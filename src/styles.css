@@ -4,6 +4,30 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --color-brand-emerald: #10B981;
+  --color-brand-indigo: #6366F1;
+  --color-brand-amber: #F59E0B;
+  --color-brand-slate: #0F172A;
+  --color-brand-crimson: #DC2626;
+}
+
+@layer base {
+  html, body { font-family: "Inter", ui-sans-serif, system-ui, sans-serif; }
+  .font-mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+}
+
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.6); opacity: 0.5; }
+}
+.heartbeat-dot::after {
+  content: ""; position: absolute; inset: -4px; border-radius: 9999px;
+  background: #10B981; opacity: 0.4; animation: heartbeat 1.4s ease-in-out infinite;
+}
+
 /*
  * Design system definition.
  *
