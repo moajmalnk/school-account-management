@@ -1,14 +1,45 @@
-import { KeyRound, Webhook, CheckCircle2, AlertTriangle } from "lucide-react";
+import { useState } from "react";
+import { KeyRound, Webhook, CheckCircle2, AlertTriangle, Zap } from "lucide-react";
 import { impersonationLogs, webhookEvents } from "./data";
+import { toast } from "sonner";
+
+const SIM_POOL = [
+  { source: "Razorpay", event: "payment.captured", status: 200, payload: "₹ 18,400 / Crescent Bay International" },
+  { source: "Stripe", event: "invoice.paid", status: 200, payload: "USD 499 / Orchid Springs Academy" },
+  { source: "Razorpay", event: "payment.failed", status: 402, payload: "₹ 6,800 / Northwood Grammar Trust" },
+  { source: "Internal", event: "tenant.upgraded", status: 200, payload: "Heritage Montessori → Premium" },
+  { source: "Razorpay", event: "refund.processed", status: 200, payload: "₹ 1,500 / Lakeside Public Schools" },
+];
 
 export function AuditsView() {
+  const [events, setEvents] = useState(webhookEvents);
+
+  const simulate = () => {
+    const pick = SIM_POOL[Math.floor(Math.random() * SIM_POOL.length)];
+    const now = new Date();
+    const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
+    setEvents((prev) => [{ ...pick, time }, ...prev]);
+    toast.success(`Webhook ingested · ${pick.source} ${pick.event}`, {
+      description: pick.payload,
+    });
+  };
+
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">Audit Logging &amp; System Configuration</h1>
-        <p className="mt-1 text-[13px] text-slate-500">
-          Secured trace of impersonation sessions &amp; inbound webhook events from billing providers.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">Audit Logging &amp; System Configuration</h1>
+          <p className="mt-1 text-[13px] text-slate-500">
+            Secured trace of impersonation sessions &amp; inbound webhook events from billing providers.
+          </p>
+        </div>
+        <button
+          onClick={simulate}
+          className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-semibold text-white shadow-sm transition hover:opacity-95"
+          style={{ backgroundColor: "#F59E0B" }}
+        >
+          <Zap className="h-3.5 w-3.5" /> Simulate Live Webhook Payment Event
+        </button>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-5">
@@ -66,7 +97,7 @@ export function AuditsView() {
           </div>
 
           <ol className="relative ml-5 border-l border-dashed border-slate-200 px-5 py-4">
-            {webhookEvents.map((e, i) => {
+            {events.map((e, i) => {
               const ok = e.status < 400;
               return (
                 <li key={i} className="relative mb-4 pl-4 last:mb-0">
