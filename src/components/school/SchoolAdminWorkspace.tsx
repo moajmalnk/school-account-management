@@ -54,10 +54,19 @@ const PENDING_OBLIGATIONS = [
   { payee: "Office Stationery Co.", desc: "Exam print supplies", amount: 6800, due: "Jun 08" },
 ];
 
-export function SchoolAdminWorkspace() {
+export function SchoolAdminWorkspace({ impersonating }: { impersonating?: string | null } = {}) {
   const [nav, setNav] = useState<NavKey>("dashboard");
   return (
     <div className="min-h-screen bg-slate-50/80">
+      {impersonating && (
+        <div
+          className="flex items-center justify-center gap-2 px-4 py-1.5 text-center font-mono text-[11px] font-semibold text-white"
+          style={{ background: "linear-gradient(90deg,#6366F1,#0F172A)" }}
+        >
+          <span className="relative inline-block h-1.5 w-1.5 rounded-full bg-amber-300 heartbeat-dot" />
+          IMPERSONATION ACTIVE · Super Admin viewing workspace for {impersonating}
+        </div>
+      )}
       <div className="flex">
         <aside className="sticky top-0 flex h-screen w-60 flex-col border-r border-slate-200 bg-white">
           <div className="flex items-center gap-2.5 px-5 py-5">
