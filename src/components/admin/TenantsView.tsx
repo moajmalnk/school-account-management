@@ -24,7 +24,7 @@ const STATUS_STYLE: Record<Status, { bg: string; fg: string; dot: string }> = {
   Suspended: { bg: "#DC262615", fg: "#B91C1C", dot: "#DC2626" },
 };
 
-export function TenantsView() {
+export function TenantsView({ onImpersonate }: { onImpersonate?: (name: string) => void } = {}) {
   const [query, setQuery] = useState("");
   const [tier, setTier] = useState<string>("all");
   const [status, setStatus] = useState<string>("all");
@@ -153,7 +153,11 @@ export function TenantsView() {
                     <DropdownMenuItem><FileText className="mr-2 h-3.5 w-3.5" />Alter Billing Rules</DropdownMenuItem>
                     <DropdownMenuItem><ScrollText className="mr-2 h-3.5 w-3.5" />Audit Connection Logs</DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem className="font-semibold" style={{ color: "#6366F1" }}>
+                    <DropdownMenuItem
+                      className="font-semibold"
+                      style={{ color: "#6366F1" }}
+                      onSelect={() => onImpersonate?.(t.name)}
+                    >
                       <KeyRound className="mr-2 h-3.5 w-3.5" />Securely Impersonate Session
                     </DropdownMenuItem>
                   </DropdownMenuContent>
