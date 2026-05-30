@@ -1,4 +1,5 @@
-import { AlertTriangle, Download, Code2, Printer } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, Download, Code2, Printer, X, CheckCircle2 } from "lucide-react";
 
 const LEDGER = [
   { date: "2026-04-01", desc: "Tuition Fee · Term 1", due: "2026-04-10", charge: 4000, paid: 4000, status: "Paid" },
@@ -18,6 +19,7 @@ export function StudentWorkspace() {
   const totalDue = LEDGER.reduce((a, r) => a + r.charge, 0);
   const totalPaid = LEDGER.reduce((a, r) => a + r.paid, 0);
   const balance = totalDue - totalPaid;
+  const [receipt, setReceipt] = useState<(typeof RECEIPTS)[number] | null>(null);
 
   return (
     <div className="min-h-screen bg-slate-50/80 px-8 py-8">
@@ -127,13 +129,106 @@ export function StudentWorkspace() {
                   <div className="mt-0.5 text-[12px] text-slate-900">{r.desc}</div>
                   <div className="mt-1 flex items-center justify-between text-[10.5px] text-slate-500">
                     <span>{r.date} · {r.mode}</span>
-                    <button className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-0.5 text-slate-600 hover:bg-white">
+                    <button
+                      onClick={() => setReceipt(r)}
+                      className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-0.5 text-slate-600 hover:bg-white"
+                    >
                       <Printer className="h-3 w-3" /> Print
                     </button>
                   </div>
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      </div>
+      {receipt && <ReceiptModal receipt={receipt} onClose={() => setReceipt(null)} />}
+    </div>
+  );
+}
+
+function ReceiptModal({
+  receipt,
+  onClose,
+}: {
+  receipt: { id: string; date: string; amt: number; mode: string; desc: string };
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between p-5" style={{ background: "linear-gradient(135deg,#10B981,#6366F1)" }}>
+          <div className="text-white">
+            <div className="font-mono text-[10px] uppercase tracking-wider text-white/80">Official Receipt</div>
+            <div className="text-[16px] font-semibold">Silver Hills Global Group</div>
+            <div className="text-[11px] text-white/80">silverhills.schoolaccounts.in</div>
+          </div>
+          <button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-full bg-white/20 text-white hover:bg-white/30">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="space-y-4 p-6">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+            <span className="text-[12px] font-semibold text-emerald-700">Payment confirmed · ledger reconciled</span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-4 text-[12px]">
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-slate-400">Receipt No.</div>
+              <div className="mt-0.5 font-mono font-semibold text-slate-900">{receipt.id}</div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-slate-400">Date</div>
+              <div className="mt-0.5 font-mono text-slate-900">{receipt.date}</div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-slate-400">Student</div>
+              <div className="mt-0.5 text-slate-900">Hira Abbas · STU-2042</div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-slate-400">Mode</div>
+              <div className="mt-0.5 text-slate-900">{receipt.mode}</div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-dashed border-slate-200 p-4">
+            <div className="flex items-center justify-between text-[12px] text-slate-600">
+              <span>{receipt.desc}</span>
+              <span className="font-mono">₹ {receipt.amt.toLocaleString("en-IN")}</span>
+            </div>
+            <div className="my-3 h-px bg-slate-100" />
+            <div className="flex items-center justify-between">
+              <span className="text-[12px] font-semibold text-slate-700">Total Paid</span>
+              <span className="font-mono text-[20px] font-bold text-slate-900">₹ {receipt.amt.toLocaleString("en-IN")}</span>
+            </div>
+          </div>
+
+          <div className="rounded-lg bg-slate-50 p-3 text-center font-mono text-[10px] text-slate-500">
+            TXN · {receipt.id}-{receipt.date.replace(/-/g, "")} · System-verified · No signature required
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => window.print()}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-semibold text-white"
+              style={{ backgroundColor: "#0F172A" }}
+            >
+              <Printer className="h-3.5 w-3.5" /> Print Receipt
+            </button>
+            <button
+              onClick={onClose}
+              className="flex items-center justify-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 py-2 text-[12px] font-semibold text-slate-700"
+            >
+              <Download className="h-3.5 w-3.5" /> Download PDF
+            </button>
           </div>
         </div>
       </div>
