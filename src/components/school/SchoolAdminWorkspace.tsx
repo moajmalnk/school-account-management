@@ -678,14 +678,61 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
   return <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-slate-400">{children}</div>;
 }
 
-function ReceivePayment() {
+function ReceivePayment({
+  students,
+  setStudents,
+  payments,
+  setPayments,
+}: {
+  students: Student[];
+  setStudents: React.Dispatch<React.SetStateAction<Student[]>>;
+  payments: Payment[];
+  setPayments: React.Dispatch<React.SetStateAction<Payment[]>>;
+}) {
   const [cls, setCls] = useState("Grade 8 · B");
   const [stu, setStu] = useState("Aarav Sharma");
-  const [cats, setCats] = useState<string[]>(["Tuition Fee"]);
+  const [category, setCategory] = useState("Tuition Fee");
   const [amount, setAmount] = useState("4500");
-  const [mode, setMode] = useState("UPI");
-  const toggleCat = (c: string) =>
-    setCats((p) => (p.includes(c) ? p.filter((x) => x !== c) : [...p, c]));
+  const [mode, setMode] = useState("Bank");
+
+  const studentsInClass = students.filter((s) => s.cls === cls);
+  const selected = students.find((s) => s.name === stu);
+
+  const handleRecord = () => {
+    const value = Number(amount);
+    if (!value || value <= 0) {
+      toast.error("Enter a valid amount");
+      return;
+    }
+    if (!selected) {
+      toast.error("Select a valid student");
+      return;
+    }
+    const now = new Date();
+    const stamp = `Today · ${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
+    const newPayment: Payment = {
+      id: `RC-${9822 + payments.length}`,
+      name: selected.name,
+      cat: category,
+      mode,
+      amount: value,
+      time: stamp,
+    };
+    setPayments((prev) => [newPayment, ...prev]);
+    setStudents((prev) =>
+      prev.map((s) =>
+        s.id === selected.id ? { ...s, due: Math.max(0, s.due - value) } : s,
+      ),
+    );
+    const remaining = Math.max(0, selected.due - value);
+    toast.success(`Receipt ${newPayment.id} · ₹ ${value.toLocaleString("en-IN")} captured`, {
+      description:
+        remaining === 0
+          ? `${selected.name}'s balance is now Cleared`
+          : `${selected.name} · balance ₹ ${remaining.toLocaleString("en-IN")}`,
+    });
+    setAmount("");
+  };
 
   return (
     <div className="grid grid-cols-3 gap-4">
@@ -696,10 +743,15 @@ function ReceivePayment() {
             <FieldLabel>Class</FieldLabel>
             <select
               value={cls}
-              onChange={(e) => setCls(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value;
+                setCls(next);
+                const first = students.find((s) => s.cls === next);
+                if (first) setStu(first.name);
+              }}
               className="h-9 w-full rounded-md border border-slate-200 bg-white px-2.5 text-[13px]"
             >
-              {["LKG · A", "Grade 4 · B", "Grade 6 · C", "Grade 8 · B", "Grade 10 · A", "Grade 12 · A"].map((c) => (
+              {Array.from(new Set(students.map((s) => s.cls))).map((c) => (
                 <option key={c}>{c}</option>
               ))}
             </select>
@@ -711,7 +763,7 @@ function ReceivePayment() {
               onChange={(e) => setStu(e.target.value)}
               className="h-9 w-full rounded-md border border-slate-200 bg-white px-2.5 text-[13px]"
             >
-              {STUDENTS.map((s) => (
+              {(studentsInClass.length ? studentsInClass : students).map((s) => (
                 <option key={s.id}>{s.name}</option>
               ))}
             </select>
@@ -721,11 +773,11 @@ function ReceivePayment() {
           <FieldLabel>Fee Categories</FieldLabel>
           <div className="flex flex-wrap gap-2">
             {["Tuition Fee", "Vehicle Fee", "Donation", "Other"].map((c) => {
-              const active = cats.includes(c);
+              const active = category === c;
               return (
                 <button
                   key={c}
-                  onClick={() => toggleCat(c)}
+                  onClick={() => setCategory(c)}
                   className={`rounded-full border px-3 py-1 text-[12px] ${
                     active ? "border-transparent text-white" : "border-slate-200 text-slate-600 hover:bg-slate-50"
                   }`}
@@ -742,7 +794,8 @@ function ReceivePayment() {
             <FieldLabel>Amount (₹)</FieldLabel>
             <input
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ""))}
+              inputMode="numeric"
               className="h-9 w-full rounded-md border border-slate-200 px-2.5 font-mono text-[13px]"
             />
           </div>
@@ -769,22 +822,35 @@ function ReceivePayment() {
         </div>
         <div className="mt-5 flex items-center justify-between rounded-lg bg-slate-50 p-3">
           <div className="text-[12px] text-slate-500">
-            Receipt for <span className="font-medium text-slate-900">{stu}</span> · {cls}
+            Receipt for <span className="font-medium text-slate-900">{stu}</span> · {cls} ·{" "}
+            <span className="font-medium text-slate-700">{category}</span> · {mode}
+            {selected && selected.due > 0 && (
+              <span className="ml-2 inline-flex items-center gap-1 font-mono text-amber-600">
+                <AlertTriangle className="h-3 w-3" /> Due ₹ {selected.due.toLocaleString("en-IN")}
+              </span>
+            )}
+            {selected && selected.due === 0 && (
+              <span className="ml-2 font-mono text-emerald-600">· Cleared</span>
+            )}
           </div>
           <button
-            className="rounded-lg px-4 py-2 text-[12px] font-semibold text-white"
+            onClick={handleRecord}
+            disabled={!Number(amount)}
+            className="rounded-lg px-4 py-2 text-[12px] font-semibold text-white disabled:opacity-50"
             style={{ background: "linear-gradient(135deg,#10B981,#6366F1)" }}
           >
-            Record ₹ {Number(amount).toLocaleString("en-IN")}
+            Record ₹ {(Number(amount) || 0).toLocaleString("en-IN")}
           </button>
         </div>
       </div>
 
       <div className="rounded-2xl border border-slate-200/80 bg-white p-5">
         <div className="text-[13px] font-semibold text-slate-900">Payment History</div>
-        <div className="mt-1 text-[11px] text-slate-500">Most recent receipts</div>
-        <div className="mt-3 divide-y divide-slate-100">
-          {PAYMENT_HISTORY.map((p) => (
+        <div className="mt-1 text-[11px] text-slate-500">
+          {payments.length} receipts · most recent
+        </div>
+        <div className="mt-3 max-h-[420px] divide-y divide-slate-100 overflow-y-auto">
+          {payments.map((p) => (
             <div key={p.id} className="py-2.5">
               <div className="flex items-center justify-between text-[12.5px]">
                 <span className="font-medium text-slate-900">{p.name}</span>
