@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
 import {
   LayoutDashboard,
   Users,
@@ -11,7 +12,35 @@ import {
   Search,
   Plus,
   Code2,
+  MoreVertical,
+  AlertTriangle,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetFooter,
+} from "@/components/ui/sheet";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 type NavKey = "dashboard" | "students" | "staff" | "finance" | "settings";
 
@@ -23,23 +52,27 @@ const NAV: { key: NavKey; label: string; icon: typeof LayoutDashboard }[] = [
   { key: "settings", label: "Settings", icon: Settings },
 ];
 
-const STUDENTS = [
-  { id: "STU-2041", name: "Aarav Sharma", cls: "Grade 8 · B", guardian: "Vinod Sharma", due: 4500 },
-  { id: "STU-2042", name: "Hira Abbas", cls: "LKG · A", guardian: "Iqbal Abbas", due: 5500 },
-  { id: "STU-2043", name: "Meera Iyer", cls: "Grade 10 · A", guardian: "Devanand Iyer", due: 0 },
-  { id: "STU-2044", name: "Kabir Khanna", cls: "Grade 6 · C", guardian: "Anjali Khanna", due: 2200 },
-  { id: "STU-2045", name: "Tara Mehta", cls: "Grade 4 · B", guardian: "Rohan Mehta", due: 800 },
-  { id: "STU-2046", name: "Yash Pillai", cls: "Grade 12 · A", guardian: "Latha Pillai", due: 12300 },
+type Student = { id: string; name: string; cls: string; guardian: string; due: number };
+type Staff = { id: string; name: string; role: string; dept: string; active: boolean };
+type Payment = { id: string; name: string; cat: string; mode: string; amount: number; time: string };
+
+const SEED_STUDENTS: Student[] = [
+  { id: "STU-2841", name: "Aarav Sharma", cls: "Grade 8 · B", guardian: "Vinod Sharma", due: 4500 },
+  { id: "STU-2842", name: "Hira Abbas", cls: "LKG · A", guardian: "Iqbal Abbas", due: 5500 },
+  { id: "STU-2843", name: "Meera Iyer", cls: "Grade 10 · A", guardian: "Devanand Iyer", due: 0 },
+  { id: "STU-2844", name: "Kabir Khanna", cls: "Grade 6 · C", guardian: "Anjali Khanna", due: 2200 },
+  { id: "STU-2845", name: "Tara Mehta", cls: "Grade 4 · B", guardian: "Rohan Mehta", due: 800 },
+  { id: "STU-2846", name: "Yash Pillai", cls: "Grade 12 · A", guardian: "Latha Pillai", due: 12300 },
 ];
 
-const STAFF_LIST = [
-  { id: "STF-018", name: "Anika Roy", role: "Mathematics · HOD", dept: "Senior Wing" },
-  { id: "STF-019", name: "Devanand Iyer", role: "Physics", dept: "Senior Wing" },
-  { id: "STF-020", name: "Priya Subramanian", role: "Principal Office", dept: "Administration" },
-  { id: "STF-021", name: "Rohan Mehta", role: "Sports Coordinator", dept: "Co-curricular" },
+const SEED_STAFF: Staff[] = [
+  { id: "STF-018", name: "Anika Roy", role: "Mathematics · HOD", dept: "Senior Wing", active: true },
+  { id: "STF-019", name: "Devanand Iyer", role: "Physics", dept: "Senior Wing", active: true },
+  { id: "STF-020", name: "Priya Subramanian", role: "Principal Office", dept: "Administration", active: true },
+  { id: "STF-021", name: "Rohan Mehta", role: "Sports Coordinator", dept: "Co-curricular", active: true },
 ];
 
-const PAYMENT_HISTORY = [
+const SEED_PAYMENTS: Payment[] = [
   { id: "RC-9821", name: "Aarav Sharma", cat: "Tuition Fee", mode: "UPI", amount: 4500, time: "Today · 10:22" },
   { id: "RC-9820", name: "Meera Iyer", cat: "Vehicle Fee", mode: "Bank", amount: 1800, time: "Today · 09:51" },
   { id: "RC-9819", name: "Kabir Khanna", cat: "Tuition Fee", mode: "Cash", amount: 2200, time: "Yesterday" },
@@ -56,6 +89,9 @@ const PENDING_OBLIGATIONS = [
 
 export function SchoolAdminWorkspace({ impersonating }: { impersonating?: string | null } = {}) {
   const [nav, setNav] = useState<NavKey>("dashboard");
+  const [students, setStudents] = useState<Student[]>(SEED_STUDENTS);
+  const [staff, setStaff] = useState<Staff[]>(SEED_STAFF);
+  const [payments, setPayments] = useState<Payment[]>(SEED_PAYMENTS);
   return (
     <div className="min-h-screen bg-slate-50/80">
       {impersonating && (
@@ -111,9 +147,18 @@ export function SchoolAdminWorkspace({ impersonating }: { impersonating?: string
 
         <main className="flex-1 p-8">
           {nav === "dashboard" && <SchoolDashboard />}
-          {nav === "students" && <StudentsLedger />}
-          {nav === "staff" && <StaffRoster />}
-          {nav === "finance" && <FinanceModule />}
+          {nav === "students" && (
+            <StudentsLedger students={students} setStudents={setStudents} />
+          )}
+          {nav === "staff" && <StaffRoster staff={staff} setStaff={setStaff} />}
+          {nav === "finance" && (
+            <FinanceModule
+              students={students}
+              setStudents={setStudents}
+              payments={payments}
+              setPayments={setPayments}
+            />
+          )}
           {nav === "settings" && <SchoolSettings />}
         </main>
       </div>
