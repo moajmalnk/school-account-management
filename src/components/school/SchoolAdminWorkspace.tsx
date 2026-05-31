@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
 import {
   LayoutDashboard,
   Users,
@@ -11,7 +12,35 @@ import {
   Search,
   Plus,
   Code2,
+  MoreVertical,
+  AlertTriangle,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetFooter,
+} from "@/components/ui/sheet";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 type NavKey = "dashboard" | "students" | "staff" | "finance" | "settings";
 
@@ -23,23 +52,27 @@ const NAV: { key: NavKey; label: string; icon: typeof LayoutDashboard }[] = [
   { key: "settings", label: "Settings", icon: Settings },
 ];
 
-const STUDENTS = [
-  { id: "STU-2041", name: "Aarav Sharma", cls: "Grade 8 · B", guardian: "Vinod Sharma", due: 4500 },
-  { id: "STU-2042", name: "Hira Abbas", cls: "LKG · A", guardian: "Iqbal Abbas", due: 5500 },
-  { id: "STU-2043", name: "Meera Iyer", cls: "Grade 10 · A", guardian: "Devanand Iyer", due: 0 },
-  { id: "STU-2044", name: "Kabir Khanna", cls: "Grade 6 · C", guardian: "Anjali Khanna", due: 2200 },
-  { id: "STU-2045", name: "Tara Mehta", cls: "Grade 4 · B", guardian: "Rohan Mehta", due: 800 },
-  { id: "STU-2046", name: "Yash Pillai", cls: "Grade 12 · A", guardian: "Latha Pillai", due: 12300 },
+type Student = { id: string; name: string; cls: string; guardian: string; due: number };
+type Staff = { id: string; name: string; role: string; dept: string; active: boolean };
+type Payment = { id: string; name: string; cat: string; mode: string; amount: number; time: string };
+
+const SEED_STUDENTS: Student[] = [
+  { id: "STU-2841", name: "Aarav Sharma", cls: "Grade 8 · B", guardian: "Vinod Sharma", due: 4500 },
+  { id: "STU-2842", name: "Hira Abbas", cls: "LKG · A", guardian: "Iqbal Abbas", due: 5500 },
+  { id: "STU-2843", name: "Meera Iyer", cls: "Grade 10 · A", guardian: "Devanand Iyer", due: 0 },
+  { id: "STU-2844", name: "Kabir Khanna", cls: "Grade 6 · C", guardian: "Anjali Khanna", due: 2200 },
+  { id: "STU-2845", name: "Tara Mehta", cls: "Grade 4 · B", guardian: "Rohan Mehta", due: 800 },
+  { id: "STU-2846", name: "Yash Pillai", cls: "Grade 12 · A", guardian: "Latha Pillai", due: 12300 },
 ];
 
-const STAFF_LIST = [
-  { id: "STF-018", name: "Anika Roy", role: "Mathematics · HOD", dept: "Senior Wing" },
-  { id: "STF-019", name: "Devanand Iyer", role: "Physics", dept: "Senior Wing" },
-  { id: "STF-020", name: "Priya Subramanian", role: "Principal Office", dept: "Administration" },
-  { id: "STF-021", name: "Rohan Mehta", role: "Sports Coordinator", dept: "Co-curricular" },
+const SEED_STAFF: Staff[] = [
+  { id: "STF-018", name: "Anika Roy", role: "Mathematics · HOD", dept: "Senior Wing", active: true },
+  { id: "STF-019", name: "Devanand Iyer", role: "Physics", dept: "Senior Wing", active: true },
+  { id: "STF-020", name: "Priya Subramanian", role: "Principal Office", dept: "Administration", active: true },
+  { id: "STF-021", name: "Rohan Mehta", role: "Sports Coordinator", dept: "Co-curricular", active: true },
 ];
 
-const PAYMENT_HISTORY = [
+const SEED_PAYMENTS: Payment[] = [
   { id: "RC-9821", name: "Aarav Sharma", cat: "Tuition Fee", mode: "UPI", amount: 4500, time: "Today · 10:22" },
   { id: "RC-9820", name: "Meera Iyer", cat: "Vehicle Fee", mode: "Bank", amount: 1800, time: "Today · 09:51" },
   { id: "RC-9819", name: "Kabir Khanna", cat: "Tuition Fee", mode: "Cash", amount: 2200, time: "Yesterday" },
@@ -56,6 +89,9 @@ const PENDING_OBLIGATIONS = [
 
 export function SchoolAdminWorkspace({ impersonating }: { impersonating?: string | null } = {}) {
   const [nav, setNav] = useState<NavKey>("dashboard");
+  const [students, setStudents] = useState<Student[]>(SEED_STUDENTS);
+  const [staff, setStaff] = useState<Staff[]>(SEED_STAFF);
+  const [payments, setPayments] = useState<Payment[]>(SEED_PAYMENTS);
   return (
     <div className="min-h-screen bg-slate-50/80">
       {impersonating && (
@@ -111,9 +147,18 @@ export function SchoolAdminWorkspace({ impersonating }: { impersonating?: string
 
         <main className="flex-1 p-8">
           {nav === "dashboard" && <SchoolDashboard />}
-          {nav === "students" && <StudentsLedger />}
-          {nav === "staff" && <StaffRoster />}
-          {nav === "finance" && <FinanceModule />}
+          {nav === "students" && (
+            <StudentsLedger students={students} setStudents={setStudents} />
+          )}
+          {nav === "staff" && <StaffRoster staff={staff} setStaff={setStaff} />}
+          {nav === "finance" && (
+            <FinanceModule
+              students={students}
+              setStudents={setStudents}
+              payments={payments}
+              setPayments={setPayments}
+            />
+          )}
           {nav === "settings" && <SchoolSettings />}
         </main>
       </div>
@@ -211,15 +256,59 @@ function SchoolDashboard() {
   );
 }
 
-function StudentsLedger() {
+function StudentsLedger({
+  students,
+  setStudents,
+}: {
+  students: Student[];
+  setStudents: React.Dispatch<React.SetStateAction<Student[]>>;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ name: "", cls: "Grade 8 · B", guardian: "", due: "" });
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return students;
+    return students.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        s.id.toLowerCase().includes(q) ||
+        s.guardian.toLowerCase().includes(q),
+    );
+  }, [students, query]);
+
+  const handleAdmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim() || !form.guardian.trim()) {
+      toast.error("Name and guardian are required");
+      return;
+    }
+    const nextNum = 2847 + students.filter((s) => s.id.startsWith("STU-28")).length;
+    const newStu: Student = {
+      id: `STU-${nextNum}`,
+      name: form.name.trim(),
+      cls: form.cls,
+      guardian: form.guardian.trim(),
+      due: Number(form.due) || 0,
+    };
+    setStudents((prev) => [newStu, ...prev]);
+    toast.success(`${newStu.name} admitted`, { description: `${newStu.id} · ${newStu.cls}` });
+    setForm({ name: "", cls: "Grade 8 · B", guardian: "", due: "" });
+    setOpen(false);
+  };
+
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-slate-900">Students Ledger</h1>
-          <p className="text-[13px] text-slate-500">1,284 active enrollments · isolated to Silver Hills tenant</p>
+          <p className="text-[13px] text-slate-500">
+            {students.length} active enrollments · isolated to Silver Hills tenant
+          </p>
         </div>
         <button
+          onClick={() => setOpen(true)}
           className="flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-[12px] font-semibold text-white"
           style={{ backgroundColor: "#0F172A" }}
         >
@@ -229,7 +318,15 @@ function StudentsLedger() {
       <div className="rounded-2xl border border-slate-200/80 bg-white">
         <div className="flex items-center gap-2 border-b border-slate-100 p-3">
           <Search className="h-3.5 w-3.5 text-slate-400" />
-          <input placeholder="Search by name, ID, or guardian…" className="flex-1 bg-transparent text-[13px] outline-none placeholder:text-slate-400" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by name, ID, or guardian…"
+            className="flex-1 bg-transparent text-[13px] outline-none placeholder:text-slate-400"
+          />
+          {query && (
+            <span className="font-mono text-[10px] text-slate-400">{filtered.length} match</span>
+          )}
         </div>
         <table className="w-full text-[13px]">
           <thead>
@@ -242,7 +339,7 @@ function StudentsLedger() {
             </tr>
           </thead>
           <tbody>
-            {STUDENTS.map((s) => (
+            {filtered.map((s) => (
               <tr key={s.id} className="border-t border-slate-100">
                 <td className="px-4 py-3">
                   <div className="font-medium text-slate-900">{s.name}</div>
@@ -258,23 +355,147 @@ function StudentsLedger() {
                   )}
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <button className="rounded-md border border-slate-200 px-2.5 py-1 text-[11px] text-slate-600 hover:bg-slate-50">View</button>
+                  <button className="rounded-md border border-slate-200 px-2.5 py-1 text-[11px] text-slate-600 hover:bg-slate-50">
+                    View
+                  </button>
                 </td>
               </tr>
             ))}
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-4 py-10 text-center text-[12px] text-slate-400">
+                  No students match “{query}”.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Admit New Student</DialogTitle>
+            <DialogDescription>
+              Provision a fresh enrollment record into the Silver Hills tenant ledger.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleAdmit} className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-[11px] uppercase tracking-wider text-slate-500">Full Name</Label>
+              <Input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="e.g. Ishaan Verma"
+                autoFocus
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] uppercase tracking-wider text-slate-500">Class</Label>
+                <select
+                  value={form.cls}
+                  onChange={(e) => setForm({ ...form, cls: e.target.value })}
+                  className="h-9 w-full rounded-md border border-slate-200 bg-white px-2.5 text-[13px]"
+                >
+                  {["LKG · A", "Grade 4 · B", "Grade 6 · C", "Grade 8 · B", "Grade 10 · A", "Grade 12 · A"].map((c) => (
+                    <option key={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] uppercase tracking-wider text-slate-500">Initial Due (₹)</Label>
+                <Input
+                  inputMode="numeric"
+                  value={form.due}
+                  onChange={(e) => setForm({ ...form, due: e.target.value.replace(/[^0-9]/g, "") })}
+                  placeholder="0"
+                  className="font-mono"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] uppercase tracking-wider text-slate-500">Guardian Name</Label>
+              <Input
+                value={form.guardian}
+                onChange={(e) => setForm({ ...form, guardian: e.target.value })}
+                placeholder="e.g. Anita Verma"
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                className="text-white"
+                style={{ background: "linear-gradient(135deg,#10B981,#6366F1)" }}
+              >
+                Admit Student
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-function StaffRoster() {
+function StaffRoster({
+  staff,
+  setStaff,
+}: {
+  staff: Staff[];
+  setStaff: React.Dispatch<React.SetStateAction<Staff[]>>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ name: "", role: "", dept: "Senior Wing", id: "" });
+
+  const handleRecruit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim() || !form.role.trim()) {
+      toast.error("Name and role are required");
+      return;
+    }
+    const empId = form.id.trim() || `STF-${(22 + staff.length).toString().padStart(3, "0")}`;
+    const newStaff: Staff = {
+      id: empId,
+      name: form.name.trim(),
+      role: form.role.trim(),
+      dept: form.dept,
+      active: true,
+    };
+    setStaff((prev) => [newStaff, ...prev]);
+    toast.success(`${newStaff.name} recruited`, { description: `${newStaff.id} · ${newStaff.dept}` });
+    setForm({ name: "", role: "", dept: "Senior Wing", id: "" });
+    setOpen(false);
+  };
+
+  const toggleStatus = (id: string) => {
+    setStaff((prev) => prev.map((s) => (s.id === id ? { ...s, active: !s.active } : s)));
+    const s = staff.find((x) => x.id === id);
+    toast(`${s?.name} marked ${s?.active ? "Inactive" : "Active"}`);
+  };
+  const removeStaff = (id: string) => {
+    const s = staff.find((x) => x.id === id);
+    setStaff((prev) => prev.filter((x) => x.id !== id));
+    toast.error(`${s?.name} removed from roster`);
+  };
+
   return (
     <div>
-      <h1 className="mb-4 text-xl font-semibold text-slate-900">Staff Roster</h1>
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="text-xl font-semibold text-slate-900">Staff Roster</h1>
+        <button
+          onClick={() => setOpen(true)}
+          className="flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-[12px] font-semibold text-white"
+          style={{ backgroundColor: "#0F172A" }}
+        >
+          <Plus className="h-3.5 w-3.5" /> Recruit Staff
+        </button>
+      </div>
       <div className="grid grid-cols-2 gap-4">
-        {STAFF_LIST.map((s) => (
+        {staff.map((s) => (
           <div key={s.id} className="rounded-2xl border border-slate-200/80 bg-white p-4">
             <div className="flex items-center gap-3">
               <div
@@ -287,20 +508,127 @@ function StaffRoster() {
                 <div className="text-[13px] font-semibold text-slate-900">{s.name}</div>
                 <div className="text-[11px] text-slate-500">{s.role}</div>
               </div>
-              <div className="ml-auto font-mono text-[10px] text-slate-400">{s.id}</div>
+              <div className="ml-auto flex items-center gap-2">
+                <span className="font-mono text-[10px] text-slate-400">{s.id}</span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+                      <MoreVertical className="h-3.5 w-3.5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-40">
+                    <DropdownMenuItem onClick={() => toggleStatus(s.id)}>
+                      Toggle Status
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => toast(`Editor draft opened for ${s.name}`)}
+                    >
+                      Edit Profile
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => removeStaff(s.id)}
+                      className="text-rose-600 focus:text-rose-600"
+                    >
+                      Remove
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
             <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500">
               <span>Department · {s.dept}</span>
-              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">Active</span>
+              <span
+                className={`rounded-full px-2 py-0.5 ${
+                  s.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"
+                }`}
+              >
+                {s.active ? "Active" : "Inactive"}
+              </span>
             </div>
           </div>
         ))}
       </div>
+
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>Recruit New Staff</SheetTitle>
+            <SheetDescription>
+              Provision a faculty / administrative profile for Silver Hills.
+            </SheetDescription>
+          </SheetHeader>
+          <form onSubmit={handleRecruit} className="mt-5 space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-[11px] uppercase tracking-wider text-slate-500">Full Name</Label>
+              <Input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="e.g. Sneha Pillai"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] uppercase tracking-wider text-slate-500">Role</Label>
+              <Input
+                value={form.role}
+                onChange={(e) => setForm({ ...form, role: e.target.value })}
+                placeholder="e.g. Chemistry · HOD"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] uppercase tracking-wider text-slate-500">Department</Label>
+                <select
+                  value={form.dept}
+                  onChange={(e) => setForm({ ...form, dept: e.target.value })}
+                  className="h-9 w-full rounded-md border border-slate-200 bg-white px-2.5 text-[13px]"
+                >
+                  {["Senior Wing", "Junior Wing", "Administration", "Co-curricular", "Support"].map((d) => (
+                    <option key={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] uppercase tracking-wider text-slate-500">Employee ID</Label>
+                <Input
+                  value={form.id}
+                  onChange={(e) => setForm({ ...form, id: e.target.value })}
+                  placeholder="Auto-generate"
+                  className="font-mono"
+                />
+              </div>
+            </div>
+            <SheetFooter className="mt-4">
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                className="text-white"
+                style={{ background: "linear-gradient(135deg,#10B981,#6366F1)" }}
+              >
+                Recruit
+              </Button>
+            </SheetFooter>
+          </form>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
 
-function FinanceModule() {
+function FinanceModule({
+  students,
+  setStudents,
+  payments,
+  setPayments,
+}: {
+  students: Student[];
+  setStudents: React.Dispatch<React.SetStateAction<Student[]>>;
+  payments: Payment[];
+  setPayments: React.Dispatch<React.SetStateAction<Payment[]>>;
+}) {
   const [tab, setTab] = useState<"receive" | "make" | "ledger">("receive");
   return (
     <div>
@@ -332,7 +660,14 @@ function FinanceModule() {
         })}
       </div>
 
-      {tab === "receive" && <ReceivePayment />}
+      {tab === "receive" && (
+        <ReceivePayment
+          students={students}
+          setStudents={setStudents}
+          payments={payments}
+          setPayments={setPayments}
+        />
+      )}
       {tab === "make" && <MakePayment />}
       {tab === "ledger" && <LedgerAnalytics />}
     </div>
@@ -343,14 +678,61 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
   return <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-slate-400">{children}</div>;
 }
 
-function ReceivePayment() {
+function ReceivePayment({
+  students,
+  setStudents,
+  payments,
+  setPayments,
+}: {
+  students: Student[];
+  setStudents: React.Dispatch<React.SetStateAction<Student[]>>;
+  payments: Payment[];
+  setPayments: React.Dispatch<React.SetStateAction<Payment[]>>;
+}) {
   const [cls, setCls] = useState("Grade 8 · B");
   const [stu, setStu] = useState("Aarav Sharma");
-  const [cats, setCats] = useState<string[]>(["Tuition Fee"]);
+  const [category, setCategory] = useState("Tuition Fee");
   const [amount, setAmount] = useState("4500");
-  const [mode, setMode] = useState("UPI");
-  const toggleCat = (c: string) =>
-    setCats((p) => (p.includes(c) ? p.filter((x) => x !== c) : [...p, c]));
+  const [mode, setMode] = useState("Bank");
+
+  const studentsInClass = students.filter((s) => s.cls === cls);
+  const selected = students.find((s) => s.name === stu);
+
+  const handleRecord = () => {
+    const value = Number(amount);
+    if (!value || value <= 0) {
+      toast.error("Enter a valid amount");
+      return;
+    }
+    if (!selected) {
+      toast.error("Select a valid student");
+      return;
+    }
+    const now = new Date();
+    const stamp = `Today · ${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
+    const newPayment: Payment = {
+      id: `RC-${9822 + payments.length}`,
+      name: selected.name,
+      cat: category,
+      mode,
+      amount: value,
+      time: stamp,
+    };
+    setPayments((prev) => [newPayment, ...prev]);
+    setStudents((prev) =>
+      prev.map((s) =>
+        s.id === selected.id ? { ...s, due: Math.max(0, s.due - value) } : s,
+      ),
+    );
+    const remaining = Math.max(0, selected.due - value);
+    toast.success(`Receipt ${newPayment.id} · ₹ ${value.toLocaleString("en-IN")} captured`, {
+      description:
+        remaining === 0
+          ? `${selected.name}'s balance is now Cleared`
+          : `${selected.name} · balance ₹ ${remaining.toLocaleString("en-IN")}`,
+    });
+    setAmount("");
+  };
 
   return (
     <div className="grid grid-cols-3 gap-4">
@@ -361,10 +743,15 @@ function ReceivePayment() {
             <FieldLabel>Class</FieldLabel>
             <select
               value={cls}
-              onChange={(e) => setCls(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value;
+                setCls(next);
+                const first = students.find((s) => s.cls === next);
+                if (first) setStu(first.name);
+              }}
               className="h-9 w-full rounded-md border border-slate-200 bg-white px-2.5 text-[13px]"
             >
-              {["LKG · A", "Grade 4 · B", "Grade 6 · C", "Grade 8 · B", "Grade 10 · A", "Grade 12 · A"].map((c) => (
+              {Array.from(new Set(students.map((s) => s.cls))).map((c) => (
                 <option key={c}>{c}</option>
               ))}
             </select>
@@ -376,7 +763,7 @@ function ReceivePayment() {
               onChange={(e) => setStu(e.target.value)}
               className="h-9 w-full rounded-md border border-slate-200 bg-white px-2.5 text-[13px]"
             >
-              {STUDENTS.map((s) => (
+              {(studentsInClass.length ? studentsInClass : students).map((s) => (
                 <option key={s.id}>{s.name}</option>
               ))}
             </select>
@@ -386,11 +773,11 @@ function ReceivePayment() {
           <FieldLabel>Fee Categories</FieldLabel>
           <div className="flex flex-wrap gap-2">
             {["Tuition Fee", "Vehicle Fee", "Donation", "Other"].map((c) => {
-              const active = cats.includes(c);
+              const active = category === c;
               return (
                 <button
                   key={c}
-                  onClick={() => toggleCat(c)}
+                  onClick={() => setCategory(c)}
                   className={`rounded-full border px-3 py-1 text-[12px] ${
                     active ? "border-transparent text-white" : "border-slate-200 text-slate-600 hover:bg-slate-50"
                   }`}
@@ -407,7 +794,8 @@ function ReceivePayment() {
             <FieldLabel>Amount (₹)</FieldLabel>
             <input
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ""))}
+              inputMode="numeric"
               className="h-9 w-full rounded-md border border-slate-200 px-2.5 font-mono text-[13px]"
             />
           </div>
@@ -434,22 +822,35 @@ function ReceivePayment() {
         </div>
         <div className="mt-5 flex items-center justify-between rounded-lg bg-slate-50 p-3">
           <div className="text-[12px] text-slate-500">
-            Receipt for <span className="font-medium text-slate-900">{stu}</span> · {cls}
+            Receipt for <span className="font-medium text-slate-900">{stu}</span> · {cls} ·{" "}
+            <span className="font-medium text-slate-700">{category}</span> · {mode}
+            {selected && selected.due > 0 && (
+              <span className="ml-2 inline-flex items-center gap-1 font-mono text-amber-600">
+                <AlertTriangle className="h-3 w-3" /> Due ₹ {selected.due.toLocaleString("en-IN")}
+              </span>
+            )}
+            {selected && selected.due === 0 && (
+              <span className="ml-2 font-mono text-emerald-600">· Cleared</span>
+            )}
           </div>
           <button
-            className="rounded-lg px-4 py-2 text-[12px] font-semibold text-white"
+            onClick={handleRecord}
+            disabled={!Number(amount)}
+            className="rounded-lg px-4 py-2 text-[12px] font-semibold text-white disabled:opacity-50"
             style={{ background: "linear-gradient(135deg,#10B981,#6366F1)" }}
           >
-            Record ₹ {Number(amount).toLocaleString("en-IN")}
+            Record ₹ {(Number(amount) || 0).toLocaleString("en-IN")}
           </button>
         </div>
       </div>
 
       <div className="rounded-2xl border border-slate-200/80 bg-white p-5">
         <div className="text-[13px] font-semibold text-slate-900">Payment History</div>
-        <div className="mt-1 text-[11px] text-slate-500">Most recent receipts</div>
-        <div className="mt-3 divide-y divide-slate-100">
-          {PAYMENT_HISTORY.map((p) => (
+        <div className="mt-1 text-[11px] text-slate-500">
+          {payments.length} receipts · most recent
+        </div>
+        <div className="mt-3 max-h-[420px] divide-y divide-slate-100 overflow-y-auto">
+          {payments.map((p) => (
             <div key={p.id} className="py-2.5">
               <div className="flex items-center justify-between text-[12.5px]">
                 <span className="font-medium text-slate-900">{p.name}</span>
