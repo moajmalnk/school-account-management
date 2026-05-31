@@ -256,15 +256,59 @@ function SchoolDashboard() {
   );
 }
 
-function StudentsLedger() {
+function StudentsLedger({
+  students,
+  setStudents,
+}: {
+  students: Student[];
+  setStudents: React.Dispatch<React.SetStateAction<Student[]>>;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ name: "", cls: "Grade 8 · B", guardian: "", due: "" });
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return students;
+    return students.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        s.id.toLowerCase().includes(q) ||
+        s.guardian.toLowerCase().includes(q),
+    );
+  }, [students, query]);
+
+  const handleAdmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim() || !form.guardian.trim()) {
+      toast.error("Name and guardian are required");
+      return;
+    }
+    const nextNum = 2847 + students.filter((s) => s.id.startsWith("STU-28")).length;
+    const newStu: Student = {
+      id: `STU-${nextNum}`,
+      name: form.name.trim(),
+      cls: form.cls,
+      guardian: form.guardian.trim(),
+      due: Number(form.due) || 0,
+    };
+    setStudents((prev) => [newStu, ...prev]);
+    toast.success(`${newStu.name} admitted`, { description: `${newStu.id} · ${newStu.cls}` });
+    setForm({ name: "", cls: "Grade 8 · B", guardian: "", due: "" });
+    setOpen(false);
+  };
+
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-slate-900">Students Ledger</h1>
-          <p className="text-[13px] text-slate-500">1,284 active enrollments · isolated to Silver Hills tenant</p>
+          <p className="text-[13px] text-slate-500">
+            {students.length} active enrollments · isolated to Silver Hills tenant
+          </p>
         </div>
         <button
+          onClick={() => setOpen(true)}
           className="flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-[12px] font-semibold text-white"
           style={{ backgroundColor: "#0F172A" }}
         >
@@ -274,7 +318,15 @@ function StudentsLedger() {
       <div className="rounded-2xl border border-slate-200/80 bg-white">
         <div className="flex items-center gap-2 border-b border-slate-100 p-3">
           <Search className="h-3.5 w-3.5 text-slate-400" />
-          <input placeholder="Search by name, ID, or guardian…" className="flex-1 bg-transparent text-[13px] outline-none placeholder:text-slate-400" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by name, ID, or guardian…"
+            className="flex-1 bg-transparent text-[13px] outline-none placeholder:text-slate-400"
+          />
+          {query && (
+            <span className="font-mono text-[10px] text-slate-400">{filtered.length} match</span>
+          )}
         </div>
         <table className="w-full text-[13px]">
           <thead>
@@ -287,7 +339,7 @@ function StudentsLedger() {
             </tr>
           </thead>
           <tbody>
-            {STUDENTS.map((s) => (
+            {filtered.map((s) => (
               <tr key={s.id} className="border-t border-slate-100">
                 <td className="px-4 py-3">
                   <div className="font-medium text-slate-900">{s.name}</div>
@@ -303,23 +355,147 @@ function StudentsLedger() {
                   )}
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <button className="rounded-md border border-slate-200 px-2.5 py-1 text-[11px] text-slate-600 hover:bg-slate-50">View</button>
+                  <button className="rounded-md border border-slate-200 px-2.5 py-1 text-[11px] text-slate-600 hover:bg-slate-50">
+                    View
+                  </button>
                 </td>
               </tr>
             ))}
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-4 py-10 text-center text-[12px] text-slate-400">
+                  No students match “{query}”.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Admit New Student</DialogTitle>
+            <DialogDescription>
+              Provision a fresh enrollment record into the Silver Hills tenant ledger.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleAdmit} className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-[11px] uppercase tracking-wider text-slate-500">Full Name</Label>
+              <Input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="e.g. Ishaan Verma"
+                autoFocus
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] uppercase tracking-wider text-slate-500">Class</Label>
+                <select
+                  value={form.cls}
+                  onChange={(e) => setForm({ ...form, cls: e.target.value })}
+                  className="h-9 w-full rounded-md border border-slate-200 bg-white px-2.5 text-[13px]"
+                >
+                  {["LKG · A", "Grade 4 · B", "Grade 6 · C", "Grade 8 · B", "Grade 10 · A", "Grade 12 · A"].map((c) => (
+                    <option key={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] uppercase tracking-wider text-slate-500">Initial Due (₹)</Label>
+                <Input
+                  inputMode="numeric"
+                  value={form.due}
+                  onChange={(e) => setForm({ ...form, due: e.target.value.replace(/[^0-9]/g, "") })}
+                  placeholder="0"
+                  className="font-mono"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] uppercase tracking-wider text-slate-500">Guardian Name</Label>
+              <Input
+                value={form.guardian}
+                onChange={(e) => setForm({ ...form, guardian: e.target.value })}
+                placeholder="e.g. Anita Verma"
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                className="text-white"
+                style={{ background: "linear-gradient(135deg,#10B981,#6366F1)" }}
+              >
+                Admit Student
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-function StaffRoster() {
+function StaffRoster({
+  staff,
+  setStaff,
+}: {
+  staff: Staff[];
+  setStaff: React.Dispatch<React.SetStateAction<Staff[]>>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ name: "", role: "", dept: "Senior Wing", id: "" });
+
+  const handleRecruit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim() || !form.role.trim()) {
+      toast.error("Name and role are required");
+      return;
+    }
+    const empId = form.id.trim() || `STF-${(22 + staff.length).toString().padStart(3, "0")}`;
+    const newStaff: Staff = {
+      id: empId,
+      name: form.name.trim(),
+      role: form.role.trim(),
+      dept: form.dept,
+      active: true,
+    };
+    setStaff((prev) => [newStaff, ...prev]);
+    toast.success(`${newStaff.name} recruited`, { description: `${newStaff.id} · ${newStaff.dept}` });
+    setForm({ name: "", role: "", dept: "Senior Wing", id: "" });
+    setOpen(false);
+  };
+
+  const toggleStatus = (id: string) => {
+    setStaff((prev) => prev.map((s) => (s.id === id ? { ...s, active: !s.active } : s)));
+    const s = staff.find((x) => x.id === id);
+    toast(`${s?.name} marked ${s?.active ? "Inactive" : "Active"}`);
+  };
+  const removeStaff = (id: string) => {
+    const s = staff.find((x) => x.id === id);
+    setStaff((prev) => prev.filter((x) => x.id !== id));
+    toast.error(`${s?.name} removed from roster`);
+  };
+
   return (
     <div>
-      <h1 className="mb-4 text-xl font-semibold text-slate-900">Staff Roster</h1>
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="text-xl font-semibold text-slate-900">Staff Roster</h1>
+        <button
+          onClick={() => setOpen(true)}
+          className="flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-[12px] font-semibold text-white"
+          style={{ backgroundColor: "#0F172A" }}
+        >
+          <Plus className="h-3.5 w-3.5" /> Recruit Staff
+        </button>
+      </div>
       <div className="grid grid-cols-2 gap-4">
-        {STAFF_LIST.map((s) => (
+        {staff.map((s) => (
           <div key={s.id} className="rounded-2xl border border-slate-200/80 bg-white p-4">
             <div className="flex items-center gap-3">
               <div
@@ -332,20 +508,127 @@ function StaffRoster() {
                 <div className="text-[13px] font-semibold text-slate-900">{s.name}</div>
                 <div className="text-[11px] text-slate-500">{s.role}</div>
               </div>
-              <div className="ml-auto font-mono text-[10px] text-slate-400">{s.id}</div>
+              <div className="ml-auto flex items-center gap-2">
+                <span className="font-mono text-[10px] text-slate-400">{s.id}</span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+                      <MoreVertical className="h-3.5 w-3.5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-40">
+                    <DropdownMenuItem onClick={() => toggleStatus(s.id)}>
+                      Toggle Status
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => toast(`Editor draft opened for ${s.name}`)}
+                    >
+                      Edit Profile
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => removeStaff(s.id)}
+                      className="text-rose-600 focus:text-rose-600"
+                    >
+                      Remove
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
             <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500">
               <span>Department · {s.dept}</span>
-              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">Active</span>
+              <span
+                className={`rounded-full px-2 py-0.5 ${
+                  s.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"
+                }`}
+              >
+                {s.active ? "Active" : "Inactive"}
+              </span>
             </div>
           </div>
         ))}
       </div>
+
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>Recruit New Staff</SheetTitle>
+            <SheetDescription>
+              Provision a faculty / administrative profile for Silver Hills.
+            </SheetDescription>
+          </SheetHeader>
+          <form onSubmit={handleRecruit} className="mt-5 space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-[11px] uppercase tracking-wider text-slate-500">Full Name</Label>
+              <Input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="e.g. Sneha Pillai"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] uppercase tracking-wider text-slate-500">Role</Label>
+              <Input
+                value={form.role}
+                onChange={(e) => setForm({ ...form, role: e.target.value })}
+                placeholder="e.g. Chemistry · HOD"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] uppercase tracking-wider text-slate-500">Department</Label>
+                <select
+                  value={form.dept}
+                  onChange={(e) => setForm({ ...form, dept: e.target.value })}
+                  className="h-9 w-full rounded-md border border-slate-200 bg-white px-2.5 text-[13px]"
+                >
+                  {["Senior Wing", "Junior Wing", "Administration", "Co-curricular", "Support"].map((d) => (
+                    <option key={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] uppercase tracking-wider text-slate-500">Employee ID</Label>
+                <Input
+                  value={form.id}
+                  onChange={(e) => setForm({ ...form, id: e.target.value })}
+                  placeholder="Auto-generate"
+                  className="font-mono"
+                />
+              </div>
+            </div>
+            <SheetFooter className="mt-4">
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                className="text-white"
+                style={{ background: "linear-gradient(135deg,#10B981,#6366F1)" }}
+              >
+                Recruit
+              </Button>
+            </SheetFooter>
+          </form>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
 
-function FinanceModule() {
+function FinanceModule({
+  students,
+  setStudents,
+  payments,
+  setPayments,
+}: {
+  students: Student[];
+  setStudents: React.Dispatch<React.SetStateAction<Student[]>>;
+  payments: Payment[];
+  setPayments: React.Dispatch<React.SetStateAction<Payment[]>>;
+}) {
   const [tab, setTab] = useState<"receive" | "make" | "ledger">("receive");
   return (
     <div>
@@ -377,7 +660,14 @@ function FinanceModule() {
         })}
       </div>
 
-      {tab === "receive" && <ReceivePayment />}
+      {tab === "receive" && (
+        <ReceivePayment
+          students={students}
+          setStudents={setStudents}
+          payments={payments}
+          setPayments={setPayments}
+        />
+      )}
       {tab === "make" && <MakePayment />}
       {tab === "ledger" && <LedgerAnalytics />}
     </div>
