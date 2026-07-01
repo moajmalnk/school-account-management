@@ -1107,9 +1107,6 @@ export function StudentsLedger() {
 
   const gradeFilterControl = (
     <div className="flex shrink-0 items-center gap-1.5">
-      <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-black/55 sm:text-[10.5px]">
-        Grade
-      </span>
       <Select value={gradeFilter} onValueChange={setGradeFilter}>
         <SelectTrigger className="h-10 w-[7.5rem] rounded-full border-black/10 bg-white text-[12px] font-medium text-black focus:ring-[#C7F33C] sm:h-11 sm:w-[160px] sm:text-[12.5px] lg:h-10">
           <SelectValue placeholder="All Grades" />
