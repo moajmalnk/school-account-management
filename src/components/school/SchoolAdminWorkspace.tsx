@@ -829,7 +829,7 @@ export function SchoolDashboard() {
 type StatusFilter = "all" | "paid" | "overdue";
 
 const STATUS_TABS: { key: StatusFilter; label: string }[] = [
-  { key: "all", label: "All Students" },
+  { key: "all", label: "All" },
   { key: "paid", label: "Paid" },
   { key: "overdue", label: "Overdue" },
 ];
@@ -1085,8 +1085,14 @@ export function StudentsLedger() {
   const limeBtn =
     "flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-[#C7F33C] px-4 py-2 text-[12.5px] font-semibold text-black shadow-[0_8px_24px_-12px_rgba(199,243,60,0.6)] transition-colors hover:brightness-95";
 
-  const statusTabs = (
-    <div className="inline-flex min-w-max items-center rounded-full border border-black/10 bg-white p-1">
+  const statusTabs = (fill = false) => (
+    <div
+      className={
+        fill
+          ? "flex min-w-0 flex-1 items-center rounded-full border border-black/10 bg-white p-1"
+          : "inline-flex min-w-max items-center rounded-full border border-black/10 bg-white p-1"
+      }
+    >
       {STATUS_TABS.map((t) => {
         const active = statusFilter === t.key;
         return (
@@ -1094,9 +1100,11 @@ export function StudentsLedger() {
             key={t.key}
             type="button"
             onClick={() => setStatusFilter(t.key)}
-            className={`min-h-9 rounded-full px-3 py-1.5 text-[11.5px] font-semibold transition-colors sm:px-3.5 sm:text-[12px] ${
-              active ? "bg-[#C7F33C] text-black" : "text-black/55 hover:bg-black/5"
-            }`}
+            className={`min-h-9 rounded-full py-1.5 font-semibold transition-colors ${
+              fill
+                ? "min-w-0 flex-1 px-2 text-[11px]"
+                : "px-3 text-[11.5px] sm:px-3.5 sm:text-[12px]"
+            } ${active ? "bg-[#C7F33C] text-black" : "text-black/55 hover:bg-black/5"}`}
           >
             {t.label}
           </button>
@@ -1105,10 +1113,16 @@ export function StudentsLedger() {
     </div>
   );
 
-  const gradeFilterControl = (
-    <div className="flex shrink-0 items-center gap-1.5">
+  const gradeFilterControl = (compact = false) => (
+    <div className={compact ? "shrink-0" : "flex shrink-0 items-center gap-1.5"}>
       <Select value={gradeFilter} onValueChange={setGradeFilter}>
-        <SelectTrigger className="h-10 w-[7.5rem] rounded-full border-black/10 bg-white text-[12px] font-medium text-black focus:ring-[#C7F33C] sm:h-11 sm:w-[160px] sm:text-[12.5px] lg:h-10">
+        <SelectTrigger
+          className={
+            compact
+              ? "h-10 w-[6.75rem] rounded-full border-black/10 bg-white px-2.5 text-[11px] font-medium text-black focus:ring-[#C7F33C]"
+              : "h-10 w-[7.5rem] rounded-full border-black/10 bg-white text-[12px] font-medium text-black focus:ring-[#C7F33C] sm:h-11 sm:w-[160px] sm:text-[12.5px] lg:h-10"
+          }
+        >
           <SelectValue placeholder="All Grades" />
         </SelectTrigger>
         <SelectContent>
@@ -1201,16 +1215,16 @@ export function StudentsLedger() {
             })}
           </div>
 
-          <div className="mobile-scrollbar-none hidden overflow-x-auto lg:block">{statusTabs}</div>
+          <div className="mobile-scrollbar-none hidden overflow-x-auto lg:block">{statusTabs()}</div>
         </div>
 
-        <div className="flex items-center gap-2 lg:hidden">
-          <div className="mobile-scrollbar-none min-w-0 flex-1 overflow-x-auto">{statusTabs}</div>
-          {gradeFilterControl}
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 lg:hidden">
+          {statusTabs(true)}
+          {gradeFilterControl(true)}
         </div>
 
         <div className="grid gap-2 lg:grid-cols-[auto_auto_minmax(260px,1fr)] lg:items-center">
-          <div className="hidden lg:block">{gradeFilterControl}</div>
+          <div className="hidden lg:block">{gradeFilterControl()}</div>
 
           <span className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-full bg-[#E1F2AE] px-3 py-1.5 text-[12px] font-semibold text-black lg:min-h-10 lg:w-auto lg:justify-start">
             <span className="font-mono">{counts.total}</span>
