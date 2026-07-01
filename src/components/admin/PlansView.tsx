@@ -100,7 +100,7 @@ export function PlansView() {
           </p>
         </div>
 
-        <div className="inline-flex items-center gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
+        <div className="inline-flex w-full items-center gap-1 rounded-full border border-[#E5E5E5] bg-white p-1 sm:w-auto">
           {(["Monthly", "Annually"] as Interval[]).map((i) => (
             <button
               key={i}
@@ -115,7 +115,7 @@ export function PlansView() {
         </div>
       </div>
 
-      <div className="grid gap-5 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
         {tiers.map((t, i) => {
           const price = interval === "Monthly" ? t.monthly : t.annually;
           const isPremium = t.name === "Premium";

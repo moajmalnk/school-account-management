@@ -296,7 +296,7 @@ function TopBar({
   onToggleEdit: () => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2 text-[14px]">
           <button
@@ -309,16 +309,16 @@ function TopBar({
           <span className="font-semibold text-black">{studentName}</span>
         </div>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
         <button
           onClick={onBack}
-          className="inline-flex items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-4 py-2 text-[13px] font-medium text-black/75 shadow-sm transition-colors hover:bg-[#F4F4F5]"
+          className="inline-flex w-full items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-4 py-2 text-[13px] font-medium text-black/75 shadow-sm transition-colors hover:bg-[#F4F4F5] sm:w-auto"
         >
           <ArrowLeft className="h-4 w-4" /> Back to list
         </button>
         <button
           onClick={onToggleEdit}
-          className={`inline-flex items-center gap-1.5 rounded-full px-5 py-2 text-[13px] font-semibold shadow-sm transition-colors ${
+          className={`inline-flex w-full items-center justify-center gap-1.5 rounded-full px-5 py-2 text-[13px] font-semibold shadow-sm transition-colors sm:w-auto ${
             editing
               ? "bg-[#C7F33C] text-black hover:bg-[#E1F2AE]"
               : "bg-black text-white hover:bg-black/85"

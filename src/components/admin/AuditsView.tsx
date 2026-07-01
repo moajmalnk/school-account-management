@@ -62,7 +62,7 @@ export function AuditsView() {
         </div>
         <button
           onClick={simulate}
-          className="inline-flex items-center gap-1.5 rounded-full bg-black px-5 py-2.5 text-[12.5px] font-semibold text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)] transition hover:bg-[#C7F33C] hover:text-black"
+          className="inline-flex w-full items-center justify-center gap-1.5 rounded-full bg-black px-5 py-2.5 text-[12.5px] font-semibold text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)] transition hover:bg-[#C7F33C] hover:text-black sm:w-auto"
         >
           <Zap className="h-3.5 w-3.5" /> Simulate Live Webhook Payment Event
         </button>
@@ -88,34 +88,81 @@ export function AuditsView() {
             </span>
           </div>
 
-          <div className="grid grid-cols-[1.4fr_1.6fr_1fr_1.2fr_0.7fr] gap-3 border-b border-[#E5E5E5] bg-[#F4F4F5]/60 px-6 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/55">
-            <div>Super Admin</div>
-            <div>Target Workspace</div>
-            <div>Ticket</div>
-            <div>Entered</div>
-            <div>Duration</div>
-          </div>
-          {impersonationLogs.map((l, i) => (
-            <div
-              key={i}
-              className="grid grid-cols-[1.4fr_1.6fr_1fr_1.2fr_0.7fr] gap-3 border-b border-[#F0F0F0] px-6 py-3.5 last:border-b-0 hover:bg-[#F4F4F5]/60"
-            >
-              <div className="flex items-center gap-2">
-                <div className="grid h-7 w-7 place-items-center rounded-full bg-black text-[10px] font-semibold text-white">
-                  {l.admin
-                    .split(" ")
-                    .map((s) => s[0])
-                    .join("")
-                    .slice(0, 2)}
+          <div className="space-y-3 px-4 py-4 lg:hidden">
+            {impersonationLogs.map((l, i) => (
+              <div key={i} className="rounded-2xl border border-[#E5E5E5] bg-[#F4F4F5]/40 p-4">
+                <div className="flex items-center gap-2">
+                  <div className="grid h-7 w-7 place-items-center rounded-full bg-black text-[10px] font-semibold text-white">
+                    {l.admin
+                      .split(" ")
+                      .map((s) => s[0])
+                      .join("")
+                      .slice(0, 2)}
+                  </div>
+                  <span className="text-[12.5px] font-medium text-black">{l.admin}</span>
                 </div>
-                <span className="text-[12.5px] font-medium text-black">{l.admin}</span>
+                <div className="mt-3 space-y-2 text-[12px]">
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                      Target Workspace
+                    </div>
+                    <div className="text-black/75">{l.tenant}</div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                        Ticket
+                      </div>
+                      <div className="font-mono text-[11px] text-black">{l.ticket}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                        Duration
+                      </div>
+                      <div className="font-mono text-[11px] text-black/75">{l.duration}</div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                      Entered
+                    </div>
+                    <div className="font-mono text-[11px] text-black/55">{l.time}</div>
+                  </div>
+                </div>
               </div>
-              <div className="text-[12.5px] text-black/75">{l.tenant}</div>
-              <div className="font-mono text-[11px] text-black">{l.ticket}</div>
-              <div className="font-mono text-[11px] text-black/55">{l.time}</div>
-              <div className="font-mono text-[11px] text-black/75">{l.duration}</div>
+            ))}
+          </div>
+
+          <div className="hidden lg:block">
+            <div className="grid grid-cols-[1.4fr_1.6fr_1fr_1.2fr_0.7fr] gap-3 border-b border-[#E5E5E5] bg-[#F4F4F5]/60 px-6 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/55">
+              <div>Super Admin</div>
+              <div>Target Workspace</div>
+              <div>Ticket</div>
+              <div>Entered</div>
+              <div>Duration</div>
             </div>
-          ))}
+            {impersonationLogs.map((l, i) => (
+              <div
+                key={i}
+                className="grid grid-cols-[1.4fr_1.6fr_1fr_1.2fr_0.7fr] gap-3 border-b border-[#F0F0F0] px-6 py-3.5 last:border-b-0 hover:bg-[#F4F4F5]/60"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="grid h-7 w-7 place-items-center rounded-full bg-black text-[10px] font-semibold text-white">
+                    {l.admin
+                      .split(" ")
+                      .map((s) => s[0])
+                      .join("")
+                      .slice(0, 2)}
+                  </div>
+                  <span className="text-[12.5px] font-medium text-black">{l.admin}</span>
+                </div>
+                <div className="text-[12.5px] text-black/75">{l.tenant}</div>
+                <div className="font-mono text-[11px] text-black">{l.ticket}</div>
+                <div className="font-mono text-[11px] text-black/55">{l.time}</div>
+                <div className="font-mono text-[11px] text-black/75">{l.duration}</div>
+              </div>
+            ))}
+          </div>
         </OrganicCard>
 
         {/* Webhook stream */}

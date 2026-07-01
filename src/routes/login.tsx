@@ -102,8 +102,8 @@ function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#EAEAEA] px-4 py-12">
-      <div className="w-full max-w-[460px]">
+    <div className="flex min-h-screen items-center justify-center bg-[#EAEAEA] px-4 py-6 sm:py-12">
+      <div className="w-full max-w-md">
         <div className="mb-8 flex flex-col items-center text-center">
           <div className="flex items-center gap-3">
             <div className="grid h-11 w-11 place-items-center rounded-2xl bg-black text-base font-bold text-white">
@@ -118,7 +118,7 @@ function LoginPage() {
           </div>
         </div>
 
-        <OrganicCard tone="white" cornerSide="tr" className="p-8">
+        <OrganicCard tone="white" cornerSide="tr" className="p-6 sm:p-8">
           <h1 className="text-title">Sign in to continue</h1>
           <p className="mt-2 text-[14px] text-black/55">Select your authentication tier.</p>
 

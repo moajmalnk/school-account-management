@@ -98,17 +98,17 @@ export function OverviewView() {
             conversion this week.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button className="rounded-full border border-[#E5E5E5] bg-white px-4 py-2 text-[12.5px] font-medium text-black/75 transition-colors hover:bg-[#F4F4F5]">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          <button className="w-full rounded-full border border-[#E5E5E5] bg-white px-4 py-2 text-[12.5px] font-medium text-black/75 transition-colors hover:bg-[#F4F4F5] sm:w-auto">
             Last 30 days
           </button>
-          <button className="rounded-full bg-black px-4 py-2 text-[12.5px] font-semibold text-white shadow-sm transition-colors hover:bg-black/85">
+          <button className="w-full rounded-full bg-black px-4 py-2 text-[12.5px] font-semibold text-white shadow-sm transition-colors hover:bg-black/85 sm:w-auto">
             Export Report
           </button>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           label="Total Active Schools"
           value="142"

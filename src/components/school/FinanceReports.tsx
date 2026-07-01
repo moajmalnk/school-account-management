@@ -74,20 +74,20 @@ function ExportBar({
   onPdf: () => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
       <div className="text-title">{title}</div>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
         <button
           type="button"
           onClick={onCsv}
-          className="inline-flex items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3.5 py-1.5 text-[12px] font-medium text-black transition-colors hover:bg-[#F4F4F5]"
+          className="inline-flex w-full items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3.5 py-1.5 text-[12px] font-medium text-black transition-colors hover:bg-[#F4F4F5] sm:w-auto"
         >
           <FileSpreadsheet className="h-3.5 w-3.5" /> Export CSV
         </button>
         <button
           type="button"
           onClick={onPdf}
-          className="inline-flex items-center gap-1.5 rounded-full bg-black px-3.5 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-black/85"
+          className="inline-flex w-full items-center justify-center gap-1.5 rounded-full bg-black px-3.5 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-black/85 sm:w-auto"
         >
           <Download className="h-3.5 w-3.5" /> Export PDF
         </button>

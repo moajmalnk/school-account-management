@@ -204,15 +204,19 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (name: string) 
         </div>
         <button
           onClick={() => setOpen(true)}
-          className="inline-flex items-center gap-1.5 rounded-full bg-black px-5 py-2.5 text-[13px] font-semibold text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)] transition hover:bg-black/85"
+          className="inline-flex w-full items-center justify-center gap-1.5 rounded-full bg-black px-5 py-2.5 text-[13px] font-semibold text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)] transition hover:bg-black/85 sm:w-auto"
         >
           <Plus className="h-4 w-4" /> Provision New School Tenant
         </button>
       </div>
 
       {/* Filters */}
-      <OrganicCard tone="white" cornerSide="tr" className="flex flex-wrap items-center gap-2 p-3">
-        <div className="relative min-w-[260px] flex-1">
+      <OrganicCard
+        tone="white"
+        cornerSide="tr"
+        className="flex flex-col gap-2 p-3 sm:flex-row sm:flex-wrap sm:items-center"
+      >
+        <div className="relative w-full min-w-0 flex-1 sm:min-w-[260px]">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-black/40" />
           <Input
             value={query}
@@ -222,7 +226,7 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (name: string) 
           />
         </div>
         <Select value={tier} onValueChange={setTier}>
-          <SelectTrigger className="h-10 w-[170px] rounded-full border-[#E5E5E5] bg-[#F4F4F5] text-[12px]">
+          <SelectTrigger className="h-10 w-full rounded-full border-[#E5E5E5] bg-[#F4F4F5] text-[12px] sm:w-[170px]">
             <SelectValue placeholder="All packages" />
           </SelectTrigger>
           <SelectContent>
@@ -233,7 +237,7 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (name: string) 
           </SelectContent>
         </Select>
         <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="h-10 w-[170px] rounded-full border-[#E5E5E5] bg-[#F4F4F5] text-[12px]">
+          <SelectTrigger className="h-10 w-full rounded-full border-[#E5E5E5] bg-[#F4F4F5] text-[12px] sm:w-[170px]">
             <SelectValue placeholder="All statuses" />
           </SelectTrigger>
           <SelectContent>
@@ -247,7 +251,7 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (name: string) 
       </OrganicCard>
 
       {/* Cards */}
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {filtered.map((t, i) => {
           const pct = Math.round((t.students / t.capacity) * 100);
           const tStyle = TIER_STYLE[t.tier];
@@ -541,7 +545,7 @@ function TenantFormDrawer({
             </div>
           </Field>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Administrator Full Name">
               <Input
                 value={adminName}
@@ -559,7 +563,7 @@ function TenantFormDrawer({
             </Field>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Contact String">
               <Input
                 value={contact}
@@ -577,7 +581,7 @@ function TenantFormDrawer({
             </Field>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Student Seat Limit">
               <Input
                 type="number"
@@ -597,7 +601,7 @@ function TenantFormDrawer({
           </div>
 
           <Field label="Subscription Tier">
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               {(["Basic", "Premium", "Enterprise"] as Tier[]).map((tt) => {
                 const sel = tier === tt;
                 return (
@@ -738,7 +742,7 @@ function EditTenantDrawer({
           </Field>
 
           <Field label="Subscription Tier">
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               {(["Basic", "Premium", "Enterprise"] as Tier[]).map((tt) => {
                 const sel = tier === tt;
                 return (
@@ -760,7 +764,7 @@ function EditTenantDrawer({
           </Field>
 
           <Field label="Lifecycle Status">
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {(["Active", "Trial", "Overdue", "Suspended"] as Status[]).map((ss) => {
                 const sel = status === ss;
                 return (
@@ -875,7 +879,7 @@ function BillingRulesDrawer({
 
         <div className="space-y-5 px-6 py-5">
           <Field label="Billing Cycle">
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               {(["Monthly", "Quarterly", "Annual"] as BillingCycle[]).map((c) => {
                 const sel = draft.cycle === c;
                 return (
@@ -896,7 +900,7 @@ function BillingRulesDrawer({
             </div>
           </Field>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label={`Rate / student (${sym})`}>
               <Input
                 type="number"
@@ -920,7 +924,7 @@ function BillingRulesDrawer({
             </Field>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Tax / GST %">
               <Input
                 type="number"
@@ -943,7 +947,7 @@ function BillingRulesDrawer({
             </Field>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Next Invoice Date">
               <DatePicker
                 value={draft.nextInvoice}

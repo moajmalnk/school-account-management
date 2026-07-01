@@ -11,6 +11,11 @@ import {
 import { useEffect } from "react";
 import { toast } from "sonner";
 
+import {
+  MobileTabBar,
+  mobileMainPadding,
+  type MobileTabItem,
+} from "@/components/layout/MobileTabBar";
 import { useAuth } from "@/lib/auth";
 import { TenantStoreProvider } from "@/lib/tenant-store";
 
@@ -21,16 +26,24 @@ export const Route = createFileRoute("/tenant")({
 type NavEntry = {
   to: string;
   label: string;
+  shortLabel: string;
   icon: typeof LayoutDashboard;
 };
 
 const NAV: NavEntry[] = [
-  { to: "/tenant/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/tenant/students", label: "Students", icon: Users },
-  { to: "/tenant/staff", label: "Staff", icon: UserCog },
-  { to: "/tenant/finance", label: "Finance", icon: Wallet },
-  { to: "/tenant/settings", label: "Settings", icon: Settings },
+  { to: "/tenant/dashboard", label: "Dashboard", shortLabel: "Home", icon: LayoutDashboard },
+  { to: "/tenant/students", label: "Students", shortLabel: "Students", icon: Users },
+  { to: "/tenant/staff", label: "Staff", shortLabel: "Staff", icon: UserCog },
+  { to: "/tenant/finance", label: "Finance", shortLabel: "Finance", icon: Wallet },
+  { to: "/tenant/settings", label: "Settings", shortLabel: "Settings", icon: Settings },
 ];
+
+const MOBILE_TABS: MobileTabItem[] = NAV.map((n) => ({
+  to: n.to,
+  label: n.shortLabel,
+  icon: n.icon,
+  match: (pathname) => pathname.startsWith(n.to),
+}));
 
 function TenantLayout() {
   const navigate = useNavigate();
@@ -57,15 +70,46 @@ function TenantLayout() {
   return (
     <TenantStoreProvider>
       <div className="min-h-screen bg-[#EAEAEA] text-black">
-        <div className="flex gap-6 p-6">
+        <TenantMobileHeader />
+        <div className="flex gap-4 p-3 sm:p-4 lg:gap-6 lg:p-6">
           <TenantSidebar />
-          <main className="min-w-0 flex-1 pb-12">
+          <main className={`min-w-0 flex-1 ${mobileMainPadding}`}>
             <Outlet />
           </main>
         </div>
+        <TenantMobileNav />
       </div>
     </TenantStoreProvider>
   );
+}
+
+function TenantMobileHeader() {
+  const { session } = useAuth();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const active = NAV.find((n) => pathname.startsWith(n.to));
+
+  return (
+    <header className="sticky top-0 z-30 border-b border-[#E5E5E5]/80 bg-[#EAEAEA]/95 px-3 py-3 backdrop-blur-md sm:px-4 lg:hidden">
+      <div className="flex items-center gap-2.5">
+        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-black text-xs font-bold text-white">
+          SH
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[13px] font-semibold text-black">
+            {session?.tenantName ?? "Silver Hills Global"}
+          </div>
+          <div className="truncate text-[10px] uppercase tracking-wider text-black/45">
+            {active?.label ?? "Tenant Workspace"}
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function TenantMobileNav() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  return <MobileTabBar items={MOBILE_TABS} pathname={pathname} />;
 }
 
 function TenantSidebar() {
@@ -81,7 +125,7 @@ function TenantSidebar() {
   };
 
   return (
-    <aside className="sticky top-6 flex h-[calc(100vh-3rem)] w-64 shrink-0 flex-col rounded-[2rem] border border-[#E5E5E5] bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_24px_60px_-32px_rgba(0,0,0,0.18)]">
+    <aside className="sticky top-6 hidden h-[calc(100vh-3rem)] w-64 shrink-0 flex-col rounded-[2rem] border border-[#E5E5E5] bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_24px_60px_-32px_rgba(0,0,0,0.18)] lg:flex">
       <div className="mb-5 flex items-center gap-2.5 px-2 pt-1">
         <div className="grid h-10 w-10 place-items-center rounded-2xl bg-black text-sm font-bold text-white">
           SH

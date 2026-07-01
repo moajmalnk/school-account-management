@@ -473,19 +473,27 @@ export function StudentsLedger() {
             {students.length} active enrollments · isolated to Silver Hills tenant
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button onClick={() => setOpen(true)} className={limeBtn}>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+          <button onClick={() => setOpen(true)} className={`${limeBtn} w-full sm:w-auto`}>
             <Plus className="h-3.5 w-3.5" /> Admit Student
           </button>
-          <button onClick={downloadPdf} className={limeBtn} title="Open print-ready PDF preview">
+          <button
+            onClick={downloadPdf}
+            className={`${limeBtn} w-full sm:w-auto`}
+            title="Open print-ready PDF preview"
+          >
             <Printer className="h-3.5 w-3.5" /> Download PDF
           </button>
-          <button onClick={exportCsv} className={limeBtn} title="Export visible rows as CSV">
+          <button
+            onClick={exportCsv}
+            className={`${limeBtn} w-full sm:w-auto`}
+            title="Export visible rows as CSV"
+          >
             <Download className="h-3.5 w-3.5" /> Export CSV
           </button>
           <button
             onClick={handleImportClick}
-            className={limeBtn}
+            className={`${limeBtn} w-full sm:w-auto`}
             title="Append students from a CSV file"
           >
             <Upload className="h-3.5 w-3.5" /> Import CSV
@@ -500,13 +508,17 @@ export function StudentsLedger() {
         </div>
       </div>
 
-      <OrganicCard tone="white" cornerSide="tr" className="flex flex-wrap items-center gap-3 p-3">
-        <div className="flex items-center gap-2">
-          <span className="pl-1 text-[10.5px] font-semibold uppercase tracking-wider text-black/55">
+      <OrganicCard
+        tone="white"
+        cornerSide="tr"
+        className="flex flex-col gap-3 p-3 sm:flex-row sm:flex-wrap sm:items-center"
+      >
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <span className="shrink-0 pl-1 text-[10.5px] font-semibold uppercase tracking-wider text-black/55">
             Grade
           </span>
           <Select value={gradeFilter} onValueChange={setGradeFilter}>
-            <SelectTrigger className="h-9 w-[150px] rounded-full border-black/10 bg-white text-[12.5px] font-medium text-black focus:ring-[#C7F33C]">
+            <SelectTrigger className="h-9 w-full rounded-full border-black/10 bg-white text-[12.5px] font-medium text-black focus:ring-[#C7F33C] sm:w-[150px]">
               <SelectValue placeholder="All Grades" />
             </SelectTrigger>
             <SelectContent>
@@ -520,7 +532,7 @@ export function StudentsLedger() {
           </Select>
         </div>
 
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#E1F2AE] px-3 py-1.5 text-[12px] font-semibold text-black">
+        <span className="inline-flex w-full items-center justify-center gap-1.5 rounded-full bg-[#E1F2AE] px-3 py-1.5 text-[12px] font-semibold text-black sm:w-auto sm:justify-start">
           <span className="font-mono">{counts.total}</span>
           Total Students
           <span className="font-mono text-black/65">
@@ -528,21 +540,23 @@ export function StudentsLedger() {
           </span>
         </span>
 
-        <div className="ml-auto inline-flex items-center rounded-full border border-black/10 bg-white p-1">
-          {STATUS_TABS.map((t) => {
-            const active = statusFilter === t.key;
-            return (
-              <button
-                key={t.key}
-                onClick={() => setStatusFilter(t.key)}
-                className={`rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition-colors ${
-                  active ? "bg-[#C7F33C] text-black" : "text-black/55 hover:bg-black/5"
-                }`}
-              >
-                {t.label}
-              </button>
-            );
-          })}
+        <div className="w-full overflow-x-auto sm:ml-auto sm:w-auto">
+          <div className="inline-flex min-w-max items-center rounded-full border border-black/10 bg-white p-1">
+            {STATUS_TABS.map((t) => {
+              const active = statusFilter === t.key;
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => setStatusFilter(t.key)}
+                  className={`rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition-colors ${
+                    active ? "bg-[#C7F33C] text-black" : "text-black/55 hover:bg-black/5"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </OrganicCard>
 
@@ -697,7 +711,7 @@ export function StudentsLedger() {
                 autoFocus
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
                   Class
@@ -845,7 +859,7 @@ export function StaffRoster() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-heading">Staff Roster</h1>
           <p className="mt-2 text-[14px] text-black/55">
@@ -854,7 +868,7 @@ export function StaffRoster() {
         </div>
         <button
           onClick={() => setOpen(true)}
-          className="flex items-center gap-1.5 rounded-full bg-black px-5 py-2.5 text-[12.5px] font-semibold text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)] transition-colors hover:bg-black/85"
+          className="flex w-full items-center justify-center gap-1.5 rounded-full bg-black px-5 py-2.5 text-[12.5px] font-semibold text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)] transition-colors hover:bg-black/85 sm:w-auto"
         >
           <Plus className="h-3.5 w-3.5" /> Recruit Staff
         </button>
@@ -966,7 +980,7 @@ export function StaffRoster() {
                 Manage role catalogue under Settings · Roles
               </p>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
                   Department
@@ -1059,7 +1073,7 @@ export function StaffRoster() {
                 <div className="text-[12px] text-black/60">{detailStaff.role}</div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="rounded-2xl border border-[#E5E5E5] p-3">
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
                     Employee ID
@@ -1272,7 +1286,7 @@ function ReceivePayment() {
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <OrganicCard tone="white" cornerSide="tr" padded className="lg:col-span-2">
         <div className="text-title">Inbound Fee Capture</div>
-        <div className="mt-4 grid grid-cols-2 gap-4">
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <FieldLabel>Class</FieldLabel>
             <FieldSelect
@@ -1326,7 +1340,7 @@ function ReceivePayment() {
             })}
           </div>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-4">
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <FieldLabel>Amount (₹)</FieldLabel>
             <input
@@ -1362,7 +1376,7 @@ function ReceivePayment() {
             </div>
           </div>
         </div>
-        <div className="mt-5 flex items-center justify-between rounded-2xl bg-[#F4F4F5] p-4">
+        <div className="mt-5 flex flex-col gap-3 rounded-2xl bg-[#F4F4F5] p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-[12.5px] text-black/65">
             Receipt for <span className="font-medium text-black">{stu}</span> · {cls} ·{" "}
             <span className="font-medium text-black">{category}</span> · {mode}
@@ -1378,7 +1392,7 @@ function ReceivePayment() {
           <button
             onClick={handleRecord}
             disabled={!Number(amount)}
-            className="rounded-full bg-black px-5 py-2 text-[12.5px] font-semibold text-white shadow-sm transition-colors hover:bg-black/85 disabled:opacity-50"
+            className="w-full shrink-0 rounded-full bg-black px-5 py-2 text-[12.5px] font-semibold text-white shadow-sm transition-colors hover:bg-black/85 disabled:opacity-50 sm:w-auto"
           >
             Record ₹ {(Number(amount) || 0).toLocaleString("en-IN")}
           </button>
@@ -1433,7 +1447,7 @@ function MakePayment() {
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <OrganicCard tone="white" cornerSide="tr" padded className="lg:col-span-2">
         <div className="text-title">Outbound Disbursal</div>
-        <div className="mt-4 grid grid-cols-2 gap-4">
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <FieldLabel>Payee Type</FieldLabel>
             <div className="flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
@@ -2223,7 +2237,7 @@ function ClassesCard({
                 autoFocus
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
                   Tuition Fee (₹)
@@ -2334,53 +2348,55 @@ function TransportCard({
         onAction={startCreate}
       />
 
-      <div className="mt-4 overflow-hidden rounded-2xl border border-[#EFEFEF]">
-        <div className="grid grid-cols-[1.4fr_1.4fr_0.7fr_auto] gap-2 bg-[#F4F4F5] px-3.5 py-2 text-[10px] font-semibold uppercase tracking-wider text-black/55">
-          <span>From</span>
-          <span>To</span>
-          <span className="text-right">Fee</span>
-          <span />
-        </div>
-        {transportRoutes.length === 0 ? (
-          <div className="px-3.5 py-6 text-center text-[12px] text-black/55">
-            No routes mapped yet
+      <div className="mt-4 overflow-x-auto rounded-2xl border border-[#EFEFEF]">
+        <div className="min-w-[320px]">
+          <div className="grid grid-cols-[1.4fr_1.4fr_0.7fr_auto] gap-2 bg-[#F4F4F5] px-3.5 py-2 text-[10px] font-semibold uppercase tracking-wider text-black/55">
+            <span>From</span>
+            <span>To</span>
+            <span className="text-right">Fee</span>
+            <span />
           </div>
-        ) : (
-          transportRoutes.map((r) => (
-            <div
-              key={r.id}
-              className="grid grid-cols-[1.4fr_1.4fr_0.7fr_auto] items-center gap-2 border-t border-[#EFEFEF] px-3.5 py-2.5 text-[12.5px] last:border-b-0"
-            >
-              <span className="truncate text-black">{r.mapFrom}</span>
-              <span className="truncate text-black/75">{r.mapTo}</span>
-              <span className="text-right font-mono text-black">
-                ₹ {r.fee.toLocaleString("en-IN")}
-              </span>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    className="grid h-7 w-7 place-items-center rounded-full text-black/55 hover:bg-black/5 hover:text-black"
-                    aria-label="More"
-                  >
-                    <MoreVertical className="h-3.5 w-3.5" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-40 rounded-2xl">
-                  <DropdownMenuItem onClick={() => startEdit(r)}>
-                    <Pencil className="mr-2 h-3.5 w-3.5" /> Edit
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => remove(r)}
-                    className="text-[#B91C1C] focus:text-[#B91C1C]"
-                  >
-                    <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+          {transportRoutes.length === 0 ? (
+            <div className="px-3.5 py-6 text-center text-[12px] text-black/55">
+              No routes mapped yet
             </div>
-          ))
-        )}
+          ) : (
+            transportRoutes.map((r) => (
+              <div
+                key={r.id}
+                className="grid grid-cols-[1.4fr_1.4fr_0.7fr_auto] items-center gap-2 border-t border-[#EFEFEF] px-3.5 py-2.5 text-[12.5px] last:border-b-0"
+              >
+                <span className="truncate text-black">{r.mapFrom}</span>
+                <span className="truncate text-black/75">{r.mapTo}</span>
+                <span className="text-right font-mono text-black">
+                  ₹ {r.fee.toLocaleString("en-IN")}
+                </span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      className="grid h-7 w-7 place-items-center rounded-full text-black/55 hover:bg-black/5 hover:text-black"
+                      aria-label="More"
+                    >
+                      <MoreVertical className="h-3.5 w-3.5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-40 rounded-2xl">
+                    <DropdownMenuItem onClick={() => startEdit(r)}>
+                      <Pencil className="mr-2 h-3.5 w-3.5" /> Edit
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => remove(r)}
+                      className="text-[#B91C1C] focus:text-[#B91C1C]"
+                    >
+                      <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            ))
+          )}
+        </div>
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
