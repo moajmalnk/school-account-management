@@ -1,17 +1,8 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import {
-  Bell,
-  ClipboardList,
-  CreditCard,
-  LayoutDashboard,
-  LogOut,
-  Search,
-  Settings,
-  UserCog,
-  Users,
-} from "lucide-react";
+import { Bell, LogOut, Search, Settings, UserCog } from "lucide-react";
 import { toast } from "sonner";
 
+import { ADMIN_NAV, type ViewKey } from "@/components/admin/admin-nav";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
@@ -22,41 +13,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/lib/auth";
-
-export type ViewKey = "overview" | "tenants" | "plans" | "audits";
-
-type NavEntry = {
-  key: ViewKey;
-  label: string;
-  shortLabel: string;
-  to: string;
-  icon: typeof LayoutDashboard;
-};
-
-export const ADMIN_NAV: NavEntry[] = [
-  {
-    key: "overview",
-    label: "Overview",
-    shortLabel: "Overview",
-    to: "/super-admin/overview",
-    icon: LayoutDashboard,
-  },
-  {
-    key: "tenants",
-    label: "Tenants",
-    shortLabel: "Tenants",
-    to: "/super-admin/tenants",
-    icon: Users,
-  },
-  { key: "plans", label: "Plans", shortLabel: "Plans", to: "/super-admin/plans", icon: CreditCard },
-  {
-    key: "audits",
-    label: "Audits",
-    shortLabel: "Audits",
-    to: "/super-admin/audits",
-    icon: ClipboardList,
-  },
-];
 
 function deriveActive(pathname: string): ViewKey {
   const match = ADMIN_NAV.find((n) => pathname.startsWith(n.to));
@@ -87,16 +43,14 @@ export function TopNav() {
   const activeLabel = ADMIN_NAV.find((n) => n.key === active)?.label ?? "Overview";
 
   return (
-    <header className="sticky top-0 z-30 border-b border-[#E5E5E5]/80 bg-[#EAEAEA]/95 px-3 pt-3 backdrop-blur-md sm:px-4 sm:pt-4 lg:border-b-0 lg:bg-transparent lg:px-6 lg:pt-6 lg:backdrop-blur-none">
-      <div className="mx-auto flex max-w-[1480px] items-center justify-between gap-3 lg:gap-4">
+    <header className="sticky top-0 z-30 bg-[#EAEAEA]/92 px-3 pb-2 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl sm:px-4 sm:pt-[calc(1rem+env(safe-area-inset-top))] lg:border-b-0 lg:bg-transparent lg:px-6 lg:pb-0 lg:pt-6 lg:backdrop-blur-none">
+      <div className="mobile-app-rail flex items-center justify-between gap-3 rounded-[1.75rem] border border-white/70 bg-white/88 px-3 py-2.5 shadow-[0_14px_44px_-32px_rgba(0,0,0,0.45)] lg:mx-auto lg:max-w-[1480px] lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
         <Link to="/super-admin/overview" className="flex min-w-0 items-center gap-2.5">
-          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-black text-sm font-bold text-white lg:h-10 lg:w-10 lg:rounded-2xl">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-black text-sm font-bold text-white">
             S
           </div>
           <div className="min-w-0 leading-tight">
-            <div className="truncate text-[13px] font-semibold text-black lg:text-[14px]">
-              School Accounts
-            </div>
+            <div className="truncate text-[14px] font-semibold text-black">School Accounts</div>
             <div className="truncate text-[10px] font-medium uppercase tracking-wider text-black/45 lg:hidden">
               {activeLabel}
             </div>
@@ -136,7 +90,7 @@ export function TopNav() {
             onClick={() =>
               toast("Settings drawer coming online", { description: "Module placeholder · v2.1" })
             }
-            className="hidden h-9 w-9 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:bg-black hover:text-white sm:grid lg:h-10 lg:w-10"
+            className="hidden h-10 w-10 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:bg-black hover:text-white sm:grid"
             aria-label="Settings"
           >
             <Settings className="h-4 w-4" />
@@ -147,7 +101,7 @@ export function TopNav() {
                 description: "Open the notification stream from the bell icon",
               })
             }
-            className="relative hidden h-9 w-9 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:bg-black hover:text-white sm:grid lg:h-10 lg:w-10"
+            className="relative hidden h-10 w-10 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:bg-black hover:text-white sm:grid"
             aria-label="Notifications"
           >
             <Bell className="h-4 w-4" />
@@ -156,7 +110,7 @@ export function TopNav() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
-                className="grid h-9 w-9 place-items-center rounded-full bg-black text-[11px] font-semibold text-white transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-black/30 sm:ml-1 lg:h-10 lg:w-10 lg:text-[12px]"
+                className="grid h-10 w-10 place-items-center rounded-full bg-black text-[12px] font-semibold text-white transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-black/30 sm:ml-1"
                 aria-label="Account menu"
               >
                 {initials}

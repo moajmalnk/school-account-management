@@ -1,7 +1,8 @@
 import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect } from "react";
 
-import { ADMIN_NAV, TopNav } from "@/components/admin/TopNav";
+import { ADMIN_NAV } from "@/components/admin/admin-nav";
+import { TopNav } from "@/components/admin/TopNav";
 import {
   MobileTabBar,
   mobileMainPadding,
@@ -44,10 +45,10 @@ function SuperAdminLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-[#EAEAEA] text-black">
+    <div className="min-h-dvh bg-[#EAEAEA] text-black">
       <TopNav />
       <main
-        className={`mx-auto max-w-[1480px] px-3 pb-6 pt-4 sm:px-4 sm:pt-6 lg:px-6 lg:pb-24 lg:pt-8 ${mobileMainPadding}`}
+        className={`mobile-app-rail px-3 pb-6 pt-4 sm:px-4 sm:pt-6 lg:mx-auto lg:max-w-[1480px] lg:px-6 lg:pb-24 lg:pt-8 ${mobileMainPadding}`}
       >
         <Outlet />
       </main>

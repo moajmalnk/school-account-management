@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useNavigate, useSearch } from "@tanstack/react-router";
+import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis, YAxis } from "recharts";
 import {
   TrendingUp,
   TrendingDown,
   Search,
   Plus,
-  MoreVertical,
   AlertTriangle,
   Printer,
   Download,
@@ -17,6 +17,13 @@ import {
   Pencil,
   Trash2,
   X,
+  Check,
+  ChevronDown,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  ChartPie,
+  BookOpen,
+  Scale,
 } from "lucide-react";
 import {
   Dialog,
@@ -41,17 +48,16 @@ import {
   SheetDescription,
   SheetFooter,
 } from "@/components/ui/sheet";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OrganicCard } from "@/components/ui/organic-card";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
 import {
   ACADEMIC_YEAR_OPTIONS,
   THEME_ACCENT_OPTIONS,
@@ -69,6 +75,7 @@ import {
   type TransportRoute,
 } from "@/lib/tenant-store";
 import { StudentProfileDetail } from "@/components/school/StudentProfileDetail";
+import { FinanceBarCard, FinanceDonutCard } from "@/components/school/finance-charts";
 import {
   BalanceSheetReport,
   GeneralLedgerReport,
@@ -78,12 +85,358 @@ import { downloadReceiptPdf } from "@/lib/finance-export";
 import { useAuth } from "@/lib/auth";
 import { cn, type CornerSide, type Tone } from "@/lib/utils";
 
-const PENDING_OBLIGATIONS = [
-  { payee: "BrightBus Logistics", desc: "Bus diesel + maintenance", amount: 48200, due: "Jun 02" },
-  { payee: "Faculty Payroll · May", desc: "35 staff · net payable", amount: 612000, due: "May 31" },
-  { payee: "Adani Electricity", desc: "Campus utility bill", amount: 18450, due: "Jun 05" },
-  { payee: "Office Stationery Co.", desc: "Exam print supplies", amount: 6800, due: "Jun 08" },
+const MADE_PAYMENTS = [
+  {
+    id: "DISB-2401",
+    payee: "Faculty Payroll · April",
+    desc: "34 staff · net payable",
+    amount: 598_400,
+    mode: "Bank Transfer · NEFT",
+    payeeType: "Salary" as const,
+    time: "Yesterday",
+    status: "Cleared" as const,
+  },
+  {
+    id: "DISB-2402",
+    payee: "BrightBus Logistics",
+    desc: "Bus diesel + maintenance",
+    amount: 46_800,
+    mode: "UPI Business",
+    payeeType: "Vendor" as const,
+    time: "Mon · 11:20",
+    status: "Cleared" as const,
+  },
+  {
+    id: "DISB-2403",
+    payee: "Adani Electricity",
+    desc: "Campus utility bill · Apr",
+    amount: 17_920,
+    mode: "Bank Transfer · NEFT",
+    payeeType: "Vendor" as const,
+    time: "28 Apr · 16:45",
+    status: "Cleared" as const,
+  },
+  {
+    id: "DISB-2404",
+    payee: "Office Stationery Co.",
+    desc: "Term-end print supplies",
+    amount: 5_950,
+    mode: "Cheque",
+    payeeType: "Vendor" as const,
+    time: "24 Apr · 10:12",
+    status: "Cleared" as const,
+  },
 ];
+
+const PENDING_OBLIGATIONS = [
+  {
+    id: "OBL-001",
+    payee: "BrightBus Logistics",
+    desc: "Bus diesel + maintenance",
+    amount: 48200,
+    due: "Jun 02",
+    payeeType: "Vendor" as const,
+  },
+  {
+    id: "OBL-002",
+    payee: "Faculty Payroll · May",
+    desc: "35 staff · net payable",
+    amount: 612000,
+    due: "May 31",
+    payeeType: "Salary" as const,
+  },
+  {
+    id: "OBL-003",
+    payee: "Adani Electricity",
+    desc: "Campus utility bill",
+    amount: 18450,
+    due: "Jun 05",
+    payeeType: "Vendor" as const,
+  },
+  {
+    id: "OBL-004",
+    payee: "Office Stationery Co.",
+    desc: "Exam print supplies",
+    amount: 6800,
+    due: "Jun 08",
+    payeeType: "Vendor" as const,
+  },
+];
+
+type PendingObligation = (typeof PENDING_OBLIGATIONS)[number];
+type MadePayment = Omit<(typeof MADE_PAYMENTS)[number], "status"> & {
+  status: "Queued" | "Cleared";
+};
+
+function formatDisbursalTime() {
+  const now = new Date();
+  return `Today · ${now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false })}`;
+}
+
+function gradeBand(cls: string): string {
+  const c = cls.toUpperCase();
+  if (c.includes("LKG") || c.includes("UKG") || c.includes("NURSERY")) {
+    return "Pre-Primary (LKG–UKG)";
+  }
+  const gradeMatch = c.match(/GRADE\s*(\d+)/i);
+  if (gradeMatch) {
+    const grade = Number(gradeMatch[1]);
+    if (grade <= 5) return "Primary (Gr 1–5)";
+    if (grade <= 8) return "Middle (Gr 6–8)";
+    return "Senior (Gr 9–12)";
+  }
+  return "Primary (Gr 1–5)";
+}
+
+const DAILY_CHART_CONFIG = {
+  amount: { label: "Collection", color: "#111111" },
+} satisfies ChartConfig;
+
+const OUTSTANDING_CHART_CONFIG = {
+  amount: { label: "Outstanding", color: "#C7F33C" },
+} satisfies ChartConfig;
+
+const PAYMENT_MODE_COLORS = ["#111111", "#C7F33C", "#E1F2AE"];
+
+function PaymentModeChart({ data }: { data: { label: string; value: number }[] }) {
+  const chartConfig = data.reduce<ChartConfig>((acc, row, index) => {
+    acc[row.label] = {
+      label: row.label,
+      color: PAYMENT_MODE_COLORS[index % PAYMENT_MODE_COLORS.length],
+    };
+    return acc;
+  }, {});
+
+  return (
+    <ChartContainer config={chartConfig} className="aspect-auto h-[220px] w-full">
+      <PieChart>
+        <ChartTooltip
+          content={
+            <ChartTooltipContent
+              formatter={(value, name) => [
+                `₹ ${Number(value).toLocaleString("en-IN")}`,
+                String(name),
+              ]}
+            />
+          }
+        />
+        <Pie
+          data={data}
+          dataKey="value"
+          nameKey="label"
+          innerRadius={52}
+          outerRadius={78}
+          paddingAngle={2}
+          strokeWidth={0}
+        >
+          {data.map((row, index) => (
+            <Cell key={row.label} fill={PAYMENT_MODE_COLORS[index % PAYMENT_MODE_COLORS.length]} />
+          ))}
+        </Pie>
+      </PieChart>
+    </ChartContainer>
+  );
+}
+
+function CategoryCollectionChart({ data }: { data: { label: string; amount: number }[] }) {
+  const chartConfig = {
+    amount: { label: "Collected", color: "#111111" },
+  } satisfies ChartConfig;
+
+  return (
+    <ChartContainer config={chartConfig} className="aspect-auto h-[220px] w-full">
+      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 8, left: 4, bottom: 4 }}>
+        <CartesianGrid horizontal={false} strokeDasharray="4 4" stroke="#E5E5E5" />
+        <XAxis type="number" hide />
+        <YAxis
+          type="category"
+          dataKey="label"
+          tickLine={false}
+          axisLine={false}
+          width={88}
+          tick={{ fontSize: 10, fill: "#525252" }}
+        />
+        <ChartTooltip
+          content={
+            <ChartTooltipContent
+              formatter={(value) => [`₹ ${Number(value).toLocaleString("en-IN")}`, "Collected"]}
+            />
+          }
+        />
+        <Bar dataKey="amount" fill="#111111" radius={[0, 8, 8, 0]} maxBarSize={18} />
+      </BarChart>
+    </ChartContainer>
+  );
+}
+
+function ClassEnrollmentChart({ data }: { data: { label: string; count: number }[] }) {
+  const chartConfig = {
+    count: { label: "Students", color: "#C7F33C" },
+  } satisfies ChartConfig;
+
+  return (
+    <ChartContainer config={chartConfig} className="aspect-auto h-[220px] w-full">
+      <BarChart data={data} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+        <CartesianGrid vertical={false} strokeDasharray="4 4" stroke="#E5E5E5" />
+        <XAxis
+          dataKey="label"
+          tickLine={false}
+          axisLine={false}
+          tick={{ fontSize: 9, fill: "#737373" }}
+          interval={0}
+          angle={-18}
+          textAnchor="end"
+          height={52}
+        />
+        <YAxis
+          tickLine={false}
+          axisLine={false}
+          allowDecimals={false}
+          tick={{ fontSize: 10, fill: "#737373" }}
+          width={28}
+        />
+        <ChartTooltip
+          content={
+            <ChartTooltipContent formatter={(value) => [`${Number(value)} enrolled`, "Students"]} />
+          }
+        />
+        <Bar dataKey="count" fill="#C7F33C" radius={[8, 8, 4, 4]} maxBarSize={36} />
+      </BarChart>
+    </ChartContainer>
+  );
+}
+
+function InsightCard({
+  label,
+  value,
+  hint,
+  tone = "white",
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  tone?: Tone;
+}) {
+  return (
+    <OrganicCard tone={tone} cornerSide="tr" padded className="!p-4">
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+        {label}
+      </div>
+      <div className="mt-2 font-mono text-[22px] font-semibold tracking-tight text-black">
+        {value}
+      </div>
+      <div className="mt-1 text-[11px] text-black/55">{hint}</div>
+    </OrganicCard>
+  );
+}
+
+function DailyFeeCollectionChart({
+  data,
+  peakDay,
+}: {
+  data: { day: string; amount: number }[];
+  peakDay: string;
+}) {
+  const weekTotal = data.reduce((sum, row) => sum + row.amount, 0);
+
+  return (
+    <div>
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+        <div className="rounded-2xl bg-[#F4F4F5] px-3 py-2">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+            Week total
+          </div>
+          <div className="font-mono text-[16px] font-semibold text-black">
+            ₹ {weekTotal.toLocaleString("en-IN")}
+          </div>
+        </div>
+        <div className="flex items-center gap-3 text-[10.5px] text-black/55">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-sm bg-black" /> Regular days
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-sm bg-[#C7F33C]" /> Peak day
+          </span>
+        </div>
+      </div>
+      <ChartContainer config={DAILY_CHART_CONFIG} className="aspect-auto h-[240px] w-full">
+        <BarChart data={data} margin={{ top: 12, right: 8, left: -8, bottom: 0 }}>
+          <defs>
+            <linearGradient id="peakBarGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#C7F33C" />
+              <stop offset="100%" stopColor="#A8D62E" />
+            </linearGradient>
+          </defs>
+          <CartesianGrid vertical={false} strokeDasharray="4 4" stroke="#E5E5E5" />
+          <XAxis
+            dataKey="day"
+            tickLine={false}
+            axisLine={false}
+            tick={{ fontSize: 11, fill: "#737373" }}
+          />
+          <YAxis
+            tickLine={false}
+            axisLine={false}
+            tick={{ fontSize: 10, fill: "#737373" }}
+            tickFormatter={(value) => `₹${Math.round(Number(value) / 1000)}k`}
+            width={44}
+          />
+          <ChartTooltip
+            cursor={{ fill: "rgba(0,0,0,0.04)", radius: 8 }}
+            content={
+              <ChartTooltipContent
+                formatter={(value) => [`₹ ${Number(value).toLocaleString("en-IN")}`, "Collected"]}
+              />
+            }
+          />
+          <Bar dataKey="amount" radius={[10, 10, 4, 4]} maxBarSize={52}>
+            {data.map((row) => (
+              <Cell
+                key={row.day}
+                fill={row.day === peakDay ? "url(#peakBarGradient)" : "#111111"}
+              />
+            ))}
+          </Bar>
+        </BarChart>
+      </ChartContainer>
+    </div>
+  );
+}
+
+function OutstandingFeesChart({
+  data,
+}: {
+  data: { label: string; shortLabel: string; amount: number }[];
+}) {
+  const maxAmount = Math.max(...data.map((row) => row.amount), 1);
+
+  return (
+    <ChartContainer config={OUTSTANDING_CHART_CONFIG} className="aspect-auto h-[280px] w-full">
+      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 12, left: 4, bottom: 4 }}>
+        <CartesianGrid horizontal={false} strokeDasharray="4 4" stroke="#E5E5E5" />
+        <XAxis type="number" hide domain={[0, maxAmount * 1.15]} />
+        <YAxis
+          type="category"
+          dataKey="shortLabel"
+          tickLine={false}
+          axisLine={false}
+          width={72}
+          tick={{ fontSize: 11, fill: "#525252" }}
+        />
+        <ChartTooltip
+          cursor={{ fill: "rgba(199,243,60,0.12)" }}
+          content={
+            <ChartTooltipContent
+              labelFormatter={(_, payload) => payload?.[0]?.payload?.label ?? "Grade band"}
+              formatter={(value) => [`₹ ${Number(value).toLocaleString("en-IN")}`, "Outstanding"]}
+            />
+          }
+        />
+        <Bar dataKey="amount" fill="#C7F33C" radius={[0, 10, 10, 0]} maxBarSize={22} />
+      </BarChart>
+    </ChartContainer>
+  );
+}
 
 function KpiCard({
   label,
@@ -112,120 +465,347 @@ function KpiCard({
         ? "text-black"
         : "text-[#B91C1C]";
   return (
-    <OrganicCard tone={tone} cornerSide={cornerSide} arrow padded>
-      <div className={`text-[11px] font-medium uppercase tracking-wider ${labelClass}`}>
+    <OrganicCard
+      tone={tone}
+      cornerSide={cornerSide}
+      arrow
+      padded
+      className="min-w-0 w-full p-3 sm:p-6 [&_.relative]:pr-10 [&_.relative]:pl-10 [&_.relative]:pb-10 sm:[&_.relative]:pr-14 sm:[&_.relative]:pl-14 sm:[&_.relative]:pb-14"
+    >
+      <div
+        className={`text-[9px] font-medium uppercase leading-tight tracking-wider sm:text-[11px] ${labelClass}`}
+      >
         {label}
       </div>
-      <div className="mt-3 font-mono text-[28px] font-semibold tracking-tight">{value}</div>
-      <div className={`mt-1 flex items-center gap-1 text-[11.5px] ${deltaColor}`}>
-        <Icon className="h-3 w-3" /> {delta}
+      <div className="mt-1.5 font-mono text-[17px] font-semibold leading-none tracking-tight sm:mt-3 sm:text-[22px] md:text-[28px]">
+        {value}
+      </div>
+      <div className={`mt-1 flex min-w-0 items-center gap-1 text-[10px] sm:text-[11.5px] ${deltaColor}`}>
+        <Icon className="h-3 w-3 shrink-0" /> <span className="truncate">{delta}</span>
       </div>
     </OrganicCard>
   );
 }
 
 export function SchoolDashboard() {
-  const { students, staff, payments } = useTenantStore();
+  const { students, staff, payments, academicYear } = useTenantStore();
   const totalDue = students.reduce((acc, s) => acc + s.due, 0);
   const monthlyIncome = payments.reduce((acc, p) => acc + p.amount, 0);
+  const clearedStudents = students.filter((s) => s.due === 0).length;
+  const overdueStudents = students.filter((s) => s.due > 0);
+  const collectionRate =
+    students.length > 0 ? Math.round((clearedStudents / students.length) * 100) : 0;
+  const avgReceipt = payments.length > 0 ? Math.round(monthlyIncome / payments.length) : 0;
 
-  const peakIdx = useMemo(() => {
-    const arr = [42, 58, 74, 96, 88, 51, 33];
-    return arr.reduce((m, v, i, a) => (v > a[m] ? i : m), 0);
-  }, []);
-  const bars = [42, 58, 74, 96, 88, 51, 33];
+  const dailyCollection = useMemo(() => {
+    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const baseline = [42000, 58000, 74000, 96000, 88000, 51000, 33000];
+    const receiptPulse = Math.round(monthlyIncome / Math.max(payments.length, 1));
+
+    return days.map((day, index) => ({
+      day,
+      amount: baseline[index] + (index === 3 ? receiptPulse : Math.round(receiptPulse * 0.15)),
+    }));
+  }, [monthlyIncome, payments.length]);
+
+  const peakDay = useMemo(
+    () =>
+      dailyCollection.reduce(
+        (best, row) => (row.amount > best.amount ? row : best),
+        dailyCollection[0],
+      ).day,
+    [dailyCollection],
+  );
+
+  const outstandingBands = useMemo(() => {
+    const bandOrder = [
+      "Pre-Primary (LKG–UKG)",
+      "Primary (Gr 1–5)",
+      "Middle (Gr 6–8)",
+      "Senior (Gr 9–12)",
+    ] as const;
+    const totals = new Map<string, number>(bandOrder.map((label) => [label, 0]));
+
+    for (const student of students) {
+      const band = gradeBand(student.cls);
+      totals.set(band, (totals.get(band) ?? 0) + student.due);
+    }
+
+    return bandOrder.map((label) => ({
+      label,
+      shortLabel: label.split("(")[0]?.trim() ?? label,
+      amount: totals.get(label) ?? 0,
+    }));
+  }, [students]);
+
+  const paymentModes = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const payment of payments) {
+      totals.set(payment.mode, (totals.get(payment.mode) ?? 0) + payment.amount);
+    }
+    return Array.from(totals.entries()).map(([label, value]) => ({ label, value }));
+  }, [payments]);
+
+  const feeCategories = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const payment of payments) {
+      totals.set(payment.cat, (totals.get(payment.cat) ?? 0) + payment.amount);
+    }
+    return Array.from(totals.entries())
+      .map(([label, amount]) => ({ label, amount }))
+      .sort((a, b) => b.amount - a.amount);
+  }, [payments]);
+
+  const classEnrollment = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const student of students) {
+      totals.set(student.cls, (totals.get(student.cls) ?? 0) + 1);
+    }
+    return Array.from(totals.entries())
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [students]);
+
+  const recentReceipts = useMemo(() => payments.slice(0, 5), [payments]);
+
+  const overdueWatchlist = useMemo(
+    () => [...overdueStudents].sort((a, b) => b.due - a.due).slice(0, 5),
+    [overdueStudents],
+  );
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-end justify-between">
-        <div>
-          <h1 className="text-heading">Operations Dashboard</h1>
-          <p className="mt-2 text-[14px] text-black/55">
-            Live snapshot · Silver Hills Global Group · academic year 2025–26
-          </p>
+    <div className="space-y-4 sm:space-y-6">
+
+      <div className="grid min-w-0 grid-cols-2 gap-2.5 sm:gap-3 md:gap-4 xl:grid-cols-4">
+        <div className="min-w-0">
+          <KpiCard
+            label="Total Students"
+            value={students.length.toLocaleString("en-IN")}
+            delta="live ledger"
+            cornerSide="tr"
+          />
         </div>
-        <div className="font-mono text-[11px] text-black/45">Updated 14:42 IST</div>
+        <div className="min-w-0">
+          <KpiCard
+            label="Total Staff"
+            value={staff.length.toString()}
+            delta={`${staff.filter((s) => s.active).length} active`}
+            cornerSide="bl"
+          />
+        </div>
+        <div className="min-w-0">
+          <KpiCard
+            label="Receipts Captured"
+            value={`₹ ${monthlyIncome.toLocaleString("en-IN")}`}
+            delta={`${payments.length} receipts`}
+            cornerSide="tr"
+          />
+        </div>
+        <div className="min-w-0">
+          <KpiCard
+            label="Outstanding Dues"
+            value={`₹ ${totalDue.toLocaleString("en-IN")}`}
+            delta="across all classes"
+            positive={false}
+            tone="lime"
+            cornerSide="bl"
+          />
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <KpiCard
-          label="Total Students"
-          value={students.length.toLocaleString("en-IN")}
-          delta="live ledger"
-          cornerSide="tr"
-        />
-        <KpiCard
-          label="Total Staff"
-          value={staff.length.toString()}
-          delta={`${staff.filter((s) => s.active).length} active`}
-          cornerSide="bl"
-        />
-        <KpiCard
-          label="Receipts Captured"
-          value={`₹ ${monthlyIncome.toLocaleString("en-IN")}`}
-          delta={`${payments.length} receipts`}
-          cornerSide="tr"
-        />
-        <KpiCard
-          label="Outstanding Dues"
-          value={`₹ ${totalDue.toLocaleString("en-IN")}`}
-          delta="across all classes"
-          positive={false}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+        <InsightCard
+          label="Collection Rate"
+          value={`${collectionRate}%`}
+          hint={`${clearedStudents} of ${students.length} accounts cleared`}
           tone="lime"
-          cornerSide="bl"
+        />
+        <InsightCard
+          label="Overdue Accounts"
+          value={overdueStudents.length.toString()}
+          hint={`₹ ${totalDue.toLocaleString("en-IN")} pending recovery`}
+        />
+        <InsightCard
+          label="Average Receipt"
+          value={`₹ ${avgReceipt.toLocaleString("en-IN")}`}
+          hint="Mean value per captured receipt"
+        />
+        <InsightCard
+          label="Active Staff Ratio"
+          value={`1:${students.length > 0 ? Math.max(1, Math.round(students.length / Math.max(staff.filter((s) => s.active).length, 1))) : 0}`}
+          hint={`${staff.filter((s) => s.active).length} active faculty & admin`}
         />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <OrganicCard tone="white" cornerSide="tr" arrow padded className="lg:col-span-2">
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="text-title">Daily Fee Collection</div>
               <div className="mt-1 text-[12.5px] text-black/55">Last 7 working days</div>
             </div>
-            <div className="font-mono text-[11px] text-black/45">in ₹ thousands</div>
+            <div className="rounded-full bg-[#F4F4F5] px-3 py-1 font-mono text-[10.5px] text-black/55">
+              Peak · {peakDay}
+            </div>
           </div>
-          <div className="flex h-44 items-end gap-3">
-            {bars.map((v, i) => {
-              const isPeak = i === peakIdx;
-              return (
-                <div key={i} className="flex flex-1 flex-col items-center gap-1.5">
-                  <div
-                    className="w-full rounded-xl"
-                    style={{
-                      height: `${v}%`,
-                      background: isPeak
-                        ? "linear-gradient(180deg,#C7F33C,#E1F2AE)"
-                        : "linear-gradient(180deg,#000000,#1F1F1F)",
-                    }}
-                  />
-                  <div className="font-mono text-[10px] text-black/55">{v}k</div>
-                </div>
-              );
-            })}
-          </div>
+          <DailyFeeCollectionChart data={dailyCollection} peakDay={peakDay} />
         </OrganicCard>
 
         <OrganicCard tone="white" cornerSide="bl" arrow padded>
           <div className="text-title">Outstanding Fees</div>
           <div className="mt-1 text-[12.5px] text-black/55">By academic grade band</div>
-          <div className="mt-4 space-y-3">
-            {[
-              { label: "Pre-Primary (LKG–UKG)", v: 18, amt: "₹ 0.42 L" },
-              { label: "Primary (Gr 1–5)", v: 36, amt: "₹ 1.84 L" },
-              { label: "Middle (Gr 6–8)", v: 28, amt: "₹ 2.10 L" },
-              { label: "Senior (Gr 9–12)", v: 18, amt: "₹ 3.65 L" },
-            ].map((r) => (
-              <div key={r.label}>
-                <div className="flex items-center justify-between text-[12.5px]">
-                  <span className="text-black/65">{r.label}</span>
-                  <span className="font-mono text-black">{r.amt}</span>
+          <div className="mt-3 rounded-2xl bg-[#F4F4F5] px-3 py-2">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+              Total outstanding
+            </div>
+            <div className="font-mono text-[18px] font-semibold text-black">
+              ₹ {totalDue.toLocaleString("en-IN")}
+            </div>
+          </div>
+          <div className="mt-4">
+            <OutstandingFeesChart data={outstandingBands} />
+          </div>
+          <div className="mt-2 space-y-2">
+            {outstandingBands.map((row) => (
+              <div
+                key={row.label}
+                className="flex items-center justify-between text-[11.5px] text-black/65"
+              >
+                <span>{row.label}</span>
+                <span className="font-mono text-black">₹ {row.amount.toLocaleString("en-IN")}</span>
+              </div>
+            ))}
+          </div>
+        </OrganicCard>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <OrganicCard tone="white" cornerSide="tr" padded>
+          <div className="text-title">Recent Receipts</div>
+          <div className="mt-1 text-[12.5px] text-black/55">
+            Latest inbound payments · {recentReceipts.length} shown
+          </div>
+          <div className="mt-4 divide-y divide-[#F0F0F0]">
+            {recentReceipts.length === 0 && (
+              <div className="py-6 text-center text-[12px] text-black/55">
+                No receipts logged yet
+              </div>
+            )}
+            {recentReceipts.map((payment) => (
+              <div
+                key={payment.id}
+                className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-[13px] font-semibold text-black">
+                    {payment.name}
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-black/55">
+                    {payment.cat} · {payment.mode} · {payment.time}
+                  </div>
                 </div>
-                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#F4F4F5]">
-                  <div
-                    className="h-full"
-                    style={{ width: `${r.v * 2.5}%`, backgroundColor: "#C7F33C" }}
+                <div className="shrink-0 text-right">
+                  <div className="font-mono text-[13px] font-semibold text-black">
+                    ₹ {payment.amount.toLocaleString("en-IN")}
+                  </div>
+                  <div className="font-mono text-[10px] text-black/45">{payment.id}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </OrganicCard>
+
+        <OrganicCard tone="white" cornerSide="bl" padded>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-title">Overdue Watchlist</div>
+            </div>
+            <span className="rounded-full bg-[#C7F33C] px-2.5 py-1 text-[10px] font-semibold text-black">
+              {overdueStudents.length} overdue
+            </span>
+          </div>
+          <div className="mt-4 space-y-2">
+            {overdueWatchlist.length === 0 && (
+              <div className="rounded-2xl bg-[#F4F4F5] px-4 py-6 text-center text-[12px] text-black/55">
+                All student balances are cleared
+              </div>
+            )}
+            {overdueWatchlist.map((student) => (
+              <div
+                key={student.id}
+                className="flex items-center justify-between gap-3 rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-[13px] font-semibold text-black">
+                    {student.name}
+                  </div>
+                  <div className="text-[11px] text-black/55">
+                    {student.cls} · {student.id}
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="font-mono text-[13px] font-semibold text-black">
+                    ₹ {student.due.toLocaleString("en-IN")}
+                  </div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-[#B91C1C]">
+                    Overdue
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </OrganicCard>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <OrganicCard tone="white" cornerSide="tr" padded>
+          <div className="text-title">Payment Mode Mix</div>
+          <div className="mt-1 text-[12.5px] text-black/55">Share of collections by channel</div>
+          <div className="mt-4">
+            <PaymentModeChart data={paymentModes} />
+          </div>
+          <div className="mt-3 space-y-2">
+            {paymentModes.map((row, index) => (
+              <div key={row.label} className="flex items-center justify-between text-[11.5px]">
+                <span className="inline-flex items-center gap-2 text-black/65">
+                  <span
+                    className="h-2 w-2 rounded-sm"
+                    style={{
+                      backgroundColor: PAYMENT_MODE_COLORS[index % PAYMENT_MODE_COLORS.length],
+                    }}
                   />
+                  {row.label}
+                </span>
+                <span className="font-mono text-black">₹ {row.value.toLocaleString("en-IN")}</span>
+              </div>
+            ))}
+          </div>
+        </OrganicCard>
+
+        <OrganicCard tone="white" cornerSide="bl" padded>
+          <div className="text-title">Fee Category Split</div>
+          <div className="mt-1 text-[12.5px] text-black/55">Collections grouped by fee head</div>
+          <div className="mt-4">
+            <CategoryCollectionChart data={feeCategories} />
+          </div>
+        </OrganicCard>
+
+        <OrganicCard tone="white" cornerSide="tr" padded>
+          <div className="text-title">Class Enrollment</div>
+          <div className="mt-1 text-[12.5px] text-black/55">
+            Active students across configured class tiers
+          </div>
+          <div className="mt-4">
+            <ClassEnrollmentChart data={classEnrollment} />
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {classEnrollment.slice(0, 4).map((row) => (
+              <div key={row.label} className="rounded-2xl bg-[#F4F4F5] px-3 py-2">
+                <div className="truncate text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                  {row.label}
+                </div>
+                <div className="mt-1 font-mono text-[14px] font-semibold text-black">
+                  {row.count}
                 </div>
               </div>
             ))}
@@ -269,6 +849,9 @@ export function StudentsLedger() {
   const [form, setForm] = useState({ name: "", cls: defaultClass, guardian: "", due: "" });
   const [gradeFilter, setGradeFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [pendingLedgerAction, setPendingLedgerAction] = useState<"pdf" | "csv" | "import" | null>(
+    null,
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -457,123 +1040,156 @@ export function StudentsLedger() {
     toast.success("Print preview opened", { description: "Save as PDF from your browser dialog" });
   };
 
+  const confirmLedgerAction = () => {
+    if (!pendingLedgerAction) return;
+    if (pendingLedgerAction === "pdf") downloadPdf();
+    else if (pendingLedgerAction === "csv") exportCsv();
+    else handleImportClick();
+    setPendingLedgerAction(null);
+  };
+
+  const ledgerActionCopy = {
+    pdf: {
+      title: "Download PDF",
+      description: `Generate a print-ready PDF for ${filtered.length} student${filtered.length === 1 ? "" : "s"} matching the current filters?`,
+      confirm: "Download PDF",
+    },
+    csv: {
+      title: "Export CSV",
+      description: `Export ${filtered.length} visible student${filtered.length === 1 ? "" : "s"} to a CSV file?`,
+      confirm: "Export CSV",
+    },
+    import: {
+      title: "Import CSV",
+      description:
+        "Import students from a CSV file? New records will be appended to the active tenant ledger.",
+      confirm: "Choose File",
+    },
+  } as const;
+
   if (activeStudent) {
     return <StudentProfileDetail student={activeStudent} onBack={closeStudent} />;
   }
 
   const limeBtn =
-    "flex items-center gap-1.5 rounded-full bg-[#C7F33C] px-4 py-2 text-[12.5px] font-semibold text-black shadow-[0_8px_24px_-12px_rgba(199,243,60,0.6)] transition-colors hover:brightness-95";
+    "flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-[#C7F33C] px-4 py-2 text-[12.5px] font-semibold text-black shadow-[0_8px_24px_-12px_rgba(199,243,60,0.6)] transition-colors hover:brightness-95";
+
+  const statusTabs = (
+    <div className="inline-flex min-w-max items-center rounded-full border border-black/10 bg-white p-1">
+      {STATUS_TABS.map((t) => {
+        const active = statusFilter === t.key;
+        return (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setStatusFilter(t.key)}
+            className={`min-h-9 rounded-full px-3 py-1.5 text-[11.5px] font-semibold transition-colors sm:px-3.5 sm:text-[12px] ${
+              active ? "bg-[#C7F33C] text-black" : "text-black/55 hover:bg-black/5"
+            }`}
+          >
+            {t.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  const gradeFilterControl = (
+    <div className="flex shrink-0 items-center gap-1.5">
+      <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-black/55 sm:text-[10.5px]">
+        Grade
+      </span>
+      <Select value={gradeFilter} onValueChange={setGradeFilter}>
+        <SelectTrigger className="h-10 w-[7.5rem] rounded-full border-black/10 bg-white text-[12px] font-medium text-black focus:ring-[#C7F33C] sm:h-11 sm:w-[160px] sm:text-[12.5px] lg:h-10">
+          <SelectValue placeholder="All Grades" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All Grades</SelectItem>
+          {grades.map((g) => (
+            <SelectItem key={g} value={g}>
+              {g}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-heading">Students Ledger</h1>
-          <p className="mt-2 text-[14px] text-black/55">
-            {students.length} active enrollments · isolated to Silver Hills tenant
-          </p>
-        </div>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
-          <button onClick={() => setOpen(true)} className={`${limeBtn} w-full sm:w-auto`}>
-            <Plus className="h-3.5 w-3.5" /> Admit Student
-          </button>
-          <button
-            onClick={downloadPdf}
-            className={`${limeBtn} w-full sm:w-auto`}
-            title="Open print-ready PDF preview"
-          >
-            <Printer className="h-3.5 w-3.5" /> Download PDF
-          </button>
-          <button
-            onClick={exportCsv}
-            className={`${limeBtn} w-full sm:w-auto`}
-            title="Export visible rows as CSV"
-          >
-            <Download className="h-3.5 w-3.5" /> Export CSV
-          </button>
-          <button
-            onClick={handleImportClick}
-            className={`${limeBtn} w-full sm:w-auto`}
-            title="Append students from a CSV file"
-          >
-            <Upload className="h-3.5 w-3.5" /> Import CSV
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv,text/csv"
-            className="hidden"
-            onChange={handleImport}
-          />
-        </div>
-      </div>
+    <div className="space-y-4 sm:space-y-6">
+      <OrganicCard tone="white" cornerSide="tr" className="space-y-3 p-3.5 sm:p-4">
+        <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+            <button onClick={() => setOpen(true)} className={`${limeBtn} w-full sm:w-auto`}>
+              <Plus className="h-3.5 w-3.5" /> Student
+            </button>
+            <button
+              onClick={() => setPendingLedgerAction("pdf")}
+              className={`${limeBtn} w-full sm:w-auto`}
+              title="Open print-ready PDF preview"
+            >
+              <Printer className="h-3.5 w-3.5" /> Download PDF
+            </button>
+            <button
+              onClick={() => setPendingLedgerAction("csv")}
+              className={`${limeBtn} w-full sm:w-auto`}
+              title="Export visible rows as CSV"
+            >
+              <Download className="h-3.5 w-3.5" /> Export CSV
+            </button>
+            <button
+              onClick={() => setPendingLedgerAction("import")}
+              className={`${limeBtn} w-full sm:w-auto`}
+              title="Append students from a CSV file"
+            >
+              <Upload className="h-3.5 w-3.5" /> Import CSV
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={handleImport}
+            />
+          </div>
 
-      <OrganicCard
-        tone="white"
-        cornerSide="tr"
-        className="flex flex-col gap-3 p-3 sm:flex-row sm:flex-wrap sm:items-center"
-      >
-        <div className="flex w-full items-center gap-2 sm:w-auto">
-          <span className="shrink-0 pl-1 text-[10.5px] font-semibold uppercase tracking-wider text-black/55">
-            Grade
+          <div className="mobile-scrollbar-none hidden overflow-x-auto lg:block">{statusTabs}</div>
+        </div>
+
+        <div className="flex items-center gap-2 lg:hidden">
+          <div className="mobile-scrollbar-none min-w-0 flex-1 overflow-x-auto">{statusTabs}</div>
+          {gradeFilterControl}
+        </div>
+
+        <div className="grid gap-2 lg:grid-cols-[auto_auto_minmax(260px,1fr)] lg:items-center">
+          <div className="hidden lg:block">{gradeFilterControl}</div>
+
+          <span className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-full bg-[#E1F2AE] px-3 py-1.5 text-[12px] font-semibold text-black lg:min-h-10 lg:w-auto lg:justify-start">
+            <span className="font-mono">{counts.total}</span>
+            Total Students
+            <span className="font-mono text-black/65">
+              ({counts.male}M | {counts.female}F)
+            </span>
           </span>
-          <Select value={gradeFilter} onValueChange={setGradeFilter}>
-            <SelectTrigger className="h-9 w-full rounded-full border-black/10 bg-white text-[12.5px] font-medium text-black focus:ring-[#C7F33C] sm:w-[150px]">
-              <SelectValue placeholder="All Grades" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Grades</SelectItem>
-              {grades.map((g) => (
-                <SelectItem key={g} value={g}>
-                  {g}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
 
-        <span className="inline-flex w-full items-center justify-center gap-1.5 rounded-full bg-[#E1F2AE] px-3 py-1.5 text-[12px] font-semibold text-black sm:w-auto sm:justify-start">
-          <span className="font-mono">{counts.total}</span>
-          Total Students
-          <span className="font-mono text-black/65">
-            ({counts.male}M | {counts.female}F)
-          </span>
-        </span>
-
-        <div className="w-full overflow-x-auto sm:ml-auto sm:w-auto">
-          <div className="inline-flex min-w-max items-center rounded-full border border-black/10 bg-white p-1">
-            {STATUS_TABS.map((t) => {
-              const active = statusFilter === t.key;
-              return (
-                <button
-                  key={t.key}
-                  onClick={() => setStatusFilter(t.key)}
-                  className={`rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition-colors ${
-                    active ? "bg-[#C7F33C] text-black" : "text-black/55 hover:bg-black/5"
-                  }`}
-                >
-                  {t.label}
-                </button>
-              );
-            })}
+          <div className="flex min-h-11 items-center gap-2 rounded-full border border-[#E5E5E5] bg-white px-3.5 shadow-[0_10px_28px_-24px_rgba(0,0,0,0.35)]">
+            <Search className="h-3.5 w-3.5 shrink-0 text-black/40" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by name, ID, or guardian…"
+              className="min-w-0 flex-1 bg-transparent text-[13px] text-black outline-none placeholder:text-black/35"
+            />
+            {query && (
+              <span className="shrink-0 font-mono text-[10px] text-black/45">
+                {filtered.length} match
+              </span>
+            )}
           </div>
         </div>
       </OrganicCard>
 
-      <OrganicCard tone="white" cornerSide="tr" className="flex items-center gap-2 p-3">
-        <Search className="ml-2 h-3.5 w-3.5 text-black/40" />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by name, ID, or guardian…"
-          className="flex-1 bg-transparent text-[13px] text-black outline-none placeholder:text-black/35"
-        />
-        {query && (
-          <span className="font-mono text-[10px] text-black/45">{filtered.length} match</span>
-        )}
-      </OrganicCard>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">
         {filtered.map((s, i) => {
           const isOverdue = s.due > 0;
           const tone: Tone = isOverdue ? "lime" : "white";
@@ -752,10 +1368,42 @@ export function StudentsLedger() {
                 Cancel
               </Button>
               <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
-                Admit Student
+                Student
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(pendingLedgerAction)}
+        onOpenChange={(next) => {
+          if (!next) setPendingLedgerAction(null);
+        }}
+      >
+        <DialogContent className="max-w-sm rounded-[1.5rem] border border-[#E5E5E5] bg-white p-6">
+          <DialogHeader>
+            <DialogTitle className="text-[22px] font-semibold text-black">
+              {pendingLedgerAction ? ledgerActionCopy[pendingLedgerAction].title : "Confirm Action"}
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
+              {pendingLedgerAction
+                ? ledgerActionCopy[pendingLedgerAction].description
+                : "Are you sure you want to continue?"}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-5 flex-row justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setPendingLedgerAction(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={confirmLedgerAction}
+              className="rounded-full bg-black text-white hover:bg-black/85"
+            >
+              {pendingLedgerAction ? ledgerActionCopy[pendingLedgerAction].confirm : "Continue"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
@@ -801,9 +1449,17 @@ export function StaffRoster() {
   const defaultDept = departments[0]?.name ?? "";
   const defaultRole = roles[0]?.title ?? "";
   const [open, setOpen] = useState(false);
+  const [editStaff, setEditStaff] = useState<Staff | null>(null);
   const [pendingRemoval, setPendingRemoval] = useState<Staff | null>(null);
+  const [pendingStatusChange, setPendingStatusChange] = useState<Staff | null>(null);
   const [detailStaff, setDetailStaff] = useState<Staff | null>(null);
   const [form, setForm] = useState({
+    name: "",
+    role: defaultRole,
+    dept: defaultDept,
+    id: "",
+  });
+  const [editForm, setEditForm] = useState({
     name: "",
     role: defaultRole,
     dept: defaultDept,
@@ -840,11 +1496,46 @@ export function StaffRoster() {
     setOpen(false);
   };
 
-  const toggleStatus = (id: string) => {
-    setStaff((prev) => prev.map((s) => (s.id === id ? { ...s, active: !s.active } : s)));
-    const s = staff.find((x) => x.id === id);
-    toast(`${s?.name} marked ${s?.active ? "Inactive" : "Active"}`);
+  const openEdit = (s: Staff) => {
+    setEditForm({ name: s.name, role: s.role, dept: s.dept, id: s.id });
+    setEditStaff(s);
   };
+
+  const handleEditSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editStaff) return;
+    if (!editForm.name.trim() || !editForm.role.trim()) {
+      toast.error("Name and role are required");
+      return;
+    }
+    setStaff((prev) =>
+      prev.map((s) =>
+        s.id === editStaff.id
+          ? {
+              ...s,
+              name: editForm.name.trim(),
+              role: editForm.role.trim(),
+              dept: editForm.dept,
+            }
+          : s,
+      ),
+    );
+    toast.success(`${editForm.name.trim()} updated`, {
+      description: `${editStaff.id} · ${editForm.dept}`,
+    });
+    setEditStaff(null);
+  };
+
+  const confirmStatusChange = () => {
+    if (!pendingStatusChange) return;
+    const nextActive = !pendingStatusChange.active;
+    setStaff((prev) =>
+      prev.map((s) => (s.id === pendingStatusChange.id ? { ...s, active: nextActive } : s)),
+    );
+    toast(`${pendingStatusChange.name} marked ${nextActive ? "Active" : "Inactive"}`);
+    setPendingStatusChange(null);
+  };
+
   const removeStaff = (id: string) => {
     const s = staff.find((x) => x.id === id);
     setStaff((prev) => prev.filter((x) => x.id !== id));
@@ -858,22 +1549,16 @@ export function StaffRoster() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-heading">Staff Roster</h1>
-          <p className="mt-2 text-[14px] text-black/55">
-            {staff.length} faculty &amp; administrative profiles
-          </p>
-        </div>
         <button
           onClick={() => setOpen(true)}
-          className="flex w-full items-center justify-center gap-1.5 rounded-full bg-black px-5 py-2.5 text-[12.5px] font-semibold text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)] transition-colors hover:bg-black/85 sm:w-auto"
+          className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-full bg-black px-5 py-2.5 text-[12.5px] font-semibold text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)] transition-colors hover:bg-black/85 sm:w-auto"
         >
           <Plus className="h-3.5 w-3.5" /> Recruit Staff
         </button>
       </div>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2">
         {staff.map((s, i) => {
           const tone: Tone = s.active ? "white" : "limePale";
           const cornerSide: CornerSide = i % 2 === 0 ? "tr" : "bl";
@@ -918,22 +1603,22 @@ export function StaffRoster() {
                   <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                     <button
                       type="button"
-                      onClick={() => toggleStatus(s.id)}
-                      className="w-full rounded-full border border-[#E5E5E5] bg-white px-3 py-2 text-[11.5px] font-medium text-black transition-colors hover:border-black/20 hover:bg-[#F4F4F5] sm:min-w-[6.5rem] sm:flex-1"
+                      onClick={() => setPendingStatusChange(s)}
+                      className="min-h-10 w-full rounded-full border border-[#E5E5E5] bg-white px-3 py-2 text-[11.5px] font-medium text-black transition-colors hover:border-black/20 hover:bg-[#F4F4F5] sm:min-w-[6.5rem] sm:flex-1"
                     >
                       {s.active ? "Deactivate" : "Activate"}
                     </button>
                     <button
                       type="button"
-                      onClick={() => toast(`Editor draft opened for ${s.name}`)}
-                      className="w-full rounded-full border border-[#E5E5E5] bg-white px-3 py-2 text-[11.5px] font-medium text-black transition-colors hover:border-black/20 hover:bg-[#F4F4F5] sm:min-w-[6.5rem] sm:flex-1"
+                      onClick={() => openEdit(s)}
+                      className="min-h-10 w-full rounded-full border border-[#E5E5E5] bg-white px-3 py-2 text-[11.5px] font-medium text-black transition-colors hover:border-black/20 hover:bg-[#F4F4F5] sm:min-w-[6.5rem] sm:flex-1"
                     >
                       Edit Profile
                     </button>
                     <button
                       type="button"
                       onClick={() => setPendingRemoval(s)}
-                      className="w-full rounded-full border border-[#FECACA] bg-[#FEF2F2] px-3 py-2 text-[11.5px] font-medium text-[#B91C1C] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2] sm:min-w-[6.5rem] sm:flex-1"
+                      className="min-h-10 w-full rounded-full border border-[#FECACA] bg-[#FEF2F2] px-3 py-2 text-[11.5px] font-medium text-[#B91C1C] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2] sm:min-w-[6.5rem] sm:flex-1"
                     >
                       Remove
                     </button>
@@ -1017,6 +1702,111 @@ export function StaffRoster() {
         </SheetContent>
       </Sheet>
 
+      <Sheet open={Boolean(editStaff)} onOpenChange={(next) => !next && setEditStaff(null)}>
+        <SheetContent side="right" className="w-full sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>Edit Staff Profile</SheetTitle>
+            <SheetDescription>
+              Update details for {editStaff?.name ?? "this staff member"}.
+            </SheetDescription>
+          </SheetHeader>
+          <form onSubmit={handleEditSave} className="mt-5 space-y-3 px-1">
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                Full Name
+              </Label>
+              <Input
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                placeholder="e.g. Sneha Pillai"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                Role
+              </Label>
+              <FieldSelect
+                value={editForm.role}
+                onValueChange={(role) => setEditForm({ ...editForm, role })}
+                options={roles.map((r) => ({ value: r.title, label: r.title }))}
+                placeholder="No roles configured"
+                disabled={roles.length === 0}
+              />
+              <p className="text-[10.5px] text-black/45">
+                Manage role catalogue under Settings · Roles
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Department
+                </Label>
+                <FieldSelect
+                  value={editForm.dept}
+                  onValueChange={(dept) => setEditForm({ ...editForm, dept })}
+                  options={departments.map((d) => ({ value: d.name, label: d.name }))}
+                  placeholder="No departments configured"
+                  disabled={departments.length === 0}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Employee ID
+                </Label>
+                <Input value={editForm.id} disabled className="font-mono opacity-60" />
+              </div>
+            </div>
+            <SheetFooter className="mt-4">
+              <Button type="button" variant="outline" onClick={() => setEditStaff(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+                Save Changes
+              </Button>
+            </SheetFooter>
+          </form>
+        </SheetContent>
+      </Sheet>
+
+      <Dialog
+        open={Boolean(pendingStatusChange)}
+        onOpenChange={(next) => {
+          if (!next) setPendingStatusChange(null);
+        }}
+      >
+        <DialogContent className="max-w-sm rounded-[1.5rem] border border-[#E5E5E5] bg-white p-6">
+          <DialogHeader>
+            <DialogTitle className="text-[22px] font-semibold text-black">
+              {pendingStatusChange?.active ? "Deactivate Staff" : "Activate Staff"}
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
+              {pendingStatusChange
+                ? pendingStatusChange.active
+                  ? `Are you sure you want to deactivate ${pendingStatusChange.name} (${pendingStatusChange.id})? They will be marked inactive on the roster.`
+                  : `Are you sure you want to activate ${pendingStatusChange.name} (${pendingStatusChange.id})? They will be marked active on the roster.`
+                : "Are you sure you want to change this staff member's status?"}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-5 flex-row justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setPendingStatusChange(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={confirmStatusChange}
+              className={
+                pendingStatusChange?.active
+                  ? "rounded-full bg-black text-white hover:bg-black/85"
+                  : "rounded-full bg-[#C7F33C] text-black hover:bg-[#E1F2AE]"
+              }
+            >
+              {pendingStatusChange?.active ? "Deactivate" : "Activate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog
         open={Boolean(pendingRemoval)}
         onOpenChange={(next) => {
@@ -1053,7 +1843,7 @@ export function StaffRoster() {
           if (!next) setDetailStaff(null);
         }}
       >
-        <DialogContent className="max-w-md rounded-[1.75rem] border border-[#E5E5E5] bg-white p-6">
+        <DialogContent className="max-w-md rounded-[1.75rem] border border-[#E5E5E5] bg-white p-6 [&>button]:hidden">
           <DialogHeader>
             <DialogTitle className="text-[24px] font-semibold text-black">
               Staff Profile
@@ -1096,14 +1886,41 @@ export function StaffRoster() {
                 </div>
                 <div className="mt-1 text-[12px] text-black">{detailStaff.dept}</div>
               </div>
+
+              <div className="grid grid-cols-3 gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPendingStatusChange(detailStaff);
+                    setDetailStaff(null);
+                  }}
+                  className="min-h-10 rounded-full border border-[#E5E5E5] bg-white px-2 py-2 text-center text-[10px] font-medium leading-tight text-black transition-colors hover:border-black/20 hover:bg-[#F4F4F5] sm:px-3 sm:text-[11.5px]"
+                >
+                  {detailStaff.active ? "Deactivate" : "Activate"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    openEdit(detailStaff);
+                    setDetailStaff(null);
+                  }}
+                  className="min-h-10 rounded-full border border-[#E5E5E5] bg-white px-2 py-2 text-center text-[10px] font-medium leading-tight text-black transition-colors hover:border-black/20 hover:bg-[#F4F4F5] sm:px-3 sm:text-[11.5px]"
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPendingRemoval(detailStaff);
+                    setDetailStaff(null);
+                  }}
+                  className="min-h-10 rounded-full border border-[#FECACA] bg-[#FEF2F2] px-2 py-2 text-center text-[10px] font-medium leading-tight text-[#B91C1C] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2] sm:px-3 sm:text-[11.5px]"
+                >
+                  Remove
+                </button>
+              </div>
             </div>
           )}
-
-          <DialogFooter className="mt-5 flex-row justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setDetailStaff(null)}>
-              Close
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
@@ -1111,36 +1928,106 @@ export function StaffRoster() {
 }
 
 export function FinanceModule() {
-  const [tab, setTab] = useState<"receive" | "make" | "analytics" | "ledger" | "pl" | "balance">(
-    "receive",
-  );
-  const tabs = [
-    { k: "receive" as const, l: "Receive Payment" },
-    { k: "make" as const, l: "Make Payment" },
-    { k: "analytics" as const, l: "Ledger Analytics" },
-    { k: "ledger" as const, l: "Ledger" },
-    { k: "pl" as const, l: "Profit & Loss Account" },
-    { k: "balance" as const, l: "Balance Sheet" },
+  type FinanceTabKey = "receive" | "make" | "analytics" | "ledger" | "pl" | "balance";
+
+  const [tab, setTab] = useState<FinanceTabKey>("receive");
+  const [sectionOpen, setSectionOpen] = useState(false);
+
+  const tabs: {
+    k: FinanceTabKey;
+    l: string;
+    icon: typeof ArrowDownToLine;
+  }[] = [
+    { k: "receive", l: "Receive Payment", icon: ArrowDownToLine },
+    { k: "make", l: "Make Payment", icon: ArrowUpFromLine },
+    { k: "analytics", l: "Ledger Analytics", icon: ChartPie },
+    { k: "ledger", l: "Ledger", icon: BookOpen },
+    { k: "pl", l: "Profit & Loss Account", icon: TrendingUp },
+    { k: "balance", l: "Balance Sheet", icon: Scale },
   ];
+
+  const activeTab = tabs.find((t) => t.k === tab) ?? tabs[0];
+  const ActiveIcon = activeTab.icon;
+
+  const selectSection = (key: FinanceTabKey) => {
+    setTab(key);
+    setSectionOpen(false);
+  };
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-end justify-between">
-        <div>
-          <h1 className="text-heading">Finance Command Center</h1>
-          <p className="mt-2 text-[14px] text-black/55">
-            Receive, disburse, and analyse cashflow in real time
-          </p>
+    <div className="space-y-4 sm:space-y-6">
+      <button
+        type="button"
+        onClick={() => setSectionOpen(true)}
+        className="flex w-full items-center gap-3 rounded-[1.35rem] border border-[#E5E5E5] bg-white p-3.5 text-left shadow-[0_10px_28px_-24px_rgba(0,0,0,0.35)] transition-colors hover:bg-[#FAFAFA] lg:hidden"
+      >
+        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-black text-white">
+          <ActiveIcon className="h-5 w-5" strokeWidth={2} />
         </div>
-      </div>
-      <div className="max-w-full overflow-x-auto pb-1">
-        <div className="inline-flex min-w-max rounded-full border border-[#E5E5E5] bg-white p-1">
+        <div className="min-w-0 flex-1">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+            Finance Section
+          </div>
+          <div className="truncate text-[15px] font-semibold text-black">{activeTab.l}</div>
+        </div>
+        <ChevronDown className="h-5 w-5 shrink-0 text-black/45" />
+      </button>
+
+      <Sheet open={sectionOpen} onOpenChange={setSectionOpen}>
+        <SheetContent
+          side="bottom"
+          className="max-h-[85dvh] rounded-t-[1.75rem] border-0 bg-[#0F1115] p-0 pb-[calc(1rem+env(safe-area-inset-bottom))] lg:hidden [&>button]:hidden"
+        >
+          <div className="flex justify-center pt-3">
+            <div className="h-1 w-10 rounded-full bg-white/20" />
+          </div>
+          <SheetHeader className="space-y-1 px-5 pb-4 pt-2 text-left">
+          </SheetHeader>
+          <div className="mobile-scrollbar-none max-h-[min(52dvh,420px)] space-y-2 overflow-y-auto px-4 pb-2">
+            {tabs.map((t) => {
+              const Icon = t.icon;
+              const active = tab === t.k;
+              return (
+                <button
+                  key={t.k}
+                  type="button"
+                  onClick={() => selectSection(t.k)}
+                  className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left transition-colors ${
+                    active
+                      ? "bg-[#C7F33C] text-black"
+                      : "bg-white/[0.06] text-white hover:bg-white/[0.1]"
+                  }`}
+                >
+                  <div
+                    className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${
+                      active ? "bg-black/10" : "bg-white/10"
+                    }`}
+                  >
+                    <Icon className="h-[18px] w-[18px]" strokeWidth={2} />
+                  </div>
+                  <span className="min-w-0 flex-1 text-[15px] font-medium">{t.l}</span>
+                  {active && (
+                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-black text-white">
+                      <Check className="h-4 w-4" strokeWidth={2.5} />
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <div className="hidden w-full lg:block">
+        <div className="grid w-full grid-cols-12 gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
           {tabs.map((t) => {
             const active = tab === t.k;
             return (
               <button
                 key={t.k}
+                type="button"
                 onClick={() => setTab(t.k)}
-                className={`whitespace-nowrap rounded-full px-4 py-2 text-[12px] font-medium transition-all sm:px-5 sm:text-[12.5px] ${
+                className={`col-span-2 rounded-full px-4 py-2 text-center text-[12.5px] font-medium leading-tight transition-all ${
                   active ? "bg-black text-white shadow-sm" : "text-black/65 hover:text-black"
                 }`}
               >
@@ -1282,11 +2169,44 @@ function ReceivePayment() {
     setAmount("");
   };
 
+  const todayTotal = useMemo(
+    () =>
+      payments
+        .filter((p) => p.time.startsWith("Today"))
+        .reduce((sum, p) => sum + p.amount, 0),
+    [payments],
+  );
+
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-      <OrganicCard tone="white" cornerSide="tr" padded className="lg:col-span-2">
-        <div className="text-title">Inbound Fee Capture</div>
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <div className="space-y-4 sm:space-y-5">
+      <OrganicCard tone="white" cornerSide="tr" padded>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-title">Inbound Fee Capture</div>
+            <p className="mt-1 text-[12px] text-black/55">
+              Post fee receipts to student ledgers · {academicYear}
+            </p>
+          </div>
+          {selected && (
+            <span
+              className={cn(
+                "inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[11.5px] font-semibold",
+                selected.due > 0 ? "bg-[#FEF3C7] text-black" : "bg-[#E1F2AE] text-black",
+              )}
+            >
+              {selected.due > 0 ? (
+                <>
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Due ₹ {selected.due.toLocaleString("en-IN")}
+                </>
+              ) : (
+                "Ledger Cleared"
+              )}
+            </span>
+          )}
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <div>
             <FieldLabel>Class</FieldLabel>
             <FieldSelect
@@ -1313,34 +2233,6 @@ function ReceivePayment() {
               placeholder="Select student"
             />
           </div>
-        </div>
-        <div className="mt-4">
-          <FieldLabel>Fee Categories</FieldLabel>
-          <div className="flex flex-wrap gap-2">
-            {paymentCategories.length === 0 && (
-              <span className="text-[12px] text-black/55">
-                No categories configured · add them under Settings
-              </span>
-            )}
-            {paymentCategories.map((c) => {
-              const active = category === c.label;
-              return (
-                <button
-                  key={c.id}
-                  onClick={() => setCategory(c.label)}
-                  className={`rounded-full border px-3.5 py-1.5 text-[12px] font-medium transition-colors ${
-                    active
-                      ? "border-transparent bg-[#C7F33C] text-black"
-                      : "border-[#E5E5E5] text-black/65 hover:bg-[#F4F4F5]"
-                  }`}
-                >
-                  {c.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <FieldLabel>Amount (₹)</FieldLabel>
             <input
@@ -1376,18 +2268,38 @@ function ReceivePayment() {
             </div>
           </div>
         </div>
-        <div className="mt-5 flex flex-col gap-3 rounded-2xl bg-[#F4F4F5] p-4 sm:flex-row sm:items-center sm:justify-between">
+
+        <div className="mt-4">
+          <FieldLabel>Fee Categories</FieldLabel>
+          <div className="flex flex-wrap gap-2">
+            {paymentCategories.length === 0 && (
+              <span className="text-[12px] text-black/55">
+                No categories configured · add them under Settings
+              </span>
+            )}
+            {paymentCategories.map((c) => {
+              const active = category === c.label;
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => setCategory(c.label)}
+                  className={`rounded-full border px-3.5 py-1.5 text-[12px] font-medium transition-colors ${
+                    active
+                      ? "border-transparent bg-[#C7F33C] text-black"
+                      : "border-[#E5E5E5] text-black/65 hover:bg-[#F4F4F5]"
+                  }`}
+                >
+                  {c.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-[#ECECEC] bg-[#F4F4F5] p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-[12.5px] text-black/65">
             Receipt for <span className="font-medium text-black">{stu}</span> · {cls} ·{" "}
             <span className="font-medium text-black">{category}</span> · {mode}
-            {selected && selected.due > 0 && (
-              <span className="ml-2 inline-flex items-center gap-1 font-mono text-black">
-                <AlertTriangle className="h-3 w-3" /> Due ₹ {selected.due.toLocaleString("en-IN")}
-              </span>
-            )}
-            {selected && selected.due === 0 && (
-              <span className="ml-2 font-mono text-black">· Cleared</span>
-            )}
           </div>
           <button
             onClick={handleRecord}
@@ -1400,40 +2312,71 @@ function ReceivePayment() {
       </OrganicCard>
 
       <OrganicCard tone="white" cornerSide="bl" padded>
-        <div className="text-title">Payment History</div>
-        <div className="mt-1 text-[11.5px] text-black/55">
-          {payments.length} receipts · most recent
-        </div>
-        <div className="mt-3 max-h-[420px] divide-y divide-[#F0F0F0] overflow-y-auto">
-          {payments.map((p) => (
-            <div key={p.id} className="py-2.5">
-              <div className="flex items-center justify-between gap-2 text-[12.5px]">
-                <span className="font-medium text-black">{p.name}</span>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-black">
-                    +₹ {p.amount.toLocaleString("en-IN")}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label={`Download receipt ${p.id}`}
-                    onClick={() => {
-                      downloadReceiptPdf(p, schoolName, academicYear);
-                      toast.success(`Receipt ${p.id} downloaded`);
-                    }}
-                    className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-              <div className="mt-0.5 flex items-center justify-between text-[10.5px] text-black/55">
-                <span>
-                  {p.cat} · {p.mode}
-                </span>
-                <span className="font-mono">{p.time}</span>
-              </div>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <div className="text-title">Payment History</div>
+            <p className="mt-1 text-[11.5px] text-black/55">
+              {payments.length} receipts · most recent first
+            </p>
+          </div>
+          <div className="rounded-2xl bg-[#F4F4F5] px-3.5 py-2 text-right">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+              Today&apos;s intake
             </div>
-          ))}
+            <div className="font-mono text-[16px] font-semibold text-black">
+              ₹ {todayTotal.toLocaleString("en-IN")}
+            </div>
+          </div>
+        </div>
+
+        <div className="mobile-scrollbar-none mt-4 overflow-x-auto rounded-2xl border border-[#E5E5E5]">
+          <table className="w-full min-w-[640px] text-left text-[12.5px]">
+            <thead>
+              <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5]">
+                {["Student", "Category", "Mode", "Amount", "Time", ""].map((header) => (
+                  <th
+                    key={header || "action"}
+                    className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/55 last:text-right"
+                  >
+                    {header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {payments.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-3 py-8 text-center text-[12px] text-black/55">
+                    No receipts recorded yet
+                  </td>
+                </tr>
+              )}
+              {payments.map((p) => (
+                <tr key={p.id} className="border-b border-[#F0F0F0] last:border-0">
+                  <td className="px-3 py-3 font-medium text-black">{p.name}</td>
+                  <td className="px-3 py-3 text-black/70">{p.cat}</td>
+                  <td className="px-3 py-3 text-black/70">{p.mode}</td>
+                  <td className="px-3 py-3 font-mono font-semibold text-black">
+                    +₹ {p.amount.toLocaleString("en-IN")}
+                  </td>
+                  <td className="px-3 py-3 font-mono text-[11px] text-black/55">{p.time}</td>
+                  <td className="px-3 py-3 text-right">
+                    <button
+                      type="button"
+                      aria-label={`Download receipt ${p.id}`}
+                      onClick={() => {
+                        downloadReceiptPdf(p, schoolName, academicYear);
+                        toast.success(`Receipt ${p.id} downloaded`);
+                      }}
+                      className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </OrganicCard>
     </div>
@@ -1441,22 +2384,115 @@ function ReceivePayment() {
 }
 
 function MakePayment() {
-  const [payee, setPayee] = useState("Salary");
-  const [mode, setMode] = useState("Bank Transfer · NEFT");
+  const initialObligation = PENDING_OBLIGATIONS[0];
+  const [obligations, setObligations] = useState<PendingObligation[]>(PENDING_OBLIGATIONS);
+  const [madePayments, setMadePayments] = useState<MadePayment[]>(MADE_PAYMENTS);
+  const [selectedObligationId, setSelectedObligationId] = useState<string | null>(
+    initialObligation?.id ?? null,
+  );
+  const [payeeType, setPayeeType] = useState<"Salary" | "Vendor">(
+    initialObligation?.payeeType ?? "Salary",
+  );
+  const [beneficiary, setBeneficiary] = useState(initialObligation?.payee ?? "");
+  const [description, setDescription] = useState(initialObligation?.desc ?? "");
+  const [amount, setAmount] = useState(
+    initialObligation ? String(initialObligation.amount) : "",
+  );
+  const [mode, setMode] = useState("UPI Business");
+  const [pendingAuthorisation, setPendingAuthorisation] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const applyObligation = (obligation: PendingObligation) => {
+    setSelectedObligationId(obligation.id);
+    setPayeeType(obligation.payeeType);
+    setBeneficiary(obligation.payee);
+    setDescription(obligation.desc);
+    setAmount(String(obligation.amount));
+  };
+
+  const resetForm = () => {
+    setSelectedObligationId(null);
+    setPayeeType("Salary");
+    setBeneficiary("");
+    setDescription("");
+    setAmount("");
+    setMode("Bank Transfer · NEFT");
+  };
+
+  const requestAuthorisation = () => {
+    const value = Number(amount.replace(/[^0-9]/g, ""));
+    if (!beneficiary.trim()) {
+      toast.error("Beneficiary name is required");
+      return;
+    }
+    if (!description.trim()) {
+      toast.error("Description is required");
+      return;
+    }
+    if (!value || value <= 0) {
+      toast.error("Enter a valid amount");
+      return;
+    }
+    setPendingAuthorisation(true);
+  };
+
+  const confirmAuthorisation = () => {
+    if (isSubmitting) return;
+    const value = Number(amount.replace(/[^0-9]/g, ""));
+    if (!beneficiary.trim() || !description.trim() || !value || value <= 0) {
+      toast.error("Complete all required fields before authorising");
+      setPendingAuthorisation(false);
+      return;
+    }
+
+    setIsSubmitting(true);
+    setPendingAuthorisation(false);
+
+    if (selectedObligationId) {
+      setObligations((prev) => prev.filter((item) => item.id !== selectedObligationId));
+    }
+
+    const disbursal: MadePayment = {
+      id: `DISB-${Date.now().toString().slice(-6)}`,
+      payee: beneficiary.trim(),
+      desc: description.trim(),
+      amount: value,
+      mode,
+      payeeType,
+      time: formatDisbursalTime(),
+      status: "Queued",
+    };
+    setMadePayments((prev) => [disbursal, ...prev]);
+
+    toast.success("Authorisation queued for treasury approval", {
+      description: `${beneficiary.trim()} · ₹ ${value.toLocaleString("en-IN")} via ${mode}`,
+    });
+
+    const remaining = obligations.filter((item) => item.id !== selectedObligationId);
+    if (remaining.length) {
+      applyObligation(remaining[0]);
+    } else {
+      resetForm();
+    }
+
+    setIsSubmitting(false);
+  };
+
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-      <OrganicCard tone="white" cornerSide="tr" padded className="lg:col-span-2">
+    <div className="grid grid-cols-12 gap-4 sm:gap-5">
+      <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12 lg:col-span-8">
         <div className="text-title">Outbound Disbursal</div>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <FieldLabel>Payee Type</FieldLabel>
             <div className="flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
-              {["Salary", "Vendor"].map((p) => {
-                const active = payee === p;
+              {(["Salary", "Vendor"] as const).map((p) => {
+                const active = payeeType === p;
                 return (
                   <button
                     key={p}
-                    onClick={() => setPayee(p)}
+                    type="button"
+                    onClick={() => setPayeeType(p)}
                     className={`flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium ${
                       active ? "bg-black text-white" : "text-black/65"
                     }`}
@@ -1469,23 +2505,29 @@ function MakePayment() {
           </div>
           <div>
             <FieldLabel>Beneficiary</FieldLabel>
-            <input
-              defaultValue="BrightBus Logistics Pvt. Ltd."
-              className="h-10 w-full rounded-2xl border border-[#E5E5E5] bg-white px-3 text-[13px]"
+            <Input
+              value={beneficiary}
+              onChange={(e) => setBeneficiary(e.target.value)}
+              placeholder="e.g. BrightBus Logistics Pvt. Ltd."
             />
           </div>
-          <div className="col-span-2">
+          <div className="sm:col-span-2">
             <FieldLabel>Description / Line Items</FieldLabel>
             <textarea
-              defaultValue="Bus diesel refill (1,240 L) + monthly preventive maintenance fleet of 12 vehicles"
-              className="min-h-[80px] w-full rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[13px]"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Describe the payment purpose"
+              className="min-h-[80px] w-full rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-black/15"
             />
           </div>
           <div>
             <FieldLabel>Amount (₹)</FieldLabel>
-            <input
-              defaultValue="48200"
-              className="h-10 w-full rounded-2xl border border-[#E5E5E5] bg-white px-3 font-mono text-[13px]"
+            <Input
+              inputMode="numeric"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ""))}
+              placeholder="0"
+              className="font-mono"
             />
           </div>
           <div>
@@ -1503,24 +2545,35 @@ function MakePayment() {
         </div>
         <div className="mt-5 flex justify-end">
           <button
-            onClick={() => toast.success("Authorisation queued for treasury approval")}
-            className="rounded-full bg-black px-5 py-2 text-[12.5px] font-semibold text-white shadow-sm transition-colors hover:bg-black/85"
+            type="button"
+            onClick={requestAuthorisation}
+            disabled={isSubmitting}
+            className="rounded-full bg-black px-5 py-2 text-[12.5px] font-semibold text-white shadow-sm transition-colors hover:bg-black/85 disabled:cursor-not-allowed disabled:opacity-60"
           >
             Authorise Disbursal
           </button>
         </div>
       </OrganicCard>
 
-      <OrganicCard tone="white" cornerSide="bl" padded>
+      <OrganicCard tone="white" cornerSide="bl" padded className="col-span-12 lg:col-span-4">
         <div className="text-title">Top Pending Obligations</div>
         <div className="mt-3 space-y-3">
-          {PENDING_OBLIGATIONS.map((p, i) => {
-            const isUrgent = i === 0;
+          {obligations.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-black/15 bg-[#F4F4F5]/40 px-4 py-6 text-center text-[12px] text-black/55">
+              No pending obligations in the queue
+            </div>
+          )}
+          {obligations.map((p) => {
+            const isSelected = selectedObligationId === p.id;
             return (
-              <div
-                key={p.payee}
-                className={`rounded-2xl p-3 ${
-                  isUrgent ? "bg-[#C7F33C] text-black" : "bg-[#F4F4F5] text-black"
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => applyObligation(p)}
+                className={`w-full rounded-2xl p-3 text-left transition-colors ${
+                  isSelected
+                    ? "bg-[#C7F33C] text-black ring-2 ring-black/10"
+                    : "bg-[#F4F4F5] text-black hover:bg-[#ECECED]"
                 }`}
               >
                 <div className="flex items-center justify-between text-[12.5px]">
@@ -1529,100 +2582,149 @@ function MakePayment() {
                 </div>
                 <div
                   className={`mt-0.5 flex items-center justify-between text-[10.5px] ${
-                    isUrgent ? "text-black/70" : "text-black/55"
+                    isSelected ? "text-black/70" : "text-black/55"
                   }`}
                 >
                   <span>{p.desc}</span>
                   <span
                     className={`rounded-full px-2 py-0.5 ${
-                      isUrgent ? "bg-black text-[#C7F33C]" : "bg-black/10 text-black/65"
+                      isSelected ? "bg-black text-[#C7F33C]" : "bg-black/10 text-black/65"
                     }`}
                   >
                     Due {p.due}
                   </span>
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>
       </OrganicCard>
+
+      <OrganicCard tone="white" cornerSide="br" padded className="col-span-12">
+        <div className="text-title">Made Payment Details</div>
+        <div className="mt-1 text-[11.5px] text-black/55">
+          {madePayments.length} disbursals · most recent
+        </div>
+        <div className="mobile-scrollbar-none mt-3 max-h-[420px] divide-y divide-[#F0F0F0] overflow-y-auto">
+          {madePayments.length === 0 && (
+            <div className="py-6 text-center text-[12px] text-black/55">
+              No outbound payments recorded yet
+            </div>
+          )}
+          {madePayments.map((payment) => (
+            <div key={payment.id} className="py-2.5">
+              <div className="flex items-center justify-between gap-2 text-[12.5px]">
+                <span className="min-w-0 flex-1 truncate font-medium text-black">
+                  {payment.payee}
+                </span>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="font-mono text-black">
+                    −₹ {payment.amount.toLocaleString("en-IN")}
+                  </span>
+                  <span
+                    className={cn(
+                      "rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                      payment.status === "Cleared"
+                        ? "bg-[#E1F2AE] text-black"
+                        : "bg-black text-[#C7F33C]",
+                    )}
+                  >
+                    {payment.status}
+                  </span>
+                </div>
+              </div>
+              <div className="mt-0.5 flex items-center justify-between gap-2 text-[10.5px] text-black/55">
+                <span className="min-w-0 truncate">
+                  {payment.payeeType} · {payment.desc} · {payment.mode}
+                </span>
+                <span className="shrink-0 font-mono">{payment.time}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </OrganicCard>
+
+      <Dialog
+        open={pendingAuthorisation}
+        onOpenChange={(next) => {
+          if (!next) setPendingAuthorisation(false);
+        }}
+      >
+        <DialogContent className="max-w-sm rounded-[1.5rem] border border-[#E5E5E5] bg-white p-6">
+          <DialogHeader>
+            <DialogTitle className="text-[22px] font-semibold text-black">
+              Authorise Disbursal
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
+              Authorise ₹ {Number(amount || 0).toLocaleString("en-IN")} to {beneficiary.trim()} via{" "}
+              {mode}? This will queue the payment for treasury approval.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-5 flex-row justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setPendingAuthorisation(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={confirmAuthorisation}
+              disabled={isSubmitting}
+              className="rounded-full bg-black text-white hover:bg-black/85"
+            >
+              Authorise
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-function Donut({
-  title,
-  segments,
-  cornerSide = "tr",
-}: {
-  title: string;
-  segments: { label: string; value: number; color: string }[];
-  cornerSide?: CornerSide;
-}) {
-  const total = segments.reduce((a, b) => a + b.value, 0);
-  let acc = 0;
-  const gradient = segments
-    .map((s) => {
-      const from = (acc / total) * 360;
-      acc += s.value;
-      const to = (acc / total) * 360;
-      return `${s.color} ${from}deg ${to}deg`;
-    })
-    .join(", ");
-  return (
-    <OrganicCard tone="white" cornerSide={cornerSide} arrow padded>
-      <div className="text-title">{title}</div>
-      <div className="mt-4 flex items-center gap-5">
-        <div
-          className="relative h-36 w-36 rounded-full"
-          style={{ background: `conic-gradient(${gradient})` }}
-        >
-          <div className="absolute inset-4 grid place-items-center rounded-full bg-white">
-            <div className="text-center">
-              <div className="font-mono text-lg font-semibold text-black">
-                ₹ {total.toLocaleString("en-IN")}
-              </div>
-              <div className="text-[10px] uppercase tracking-wider text-black/45">Total</div>
-            </div>
-          </div>
-        </div>
-        <div className="flex-1 space-y-2">
-          {segments.map((s) => (
-            <div key={s.label} className="flex items-center gap-2 text-[12.5px]">
-              <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: s.color }} />
-              <span className="flex-1 text-black/65">{s.label}</span>
-              <span className="font-mono text-black">₹ {s.value.toLocaleString("en-IN")}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </OrganicCard>
-  );
-}
+const LEDGER_INCOME_SEGMENTS = [
+  { label: "Tuition", value: 1_840_000 },
+  { label: "Transport", value: 320_000 },
+  { label: "Donations", value: 95_000 },
+  { label: "Other", value: 42_000 },
+];
+
+const LEDGER_OUTFLOW_SEGMENTS = [
+  { label: "Salaries", value: 1_220_000 },
+  { label: "Vehicle Upkeep", value: 184_000 },
+  { label: "Utilities", value: 88_000 },
+  { label: "Rent", value: 240_000 },
+];
 
 function LedgerAnalytics() {
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      <Donut
-        title="Income Distribution"
-        cornerSide="tr"
-        segments={[
-          { label: "Tuition", value: 1840000, color: "#000000" },
-          { label: "Transport", value: 320000, color: "#C7F33C" },
-          { label: "Donations", value: 95000, color: "#E1F2AE" },
-          { label: "Other", value: 42000, color: "#9CA3AF" },
-        ]}
-      />
-      <Donut
-        title="Monthly Outflow Breakdown"
-        cornerSide="bl"
-        segments={[
-          { label: "Salaries", value: 1220000, color: "#000000" },
-          { label: "Vehicle Upkeep", value: 184000, color: "#C7F33C" },
-          { label: "Utilities", value: 88000, color: "#E1F2AE" },
-          { label: "Rent", value: 240000, color: "#9CA3AF" },
-        ]}
-      />
+    <div className="grid grid-cols-12 gap-3 sm:gap-4 lg:gap-5">
+      <div className="col-span-6 min-w-0">
+        <FinanceDonutCard
+          title="Income Distribution"
+          cornerSide="tr"
+          segments={LEDGER_INCOME_SEGMENTS}
+        />
+      </div>
+      <div className="col-span-6 min-w-0">
+        <FinanceDonutCard
+          title="Monthly Outflow Breakdown"
+          cornerSide="bl"
+          segments={LEDGER_OUTFLOW_SEGMENTS}
+        />
+      </div>
+      <div className="col-span-6 min-w-0">
+        <FinanceBarCard
+          title="Income by Category"
+          cornerSide="tr"
+          segments={LEDGER_INCOME_SEGMENTS}
+        />
+      </div>
+      <div className="col-span-6 min-w-0">
+        <FinanceBarCard
+          title="Outflow by Category"
+          cornerSide="bl"
+          fill="#C7F33C"
+          segments={LEDGER_OUTFLOW_SEGMENTS}
+        />
+      </div>
     </div>
   );
 }
@@ -1650,18 +2752,7 @@ export function SchoolSettings() {
   } = useTenantStore();
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-heading">Tenant Settings</h1>
-          <p className="mt-2 text-[14px] text-black/55">
-            Configure organisational structure, fee tiers, and ledger constants for this workspace
-          </p>
-        </div>
-        <span className="inline-flex items-center gap-2 rounded-full border border-[#E5E5E5] bg-white px-4 py-2 text-[12px] font-semibold text-black">
-          <span className="h-1.5 w-1.5 rounded-full bg-[#C7F33C]" /> {academicYear}
-        </span>
-      </div>
+    <div className="space-y-4 sm:space-y-6">
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 xl:grid-cols-3">
         <DepartmentsCard
@@ -1684,15 +2775,22 @@ export function SchoolSettings() {
           students={students}
           setStudents={setStudents}
         />
-        <TransportCard transportRoutes={transportRoutes} setTransportRoutes={setTransportRoutes} />
-        <CategoriesCard
-          paymentCategories={paymentCategories}
-          setPaymentCategories={setPaymentCategories}
-          academicYear={academicYear}
-          setAcademicYear={setAcademicYear}
-          themeSettings={themeSettings}
-          setThemeSettings={setThemeSettings}
-        />
+      </div>
+
+      <div className="grid grid-cols-12 gap-5">
+        <div className="col-span-12 lg:col-span-6">
+          <TransportCard transportRoutes={transportRoutes} setTransportRoutes={setTransportRoutes} />
+        </div>
+        <div className="col-span-12 lg:col-span-6">
+          <CategoriesCard
+            paymentCategories={paymentCategories}
+            setPaymentCategories={setPaymentCategories}
+            academicYear={academicYear}
+            setAcademicYear={setAcademicYear}
+            themeSettings={themeSettings}
+            setThemeSettings={setThemeSettings}
+          />
+        </div>
       </div>
     </div>
   );
@@ -1736,6 +2834,45 @@ function EmptyRow({ label }: { label: string }) {
   );
 }
 
+function DeleteConfirmDialog({
+  open,
+  onOpenChange,
+  title,
+  description,
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  description: string;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm rounded-[1.5rem] border border-[#E5E5E5] bg-white p-6">
+        <DialogHeader>
+          <DialogTitle className="text-[22px] font-semibold text-black">{title}</DialogTitle>
+          <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
+            {description}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="mt-5 flex-row justify-end gap-2">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={onConfirm}
+            className="rounded-full bg-[#B91C1C] text-white hover:bg-[#991B1B]"
+          >
+            Delete
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function DepartmentsCard({
   departments,
   setDepartments,
@@ -1751,6 +2888,7 @@ function DepartmentsCard({
 }) {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Department | null>(null);
   const [form, setForm] = useState({ name: "", code: "" });
 
   const startCreate = () => {
@@ -1802,8 +2940,14 @@ function DepartmentsCard({
     toast.error(`${d.name} removed`);
   };
 
+  const confirmDelete = () => {
+    if (!pendingDelete) return;
+    remove(pendingDelete);
+    setPendingDelete(null);
+  };
+
   return (
-    <OrganicCard tone="white" cornerSide="tr" arrow padded>
+    <OrganicCard tone="white" cornerSide="tr" padded>
       <CardHeader
         title="Departments"
         subtitle={`${departments.length} divisions · live staff counts`}
@@ -1831,37 +2975,46 @@ function DepartmentsCard({
                   </div>
                 </div>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <span className="rounded-full bg-[#E1F2AE] px-2.5 py-0.5 font-mono text-[11px] font-semibold text-black">
-                  {count} staff
+              <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+                <span className="rounded-full bg-[#E1F2AE] px-2 py-0.5 font-mono text-[10px] font-semibold text-black sm:px-2.5 sm:text-[11px]">
+                  <span className="sm:hidden">{count}</span>
+                  <span className="hidden sm:inline">{count} staff</span>
                 </span>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      className="grid h-8 w-8 place-items-center rounded-full text-black/55 hover:bg-black/5 hover:text-black"
-                      aria-label="More"
-                    >
-                      <MoreVertical className="h-3.5 w-3.5" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-44 rounded-2xl">
-                    <DropdownMenuItem onClick={() => startEdit(d)}>
-                      <Pencil className="mr-2 h-3.5 w-3.5" /> Rename
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => remove(d)}
-                      className="text-[#B91C1C] focus:text-[#B91C1C]"
-                    >
-                      <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <button
+                  type="button"
+                  onClick={() => startEdit(d)}
+                  aria-label={`Rename ${d.name}`}
+                  className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPendingDelete(d)}
+                  aria-label={`Delete ${d.name}`}
+                  className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
               </div>
             </div>
           );
         })}
       </div>
+
+      <DeleteConfirmDialog
+        open={Boolean(pendingDelete)}
+        onOpenChange={(next) => {
+          if (!next) setPendingDelete(null);
+        }}
+        title="Delete Department"
+        description={
+          pendingDelete
+            ? `Are you sure you want to delete ${pendingDelete.name} (${pendingDelete.code})? This action cannot be undone.`
+            : "Are you sure you want to delete this department?"
+        }
+        onConfirm={confirmDelete}
+      />
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
@@ -1924,6 +3077,7 @@ function RolesCard({
 }) {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Role | null>(null);
   const [form, setForm] = useState({
     title: "",
     departmentId: departments[0]?.id ?? "",
@@ -1982,8 +3136,14 @@ function RolesCard({
     toast.error(`${r.title} removed`);
   };
 
+  const confirmDelete = () => {
+    if (!pendingDelete) return;
+    remove(pendingDelete);
+    setPendingDelete(null);
+  };
+
   return (
-    <OrganicCard tone="white" cornerSide="bl" arrow padded>
+    <OrganicCard tone="white" cornerSide="bl" padded>
       <CardHeader
         title="Roles"
         subtitle={`${roles.length} role definitions · select in Recruit Staff`}
@@ -2004,32 +3164,42 @@ function RolesCard({
                 <div className="truncate text-[13px] font-semibold text-black">{r.title}</div>
                 <div className="text-[11.5px] text-black/55">{dept?.name ?? "Unassigned"}</div>
               </div>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-black/55 hover:bg-black/5 hover:text-black"
-                    aria-label="More"
-                  >
-                    <MoreVertical className="h-3.5 w-3.5" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-44 rounded-2xl">
-                  <DropdownMenuItem onClick={() => startEdit(r)}>
-                    <Pencil className="mr-2 h-3.5 w-3.5" /> Rename
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => remove(r)}
-                    className="text-[#B91C1C] focus:text-[#B91C1C]"
-                  >
-                    <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => startEdit(r)}
+                  aria-label={`Rename ${r.title}`}
+                  className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPendingDelete(r)}
+                  aria-label={`Delete ${r.title}`}
+                  className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
           );
         })}
       </div>
+
+      <DeleteConfirmDialog
+        open={Boolean(pendingDelete)}
+        onOpenChange={(next) => {
+          if (!next) setPendingDelete(null);
+        }}
+        title="Delete Role"
+        description={
+          pendingDelete
+            ? `Are you sure you want to delete the role "${pendingDelete.title}"? This action cannot be undone.`
+            : "Are you sure you want to delete this role?"
+        }
+        onConfirm={confirmDelete}
+      />
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
@@ -2091,6 +3261,7 @@ function ClassesCard({
 }) {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<ClassConfig | null>(null);
   const [form, setForm] = useState<{
     className: string;
     tuitionFeeAmount: string;
@@ -2164,8 +3335,14 @@ function ClassesCard({
     toast.error(`${c.className} removed`);
   };
 
+  const confirmDelete = () => {
+    if (!pendingDelete) return;
+    remove(pendingDelete);
+    setPendingDelete(null);
+  };
+
   return (
-    <OrganicCard tone="white" cornerSide="tr" arrow padded>
+    <OrganicCard tone="white" cornerSide="tr" padded>
       <CardHeader
         title="Class Tiers & Tuition"
         subtitle="Receipt amounts prefill from this matrix"
@@ -2191,31 +3368,41 @@ function ClassesCard({
                 </span>
               </div>
             </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-black/55 hover:bg-black/5 hover:text-black"
-                  aria-label="More"
-                >
-                  <MoreVertical className="h-3.5 w-3.5" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-40 rounded-2xl">
-                <DropdownMenuItem onClick={() => startEdit(c)}>
-                  <Pencil className="mr-2 h-3.5 w-3.5" /> Edit
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => remove(c)}
-                  className="text-[#B91C1C] focus:text-[#B91C1C]"
-                >
-                  <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => startEdit(c)}
+                aria-label={`Edit ${c.className}`}
+                className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingDelete(c)}
+                aria-label={`Delete ${c.className}`}
+                className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
         ))}
       </div>
+
+      <DeleteConfirmDialog
+        open={Boolean(pendingDelete)}
+        onOpenChange={(next) => {
+          if (!next) setPendingDelete(null);
+        }}
+        title="Delete Class Tier"
+        description={
+          pendingDelete
+            ? `Are you sure you want to delete ${pendingDelete.className}? Tuition prefill for this class will stop working.`
+            : "Are you sure you want to delete this class tier?"
+        }
+        onConfirm={confirmDelete}
+      />
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
@@ -2295,6 +3482,7 @@ function TransportCard({
 }) {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<TransportRoute | null>(null);
   const [form, setForm] = useState({ mapFrom: "", mapTo: "", fee: "" });
 
   const startCreate = () => {
@@ -2339,8 +3527,14 @@ function TransportCard({
     toast.error(`${r.mapFrom} → ${r.mapTo} removed`);
   };
 
+  const confirmDelete = () => {
+    if (!pendingDelete) return;
+    remove(pendingDelete);
+    setPendingDelete(null);
+  };
+
   return (
-    <OrganicCard tone="white" cornerSide="bl" arrow padded>
+    <OrganicCard tone="white" cornerSide="bl" padded>
       <CardHeader
         title="Transport Routes"
         subtitle={`${transportRoutes.length} mapped pickup → drop pairs`}
@@ -2371,33 +3565,43 @@ function TransportCard({
                 <span className="text-right font-mono text-black">
                   ₹ {r.fee.toLocaleString("en-IN")}
                 </span>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      className="grid h-7 w-7 place-items-center rounded-full text-black/55 hover:bg-black/5 hover:text-black"
-                      aria-label="More"
-                    >
-                      <MoreVertical className="h-3.5 w-3.5" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-40 rounded-2xl">
-                    <DropdownMenuItem onClick={() => startEdit(r)}>
-                      <Pencil className="mr-2 h-3.5 w-3.5" /> Edit
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => remove(r)}
-                      className="text-[#B91C1C] focus:text-[#B91C1C]"
-                    >
-                      <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => startEdit(r)}
+                    aria-label={`Edit route ${r.mapFrom} to ${r.mapTo}`}
+                    className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPendingDelete(r)}
+                    aria-label={`Delete route ${r.mapFrom} to ${r.mapTo}`}
+                    className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
             ))
           )}
         </div>
       </div>
+
+      <DeleteConfirmDialog
+        open={Boolean(pendingDelete)}
+        onOpenChange={(next) => {
+          if (!next) setPendingDelete(null);
+        }}
+        title="Delete Transport Route"
+        description={
+          pendingDelete
+            ? `Are you sure you want to delete the route ${pendingDelete.mapFrom} → ${pendingDelete.mapTo}? This action cannot be undone.`
+            : "Are you sure you want to delete this transport route?"
+        }
+        onConfirm={confirmDelete}
+      />
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
@@ -2473,6 +3677,7 @@ function CategoriesCard({
   setThemeSettings: React.Dispatch<React.SetStateAction<ThemeSettings>>;
 }) {
   const [draft, setDraft] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<PaymentCategory | null>(null);
 
   const addCategory = (e: React.FormEvent) => {
     e.preventDefault();
@@ -2495,8 +3700,14 @@ function CategoriesCard({
     toast.error(`${c.label} removed`, { description: "Existing receipts retain the label" });
   };
 
+  const confirmDelete = () => {
+    if (!pendingDelete) return;
+    removeCategory(pendingDelete);
+    setPendingDelete(null);
+  };
+
   return (
-    <OrganicCard tone="white" cornerSide="tr" arrow padded>
+    <OrganicCard tone="white" cornerSide="tr" padded>
       <div className="text-[18px] font-bold leading-tight tracking-tight text-black">
         System Constants
       </div>
@@ -2572,7 +3783,8 @@ function CategoriesCard({
             >
               {c.label}
               <button
-                onClick={() => removeCategory(c)}
+                type="button"
+                onClick={() => setPendingDelete(c)}
                 className="grid h-4 w-4 place-items-center rounded-full text-black/55 hover:bg-black hover:text-white"
                 aria-label={`Remove ${c.label}`}
               >
@@ -2594,6 +3806,20 @@ function CategoriesCard({
           </Button>
         </form>
       </div>
+
+      <DeleteConfirmDialog
+        open={Boolean(pendingDelete)}
+        onOpenChange={(next) => {
+          if (!next) setPendingDelete(null);
+        }}
+        title="Delete Payment Category"
+        description={
+          pendingDelete
+            ? `Are you sure you want to remove "${pendingDelete.label}" from payment categories? Existing receipts will keep this label.`
+            : "Are you sure you want to delete this payment category?"
+        }
+        onConfirm={confirmDelete}
+      />
     </OrganicCard>
   );
 }

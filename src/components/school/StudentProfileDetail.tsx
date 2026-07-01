@@ -10,6 +10,15 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { DatePicker } from "@/components/ui/date-picker";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { OrganicCard } from "@/components/ui/organic-card";
 import type { Student } from "@/lib/tenant-store";
@@ -177,7 +186,7 @@ export function StudentProfileDetail({
   };
 
   return (
-    <div className="flex flex-col gap-6 lg:min-h-[calc(100dvh-3rem)]">
+    <div className="flex flex-col gap-4 sm:gap-6">
       <TopBar
         studentName={student.name}
         onBack={onBack}
@@ -185,16 +194,16 @@ export function StudentProfileDetail({
         onToggleEdit={toggleEdit}
       />
 
-      <div className="grid grid-cols-1 gap-6 lg:min-h-0 lg:flex-1 lg:grid-cols-12 lg:items-stretch">
+      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-12 lg:items-start">
         <OrganicCard
           tone="white"
           cornerSide="tr"
           padded
-          className="flex flex-col lg:col-span-4 lg:h-full lg:min-h-0"
+          className="flex flex-col lg:sticky lg:top-6 lg:col-span-4 lg:self-start"
         >
           <IdentityHeader student={student} />
 
-          <div className="mt-6 flex min-h-0 flex-1 flex-col gap-5">
+          <div className="mt-6 flex flex-col gap-5">
             <MetaField
               label="Guardian"
               value={draft.guardian}
@@ -256,13 +265,12 @@ export function StudentProfileDetail({
               onChange={(v) => setDraft({ ...draft, address: v })}
               placeholder="B-204, Lotus Greens, Sector 21, Noida 201301"
               multiline
-              fill
             />
           </div>
         </OrganicCard>
 
         <div className="lg:col-span-8">
-          <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="mb-4 grid grid-cols-1 gap-3 sm:mb-6 sm:gap-4 md:grid-cols-3">
             <MetricTile label="Total Due" value={inr(fees.totalDue)} cornerSide="tr" />
             <MetricTile
               label="Total Paid"
@@ -296,45 +304,49 @@ function TopBar({
   onToggleEdit: () => void;
 }) {
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2 text-[14px]">
-          <button
-            onClick={onBack}
-            className="font-medium text-black/55 transition-colors hover:text-black"
-          >
-            Students
-          </button>
-          <span className="text-black/30">/</span>
-          <span className="font-semibold text-black">{studentName}</span>
-        </div>
-      </div>
-      <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+    <div className="flex items-center gap-2 rounded-[1.5rem] border border-[#E5E5E5] bg-white p-2 shadow-[0_10px_28px_-24px_rgba(0,0,0,0.35)] sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none">
+      <div className="min-w-0 flex-1 truncate pl-0.5 text-[12px] sm:text-[14px]">
         <button
+          type="button"
           onClick={onBack}
-          className="inline-flex w-full items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-4 py-2 text-[13px] font-medium text-black/75 shadow-sm transition-colors hover:bg-[#F4F4F5] sm:w-auto"
+          className="font-medium text-black/55 transition-colors hover:text-black"
         >
-          <ArrowLeft className="h-4 w-4" /> Back to list
+          Students
         </button>
-        <button
-          onClick={onToggleEdit}
-          className={`inline-flex w-full items-center justify-center gap-1.5 rounded-full px-5 py-2 text-[13px] font-semibold shadow-sm transition-colors sm:w-auto ${
-            editing
-              ? "bg-[#C7F33C] text-black hover:bg-[#E1F2AE]"
-              : "bg-black text-white hover:bg-black/85"
-          }`}
-        >
-          {editing ? (
-            <>
-              <Check className="h-4 w-4" /> Save Profile
-            </>
-          ) : (
-            <>
-              <Pencil className="h-4 w-4" /> Edit Profile
-            </>
-          )}
-        </button>
+        <span className="text-black/30"> / </span>
+        <span className="font-semibold text-black">{studentName}</span>
       </div>
+
+      <button
+        type="button"
+        onClick={onBack}
+        className="inline-flex h-10 shrink-0 items-center justify-center gap-1 rounded-full border border-[#E5E5E5] bg-[#FAFAFA] px-3 text-[11.5px] font-medium text-black/75 transition-colors hover:bg-[#F4F4F5] sm:gap-1.5 sm:px-4 sm:text-[13px]"
+      >
+        <ArrowLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+        <span className="hidden min-[380px]:inline sm:inline">Back</span>
+      </button>
+
+      <button
+        type="button"
+        onClick={onToggleEdit}
+        className={`inline-flex h-10 shrink-0 items-center justify-center gap-1 rounded-full px-3 text-[11.5px] font-semibold shadow-sm transition-colors sm:gap-1.5 sm:px-5 sm:text-[13px] ${
+          editing
+            ? "bg-[#C7F33C] text-black hover:bg-[#E1F2AE]"
+            : "bg-black text-white hover:bg-black/85"
+        }`}
+      >
+        {editing ? (
+          <>
+            <Check className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            <span>Save</span>
+          </>
+        ) : (
+          <>
+            <Pencil className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            <span>Edit</span>
+          </>
+        )}
+      </button>
     </div>
   );
 }
@@ -515,77 +527,224 @@ function BalanceTile({ balance, overdue }: { balance: number; overdue: boolean }
 }
 
 function FeesTable({ ledger }: { ledger: LedgerRow[] }) {
+  const [selectedRow, setSelectedRow] = useState<LedgerRow | null>(null);
+  const paidPct =
+    selectedRow && selectedRow.charge > 0
+      ? Math.round((selectedRow.paid / selectedRow.charge) * 100)
+      : 0;
+
   return (
-    <OrganicCard tone="white" cornerSide="tr" padded>
-      <div className="mb-4 flex items-end justify-between gap-4">
-        <div>
-          <div className="text-title">Fees Details</div>
-          <div className="mt-1 text-[12px] text-black/55">
-            Statement ledger sheet · {ledger.length} line items on file
+    <>
+      <OrganicCard tone="white" cornerSide="tr" padded>
+        <div className="mb-4 flex items-end justify-between gap-4">
+          <div>
+            <div className="text-title">Fees Details</div>
+            <div className="mt-1 text-[12px] text-black/55">
+              Statement ledger sheet · {ledger.length} line items on file
+            </div>
           </div>
+          <span className="rounded-full border border-[#E5E5E5] bg-[#F4F4F5] px-2.5 py-1 font-mono text-[10.5px] font-medium text-black/65">
+            AY 2025-26
+          </span>
         </div>
-        <span className="rounded-full border border-[#E5E5E5] bg-[#F4F4F5] px-2.5 py-1 font-mono text-[10.5px] font-medium text-black/65">
-          AY 2025-26
-        </span>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-left">
-          <thead>
-            <tr>
-              <th className="border-b border-[#E5E5E5] pb-4 pl-1 pr-4 text-[11px] font-semibold uppercase tracking-wider text-black/45">
-                Date
-              </th>
-              <th className="border-b border-[#E5E5E5] px-4 pb-4 text-[11px] font-semibold uppercase tracking-wider text-black/45">
-                Description
-              </th>
-              <th className="border-b border-[#E5E5E5] px-4 pb-4 text-[11px] font-semibold uppercase tracking-wider text-black/45">
-                Due Date
-              </th>
-              <th className="border-b border-[#E5E5E5] px-4 pb-4 text-right text-[11px] font-semibold uppercase tracking-wider text-black/45">
-                Charge Amount
-              </th>
-              <th className="border-b border-[#E5E5E5] px-4 pb-4 text-right text-[11px] font-semibold uppercase tracking-wider text-black/45">
-                Paid Amount
-              </th>
-              <th className="border-b border-[#E5E5E5] px-4 pb-4 text-right text-[11px] font-semibold uppercase tracking-wider text-black/45">
-                Balance
-              </th>
-              <th className="border-b border-[#E5E5E5] pb-4 pl-4 pr-1 text-[11px] font-semibold uppercase tracking-wider text-black/45">
-                Status
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {ledger.map((r, i) => (
-              <tr
-                key={i}
-                className="border-b border-[#F0F0F0] transition-colors last:border-b-0 hover:bg-[#F4F4F5]"
-              >
-                <td className="py-4 pl-1 pr-4 font-mono text-[13px] text-black/55">{r.date}</td>
-                <td className="px-4 py-4 text-[13px] font-medium text-black">{r.desc}</td>
-                <td className="px-4 py-4 font-mono text-[13px] text-black/55">{r.due}</td>
-                <td className="px-4 py-4 text-right font-mono text-[13px] text-black/75">
-                  {inr(r.charge)}
-                </td>
-                <td className="px-4 py-4 text-right font-mono text-[13px] font-medium text-black">
-                  {inr(r.paid)}
-                </td>
-                <td
-                  className={`px-4 py-4 text-right font-mono text-[13px] ${
-                    r.balance === 0 ? "text-black/40" : "text-black"
-                  }`}
-                >
-                  {inr(r.balance)}
-                </td>
-                <td className="py-4 pl-4 pr-1">
-                  <StatusBadge status={r.status} />
-                </td>
+
+        <div className="space-y-2.5 md:hidden">
+          {ledger.map((r, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setSelectedRow(r)}
+              aria-label={`View details for ${r.desc}`}
+              className="w-full rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 text-left transition-colors hover:border-black/15 hover:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C7F33C]"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate text-[14px] font-semibold text-black">{r.desc}</div>
+                  <div className="mt-1 font-mono text-[11px] text-black/45">{r.date}</div>
+                </div>
+                <StatusBadge status={r.status} />
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2.5">
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    Due Date
+                  </div>
+                  <div className="mt-0.5 font-mono text-[12px] text-black/70">{r.due}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    Charge
+                  </div>
+                  <div className="mt-0.5 font-mono text-[12px] text-black">{inr(r.charge)}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    Paid
+                  </div>
+                  <div className="mt-0.5 font-mono text-[12px] font-medium text-black">
+                    {inr(r.paid)}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    Balance
+                  </div>
+                  <div
+                    className={`mt-0.5 font-mono text-[12px] ${
+                      r.balance === 0 ? "text-black/40" : "font-semibold text-black"
+                    }`}
+                  >
+                    {inr(r.balance)}
+                  </div>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        <div className="hidden overflow-x-auto md:block">
+          <table className="w-full min-w-[640px] border-collapse text-left">
+            <thead>
+              <tr>
+                <th className="border-b border-[#E5E5E5] pb-4 pl-1 pr-4 text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                  Date
+                </th>
+                <th className="border-b border-[#E5E5E5] px-4 pb-4 text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                  Description
+                </th>
+                <th className="border-b border-[#E5E5E5] px-4 pb-4 text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                  Due Date
+                </th>
+                <th className="border-b border-[#E5E5E5] px-4 pb-4 text-right text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                  Charge Amount
+                </th>
+                <th className="border-b border-[#E5E5E5] px-4 pb-4 text-right text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                  Paid Amount
+                </th>
+                <th className="border-b border-[#E5E5E5] px-4 pb-4 text-right text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                  Balance
+                </th>
+                <th className="border-b border-[#E5E5E5] pb-4 pl-4 pr-1 text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                  Status
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {ledger.map((r, i) => (
+                <tr
+                  key={i}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSelectedRow(r)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setSelectedRow(r);
+                    }
+                  }}
+                  aria-label={`View details for ${r.desc}`}
+                  className="cursor-pointer border-b border-[#F0F0F0] transition-colors last:border-b-0 hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C7F33C]"
+                >
+                  <td className="py-4 pl-1 pr-4 font-mono text-[13px] text-black/55">{r.date}</td>
+                  <td className="px-4 py-4 text-[13px] font-medium text-black">{r.desc}</td>
+                  <td className="px-4 py-4 font-mono text-[13px] text-black/55">{r.due}</td>
+                  <td className="px-4 py-4 text-right font-mono text-[13px] text-black/75">
+                    {inr(r.charge)}
+                  </td>
+                  <td className="px-4 py-4 text-right font-mono text-[13px] font-medium text-black">
+                    {inr(r.paid)}
+                  </td>
+                  <td
+                    className={`px-4 py-4 text-right font-mono text-[13px] ${
+                      r.balance === 0 ? "text-black/40" : "text-black"
+                    }`}
+                  >
+                    {inr(r.balance)}
+                  </td>
+                  <td className="py-4 pl-4 pr-1">
+                    <StatusBadge status={r.status} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </OrganicCard>
+
+      <Dialog open={Boolean(selectedRow)} onOpenChange={(open) => !open && setSelectedRow(null)}>
+        <DialogContent className="max-w-md rounded-[1.75rem] border border-[#E5E5E5] bg-white p-6">
+          <DialogHeader>
+            <DialogTitle className="text-[24px] font-semibold text-black">
+              Fee Line Detail
+            </DialogTitle>
+            <DialogDescription className="text-[13px] text-black/55">
+              Full statement entry for the selected ledger row.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedRow && (
+            <div className="mt-2 space-y-3">
+              <div className="rounded-2xl bg-[#F4F4F5] p-4">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-black/50">
+                  Description
+                </div>
+                <div className="mt-1 text-[18px] font-semibold text-black">{selectedRow.desc}</div>
+                <div className="mt-2">
+                  <StatusBadge status={selectedRow.status} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <DetailField label="Posted Date" value={selectedRow.date} mono />
+                <DetailField label="Due Date" value={selectedRow.due} mono />
+                <DetailField label="Charge Amount" value={inr(selectedRow.charge)} mono />
+                <DetailField label="Paid Amount" value={inr(selectedRow.paid)} mono />
+                <DetailField label="Balance Due" value={inr(selectedRow.balance)} mono />
+                <DetailField label="Collection" value={`${paidPct}% collected`} />
+              </div>
+
+              <div className="rounded-2xl border border-[#E5E5E5] p-3">
+                <div className="flex items-center justify-between text-[11px] text-black/55">
+                  <span>Payment progress</span>
+                  <span className="font-mono text-black">{paidPct}%</span>
+                </div>
+                <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#F4F4F5]">
+                  <div
+                    className="h-full rounded-full bg-[#C7F33C] transition-all"
+                    style={{ width: `${paidPct}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="mt-5 flex-row justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setSelectedRow(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function DetailField({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-[#E5E5E5] p-3">
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+        {label}
       </div>
-    </OrganicCard>
+      <div className={cn("mt-1 text-[12px] text-black", mono && "font-mono")}>{value}</div>
+    </div>
   );
 }
 

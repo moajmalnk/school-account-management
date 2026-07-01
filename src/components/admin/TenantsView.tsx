@@ -193,8 +193,8 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (name: string) 
   const getBilling = (t: Tenant) => billingMap[t.id] ?? defaultBilling(t);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
         <div>
           <h1 className="text-heading">School Tenants Registry</h1>
           <p className="mt-2 text-[14px] text-black/55">
@@ -204,7 +204,7 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (name: string) 
         </div>
         <button
           onClick={() => setOpen(true)}
-          className="inline-flex w-full items-center justify-center gap-1.5 rounded-full bg-black px-5 py-2.5 text-[13px] font-semibold text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)] transition hover:bg-black/85 sm:w-auto"
+          className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-full bg-black px-5 py-2.5 text-[13px] font-semibold text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)] transition hover:bg-black/85 sm:w-auto"
         >
           <Plus className="h-4 w-4" /> Provision New School Tenant
         </button>
@@ -214,7 +214,7 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (name: string) 
       <OrganicCard
         tone="white"
         cornerSide="tr"
-        className="flex flex-col gap-2 p-3 sm:flex-row sm:flex-wrap sm:items-center"
+        className="flex flex-col gap-2.5 p-3.5 sm:flex-row sm:flex-wrap sm:items-center"
       >
         <div className="relative w-full min-w-0 flex-1 sm:min-w-[260px]">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-black/40" />
@@ -222,11 +222,11 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (name: string) 
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search by school, subdomain, or tenant ID…"
-            className="h-10 rounded-full border-[#E5E5E5] bg-[#F4F4F5] pl-9 text-[13px]"
+            className="h-11 rounded-full border-[#E5E5E5] bg-[#F4F4F5] pl-9 text-[13px] sm:h-10"
           />
         </div>
         <Select value={tier} onValueChange={setTier}>
-          <SelectTrigger className="h-10 w-full rounded-full border-[#E5E5E5] bg-[#F4F4F5] text-[12px] sm:w-[170px]">
+          <SelectTrigger className="h-11 w-full rounded-full border-[#E5E5E5] bg-[#F4F4F5] text-[12px] sm:h-10 sm:w-[170px]">
             <SelectValue placeholder="All packages" />
           </SelectTrigger>
           <SelectContent>
@@ -237,7 +237,7 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (name: string) 
           </SelectContent>
         </Select>
         <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="h-10 w-full rounded-full border-[#E5E5E5] bg-[#F4F4F5] text-[12px] sm:w-[170px]">
+          <SelectTrigger className="h-11 w-full rounded-full border-[#E5E5E5] bg-[#F4F4F5] text-[12px] sm:h-10 sm:w-[170px]">
             <SelectValue placeholder="All statuses" />
           </SelectTrigger>
           <SelectContent>
@@ -251,7 +251,7 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (name: string) 
       </OrganicCard>
 
       {/* Cards */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">
         {filtered.map((t, i) => {
           const pct = Math.round((t.students / t.capacity) * 100);
           const tStyle = TIER_STYLE[t.tier];

@@ -89,8 +89,8 @@ function MetricCard({
 
 export function OverviewView() {
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
         <div>
           <h1 className="text-heading">Platform Control Overview</h1>
           <p className="mt-2 text-[14px] text-black/55">
@@ -99,16 +99,16 @@ export function OverviewView() {
           </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-          <button className="w-full rounded-full border border-[#E5E5E5] bg-white px-4 py-2 text-[12.5px] font-medium text-black/75 transition-colors hover:bg-[#F4F4F5] sm:w-auto">
+          <button className="min-h-11 w-full rounded-full border border-[#E5E5E5] bg-white px-4 py-2 text-[12.5px] font-medium text-black/75 transition-colors hover:bg-[#F4F4F5] sm:min-h-0 sm:w-auto">
             Last 30 days
           </button>
-          <button className="w-full rounded-full bg-black px-4 py-2 text-[12.5px] font-semibold text-white shadow-sm transition-colors hover:bg-black/85 sm:w-auto">
+          <button className="min-h-11 w-full rounded-full bg-black px-4 py-2 text-[12.5px] font-semibold text-white shadow-sm transition-colors hover:bg-black/85 sm:min-h-0 sm:w-auto">
             Export Report
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           label="Total Active Schools"
           value="142"
@@ -145,7 +145,7 @@ export function OverviewView() {
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">
         {/* Activity Tracker */}
         <OrganicCard tone="white" cornerSide="tr" arrow padded className="lg:col-span-2">
           <div className="flex items-start justify-between">

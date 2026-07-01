@@ -20,13 +20,13 @@ export function MobileTabBar({ items, pathname, className }: MobileTabBarProps) 
   return (
     <nav
       className={cn(
-        "fixed inset-x-0 bottom-0 z-40 border-t border-[#E5E5E5] bg-white/95 backdrop-blur-md lg:hidden",
-        "pb-[env(safe-area-inset-bottom)]",
+        "fixed inset-x-3 bottom-3 z-40 rounded-[2rem] border border-white/70 bg-white/92 shadow-[0_18px_55px_-24px_rgba(0,0,0,0.45)] backdrop-blur-xl lg:hidden",
+        "pb-[calc(0.375rem+env(safe-area-inset-bottom))]",
         className,
       )}
       aria-label="Mobile navigation"
     >
-      <div className="mx-auto flex max-w-lg items-stretch justify-around gap-0.5 px-1 pt-1">
+      <div className="mobile-app-rail flex items-stretch justify-around gap-1 px-1.5 pt-1.5">
         {items.map((item) => {
           const Icon = item.icon;
           const active = item.match ? item.match(pathname) : pathname.startsWith(item.to);
@@ -35,13 +35,13 @@ export function MobileTabBar({ items, pathname, className }: MobileTabBarProps) 
               key={item.to}
               to={item.to}
               className={cn(
-                "flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-2 text-[10px] font-medium transition-colors",
+                "relative flex min-h-[54px] min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-[1.5rem] px-1 text-[10.5px] font-semibold transition-all duration-200",
                 active
-                  ? "bg-[#C7F33C] text-black"
-                  : "text-black/55 hover:bg-[#F4F4F5] hover:text-black",
+                  ? "bg-black text-white shadow-[0_10px_24px_-16px_rgba(0,0,0,0.7)]"
+                  : "text-black/50 hover:bg-[#F4F4F5] hover:text-black",
               )}
             >
-              <Icon className="h-4 w-4 shrink-0" strokeWidth={active ? 2.25 : 2} />
+              <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={active ? 2.4 : 2} />
               <span className="max-w-full truncate">{item.label}</span>
             </Link>
           );
@@ -51,4 +51,4 @@ export function MobileTabBar({ items, pathname, className }: MobileTabBarProps) 
   );
 }
 
-export const mobileMainPadding = "pb-[calc(4.75rem+env(safe-area-inset-bottom))] lg:pb-12";
+export const mobileMainPadding = "pb-[calc(6.5rem+env(safe-area-inset-bottom))] lg:pb-12";

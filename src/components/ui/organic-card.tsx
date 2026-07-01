@@ -40,7 +40,7 @@ export function OrganicCard({
         toneClasses[tone],
         cornerClasses[cornerSide],
         SHADOW,
-        padded ? "p-6" : "",
+        padded ? "p-4 sm:p-6" : "",
         className,
       )}
     >

@@ -23,20 +23,25 @@
     font-feature-settings: "ss01", "cv11";
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    overflow-x: clip;
   }
   .font-mono {
     font-family: "JetBrains Mono", ui-monospace, monospace;
   }
 
   .text-heading {
-    font-size: 34px;
+    font-size: clamp(26px, 8vw, 34px);
     line-height: 1.1;
     font-weight: 600;
     letter-spacing: -0.02em;
     color: #000000;
   }
   .text-title {
-    font-size: 28px;
+    font-size: clamp(22px, 6.5vw, 28px);
     line-height: 1.15;
     font-weight: 600;
     letter-spacing: -0.015em;
@@ -102,6 +107,49 @@
   }
   .organic-corner-bl {
     border-bottom-left-radius: 4rem;
+  }
+
+  .mobile-app-rail {
+    width: 100%;
+    max-width: 520px;
+    margin-inline: auto;
+  }
+
+  .mobile-scrollbar-none {
+    scrollbar-width: none;
+  }
+
+  .mobile-scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  @media (min-width: 1024px) {
+    .mobile-app-rail {
+      max-width: none;
+      margin-inline: 0;
+    }
+  }
+
+  @media (max-width: 639px) {
+    .organic-card {
+      border-radius: 1.5rem;
+    }
+
+    .organic-corner-tr {
+      border-top-right-radius: 2.75rem;
+    }
+
+    .organic-corner-tl {
+      border-top-left-radius: 2.75rem;
+    }
+
+    .organic-corner-br {
+      border-bottom-right-radius: 2.75rem;
+    }
+
+    .organic-corner-bl {
+      border-bottom-left-radius: 2.75rem;
+    }
   }
 }
 

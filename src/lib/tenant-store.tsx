@@ -254,6 +254,8 @@ export const SEED_TRANSPORT: TransportRoute[] = [
   },
   { id: "TR-002", mapFrom: "Marina Crest, MG Road", mapTo: "Main Campus Drop-off", fee: 1500 },
   { id: "TR-003", mapFrom: "Hiranandani Gardens, Powai", mapTo: "Main Campus Drop-off", fee: 2400 },
+  { id: "TR-004", mapFrom: "Cumballa Heights, Peddar Road", mapTo: "Main Campus Drop-off", fee: 2000 },
+  { id: "TR-005", mapFrom: "Sasthamangalam, Thiruvananthapuram", mapTo: "Main Campus Drop-off", fee: 2200 },
 ];
 
 export const SEED_PAYMENT_CATEGORIES: PaymentCategory[] = [

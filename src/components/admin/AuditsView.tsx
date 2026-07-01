@@ -51,8 +51,8 @@ export function AuditsView() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
         <div>
           <h1 className="text-heading">Audit Logging &amp; System Configuration</h1>
           <p className="mt-2 text-[14px] text-black/55">
@@ -62,16 +62,16 @@ export function AuditsView() {
         </div>
         <button
           onClick={simulate}
-          className="inline-flex w-full items-center justify-center gap-1.5 rounded-full bg-black px-5 py-2.5 text-[12.5px] font-semibold text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)] transition hover:bg-[#C7F33C] hover:text-black sm:w-auto"
+          className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-full bg-black px-5 py-2.5 text-[12.5px] font-semibold text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)] transition hover:bg-[#C7F33C] hover:text-black sm:w-auto"
         >
           <Zap className="h-3.5 w-3.5" /> Simulate Live Webhook Payment Event
         </button>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-5">
+      <div className="grid gap-3 sm:gap-5 lg:grid-cols-5">
         {/* Impersonation */}
         <OrganicCard tone="white" cornerSide="tr" arrow className="lg:col-span-3">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E5E5] px-6 py-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E5E5] px-4 py-4 sm:px-6 sm:py-5">
             <div className="flex items-center gap-2.5">
               <div className="grid h-9 w-9 place-items-center rounded-2xl bg-black text-white">
                 <KeyRound className="h-4 w-4" />
@@ -88,7 +88,7 @@ export function AuditsView() {
             </span>
           </div>
 
-          <div className="space-y-3 px-4 py-4 lg:hidden">
+          <div className="space-y-2.5 px-3.5 py-3.5 lg:hidden">
             {impersonationLogs.map((l, i) => (
               <div key={i} className="rounded-2xl border border-[#E5E5E5] bg-[#F4F4F5]/40 p-4">
                 <div className="flex items-center gap-2">
@@ -167,7 +167,7 @@ export function AuditsView() {
 
         {/* Webhook stream */}
         <OrganicCard tone="white" cornerSide="bl" arrow className="lg:col-span-2">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E5E5] px-6 py-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E5E5] px-4 py-4 sm:px-6 sm:py-5">
             <div className="flex items-center gap-2.5">
               <div className="grid h-9 w-9 place-items-center rounded-2xl bg-[#C7F33C] text-black">
                 <Webhook className="h-4 w-4" />
@@ -182,7 +182,7 @@ export function AuditsView() {
             <span className="relative inline-block h-2 w-2 rounded-full heartbeat-dot bg-[#C7F33C]" />
           </div>
 
-          <ol className="relative ml-6 border-l border-dashed border-black/15 px-6 py-5">
+          <ol className="relative ml-5 border-l border-dashed border-black/15 px-5 py-4 sm:ml-6 sm:px-6 sm:py-5">
             {events.map((e, i) => {
               const ok = e.status < 400;
               return (

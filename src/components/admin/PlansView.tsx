@@ -90,8 +90,8 @@ export function PlansView() {
   const totalEnabled = tiers.reduce((s, t) => s + Object.values(t.flags).filter(Boolean).length, 0);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
         <div>
           <h1 className="text-heading">Subscription Tiers &amp; Feature Matrix</h1>
           <p className="mt-2 text-[14px] text-black/55">
@@ -105,7 +105,7 @@ export function PlansView() {
             <button
               key={i}
               onClick={() => setInterval(i)}
-              className={`rounded-full px-5 py-2 text-[12.5px] font-semibold transition ${
+              className={`min-h-10 flex-1 rounded-full px-5 py-2 text-[12.5px] font-semibold transition sm:flex-none ${
                 interval === i ? "bg-black text-white shadow-sm" : "text-black/65 hover:text-black"
               }`}
             >
@@ -115,7 +115,7 @@ export function PlansView() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:gap-5 md:grid-cols-2 xl:grid-cols-3">
         {tiers.map((t, i) => {
           const price = interval === "Monthly" ? t.monthly : t.annually;
           const isPremium = t.name === "Premium";

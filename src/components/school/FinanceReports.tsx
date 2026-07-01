@@ -1,7 +1,17 @@
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Download, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
 
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { FinanceBarCard, FinanceDonutCard } from "@/components/school/finance-charts";
 import { OrganicCard } from "@/components/ui/organic-card";
 import { useAuth } from "@/lib/auth";
 import { downloadCsv, downloadTablePdf } from "@/lib/finance-export";
@@ -73,26 +83,83 @@ function ExportBar({
   onCsv: () => void;
   onPdf: () => void;
 }) {
+  const [pendingExport, setPendingExport] = useState<"csv" | "pdf" | null>(null);
+
+  const confirmExport = () => {
+    if (pendingExport === "csv") onCsv();
+    else if (pendingExport === "pdf") onPdf();
+    setPendingExport(null);
+  };
+
+  const exportCopy = {
+    csv: {
+      title: "Export CSV",
+      description: `Export ${title} as a CSV file? The download will start immediately after confirmation.`,
+      confirm: "Export CSV",
+    },
+    pdf: {
+      title: "Export PDF",
+      description: `Export ${title} as a PDF file? The download will start immediately after confirmation.`,
+      confirm: "Export PDF",
+    },
+  } as const;
+
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-      <div className="text-title">{title}</div>
-      <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
-        <button
-          type="button"
-          onClick={onCsv}
-          className="inline-flex w-full items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3.5 py-1.5 text-[12px] font-medium text-black transition-colors hover:bg-[#F4F4F5] sm:w-auto"
-        >
-          <FileSpreadsheet className="h-3.5 w-3.5" /> Export CSV
-        </button>
-        <button
-          type="button"
-          onClick={onPdf}
-          className="inline-flex w-full items-center justify-center gap-1.5 rounded-full bg-black px-3.5 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-black/85 sm:w-auto"
-        >
-          <Download className="h-3.5 w-3.5" /> Export PDF
-        </button>
+    <>
+      <div className="grid grid-cols-12 items-start gap-3 lg:items-center">
+        <div className="col-span-12 lg:col-span-7">
+          <div className="text-title">{title}</div>
+        </div>
+        <div className="col-span-12 grid grid-cols-2 gap-2 lg:col-span-5">
+          <button
+            type="button"
+            onClick={() => setPendingExport("csv")}
+            className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 py-1.5 text-[11.5px] font-medium text-black transition-colors hover:bg-[#F4F4F5] sm:text-[12px]"
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" /> Export CSV
+          </button>
+          <button
+            type="button"
+            onClick={() => setPendingExport("pdf")}
+            className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full bg-black px-3 py-1.5 text-[11.5px] font-semibold text-white transition-colors hover:bg-black/85 sm:text-[12px]"
+          >
+            <Download className="h-3.5 w-3.5 shrink-0" /> Export PDF
+          </button>
+        </div>
       </div>
-    </div>
+
+      <Dialog
+        open={Boolean(pendingExport)}
+        onOpenChange={(next) => {
+          if (!next) setPendingExport(null);
+        }}
+      >
+        <DialogContent className="max-w-sm rounded-[1.5rem] border border-[#E5E5E5] bg-white p-6">
+          <DialogHeader>
+            <DialogTitle className="text-[22px] font-semibold text-black">
+              {pendingExport ? exportCopy[pendingExport].title : "Confirm Export"}
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
+              {pendingExport
+                ? exportCopy[pendingExport].description
+                : "Are you sure you want to export this report?"}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-5 flex-row justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setPendingExport(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={confirmExport}
+              className="rounded-full bg-black text-white hover:bg-black/85"
+            >
+              {pendingExport ? exportCopy[pendingExport].confirm : "Export"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -100,14 +167,21 @@ function ReportTable({
   headers,
   rows,
   footer,
+  compact = false,
 }: {
   headers: string[];
   rows: (string | number)[][];
   footer?: ReactNode;
+  compact?: boolean;
 }) {
   return (
-    <div className="mt-4 overflow-x-auto rounded-2xl border border-[#E5E5E5]">
-      <table className="w-full min-w-[640px] text-left text-[12.5px]">
+    <div className="mobile-scrollbar-none mt-4 overflow-x-auto rounded-2xl border border-[#E5E5E5]">
+      <table
+        className={cn(
+          "w-full text-left text-[12.5px]",
+          compact ? "min-w-[320px]" : "min-w-[640px]",
+        )}
+      >
         <thead>
           <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5]">
             {headers.map((h) => (
@@ -145,7 +219,7 @@ function ReportTable({
 
 function SummaryStrip({ items }: { items: { label: string; value: string; accent?: boolean }[] }) {
   return (
-    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {items.map((item) => (
         <div
           key={item.label}
@@ -273,8 +347,8 @@ export function ProfitLossReport() {
   };
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-      <OrganicCard tone="white" cornerSide="tr" padded className="lg:col-span-2">
+    <div className="grid grid-cols-12 gap-4 sm:gap-5">
+      <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12 lg:col-span-8">
         <ExportBar title="Profit & Loss Account" onCsv={handleCsv} onPdf={handlePdf} />
         <p className="mt-1 text-[12px] text-black/55">
           Income from fee receipts vs operating expenditure · {academicYear}
@@ -282,29 +356,64 @@ export function ProfitLossReport() {
         <ReportTable headers={headers} rows={tableRows} />
       </OrganicCard>
 
-      <OrganicCard tone="lime" cornerSide="bl" padded>
-        <div className="text-title">Statement Summary</div>
-        <div className="mt-4 space-y-3">
-          <div className="rounded-2xl bg-white/60 p-3">
+      <OrganicCard
+        tone="lime"
+        cornerSide="bl"
+        padded
+        className="col-span-12 max-h-[calc(100dvh-9rem)] overflow-hidden p-4 sm:p-6 lg:col-span-4"
+      >
+        <div className="text-[28px] font-semibold leading-none tracking-tight sm:text-title">
+          Statement Summary
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-3 lg:grid-cols-1">
+          <div className="min-w-0 rounded-[1.35rem] bg-white/60 px-3 py-2.5 sm:rounded-2xl sm:p-3">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-black/55">
               Gross Income
             </div>
-            <div className="mt-1 font-mono text-[20px] font-semibold">{inr(totalIncome)}</div>
+            <div className="mt-1 truncate font-mono text-[18px] font-semibold sm:text-[20px]">
+              {inr(totalIncome)}
+            </div>
           </div>
-          <div className="rounded-2xl bg-white/60 p-3">
+          <div className="min-w-0 rounded-[1.35rem] bg-white/60 px-3 py-2.5 sm:rounded-2xl sm:p-3">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-black/55">
               Operating Expense
             </div>
-            <div className="mt-1 font-mono text-[20px] font-semibold">{inr(totalExpense)}</div>
+            <div className="mt-1 truncate font-mono text-[18px] font-semibold sm:text-[20px]">
+              {inr(totalExpense)}
+            </div>
           </div>
-          <div className="rounded-2xl bg-black p-3 text-white">
+          <div className="min-w-0 rounded-[1.35rem] bg-black px-3 py-2.5 text-white sm:rounded-2xl sm:p-3">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-white/65">
               Net Surplus
             </div>
-            <div className="mt-1 font-mono text-[22px] font-semibold">{inr(netProfit)}</div>
+            <div className="mt-1 truncate font-mono text-[18px] font-semibold sm:text-[22px]">
+              {inr(netProfit)}
+            </div>
           </div>
         </div>
       </OrganicCard>
+
+      <div className="col-span-6 min-w-0">
+        <FinanceDonutCard
+          title="Income Mix"
+          cornerSide="tr"
+          segments={incomeByCategory.map((item) => ({
+            label: item.label,
+            value: item.amount,
+          }))}
+        />
+      </div>
+      <div className="col-span-6 min-w-0">
+        <FinanceBarCard
+          title="Expense Breakdown"
+          cornerSide="bl"
+          fill="#C7F33C"
+          segments={OPERATING_EXPENSES.map((item) => ({
+            label: item.account.replace(" & ", " · "),
+            value: item.amount,
+          }))}
+        />
+      </div>
     </div>
   );
 }
@@ -375,8 +484,8 @@ export function BalanceSheetReport() {
   };
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      <OrganicCard tone="white" cornerSide="tr" padded>
+    <div className="grid grid-cols-12 gap-4 sm:gap-5">
+      <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12 lg:col-span-6">
         <ExportBar title="Balance Sheet" onCsv={handleCsv} onPdf={handlePdf} />
         <p className="mt-1 text-[12px] text-black/55">
           Position statement as at today · {academicYear}
@@ -388,17 +497,20 @@ export function BalanceSheetReport() {
             { label: "Net Equity", value: inr(equity), accent: true },
           ]}
         />
-        <ReportTable headers={headers} rows={tableRows} />
+        <ReportTable headers={headers} rows={tableRows} compact />
       </OrganicCard>
 
-      <OrganicCard tone="white" cornerSide="bl" padded>
+      <OrganicCard tone="white" cornerSide="bl" padded className="col-span-12 lg:col-span-6">
         <div className="text-title">Outstanding Payables</div>
         <p className="mt-1 text-[12px] text-black/55">{ACCOUNTS_PAYABLE.length} open obligations</p>
-        <div className="mt-4 divide-y divide-[#F0F0F0]">
+        <div className="mt-4 space-y-2">
           {ACCOUNTS_PAYABLE.map((p) => (
-            <div key={p.payee} className="flex items-center justify-between py-2.5 text-[12.5px]">
-              <span className="font-medium text-black">{p.payee}</span>
-              <span className="font-mono text-black">{inr(p.amount)}</span>
+            <div
+              key={p.payee}
+              className="flex items-center justify-between gap-3 rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5 text-[12.5px]"
+            >
+              <span className="min-w-0 flex-1 truncate font-medium text-black">{p.payee}</span>
+              <span className="shrink-0 font-mono text-black">{inr(p.amount)}</span>
             </div>
           ))}
         </div>
@@ -412,6 +524,28 @@ export function BalanceSheetReport() {
           </p>
         </div>
       </OrganicCard>
+
+      <div className="col-span-6 min-w-0">
+        <FinanceDonutCard
+          title="Asset Composition"
+          cornerSide="tr"
+          segments={[
+            { label: "Cash", value: cashOnHand },
+            { label: "Bank & UPI", value: bankBalance },
+            { label: "Receivables", value: receivables },
+          ]}
+        />
+      </div>
+      <div className="col-span-6 min-w-0">
+        <FinanceBarCard
+          title="Payables Snapshot"
+          cornerSide="bl"
+          segments={ACCOUNTS_PAYABLE.map((item) => ({
+            label: item.payee.split(" · ")[0],
+            value: item.amount,
+          }))}
+        />
+      </div>
     </div>
   );
 }
