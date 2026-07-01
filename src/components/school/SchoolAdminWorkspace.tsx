@@ -787,6 +787,7 @@ export function StaffRoster() {
   const defaultDept = departments[0]?.name ?? "";
   const defaultRole = roles[0]?.title ?? "";
   const [open, setOpen] = useState(false);
+  const [pendingRemoval, setPendingRemoval] = useState<Staff | null>(null);
   const [form, setForm] = useState({
     name: "",
     role: defaultRole,
@@ -833,6 +834,12 @@ export function StaffRoster() {
     const s = staff.find((x) => x.id === id);
     setStaff((prev) => prev.filter((x) => x.id !== id));
     toast.error(`${s?.name} removed from roster`);
+  };
+
+  const confirmRemoveStaff = () => {
+    if (!pendingRemoval) return;
+    removeStaff(pendingRemoval.id);
+    setPendingRemoval(null);
   };
 
   return (
@@ -900,7 +907,7 @@ export function StaffRoster() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => removeStaff(s.id)}
+                      onClick={() => setPendingRemoval(s)}
                       className="w-full rounded-full border border-[#FECACA] bg-[#FEF2F2] px-3 py-2 text-[11.5px] font-medium text-[#B91C1C] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2] sm:min-w-[6.5rem] sm:flex-1"
                     >
                       Remove
@@ -984,6 +991,36 @@ export function StaffRoster() {
           </form>
         </SheetContent>
       </Sheet>
+
+      <Dialog
+        open={Boolean(pendingRemoval)}
+        onOpenChange={(next) => {
+          if (!next) setPendingRemoval(null);
+        }}
+      >
+        <DialogContent className="max-w-sm rounded-[1.5rem] border border-[#E5E5E5] bg-white p-6">
+          <DialogHeader>
+            <DialogTitle className="text-[22px] font-semibold text-black">Remove Staff</DialogTitle>
+            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
+              {pendingRemoval
+                ? `Are you sure you want to remove ${pendingRemoval.name} (${pendingRemoval.id}) from the roster? This action cannot be undone.`
+                : "Are you sure you want to remove this staff profile?"}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-5 flex-row justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setPendingRemoval(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={confirmRemoveStaff}
+              className="rounded-full bg-[#B91C1C] text-white hover:bg-[#991B1B]"
+            >
+              Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
