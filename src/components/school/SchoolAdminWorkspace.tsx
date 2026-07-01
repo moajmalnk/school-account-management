@@ -468,20 +468,22 @@ function KpiCard({
     <OrganicCard
       tone={tone}
       cornerSide={cornerSide}
-      arrow
       padded
-      className="min-w-0 w-full p-3 sm:p-6 [&_.relative]:pr-10 [&_.relative]:pl-10 [&_.relative]:pb-10 sm:[&_.relative]:pr-14 sm:[&_.relative]:pl-14 sm:[&_.relative]:pb-14"
+      className="flex h-full min-w-0 w-full flex-col justify-between p-2.5 sm:p-6"
     >
       <div
-        className={`text-[9px] font-medium uppercase leading-tight tracking-wider sm:text-[11px] ${labelClass}`}
+        className={`text-[9px] font-medium uppercase leading-snug tracking-wide sm:text-[11px] ${labelClass}`}
       >
         {label}
       </div>
-      <div className="mt-1.5 font-mono text-[17px] font-semibold leading-none tracking-tight sm:mt-3 sm:text-[22px] md:text-[28px]">
+      <div className="mt-1 break-words font-mono text-[15px] font-semibold leading-tight tracking-tight sm:mt-2 sm:text-[22px] md:text-[28px]">
         {value}
       </div>
-      <div className={`mt-1 flex min-w-0 items-center gap-1 text-[10px] sm:text-[11.5px] ${deltaColor}`}>
-        <Icon className="h-3 w-3 shrink-0" /> <span className="truncate">{delta}</span>
+      <div
+        className={`mt-1 flex items-start gap-1 text-[9.5px] leading-snug sm:mt-1.5 sm:text-[11.5px] ${deltaColor}`}
+      >
+        <Icon className="mt-px h-3 w-3 shrink-0" />
+        <span className="min-w-0 break-words">{delta}</span>
       </div>
     </OrganicCard>
   );
@@ -576,8 +578,8 @@ export function SchoolDashboard() {
   return (
     <div className="space-y-4 sm:space-y-6">
 
-      <div className="grid min-w-0 grid-cols-2 gap-2.5 sm:gap-3 md:gap-4 xl:grid-cols-4">
-        <div className="min-w-0">
+      <div className="grid min-w-0 auto-rows-fr grid-cols-2 gap-2 sm:gap-3 md:gap-4 xl:grid-cols-4">
+        <div className="min-w-0 h-full">
           <KpiCard
             label="Total Students"
             value={students.length.toLocaleString("en-IN")}
@@ -585,7 +587,7 @@ export function SchoolDashboard() {
             cornerSide="tr"
           />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 h-full">
           <KpiCard
             label="Total Staff"
             value={staff.length.toString()}
@@ -593,7 +595,7 @@ export function SchoolDashboard() {
             cornerSide="bl"
           />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 h-full">
           <KpiCard
             label="Receipts Captured"
             value={`₹ ${monthlyIncome.toLocaleString("en-IN")}`}
@@ -601,7 +603,7 @@ export function SchoolDashboard() {
             cornerSide="tr"
           />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 h-full">
           <KpiCard
             label="Outstanding Dues"
             value={`₹ ${totalDue.toLocaleString("en-IN")}`}
@@ -852,6 +854,7 @@ export function StudentsLedger() {
   const [pendingLedgerAction, setPendingLedgerAction] = useState<"pdf" | "csv" | "import" | null>(
     null,
   );
+  const [actionsOpen, setActionsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -1115,42 +1118,82 @@ export function StudentsLedger() {
     </div>
   );
 
+  const ledgerActions = [
+    {
+      id: "admit",
+      label: "Admit Student",
+      icon: Plus,
+      onSelect: () => {
+        setActionsOpen(false);
+        setOpen(true);
+      },
+    },
+    {
+      id: "pdf",
+      label: "Download PDF",
+      icon: Printer,
+      onSelect: () => {
+        setActionsOpen(false);
+        setPendingLedgerAction("pdf");
+      },
+    },
+    {
+      id: "csv",
+      label: "Export CSV",
+      icon: Download,
+      onSelect: () => {
+        setActionsOpen(false);
+        setPendingLedgerAction("csv");
+      },
+    },
+    {
+      id: "import",
+      label: "Import CSV",
+      icon: Upload,
+      onSelect: () => {
+        setActionsOpen(false);
+        setPendingLedgerAction("import");
+      },
+    },
+  ] as const;
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <OrganicCard tone="white" cornerSide="tr" className="space-y-3 p-3.5 sm:p-4">
         <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-            <button onClick={() => setOpen(true)} className={`${limeBtn} w-full sm:w-auto`}>
-              <Plus className="h-3.5 w-3.5" /> Student
-            </button>
-            <button
-              onClick={() => setPendingLedgerAction("pdf")}
-              className={`${limeBtn} w-full sm:w-auto`}
-              title="Open print-ready PDF preview"
-            >
-              <Printer className="h-3.5 w-3.5" /> Download PDF
-            </button>
-            <button
-              onClick={() => setPendingLedgerAction("csv")}
-              className={`${limeBtn} w-full sm:w-auto`}
-              title="Export visible rows as CSV"
-            >
-              <Download className="h-3.5 w-3.5" /> Export CSV
-            </button>
-            <button
-              onClick={() => setPendingLedgerAction("import")}
-              className={`${limeBtn} w-full sm:w-auto`}
-              title="Append students from a CSV file"
-            >
-              <Upload className="h-3.5 w-3.5" /> Import CSV
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".csv,text/csv"
-              className="hidden"
-              onChange={handleImport}
-            />
+          <button
+            type="button"
+            onClick={() => setActionsOpen(true)}
+            className="flex w-full items-center gap-3 rounded-[1.35rem] border border-[#E5E5E5] bg-white p-3 text-left shadow-[0_10px_28px_-24px_rgba(0,0,0,0.35)] transition-colors hover:bg-[#FAFAFA] lg:hidden"
+          >
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-black text-white">
+              <Plus className="h-5 w-5" strokeWidth={2} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                Ledger Actions
+              </div>
+              <div className="truncate text-[15px] font-semibold text-black">
+                Admit, export, or import
+              </div>
+            </div>
+            <ChevronDown className="h-5 w-5 shrink-0 text-black/45" />
+          </button>
+
+          <div className="hidden gap-2 lg:flex lg:flex-wrap lg:items-center">
+            {ledgerActions.map((action) => {
+              const Icon = action.icon;
+              return (
+                <button
+                  key={action.id}
+                  onClick={action.onSelect}
+                  className={`${limeBtn} w-auto`}
+                  title={action.label}
+                >
+                  <Icon className="h-3.5 w-3.5" /> {action.label.replace(" Student", "")}
+                </button>
+              );
+            })}
           </div>
 
           <div className="mobile-scrollbar-none hidden overflow-x-auto lg:block">{statusTabs}</div>
@@ -1188,6 +1231,49 @@ export function StudentsLedger() {
           </div>
         </div>
       </OrganicCard>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv,text/csv"
+        className="hidden"
+        onChange={handleImport}
+      />
+
+      <Sheet open={actionsOpen} onOpenChange={setActionsOpen}>
+        <SheetContent
+          side="bottom"
+          className="max-h-[85dvh] rounded-t-[1.75rem] border-0 bg-[#0F1115] p-0 pb-[calc(1rem+env(safe-area-inset-bottom))] lg:hidden [&>button]:hidden"
+        >
+          <div className="flex justify-center pt-3">
+            <div className="h-1 w-10 rounded-full bg-white/20" />
+          </div>
+          <SheetHeader className="space-y-1 px-5 pb-4 pt-2 text-left">
+            <SheetTitle className="text-[22px] font-semibold text-white">Select Action</SheetTitle>
+            <SheetDescription className="text-[13px] text-white/55">
+              Admit students or manage ledger exports
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mobile-scrollbar-none max-h-[min(52dvh,420px)] space-y-2 overflow-y-auto px-4 pb-2">
+            {ledgerActions.map((action) => {
+              const Icon = action.icon;
+              return (
+                <button
+                  key={action.id}
+                  type="button"
+                  onClick={action.onSelect}
+                  className="flex w-full items-center gap-3 rounded-2xl bg-white/[0.06] px-4 py-3.5 text-left text-white transition-colors hover:bg-white/[0.1]"
+                >
+                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/10">
+                    <Icon className="h-[18px] w-[18px]" strokeWidth={2} />
+                  </div>
+                  <span className="min-w-0 flex-1 text-[15px] font-medium">{action.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">
         {filtered.map((s, i) => {
@@ -1982,6 +2068,10 @@ export function FinanceModule() {
             <div className="h-1 w-10 rounded-full bg-white/20" />
           </div>
           <SheetHeader className="space-y-1 px-5 pb-4 pt-2 text-left">
+            <SheetTitle className="text-[22px] font-semibold text-white">Select Section</SheetTitle>
+            <SheetDescription className="text-[13px] text-white/55">
+              Navigate to different finance areas
+            </SheetDescription>
           </SheetHeader>
           <div className="mobile-scrollbar-none max-h-[min(52dvh,420px)] space-y-2 overflow-y-auto px-4 pb-2">
             {tabs.map((t) => {
