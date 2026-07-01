@@ -788,6 +788,7 @@ export function StaffRoster() {
   const defaultRole = roles[0]?.title ?? "";
   const [open, setOpen] = useState(false);
   const [pendingRemoval, setPendingRemoval] = useState<Staff | null>(null);
+  const [detailStaff, setDetailStaff] = useState<Staff | null>(null);
   const [form, setForm] = useState({
     name: "",
     role: defaultRole,
@@ -864,32 +865,42 @@ export function StaffRoster() {
           const cornerSide: CornerSide = i % 2 === 0 ? "tr" : "bl";
           return (
             <OrganicCard key={s.id} tone={tone} cornerSide={cornerSide} padded>
-              <div className="flex items-start gap-3">
-                <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-black text-[14px] font-semibold text-white">
+              <div className="flex w-full items-start gap-3">
+                <button
+                  type="button"
+                  onClick={() => setDetailStaff(s)}
+                  className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-black text-[14px] font-semibold text-white"
+                >
                   {s.name
                     .split(" ")
                     .map((n) => n[0])
                     .join("")
                     .slice(0, 2)}
-                </div>
+                </button>
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
-                    <div className="min-w-0">
-                      <div className="text-[14px] font-semibold text-black">{s.name}</div>
-                      <div className="text-[11.5px] text-black/55">{s.role}</div>
+                  <button
+                    type="button"
+                    onClick={() => setDetailStaff(s)}
+                    className="w-full text-left"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
+                      <div className="min-w-0">
+                        <div className="text-[14px] font-semibold text-black">{s.name}</div>
+                        <div className="text-[11.5px] text-black/55">{s.role}</div>
+                      </div>
+                      <span className="shrink-0 font-mono text-[10px] text-black/45">{s.id}</span>
                     </div>
-                    <span className="shrink-0 font-mono text-[10px] text-black/45">{s.id}</span>
-                  </div>
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11.5px]">
-                    <span className="text-black/55">Department · {s.dept}</span>
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-[10.5px] font-semibold ${
-                        s.active ? "bg-[#C7F33C] text-black" : "bg-black/10 text-black/55"
-                      }`}
-                    >
-                      {s.active ? "Active" : "Inactive"}
-                    </span>
-                  </div>
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11.5px]">
+                      <span className="text-black/55">Department · {s.dept}</span>
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-[10.5px] font-semibold ${
+                          s.active ? "bg-[#C7F33C] text-black" : "bg-black/10 text-black/55"
+                        }`}
+                      >
+                        {s.active ? "Active" : "Inactive"}
+                      </span>
+                    </div>
+                  </button>
                   <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                     <button
                       type="button"
@@ -1017,6 +1028,66 @@ export function StaffRoster() {
               className="rounded-full bg-[#B91C1C] text-white hover:bg-[#991B1B]"
             >
               Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(detailStaff)}
+        onOpenChange={(next) => {
+          if (!next) setDetailStaff(null);
+        }}
+      >
+        <DialogContent className="max-w-md rounded-[1.75rem] border border-[#E5E5E5] bg-white p-6">
+          <DialogHeader>
+            <DialogTitle className="text-[24px] font-semibold text-black">
+              Staff Profile
+            </DialogTitle>
+            <DialogDescription className="text-[13px] text-black/55">
+              Detailed view for selected faculty / administrative member.
+            </DialogDescription>
+          </DialogHeader>
+
+          {detailStaff && (
+            <div className="mt-2 space-y-3">
+              <div className="rounded-2xl bg-[#F4F4F5] p-4">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-black/50">
+                  Employee
+                </div>
+                <div className="mt-1 text-[18px] font-semibold text-black">{detailStaff.name}</div>
+                <div className="text-[12px] text-black/60">{detailStaff.role}</div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-[#E5E5E5] p-3">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    Employee ID
+                  </div>
+                  <div className="mt-1 font-mono text-[12px] text-black">{detailStaff.id}</div>
+                </div>
+                <div className="rounded-2xl border border-[#E5E5E5] p-3">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    Status
+                  </div>
+                  <div className="mt-1 text-[12px] font-semibold text-black">
+                    {detailStaff.active ? "Active" : "Inactive"}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-[#E5E5E5] p-3">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                  Department
+                </div>
+                <div className="mt-1 text-[12px] text-black">{detailStaff.dept}</div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="mt-5 flex-row justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setDetailStaff(null)}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>
