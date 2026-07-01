@@ -318,14 +318,19 @@ function InsightCard({
   tone?: Tone;
 }) {
   return (
-    <OrganicCard tone={tone} cornerSide="tr" padded className="!p-4">
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+    <OrganicCard
+      tone={tone}
+      cornerSide="tr"
+      padded
+      className="flex h-full min-h-[92px] min-w-0 flex-col justify-between p-3 sm:min-h-[108px] sm:!p-4"
+    >
+      <div className="text-[10px] font-semibold uppercase leading-snug tracking-wider text-black/45">
         {label}
       </div>
-      <div className="mt-2 font-mono text-[22px] font-semibold tracking-tight text-black">
+      <div className="mt-2 font-mono text-[18px] font-semibold leading-tight tracking-tight text-black sm:text-[22px]">
         {value}
       </div>
-      <div className="mt-1 text-[11px] text-black/55">{hint}</div>
+      <div className="mt-1 text-[10.5px] leading-snug text-black/55 sm:text-[11px]">{hint}</div>
     </OrganicCard>
   );
 }
@@ -444,14 +449,12 @@ function KpiCard({
   delta,
   positive = true,
   tone = "white",
-  cornerSide = "tr",
 }: {
   label: string;
   value: string;
   delta: string;
   positive?: boolean;
   tone?: Tone;
-  cornerSide?: CornerSide;
 }) {
   const Icon = positive ? TrendingUp : TrendingDown;
   const isLime = tone === "lime";
@@ -467,20 +470,21 @@ function KpiCard({
   return (
     <OrganicCard
       tone={tone}
-      cornerSide={cornerSide}
+      cornerSide="tr"
+      arrow
       padded
-      className="flex h-full min-w-0 w-full flex-col justify-between p-2.5 sm:p-6"
+      className="h-full min-h-[92px] min-w-0 w-full p-2.5 sm:min-h-[116px] sm:p-6 [&>button]:right-2 [&>button]:top-2 [&>button]:h-8 [&>button]:w-8 sm:[&>button]:right-4 sm:[&>button]:top-4 sm:[&>button]:h-10 sm:[&>button]:w-10 [&_.relative]:grid [&_.relative]:h-full [&_.relative]:min-h-[72px] [&_.relative]:min-w-0 [&_.relative]:grid-rows-[auto_minmax(0,1fr)_auto] [&_.relative]:gap-1 [&_.relative]:pr-9 sm:[&_.relative]:min-h-[88px] sm:[&_.relative]:gap-1.5 sm:[&_.relative]:pr-14"
     >
       <div
         className={`text-[9px] font-medium uppercase leading-snug tracking-wide sm:text-[11px] ${labelClass}`}
       >
         {label}
       </div>
-      <div className="mt-1 break-words font-mono text-[15px] font-semibold leading-tight tracking-tight sm:mt-2 sm:text-[22px] md:text-[28px]">
+      <div className="flex items-end break-words font-mono text-[15px] font-semibold leading-tight tracking-tight sm:text-[22px] md:text-[28px]">
         {value}
       </div>
       <div
-        className={`mt-1 flex items-start gap-1 text-[9.5px] leading-snug sm:mt-1.5 sm:text-[11.5px] ${deltaColor}`}
+        className={`flex items-start gap-1 text-[9.5px] leading-snug sm:text-[11.5px] ${deltaColor}`}
       >
         <Icon className="mt-px h-3 w-3 shrink-0" />
         <span className="min-w-0 break-words">{delta}</span>
@@ -584,7 +588,6 @@ export function SchoolDashboard() {
             label="Total Students"
             value={students.length.toLocaleString("en-IN")}
             delta="live ledger"
-            cornerSide="tr"
           />
         </div>
         <div className="min-w-0 h-full">
@@ -592,7 +595,6 @@ export function SchoolDashboard() {
             label="Total Staff"
             value={staff.length.toString()}
             delta={`${staff.filter((s) => s.active).length} active`}
-            cornerSide="bl"
           />
         </div>
         <div className="min-w-0 h-full">
@@ -600,7 +602,6 @@ export function SchoolDashboard() {
             label="Receipts Captured"
             value={`₹ ${monthlyIncome.toLocaleString("en-IN")}`}
             delta={`${payments.length} receipts`}
-            cornerSide="tr"
           />
         </div>
         <div className="min-w-0 h-full">
@@ -610,33 +611,40 @@ export function SchoolDashboard() {
             delta="across all classes"
             positive={false}
             tone="lime"
-            cornerSide="bl"
           />
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
-        <InsightCard
-          label="Collection Rate"
-          value={`${collectionRate}%`}
-          hint={`${clearedStudents} of ${students.length} accounts cleared`}
-          tone="lime"
-        />
-        <InsightCard
-          label="Overdue Accounts"
-          value={overdueStudents.length.toString()}
-          hint={`₹ ${totalDue.toLocaleString("en-IN")} pending recovery`}
-        />
-        <InsightCard
-          label="Average Receipt"
-          value={`₹ ${avgReceipt.toLocaleString("en-IN")}`}
-          hint="Mean value per captured receipt"
-        />
-        <InsightCard
-          label="Active Staff Ratio"
-          value={`1:${students.length > 0 ? Math.max(1, Math.round(students.length / Math.max(staff.filter((s) => s.active).length, 1))) : 0}`}
-          hint={`${staff.filter((s) => s.active).length} active faculty & admin`}
-        />
+      <div className="grid auto-rows-fr grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4 md:gap-4">
+        <div className="min-w-0 h-full">
+          <InsightCard
+            label="Collection Rate"
+            value={`${collectionRate}%`}
+            hint={`${clearedStudents} of ${students.length} accounts cleared`}
+            tone="lime"
+          />
+        </div>
+        <div className="min-w-0 h-full">
+          <InsightCard
+            label="Overdue Accounts"
+            value={overdueStudents.length.toString()}
+            hint={`₹ ${totalDue.toLocaleString("en-IN")} pending recovery`}
+          />
+        </div>
+        <div className="min-w-0 h-full">
+          <InsightCard
+            label="Average Receipt"
+            value={`₹ ${avgReceipt.toLocaleString("en-IN")}`}
+            hint="Mean value per captured receipt"
+          />
+        </div>
+        <div className="min-w-0 h-full">
+          <InsightCard
+            label="Active Staff Ratio"
+            value={`1:${students.length > 0 ? Math.max(1, Math.round(students.length / Math.max(staff.filter((s) => s.active).length, 1))) : 0}`}
+            hint={`${staff.filter((s) => s.active).length} active faculty & admin`}
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
