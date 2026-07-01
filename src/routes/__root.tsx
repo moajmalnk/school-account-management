@@ -8,21 +8,23 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 
+import { Toaster } from "@/components/ui/sonner";
+import { AuthProvider } from "@/lib/auth";
 import appCss from "../styles.css?url";
 
 function NotFoundComponent() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+    <div className="flex min-h-screen items-center justify-center bg-[#EAEAEA] px-4">
       <div className="max-w-md text-center">
-        <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
+        <h1 className="text-7xl font-bold text-black">404</h1>
+        <h2 className="mt-4 text-xl font-semibold text-black">Page not found</h2>
+        <p className="mt-2 text-sm text-black/55">
           The page you're looking for doesn't exist or has been moved.
         </p>
         <div className="mt-6">
           <Link
             to="/"
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            className="inline-flex items-center justify-center rounded-full bg-black px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-black/85"
           >
             Go home
           </Link>
@@ -37,12 +39,10 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+    <div className="flex min-h-screen items-center justify-center bg-[#EAEAEA] px-4">
       <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          This page didn't load
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
+        <h1 className="text-xl font-semibold tracking-tight text-black">This page didn't load</h1>
+        <p className="mt-2 text-sm text-black/55">
           Something went wrong on our end. You can try refreshing or head back home.
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
@@ -51,13 +51,13 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
               router.invalidate();
               reset();
             }}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            className="inline-flex items-center justify-center rounded-full bg-black px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-black/85"
           >
             Try again
           </button>
           <a
             href="/"
-            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+            className="inline-flex items-center justify-center rounded-full border border-[#E5E5E5] bg-white px-5 py-2.5 text-sm font-medium text-black/75 transition-colors hover:bg-[#F4F4F5]"
           >
             Go home
           </a>
@@ -72,18 +72,26 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "School Admin Console is a multi-tenant SaaS platform for managing educational institutions." },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "School Admin Console is a multi-tenant SaaS platform for managing educational institutions." },
+      { title: "School Admin Console" },
+      {
+        name: "description",
+        content:
+          "School Admin Console is a multi-tenant SaaS platform for managing educational institutions.",
+      },
+      { property: "og:title", content: "School Admin Console" },
+      {
+        property: "og:description",
+        content:
+          "School Admin Console is a multi-tenant SaaS platform for managing educational institutions.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
-      { name: "twitter:title", content: "Lovable App" },
-      { name: "twitter:description", content: "School Admin Console is a multi-tenant SaaS platform for managing educational institutions." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/fb3a133f-6266-49e9-8509-e464ac3b36a7/id-preview-b613c48d--34fa7e2c-bc37-47df-8f7a-e7abb6fb408c.lovable.app-1779883244372.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/fb3a133f-6266-49e9-8509-e464ac3b36a7/id-preview-b613c48d--34fa7e2c-bc37-47df-8f7a-e7abb6fb408c.lovable.app-1779883244372.png" },
+      { name: "twitter:title", content: "School Admin Console" },
+      {
+        name: "twitter:description",
+        content:
+          "School Admin Console is a multi-tenant SaaS platform for managing educational institutions.",
+      },
     ],
     links: [
       {
@@ -123,7 +131,19 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Outlet />
+      <AuthProvider>
+        <Outlet />
+        <Toaster
+          position="bottom-center"
+          richColors
+          closeButton
+          expand
+          offset={28}
+          gap={12}
+          visibleToasts={4}
+          duration={4500}
+        />
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

@@ -9,38 +9,230 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TenantRouteImport } from './routes/tenant'
+import { Route as SuperAdminRouteImport } from './routes/super-admin'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as TenantIndexRouteImport } from './routes/tenant/index'
+import { Route as SuperAdminIndexRouteImport } from './routes/super-admin/index'
+import { Route as TenantStudentsRouteImport } from './routes/tenant/students'
+import { Route as TenantStaffRouteImport } from './routes/tenant/staff'
+import { Route as TenantSettingsRouteImport } from './routes/tenant/settings'
+import { Route as TenantFinanceRouteImport } from './routes/tenant/finance'
+import { Route as TenantDashboardRouteImport } from './routes/tenant/dashboard'
+import { Route as SuperAdminTenantsRouteImport } from './routes/super-admin/tenants'
+import { Route as SuperAdminPlansRouteImport } from './routes/super-admin/plans'
+import { Route as SuperAdminOverviewRouteImport } from './routes/super-admin/overview'
+import { Route as SuperAdminAuditsRouteImport } from './routes/super-admin/audits'
 
+const TenantRoute = TenantRouteImport.update({
+  id: '/tenant',
+  path: '/tenant',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SuperAdminRoute = SuperAdminRouteImport.update({
+  id: '/super-admin',
+  path: '/super-admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TenantIndexRoute = TenantIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => TenantRoute,
+} as any)
+const SuperAdminIndexRoute = SuperAdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SuperAdminRoute,
+} as any)
+const TenantStudentsRoute = TenantStudentsRouteImport.update({
+  id: '/students',
+  path: '/students',
+  getParentRoute: () => TenantRoute,
+} as any)
+const TenantStaffRoute = TenantStaffRouteImport.update({
+  id: '/staff',
+  path: '/staff',
+  getParentRoute: () => TenantRoute,
+} as any)
+const TenantSettingsRoute = TenantSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => TenantRoute,
+} as any)
+const TenantFinanceRoute = TenantFinanceRouteImport.update({
+  id: '/finance',
+  path: '/finance',
+  getParentRoute: () => TenantRoute,
+} as any)
+const TenantDashboardRoute = TenantDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => TenantRoute,
+} as any)
+const SuperAdminTenantsRoute = SuperAdminTenantsRouteImport.update({
+  id: '/tenants',
+  path: '/tenants',
+  getParentRoute: () => SuperAdminRoute,
+} as any)
+const SuperAdminPlansRoute = SuperAdminPlansRouteImport.update({
+  id: '/plans',
+  path: '/plans',
+  getParentRoute: () => SuperAdminRoute,
+} as any)
+const SuperAdminOverviewRoute = SuperAdminOverviewRouteImport.update({
+  id: '/overview',
+  path: '/overview',
+  getParentRoute: () => SuperAdminRoute,
+} as any)
+const SuperAdminAuditsRoute = SuperAdminAuditsRouteImport.update({
+  id: '/audits',
+  path: '/audits',
+  getParentRoute: () => SuperAdminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/super-admin': typeof SuperAdminRouteWithChildren
+  '/tenant': typeof TenantRouteWithChildren
+  '/super-admin/audits': typeof SuperAdminAuditsRoute
+  '/super-admin/overview': typeof SuperAdminOverviewRoute
+  '/super-admin/plans': typeof SuperAdminPlansRoute
+  '/super-admin/tenants': typeof SuperAdminTenantsRoute
+  '/tenant/dashboard': typeof TenantDashboardRoute
+  '/tenant/finance': typeof TenantFinanceRoute
+  '/tenant/settings': typeof TenantSettingsRoute
+  '/tenant/staff': typeof TenantStaffRoute
+  '/tenant/students': typeof TenantStudentsRoute
+  '/super-admin/': typeof SuperAdminIndexRoute
+  '/tenant/': typeof TenantIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/super-admin/audits': typeof SuperAdminAuditsRoute
+  '/super-admin/overview': typeof SuperAdminOverviewRoute
+  '/super-admin/plans': typeof SuperAdminPlansRoute
+  '/super-admin/tenants': typeof SuperAdminTenantsRoute
+  '/tenant/dashboard': typeof TenantDashboardRoute
+  '/tenant/finance': typeof TenantFinanceRoute
+  '/tenant/settings': typeof TenantSettingsRoute
+  '/tenant/staff': typeof TenantStaffRoute
+  '/tenant/students': typeof TenantStudentsRoute
+  '/super-admin': typeof SuperAdminIndexRoute
+  '/tenant': typeof TenantIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/super-admin': typeof SuperAdminRouteWithChildren
+  '/tenant': typeof TenantRouteWithChildren
+  '/super-admin/audits': typeof SuperAdminAuditsRoute
+  '/super-admin/overview': typeof SuperAdminOverviewRoute
+  '/super-admin/plans': typeof SuperAdminPlansRoute
+  '/super-admin/tenants': typeof SuperAdminTenantsRoute
+  '/tenant/dashboard': typeof TenantDashboardRoute
+  '/tenant/finance': typeof TenantFinanceRoute
+  '/tenant/settings': typeof TenantSettingsRoute
+  '/tenant/staff': typeof TenantStaffRoute
+  '/tenant/students': typeof TenantStudentsRoute
+  '/super-admin/': typeof SuperAdminIndexRoute
+  '/tenant/': typeof TenantIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/super-admin'
+    | '/tenant'
+    | '/super-admin/audits'
+    | '/super-admin/overview'
+    | '/super-admin/plans'
+    | '/super-admin/tenants'
+    | '/tenant/dashboard'
+    | '/tenant/finance'
+    | '/tenant/settings'
+    | '/tenant/staff'
+    | '/tenant/students'
+    | '/super-admin/'
+    | '/tenant/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/login'
+    | '/super-admin/audits'
+    | '/super-admin/overview'
+    | '/super-admin/plans'
+    | '/super-admin/tenants'
+    | '/tenant/dashboard'
+    | '/tenant/finance'
+    | '/tenant/settings'
+    | '/tenant/staff'
+    | '/tenant/students'
+    | '/super-admin'
+    | '/tenant'
+  id:
+    | '__root__'
+    | '/'
+    | '/login'
+    | '/super-admin'
+    | '/tenant'
+    | '/super-admin/audits'
+    | '/super-admin/overview'
+    | '/super-admin/plans'
+    | '/super-admin/tenants'
+    | '/tenant/dashboard'
+    | '/tenant/finance'
+    | '/tenant/settings'
+    | '/tenant/staff'
+    | '/tenant/students'
+    | '/super-admin/'
+    | '/tenant/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  LoginRoute: typeof LoginRoute
+  SuperAdminRoute: typeof SuperAdminRouteWithChildren
+  TenantRoute: typeof TenantRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/tenant': {
+      id: '/tenant'
+      path: '/tenant'
+      fullPath: '/tenant'
+      preLoaderRoute: typeof TenantRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/super-admin': {
+      id: '/super-admin'
+      path: '/super-admin'
+      fullPath: '/super-admin'
+      preLoaderRoute: typeof SuperAdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,12 +240,143 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/tenant/': {
+      id: '/tenant/'
+      path: '/'
+      fullPath: '/tenant/'
+      preLoaderRoute: typeof TenantIndexRouteImport
+      parentRoute: typeof TenantRoute
+    }
+    '/super-admin/': {
+      id: '/super-admin/'
+      path: '/'
+      fullPath: '/super-admin/'
+      preLoaderRoute: typeof SuperAdminIndexRouteImport
+      parentRoute: typeof SuperAdminRoute
+    }
+    '/tenant/students': {
+      id: '/tenant/students'
+      path: '/students'
+      fullPath: '/tenant/students'
+      preLoaderRoute: typeof TenantStudentsRouteImport
+      parentRoute: typeof TenantRoute
+    }
+    '/tenant/staff': {
+      id: '/tenant/staff'
+      path: '/staff'
+      fullPath: '/tenant/staff'
+      preLoaderRoute: typeof TenantStaffRouteImport
+      parentRoute: typeof TenantRoute
+    }
+    '/tenant/settings': {
+      id: '/tenant/settings'
+      path: '/settings'
+      fullPath: '/tenant/settings'
+      preLoaderRoute: typeof TenantSettingsRouteImport
+      parentRoute: typeof TenantRoute
+    }
+    '/tenant/finance': {
+      id: '/tenant/finance'
+      path: '/finance'
+      fullPath: '/tenant/finance'
+      preLoaderRoute: typeof TenantFinanceRouteImport
+      parentRoute: typeof TenantRoute
+    }
+    '/tenant/dashboard': {
+      id: '/tenant/dashboard'
+      path: '/dashboard'
+      fullPath: '/tenant/dashboard'
+      preLoaderRoute: typeof TenantDashboardRouteImport
+      parentRoute: typeof TenantRoute
+    }
+    '/super-admin/tenants': {
+      id: '/super-admin/tenants'
+      path: '/tenants'
+      fullPath: '/super-admin/tenants'
+      preLoaderRoute: typeof SuperAdminTenantsRouteImport
+      parentRoute: typeof SuperAdminRoute
+    }
+    '/super-admin/plans': {
+      id: '/super-admin/plans'
+      path: '/plans'
+      fullPath: '/super-admin/plans'
+      preLoaderRoute: typeof SuperAdminPlansRouteImport
+      parentRoute: typeof SuperAdminRoute
+    }
+    '/super-admin/overview': {
+      id: '/super-admin/overview'
+      path: '/overview'
+      fullPath: '/super-admin/overview'
+      preLoaderRoute: typeof SuperAdminOverviewRouteImport
+      parentRoute: typeof SuperAdminRoute
+    }
+    '/super-admin/audits': {
+      id: '/super-admin/audits'
+      path: '/audits'
+      fullPath: '/super-admin/audits'
+      preLoaderRoute: typeof SuperAdminAuditsRouteImport
+      parentRoute: typeof SuperAdminRoute
+    }
   }
 }
 
+interface SuperAdminRouteChildren {
+  SuperAdminAuditsRoute: typeof SuperAdminAuditsRoute
+  SuperAdminOverviewRoute: typeof SuperAdminOverviewRoute
+  SuperAdminPlansRoute: typeof SuperAdminPlansRoute
+  SuperAdminTenantsRoute: typeof SuperAdminTenantsRoute
+  SuperAdminIndexRoute: typeof SuperAdminIndexRoute
+}
+
+const SuperAdminRouteChildren: SuperAdminRouteChildren = {
+  SuperAdminAuditsRoute: SuperAdminAuditsRoute,
+  SuperAdminOverviewRoute: SuperAdminOverviewRoute,
+  SuperAdminPlansRoute: SuperAdminPlansRoute,
+  SuperAdminTenantsRoute: SuperAdminTenantsRoute,
+  SuperAdminIndexRoute: SuperAdminIndexRoute,
+}
+
+const SuperAdminRouteWithChildren = SuperAdminRoute._addFileChildren(
+  SuperAdminRouteChildren,
+)
+
+interface TenantRouteChildren {
+  TenantDashboardRoute: typeof TenantDashboardRoute
+  TenantFinanceRoute: typeof TenantFinanceRoute
+  TenantSettingsRoute: typeof TenantSettingsRoute
+  TenantStaffRoute: typeof TenantStaffRoute
+  TenantStudentsRoute: typeof TenantStudentsRoute
+  TenantIndexRoute: typeof TenantIndexRoute
+}
+
+const TenantRouteChildren: TenantRouteChildren = {
+  TenantDashboardRoute: TenantDashboardRoute,
+  TenantFinanceRoute: TenantFinanceRoute,
+  TenantSettingsRoute: TenantSettingsRoute,
+  TenantStaffRoute: TenantStaffRoute,
+  TenantStudentsRoute: TenantStudentsRoute,
+  TenantIndexRoute: TenantIndexRoute,
+}
+
+const TenantRouteWithChildren =
+  TenantRoute._addFileChildren(TenantRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  LoginRoute: LoginRoute,
+  SuperAdminRoute: SuperAdminRouteWithChildren,
+  TenantRoute: TenantRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

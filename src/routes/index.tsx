@@ -1,52 +1,31 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-import { toast } from "sonner";
-import { Toaster } from "@/components/ui/sonner";
-import { TopNav, type ViewKey } from "@/components/admin/TopNav";
-import { OverviewView } from "@/components/admin/OverviewView";
-import { TenantsView } from "@/components/admin/TenantsView";
-import { PlansView } from "@/components/admin/PlansView";
-import { AuditsView } from "@/components/admin/AuditsView";
-import { RoleSwitcher, type Role } from "@/components/RoleSwitcher";
-import { SchoolAdminWorkspace } from "@/components/school/SchoolAdminWorkspace";
-import { StaffWorkspace } from "@/components/staff/StaffWorkspace";
-import { StudentWorkspace } from "@/components/student/StudentWorkspace";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect } from "react";
+
+import { MOCK_CREDENTIALS, useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/")({
-  component: Index,
+  component: IndexRedirect,
 });
 
-function Index() {
-  const [view, setView] = useState<ViewKey>("overview");
-  const [role, setRole] = useState<Role>("super_admin");
-  const [impersonating, setImpersonating] = useState<string | null>(null);
+function IndexRedirect() {
+  const navigate = useNavigate();
+  const { session, hydrated } = useAuth();
 
-  const handleImpersonate = (tenantName: string) => {
-    setImpersonating(tenantName);
-    setRole("school_admin");
-    toast.success(`Securely impersonating session for ${tenantName}`, {
-      description: "RBAC scope: read/write · session ticket SUP-AUTO",
-    });
-  };
+  useEffect(() => {
+    if (!hydrated) return;
+    if (session) {
+      navigate({ to: MOCK_CREDENTIALS[session.role].redirect, replace: true });
+    } else {
+      navigate({ to: "/login", replace: true });
+    }
+  }, [hydrated, session, navigate]);
 
   return (
-    <div className="min-h-screen bg-slate-50/80 text-slate-900">
-      {role === "super_admin" && (
-        <>
-          <TopNav active={view} onChange={setView} />
-          <main className="mx-auto max-w-[1480px] px-6 pb-24 pt-6">
-            {view === "overview" && <OverviewView />}
-            {view === "tenants" && <TenantsView onImpersonate={handleImpersonate} />}
-            {view === "plans" && <PlansView />}
-            {view === "audits" && <AuditsView />}
-          </main>
-        </>
-      )}
-      {role === "school_admin" && <SchoolAdminWorkspace impersonating={impersonating} />}
-      {role === "staff" && <StaffWorkspace />}
-      {role === "student" && <StudentWorkspace />}
-      <RoleSwitcher role={role} onChange={(r) => { setRole(r); if (r !== "school_admin") setImpersonating(null); }} />
-      <Toaster position="top-right" />
+    <div className="flex min-h-screen items-center justify-center bg-[#EAEAEA]">
+      <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-black/45">
+        <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-black/45" />
+        Routing session…
+      </div>
     </div>
   );
 }
