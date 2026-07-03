@@ -2,11 +2,12 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { StudentsLedger } from "@/components/school/SchoolAdminWorkspace";
 
-type StudentsSearch = { id?: string };
+type StudentsSearch = { id?: string; edit?: string };
 
 export const Route = createFileRoute("/tenant/students")({
   validateSearch: (search: Record<string, unknown>): StudentsSearch => ({
     id: typeof search.id === "string" && search.id.length > 0 ? search.id : undefined,
+    edit: search.edit === "1" ? "1" : undefined,
   }),
   component: StudentsLedger,
 });

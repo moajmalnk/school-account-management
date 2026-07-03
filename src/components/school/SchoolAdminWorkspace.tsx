@@ -24,6 +24,9 @@ import {
   ChartPie,
   BookOpen,
   Scale,
+  LayoutGrid,
+  List,
+  ArrowUpRight,
 } from "lucide-react";
 import {
   Dialog,
@@ -60,6 +63,7 @@ import {
 } from "@/components/ui/chart";
 import {
   ACADEMIC_YEAR_OPTIONS,
+  DEFAULT_STAFF_DOCUMENTS,
   THEME_ACCENT_OPTIONS,
   THEME_DENSITY_OPTIONS,
   THEME_MODE_OPTIONS,
@@ -75,6 +79,7 @@ import {
   type TransportRoute,
 } from "@/lib/tenant-store";
 import { StudentProfileDetail } from "@/components/school/StudentProfileDetail";
+import { StaffProfileDetail } from "@/components/school/StaffProfileDetail";
 import { FinanceBarCard, FinanceDonutCard } from "@/components/school/finance-charts";
 import {
   BalanceSheetReport,
@@ -844,11 +849,233 @@ const formatPhone = (raw?: string) => {
   return d;
 };
 
+type LedgerViewMode = "grid" | "list";
+
+function studentInitials(name: string) {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+function LedgerViewToggle({
+  value,
+  onChange,
+}: {
+  value: LedgerViewMode;
+  onChange: (mode: LedgerViewMode) => void;
+}) {
+  return (
+    <div
+      className="inline-flex shrink-0 items-center rounded-full border border-black/10 bg-white p-1"
+      role="group"
+      aria-label="View mode"
+    >
+      <button
+        type="button"
+        onClick={() => onChange("grid")}
+        aria-label="Grid view"
+        aria-pressed={value === "grid"}
+        title="Grid view"
+        className={cn(
+          "grid h-9 w-9 place-items-center rounded-full transition-colors",
+          value === "grid" ? "bg-[#C7F33C] text-black" : "text-black/45 hover:bg-black/5",
+        )}
+      >
+        <LayoutGrid className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange("list")}
+        aria-label="List view"
+        aria-pressed={value === "list"}
+        title="List view"
+        className={cn(
+          "grid h-9 w-9 place-items-center rounded-full transition-colors",
+          value === "list" ? "bg-[#C7F33C] text-black" : "text-black/45 hover:bg-black/5",
+        )}
+      >
+        <List className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
+
+function StudentLedgerListRow({
+  student,
+  onOpen,
+}: {
+  student: Student;
+  onOpen: () => void;
+}) {
+  const isOverdue = student.due > 0;
+  const digits = phoneDigits(student.phone);
+  const hasPhone = digits.length > 0;
+  const waHref = `https://wa.me/${digits.length === 10 ? "91" : ""}${digits}`;
+
+  return (
+    <li>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onOpen}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onOpen();
+          }
+        }}
+        aria-label={`Open profile for ${student.name}`}
+        className={cn(
+          "group flex cursor-pointer flex-col gap-3 px-4 py-3.5 transition-colors sm:px-6 sm:py-4 md:grid md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.75fr)_auto] md:items-center md:gap-4",
+          isOverdue ? "bg-[#C7F33C]/12 hover:bg-[#C7F33C]/20" : "hover:bg-[#F4F4F5]",
+        )}
+      >
+        <div className="flex min-w-0 items-center gap-3">
+          <div
+            className={cn(
+              "grid h-10 w-10 shrink-0 place-items-center rounded-xl text-[12px] font-semibold",
+              isOverdue ? "bg-black text-[#C7F33C]" : "bg-black text-white",
+            )}
+          >
+            {studentInitials(student.name)}
+          </div>
+          <div className="min-w-0">
+            <div className="truncate text-[14px] font-semibold text-black">{student.name}</div>
+            <div className="mt-0.5 truncate font-mono text-[11px] text-black/55">
+              {student.id} · {student.cls}
+            </div>
+          </div>
+        </div>
+
+        <div className="min-w-0 md:contents">
+          <div className="min-w-0">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/40 md:hidden">
+              Guardian
+            </div>
+            <span
+              className={cn(
+                "mt-0.5 inline-flex max-w-full truncate rounded-full px-2.5 py-1 text-[11px] font-medium md:mt-0",
+                isOverdue ? "bg-black text-[#C7F33C]" : "bg-[#F4F4F5] text-black/75",
+              )}
+            >
+              {student.guardian}
+            </span>
+          </div>
+
+          <div className="min-w-0">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/40 md:hidden">
+              Phone
+            </div>
+            <div className="mt-0.5 font-mono text-[12px] text-black/70 md:mt-0">
+              {hasPhone ? formatPhone(student.phone) : "—"}
+            </div>
+          </div>
+
+          <div className="min-w-0">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/40 md:hidden">
+              Due Balance
+            </div>
+            <div className="mt-0.5 font-mono text-[14px] font-semibold md:mt-0">
+              {student.due === 0 ? (
+                <span className="text-emerald-700">Cleared</span>
+              ) : (
+                <span>₹ {student.due.toLocaleString("en-IN")}</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-2 md:justify-end">
+          <div className="flex items-center gap-1.5">
+            <ContactAction
+              icon={MessageCircle}
+              label="WhatsApp"
+              accent="emerald"
+              disabled={!hasPhone}
+              onClick={() => {
+                window.open(waHref, "_blank", "noopener,noreferrer");
+                toast.success(`WhatsApp opened for ${student.guardian}`);
+              }}
+            />
+            <ContactAction
+              icon={Phone}
+              label="Call"
+              accent="ink"
+              disabled={!hasPhone}
+              onClick={() => {
+                window.location.href = `tel:${digits}`;
+              }}
+            />
+            <ContactAction
+              icon={MessageSquare}
+              label="SMS"
+              accent="ink"
+              disabled={!hasPhone}
+              onClick={() => {
+                window.location.href = `sms:${digits}`;
+              }}
+            />
+          </div>
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-black/10 bg-white text-black/55 transition-colors group-hover:border-black group-hover:bg-black group-hover:text-white md:h-9 md:w-9">
+            <ArrowUpRight className="h-3.5 w-3.5" />
+          </span>
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function StudentLedgerList({
+  students,
+  onOpen,
+}: {
+  students: Student[];
+  onOpen: (id: string) => void;
+}) {
+  if (students.length === 0) {
+    return (
+      <OrganicCard tone="white" cornerSide="tr" padded>
+        <div className="py-10 text-center text-[12.5px] text-black/45">
+          No students match the current filters.
+        </div>
+      </OrganicCard>
+    );
+  }
+
+  return (
+    <OrganicCard tone="white" cornerSide="tr" className="overflow-hidden p-0">
+      <div className="hidden border-b border-[#EFEFEF] px-6 py-3 md:grid md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.75fr)_auto] md:gap-4">
+        {["Student", "Guardian", "Phone", "Due Balance", "Actions"].map((label) => (
+          <div
+            key={label}
+            className={cn(
+              "text-[10.5px] font-semibold uppercase tracking-wider text-black/45",
+              label === "Actions" && "text-right",
+            )}
+          >
+            {label}
+          </div>
+        ))}
+      </div>
+      <ul className="divide-y divide-[#F0F0F0]">
+        {students.map((s) => (
+          <StudentLedgerListRow key={s.id} student={s} onOpen={() => onOpen(s.id)} />
+        ))}
+      </ul>
+    </OrganicCard>
+  );
+}
+
 export function StudentsLedger() {
   const { students, setStudents, classes } = useTenantStore();
   const navigate = useNavigate();
-  const search = useSearch({ from: "/tenant/students" }) as { id?: string };
+  const search = useSearch({ from: "/tenant/students" }) as { id?: string; edit?: string };
   const activeStudentViewId = search.id ?? null;
+  const initialEdit = search.edit === "1";
 
   const openStudent = (id: string) => navigate({ to: "/tenant/students", search: { id } });
   const closeStudent = () => navigate({ to: "/tenant/students", search: {} });
@@ -863,6 +1090,7 @@ export function StudentsLedger() {
     null,
   );
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<LedgerViewMode>("grid");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -1079,7 +1307,13 @@ export function StudentsLedger() {
   } as const;
 
   if (activeStudent) {
-    return <StudentProfileDetail student={activeStudent} onBack={closeStudent} />;
+    return (
+      <StudentProfileDetail
+        student={activeStudent}
+        onBack={closeStudent}
+        initialEdit={initialEdit}
+      />
+    );
   }
 
   const limeBtn =
@@ -1218,12 +1452,13 @@ export function StudentsLedger() {
           <div className="mobile-scrollbar-none hidden overflow-x-auto lg:block">{statusTabs()}</div>
         </div>
 
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 lg:hidden">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 lg:hidden">
           {statusTabs(true)}
           {gradeFilterControl(true)}
+          <LedgerViewToggle value={viewMode} onChange={setViewMode} />
         </div>
 
-        <div className="grid gap-2 lg:grid-cols-[auto_auto_minmax(260px,1fr)] lg:items-center">
+        <div className="grid gap-2 lg:grid-cols-[auto_auto_minmax(260px,1fr)_auto] lg:items-center">
           <div className="hidden lg:block">{gradeFilterControl()}</div>
 
           <span className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-full bg-[#E1F2AE] px-3 py-1.5 text-[12px] font-semibold text-black lg:min-h-10 lg:w-auto lg:justify-start">
@@ -1247,6 +1482,10 @@ export function StudentsLedger() {
                 {filtered.length} match
               </span>
             )}
+          </div>
+
+          <div className="hidden lg:block">
+            <LedgerViewToggle value={viewMode} onChange={setViewMode} />
           </div>
         </div>
       </OrganicCard>
@@ -1294,6 +1533,7 @@ export function StudentsLedger() {
         </SheetContent>
       </Sheet>
 
+      {viewMode === "grid" ? (
       <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">
         {filtered.map((s, i) => {
           const isOverdue = s.due > 0;
@@ -1309,6 +1549,9 @@ export function StudentsLedger() {
               tone={tone}
               cornerSide={cornerSide}
               padded
+              arrow
+              onArrowClick={openProfile}
+              arrowAriaLabel={`View profile for ${s.name}`}
               role="button"
               tabIndex={0}
               aria-label={`Open profile for ${s.name}`}
@@ -1321,7 +1564,7 @@ export function StudentsLedger() {
               }}
               className="flex cursor-pointer flex-col gap-3 transition-transform duration-150 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/60 focus-visible:ring-offset-2"
             >
-              <div className="pr-12">
+              <div>
                 <div className="text-[15px] font-semibold leading-tight">{s.name}</div>
                 <div
                   className={`mt-1 font-mono text-[11px] ${
@@ -1411,6 +1654,9 @@ export function StudentsLedger() {
           </OrganicCard>
         )}
       </div>
+      ) : (
+        <StudentLedgerList students={filtered} onOpen={openStudent} />
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
@@ -1551,20 +1797,22 @@ function ContactAction({
 
 export function StaffRoster() {
   const { staff, setStaff, departments, roles } = useTenantStore();
+  const navigate = useNavigate();
+  const search = useSearch({ from: "/tenant/staff" }) as { id?: string; edit?: string };
+  const activeStaffViewId = search.id ?? null;
+  const initialEdit = search.edit === "1";
+
+  const openStaff = (id: string) => navigate({ to: "/tenant/staff", search: { id } });
+  const openStaffEdit = (id: string) =>
+    navigate({ to: "/tenant/staff", search: { id, edit: "1" } });
+  const closeStaff = () => navigate({ to: "/tenant/staff", search: {} });
+
   const defaultDept = departments[0]?.name ?? "";
   const defaultRole = roles[0]?.title ?? "";
   const [open, setOpen] = useState(false);
-  const [editStaff, setEditStaff] = useState<Staff | null>(null);
   const [pendingRemoval, setPendingRemoval] = useState<Staff | null>(null);
   const [pendingStatusChange, setPendingStatusChange] = useState<Staff | null>(null);
-  const [detailStaff, setDetailStaff] = useState<Staff | null>(null);
   const [form, setForm] = useState({
-    name: "",
-    role: defaultRole,
-    dept: defaultDept,
-    id: "",
-  });
-  const [editForm, setEditForm] = useState({
     name: "",
     role: defaultRole,
     dept: defaultDept,
@@ -1579,6 +1827,11 @@ export function StaffRoster() {
     }));
   }, [departments, defaultDept, defaultRole, roles]);
 
+  const activeStaff = useMemo(
+    () => (activeStaffViewId ? (staff.find((s) => s.id === activeStaffViewId) ?? null) : null),
+    [activeStaffViewId, staff],
+  );
+
   const handleRecruit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim() || !form.role.trim()) {
@@ -1592,6 +1845,10 @@ export function StaffRoster() {
       role: form.role.trim(),
       dept: form.dept,
       active: true,
+      joinedAt: new Date().toISOString().slice(0, 10),
+      basicSalary: 8000,
+      additionalAllowances: 0,
+      documents: DEFAULT_STAFF_DOCUMENTS.map((d) => ({ ...d })),
     };
     setStaff((prev) => [newStaff, ...prev]);
     toast.success(`${newStaff.name} recruited`, {
@@ -1599,36 +1856,6 @@ export function StaffRoster() {
     });
     setForm({ name: "", role: defaultRole, dept: defaultDept, id: "" });
     setOpen(false);
-  };
-
-  const openEdit = (s: Staff) => {
-    setEditForm({ name: s.name, role: s.role, dept: s.dept, id: s.id });
-    setEditStaff(s);
-  };
-
-  const handleEditSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editStaff) return;
-    if (!editForm.name.trim() || !editForm.role.trim()) {
-      toast.error("Name and role are required");
-      return;
-    }
-    setStaff((prev) =>
-      prev.map((s) =>
-        s.id === editStaff.id
-          ? {
-              ...s,
-              name: editForm.name.trim(),
-              role: editForm.role.trim(),
-              dept: editForm.dept,
-            }
-          : s,
-      ),
-    );
-    toast.success(`${editForm.name.trim()} updated`, {
-      description: `${editStaff.id} · ${editForm.dept}`,
-    });
-    setEditStaff(null);
   };
 
   const confirmStatusChange = () => {
@@ -1653,6 +1880,16 @@ export function StaffRoster() {
     setPendingRemoval(null);
   };
 
+  if (activeStaff) {
+    return (
+      <StaffProfileDetail
+        staff={activeStaff}
+        onBack={closeStaff}
+        initialEdit={initialEdit}
+      />
+    );
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1672,7 +1909,7 @@ export function StaffRoster() {
               <div className="flex w-full items-start gap-3">
                 <button
                   type="button"
-                  onClick={() => setDetailStaff(s)}
+                  onClick={() => openStaff(s.id)}
                   className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-black text-[14px] font-semibold text-white"
                 >
                   {s.name
@@ -1684,7 +1921,7 @@ export function StaffRoster() {
                 <div className="min-w-0 flex-1">
                   <button
                     type="button"
-                    onClick={() => setDetailStaff(s)}
+                    onClick={() => openStaff(s.id)}
                     className="w-full text-left"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
@@ -1715,7 +1952,7 @@ export function StaffRoster() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => openEdit(s)}
+                      onClick={() => openStaffEdit(s.id)}
                       className="min-h-10 w-full rounded-full border border-[#E5E5E5] bg-white px-3 py-2 text-[11.5px] font-medium text-black transition-colors hover:border-black/20 hover:bg-[#F4F4F5] sm:min-w-[6.5rem] sm:flex-1"
                     >
                       Edit Profile
@@ -1807,73 +2044,6 @@ export function StaffRoster() {
         </SheetContent>
       </Sheet>
 
-      <Sheet open={Boolean(editStaff)} onOpenChange={(next) => !next && setEditStaff(null)}>
-        <SheetContent side="right" className="w-full sm:max-w-md">
-          <SheetHeader>
-            <SheetTitle>Edit Staff Profile</SheetTitle>
-            <SheetDescription>
-              Update details for {editStaff?.name ?? "this staff member"}.
-            </SheetDescription>
-          </SheetHeader>
-          <form onSubmit={handleEditSave} className="mt-5 space-y-3 px-1">
-            <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                Full Name
-              </Label>
-              <Input
-                value={editForm.name}
-                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                placeholder="e.g. Sneha Pillai"
-                autoFocus
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                Role
-              </Label>
-              <FieldSelect
-                value={editForm.role}
-                onValueChange={(role) => setEditForm({ ...editForm, role })}
-                options={roles.map((r) => ({ value: r.title, label: r.title }))}
-                placeholder="No roles configured"
-                disabled={roles.length === 0}
-              />
-              <p className="text-[10.5px] text-black/45">
-                Manage role catalogue under Settings · Roles
-              </p>
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                  Department
-                </Label>
-                <FieldSelect
-                  value={editForm.dept}
-                  onValueChange={(dept) => setEditForm({ ...editForm, dept })}
-                  options={departments.map((d) => ({ value: d.name, label: d.name }))}
-                  placeholder="No departments configured"
-                  disabled={departments.length === 0}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                  Employee ID
-                </Label>
-                <Input value={editForm.id} disabled className="font-mono opacity-60" />
-              </div>
-            </div>
-            <SheetFooter className="mt-4">
-              <Button type="button" variant="outline" onClick={() => setEditStaff(null)}>
-                Cancel
-              </Button>
-              <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
-                Save Changes
-              </Button>
-            </SheetFooter>
-          </form>
-        </SheetContent>
-      </Sheet>
-
       <Dialog
         open={Boolean(pendingStatusChange)}
         onOpenChange={(next) => {
@@ -1939,93 +2109,6 @@ export function StaffRoster() {
               Remove
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={Boolean(detailStaff)}
-        onOpenChange={(next) => {
-          if (!next) setDetailStaff(null);
-        }}
-      >
-        <DialogContent className="max-w-md rounded-[1.75rem] border border-[#E5E5E5] bg-white p-6 [&>button]:hidden">
-          <DialogHeader>
-            <DialogTitle className="text-[24px] font-semibold text-black">
-              Staff Profile
-            </DialogTitle>
-            <DialogDescription className="text-[13px] text-black/55">
-              Detailed view for selected faculty / administrative member.
-            </DialogDescription>
-          </DialogHeader>
-
-          {detailStaff && (
-            <div className="mt-2 space-y-3">
-              <div className="rounded-2xl bg-[#F4F4F5] p-4">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-black/50">
-                  Employee
-                </div>
-                <div className="mt-1 text-[18px] font-semibold text-black">{detailStaff.name}</div>
-                <div className="text-[12px] text-black/60">{detailStaff.role}</div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="rounded-2xl border border-[#E5E5E5] p-3">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                    Employee ID
-                  </div>
-                  <div className="mt-1 font-mono text-[12px] text-black">{detailStaff.id}</div>
-                </div>
-                <div className="rounded-2xl border border-[#E5E5E5] p-3">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                    Status
-                  </div>
-                  <div className="mt-1 text-[12px] font-semibold text-black">
-                    {detailStaff.active ? "Active" : "Inactive"}
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-[#E5E5E5] p-3">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                  Department
-                </div>
-                <div className="mt-1 text-[12px] text-black">{detailStaff.dept}</div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPendingStatusChange(detailStaff);
-                    setDetailStaff(null);
-                  }}
-                  className="min-h-10 rounded-full border border-[#E5E5E5] bg-white px-2 py-2 text-center text-[10px] font-medium leading-tight text-black transition-colors hover:border-black/20 hover:bg-[#F4F4F5] sm:px-3 sm:text-[11.5px]"
-                >
-                  {detailStaff.active ? "Deactivate" : "Activate"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    openEdit(detailStaff);
-                    setDetailStaff(null);
-                  }}
-                  className="min-h-10 rounded-full border border-[#E5E5E5] bg-white px-2 py-2 text-center text-[10px] font-medium leading-tight text-black transition-colors hover:border-black/20 hover:bg-[#F4F4F5] sm:px-3 sm:text-[11.5px]"
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPendingRemoval(detailStaff);
-                    setDetailStaff(null);
-                  }}
-                  className="min-h-10 rounded-full border border-[#FECACA] bg-[#FEF2F2] px-2 py-2 text-center text-[10px] font-medium leading-tight text-[#B91C1C] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2] sm:px-3 sm:text-[11.5px]"
-                >
-                  Remove
-                </button>
-              </div>
-            </div>
-          )}
         </DialogContent>
       </Dialog>
     </div>

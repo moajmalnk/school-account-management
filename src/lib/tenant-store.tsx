@@ -22,13 +22,97 @@ export type Student = {
   address?: string;
 };
 
+export type StaffDocumentAttachment = {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  dataUrl: string;
+  uploadedAt: string;
+};
+
+export type StaffDocument = {
+  id: string;
+  label: string;
+  number: string;
+  attachments: StaffDocumentAttachment[];
+};
+
+export const DEFAULT_STAFF_DOCUMENTS: StaffDocument[] = [
+  { id: "doc-aadhaar", label: "Aadhaar", number: "", attachments: [] },
+  { id: "doc-pan", label: "PAN Card", number: "", attachments: [] },
+];
+
 export type Staff = {
   id: string;
   name: string;
   role: string;
   dept: string;
   active: boolean;
+  joinedAt: string;
+  phone?: string;
+  basicSalary: number;
+  additionalAllowances: number;
+  documents: StaffDocument[];
 };
+
+function normalizeAttachment(raw: unknown): StaffDocumentAttachment | null {
+  if (!raw || typeof raw !== "object") return null;
+  const attachment = raw as Partial<StaffDocumentAttachment>;
+  if (
+    typeof attachment.id !== "string" ||
+    typeof attachment.name !== "string" ||
+    typeof attachment.dataUrl !== "string" ||
+    typeof attachment.size !== "number"
+  ) {
+    return null;
+  }
+  return {
+    id: attachment.id,
+    name: attachment.name,
+    mimeType:
+      typeof attachment.mimeType === "string" ? attachment.mimeType : "application/octet-stream",
+    size: attachment.size,
+    dataUrl: attachment.dataUrl,
+    uploadedAt:
+      typeof attachment.uploadedAt === "string" ? attachment.uploadedAt : new Date().toISOString(),
+  };
+}
+
+function normalizeStaffDocuments(raw: StaffDocument[] | undefined): StaffDocument[] {
+  const byId = new Map(Array.isArray(raw) ? raw.map((d) => [d.id, d]) : []);
+  return DEFAULT_STAFF_DOCUMENTS.map((def) => {
+    const existing = byId.get(def.id);
+    return {
+      ...def,
+      number: typeof existing?.number === "string" ? existing.number : "",
+      attachments: Array.isArray(existing?.attachments)
+        ? existing.attachments
+            .map(normalizeAttachment)
+            .filter((a): a is StaffDocumentAttachment => a !== null)
+        : [],
+    };
+  });
+}
+
+export function normalizeStaff(raw: Partial<Staff> & Pick<Staff, "id" | "name" | "role" | "dept" | "active">): Staff {
+  return {
+    id: raw.id,
+    name: raw.name,
+    role: raw.role,
+    dept: raw.dept,
+    active: raw.active,
+    joinedAt: typeof raw.joinedAt === "string" && raw.joinedAt ? raw.joinedAt : "2025-01-01",
+    phone: typeof raw.phone === "string" ? raw.phone : undefined,
+    basicSalary:
+      typeof raw.basicSalary === "number" && Number.isFinite(raw.basicSalary) ? raw.basicSalary : 8000,
+    additionalAllowances:
+      typeof raw.additionalAllowances === "number" && Number.isFinite(raw.additionalAllowances)
+        ? raw.additionalAllowances
+        : 0,
+    documents: normalizeStaffDocuments(raw.documents),
+  };
+}
 
 export type Payment = {
   id: string;
@@ -76,7 +160,8 @@ export type ThemeSettings = {
   density: "Comfortable" | "Compact";
 };
 
-const STORAGE_KEY = "school-accounts/tenant-store/v3";
+const STORAGE_KEY = "school-accounts/tenant-store/v4";
+const LEGACY_STORAGE_KEY = "school-accounts/tenant-store/v3";
 
 export const SEED_STUDENTS: Student[] = [
   {
@@ -160,14 +245,44 @@ export const SEED_STAFF: Staff[] = [
     role: "Mathematics · HOD",
     dept: "Senior Wing",
     active: true,
+    joinedAt: "2022-08-15",
+    phone: "9847012345",
+    basicSalary: 45000,
+    additionalAllowances: 5000,
+    documents: [
+      { id: "doc-aadhaar", label: "Aadhaar", number: "4567 8901 2345", attachments: [] },
+      { id: "doc-pan", label: "PAN Card", number: "AROPY5678K", attachments: [] },
+    ],
   },
-  { id: "STF-019", name: "Devanand Iyer", role: "Physics", dept: "Senior Wing", active: true },
+  {
+    id: "STF-019",
+    name: "Devanand Iyer",
+    role: "Physics",
+    dept: "Senior Wing",
+    active: true,
+    joinedAt: "2023-06-01",
+    phone: "9876543210",
+    basicSalary: 38000,
+    additionalAllowances: 3000,
+    documents: [
+      { id: "doc-aadhaar", label: "Aadhaar", number: "2345 6789 0123", attachments: [] },
+      { id: "doc-pan", label: "PAN Card", number: "DEVIY1234P", attachments: [] },
+    ],
+  },
   {
     id: "STF-020",
     name: "Priya Subramanian",
     role: "Principal Office",
     dept: "Administration",
     active: true,
+    joinedAt: "2020-04-10",
+    phone: "9895011223",
+    basicSalary: 52000,
+    additionalAllowances: 8000,
+    documents: [
+      { id: "doc-aadhaar", label: "Aadhaar", number: "5678 9012 3456", attachments: [] },
+      { id: "doc-pan", label: "PAN Card", number: "PSUBM9012L", attachments: [] },
+    ],
   },
   {
     id: "STF-021",
@@ -175,6 +290,14 @@ export const SEED_STAFF: Staff[] = [
     role: "Sports Coordinator",
     dept: "Co-curricular",
     active: true,
+    joinedAt: "2024-01-20",
+    phone: "9765432109",
+    basicSalary: 32000,
+    additionalAllowances: 2000,
+    documents: [
+      { id: "doc-aadhaar", label: "Aadhaar", number: "3456 7890 1234", attachments: [] },
+      { id: "doc-pan", label: "PAN Card", number: "RMEHT3456H", attachments: [] },
+    ],
   },
 ];
 
@@ -323,40 +446,44 @@ function isThemeSettings(value: unknown): value is ThemeSettings {
   );
 }
 
+function parseSnapshot(raw: string): Snapshot | null {
+  const parsed = JSON.parse(raw) as Partial<Snapshot> | null;
+  if (
+    !parsed ||
+    !Array.isArray(parsed.students) ||
+    !Array.isArray(parsed.staff) ||
+    !Array.isArray(parsed.payments) ||
+    !Array.isArray(parsed.departments) ||
+    !Array.isArray(parsed.roles) ||
+    !Array.isArray(parsed.classes) ||
+    !Array.isArray(parsed.transportRoutes) ||
+    !Array.isArray(parsed.paymentCategories) ||
+    typeof parsed.academicYear !== "string"
+  ) {
+    return null;
+  }
+  return {
+    students: parsed.students,
+    staff: parsed.staff.map((s) => normalizeStaff(s as Staff)),
+    payments: parsed.payments,
+    departments: parsed.departments,
+    roles: parsed.roles,
+    classes: parsed.classes,
+    transportRoutes: parsed.transportRoutes,
+    paymentCategories: parsed.paymentCategories,
+    academicYear: parsed.academicYear,
+    themeSettings: isThemeSettings(parsed.themeSettings)
+      ? parsed.themeSettings
+      : SEED_THEME_SETTINGS,
+  };
+}
+
 function readSnapshot(): Snapshot | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<Snapshot> | null;
-    if (
-      !parsed ||
-      !Array.isArray(parsed.students) ||
-      !Array.isArray(parsed.staff) ||
-      !Array.isArray(parsed.payments) ||
-      !Array.isArray(parsed.departments) ||
-      !Array.isArray(parsed.roles) ||
-      !Array.isArray(parsed.classes) ||
-      !Array.isArray(parsed.transportRoutes) ||
-      !Array.isArray(parsed.paymentCategories) ||
-      typeof parsed.academicYear !== "string"
-    ) {
-      return null;
-    }
-    return {
-      students: parsed.students,
-      staff: parsed.staff,
-      payments: parsed.payments,
-      departments: parsed.departments,
-      roles: parsed.roles,
-      classes: parsed.classes,
-      transportRoutes: parsed.transportRoutes,
-      paymentCategories: parsed.paymentCategories,
-      academicYear: parsed.academicYear,
-      themeSettings: isThemeSettings(parsed.themeSettings)
-        ? parsed.themeSettings
-        : SEED_THEME_SETTINGS,
-    };
+    return parseSnapshot(raw);
   } catch {
     return null;
   }

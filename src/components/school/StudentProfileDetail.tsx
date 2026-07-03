@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -22,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { OrganicCard } from "@/components/ui/organic-card";
 import type { Student } from "@/lib/tenant-store";
+import { useTenantStore } from "@/lib/tenant-store";
 import { cn } from "@/lib/utils";
 
 type LedgerStatus = "Paid" | "Partially Paid" | "Overdue";
@@ -154,11 +156,15 @@ function initials(name: string) {
 export function StudentProfileDetail({
   student,
   onBack,
+  initialEdit = false,
 }: {
   student: Student;
   onBack: () => void;
+  initialEdit?: boolean;
 }) {
-  const [editing, setEditing] = useState(false);
+  const navigate = useNavigate();
+  const { setStudents } = useTenantStore();
+  const [editing, setEditing] = useState(initialEdit);
   const [draft, setDraft] = useState({
     guardian: student.guardian,
     phone: student.phone ?? "",
@@ -166,6 +172,22 @@ export function StudentProfileDetail({
     email: student.email ?? "",
     address: student.address ?? "",
   });
+
+  useEffect(() => {
+    setDraft({
+      guardian: student.guardian,
+      phone: student.phone ?? "",
+      dob: student.dob ?? "",
+      email: student.email ?? "",
+      address: student.address ?? "",
+    });
+  }, [student]);
+
+  useEffect(() => {
+    if (initialEdit) {
+      navigate({ to: "/tenant/students", search: { id: student.id }, replace: true });
+    }
+  }, [initialEdit, navigate, student.id]);
 
   const fees = useMemo(() => deriveFees(student.due), [student.due]);
   const ledger = useMemo(() => deriveLedger(student.due), [student.due]);
@@ -178,11 +200,38 @@ export function StudentProfileDetail({
 
   const toggleEdit = () => {
     if (editing) {
+      if (!draft.guardian.trim()) {
+        toast.error("Guardian name is required");
+        return;
+      }
+      setStudents((prev) =>
+        prev.map((s) =>
+          s.id === student.id
+            ? {
+                ...s,
+                guardian: draft.guardian.trim(),
+                phone: draft.phone.trim() || undefined,
+                dob: draft.dob.trim() || undefined,
+                email: draft.email.trim() || undefined,
+                address: draft.address.trim() || undefined,
+              }
+            : s,
+        ),
+      );
       toast.success(`${student.name}'s profile updated`, {
-        description: "Local draft saved · sync to ledger on next push",
+        description: `${student.id} · guardian synced to ledger`,
       });
+      setEditing(false);
+    } else {
+      setDraft({
+        guardian: student.guardian,
+        phone: student.phone ?? "",
+        dob: student.dob ?? "",
+        email: student.email ?? "",
+        address: student.address ?? "",
+      });
+      setEditing(true);
     }
-    setEditing((e) => !e);
   };
 
   return (
