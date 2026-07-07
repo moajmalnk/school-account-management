@@ -20,6 +20,7 @@ export type Student = {
   dob?: string;
   email?: string;
   address?: string;
+  photoUrl?: string;
 };
 
 export type StaffDocumentAttachment = {
@@ -51,6 +52,7 @@ export type Staff = {
   active: boolean;
   joinedAt: string;
   phone?: string;
+  photoUrl?: string;
   basicSalary: number;
   additionalAllowances: number;
   documents: StaffDocument[];
@@ -104,6 +106,7 @@ export function normalizeStaff(raw: Partial<Staff> & Pick<Staff, "id" | "name" |
     active: raw.active,
     joinedAt: typeof raw.joinedAt === "string" && raw.joinedAt ? raw.joinedAt : "2025-01-01",
     phone: typeof raw.phone === "string" ? raw.phone : undefined,
+    photoUrl: typeof raw.photoUrl === "string" && raw.photoUrl ? raw.photoUrl : undefined,
     basicSalary:
       typeof raw.basicSalary === "number" && Number.isFinite(raw.basicSalary) ? raw.basicSalary : 8000,
     additionalAllowances:
@@ -142,11 +145,24 @@ export type ClassConfig = {
   billingCycle: "Monthly" | "Annually";
 };
 
+export type TransportVehicle = {
+  id: string;
+  name: string;
+  registrationNo: string;
+  capacity: number;
+  driverName?: string;
+  driverPhone?: string;
+  routeId?: string;
+  active: boolean;
+};
+
 export type TransportRoute = {
   id: string;
   mapFrom: string;
   mapTo: string;
-  fee: number;
+  morningFee: number;
+  eveningFee: number;
+  bothFee: number;
 };
 
 export type PaymentCategory = {
@@ -160,10 +176,90 @@ export type ThemeSettings = {
   density: "Comfortable" | "Compact";
 };
 
-const STORAGE_KEY = "school-accounts/tenant-store/v4";
-const LEGACY_STORAGE_KEY = "school-accounts/tenant-store/v3";
+const STORAGE_KEY = "school-accounts/tenant-store/v7";
+const LEGACY_STORAGE_KEYS = [
+  "school-accounts/tenant-store/v6",
+  "school-accounts/tenant-store/v5",
+  "school-accounts/tenant-store/v4",
+  "school-accounts/tenant-store/v3",
+] as const;
+
+function normalizeTransportRoute(raw: unknown): TransportRoute | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.id !== "string" || typeof r.mapFrom !== "string" || typeof r.mapTo !== "string") {
+    return null;
+  }
+  const legacyFee = typeof r.fee === "number" ? r.fee : undefined;
+  const morningFee =
+    typeof r.morningFee === "number"
+      ? r.morningFee
+      : legacyFee
+        ? Math.round(legacyFee * 0.55)
+        : 0;
+  const eveningFee =
+    typeof r.eveningFee === "number"
+      ? r.eveningFee
+      : legacyFee
+        ? Math.round(legacyFee * 0.55)
+        : 0;
+  const bothFee =
+    typeof r.bothFee === "number" ? r.bothFee : (legacyFee ?? morningFee + eveningFee);
+  return { id: r.id, mapFrom: r.mapFrom, mapTo: r.mapTo, morningFee, eveningFee, bothFee };
+}
+
+function normalizeTransportVehicle(raw: unknown): TransportVehicle | null {
+  if (!raw || typeof raw !== "object") return null;
+  const v = raw as Record<string, unknown>;
+  if (typeof v.id !== "string" || typeof v.name !== "string" || typeof v.registrationNo !== "string") {
+    return null;
+  }
+  return {
+    id: v.id,
+    name: v.name,
+    registrationNo: v.registrationNo,
+    capacity: typeof v.capacity === "number" ? v.capacity : 0,
+    driverName: typeof v.driverName === "string" ? v.driverName : undefined,
+    driverPhone: typeof v.driverPhone === "string" ? v.driverPhone : undefined,
+    routeId: typeof v.routeId === "string" ? v.routeId : undefined,
+    active: typeof v.active === "boolean" ? v.active : true,
+  };
+}
+
+export const DEFAULT_DASHBOARD_TODOS = ["", "", "", "", ""] as const;
+
+function normalizeDashboardTodos(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [...DEFAULT_DASHBOARD_TODOS];
+  const items = raw.map((item) => (typeof item === "string" ? item : ""));
+  while (items.length < 5) items.push("");
+  return items.slice(0, 5);
+}
 
 export const SEED_STUDENTS: Student[] = [
+  {
+    id: "STU-2847",
+    name: "Muhammed",
+    cls: "LKG",
+    guardian: "Hira Abbas",
+    due: 5500,
+    gender: "M",
+    phone: "9744001122",
+    dob: "15 Jan 2021",
+    email: "muhammed@silverhills.in",
+    address: "Flat 8, Marina Crest, MG Road, Kochi 682016",
+  },
+  {
+    id: "STU-2848",
+    name: "Fathima",
+    cls: "LKG",
+    guardian: "Ibrahim",
+    due: 0,
+    gender: "F",
+    phone: "9747122456",
+    dob: "22 Apr 2021",
+    email: "fathima@silverhills.in",
+    address: "12 Palm Grove, Edappally, Kochi 682024",
+  },
   {
     id: "STU-2841",
     name: "Aarav Sharma",
@@ -241,62 +337,152 @@ export const SEED_STUDENTS: Student[] = [
 export const SEED_STAFF: Staff[] = [
   {
     id: "STF-018",
-    name: "Anika Roy",
-    role: "Mathematics · HOD",
-    dept: "Senior Wing",
+    name: "Abdulla",
+    role: "Teacher",
+    dept: "LP",
     active: true,
     joinedAt: "2022-08-15",
     phone: "9847012345",
-    basicSalary: 45000,
-    additionalAllowances: 5000,
+    basicSalary: 42000,
+    additionalAllowances: 4000,
     documents: [
       { id: "doc-aadhaar", label: "Aadhaar", number: "4567 8901 2345", attachments: [] },
-      { id: "doc-pan", label: "PAN Card", number: "AROPY5678K", attachments: [] },
+      { id: "doc-pan", label: "PAN Card", number: "ABDUL5678K", attachments: [] },
     ],
   },
   {
     id: "STF-019",
-    name: "Devanand Iyer",
-    role: "Physics",
-    dept: "Senior Wing",
+    name: "Ayisha",
+    role: "Teacher",
+    dept: "LKG",
     active: true,
-    joinedAt: "2023-06-01",
+    joinedAt: "2021-06-01",
     phone: "9876543210",
     basicSalary: 38000,
-    additionalAllowances: 3000,
+    additionalAllowances: 3500,
     documents: [
       { id: "doc-aadhaar", label: "Aadhaar", number: "2345 6789 0123", attachments: [] },
-      { id: "doc-pan", label: "PAN Card", number: "DEVIY1234P", attachments: [] },
+      { id: "doc-pan", label: "PAN Card", number: "AYISH1234P", attachments: [] },
     ],
   },
   {
     id: "STF-020",
-    name: "Priya Subramanian",
-    role: "Principal Office",
-    dept: "Administration",
+    name: "Shamina",
+    role: "Accountant",
+    dept: "Administrative",
     active: true,
     joinedAt: "2020-04-10",
     phone: "9895011223",
     basicSalary: 52000,
-    additionalAllowances: 8000,
+    additionalAllowances: 6000,
     documents: [
       { id: "doc-aadhaar", label: "Aadhaar", number: "5678 9012 3456", attachments: [] },
-      { id: "doc-pan", label: "PAN Card", number: "PSUBM9012L", attachments: [] },
+      { id: "doc-pan", label: "PAN Card", number: "SHAMI9012L", attachments: [] },
     ],
   },
   {
     id: "STF-021",
-    name: "Rohan Mehta",
-    role: "Sports Coordinator",
-    dept: "Co-curricular",
+    name: "Fathima",
+    role: "Teacher",
+    dept: "UKG",
     active: true,
-    joinedAt: "2024-01-20",
+    joinedAt: "2023-01-12",
     phone: "9765432109",
-    basicSalary: 32000,
-    additionalAllowances: 2000,
+    basicSalary: 36000,
+    additionalAllowances: 3000,
     documents: [
       { id: "doc-aadhaar", label: "Aadhaar", number: "3456 7890 1234", attachments: [] },
-      { id: "doc-pan", label: "PAN Card", number: "RMEHT3456H", attachments: [] },
+      { id: "doc-pan", label: "PAN Card", number: "FATHM3456H", attachments: [] },
+    ],
+  },
+  {
+    id: "STF-022",
+    name: "Rahul",
+    role: "Teacher",
+    dept: "Grade 1",
+    active: true,
+    joinedAt: "2022-11-05",
+    phone: "9812345678",
+    basicSalary: 40000,
+    additionalAllowances: 3500,
+    documents: [
+      { id: "doc-aadhaar", label: "Aadhaar", number: "6789 0123 4567", attachments: [] },
+      { id: "doc-pan", label: "PAN Card", number: "RAHUL6789M", attachments: [] },
+    ],
+  },
+  {
+    id: "STF-023",
+    name: "Sneha",
+    role: "Teacher",
+    dept: "Grade 5",
+    active: true,
+    joinedAt: "2021-08-20",
+    phone: "9823456789",
+    basicSalary: 41000,
+    additionalAllowances: 4000,
+    documents: [
+      { id: "doc-aadhaar", label: "Aadhaar", number: "7890 1234 5678", attachments: [] },
+      { id: "doc-pan", label: "PAN Card", number: "SNEHA7890N", attachments: [] },
+    ],
+  },
+  {
+    id: "STF-024",
+    name: "Vikram",
+    role: "Teacher",
+    dept: "Grade 8",
+    active: true,
+    joinedAt: "2019-07-15",
+    phone: "9834567890",
+    basicSalary: 44000,
+    additionalAllowances: 4500,
+    documents: [
+      { id: "doc-aadhaar", label: "Aadhaar", number: "8901 2345 6789", attachments: [] },
+      { id: "doc-pan", label: "PAN Card", number: "VIKRM8901Q", attachments: [] },
+    ],
+  },
+  {
+    id: "STF-025",
+    name: "Lakshmi",
+    role: "Teacher",
+    dept: "Grade 10",
+    active: true,
+    joinedAt: "2018-06-01",
+    phone: "9845678901",
+    basicSalary: 46000,
+    additionalAllowances: 5000,
+    documents: [
+      { id: "doc-aadhaar", label: "Aadhaar", number: "9012 3456 7890", attachments: [] },
+      { id: "doc-pan", label: "PAN Card", number: "LAKSH9012R", attachments: [] },
+    ],
+  },
+  {
+    id: "STF-026",
+    name: "Joseph",
+    role: "Teacher",
+    dept: "Grade 12",
+    active: true,
+    joinedAt: "2017-05-18",
+    phone: "9856789012",
+    basicSalary: 48000,
+    additionalAllowances: 5500,
+    documents: [
+      { id: "doc-aadhaar", label: "Aadhaar", number: "0123 4567 8901", attachments: [] },
+      { id: "doc-pan", label: "PAN Card", number: "JOSEP0123S", attachments: [] },
+    ],
+  },
+  {
+    id: "STF-027",
+    name: "Priya",
+    role: "Office Administrator",
+    dept: "Administrative",
+    active: true,
+    joinedAt: "2020-09-01",
+    phone: "9867890123",
+    basicSalary: 50000,
+    additionalAllowances: 5000,
+    documents: [
+      { id: "doc-aadhaar", label: "Aadhaar", number: "1234 5678 9012", attachments: [] },
+      { id: "doc-pan", label: "PAN Card", number: "PRIYA1234T", attachments: [] },
     ],
   },
 ];
@@ -373,12 +559,74 @@ export const SEED_TRANSPORT: TransportRoute[] = [
     id: "TR-001",
     mapFrom: "Lotus Greens Sector 21",
     mapTo: "Main Campus Drop-off",
-    fee: 1800,
+    morningFee: 1000,
+    eveningFee: 1000,
+    bothFee: 1800,
   },
-  { id: "TR-002", mapFrom: "Marina Crest, MG Road", mapTo: "Main Campus Drop-off", fee: 1500 },
-  { id: "TR-003", mapFrom: "Hiranandani Gardens, Powai", mapTo: "Main Campus Drop-off", fee: 2400 },
-  { id: "TR-004", mapFrom: "Cumballa Heights, Peddar Road", mapTo: "Main Campus Drop-off", fee: 2000 },
-  { id: "TR-005", mapFrom: "Sasthamangalam, Thiruvananthapuram", mapTo: "Main Campus Drop-off", fee: 2200 },
+  {
+    id: "TR-002",
+    mapFrom: "Marina Crest, MG Road",
+    mapTo: "Main Campus Drop-off",
+    morningFee: 850,
+    eveningFee: 850,
+    bothFee: 1500,
+  },
+  {
+    id: "TR-003",
+    mapFrom: "Hiranandani Gardens, Powai",
+    mapTo: "Main Campus Drop-off",
+    morningFee: 1350,
+    eveningFee: 1350,
+    bothFee: 2400,
+  },
+  {
+    id: "TR-004",
+    mapFrom: "Cumballa Heights, Peddar Road",
+    mapTo: "Main Campus Drop-off",
+    morningFee: 1100,
+    eveningFee: 1100,
+    bothFee: 2000,
+  },
+  {
+    id: "TR-005",
+    mapFrom: "Sasthamangalam, Thiruvananthapuram",
+    mapTo: "Main Campus Drop-off",
+    morningFee: 1200,
+    eveningFee: 1200,
+    bothFee: 2200,
+  },
+];
+
+export const SEED_VEHICLES: TransportVehicle[] = [
+  {
+    id: "VH-001",
+    name: "Bus 01",
+    registrationNo: "KL-07-AB-4521",
+    capacity: 42,
+    driverName: "Rajan Kumar",
+    driverPhone: "9847012345",
+    routeId: "TR-001",
+    active: true,
+  },
+  {
+    id: "VH-002",
+    name: "Bus 02",
+    registrationNo: "KL-07-CD-8832",
+    capacity: 36,
+    driverName: "Suresh Nair",
+    driverPhone: "9847098765",
+    routeId: "TR-002",
+    active: true,
+  },
+  {
+    id: "VH-003",
+    name: "Van 01",
+    registrationNo: "MH-02-EF-1190",
+    capacity: 14,
+    driverName: "Imran Sheikh",
+    routeId: "TR-003",
+    active: true,
+  },
 ];
 
 export const SEED_PAYMENT_CATEGORIES: PaymentCategory[] = [
@@ -407,9 +655,12 @@ type Snapshot = {
   roles: Role[];
   classes: ClassConfig[];
   transportRoutes: TransportRoute[];
+  transportVehicles: TransportVehicle[];
   paymentCategories: PaymentCategory[];
   academicYear: string;
   themeSettings: ThemeSettings;
+  dashboardTodos: string[];
+  dashboardNote: string;
 };
 
 type TenantStoreValue = {
@@ -427,12 +678,18 @@ type TenantStoreValue = {
   setClasses: Dispatch<SetStateAction<ClassConfig[]>>;
   transportRoutes: TransportRoute[];
   setTransportRoutes: Dispatch<SetStateAction<TransportRoute[]>>;
+  transportVehicles: TransportVehicle[];
+  setTransportVehicles: Dispatch<SetStateAction<TransportVehicle[]>>;
   paymentCategories: PaymentCategory[];
   setPaymentCategories: Dispatch<SetStateAction<PaymentCategory[]>>;
   academicYear: string;
   setAcademicYear: Dispatch<SetStateAction<string>>;
   themeSettings: ThemeSettings;
   setThemeSettings: Dispatch<SetStateAction<ThemeSettings>>;
+  dashboardTodos: string[];
+  setDashboardTodos: Dispatch<SetStateAction<string[]>>;
+  dashboardNote: string;
+  setDashboardNote: Dispatch<SetStateAction<string>>;
   resetTenant: () => void;
 };
 
@@ -469,19 +726,30 @@ function parseSnapshot(raw: string): Snapshot | null {
     departments: parsed.departments,
     roles: parsed.roles,
     classes: parsed.classes,
-    transportRoutes: parsed.transportRoutes,
+    transportRoutes: (parsed.transportRoutes ?? [])
+      .map(normalizeTransportRoute)
+      .filter((r): r is TransportRoute => r !== null),
+    transportVehicles: Array.isArray(parsed.transportVehicles)
+      ? parsed.transportVehicles
+          .map(normalizeTransportVehicle)
+          .filter((v): v is TransportVehicle => v !== null)
+      : [...SEED_VEHICLES],
     paymentCategories: parsed.paymentCategories,
     academicYear: parsed.academicYear,
     themeSettings: isThemeSettings(parsed.themeSettings)
       ? parsed.themeSettings
       : SEED_THEME_SETTINGS,
+    dashboardTodos: normalizeDashboardTodos(parsed.dashboardTodos),
+    dashboardNote: typeof parsed.dashboardNote === "string" ? parsed.dashboardNote : "",
   };
 }
 
 function readSnapshot(): Snapshot | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_STORAGE_KEY);
+    const raw =
+      window.localStorage.getItem(STORAGE_KEY) ??
+      LEGACY_STORAGE_KEYS.map((key) => window.localStorage.getItem(key)).find(Boolean);
     if (!raw) return null;
     return parseSnapshot(raw);
   } catch {
@@ -508,10 +776,13 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
   const [roles, setRoles] = useState<Role[]>(SEED_ROLES);
   const [classes, setClasses] = useState<ClassConfig[]>(SEED_CLASSES);
   const [transportRoutes, setTransportRoutes] = useState<TransportRoute[]>(SEED_TRANSPORT);
+  const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>(SEED_VEHICLES);
   const [paymentCategories, setPaymentCategories] =
     useState<PaymentCategory[]>(SEED_PAYMENT_CATEGORIES);
   const [academicYear, setAcademicYear] = useState<string>(SEED_ACADEMIC_YEAR);
   const [themeSettings, setThemeSettings] = useState<ThemeSettings>(SEED_THEME_SETTINGS);
+  const [dashboardTodos, setDashboardTodos] = useState<string[]>([...DEFAULT_DASHBOARD_TODOS]);
+  const [dashboardNote, setDashboardNote] = useState("");
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -524,9 +795,12 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       setRoles(snap.roles);
       setClasses(snap.classes);
       setTransportRoutes(snap.transportRoutes);
+      setTransportVehicles(snap.transportVehicles);
       setPaymentCategories(snap.paymentCategories);
       setAcademicYear(snap.academicYear);
       setThemeSettings(snap.themeSettings);
+      setDashboardTodos(snap.dashboardTodos);
+      setDashboardNote(snap.dashboardNote);
     }
     setHydrated(true);
   }, []);
@@ -541,9 +815,12 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       roles,
       classes,
       transportRoutes,
+      transportVehicles,
       paymentCategories,
       academicYear,
       themeSettings,
+      dashboardTodos,
+      dashboardNote,
     });
   }, [
     hydrated,
@@ -554,9 +831,12 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
     roles,
     classes,
     transportRoutes,
+    transportVehicles,
     paymentCategories,
     academicYear,
     themeSettings,
+    dashboardTodos,
+    dashboardNote,
   ]);
 
   const resetTenant = () => {
@@ -567,9 +847,12 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
     setRoles(SEED_ROLES);
     setClasses(SEED_CLASSES);
     setTransportRoutes(SEED_TRANSPORT);
+    setTransportVehicles(SEED_VEHICLES);
     setPaymentCategories(SEED_PAYMENT_CATEGORIES);
     setAcademicYear(SEED_ACADEMIC_YEAR);
     setThemeSettings(SEED_THEME_SETTINGS);
+    setDashboardTodos([...DEFAULT_DASHBOARD_TODOS]);
+    setDashboardNote("");
     writeSnapshot({
       students: SEED_STUDENTS,
       staff: SEED_STAFF,
@@ -578,9 +861,12 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       roles: SEED_ROLES,
       classes: SEED_CLASSES,
       transportRoutes: SEED_TRANSPORT,
+      transportVehicles: SEED_VEHICLES,
       paymentCategories: SEED_PAYMENT_CATEGORIES,
       academicYear: SEED_ACADEMIC_YEAR,
       themeSettings: SEED_THEME_SETTINGS,
+      dashboardTodos: [...DEFAULT_DASHBOARD_TODOS],
+      dashboardNote: "",
     });
   };
 
@@ -600,12 +886,18 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       setClasses,
       transportRoutes,
       setTransportRoutes,
+      transportVehicles,
+      setTransportVehicles,
       paymentCategories,
       setPaymentCategories,
       academicYear,
       setAcademicYear,
       themeSettings,
       setThemeSettings,
+      dashboardTodos,
+      setDashboardTodos,
+      dashboardNote,
+      setDashboardNote,
       resetTenant,
     }),
     [
@@ -616,9 +908,12 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       roles,
       classes,
       transportRoutes,
+      transportVehicles,
       paymentCategories,
       academicYear,
       themeSettings,
+      dashboardTodos,
+      dashboardNote,
     ],
   );
 

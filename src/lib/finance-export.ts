@@ -73,58 +73,135 @@ export function downloadTablePdf({
 }
 
 export function downloadReceiptPdf(payment: Payment, schoolName: string, academicYear: string) {
-  const doc = new jsPDF();
-  const margin = 18;
-  let y = margin;
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 14;
+  const contentWidth = pageWidth - margin * 2;
+  const generatedAt = new Date().toLocaleString("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+  const amountFormatted = `₹ ${payment.amount.toLocaleString("en-IN")}`;
 
   doc.setFillColor(199, 243, 60);
-  doc.rect(0, 0, 210, 28, "F");
-  doc.setFontSize(18);
-  doc.setTextColor(0, 0, 0);
-  doc.text(schoolName, margin, 18);
-  doc.setFontSize(10);
-  doc.text(`Fee Receipt · ${academicYear}`, margin, 24);
+  doc.rect(0, 0, pageWidth, 34, "F");
 
-  y = 40;
-  doc.setFontSize(14);
-  doc.text("Payment Receipt", margin, y);
-  y += 10;
-
-  doc.setFontSize(10);
-  doc.setTextColor(60, 60, 60);
-  const lines: [string, string][] = [
-    ["Receipt No.", payment.id],
-    ["Student", payment.name],
-    ["Category", payment.cat],
-    ["Payment Mode", payment.mode],
-    ["Amount", `₹ ${payment.amount.toLocaleString("en-IN")}`],
-    ["Recorded", payment.time],
-  ];
-  lines.forEach(([label, value]) => {
-    doc.setTextColor(120, 120, 120);
-    doc.text(label, margin, y);
-    doc.setTextColor(0, 0, 0);
-    doc.setFont("helvetica", "bold");
-    doc.text(value, margin + 42, y);
-    doc.setFont("helvetica", "normal");
-    y += 8;
-  });
-
-  y += 6;
-  doc.setDrawColor(229, 229, 229);
-  doc.line(margin, y, 210 - margin, y);
-  y += 10;
-
-  doc.setFontSize(20);
   doc.setFont("helvetica", "bold");
-  doc.text(`₹ ${payment.amount.toLocaleString("en-IN")}`, margin, y);
-  doc.setFont("helvetica", "normal");
-  y += 12;
+  doc.setFontSize(20);
+  doc.setTextColor(0, 0, 0);
+  doc.text(schoolName, margin, 15);
 
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.text(`Official Fee Receipt · ${academicYear}`, margin, 23);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.text(payment.id, pageWidth - margin, 15, { align: "right" });
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(45, 45, 45);
+  doc.text(`Issued ${generatedAt}`, pageWidth - margin, 22, { align: "right" });
+
+  const titleY = 46;
+  doc.setFontSize(14);
+  doc.setTextColor(0, 0, 0);
+  doc.setFont("helvetica", "bold");
+  doc.text("Payment Receipt", margin, titleY);
+  doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(100, 100, 100);
-  doc.text("This is a computer-generated receipt. No signature required.", margin, y);
-  doc.text(`Generated ${new Date().toLocaleString("en-IN")}`, margin, y + 5);
+  doc.text("Fee collection acknowledgement · student account ledger", margin, titleY + 6);
+
+  autoTable(doc, {
+    startY: titleY + 12,
+    margin: { left: margin, right: margin },
+    tableWidth: contentWidth,
+    head: [["Field", "Details"]],
+    body: [
+      ["Receipt Number", payment.id],
+      ["Student Name", payment.name],
+      ["Fee Category", payment.cat],
+      ["Payment Mode", payment.mode],
+      ["Recorded On", payment.time],
+      ["Amount Received", amountFormatted],
+    ],
+    theme: "grid",
+    styles: {
+      fontSize: 10,
+      cellPadding: { top: 5, right: 6, bottom: 5, left: 6 },
+      lineColor: [220, 220, 220],
+      lineWidth: 0.25,
+      textColor: [0, 0, 0],
+      valign: "middle",
+    },
+    headStyles: {
+      fillColor: [0, 0, 0],
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+      halign: "left",
+    },
+    columnStyles: {
+      0: { cellWidth: 54, fontStyle: "bold", textColor: [90, 90, 90], fillColor: [248, 248, 248] },
+      1: { cellWidth: contentWidth - 54, fontStyle: "bold" },
+    },
+    didParseCell: (data) => {
+      if (data.section === "body" && data.row.index === 5) {
+        data.cell.styles.fillColor = [225, 242, 174];
+        data.cell.styles.fontSize = 11;
+        if (data.column.index === 1) {
+          data.cell.styles.halign = "right";
+        }
+      }
+    },
+  });
+
+  const detailsEnd = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+
+  autoTable(doc, {
+    startY: detailsEnd + 6,
+    margin: { left: margin, right: margin },
+    tableWidth: contentWidth,
+    body: [
+      [
+        { content: "Total Amount Paid", styles: { fontStyle: "bold", textColor: [60, 60, 60] } },
+        {
+          content: amountFormatted,
+          styles: {
+            fontStyle: "bold",
+            fontSize: 16,
+            halign: "right",
+            fillColor: [199, 243, 60],
+            textColor: [0, 0, 0],
+          },
+        },
+      ],
+    ],
+    theme: "grid",
+    styles: {
+      cellPadding: { top: 7, right: 8, bottom: 7, left: 8 },
+      lineColor: [0, 0, 0],
+      lineWidth: 0.35,
+      valign: "middle",
+    },
+    columnStyles: {
+      0: { cellWidth: contentWidth * 0.58 },
+      1: { cellWidth: contentWidth * 0.42 },
+    },
+  });
+
+  const summaryEnd = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+
+  doc.setDrawColor(229, 229, 229);
+  doc.setLineWidth(0.3);
+  doc.line(margin, summaryEnd, pageWidth - margin, summaryEnd);
+
+  doc.setFontSize(8);
+  doc.setTextColor(115, 115, 115);
+  doc.setFont("helvetica", "normal");
+  doc.text("This is a computer-generated receipt. No physical signature is required.", margin, summaryEnd + 6);
+  doc.text(`Document generated on ${generatedAt}`, margin, summaryEnd + 11);
+  doc.text(`For billing queries, contact the ${schoolName} accounts office.`, margin, summaryEnd + 16);
 
   doc.save(`receipt-${payment.id}.pdf`);
 }

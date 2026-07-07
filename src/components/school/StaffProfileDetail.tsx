@@ -2,19 +2,27 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
-  ArrowLeft,
   MessageSquare,
   Pencil,
   Phone,
-  Check,
+  Camera,
+  X,
   FileText,
   Paperclip,
   Upload,
-  X,
   ExternalLink,
 } from "lucide-react";
-import { DatePicker } from "@/components/ui/date-picker";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -43,6 +51,80 @@ function initials(name: string) {
     .toUpperCase();
 }
 
+function StaffPhotoAvatar({
+  staff,
+  onPhotoChange,
+}: {
+  staff: Staff;
+  onPhotoChange: (photoUrl: string | undefined) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose a JPG, PNG, or WebP image");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Image must be 2 MB or smaller");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result ?? "");
+      if (dataUrl) onPhotoChange(dataUrl);
+    };
+    reader.onerror = () => toast.error("Could not read the selected image");
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  return (
+    <div className="relative h-16 w-16 shrink-0">
+      {staff.photoUrl ? (
+        <img
+          src={staff.photoUrl}
+          alt={`${staff.name} profile`}
+          className="h-16 w-16 rounded-2xl object-cover"
+        />
+      ) : (
+        <div className="grid h-16 w-16 place-items-center rounded-2xl bg-black text-lg font-semibold text-white">
+          {initials(staff.name)}
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={() => fileInputRef.current?.click()}
+        aria-label={`Change photo for ${staff.name}`}
+        title="Change photo"
+        className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#C7F33C] text-black shadow-sm transition-colors hover:bg-black hover:text-[#C7F33C]"
+      >
+        <Camera className="h-3.5 w-3.5" />
+      </button>
+      {staff.photoUrl && (
+        <button
+          type="button"
+          onClick={() => onPhotoChange(undefined)}
+          aria-label={`Remove photo for ${staff.name}`}
+          title="Remove photo"
+          className="absolute -left-1 -top-1 grid h-6 w-6 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 shadow-sm transition-colors hover:bg-[#FEE2E2] hover:text-[#B91C1C]"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        className="hidden"
+        onChange={handleFile}
+      />
+    </div>
+  );
+}
+
 function formatJoinedAt(iso: string) {
   const d = new Date(iso.includes("T") ? iso : `${iso}T00:00:00`);
   if (Number.isNaN(d.getTime())) return iso;
@@ -50,12 +132,6 @@ function formatJoinedAt(iso: string) {
   const month = String(d.getMonth() + 1).padStart(2, "0");
   return `${day}/${month}/${d.getFullYear()}`;
 }
-
-const todayISO = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
-
 
 function totalSalarySizeClass(formatted: string) {
   if (formatted.length > 14) return "text-sm leading-tight";
@@ -98,24 +174,29 @@ export function StaffProfileDetail({
   initialEdit?: boolean;
 }) {
   const navigate = useNavigate();
-  const { setStaff, departments, roles } = useTenantStore();
-  const [editing, setEditing] = useState(initialEdit);
+  const { setStaff, staff: allStaff, departments, roles } = useTenantStore();
+  const [editOpen, setEditOpen] = useState(initialEdit);
   const [draft, setDraft] = useState({
     name: staff.name,
     role: staff.role,
     dept: staff.dept,
-    joinedAt: staff.joinedAt,
-    phone: staff.phone ?? "",
+    id: staff.id,
+    photoUrl: staff.photoUrl ?? "",
   });
+  const editPhotoRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
+  const resetDraft = () => {
     setDraft({
       name: staff.name,
       role: staff.role,
       dept: staff.dept,
-      joinedAt: staff.joinedAt,
-      phone: staff.phone ?? "",
+      id: staff.id,
+      photoUrl: staff.photoUrl ?? "",
     });
+  };
+
+  useEffect(() => {
+    resetDraft();
   }, [staff]);
 
   useEffect(() => {
@@ -271,39 +352,63 @@ export function StaffProfileDetail({
   };
 
   const toggleEdit = () => {
-    if (editing) {
-      if (!draft.name.trim() || !draft.role.trim()) {
-        toast.error("Name and role are required");
-        return;
-      }
-      setStaff((prev) =>
-        prev.map((s) =>
-          s.id === staff.id
-            ? {
-                ...s,
-                name: draft.name.trim(),
-                role: draft.role.trim(),
-                dept: draft.dept,
-                joinedAt: draft.joinedAt,
-                phone: draft.phone.trim() || undefined,
-              }
-            : s,
-        ),
-      );
-      toast.success(`${draft.name.trim()} updated`, {
-        description: `${staff.id} · ${draft.dept}`,
-      });
-      setEditing(false);
-    } else {
-      setDraft({
-        name: staff.name,
-        role: staff.role,
-        dept: staff.dept,
-        joinedAt: staff.joinedAt,
-        phone: staff.phone ?? "",
-      });
-      setEditing(true);
+    resetDraft();
+    setEditOpen(true);
+  };
+
+  const handleEditPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose a JPG, PNG, or WebP image");
+      return;
     }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Image must be 2 MB or smaller");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result ?? "");
+      if (dataUrl) setDraft((prev) => ({ ...prev, photoUrl: dataUrl }));
+    };
+    reader.onerror = () => toast.error("Could not read the selected image");
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  const handleSaveProfile = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!draft.name.trim() || !draft.role.trim()) {
+      toast.error("Name and role are required");
+      return;
+    }
+    const nextId = draft.id.trim() || staff.id;
+    if (nextId !== staff.id && allStaff.some((s) => s.id === nextId)) {
+      toast.error("Employee ID already in use");
+      return;
+    }
+    setStaff((prev) =>
+      prev.map((s) =>
+        s.id === staff.id
+          ? {
+              ...s,
+              id: nextId,
+              name: draft.name.trim(),
+              role: draft.role.trim(),
+              dept: draft.dept,
+              photoUrl: draft.photoUrl || undefined,
+            }
+          : s,
+      ),
+    );
+    toast.success(`${draft.name.trim()} updated`, {
+      description: `${nextId} · ${draft.dept}`,
+    });
+    if (nextId !== staff.id) {
+      navigate({ to: "/tenant/staff", search: { id: nextId }, replace: true });
+    }
+    setEditOpen(false);
   };
 
   const handleMessage = () => {
@@ -322,46 +427,20 @@ export function StaffProfileDetail({
     window.location.href = `tel:${digits}`;
   };
 
+  const updatePhoto = (photoUrl: string | undefined) => {
+    setStaff((prev) =>
+      prev.map((s) => (s.id === staff.id ? { ...s, photoUrl } : s)),
+    );
+    toast.success(
+      photoUrl ? `${staff.name}'s photo updated` : `${staff.name}'s photo removed`,
+    );
+  };
+
   return (
     <div className="flex flex-col gap-4 sm:gap-6">
-      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-        <button
-          type="button"
-          onClick={onBack}
-          className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-black/75 transition-colors hover:bg-slate-50"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Roster
-        </button>
-        <button
-          type="button"
-          onClick={toggleEdit}
-          className={cn(
-            "inline-flex h-10 items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold transition-colors",
-            editing
-              ? "bg-[#C7F33C] text-black hover:bg-[#E1F2AE]"
-              : "bg-slate-950 text-white hover:bg-slate-800",
-          )}
-        >
-          {editing ? (
-            <>
-              <Check className="h-4 w-4" />
-              Save Profile
-            </>
-          ) : (
-            <>
-              <Pencil className="h-4 w-4" />
-              Edit Profile
-            </>
-          )}
-        </button>
-      </div>
-
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center">
-          <div className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-black text-lg font-semibold text-white">
-            {initials(staff.name)}
-          </div>
+          <StaffPhotoAvatar staff={staff} onPhotoChange={updatePhoto} />
           <div className="min-w-0">
             <h1 className="truncate text-xl font-semibold text-black sm:text-2xl">{staff.name}</h1>
             <p className="mt-0.5 text-sm text-black/60">{staff.role}</p>
@@ -400,6 +479,14 @@ export function StaffProfileDetail({
             <Phone className="h-4 w-4" />
             Call
           </button>
+          <button
+            type="button"
+            onClick={toggleEdit}
+            className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
+          >
+            <Pencil className="h-4 w-4" />
+            Edit Profile
+          </button>
         </div>
       </div>
 
@@ -411,98 +498,18 @@ export function StaffProfileDetail({
               {staff.id}
             </MetaRow>
 
-            <div>
-              <div className={META_LABEL}>Date of Joining</div>
-              <div className="mt-1.5">
-                {editing ? (
-                  <DatePicker
-                    value={draft.joinedAt}
-                    onChange={(v) => setDraft({ ...draft, joinedAt: v })}
-                    placeholder="Pick joining date"
-                    valueFormat="iso"
-                    variant="pill"
-                    quickPicks={[]}
-                    min="1990-01-01"
-                    max={todayISO()}
-                    className="h-9"
-                  />
-                ) : (
-                  <span className="font-mono text-[14px] font-medium text-black">
-                    {formatJoinedAt(staff.joinedAt)}
-                  </span>
-                )}
-              </div>
-            </div>
+            <MetaRow label="Date of Joining" mono>
+              {formatJoinedAt(staff.joinedAt)}
+            </MetaRow>
 
             <MetaRow label="Department" mono>
               {staff.dept}
             </MetaRow>
 
-            {!editing && staff.phone && (
+            {staff.phone && (
               <MetaRow label="Phone" mono>
                 {staff.phone}
               </MetaRow>
-            )}
-
-            {editing && (
-              <>
-                <div>
-                  <div className={META_LABEL}>Department</div>
-                  <Select
-                    value={departments.some((d) => d.name === draft.dept) ? draft.dept : undefined}
-                    onValueChange={(dept) => setDraft({ ...draft, dept })}
-                    disabled={departments.length === 0}
-                  >
-                    <SelectTrigger className="mt-1.5 h-10 w-full rounded-2xl border border-[#E5E5E5] bg-white px-3 text-[13px] font-normal text-black shadow-none focus:ring-2 focus:ring-[#C7F33C]">
-                      <SelectValue placeholder="No departments configured" />
-                    </SelectTrigger>
-                    <SelectContent className="z-[250] rounded-2xl border border-[#E5E5E5] bg-white p-1.5">
-                      {departments.map((d) => (
-                        <SelectItem key={d.id} value={d.name}>
-                          {d.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <div className={META_LABEL}>Full Name</div>
-                  <Input
-                    value={draft.name}
-                    onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                    className="mt-1.5 h-9 text-[13px]"
-                    placeholder="Staff full name"
-                  />
-                </div>
-                <div>
-                  <div className={META_LABEL}>Role / Designation</div>
-                  <Select
-                    value={roles.some((r) => r.title === draft.role) ? draft.role : undefined}
-                    onValueChange={(role) => setDraft({ ...draft, role })}
-                    disabled={roles.length === 0}
-                  >
-                    <SelectTrigger className="mt-1.5 h-10 w-full rounded-2xl border border-[#E5E5E5] bg-white px-3 text-[13px] font-normal text-black shadow-none focus:ring-2 focus:ring-[#C7F33C]">
-                      <SelectValue placeholder="No roles configured" />
-                    </SelectTrigger>
-                    <SelectContent className="z-[250] rounded-2xl border border-[#E5E5E5] bg-white p-1.5">
-                      {roles.map((r) => (
-                        <SelectItem key={r.id} value={r.title}>
-                          {r.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <div className={META_LABEL}>Phone</div>
-                  <Input
-                    value={draft.phone}
-                    onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
-                    className="mt-1.5 h-9 font-mono text-[13px]"
-                    placeholder="9810045221"
-                  />
-                </div>
-              </>
             )}
           </div>
         </section>
@@ -591,7 +598,6 @@ export function StaffProfileDetail({
               <DocumentCard
                 key={doc.id}
                 doc={doc}
-                editing={editing}
                 onNumberChange={(number) => updateDocument(doc.id, number)}
                 onAttach={(files) => addAttachments(doc.id, files)}
                 onRemoveAttachment={(attachmentId) => removeAttachment(doc.id, attachmentId)}
@@ -600,19 +606,160 @@ export function StaffProfileDetail({
           </div>
         </section>
       </div>
+
+      <Dialog
+        open={editOpen}
+        onOpenChange={(open) => {
+          setEditOpen(open);
+          if (!open) resetDraft();
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Staff Profile</DialogTitle>
+            <DialogDescription>
+              Update core roster details for {staff.name}.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSaveProfile} className="space-y-3">
+            <div className="flex items-center gap-4 rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] p-3">
+              <div className="relative h-14 w-14 shrink-0">
+                {draft.photoUrl ? (
+                  <img
+                    src={draft.photoUrl}
+                    alt=""
+                    className="h-14 w-14 rounded-2xl object-cover"
+                  />
+                ) : (
+                  <div className="grid h-14 w-14 place-items-center rounded-2xl bg-black text-sm font-semibold text-white">
+                    {draft.name.trim() ? initials(draft.name) : "?"}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => editPhotoRef.current?.click()}
+                  aria-label="Upload profile photo"
+                  className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#C7F33C] text-black shadow-sm"
+                >
+                  <Camera className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <div className="min-w-0 text-[12px] text-black/55">
+                <div className="font-medium text-black">Profile Photo</div>
+                <div className="mt-0.5">Optional · JPG, PNG or WebP up to 2 MB</div>
+                {draft.photoUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setDraft((prev) => ({ ...prev, photoUrl: "" }))}
+                    className="mt-1.5 text-[11px] font-semibold text-[#B91C1C] hover:underline"
+                  >
+                    Remove photo
+                  </button>
+                )}
+              </div>
+              <input
+                ref={editPhotoRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="hidden"
+                onChange={handleEditPhoto}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                Full Name
+              </Label>
+              <Input
+                value={draft.name}
+                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                placeholder="e.g. Sneha Pillai"
+                autoFocus
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                Role
+              </Label>
+              <Select
+                value={roles.some((r) => r.title === draft.role) ? draft.role : undefined}
+                onValueChange={(role) => setDraft({ ...draft, role })}
+                disabled={roles.length === 0}
+              >
+                <SelectTrigger className="h-10 w-full rounded-2xl border border-[#E5E5E5] bg-white px-3 text-[13px] font-normal text-black shadow-none focus:ring-2 focus:ring-[#C7F33C]">
+                  <SelectValue placeholder="No roles configured" />
+                </SelectTrigger>
+                <SelectContent className="z-[250] rounded-2xl border border-[#E5E5E5] bg-white p-1.5">
+                  {roles.map((r) => (
+                    <SelectItem key={r.id} value={r.title}>
+                      {r.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[10.5px] text-black/45">
+                Manage role catalogue under Settings · Roles
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Department
+                </Label>
+                <Select
+                  value={departments.some((d) => d.name === draft.dept) ? draft.dept : undefined}
+                  onValueChange={(dept) => setDraft({ ...draft, dept })}
+                  disabled={departments.length === 0}
+                >
+                  <SelectTrigger className="h-10 w-full rounded-2xl border border-[#E5E5E5] bg-white px-3 text-[13px] font-normal text-black shadow-none focus:ring-2 focus:ring-[#C7F33C]">
+                    <SelectValue placeholder="No departments configured" />
+                  </SelectTrigger>
+                  <SelectContent className="z-[250] rounded-2xl border border-[#E5E5E5] bg-white p-1.5">
+                    {departments.map((d) => (
+                      <SelectItem key={d.id} value={d.name}>
+                        {d.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Employee ID
+                </Label>
+                <Input
+                  value={draft.id}
+                  onChange={(e) => setDraft({ ...draft, id: e.target.value })}
+                  placeholder={staff.id}
+                  className="font-mono"
+                />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+                Save Profile
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
 function DocumentCard({
   doc,
-  editing,
   onNumberChange,
   onAttach,
   onRemoveAttachment,
 }: {
   doc: StaffDocument;
-  editing: boolean;
   onNumberChange: (number: string) => void;
   onAttach: (files: FileList | null) => void;
   onRemoveAttachment: (attachmentId: string) => void;
@@ -634,18 +781,12 @@ function DocumentCard({
         </span>
       </div>
 
-      {editing ? (
-        <Input
-          value={doc.number}
-          onChange={(e) => onNumberChange(e.target.value)}
-          placeholder={doc.label === "Aadhaar" ? "XXXX XXXX XXXX" : "Enter number"}
-          className="mt-1.5 h-10 border-slate-200 bg-white font-mono text-[13px]"
-        />
-      ) : (
-        <div className="mt-1.5 break-all font-mono text-[14px] font-medium text-black">
-          {doc.number.trim() || "—"}
-        </div>
-      )}
+      <Input
+        value={doc.number}
+        onChange={(e) => onNumberChange(e.target.value)}
+        placeholder={doc.label === "Aadhaar" ? "XXXX XXXX XXXX" : "Enter number"}
+        className="mt-1.5 h-10 border-slate-200 bg-white font-mono text-[13px]"
+      />
 
       <div className="mt-4 border-t border-slate-200/80 pt-4">
         <div className="flex items-center justify-between gap-2">

@@ -1,29 +1,31 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
   ArrowLeft,
+  Camera,
   Download,
   MessageCircle,
   Pencil,
   Check,
   AlertTriangle,
   CheckCircle2,
+  X,
 } from "lucide-react";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { OrganicCard } from "@/components/ui/organic-card";
 import type { Student } from "@/lib/tenant-store";
 import { useTenantStore } from "@/lib/tenant-store";
+import { downloadReceiptPdf } from "@/lib/finance-export";
+import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 type LedgerStatus = "Paid" | "Partially Paid" | "Overdue";
@@ -163,7 +165,9 @@ export function StudentProfileDetail({
   initialEdit?: boolean;
 }) {
   const navigate = useNavigate();
-  const { setStudents } = useTenantStore();
+  const { setStudents, academicYear } = useTenantStore();
+  const { session } = useAuth();
+  const schoolName = session?.tenantName ?? "Silver Hills Global";
   const [editing, setEditing] = useState(initialEdit);
   const [draft, setDraft] = useState({
     guardian: student.guardian,
@@ -234,6 +238,15 @@ export function StudentProfileDetail({
     }
   };
 
+  const updatePhoto = (photoUrl: string | undefined) => {
+    setStudents((prev) =>
+      prev.map((s) => (s.id === student.id ? { ...s, photoUrl } : s)),
+    );
+    toast.success(
+      photoUrl ? `${student.name}'s photo updated` : `${student.name}'s photo removed`,
+    );
+  };
+
   return (
     <div className="flex flex-col gap-4 sm:gap-6">
       <TopBar
@@ -243,89 +256,106 @@ export function StudentProfileDetail({
         onToggleEdit={toggleEdit}
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-12 lg:items-start">
+      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-12 lg:items-stretch">
         <OrganicCard
           tone="white"
           cornerSide="tr"
           padded
-          className="flex flex-col lg:sticky lg:top-6 lg:col-span-4 lg:self-start"
+          className="flex h-full flex-col lg:col-span-4"
         >
-          <IdentityHeader student={student} />
+          <IdentityHeader
+            student={student}
+            onPhotoChange={updatePhoto}
+          />
 
-          <div className="mt-6 flex flex-col gap-5">
-            <MetaField
-              label="Guardian"
-              value={draft.guardian}
-              editing={editing}
-              onChange={(v) => setDraft({ ...draft, guardian: v })}
-              placeholder="Guardian full name"
-            />
+          <div className="mt-6 flex min-h-0 flex-1 flex-col">
+            <div className="flex flex-col gap-5">
+              <MetaField
+                label="Guardian"
+                value={draft.guardian}
+                editing={editing}
+                onChange={(v) => setDraft({ ...draft, guardian: v })}
+                placeholder="Guardian full name"
+              />
 
-            <div>
-              <div className={META_LABEL}>Contact Phone</div>
-              <div className="mt-1.5 flex items-center justify-between gap-3">
-                {editing ? (
-                  <Input
-                    value={draft.phone}
-                    onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
-                    placeholder="9810045221"
-                    className="h-9 flex-1 font-mono text-[13px]"
-                  />
-                ) : (
-                  <span className="font-mono text-[14px] font-medium text-black">
-                    {draft.phone || "—"}
-                  </span>
-                )}
-                {waHref && (
-                  <a
-                    href={waHref}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="inline-flex items-center gap-1 rounded-full bg-[#C7F33C] px-2.5 py-1 text-[11px] font-semibold text-black shadow-sm transition-colors hover:bg-black hover:text-white"
-                  >
-                    <MessageCircle className="h-3 w-3" /> Quick Connect
-                  </a>
-                )}
+              <div>
+                <div className={META_LABEL}>Contact Phone</div>
+                <div className="mt-1.5 flex items-center justify-between gap-3">
+                  {editing ? (
+                    <Input
+                      value={draft.phone}
+                      onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
+                      placeholder="9810045221"
+                      className="h-9 flex-1 font-mono text-[13px]"
+                    />
+                  ) : (
+                    <span className="font-mono text-[14px] font-medium text-black">
+                      {draft.phone || "—"}
+                    </span>
+                  )}
+                  {waHref && (
+                    <a
+                      href={waHref}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#C7F33C] px-2.5 py-1 text-[11px] font-semibold text-black shadow-sm transition-colors hover:bg-black hover:text-white"
+                    >
+                      <MessageCircle className="h-3 w-3" /> Quick Connect
+                    </a>
+                  )}
+                </div>
               </div>
+
+              <MetaField
+                label="Date of Birth"
+                value={draft.dob}
+                editing={editing}
+                onChange={(v) => setDraft({ ...draft, dob: v })}
+                placeholder="14 Mar 2012"
+                date
+              />
+
+              <MetaField
+                label="Email Address"
+                value={draft.email}
+                editing={editing}
+                onChange={(v) => setDraft({ ...draft, email: v })}
+                placeholder="aarav.sharma@silverhills.in"
+                mono
+              />
             </div>
 
-            <MetaField
-              label="Date of Birth"
-              value={draft.dob}
-              editing={editing}
-              onChange={(v) => setDraft({ ...draft, dob: v })}
-              placeholder="14 Mar 2012"
-              date
-            />
+            <div className="mt-auto flex min-h-0 flex-1 flex-col gap-5 border-t border-[#EFEFEF] pt-5">
+              <div>
+                <div className={META_LABEL}>Class</div>
+                <div className="mt-1.5">
+                  <span className="inline-flex rounded-full bg-[#E1F2AE] px-3 py-1.5 text-[12px] font-semibold text-black">
+                    {student.cls}
+                  </span>
+                </div>
+              </div>
 
-            <MetaField
-              label="Email Address"
-              value={draft.email}
-              editing={editing}
-              onChange={(v) => setDraft({ ...draft, email: v })}
-              placeholder="aarav.sharma@silverhills.in"
-              mono
-            />
-
-            <MetaField
-              label="Residential Mailing Address"
-              value={draft.address}
-              editing={editing}
-              onChange={(v) => setDraft({ ...draft, address: v })}
-              placeholder="B-204, Lotus Greens, Sector 21, Noida 201301"
-              multiline
-            />
+              <MetaField
+                label="Residential Mailing Address"
+                value={draft.address}
+                editing={editing}
+                onChange={(v) => setDraft({ ...draft, address: v })}
+                placeholder="B-204, Lotus Greens, Sector 21, Noida 201301"
+                multiline
+                fill
+              />
+            </div>
           </div>
         </OrganicCard>
 
-        <div className="lg:col-span-8">
+        <div className="flex flex-col lg:col-span-8">
           <div className="mb-4 grid grid-cols-1 gap-3 sm:mb-6 sm:gap-4 md:grid-cols-3">
             <MetricTile label="Total Due" value={inr(fees.totalDue)} cornerSide="tr" />
             <MetricTile
               label="Total Paid"
               value={inr(fees.totalPaid)}
               cornerSide="bl"
-              valueClassName="text-black"
+              valueClassName="text-emerald-600"
             />
             <BalanceTile balance={fees.balance} overdue={fees.overdue} />
           </div>
@@ -333,7 +363,12 @@ export function StudentProfileDetail({
           <FeesTable ledger={ledger} />
 
           <div className="mt-6">
-            <ReceiptsList receipts={receipts} />
+            <ReceiptsList
+              receipts={receipts}
+              student={student}
+              schoolName={schoolName}
+              academicYear={academicYear}
+            />
           </div>
         </div>
       </div>
@@ -372,7 +407,7 @@ function TopBar({
         className="inline-flex h-10 shrink-0 items-center justify-center gap-1 rounded-full border border-[#E5E5E5] bg-[#FAFAFA] px-3 text-[11.5px] font-medium text-black/75 transition-colors hover:bg-[#F4F4F5] sm:gap-1.5 sm:px-4 sm:text-[13px]"
       >
         <ArrowLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-        <span className="hidden min-[380px]:inline sm:inline">Back</span>
+        <span className="hidden min-[380px]:inline sm:inline">Back to list</span>
       </button>
 
       <button
@@ -392,7 +427,7 @@ function TopBar({
         ) : (
           <>
             <Pencil className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            <span>Edit</span>
+            <span>Edit Profile</span>
           </>
         )}
       </button>
@@ -400,20 +435,83 @@ function TopBar({
   );
 }
 
-function IdentityHeader({ student }: { student: Student }) {
+function IdentityHeader({
+  student,
+  onPhotoChange,
+}: {
+  student: Student;
+  onPhotoChange: (photoUrl: string | undefined) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose a JPG, PNG, or WebP image");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Image must be 2 MB or smaller");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result ?? "");
+      if (dataUrl) onPhotoChange(dataUrl);
+    };
+    reader.onerror = () => toast.error("Could not read the selected image");
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
   return (
     <div className="flex items-center gap-4">
-      <div className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-black text-lg font-semibold text-white">
-        {initials(student.name)}
+      <div className="relative h-16 w-16 shrink-0">
+        {student.photoUrl ? (
+          <img
+            src={student.photoUrl}
+            alt={`${student.name} profile`}
+            className="h-16 w-16 rounded-2xl object-cover"
+          />
+        ) : (
+          <div className="grid h-16 w-16 place-items-center rounded-2xl bg-black text-lg font-semibold text-white">
+            {initials(student.name)}
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          aria-label={`Change photo for ${student.name}`}
+          title="Change photo"
+          className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#C7F33C] text-black shadow-sm transition-colors hover:bg-black hover:text-[#C7F33C]"
+        >
+          <Camera className="h-3.5 w-3.5" />
+        </button>
+        {student.photoUrl && (
+          <button
+            type="button"
+            onClick={() => onPhotoChange(undefined)}
+            aria-label={`Remove photo for ${student.name}`}
+            title="Remove photo"
+            className="absolute -left-1 -top-1 grid h-6 w-6 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 shadow-sm transition-colors hover:bg-[#FEE2E2] hover:text-[#B91C1C]"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/gif"
+          className="hidden"
+          onChange={handleFile}
+        />
       </div>
       <div className="min-w-0">
         <div className="truncate text-[18px] font-semibold text-black">{student.name}</div>
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
           <span className="rounded-full bg-[#F4F4F5] px-2.5 py-0.5 font-mono text-[10.5px] font-medium text-black/65">
             {student.id}
-          </span>
-          <span className="rounded-full bg-[#E1F2AE] px-2.5 py-0.5 text-[10.5px] font-medium text-black">
-            {student.cls}
           </span>
           {student.gender && (
             <span
@@ -497,7 +595,8 @@ function MetaField({
               "text-[14px] font-medium",
               mono && "font-mono",
               multiline ? "whitespace-pre-line leading-snug text-black/85" : "text-black",
-              fill && "min-h-0 flex-1",
+              fill && multiline && "min-h-0 flex-1 rounded-2xl bg-[#FAFAFA] p-3",
+              fill && !multiline && "min-h-0 flex-1",
             )}
           >
             {value || <span className="font-normal text-black/40">—</span>}
@@ -766,12 +865,6 @@ function FeesTable({ ledger }: { ledger: LedgerRow[] }) {
               </div>
             </div>
           )}
-
-          <DialogFooter className="mt-5 flex-row justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setSelectedRow(null)}>
-              Close
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
@@ -797,7 +890,41 @@ function DetailField({
   );
 }
 
-function ReceiptsList({ receipts }: { receipts: Receipt[] }) {
+function ReceiptsList({
+  receipts,
+  student,
+  schoolName,
+  academicYear,
+}: {
+  receipts: Receipt[];
+  student: Student;
+  schoolName: string;
+  academicYear: string;
+}) {
+  const handleDownload = (r: Receipt) => {
+    try {
+      downloadReceiptPdf(
+        {
+          id: r.id,
+          name: student.name,
+          cat: `Fee Payment · ${student.cls}`,
+          mode: r.mode,
+          amount: r.amount,
+          time: r.date,
+        },
+        schoolName,
+        academicYear,
+      );
+      toast.success(`Receipt ${r.id} downloaded`, {
+        description: `PDF saved · ${inr(r.amount)}`,
+      });
+    } catch {
+      toast.error(`Could not download receipt ${r.id}`, {
+        description: "Try again or check your browser download settings",
+      });
+    }
+  };
+
   return (
     <OrganicCard tone="white" cornerSide="bl" padded>
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -829,11 +956,8 @@ function ReceiptsList({ receipts }: { receipts: Receipt[] }) {
             </div>
             <div className="font-mono text-base font-semibold text-black">{inr(r.amount)}</div>
             <button
-              onClick={() =>
-                toast.success(`Receipt ${r.id} downloaded`, {
-                  description: `PDF prepared · ${inr(r.amount)}`,
-                })
-              }
+              type="button"
+              onClick={() => handleDownload(r)}
               aria-label={`Download receipt ${r.id}`}
               className="grid h-10 w-10 place-items-center rounded-2xl border border-[#E5E5E5] bg-white text-black/55 shadow-sm transition-colors hover:bg-black hover:text-white"
             >

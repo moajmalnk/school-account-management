@@ -14,24 +14,15 @@ import {
 import { FinanceBarCard, FinanceDonutCard } from "@/components/school/finance-charts";
 import { OrganicCard } from "@/components/ui/organic-card";
 import { useAuth } from "@/lib/auth";
+import {
+  ACCOUNTS_PAYABLE,
+  OPERATING_EXPENSES,
+  totalAccountsPayable,
+  totalOperatingExpense,
+} from "@/lib/dashboard-finance";
 import { downloadCsv, downloadTablePdf } from "@/lib/finance-export";
 import { useTenantStore, type Payment } from "@/lib/tenant-store";
 import { cn } from "@/lib/utils";
-
-const OPERATING_EXPENSES = [
-  { account: "Salaries & Wages", amount: 1_220_000 },
-  { account: "Vehicle Upkeep", amount: 184_000 },
-  { account: "Utilities & Power", amount: 88_000 },
-  { account: "Rent & Campus", amount: 240_000 },
-  { account: "Office & Supplies", amount: 42_000 },
-];
-
-const ACCOUNTS_PAYABLE = [
-  { payee: "BrightBus Logistics", amount: 48_200 },
-  { payee: "Faculty Payroll · May", amount: 612_000 },
-  { payee: "Adani Electricity", amount: 18_450 },
-  { payee: "Office Stationery Co.", amount: 6_800 },
-];
 
 export type LedgerRow = {
   date: string;
@@ -313,7 +304,7 @@ export function ProfitLossReport() {
   }, [payments]);
 
   const totalIncome = incomeByCategory.reduce((s, i) => s + i.amount, 0);
-  const totalExpense = OPERATING_EXPENSES.reduce((s, e) => s + e.amount, 0);
+  const totalExpense = totalOperatingExpense();
   const netProfit = totalIncome - totalExpense;
 
   const headers = ["Line Item", "Type", "Amount (₹)"];
@@ -432,7 +423,7 @@ export function BalanceSheetReport() {
     [payments],
   );
   const receivables = useMemo(() => students.reduce((s, st) => s + st.due, 0), [students]);
-  const payables = ACCOUNTS_PAYABLE.reduce((s, p) => s + p.amount, 0);
+  const payables = totalAccountsPayable();
   const totalAssets = cashOnHand + bankBalance + receivables;
   const equity = totalAssets - payables;
 

@@ -1,13 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis, YAxis } from "recharts";
 import {
   TrendingUp,
-  TrendingDown,
-  Search,
   Plus,
   AlertTriangle,
+  CheckCircle2,
   Printer,
   Download,
   Upload,
@@ -17,6 +15,7 @@ import {
   Pencil,
   Trash2,
   X,
+  Camera,
   Check,
   ChevronDown,
   ArrowDownToLine,
@@ -24,10 +23,22 @@ import {
   ChartPie,
   BookOpen,
   Scale,
-  LayoutGrid,
-  List,
-  ArrowUpRight,
+  GraduationCap,
+  Briefcase,
+  Users,
+  Filter,
+  Eye,
+  Bus,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -49,18 +60,13 @@ import {
   SheetHeader,
   SheetTitle,
   SheetDescription,
-  SheetFooter,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { DatePicker } from "@/components/ui/date-picker";
 import { OrganicCard } from "@/components/ui/organic-card";
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from "@/components/ui/chart";
 import {
   ACADEMIC_YEAR_OPTIONS,
   DEFAULT_STAFF_DOCUMENTS,
@@ -77,6 +83,7 @@ import {
   type Student,
   type ThemeSettings,
   type TransportRoute,
+  type TransportVehicle,
 } from "@/lib/tenant-store";
 import { StudentProfileDetail } from "@/components/school/StudentProfileDetail";
 import { StaffProfileDetail } from "@/components/school/StaffProfileDetail";
@@ -86,7 +93,20 @@ import {
   GeneralLedgerReport,
   ProfitLossReport,
 } from "@/components/school/FinanceReports";
-import { downloadReceiptPdf } from "@/lib/finance-export";
+import { downloadCsv, downloadReceiptPdf } from "@/lib/finance-export";
+import {
+  bankBalance,
+  cashOnHand,
+  formatInr,
+  salaryPayable,
+  totalOperatingExpense,
+} from "@/lib/dashboard-finance";
+import {
+  filterPaymentsByPeriod,
+  PAYMENT_PERIOD_OPTIONS,
+  type CustomDateRange,
+  type PaymentPeriod,
+} from "@/lib/payment-period";
 import { useAuth } from "@/lib/auth";
 import { cn, type CornerSide, type Tone } from "@/lib/utils";
 
@@ -178,654 +198,389 @@ function formatDisbursalTime() {
   return `Today · ${now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false })}`;
 }
 
-function gradeBand(cls: string): string {
-  const c = cls.toUpperCase();
-  if (c.includes("LKG") || c.includes("UKG") || c.includes("NURSERY")) {
-    return "Pre-Primary (LKG–UKG)";
-  }
-  const gradeMatch = c.match(/GRADE\s*(\d+)/i);
-  if (gradeMatch) {
-    const grade = Number(gradeMatch[1]);
-    if (grade <= 5) return "Primary (Gr 1–5)";
-    if (grade <= 8) return "Middle (Gr 6–8)";
-    return "Senior (Gr 9–12)";
-  }
-  return "Primary (Gr 1–5)";
-}
-
-const DAILY_CHART_CONFIG = {
-  amount: { label: "Collection", color: "#111111" },
-} satisfies ChartConfig;
-
-const OUTSTANDING_CHART_CONFIG = {
-  amount: { label: "Outstanding", color: "#C7F33C" },
-} satisfies ChartConfig;
-
-const PAYMENT_MODE_COLORS = ["#111111", "#C7F33C", "#E1F2AE"];
-
-function PaymentModeChart({ data }: { data: { label: string; value: number }[] }) {
-  const chartConfig = data.reduce<ChartConfig>((acc, row, index) => {
-    acc[row.label] = {
-      label: row.label,
-      color: PAYMENT_MODE_COLORS[index % PAYMENT_MODE_COLORS.length],
-    };
-    return acc;
-  }, {});
-
+function DashboardPeriodFilter({
+  period,
+  onPeriodChange,
+  customRange,
+  onCustomRangeChange,
+  className,
+}: {
+  period: PaymentPeriod;
+  onPeriodChange: (value: PaymentPeriod) => void;
+  customRange: CustomDateRange;
+  onCustomRangeChange: (value: CustomDateRange) => void;
+  className?: string;
+}) {
   return (
-    <ChartContainer config={chartConfig} className="aspect-auto h-[220px] w-full">
-      <PieChart>
-        <ChartTooltip
-          content={
-            <ChartTooltipContent
-              formatter={(value, name) => [
-                `₹ ${Number(value).toLocaleString("en-IN")}`,
-                String(name),
-              ]}
-            />
-          }
-        />
-        <Pie
-          data={data}
-          dataKey="value"
-          nameKey="label"
-          innerRadius={52}
-          outerRadius={78}
-          paddingAngle={2}
-          strokeWidth={0}
-        >
-          {data.map((row, index) => (
-            <Cell key={row.label} fill={PAYMENT_MODE_COLORS[index % PAYMENT_MODE_COLORS.length]} />
+    <div className={cn("flex w-full flex-col gap-2", className)}>
+      <Select value={period} onValueChange={(value) => onPeriodChange(value as PaymentPeriod)}>
+        <SelectTrigger className="h-10 w-full rounded-full border-[#E5E5E5] bg-white">
+          <SelectValue placeholder="Select period" />
+        </SelectTrigger>
+        <SelectContent>
+          {PAYMENT_PERIOD_OPTIONS.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
           ))}
-        </Pie>
-      </PieChart>
-    </ChartContainer>
-  );
-}
-
-function CategoryCollectionChart({ data }: { data: { label: string; amount: number }[] }) {
-  const chartConfig = {
-    amount: { label: "Collected", color: "#111111" },
-  } satisfies ChartConfig;
-
-  return (
-    <ChartContainer config={chartConfig} className="aspect-auto h-[220px] w-full">
-      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 8, left: 4, bottom: 4 }}>
-        <CartesianGrid horizontal={false} strokeDasharray="4 4" stroke="#E5E5E5" />
-        <XAxis type="number" hide />
-        <YAxis
-          type="category"
-          dataKey="label"
-          tickLine={false}
-          axisLine={false}
-          width={88}
-          tick={{ fontSize: 10, fill: "#525252" }}
-        />
-        <ChartTooltip
-          content={
-            <ChartTooltipContent
-              formatter={(value) => [`₹ ${Number(value).toLocaleString("en-IN")}`, "Collected"]}
-            />
-          }
-        />
-        <Bar dataKey="amount" fill="#111111" radius={[0, 8, 8, 0]} maxBarSize={18} />
-      </BarChart>
-    </ChartContainer>
-  );
-}
-
-function ClassEnrollmentChart({ data }: { data: { label: string; count: number }[] }) {
-  const chartConfig = {
-    count: { label: "Students", color: "#C7F33C" },
-  } satisfies ChartConfig;
-
-  return (
-    <ChartContainer config={chartConfig} className="aspect-auto h-[220px] w-full">
-      <BarChart data={data} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
-        <CartesianGrid vertical={false} strokeDasharray="4 4" stroke="#E5E5E5" />
-        <XAxis
-          dataKey="label"
-          tickLine={false}
-          axisLine={false}
-          tick={{ fontSize: 9, fill: "#737373" }}
-          interval={0}
-          angle={-18}
-          textAnchor="end"
-          height={52}
-        />
-        <YAxis
-          tickLine={false}
-          axisLine={false}
-          allowDecimals={false}
-          tick={{ fontSize: 10, fill: "#737373" }}
-          width={28}
-        />
-        <ChartTooltip
-          content={
-            <ChartTooltipContent formatter={(value) => [`${Number(value)} enrolled`, "Students"]} />
-          }
-        />
-        <Bar dataKey="count" fill="#C7F33C" radius={[8, 8, 4, 4]} maxBarSize={36} />
-      </BarChart>
-    </ChartContainer>
-  );
-}
-
-function InsightCard({
-  label,
-  value,
-  hint,
-  tone = "white",
-}: {
-  label: string;
-  value: string;
-  hint: string;
-  tone?: Tone;
-}) {
-  return (
-    <OrganicCard
-      tone={tone}
-      cornerSide="tr"
-      padded
-      className="flex h-full min-h-[92px] min-w-0 flex-col justify-between p-3 sm:min-h-[108px] sm:!p-4"
-    >
-      <div className="text-[10px] font-semibold uppercase leading-snug tracking-wider text-black/45">
-        {label}
-      </div>
-      <div className="mt-2 font-mono text-[18px] font-semibold leading-tight tracking-tight text-black sm:text-[22px]">
-        {value}
-      </div>
-      <div className="mt-1 text-[10.5px] leading-snug text-black/55 sm:text-[11px]">{hint}</div>
-    </OrganicCard>
-  );
-}
-
-function DailyFeeCollectionChart({
-  data,
-  peakDay,
-}: {
-  data: { day: string; amount: number }[];
-  peakDay: string;
-}) {
-  const weekTotal = data.reduce((sum, row) => sum + row.amount, 0);
-
-  return (
-    <div>
-      <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-        <div className="rounded-2xl bg-[#F4F4F5] px-3 py-2">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-            Week total
-          </div>
-          <div className="font-mono text-[16px] font-semibold text-black">
-            ₹ {weekTotal.toLocaleString("en-IN")}
-          </div>
-        </div>
-        <div className="flex items-center gap-3 text-[10.5px] text-black/55">
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-sm bg-black" /> Regular days
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-sm bg-[#C7F33C]" /> Peak day
-          </span>
-        </div>
-      </div>
-      <ChartContainer config={DAILY_CHART_CONFIG} className="aspect-auto h-[240px] w-full">
-        <BarChart data={data} margin={{ top: 12, right: 8, left: -8, bottom: 0 }}>
-          <defs>
-            <linearGradient id="peakBarGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#C7F33C" />
-              <stop offset="100%" stopColor="#A8D62E" />
-            </linearGradient>
-          </defs>
-          <CartesianGrid vertical={false} strokeDasharray="4 4" stroke="#E5E5E5" />
-          <XAxis
-            dataKey="day"
-            tickLine={false}
-            axisLine={false}
-            tick={{ fontSize: 11, fill: "#737373" }}
-          />
-          <YAxis
-            tickLine={false}
-            axisLine={false}
-            tick={{ fontSize: 10, fill: "#737373" }}
-            tickFormatter={(value) => `₹${Math.round(Number(value) / 1000)}k`}
-            width={44}
-          />
-          <ChartTooltip
-            cursor={{ fill: "rgba(0,0,0,0.04)", radius: 8 }}
-            content={
-              <ChartTooltipContent
-                formatter={(value) => [`₹ ${Number(value).toLocaleString("en-IN")}`, "Collected"]}
-              />
+        </SelectContent>
+      </Select>
+      {period === "custom" && (
+        <div className="grid grid-cols-1 gap-2">
+          <Input
+            type="date"
+            value={customRange.from}
+            onChange={(event) =>
+              onCustomRangeChange({ ...customRange, from: event.target.value })
             }
+            className="h-9 w-full rounded-full border-[#E5E5E5] bg-white"
           />
-          <Bar dataKey="amount" radius={[10, 10, 4, 4]} maxBarSize={52}>
-            {data.map((row) => (
-              <Cell
-                key={row.day}
-                fill={row.day === peakDay ? "url(#peakBarGradient)" : "#111111"}
-              />
-            ))}
-          </Bar>
-        </BarChart>
-      </ChartContainer>
+          <Input
+            type="date"
+            value={customRange.to}
+            onChange={(event) =>
+              onCustomRangeChange({ ...customRange, to: event.target.value })
+            }
+            className="h-9 w-full rounded-full border-[#E5E5E5] bg-white"
+          />
+        </div>
+      )}
     </div>
   );
 }
 
-function OutstandingFeesChart({
-  data,
-}: {
-  data: { label: string; shortLabel: string; amount: number }[];
-}) {
-  const maxAmount = Math.max(...data.map((row) => row.amount), 1);
+function dashboardValueSize(value: string): string {
+  if (value.length > 13) return "text-[13px] sm:text-[15px]";
+  if (value.length > 10) return "text-[15px] sm:text-[17px]";
+  return "text-[17px] sm:text-[20px]";
+}
 
+function DashboardStatGrid({
+  children,
+  className,
+  columns = 2,
+}: {
+  children: ReactNode;
+  className?: string;
+  columns?: 2 | 4;
+}) {
   return (
-    <ChartContainer config={OUTSTANDING_CHART_CONFIG} className="aspect-auto h-[280px] w-full">
-      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 12, left: 4, bottom: 4 }}>
-        <CartesianGrid horizontal={false} strokeDasharray="4 4" stroke="#E5E5E5" />
-        <XAxis type="number" hide domain={[0, maxAmount * 1.15]} />
-        <YAxis
-          type="category"
-          dataKey="shortLabel"
-          tickLine={false}
-          axisLine={false}
-          width={72}
-          tick={{ fontSize: 11, fill: "#525252" }}
-        />
-        <ChartTooltip
-          cursor={{ fill: "rgba(199,243,60,0.12)" }}
-          content={
-            <ChartTooltipContent
-              labelFormatter={(_, payload) => payload?.[0]?.payload?.label ?? "Grade band"}
-              formatter={(value) => [`₹ ${Number(value).toLocaleString("en-IN")}`, "Outstanding"]}
-            />
-          }
-        />
-        <Bar dataKey="amount" fill="#C7F33C" radius={[0, 10, 10, 0]} maxBarSize={22} />
-      </BarChart>
-    </ChartContainer>
+    <div
+      className={cn(
+        "grid auto-rows-fr grid-cols-2 gap-2 sm:gap-3",
+        columns === 4 && "lg:grid-cols-4",
+        className,
+      )}
+    >
+      {children}
+    </div>
   );
 }
 
-function KpiCard({
+function DashboardSectionHeading({
+  title,
+  className,
+}: {
+  title: string;
+  className?: string;
+}) {
+  return (
+    <h2
+      className={cn(
+        "text-[11px] font-semibold uppercase tracking-wider text-black/55 sm:text-[12px]",
+        className,
+      )}
+    >
+      {title}
+    </h2>
+  );
+}
+
+function DashboardMetricsBand({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return <div className={cn("space-y-2 sm:space-y-3", className)}>{children}</div>;
+}
+
+function DashboardStatCard({
   label,
   value,
-  delta,
-  positive = true,
   tone = "white",
+  className,
 }: {
   label: string;
   value: string;
-  delta: string;
-  positive?: boolean;
   tone?: Tone;
+  className?: string;
 }) {
-  const Icon = positive ? TrendingUp : TrendingDown;
-  const isLime = tone === "lime";
-  const isBlack = tone === "black";
-  const labelClass = isLime || isBlack ? "" : "text-black/45";
-  const deltaColor = isLime
-    ? "text-black"
-    : isBlack
-      ? "text-[#C7F33C]"
-      : positive
-        ? "text-black"
-        : "text-[#B91C1C]";
   return (
     <OrganicCard
       tone={tone}
       cornerSide="tr"
-      arrow
-      padded
-      className="h-full min-h-[92px] min-w-0 w-full p-2.5 sm:min-h-[116px] sm:p-6 [&>button]:right-2 [&>button]:top-2 [&>button]:h-8 [&>button]:w-8 sm:[&>button]:right-4 sm:[&>button]:top-4 sm:[&>button]:h-10 sm:[&>button]:w-10 [&_.relative]:grid [&_.relative]:h-full [&_.relative]:min-h-[72px] [&_.relative]:min-w-0 [&_.relative]:grid-rows-[auto_minmax(0,1fr)_auto] [&_.relative]:gap-1 [&_.relative]:pr-9 sm:[&_.relative]:min-h-[88px] sm:[&_.relative]:gap-1.5 sm:[&_.relative]:pr-14"
+      padded={false}
+      className={cn(
+        "flex h-[92px] w-full min-w-0 flex-col justify-start p-3 sm:h-[100px] sm:p-4 lg:h-[104px]",
+        className,
+      )}
     >
-      <div
-        className={`text-[9px] font-medium uppercase leading-snug tracking-wide sm:text-[11px] ${labelClass}`}
-      >
+      <div className="text-[10px] font-semibold uppercase leading-snug tracking-wider text-black/45">
         {label}
       </div>
-      <div className="flex items-end break-words font-mono text-[15px] font-semibold leading-tight tracking-tight sm:text-[22px] md:text-[28px]">
-        {value}
-      </div>
       <div
-        className={`flex items-start gap-1 text-[9.5px] leading-snug sm:text-[11.5px] ${deltaColor}`}
+        className={cn(
+          "mt-auto min-w-0 font-mono font-semibold leading-none tracking-tight text-black tabular-nums",
+          dashboardValueSize(value),
+        )}
       >
-        <Icon className="mt-px h-3 w-3 shrink-0" />
-        <span className="min-w-0 break-words">{delta}</span>
+        <span className="block truncate">{value}</span>
       </div>
     </OrganicCard>
   );
 }
 
 export function SchoolDashboard() {
-  const { students, staff, payments, academicYear } = useTenantStore();
+  const navigate = useNavigate();
+  const {
+    students,
+    staff,
+    payments,
+    dashboardTodos,
+    setDashboardTodos,
+    dashboardNote,
+    setDashboardNote,
+  } = useTenantStore();
+
+  const [period, setPeriod] = useState<PaymentPeriod>("this_month");
+  const [customRange, setCustomRange] = useState<CustomDateRange>({ from: "", to: "" });
+
   const totalDue = students.reduce((acc, s) => acc + s.due, 0);
-  const monthlyIncome = payments.reduce((acc, p) => acc + p.amount, 0);
-  const clearedStudents = students.filter((s) => s.due === 0).length;
   const overdueStudents = students.filter((s) => s.due > 0);
-  const collectionRate =
-    students.length > 0 ? Math.round((clearedStudents / students.length) * 100) : 0;
-  const avgReceipt = payments.length > 0 ? Math.round(monthlyIncome / payments.length) : 0;
 
-  const dailyCollection = useMemo(() => {
-    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-    const baseline = [42000, 58000, 74000, 96000, 88000, 51000, 33000];
-    const receiptPulse = Math.round(monthlyIncome / Math.max(payments.length, 1));
-
-    return days.map((day, index) => ({
-      day,
-      amount: baseline[index] + (index === 3 ? receiptPulse : Math.round(receiptPulse * 0.15)),
-    }));
-  }, [monthlyIncome, payments.length]);
-
-  const peakDay = useMemo(
-    () =>
-      dailyCollection.reduce(
-        (best, row) => (row.amount > best.amount ? row : best),
-        dailyCollection[0],
-      ).day,
-    [dailyCollection],
+  const filteredPayments = useMemo(
+    () => filterPaymentsByPeriod(payments, period, customRange),
+    [payments, period, customRange],
   );
 
-  const outstandingBands = useMemo(() => {
-    const bandOrder = [
-      "Pre-Primary (LKG–UKG)",
-      "Primary (Gr 1–5)",
-      "Middle (Gr 6–8)",
-      "Senior (Gr 9–12)",
-    ] as const;
-    const totals = new Map<string, number>(bandOrder.map((label) => [label, 0]));
+  const periodIncome = useMemo(
+    () => filteredPayments.reduce((acc, p) => acc + p.amount, 0),
+    [filteredPayments],
+  );
 
-    for (const student of students) {
-      const band = gradeBand(student.cls);
-      totals.set(band, (totals.get(band) ?? 0) + student.due);
-    }
+  const inHand = useMemo(() => cashOnHand(payments), [payments]);
+  const inBank = useMemo(() => bankBalance(payments), [payments]);
+  const totalBalance = inHand + inBank;
+  const expenseTotal = totalOperatingExpense();
+  const salaryOutstanding = salaryPayable();
 
-    return bandOrder.map((label) => ({
-      label,
-      shortLabel: label.split("(")[0]?.trim() ?? label,
-      amount: totals.get(label) ?? 0,
-    }));
-  }, [students]);
-
-  const paymentModes = useMemo(() => {
-    const totals = new Map<string, number>();
-    for (const payment of payments) {
-      totals.set(payment.mode, (totals.get(payment.mode) ?? 0) + payment.amount);
-    }
-    return Array.from(totals.entries()).map(([label, value]) => ({ label, value }));
-  }, [payments]);
-
-  const feeCategories = useMemo(() => {
-    const totals = new Map<string, number>();
-    for (const payment of payments) {
-      totals.set(payment.cat, (totals.get(payment.cat) ?? 0) + payment.amount);
-    }
-    return Array.from(totals.entries())
-      .map(([label, amount]) => ({ label, amount }))
-      .sort((a, b) => b.amount - a.amount);
-  }, [payments]);
-
-  const classEnrollment = useMemo(() => {
-    const totals = new Map<string, number>();
-    for (const student of students) {
-      totals.set(student.cls, (totals.get(student.cls) ?? 0) + 1);
-    }
-    return Array.from(totals.entries())
-      .map(([label, count]) => ({ label, count }))
-      .sort((a, b) => b.count - a.count);
-  }, [students]);
-
-  const recentReceipts = useMemo(() => payments.slice(0, 5), [payments]);
+  const recentReceipts = useMemo(() => filteredPayments.slice(0, 5), [filteredPayments]);
 
   const overdueWatchlist = useMemo(
     () => [...overdueStudents].sort((a, b) => b.due - a.due).slice(0, 5),
     [overdueStudents],
   );
 
+  const updateTodo = (index: number, value: string) => {
+    setDashboardTodos((current) => {
+      const next = [...current];
+      next[index] = value;
+      return next;
+    });
+  };
+
   return (
     <div className="space-y-4 sm:space-y-6">
-
-      <div className="grid min-w-0 auto-rows-fr grid-cols-2 gap-2 sm:gap-3 md:gap-4 xl:grid-cols-4">
-        <div className="min-w-0 h-full">
-          <KpiCard
-            label="Total Students"
-            value={students.length.toLocaleString("en-IN")}
-            delta="live ledger"
-          />
-        </div>
-        <div className="min-w-0 h-full">
-          <KpiCard
-            label="Total Staff"
-            value={staff.length.toString()}
-            delta={`${staff.filter((s) => s.active).length} active`}
-          />
-        </div>
-        <div className="min-w-0 h-full">
-          <KpiCard
-            label="Receipts Captured"
-            value={`₹ ${monthlyIncome.toLocaleString("en-IN")}`}
-            delta={`${payments.length} receipts`}
-          />
-        </div>
-        <div className="min-w-0 h-full">
-          <KpiCard
-            label="Outstanding Dues"
-            value={`₹ ${totalDue.toLocaleString("en-IN")}`}
-            delta="across all classes"
-            positive={false}
-            tone="lime"
-          />
-        </div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between lg:hidden">
+        <h1 className="text-[28px] font-semibold leading-none tracking-tight text-black sm:text-title">
+          Home
+        </h1>
+        <DashboardPeriodFilter
+          period={period}
+          onPeriodChange={setPeriod}
+          customRange={customRange}
+          onCustomRangeChange={setCustomRange}
+          className="sm:max-w-[220px]"
+        />
       </div>
 
-      <div className="grid auto-rows-fr grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4 md:gap-4">
-        <div className="min-w-0 h-full">
-          <InsightCard
-            label="Collection Rate"
-            value={`${collectionRate}%`}
-            hint={`${clearedStudents} of ${students.length} accounts cleared`}
-            tone="lime"
-          />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start lg:gap-5">
+        <div className="min-w-0 space-y-4 sm:space-y-5">
+          <h1 className="hidden text-[28px] font-semibold leading-none tracking-tight text-black lg:block sm:text-title">
+            Home
+          </h1>
+
+          <DashboardMetricsBand>
+            <DashboardStatGrid columns={4} className="gap-x-2 gap-y-2 sm:gap-3">
+              <DashboardSectionHeading title="Our Strength" className="col-span-1 lg:col-span-2" />
+              <DashboardSectionHeading
+                title="Our Financial Overview"
+                className="col-span-1 lg:col-span-2"
+              />
+            </DashboardStatGrid>
+            <DashboardStatGrid columns={4}>
+              <DashboardStatCard
+                label="Total Students"
+                value={students.length.toLocaleString("en-IN")}
+              />
+              <DashboardStatCard label="Total Staff" value={staff.length.toString()} />
+              <DashboardStatCard label="Income" value={formatInr(periodIncome)} tone="lime" />
+              <DashboardStatCard label="Expense" value={formatInr(expenseTotal)} />
+            </DashboardStatGrid>
+          </DashboardMetricsBand>
+
+          <DashboardMetricsBand>
+            <DashboardStatGrid columns={4} className="gap-x-2 gap-y-2 sm:gap-3">
+              <DashboardSectionHeading title="Our Outstandings" className="col-span-1 lg:col-span-2" />
+              <DashboardSectionHeading title="Current balance" className="col-span-1 lg:col-span-2" />
+            </DashboardStatGrid>
+            <DashboardStatGrid columns={4}>
+              <DashboardStatCard label="Fees out" value={formatInr(totalDue)} />
+              <DashboardStatCard label="Salary out" value={formatInr(salaryOutstanding)} />
+              <DashboardStatCard label="In hand" value={formatInr(inHand)} />
+              <DashboardStatCard label="In bank" value={formatInr(inBank)} />
+              <DashboardStatCard
+                label="Total"
+                value={formatInr(totalBalance)}
+                tone="lime"
+                className="col-span-2 lg:col-start-3"
+              />
+            </DashboardStatGrid>
+          </DashboardMetricsBand>
         </div>
-        <div className="min-w-0 h-full">
-          <InsightCard
-            label="Overdue Accounts"
-            value={overdueStudents.length.toString()}
-            hint={`₹ ${totalDue.toLocaleString("en-IN")} pending recovery`}
-          />
-        </div>
-        <div className="min-w-0 h-full">
-          <InsightCard
-            label="Average Receipt"
-            value={`₹ ${avgReceipt.toLocaleString("en-IN")}`}
-            hint="Mean value per captured receipt"
-          />
-        </div>
-        <div className="min-w-0 h-full">
-          <InsightCard
-            label="Active Staff Ratio"
-            value={`1:${students.length > 0 ? Math.max(1, Math.round(students.length / Math.max(staff.filter((s) => s.active).length, 1))) : 0}`}
-            hint={`${staff.filter((s) => s.active).length} active faculty & admin`}
-          />
-        </div>
-      </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <OrganicCard tone="white" cornerSide="tr" arrow padded className="lg:col-span-2">
-          <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="text-title">Daily Fee Collection</div>
-              <div className="mt-1 text-[12.5px] text-black/55">Last 7 working days</div>
-            </div>
-            <div className="rounded-full bg-[#F4F4F5] px-3 py-1 font-mono text-[10.5px] text-black/55">
-              Peak · {peakDay}
-            </div>
+        <aside className="flex w-full flex-col gap-3 lg:sticky lg:top-6 lg:w-[280px] lg:shrink-0">
+          <div className="hidden lg:block">
+            <DashboardPeriodFilter
+              period={period}
+              onPeriodChange={setPeriod}
+              customRange={customRange}
+              onCustomRangeChange={setCustomRange}
+            />
           </div>
-          <DailyFeeCollectionChart data={dailyCollection} peakDay={peakDay} />
-        </OrganicCard>
 
-        <OrganicCard tone="white" cornerSide="bl" arrow padded>
-          <div className="text-title">Outstanding Fees</div>
-          <div className="mt-1 text-[12.5px] text-black/55">By academic grade band</div>
-          <div className="mt-3 rounded-2xl bg-[#F4F4F5] px-3 py-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-              Total outstanding
-            </div>
-            <div className="font-mono text-[18px] font-semibold text-black">
-              ₹ {totalDue.toLocaleString("en-IN")}
-            </div>
-          </div>
-          <div className="mt-4">
-            <OutstandingFeesChart data={outstandingBands} />
-          </div>
-          <div className="mt-2 space-y-2">
-            {outstandingBands.map((row) => (
-              <div
-                key={row.label}
-                className="flex items-center justify-between text-[11.5px] text-black/65"
-              >
-                <span>{row.label}</span>
-                <span className="font-mono text-black">₹ {row.amount.toLocaleString("en-IN")}</span>
-              </div>
-            ))}
-          </div>
-        </OrganicCard>
-      </div>
+          <Button
+            type="button"
+            onClick={() => navigate({ to: "/tenant/finance", search: { tab: "receive" } })}
+            className="h-12 w-full rounded-[1.35rem] bg-black text-[14px] font-semibold text-white hover:bg-black/90"
+          >
+            Collect fee
+          </Button>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <OrganicCard tone="white" cornerSide="tr" padded>
-          <div className="text-title">Recent Receipts</div>
-          <div className="mt-1 text-[12.5px] text-black/55">
-            Latest inbound payments · {recentReceipts.length} shown
-          </div>
-          <div className="mt-4 divide-y divide-[#F0F0F0]">
-            {recentReceipts.length === 0 && (
-              <div className="py-6 text-center text-[12px] text-black/55">
-                No receipts logged yet
-              </div>
-            )}
-            {recentReceipts.map((payment) => (
-              <div
-                key={payment.id}
-                className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
-              >
-                <div className="min-w-0">
-                  <div className="truncate text-[13px] font-semibold text-black">
-                    {payment.name}
-                  </div>
-                  <div className="mt-0.5 text-[11px] text-black/55">
-                    {payment.cat} · {payment.mode} · {payment.time}
-                  </div>
-                </div>
-                <div className="shrink-0 text-right">
-                  <div className="font-mono text-[13px] font-semibold text-black">
-                    ₹ {payment.amount.toLocaleString("en-IN")}
-                  </div>
-                  <div className="font-mono text-[10px] text-black/45">{payment.id}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </OrganicCard>
-
-        <OrganicCard tone="white" cornerSide="bl" padded>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="text-title">Overdue Watchlist</div>
-            </div>
-            <span className="rounded-full bg-[#C7F33C] px-2.5 py-1 text-[10px] font-semibold text-black">
-              {overdueStudents.length} overdue
-            </span>
-          </div>
-          <div className="mt-4 space-y-2">
-            {overdueWatchlist.length === 0 && (
-              <div className="rounded-2xl bg-[#F4F4F5] px-4 py-6 text-center text-[12px] text-black/55">
-                All student balances are cleared
-              </div>
-            )}
-            {overdueWatchlist.map((student) => (
-              <div
-                key={student.id}
-                className="flex items-center justify-between gap-3 rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5"
-              >
-                <div className="min-w-0">
-                  <div className="truncate text-[13px] font-semibold text-black">
-                    {student.name}
-                  </div>
-                  <div className="text-[11px] text-black/55">
-                    {student.cls} · {student.id}
-                  </div>
-                </div>
-                <div className="shrink-0 text-right">
-                  <div className="font-mono text-[13px] font-semibold text-black">
-                    ₹ {student.due.toLocaleString("en-IN")}
-                  </div>
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-[#B91C1C]">
-                    Overdue
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </OrganicCard>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <OrganicCard tone="white" cornerSide="tr" padded>
-          <div className="text-title">Payment Mode Mix</div>
-          <div className="mt-1 text-[12.5px] text-black/55">Share of collections by channel</div>
-          <div className="mt-4">
-            <PaymentModeChart data={paymentModes} />
-          </div>
-          <div className="mt-3 space-y-2">
-            {paymentModes.map((row, index) => (
-              <div key={row.label} className="flex items-center justify-between text-[11.5px]">
-                <span className="inline-flex items-center gap-2 text-black/65">
-                  <span
-                    className="h-2 w-2 rounded-sm"
-                    style={{
-                      backgroundColor: PAYMENT_MODE_COLORS[index % PAYMENT_MODE_COLORS.length],
-                    }}
+          <OrganicCard tone="white" cornerSide="tr" padded className="w-full space-y-3">
+            <div className="text-title">To do</div>
+            <div className="space-y-2">
+              {dashboardTodos.map((item, index) => (
+                <div key={index} className="flex items-center gap-2.5">
+                  <span className="w-5 shrink-0 text-right text-[11px] font-semibold tabular-nums text-black/45">
+                    {index + 1}.
+                  </span>
+                  <Input
+                    value={item}
+                    onChange={(event) => updateTodo(index, event.target.value)}
+                    placeholder={`Task ${index + 1}`}
+                    className="h-9 min-w-0 flex-1 rounded-xl border-[#E5E5E5] bg-[#FAFAFA]"
                   />
-                  {row.label}
+                </div>
+              ))}
+            </div>
+          </OrganicCard>
+        </aside>
+      </div>
+
+      <div className="grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_280px] lg:gap-5">
+            <OrganicCard tone="white" cornerSide="bl" padded className="flex h-full flex-col">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-title">Overdue Watchlist</div>
+                </div>
+                <span className="rounded-full bg-[#C7F33C] px-2.5 py-1 text-[10px] font-semibold text-black">
+                  {overdueStudents.length} overdue
                 </span>
-                <span className="font-mono text-black">₹ {row.value.toLocaleString("en-IN")}</span>
               </div>
-            ))}
-          </div>
-        </OrganicCard>
-
-        <OrganicCard tone="white" cornerSide="bl" padded>
-          <div className="text-title">Fee Category Split</div>
-          <div className="mt-1 text-[12.5px] text-black/55">Collections grouped by fee head</div>
-          <div className="mt-4">
-            <CategoryCollectionChart data={feeCategories} />
-          </div>
-        </OrganicCard>
-
-        <OrganicCard tone="white" cornerSide="tr" padded>
-          <div className="text-title">Class Enrollment</div>
-          <div className="mt-1 text-[12.5px] text-black/55">
-            Active students across configured class tiers
-          </div>
-          <div className="mt-4">
-            <ClassEnrollmentChart data={classEnrollment} />
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            {classEnrollment.slice(0, 4).map((row) => (
-              <div key={row.label} className="rounded-2xl bg-[#F4F4F5] px-3 py-2">
-                <div className="truncate text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                  {row.label}
-                </div>
-                <div className="mt-1 font-mono text-[14px] font-semibold text-black">
-                  {row.count}
-                </div>
+              <div className="mt-4 flex-1 space-y-2">
+                {overdueWatchlist.length === 0 && (
+                  <div className="rounded-2xl bg-[#F4F4F5] px-4 py-6 text-center text-[12px] text-black/55">
+                    All student balances are cleared
+                  </div>
+                )}
+                {overdueWatchlist.map((student) => (
+                  <div
+                    key={student.id}
+                    className="flex items-center justify-between gap-3 rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-[13px] font-semibold text-black">
+                        {student.name}
+                      </div>
+                      <div className="text-[11px] text-black/55">
+                        {student.cls} · {student.id}
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className="font-mono text-[13px] font-semibold tabular-nums whitespace-nowrap text-black">
+                        {formatInr(student.due)}
+                      </div>
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-[#B91C1C]">
+                        Overdue
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </OrganicCard>
+            </OrganicCard>
+
+            <OrganicCard tone="white" cornerSide="tr" padded className="flex h-full flex-col">
+              <div className="text-title">Recent Receipts</div>
+              <div className="mt-1 text-[12.5px] text-black/55">
+                Latest inbound payments · {recentReceipts.length} shown
+              </div>
+              <div className="mt-4 flex-1 divide-y divide-[#F0F0F0]">
+                {recentReceipts.length === 0 && (
+                  <div className="py-6 text-center text-[12px] text-black/55">
+                    No receipts logged yet
+                  </div>
+                )}
+                {recentReceipts.map((payment) => (
+                  <div
+                    key={payment.id}
+                    className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-[13px] font-semibold text-black">
+                        {payment.name}
+                      </div>
+                      <div className="mt-0.5 text-[11px] text-black/55">
+                        {payment.cat} · {payment.mode} · {payment.time}
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className="font-mono text-[13px] font-semibold tabular-nums whitespace-nowrap text-black">
+                        {formatInr(payment.amount)}
+                      </div>
+                      <div className="font-mono text-[10px] text-black/45">{payment.id}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </OrganicCard>
+
+            <OrganicCard
+              tone="white"
+              cornerSide="bl"
+              padded
+              className="flex h-full flex-col sm:col-span-2 lg:col-span-1"
+            >
+              <div className="text-title">Note</div>
+              <Textarea
+                value={dashboardNote}
+                onChange={(event) => setDashboardNote(event.target.value)}
+                placeholder="Write a quick note for today..."
+                className="mobile-scrollbar-none mt-3 min-h-[220px] flex-1 resize-none overflow-y-auto rounded-2xl border-[#E5E5E5] bg-[#FAFAFA] text-[13px] sm:min-h-[280px] lg:min-h-0"
+              />
+            </OrganicCard>
       </div>
     </div>
   );
@@ -834,7 +589,7 @@ export function SchoolDashboard() {
 type StatusFilter = "all" | "paid" | "overdue";
 
 const STATUS_TABS: { key: StatusFilter; label: string }[] = [
-  { key: "all", label: "All" },
+  { key: "all", label: "All Students" },
   { key: "paid", label: "Paid" },
   { key: "overdue", label: "Overdue" },
 ];
@@ -849,9 +604,40 @@ const formatPhone = (raw?: string) => {
   return d;
 };
 
-type LedgerViewMode = "grid" | "list";
+type AdmitStudentForm = {
+  name: string;
+  cls: string;
+  guardian: string;
+  due: string;
+  gender: "" | "M" | "F";
+  phone: string;
+  dob: string;
+  email: string;
+  address: string;
+  photoUrl: string;
+};
 
-function studentInitials(name: string) {
+function emptyAdmitForm(cls: string): AdmitStudentForm {
+  return {
+    name: "",
+    cls,
+    guardian: "",
+    due: "",
+    gender: "",
+    phone: "",
+    dob: "",
+    email: "",
+    address: "",
+    photoUrl: "",
+  };
+}
+
+const admitTodayISO = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+function personInitials(name: string) {
   return name
     .split(" ")
     .filter(Boolean)
@@ -861,212 +647,171 @@ function studentInitials(name: string) {
     .toUpperCase();
 }
 
-function LedgerViewToggle({
-  value,
-  onChange,
-}: {
-  value: LedgerViewMode;
-  onChange: (mode: LedgerViewMode) => void;
-}) {
-  return (
-    <div
-      className="inline-flex shrink-0 items-center rounded-full border border-black/10 bg-white p-1"
-      role="group"
-      aria-label="View mode"
-    >
-      <button
-        type="button"
-        onClick={() => onChange("grid")}
-        aria-label="Grid view"
-        aria-pressed={value === "grid"}
-        title="Grid view"
-        className={cn(
-          "grid h-9 w-9 place-items-center rounded-full transition-colors",
-          value === "grid" ? "bg-[#C7F33C] text-black" : "text-black/45 hover:bg-black/5",
-        )}
-      >
-        <LayoutGrid className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        onClick={() => onChange("list")}
-        aria-label="List view"
-        aria-pressed={value === "list"}
-        title="List view"
-        className={cn(
-          "grid h-9 w-9 place-items-center rounded-full transition-colors",
-          value === "list" ? "bg-[#C7F33C] text-black" : "text-black/45 hover:bg-black/5",
-        )}
-      >
-        <List className="h-4 w-4" />
-      </button>
-    </div>
-  );
-}
-
-function StudentLedgerListRow({
-  student,
-  onOpen,
-}: {
-  student: Student;
-  onOpen: () => void;
-}) {
-  const isOverdue = student.due > 0;
-  const digits = phoneDigits(student.phone);
-  const hasPhone = digits.length > 0;
-  const waHref = `https://wa.me/${digits.length === 10 ? "91" : ""}${digits}`;
-
-  return (
-    <li>
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={onOpen}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            onOpen();
-          }
-        }}
-        aria-label={`Open profile for ${student.name}`}
-        className={cn(
-          "group flex cursor-pointer flex-col gap-3 px-4 py-3.5 transition-colors sm:px-6 sm:py-4 md:grid md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.75fr)_auto] md:items-center md:gap-4",
-          isOverdue ? "bg-[#C7F33C]/12 hover:bg-[#C7F33C]/20" : "hover:bg-[#F4F4F5]",
-        )}
-      >
-        <div className="flex min-w-0 items-center gap-3">
-          <div
-            className={cn(
-              "grid h-10 w-10 shrink-0 place-items-center rounded-xl text-[12px] font-semibold",
-              isOverdue ? "bg-black text-[#C7F33C]" : "bg-black text-white",
-            )}
-          >
-            {studentInitials(student.name)}
-          </div>
-          <div className="min-w-0">
-            <div className="truncate text-[14px] font-semibold text-black">{student.name}</div>
-            <div className="mt-0.5 truncate font-mono text-[11px] text-black/55">
-              {student.id} · {student.cls}
-            </div>
-          </div>
-        </div>
-
-        <div className="min-w-0 md:contents">
-          <div className="min-w-0">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/40 md:hidden">
-              Guardian
-            </div>
-            <span
-              className={cn(
-                "mt-0.5 inline-flex max-w-full truncate rounded-full px-2.5 py-1 text-[11px] font-medium md:mt-0",
-                isOverdue ? "bg-black text-[#C7F33C]" : "bg-[#F4F4F5] text-black/75",
-              )}
-            >
-              {student.guardian}
-            </span>
-          </div>
-
-          <div className="min-w-0">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/40 md:hidden">
-              Phone
-            </div>
-            <div className="mt-0.5 font-mono text-[12px] text-black/70 md:mt-0">
-              {hasPhone ? formatPhone(student.phone) : "—"}
-            </div>
-          </div>
-
-          <div className="min-w-0">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/40 md:hidden">
-              Due Balance
-            </div>
-            <div className="mt-0.5 font-mono text-[14px] font-semibold md:mt-0">
-              {student.due === 0 ? (
-                <span className="text-emerald-700">Cleared</span>
-              ) : (
-                <span>₹ {student.due.toLocaleString("en-IN")}</span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between gap-2 md:justify-end">
-          <div className="flex items-center gap-1.5">
-            <ContactAction
-              icon={MessageCircle}
-              label="WhatsApp"
-              accent="emerald"
-              disabled={!hasPhone}
-              onClick={() => {
-                window.open(waHref, "_blank", "noopener,noreferrer");
-                toast.success(`WhatsApp opened for ${student.guardian}`);
-              }}
-            />
-            <ContactAction
-              icon={Phone}
-              label="Call"
-              accent="ink"
-              disabled={!hasPhone}
-              onClick={() => {
-                window.location.href = `tel:${digits}`;
-              }}
-            />
-            <ContactAction
-              icon={MessageSquare}
-              label="SMS"
-              accent="ink"
-              disabled={!hasPhone}
-              onClick={() => {
-                window.location.href = `sms:${digits}`;
-              }}
-            />
-          </div>
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-black/10 bg-white text-black/55 transition-colors group-hover:border-black group-hover:bg-black group-hover:text-white md:h-9 md:w-9">
-            <ArrowUpRight className="h-3.5 w-3.5" />
-          </span>
-        </div>
-      </div>
-    </li>
-  );
-}
-
-function StudentLedgerList({
-  students,
-  onOpen,
-}: {
-  students: Student[];
-  onOpen: (id: string) => void;
-}) {
-  if (students.length === 0) {
+function StudentFeesStatusBadge({ due }: { due: number }) {
+  if (due === 0) {
     return (
-      <OrganicCard tone="white" cornerSide="tr" padded>
-        <div className="py-10 text-center text-[12.5px] text-black/45">
-          No students match the current filters.
-        </div>
-      </OrganicCard>
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[10.5px] font-semibold text-emerald-700">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+        Paid
+      </span>
     );
   }
-
   return (
-    <OrganicCard tone="white" cornerSide="tr" className="overflow-hidden p-0">
-      <div className="hidden border-b border-[#EFEFEF] px-6 py-3 md:grid md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.75fr)_auto] md:gap-4">
-        {["Student", "Guardian", "Phone", "Due Balance", "Actions"].map((label) => (
-          <div
-            key={label}
-            className={cn(
-              "text-[10.5px] font-semibold uppercase tracking-wider text-black/45",
-              label === "Actions" && "text-right",
-            )}
-          >
-            {label}
-          </div>
-        ))}
-      </div>
-      <ul className="divide-y divide-[#F0F0F0]">
-        {students.map((s) => (
-          <StudentLedgerListRow key={s.id} student={s} onOpen={() => onOpen(s.id)} />
-        ))}
-      </ul>
-    </OrganicCard>
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FEE2E2] px-2.5 py-1 text-[10.5px] font-semibold text-[#B91C1C]">
+      <span className="h-1.5 w-1.5 rounded-full bg-[#B91C1C]" />
+      Overdue
+    </span>
+  );
+}
+
+function StudentsDirectoryTable({
+  students,
+  onViewProfile,
+  onEditData,
+}: {
+  students: Student[];
+  onViewProfile: (id: string) => void;
+  onEditData: (id: string) => void;
+}) {
+  return (
+    <div className="mobile-scrollbar-none w-full overflow-x-auto rounded-[2rem] border border-slate-100/80 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_24px_60px_-32px_rgba(0,0,0,0.18)]">
+      <table className="w-full min-w-[720px] table-fixed border-collapse text-left">
+        <colgroup>
+          <col className="w-[30%]" />
+          <col className="w-[14%]" />
+          <col className="w-[28%]" />
+          <col className="w-[28%]" />
+        </colgroup>
+        <thead>
+          <tr>
+            {["Student", "Class", "Guardian & Contact", "Fees Status"].map((header) => (
+              <th
+                key={header}
+                className="border-b border-slate-100 px-4 pb-4 pt-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400 sm:px-6 sm:pt-5"
+              >
+                {header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {students.length === 0 && (
+            <tr>
+              <td colSpan={4} className="px-4 py-10 text-center text-[13px] text-black/55 sm:px-6">
+                No students match the current filters.
+              </td>
+            </tr>
+          )}
+          {students.map((student) => {
+            const digits = phoneDigits(student.phone);
+            const hasPhone = digits.length > 0;
+            const waHref = `https://wa.me/${digits.length === 10 ? "91" : ""}${digits}`;
+            return (
+              <tr
+                key={student.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => onViewProfile(student.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onViewProfile(student.id);
+                  }
+                }}
+                aria-label={`Open profile for ${student.name}`}
+                className="cursor-pointer border-b border-slate-50 transition-colors last:border-0 hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C7F33C]"
+              >
+                <td className="px-4 py-3.5 align-middle sm:px-6">
+                  <div className="flex min-w-0 items-center gap-3">
+                    {student.photoUrl ? (
+                      <img
+                        src={student.photoUrl}
+                        alt=""
+                        className="h-10 w-10 shrink-0 rounded-xl object-cover"
+                      />
+                    ) : (
+                      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-black text-[12px] font-semibold text-white">
+                        {personInitials(student.name)}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <div className="truncate text-[13.5px] font-semibold text-black">
+                        {student.name}
+                      </div>
+                      <div className="mt-0.5 truncate font-mono text-[10.5px] text-black/45">
+                        {student.id}
+                      </div>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-4 py-3.5 align-middle sm:px-6">
+                  <span className="inline-flex max-w-full truncate rounded-full bg-[#E1F2AE] px-2.5 py-1 text-[11px] font-medium text-black">
+                    {student.cls}
+                  </span>
+                </td>
+                <td className="px-4 py-3.5 align-middle sm:px-6">
+                  <div className="min-w-0">
+                    <div className="truncate text-[13px] font-medium text-black">
+                      {student.guardian}
+                    </div>
+                    <div className="mt-0.5 truncate font-mono text-[11px] text-black/50">
+                      {hasPhone ? formatPhone(student.phone) : "—"}
+                    </div>
+                  </div>
+                </td>
+                <td className="px-4 py-3.5 align-middle sm:px-6">
+                  <div className="flex w-full items-center justify-between gap-3">
+                    <div className="flex shrink-0 items-center gap-1">
+                      <ContactAction
+                        icon={MessageCircle}
+                        label="WhatsApp"
+                        accent="emerald"
+                        disabled={!hasPhone}
+                        onClick={() => {
+                          window.open(waHref, "_blank", "noopener,noreferrer");
+                          toast.success(`WhatsApp opened for ${student.guardian}`);
+                        }}
+                      />
+                      <ContactAction
+                        icon={Phone}
+                        label="Call"
+                        accent="ink"
+                        disabled={!hasPhone}
+                        onClick={() => {
+                          window.location.href = `tel:${digits}`;
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEditData(student.id);
+                        }}
+                        aria-label={`Edit data for ${student.name}`}
+                        title="Edit Data"
+                        className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/65 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <ContactAction
+                        icon={MessageSquare}
+                        label="SMS"
+                        accent="ink"
+                        disabled={!hasPhone}
+                        onClick={() => {
+                          window.location.href = `sms:${digits}`;
+                        }}
+                      />
+                    </div>
+                    <StudentFeesStatusBadge due={student.due} />
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -1078,27 +823,52 @@ export function StudentsLedger() {
   const initialEdit = search.edit === "1";
 
   const openStudent = (id: string) => navigate({ to: "/tenant/students", search: { id } });
+  const openStudentEdit = (id: string) =>
+    navigate({ to: "/tenant/students", search: { id, edit: "1" } });
   const closeStudent = () => navigate({ to: "/tenant/students", search: {} });
 
-  const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const defaultClass = classes[0]?.className ?? "";
-  const [form, setForm] = useState({ name: "", cls: defaultClass, guardian: "", due: "" });
+  const [form, setForm] = useState<AdmitStudentForm>(() => emptyAdmitForm(defaultClass));
   const [gradeFilter, setGradeFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [pendingLedgerAction, setPendingLedgerAction] = useState<"pdf" | "csv" | "import" | null>(
-    null,
-  );
-  const [actionsOpen, setActionsOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<LedgerViewMode>("grid");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const admitPhotoRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!defaultClass) return;
     setForm((prev) =>
-      classes.some((c) => c.className === prev.cls) ? prev : { ...prev, cls: defaultClass },
+      classes.some((c) => c.className === prev.cls)
+        ? prev
+        : { ...prev, cls: defaultClass },
     );
   }, [classes, defaultClass]);
+
+  const openAdmitDialog = () => {
+    setForm(emptyAdmitForm(defaultClass));
+    setOpen(true);
+  };
+
+  const handleAdmitPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose a JPG, PNG, or WebP image");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Image must be 2 MB or smaller");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result ?? "");
+      if (dataUrl) setForm((prev) => ({ ...prev, photoUrl: dataUrl }));
+    };
+    reader.onerror = () => toast.error("Could not read the selected image");
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
 
   const activeStudent = useMemo(
     () =>
@@ -1112,28 +882,22 @@ export function StudentsLedger() {
   );
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
     return students
       .filter((s) => gradeFilter === "all" || s.cls.startsWith(gradeFilter))
       .filter((s) =>
         statusFilter === "all" ? true : statusFilter === "paid" ? s.due === 0 : s.due > 0,
-      )
-      .filter(
-        (s) =>
-          !q ||
-          s.name.toLowerCase().includes(q) ||
-          s.id.toLowerCase().includes(q) ||
-          s.guardian.toLowerCase().includes(q),
       );
-  }, [students, query, gradeFilter, statusFilter]);
+  }, [students, gradeFilter, statusFilter]);
 
-  const counts = useMemo(
+  const analytics = useMemo(
     () => ({
-      total: filtered.length,
-      male: filtered.filter((s) => s.gender === "M").length,
-      female: filtered.filter((s) => s.gender === "F").length,
+      paid: students.filter((s) => s.due === 0).length,
+      overdue: students.filter((s) => s.due > 0).length,
+      total: students.length,
+      male: students.filter((s) => s.gender === "M").length,
+      female: students.filter((s) => s.gender === "F").length,
     }),
-    [filtered],
+    [students],
   );
 
   const handleAdmit = (e: React.FormEvent) => {
@@ -1149,10 +913,16 @@ export function StudentsLedger() {
       cls: form.cls,
       guardian: form.guardian.trim(),
       due: Number(form.due) || 0,
+      gender: form.gender || undefined,
+      phone: form.phone.trim() || undefined,
+      dob: form.dob.trim() || undefined,
+      email: form.email.trim() || undefined,
+      address: form.address.trim() || undefined,
+      photoUrl: form.photoUrl || undefined,
     };
     setStudents((prev) => [newStu, ...prev]);
     toast.success(`${newStu.name} admitted`, { description: `${newStu.id} · ${newStu.cls}` });
-    setForm({ name: "", cls: defaultClass, guardian: "", due: "" });
+    setForm(emptyAdmitForm(defaultClass));
     setOpen(false);
   };
 
@@ -1240,8 +1010,10 @@ export function StudentsLedger() {
     const contextLabel = [
       gradeFilter === "all" ? "All Grades" : gradeFilter,
       statusFilter === "all"
-        ? "All Statuses"
-        : statusFilter[0].toUpperCase() + statusFilter.slice(1),
+        ? "All Students"
+        : statusFilter === "paid"
+          ? "Paid"
+          : "Overdue",
     ].join(" · ");
     const rowsHtml = filtered
       .map(
@@ -1251,6 +1023,7 @@ export function StudentsLedger() {
           <td>${s.cls}</td>
           <td>${s.guardian}</td>
           <td>${s.phone ?? ""}</td>
+          <td>${s.due === 0 ? "Paid" : "Overdue"}</td>
           <td style="text-align:right">${s.due === 0 ? "Cleared" : "₹ " + s.due.toLocaleString("en-IN")}</td>
         </tr>`,
       )
@@ -1265,11 +1038,13 @@ export function StudentsLedger() {
         th, td { padding: 8px 10px; border-bottom: 1px solid #E5E5E5; text-align: left; }
         th { font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: #888; }
         tbody tr:nth-child(odd) { background: #FAFAFA; }
+        .paid { color: #047857; font-weight: 600; }
+        .overdue { color: #B91C1C; font-weight: 600; }
       </style></head><body>
-        <h1>Silver Hills Global · Students Ledger</h1>
+        <h1>Silver Hills Global · Students Directory</h1>
         <div class="meta">${contextLabel} · ${filtered.length} students · printed ${stampedAt}</div>
         <table>
-          <thead><tr><th>ID</th><th>Student</th><th>Class</th><th>Guardian</th><th>Phone</th><th style="text-align:right">Balance</th></tr></thead>
+          <thead><tr><th>ID</th><th>Student</th><th>Class</th><th>Guardian</th><th>Phone</th><th>Status</th><th style="text-align:right">Balance</th></tr></thead>
           <tbody>${rowsHtml}</tbody>
         </table>
       </body></html>`);
@@ -1278,33 +1053,6 @@ export function StudentsLedger() {
     setTimeout(() => win.print(), 100);
     toast.success("Print preview opened", { description: "Save as PDF from your browser dialog" });
   };
-
-  const confirmLedgerAction = () => {
-    if (!pendingLedgerAction) return;
-    if (pendingLedgerAction === "pdf") downloadPdf();
-    else if (pendingLedgerAction === "csv") exportCsv();
-    else handleImportClick();
-    setPendingLedgerAction(null);
-  };
-
-  const ledgerActionCopy = {
-    pdf: {
-      title: "Download PDF",
-      description: `Generate a print-ready PDF for ${filtered.length} student${filtered.length === 1 ? "" : "s"} matching the current filters?`,
-      confirm: "Download PDF",
-    },
-    csv: {
-      title: "Export CSV",
-      description: `Export ${filtered.length} visible student${filtered.length === 1 ? "" : "s"} to a CSV file?`,
-      confirm: "Export CSV",
-    },
-    import: {
-      title: "Import CSV",
-      description:
-        "Import students from a CSV file? New records will be appended to the active tenant ledger.",
-      confirm: "Choose File",
-    },
-  } as const;
 
   if (activeStudent) {
     return (
@@ -1316,179 +1064,124 @@ export function StudentsLedger() {
     );
   }
 
-  const limeBtn =
-    "flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-[#C7F33C] px-4 py-2 text-[12.5px] font-semibold text-black shadow-[0_8px_24px_-12px_rgba(199,243,60,0.6)] transition-colors hover:brightness-95";
-
-  const statusTabs = (fill = false) => (
-    <div
-      className={
-        fill
-          ? "flex min-w-0 flex-1 items-center rounded-full border border-black/10 bg-white p-1"
-          : "inline-flex min-w-max items-center rounded-full border border-black/10 bg-white p-1"
-      }
-    >
-      {STATUS_TABS.map((t) => {
-        const active = statusFilter === t.key;
-        return (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setStatusFilter(t.key)}
-            className={`min-h-9 rounded-full py-1.5 font-semibold transition-colors ${
-              fill
-                ? "min-w-0 flex-1 px-2 text-[11px]"
-                : "px-3 text-[11.5px] sm:px-3.5 sm:text-[12px]"
-            } ${active ? "bg-[#C7F33C] text-black" : "text-black/55 hover:bg-black/5"}`}
-          >
-            {t.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-
-  const gradeFilterControl = (compact = false) => (
-    <div className={compact ? "shrink-0" : "flex shrink-0 items-center gap-1.5"}>
-      <Select value={gradeFilter} onValueChange={setGradeFilter}>
-        <SelectTrigger
-          className={
-            compact
-              ? "h-10 w-[6.75rem] rounded-full border-black/10 bg-white px-2.5 text-[11px] font-medium text-black focus:ring-[#C7F33C]"
-              : "h-10 w-[7.5rem] rounded-full border-black/10 bg-white text-[12px] font-medium text-black focus:ring-[#C7F33C] sm:h-11 sm:w-[160px] sm:text-[12.5px] lg:h-10"
-          }
-        >
-          <SelectValue placeholder="All Grades" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All Grades</SelectItem>
-          {grades.map((g) => (
-            <SelectItem key={g} value={g}>
-              {g}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
-
-  const ledgerActions = [
-    {
-      id: "admit",
-      label: "Admit Student",
-      icon: Plus,
-      onSelect: () => {
-        setActionsOpen(false);
-        setOpen(true);
-      },
-    },
-    {
-      id: "pdf",
-      label: "Download PDF",
-      icon: Printer,
-      onSelect: () => {
-        setActionsOpen(false);
-        setPendingLedgerAction("pdf");
-      },
-    },
-    {
-      id: "csv",
-      label: "Export CSV",
-      icon: Download,
-      onSelect: () => {
-        setActionsOpen(false);
-        setPendingLedgerAction("csv");
-      },
-    },
-    {
-      id: "import",
-      label: "Import CSV",
-      icon: Upload,
-      onSelect: () => {
-        setActionsOpen(false);
-        setPendingLedgerAction("import");
-      },
-    },
-  ] as const;
+  const outlineBtn =
+    "inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-4 text-[12.5px] font-semibold text-black transition-colors hover:border-black/20 hover:bg-[#F4F4F5]";
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <OrganicCard tone="white" cornerSide="tr" className="space-y-3 p-3.5 sm:p-4">
-        <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <OrganicCard tone="white" cornerSide="tr" padded className="flex min-h-[108px] flex-col justify-between">
+          <div className="flex items-start justify-between gap-2">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+              Paid
+            </div>
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+          </div>
+          <div className="font-mono text-[28px] font-semibold leading-none tracking-tight text-black sm:text-[32px]">
+            {analytics.paid}
+          </div>
+        </OrganicCard>
+
+        <OrganicCard tone="white" cornerSide="bl" padded className="flex min-h-[108px] flex-col justify-between">
+          <div className="flex items-start justify-between gap-2">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+              Overdue
+            </div>
+            <AlertTriangle className="h-4 w-4 shrink-0 text-[#B91C1C]" />
+          </div>
+          <div className="font-mono text-[28px] font-semibold leading-none tracking-tight text-black sm:text-[32px]">
+            {analytics.overdue}
+          </div>
+        </OrganicCard>
+
+        <OrganicCard
+          tone="limePale"
+          cornerSide="tr"
+          padded
+          className="flex min-h-[108px] flex-col justify-between"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/55">
+              Total Students
+            </div>
+            <Users className="h-4 w-4 shrink-0 text-black/40" />
+          </div>
+          <div>
+            <div className="font-mono text-[28px] font-semibold leading-none tracking-tight text-black sm:text-[32px]">
+              {analytics.total}
+            </div>
+            <div className="mt-1.5 font-mono text-[11px] text-black/55">
+              {analytics.male}M · {analytics.female}F
+            </div>
+          </div>
+        </OrganicCard>
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-[28px] font-semibold leading-none tracking-tight text-black sm:text-title">
+          Students Directory
+        </h1>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className={outlineBtn}>
+                <Filter className="h-3.5 w-3.5" />
+                Filter
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 rounded-2xl border-[#E5E5E5] p-2">
+              <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                Grade
+              </DropdownMenuLabel>
+              <DropdownMenuRadioGroup value={gradeFilter} onValueChange={setGradeFilter}>
+                <DropdownMenuRadioItem value="all" className="rounded-xl text-[13px]">
+                  All grades
+                </DropdownMenuRadioItem>
+                {grades.map((g) => (
+                  <DropdownMenuRadioItem key={g} value={g} className="rounded-xl text-[13px]">
+                    {g}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+              <DropdownMenuSeparator className="my-2" />
+              <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                Fees Status
+              </DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={statusFilter}
+                onValueChange={(v) => setStatusFilter(v as StatusFilter)}
+              >
+                {STATUS_TABS.map((t) => (
+                  <DropdownMenuRadioItem key={t.key} value={t.key} className="rounded-xl text-[13px]">
+                    {t.label}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <button type="button" onClick={downloadPdf} className={outlineBtn}>
+            <Printer className="h-3.5 w-3.5" />
+            Download PDF
+          </button>
+          <button type="button" onClick={exportCsv} className={outlineBtn}>
+            <Download className="h-3.5 w-3.5" />
+            Export CSV
+          </button>
+          <button type="button" onClick={handleImportClick} className={outlineBtn}>
+            <Upload className="h-3.5 w-3.5" />
+            Import CSV
+          </button>
           <button
             type="button"
-            onClick={() => setActionsOpen(true)}
-            className="flex w-full items-center gap-3 rounded-[1.35rem] border border-[#E5E5E5] bg-white p-3 text-left shadow-[0_10px_28px_-24px_rgba(0,0,0,0.35)] transition-colors hover:bg-[#FAFAFA] lg:hidden"
+            onClick={openAdmitDialog}
+            className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-black px-4 text-[12.5px] font-semibold text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)] transition-colors hover:bg-black/85"
           >
-            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-black text-white">
-              <Plus className="h-5 w-5" strokeWidth={2} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                Ledger Actions
-              </div>
-              <div className="truncate text-[15px] font-semibold text-black">
-                Admit, export, or import
-              </div>
-            </div>
-            <ChevronDown className="h-5 w-5 shrink-0 text-black/45" />
+            <Plus className="h-3.5 w-3.5" />
+            Admit Student
           </button>
-
-          <div className="hidden gap-2 lg:flex lg:flex-wrap lg:items-center">
-            {ledgerActions.map((action) => {
-              const Icon = action.icon;
-              return (
-                <button
-                  key={action.id}
-                  onClick={action.onSelect}
-                  className={`${limeBtn} w-auto`}
-                  title={action.label}
-                >
-                  <Icon className="h-3.5 w-3.5" /> {action.label.replace(" Student", "")}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="mobile-scrollbar-none hidden overflow-x-auto lg:block">{statusTabs()}</div>
         </div>
-
-        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 lg:hidden">
-          {statusTabs(true)}
-          {gradeFilterControl(true)}
-          <LedgerViewToggle value={viewMode} onChange={setViewMode} />
-        </div>
-
-        <div className="grid gap-2 lg:grid-cols-[auto_auto_minmax(260px,1fr)_auto] lg:items-center">
-          <div className="hidden lg:block">{gradeFilterControl()}</div>
-
-          <span className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-full bg-[#E1F2AE] px-3 py-1.5 text-[12px] font-semibold text-black lg:min-h-10 lg:w-auto lg:justify-start">
-            <span className="font-mono">{counts.total}</span>
-            Total Students
-            <span className="font-mono text-black/65">
-              ({counts.male}M | {counts.female}F)
-            </span>
-          </span>
-
-          <div className="flex min-h-11 items-center gap-2 rounded-full border border-[#E5E5E5] bg-white px-3.5 shadow-[0_10px_28px_-24px_rgba(0,0,0,0.35)]">
-            <Search className="h-3.5 w-3.5 shrink-0 text-black/40" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by name, ID, or guardian…"
-              className="min-w-0 flex-1 bg-transparent text-[13px] text-black outline-none placeholder:text-black/35"
-            />
-            {query && (
-              <span className="shrink-0 font-mono text-[10px] text-black/45">
-                {filtered.length} match
-              </span>
-            )}
-          </div>
-
-          <div className="hidden lg:block">
-            <LedgerViewToggle value={viewMode} onChange={setViewMode} />
-          </div>
-        </div>
-      </OrganicCard>
+      </div>
 
       <input
         ref={fileInputRef}
@@ -1498,168 +1191,14 @@ export function StudentsLedger() {
         onChange={handleImport}
       />
 
-      <Sheet open={actionsOpen} onOpenChange={setActionsOpen}>
-        <SheetContent
-          side="bottom"
-          className="max-h-[85dvh] rounded-t-[1.75rem] border-0 bg-[#0F1115] p-0 pb-[calc(1rem+env(safe-area-inset-bottom))] lg:hidden [&>button]:hidden"
-        >
-          <div className="flex justify-center pt-3">
-            <div className="h-1 w-10 rounded-full bg-white/20" />
-          </div>
-          <SheetHeader className="space-y-1 px-5 pb-4 pt-2 text-left">
-            <SheetTitle className="text-[22px] font-semibold text-white">Select Action</SheetTitle>
-            <SheetDescription className="text-[13px] text-white/55">
-              Admit students or manage ledger exports
-            </SheetDescription>
-          </SheetHeader>
-          <div className="mobile-scrollbar-none max-h-[min(52dvh,420px)] space-y-2 overflow-y-auto px-4 pb-2">
-            {ledgerActions.map((action) => {
-              const Icon = action.icon;
-              return (
-                <button
-                  key={action.id}
-                  type="button"
-                  onClick={action.onSelect}
-                  className="flex w-full items-center gap-3 rounded-2xl bg-white/[0.06] px-4 py-3.5 text-left text-white transition-colors hover:bg-white/[0.1]"
-                >
-                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/10">
-                    <Icon className="h-[18px] w-[18px]" strokeWidth={2} />
-                  </div>
-                  <span className="min-w-0 flex-1 text-[15px] font-medium">{action.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      {viewMode === "grid" ? (
-      <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {filtered.map((s, i) => {
-          const isOverdue = s.due > 0;
-          const tone: Tone = isOverdue ? "lime" : "white";
-          const cornerSide: CornerSide = i % 2 === 0 ? "tr" : "bl";
-          const digits = phoneDigits(s.phone);
-          const hasPhone = digits.length > 0;
-          const waHref = `https://wa.me/${digits.length === 10 ? "91" : ""}${digits}`;
-          const openProfile = () => openStudent(s.id);
-          return (
-            <OrganicCard
-              key={s.id}
-              tone={tone}
-              cornerSide={cornerSide}
-              padded
-              arrow
-              onArrowClick={openProfile}
-              arrowAriaLabel={`View profile for ${s.name}`}
-              role="button"
-              tabIndex={0}
-              aria-label={`Open profile for ${s.name}`}
-              onClick={openProfile}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  openProfile();
-                }
-              }}
-              className="flex cursor-pointer flex-col gap-3 transition-transform duration-150 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/60 focus-visible:ring-offset-2"
-            >
-              <div>
-                <div className="text-[15px] font-semibold leading-tight">{s.name}</div>
-                <div
-                  className={`mt-1 font-mono text-[11px] ${
-                    isOverdue ? "text-black/65" : "text-black/55"
-                  }`}
-                >
-                  {s.id} · {s.cls}
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <span
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
-                    isOverdue ? "bg-black text-[#C7F33C]" : "bg-[#F4F4F5] text-black/75"
-                  }`}
-                >
-                  Guardian · {s.guardian}
-                </span>
-                {hasPhone && (
-                  <span
-                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[10.5px] ${
-                      isOverdue ? "bg-black/15 text-black/85" : "bg-[#F4F4F5] text-black/65"
-                    }`}
-                  >
-                    <Phone className="h-2.5 w-2.5" />
-                    {formatPhone(s.phone)}
-                  </span>
-                )}
-              </div>
-
-              <div className="mt-auto flex items-center justify-between gap-3">
-                <div>
-                  <div
-                    className={`text-[10.5px] font-semibold uppercase tracking-wider ${
-                      isOverdue ? "text-black/70" : "text-black/45"
-                    }`}
-                  >
-                    Due Balance
-                  </div>
-                  <div className="mt-0.5 font-mono text-[18px] font-semibold">
-                    {s.due === 0 ? (
-                      <span className="text-emerald-700">Cleared</span>
-                    ) : (
-                      <span>₹ {s.due.toLocaleString("en-IN")}</span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <ContactAction
-                    icon={MessageCircle}
-                    label="WhatsApp"
-                    accent="emerald"
-                    disabled={!hasPhone}
-                    onClick={() => {
-                      window.open(waHref, "_blank", "noopener,noreferrer");
-                      toast.success(`WhatsApp opened for ${s.guardian}`);
-                    }}
-                  />
-                  <ContactAction
-                    icon={Phone}
-                    label="Call"
-                    accent="ink"
-                    disabled={!hasPhone}
-                    onClick={() => {
-                      window.location.href = `tel:${digits}`;
-                    }}
-                  />
-                  <ContactAction
-                    icon={MessageSquare}
-                    label="SMS"
-                    accent="ink"
-                    disabled={!hasPhone}
-                    onClick={() => {
-                      window.location.href = `sms:${digits}`;
-                    }}
-                  />
-                </div>
-              </div>
-            </OrganicCard>
-          );
-        })}
-        {filtered.length === 0 && (
-          <OrganicCard tone="white" cornerSide="tr" padded className="md:col-span-2 xl:col-span-3">
-            <div className="py-10 text-center text-[12.5px] text-black/45">
-              No students match the current filters.
-            </div>
-          </OrganicCard>
-        )}
-      </div>
-      ) : (
-        <StudentLedgerList students={filtered} onOpen={openStudent} />
-      )}
+      <StudentsDirectoryTable
+        students={filtered}
+        onViewProfile={openStudent}
+        onEditData={openStudentEdit}
+      />
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-h-[min(92dvh,720px)] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Admit New Student</DialogTitle>
             <DialogDescription>
@@ -1667,6 +1206,50 @@ export function StudentsLedger() {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleAdmit} className="space-y-3">
+            <div className="flex items-center gap-4 rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] p-3">
+              <div className="relative h-14 w-14 shrink-0">
+                {form.photoUrl ? (
+                  <img
+                    src={form.photoUrl}
+                    alt=""
+                    className="h-14 w-14 rounded-2xl object-cover"
+                  />
+                ) : (
+                  <div className="grid h-14 w-14 place-items-center rounded-2xl bg-black text-sm font-semibold text-white">
+                    {form.name.trim() ? personInitials(form.name) : "?"}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => admitPhotoRef.current?.click()}
+                  aria-label="Upload profile photo"
+                  className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#C7F33C] text-black shadow-sm"
+                >
+                  <Camera className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <div className="min-w-0 text-[12px] text-black/55">
+                <div className="font-medium text-black">Profile Photo</div>
+                <div className="mt-0.5">Optional · JPG, PNG or WebP up to 2 MB</div>
+                {form.photoUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setForm((prev) => ({ ...prev, photoUrl: "" }))}
+                    className="mt-1.5 text-[11px] font-semibold text-[#B91C1C] hover:underline"
+                  >
+                    Remove photo
+                  </button>
+                )}
+              </div>
+              <input
+                ref={admitPhotoRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="hidden"
+                onChange={handleAdmitPhoto}
+              />
+            </div>
+
             <div className="space-y-1.5">
               <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
                 Full Name
@@ -1678,6 +1261,7 @@ export function StudentsLedger() {
                 autoFocus
               />
             </div>
+
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
@@ -1693,6 +1277,76 @@ export function StudentsLedger() {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Gender
+                </Label>
+                <div className="inline-flex w-full items-center rounded-full border border-black/10 bg-white p-1">
+                  {(
+                    [
+                      { key: "M" as const, label: "Male" },
+                      { key: "F" as const, label: "Female" },
+                    ] as const
+                  ).map((g) => (
+                    <button
+                      key={g.key}
+                      type="button"
+                      onClick={() => setForm({ ...form, gender: g.key })}
+                      className={cn(
+                        "min-h-9 flex-1 rounded-full text-[12px] font-semibold transition-colors",
+                        form.gender === g.key
+                          ? "bg-[#C7F33C] text-black"
+                          : "text-black/55 hover:bg-black/5",
+                      )}
+                    >
+                      {g.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Guardian Name
+                </Label>
+                <Input
+                  value={form.guardian}
+                  onChange={(e) => setForm({ ...form, guardian: e.target.value })}
+                  placeholder="e.g. Anita Verma"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Contact Phone
+                </Label>
+                <Input
+                  value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  placeholder="9810045221"
+                  className="font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Date of Birth
+                </Label>
+                <DatePicker
+                  value={form.dob}
+                  onChange={(dob) => setForm({ ...form, dob })}
+                  placeholder="14 Mar 2012"
+                  valueFormat="display"
+                  variant="pill"
+                  quickPicks={[]}
+                  min="1990-01-01"
+                  max={admitTodayISO()}
+                  className="h-9 w-full"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
                   Initial Due (₹)
                 </Label>
                 <Input
@@ -1704,57 +1358,41 @@ export function StudentsLedger() {
                 />
               </div>
             </div>
+
             <div className="space-y-1.5">
               <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                Guardian Name
+                Email Address
               </Label>
               <Input
-                value={form.guardian}
-                onChange={(e) => setForm({ ...form, guardian: e.target.value })}
-                placeholder="e.g. Anita Verma"
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                placeholder="aarav.sharma@silverhills.in"
+                className="font-mono text-[13px]"
               />
             </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                Residential Mailing Address
+              </Label>
+              <Textarea
+                value={form.address}
+                onChange={(e) => setForm({ ...form, address: e.target.value })}
+                placeholder="B-204, Lotus Greens, Sector 21, Noida 201301"
+                className="min-h-[72px] resize-none rounded-2xl text-[13px]"
+              />
+            </div>
+
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
               <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
-                Student
+                Admit Student
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={Boolean(pendingLedgerAction)}
-        onOpenChange={(next) => {
-          if (!next) setPendingLedgerAction(null);
-        }}
-      >
-        <DialogContent className="max-w-sm rounded-[1.5rem] border border-[#E5E5E5] bg-white p-6">
-          <DialogHeader>
-            <DialogTitle className="text-[22px] font-semibold text-black">
-              {pendingLedgerAction ? ledgerActionCopy[pendingLedgerAction].title : "Confirm Action"}
-            </DialogTitle>
-            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
-              {pendingLedgerAction
-                ? ledgerActionCopy[pendingLedgerAction].description
-                : "Are you sure you want to continue?"}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="mt-5 flex-row justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setPendingLedgerAction(null)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={confirmLedgerAction}
-              className="rounded-full bg-black text-white hover:bg-black/85"
-            >
-              {pendingLedgerAction ? ledgerActionCopy[pendingLedgerAction].confirm : "Continue"}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
@@ -1795,6 +1433,28 @@ function ContactAction({
   );
 }
 
+type StaffStatusFilter = "all" | "active" | "inactive";
+
+function isTeachingStaff(member: Staff): boolean {
+  return member.role.toLowerCase().includes("teacher");
+}
+
+function StaffStatusBadge({ active }: { active: boolean }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10.5px] font-semibold",
+        active ? "bg-[#E1F2AE] text-black" : "bg-black/8 text-black/55",
+      )}
+    >
+      <span
+        className={cn("h-1.5 w-1.5 rounded-full", active ? "bg-[#65A30D]" : "bg-black/35")}
+      />
+      {active ? "Active" : "Inactive"}
+    </span>
+  );
+}
+
 export function StaffRoster() {
   const { staff, setStaff, departments, roles } = useTenantStore();
   const navigate = useNavigate();
@@ -1803,21 +1463,22 @@ export function StaffRoster() {
   const initialEdit = search.edit === "1";
 
   const openStaff = (id: string) => navigate({ to: "/tenant/staff", search: { id } });
-  const openStaffEdit = (id: string) =>
-    navigate({ to: "/tenant/staff", search: { id, edit: "1" } });
   const closeStaff = () => navigate({ to: "/tenant/staff", search: {} });
 
   const defaultDept = departments[0]?.name ?? "";
-  const defaultRole = roles[0]?.title ?? "";
+  const defaultRole = roles[0]?.title ?? "Teacher";
   const [open, setOpen] = useState(false);
   const [pendingRemoval, setPendingRemoval] = useState<Staff | null>(null);
-  const [pendingStatusChange, setPendingStatusChange] = useState<Staff | null>(null);
+  const [deptFilter, setDeptFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<StaffStatusFilter>("all");
   const [form, setForm] = useState({
     name: "",
     role: defaultRole,
     dept: defaultDept,
     id: "",
+    photoUrl: "",
   });
+  const recruitPhotoRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setForm((prev) => ({
@@ -1831,6 +1492,54 @@ export function StaffRoster() {
     () => (activeStaffViewId ? (staff.find((s) => s.id === activeStaffViewId) ?? null) : null),
     [activeStaffViewId, staff],
   );
+
+  const departmentOptions = useMemo(() => {
+    const fromStaff = staff.map((s) => s.dept);
+    const fromConfig = departments.map((d) => d.name);
+    return Array.from(new Set([...fromConfig, ...fromStaff])).sort();
+  }, [departments, staff]);
+
+  const filteredStaff = useMemo(() => {
+    return staff.filter((member) => {
+      const matchesDept = deptFilter === "all" || member.dept === deptFilter;
+      const matchesStatus =
+        statusFilter === "all" ||
+        (statusFilter === "active" ? member.active : !member.active);
+      return matchesDept && matchesStatus;
+    });
+  }, [staff, deptFilter, statusFilter]);
+
+  const analytics = useMemo(() => {
+    const activeMembers = staff.filter((s) => s.active);
+    const teachers = activeMembers.filter(isTeachingStaff).length;
+    const nonTeaching = activeMembers.filter((s) => !isTeachingStaff(s)).length;
+    return {
+      teachers,
+      nonTeaching,
+      total: staff.length,
+    };
+  }, [staff]);
+
+  const handleRecruitPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose a JPG, PNG, or WebP image");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Image must be 2 MB or smaller");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result ?? "");
+      if (dataUrl) setForm((prev) => ({ ...prev, photoUrl: dataUrl }));
+    };
+    reader.onerror = () => toast.error("Could not read the selected image");
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
 
   const handleRecruit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1846,6 +1555,7 @@ export function StaffRoster() {
       dept: form.dept,
       active: true,
       joinedAt: new Date().toISOString().slice(0, 10),
+      photoUrl: form.photoUrl || undefined,
       basicSalary: 8000,
       additionalAllowances: 0,
       documents: DEFAULT_STAFF_DOCUMENTS.map((d) => ({ ...d })),
@@ -1854,18 +1564,8 @@ export function StaffRoster() {
     toast.success(`${newStaff.name} recruited`, {
       description: `${newStaff.id} · ${newStaff.dept}`,
     });
-    setForm({ name: "", role: defaultRole, dept: defaultDept, id: "" });
+    setForm({ name: "", role: defaultRole, dept: defaultDept, id: "", photoUrl: "" });
     setOpen(false);
-  };
-
-  const confirmStatusChange = () => {
-    if (!pendingStatusChange) return;
-    const nextActive = !pendingStatusChange.active;
-    setStaff((prev) =>
-      prev.map((s) => (s.id === pendingStatusChange.id ? { ...s, active: nextActive } : s)),
-    );
-    toast(`${pendingStatusChange.name} marked ${nextActive ? "Active" : "Inactive"}`);
-    setPendingStatusChange(null);
   };
 
   const removeStaff = (id: string) => {
@@ -1880,6 +1580,23 @@ export function StaffRoster() {
     setPendingRemoval(null);
   };
 
+  const handleExport = () => {
+    downloadCsv(
+      "staff-directory.csv",
+      ["ID", "Name", "Role", "Department", "Status"],
+      filteredStaff.map((member) => [
+        member.id,
+        member.name,
+        member.role,
+        member.dept,
+        member.active ? "Active" : "Inactive",
+      ]),
+    );
+    toast.success("Staff directory exported", {
+      description: `${filteredStaff.length} record${filteredStaff.length === 1 ? "" : "s"} saved to CSV`,
+    });
+  };
+
   if (activeStaff) {
     return (
       <StaffProfileDetail
@@ -1890,97 +1607,246 @@ export function StaffRoster() {
     );
   }
 
+  const outlineBtn =
+    "inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-4 text-[12.5px] font-semibold text-black transition-colors hover:border-black/20 hover:bg-[#F4F4F5]";
+
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <button
-          onClick={() => setOpen(true)}
-          className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-full bg-black px-5 py-2.5 text-[12.5px] font-semibold text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)] transition-colors hover:bg-black/85 sm:w-auto"
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <OrganicCard tone="white" cornerSide="tr" padded className="flex min-h-[108px] flex-col justify-between">
+          <div className="flex items-start justify-between gap-2">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+              Teachers
+            </div>
+            <GraduationCap className="h-4 w-4 shrink-0 text-black/35" />
+          </div>
+          <div className="font-mono text-[28px] font-semibold leading-none tracking-tight text-black sm:text-[32px]">
+            {analytics.teachers}
+          </div>
+        </OrganicCard>
+
+        <OrganicCard tone="white" cornerSide="bl" padded className="flex min-h-[108px] flex-col justify-between">
+          <div className="flex items-start justify-between gap-2">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+              Non-Teaching / Administrative
+            </div>
+            <Briefcase className="h-4 w-4 shrink-0 text-black/35" />
+          </div>
+          <div className="font-mono text-[28px] font-semibold leading-none tracking-tight text-black sm:text-[32px]">
+            {analytics.nonTeaching}
+          </div>
+        </OrganicCard>
+
+        <OrganicCard
+          tone="limePale"
+          cornerSide="tr"
+          padded
+          className="flex min-h-[108px] flex-col justify-between sm:col-span-1"
         >
-          <Plus className="h-3.5 w-3.5" /> Recruit Staff
-        </button>
-      </div>
-      <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2">
-        {staff.map((s, i) => {
-          const tone: Tone = s.active ? "white" : "limePale";
-          const cornerSide: CornerSide = i % 2 === 0 ? "tr" : "bl";
-          return (
-            <OrganicCard key={s.id} tone={tone} cornerSide={cornerSide} padded>
-              <div className="flex w-full items-start gap-3">
-                <button
-                  type="button"
-                  onClick={() => openStaff(s.id)}
-                  className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-black text-[14px] font-semibold text-white"
-                >
-                  {s.name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")
-                    .slice(0, 2)}
-                </button>
-                <div className="min-w-0 flex-1">
-                  <button
-                    type="button"
-                    onClick={() => openStaff(s.id)}
-                    className="w-full text-left"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
-                      <div className="min-w-0">
-                        <div className="text-[14px] font-semibold text-black">{s.name}</div>
-                        <div className="text-[11.5px] text-black/55">{s.role}</div>
-                      </div>
-                      <span className="shrink-0 font-mono text-[10px] text-black/45">{s.id}</span>
-                    </div>
-                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11.5px]">
-                      <span className="text-black/55">Department · {s.dept}</span>
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-[10.5px] font-semibold ${
-                          s.active ? "bg-[#C7F33C] text-black" : "bg-black/10 text-black/55"
-                        }`}
-                      >
-                        {s.active ? "Active" : "Inactive"}
-                      </span>
-                    </div>
-                  </button>
-                  <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => setPendingStatusChange(s)}
-                      className="min-h-10 w-full rounded-full border border-[#E5E5E5] bg-white px-3 py-2 text-[11.5px] font-medium text-black transition-colors hover:border-black/20 hover:bg-[#F4F4F5] sm:min-w-[6.5rem] sm:flex-1"
-                    >
-                      {s.active ? "Deactivate" : "Activate"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openStaffEdit(s.id)}
-                      className="min-h-10 w-full rounded-full border border-[#E5E5E5] bg-white px-3 py-2 text-[11.5px] font-medium text-black transition-colors hover:border-black/20 hover:bg-[#F4F4F5] sm:min-w-[6.5rem] sm:flex-1"
-                    >
-                      Edit Profile
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPendingRemoval(s)}
-                      className="min-h-10 w-full rounded-full border border-[#FECACA] bg-[#FEF2F2] px-3 py-2 text-[11.5px] font-medium text-[#B91C1C] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2] sm:min-w-[6.5rem] sm:flex-1"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </OrganicCard>
-          );
-        })}
+          <div className="flex items-start justify-between gap-2">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/55">
+              Total Staff
+            </div>
+            <Users className="h-4 w-4 shrink-0 text-black/40" />
+          </div>
+          <div className="font-mono text-[28px] font-semibold leading-none tracking-tight text-black sm:text-[32px]">
+            {analytics.total}
+          </div>
+        </OrganicCard>
       </div>
 
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md">
-          <SheetHeader>
-            <SheetTitle>Recruit New Staff</SheetTitle>
-            <SheetDescription>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-[28px] font-semibold leading-none tracking-tight text-black sm:text-title">
+          Staff Directory
+        </h1>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className={outlineBtn}>
+                <Filter className="h-3.5 w-3.5" />
+                Filter
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 rounded-2xl border-[#E5E5E5] p-2">
+              <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                Department
+              </DropdownMenuLabel>
+              <DropdownMenuRadioGroup value={deptFilter} onValueChange={setDeptFilter}>
+                <DropdownMenuRadioItem value="all" className="rounded-xl text-[13px]">
+                  All departments
+                </DropdownMenuRadioItem>
+                {departmentOptions.map((dept) => (
+                  <DropdownMenuRadioItem key={dept} value={dept} className="rounded-xl text-[13px]">
+                    {dept}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+              <DropdownMenuSeparator className="my-2" />
+              <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                Status
+              </DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={statusFilter}
+                onValueChange={(value) => setStatusFilter(value as StaffStatusFilter)}
+              >
+                <DropdownMenuRadioItem value="all" className="rounded-xl text-[13px]">
+                  All statuses
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="active" className="rounded-xl text-[13px]">
+                  Active
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="inactive" className="rounded-xl text-[13px]">
+                  Inactive
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <button type="button" onClick={handleExport} className={outlineBtn}>
+            <Download className="h-3.5 w-3.5" />
+            Export
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-black px-4 text-[12.5px] font-semibold text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)] transition-colors hover:bg-black/85"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Recruit Staff
+          </button>
+        </div>
+      </div>
+
+      <div className="mobile-scrollbar-none overflow-x-auto rounded-[2rem] border border-slate-100/80 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_24px_60px_-32px_rgba(0,0,0,0.18)] sm:p-6">
+        <table className="w-full min-w-[640px] border-collapse text-left">
+          <thead>
+            <tr>
+              {["Name", "Role", "Department", "Status"].map((header) => (
+                <th
+                  key={header}
+                  className="border-b border-slate-100 pb-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400"
+                >
+                  {header}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filteredStaff.length === 0 && (
+              <tr>
+                <td colSpan={5} className="py-10 text-center text-[13px] text-black/55">
+                  No staff records match the current filters.
+                </td>
+              </tr>
+            )}
+            {filteredStaff.map((member) => (
+              <tr key={member.id} className="border-b border-slate-50 last:border-0">
+                <td className="py-3.5 pr-4 align-middle">
+                  <div className="flex min-w-0 items-center gap-3">
+                    {member.photoUrl ? (
+                      <img
+                        src={member.photoUrl}
+                        alt=""
+                        className="h-10 w-10 shrink-0 rounded-xl object-cover"
+                      />
+                    ) : (
+                      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-black text-[12px] font-semibold text-white">
+                        {personInitials(member.name)}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <div className="truncate text-[13.5px] font-semibold text-black">{member.name}</div>
+                      <div className="mt-0.5 truncate font-mono text-[10.5px] text-black/45">{member.id}</div>
+                    </div>
+                  </div>
+                </td>
+                <td className="py-3.5 pr-4 align-middle text-[13px] text-black/75">{member.role}</td>
+                <td className="py-3.5 pr-4 align-middle text-[13px] text-black/75">{member.dept}</td>
+                <td className="py-3.5 pr-4 align-middle">
+                  <StaffStatusBadge active={member.active} />
+                </td>
+                <td className="py-3.5 align-middle">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => openStaff(member.id)}
+                      aria-label={`View profile for ${member.name}`}
+                      title="View Profile"
+                      className="grid h-9 w-9 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/65 transition-colors hover:border-black/20 hover:bg-[#F4F4F5]"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPendingRemoval(member)}
+                      aria-label={`Remove ${member.name}`}
+                      title="Remove Record"
+                      className="grid h-9 w-9 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Recruit New Staff</DialogTitle>
+            <DialogDescription>
               Provision a faculty / administrative profile for Silver Hills.
-            </SheetDescription>
-          </SheetHeader>
-          <form onSubmit={handleRecruit} className="mt-5 space-y-3 px-1">
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleRecruit} className="space-y-3">
+            <div className="flex items-center gap-4 rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] p-3">
+              <div className="relative h-14 w-14 shrink-0">
+                {form.photoUrl ? (
+                  <img
+                    src={form.photoUrl}
+                    alt=""
+                    className="h-14 w-14 rounded-2xl object-cover"
+                  />
+                ) : (
+                  <div className="grid h-14 w-14 place-items-center rounded-2xl bg-black text-sm font-semibold text-white">
+                    {form.name.trim() ? personInitials(form.name) : "?"}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => recruitPhotoRef.current?.click()}
+                  aria-label="Upload profile photo"
+                  className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#C7F33C] text-black shadow-sm"
+                >
+                  <Camera className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <div className="min-w-0 text-[12px] text-black/55">
+                <div className="font-medium text-black">Profile Photo</div>
+                <div className="mt-0.5">Optional · JPG, PNG or WebP up to 2 MB</div>
+                {form.photoUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setForm((prev) => ({ ...prev, photoUrl: "" }))}
+                    className="mt-1.5 text-[11px] font-semibold text-[#B91C1C] hover:underline"
+                  >
+                    Remove photo
+                  </button>
+                )}
+              </div>
+              <input
+                ref={recruitPhotoRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="hidden"
+                onChange={handleRecruitPhoto}
+              />
+            </div>
+
             <div className="space-y-1.5">
               <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
                 Full Name
@@ -2032,53 +1898,15 @@ export function StaffRoster() {
                 />
               </div>
             </div>
-            <SheetFooter className="mt-4">
+            <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
               <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
-                Recruit
+                Recruit Staff
               </Button>
-            </SheetFooter>
+            </DialogFooter>
           </form>
-        </SheetContent>
-      </Sheet>
-
-      <Dialog
-        open={Boolean(pendingStatusChange)}
-        onOpenChange={(next) => {
-          if (!next) setPendingStatusChange(null);
-        }}
-      >
-        <DialogContent className="max-w-sm rounded-[1.5rem] border border-[#E5E5E5] bg-white p-6">
-          <DialogHeader>
-            <DialogTitle className="text-[22px] font-semibold text-black">
-              {pendingStatusChange?.active ? "Deactivate Staff" : "Activate Staff"}
-            </DialogTitle>
-            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
-              {pendingStatusChange
-                ? pendingStatusChange.active
-                  ? `Are you sure you want to deactivate ${pendingStatusChange.name} (${pendingStatusChange.id})? They will be marked inactive on the roster.`
-                  : `Are you sure you want to activate ${pendingStatusChange.name} (${pendingStatusChange.id})? They will be marked active on the roster.`
-                : "Are you sure you want to change this staff member's status?"}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="mt-5 flex-row justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setPendingStatusChange(null)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={confirmStatusChange}
-              className={
-                pendingStatusChange?.active
-                  ? "rounded-full bg-black text-white hover:bg-black/85"
-                  : "rounded-full bg-[#C7F33C] text-black hover:bg-[#E1F2AE]"
-              }
-            >
-              {pendingStatusChange?.active ? "Deactivate" : "Activate"}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -2118,8 +1946,15 @@ export function StaffRoster() {
 export function FinanceModule() {
   type FinanceTabKey = "receive" | "make" | "analytics" | "ledger" | "pl" | "balance";
 
-  const [tab, setTab] = useState<FinanceTabKey>("receive");
+  const search = useSearch({ from: "/tenant/finance" });
+  const [tab, setTab] = useState<FinanceTabKey>(search.tab ?? "receive");
   const [sectionOpen, setSectionOpen] = useState(false);
+
+  useEffect(() => {
+    if (search.tab) {
+      setTab(search.tab);
+    }
+  }, [search.tab]);
 
   const tabs: {
     k: FinanceTabKey;
@@ -2303,7 +2138,7 @@ function ReceivePayment() {
         .split(/[ ,]+/)
         .some((token) => token.length > 3 && haystack.includes(token)),
     );
-    return matched?.fee ?? transportRoutes[0]?.fee;
+    return matched?.bothFee ?? transportRoutes[0]?.bothFee;
   }, [selected, transportRoutes]);
 
   const tuitionFee = useMemo(
@@ -2931,6 +2766,8 @@ export function SchoolSettings() {
     setClasses,
     transportRoutes,
     setTransportRoutes,
+    transportVehicles,
+    setTransportVehicles,
     paymentCategories,
     setPaymentCategories,
     academicYear,
@@ -2970,8 +2807,18 @@ export function SchoolSettings() {
       </div>
 
       <div className="grid grid-cols-12 gap-5">
-        <div className="col-span-12 lg:col-span-6">
-          <TransportCard transportRoutes={transportRoutes} setTransportRoutes={setTransportRoutes} />
+        <div className="col-span-12 space-y-5 lg:col-span-6">
+          <VehicleCard
+            transportVehicles={transportVehicles}
+            setTransportVehicles={setTransportVehicles}
+            transportRoutes={transportRoutes}
+          />
+          <TransportCard
+            transportRoutes={transportRoutes}
+            setTransportRoutes={setTransportRoutes}
+            transportVehicles={transportVehicles}
+            setTransportVehicles={setTransportVehicles}
+          />
         </div>
         <div className="col-span-12 lg:col-span-6">
           <CategoriesCard
@@ -3665,58 +3512,100 @@ function ClassesCard({
   );
 }
 
-function TransportCard({
+function VehicleCard({
+  transportVehicles,
+  setTransportVehicles,
   transportRoutes,
-  setTransportRoutes,
 }: {
+  transportVehicles: TransportVehicle[];
+  setTransportVehicles: React.Dispatch<React.SetStateAction<TransportVehicle[]>>;
   transportRoutes: TransportRoute[];
-  setTransportRoutes: React.Dispatch<React.SetStateAction<TransportRoute[]>>;
 }) {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<TransportRoute | null>(null);
-  const [form, setForm] = useState({ mapFrom: "", mapTo: "", fee: "" });
+  const [pendingDelete, setPendingDelete] = useState<TransportVehicle | null>(null);
+  const [form, setForm] = useState({
+    name: "",
+    registrationNo: "",
+    capacity: "",
+    driverName: "",
+    driverPhone: "",
+    routeId: "",
+    active: true,
+  });
+
+  const routeLabel = (routeId?: string) => {
+    if (!routeId) return "—";
+    const route = transportRoutes.find((r) => r.id === routeId);
+    return route ? `${route.mapFrom} → ${route.mapTo}` : routeId;
+  };
 
   const startCreate = () => {
     setEditingId(null);
-    setForm({ mapFrom: "", mapTo: "", fee: "" });
+    setForm({
+      name: "",
+      registrationNo: "",
+      capacity: "",
+      driverName: "",
+      driverPhone: "",
+      routeId: "",
+      active: true,
+    });
     setOpen(true);
   };
-  const startEdit = (r: TransportRoute) => {
-    setEditingId(r.id);
-    setForm({ mapFrom: r.mapFrom, mapTo: r.mapTo, fee: String(r.fee) });
+
+  const startEdit = (v: TransportVehicle) => {
+    setEditingId(v.id);
+    setForm({
+      name: v.name,
+      registrationNo: v.registrationNo,
+      capacity: String(v.capacity),
+      driverName: v.driverName ?? "",
+      driverPhone: v.driverPhone ?? "",
+      routeId: v.routeId ?? "",
+      active: v.active,
+    });
     setOpen(true);
   };
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const mapFrom = form.mapFrom.trim();
-    const mapTo = form.mapTo.trim();
-    const fee = Number(form.fee);
-    if (!mapFrom || !mapTo) {
-      toast.error("Pickup hub and destination are required");
+    const name = form.name.trim();
+    const registrationNo = form.registrationNo.trim();
+    const capacity = Number(form.capacity);
+    if (!name || !registrationNo) {
+      toast.error("Vehicle name and registration number are required");
       return;
     }
-    if (!fee || fee <= 0) {
-      toast.error("Fee must be a positive amount");
+    if (!capacity || capacity <= 0) {
+      toast.error("Capacity must be a positive number");
       return;
     }
+    const payload = {
+      name,
+      registrationNo,
+      capacity,
+      driverName: form.driverName.trim() || undefined,
+      driverPhone: form.driverPhone.trim() || undefined,
+      routeId: form.routeId || undefined,
+      active: form.active,
+    };
     if (editingId) {
-      setTransportRoutes((prev) =>
-        prev.map((r) => (r.id === editingId ? { ...r, mapFrom, mapTo, fee } : r)),
+      setTransportVehicles((prev) =>
+        prev.map((v) => (v.id === editingId ? { ...v, ...payload } : v)),
       );
-      toast.success(`Route updated · ${mapFrom} → ${mapTo}`);
+      toast.success(`${name} updated`);
     } else {
-      const nextId = `TR-${(transportRoutes.length + 1).toString().padStart(3, "0")}`;
-      setTransportRoutes((prev) => [...prev, { id: nextId, mapFrom, mapTo, fee }]);
-      toast.success(`Route added · ${mapFrom} → ${mapTo}`);
+      const nextId = `VH-${(transportVehicles.length + 1).toString().padStart(3, "0")}`;
+      setTransportVehicles((prev) => [...prev, { id: nextId, ...payload }]);
+      toast.success(`${name} added to fleet`);
     }
     setOpen(false);
   };
 
-  const remove = (r: TransportRoute) => {
-    setTransportRoutes((prev) => prev.filter((x) => x.id !== r.id));
-    toast.error(`${r.mapFrom} → ${r.mapTo} removed`);
+  const remove = (v: TransportVehicle) => {
+    setTransportVehicles((prev) => prev.filter((x) => x.id !== v.id));
+    toast.error(`${v.name} removed from fleet`);
   };
 
   const confirmDelete = () => {
@@ -3725,51 +3614,71 @@ function TransportCard({
     setPendingDelete(null);
   };
 
+  const activeCount = transportVehicles.filter((v) => v.active).length;
+
   return (
-    <OrganicCard tone="white" cornerSide="bl" padded>
+    <OrganicCard tone="white" cornerSide="tr" padded>
       <CardHeader
-        title="Transport Routes"
-        subtitle={`${transportRoutes.length} mapped pickup → drop pairs`}
-        actionLabel="Add Route"
+        title="Vehicle Management"
+        subtitle={`${activeCount} active · ${transportVehicles.length} total in fleet`}
+        actionLabel="Add Vehicle"
         onAction={startCreate}
       />
 
       <div className="mt-4 overflow-x-auto rounded-2xl border border-[#EFEFEF]">
-        <div className="min-w-[320px]">
-          <div className="grid grid-cols-[1.4fr_1.4fr_0.7fr_auto] gap-2 bg-[#F4F4F5] px-3.5 py-2 text-[10px] font-semibold uppercase tracking-wider text-black/55">
-            <span>From</span>
-            <span>To</span>
-            <span className="text-right">Fee</span>
+        <div className="min-w-[520px]">
+          <div className="grid grid-cols-[1fr_1fr_0.6fr_1.2fr_auto] gap-2 bg-[#F4F4F5] px-3.5 py-2 text-[10px] font-semibold uppercase tracking-wider text-black/55">
+            <span>Vehicle</span>
+            <span>Registration</span>
+            <span className="text-right">Seats</span>
+            <span>Assigned Route</span>
             <span />
           </div>
-          {transportRoutes.length === 0 ? (
+          {transportVehicles.length === 0 ? (
             <div className="px-3.5 py-6 text-center text-[12px] text-black/55">
-              No routes mapped yet
+              No vehicles in fleet yet
             </div>
           ) : (
-            transportRoutes.map((r) => (
+            transportVehicles.map((v) => (
               <div
-                key={r.id}
-                className="grid grid-cols-[1.4fr_1.4fr_0.7fr_auto] items-center gap-2 border-t border-[#EFEFEF] px-3.5 py-2.5 text-[12.5px] last:border-b-0"
+                key={v.id}
+                className="grid grid-cols-[1fr_1fr_0.6fr_1.2fr_auto] items-center gap-2 border-t border-[#EFEFEF] px-3.5 py-2.5 text-[12.5px] last:border-b-0"
               >
-                <span className="truncate text-black">{r.mapFrom}</span>
-                <span className="truncate text-black/75">{r.mapTo}</span>
-                <span className="text-right font-mono text-black">
-                  ₹ {r.fee.toLocaleString("en-IN")}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 truncate font-medium text-black">
+                    <Bus className="h-3.5 w-3.5 shrink-0 text-black/40" />
+                    {v.name}
+                  </div>
+                  <div className="mt-0.5 truncate text-[10.5px] text-black/45">
+                    {v.driverName ?? "No driver assigned"}
+                  </div>
+                </div>
+                <span className="truncate font-mono text-[11.5px] text-black/70">
+                  {v.registrationNo}
                 </span>
+                <span className="text-right font-mono text-black">{v.capacity}</span>
+                <span className="truncate text-[11.5px] text-black/70">{routeLabel(v.routeId)}</span>
                 <div className="flex shrink-0 items-center gap-1">
+                  <span
+                    className={cn(
+                      "mr-1 hidden rounded-full px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider sm:inline",
+                      v.active ? "bg-[#C7F33C] text-black" : "bg-black/10 text-black/50",
+                    )}
+                  >
+                    {v.active ? "Active" : "Idle"}
+                  </span>
                   <button
                     type="button"
-                    onClick={() => startEdit(r)}
-                    aria-label={`Edit route ${r.mapFrom} to ${r.mapTo}`}
+                    onClick={() => startEdit(v)}
+                    aria-label={`Edit vehicle ${v.name}`}
                     className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
                   <button
                     type="button"
-                    onClick={() => setPendingDelete(r)}
-                    aria-label={`Delete route ${r.mapFrom} to ${r.mapTo}`}
+                    onClick={() => setPendingDelete(v)}
+                    aria-label={`Delete vehicle ${v.name}`}
                     className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -3786,11 +3695,11 @@ function TransportCard({
         onOpenChange={(next) => {
           if (!next) setPendingDelete(null);
         }}
-        title="Delete Transport Route"
+        title="Delete Vehicle"
         description={
           pendingDelete
-            ? `Are you sure you want to delete the route ${pendingDelete.mapFrom} → ${pendingDelete.mapTo}? This action cannot be undone.`
-            : "Are you sure you want to delete this transport route?"
+            ? `Remove ${pendingDelete.name} (${pendingDelete.registrationNo}) from the fleet? This cannot be undone.`
+            : "Are you sure you want to delete this vehicle?"
         }
         onConfirm={confirmDelete}
       />
@@ -3798,10 +3707,294 @@ function TransportCard({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
+            <DialogTitle>{editingId ? "Edit Vehicle" : "Add Vehicle"}</DialogTitle>
+            <DialogDescription>
+              Register buses and vans, assign drivers, and link each vehicle to a transport route.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={submit} className="space-y-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Vehicle Name
+                </Label>
+                <Input
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  placeholder="e.g. Bus 01"
+                  autoFocus
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Registration No.
+                </Label>
+                <Input
+                  value={form.registrationNo}
+                  onChange={(e) => setForm({ ...form, registrationNo: e.target.value })}
+                  placeholder="KL-07-AB-4521"
+                  className="font-mono"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Seat Capacity
+                </Label>
+                <Input
+                  inputMode="numeric"
+                  value={form.capacity}
+                  onChange={(e) =>
+                    setForm({ ...form, capacity: e.target.value.replace(/[^0-9]/g, "") })
+                  }
+                  placeholder="42"
+                  className="font-mono"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Assigned Route
+                </Label>
+                <FieldSelect
+                  value={form.routeId ?? ""}
+                  onValueChange={(routeId) => setForm({ ...form, routeId })}
+                  options={transportRoutes.map((r) => ({
+                    value: r.id,
+                    label: `${r.mapFrom} → ${r.mapTo}`,
+                  }))}
+                  placeholder="No route assigned"
+                  disabled={transportRoutes.length === 0}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Driver Name
+                </Label>
+                <Input
+                  value={form.driverName}
+                  onChange={(e) => setForm({ ...form, driverName: e.target.value })}
+                  placeholder="Optional"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Driver Phone
+                </Label>
+                <Input
+                  value={form.driverPhone}
+                  onChange={(e) => setForm({ ...form, driverPhone: e.target.value })}
+                  placeholder="Optional"
+                  className="font-mono"
+                />
+              </div>
+            </div>
+            <label className="flex cursor-pointer items-center gap-2 rounded-2xl border border-[#E5E5E5] bg-[#FAFAFA] px-3 py-2.5">
+              <input
+                type="checkbox"
+                checked={form.active}
+                onChange={(e) => setForm({ ...form, active: e.target.checked })}
+                className="h-4 w-4 rounded border-black/20 accent-black"
+              />
+              <span className="text-[13px] font-medium text-black">Active in fleet</span>
+            </label>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+                {editingId ? "Save" : "Add Vehicle"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </OrganicCard>
+  );
+}
+
+function TransportCard({
+  transportRoutes,
+  setTransportRoutes,
+  transportVehicles,
+  setTransportVehicles,
+}: {
+  transportRoutes: TransportRoute[];
+  setTransportRoutes: React.Dispatch<React.SetStateAction<TransportRoute[]>>;
+  transportVehicles: TransportVehicle[];
+  setTransportVehicles: React.Dispatch<React.SetStateAction<TransportVehicle[]>>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<TransportRoute | null>(null);
+  const [form, setForm] = useState({
+    mapFrom: "",
+    mapTo: "",
+    morningFee: "",
+    eveningFee: "",
+    bothFee: "",
+  });
+
+  const vehicleForRoute = (routeId: string) =>
+    transportVehicles.find((v) => v.routeId === routeId);
+
+  const startCreate = () => {
+    setEditingId(null);
+    setForm({ mapFrom: "", mapTo: "", morningFee: "", eveningFee: "", bothFee: "" });
+    setOpen(true);
+  };
+
+  const startEdit = (r: TransportRoute) => {
+    setEditingId(r.id);
+    setForm({
+      mapFrom: r.mapFrom,
+      mapTo: r.mapTo,
+      morningFee: String(r.morningFee),
+      eveningFee: String(r.eveningFee),
+      bothFee: String(r.bothFee),
+    });
+    setOpen(true);
+  };
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const mapFrom = form.mapFrom.trim();
+    const mapTo = form.mapTo.trim();
+    const morningFee = Number(form.morningFee);
+    const eveningFee = Number(form.eveningFee);
+    const bothFee = Number(form.bothFee);
+    if (!mapFrom || !mapTo) {
+      toast.error("Pickup hub and destination are required");
+      return;
+    }
+    if (!morningFee || morningFee <= 0 || !eveningFee || eveningFee <= 0 || !bothFee || bothFee <= 0) {
+      toast.error("Morning, evening, and both-shift fees must be positive amounts");
+      return;
+    }
+    const payload = { mapFrom, mapTo, morningFee, eveningFee, bothFee };
+    if (editingId) {
+      setTransportRoutes((prev) =>
+        prev.map((r) => (r.id === editingId ? { ...r, ...payload } : r)),
+      );
+      toast.success(`Route updated · ${mapFrom} → ${mapTo}`);
+    } else {
+      const nextId = `TR-${(transportRoutes.length + 1).toString().padStart(3, "0")}`;
+      setTransportRoutes((prev) => [...prev, { id: nextId, ...payload }]);
+      toast.success(`Route added · ${mapFrom} → ${mapTo}`);
+    }
+    setOpen(false);
+  };
+
+  const remove = (r: TransportRoute) => {
+    setTransportRoutes((prev) => prev.filter((x) => x.id !== r.id));
+    setTransportVehicles((prev) =>
+      prev.map((v) => (v.routeId === r.id ? { ...v, routeId: undefined } : v)),
+    );
+    toast.error(`${r.mapFrom} → ${r.mapTo} removed`);
+  };
+
+  const confirmDelete = () => {
+    if (!pendingDelete) return;
+    remove(pendingDelete);
+    setPendingDelete(null);
+  };
+
+  const inr = (n: number) => `₹ ${n.toLocaleString("en-IN")}`;
+
+  return (
+    <OrganicCard tone="white" cornerSide="bl" padded>
+      <CardHeader
+        title="Transport Routes"
+        subtitle={`${transportRoutes.length} routes · morning, evening & both-shift fees`}
+        actionLabel="Add Route"
+        onAction={startCreate}
+      />
+
+      <div className="mt-4 overflow-x-auto rounded-2xl border border-[#EFEFEF]">
+        <div className="min-w-[640px]">
+          <div className="grid grid-cols-[1.2fr_1.2fr_0.65fr_0.65fr_0.65fr_0.8fr_auto] gap-2 bg-[#F4F4F5] px-3.5 py-2 text-[10px] font-semibold uppercase tracking-wider text-black/55">
+            <span>From</span>
+            <span>To</span>
+            <span className="text-right">Morning</span>
+            <span className="text-right">Evening</span>
+            <span className="text-right">Both</span>
+            <span>Vehicle</span>
+            <span />
+          </div>
+          {transportRoutes.length === 0 ? (
+            <div className="px-3.5 py-6 text-center text-[12px] text-black/55">
+              No routes mapped yet
+            </div>
+          ) : (
+            transportRoutes.map((r) => {
+              const vehicle = vehicleForRoute(r.id);
+              return (
+                <div
+                  key={r.id}
+                  className="grid grid-cols-[1.2fr_1.2fr_0.65fr_0.65fr_0.65fr_0.8fr_auto] items-center gap-2 border-t border-[#EFEFEF] px-3.5 py-2.5 text-[12.5px] last:border-b-0"
+                >
+                  <span className="truncate text-black">{r.mapFrom}</span>
+                  <span className="truncate text-black/75">{r.mapTo}</span>
+                  <span className="text-right font-mono text-[11.5px] text-black">
+                    {inr(r.morningFee)}
+                  </span>
+                  <span className="text-right font-mono text-[11.5px] text-black">
+                    {inr(r.eveningFee)}
+                  </span>
+                  <span className="text-right font-mono text-[11.5px] font-semibold text-black">
+                    {inr(r.bothFee)}
+                  </span>
+                  <span className="truncate text-[11px] text-black/60">
+                    {vehicle ? vehicle.name : "—"}
+                  </span>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => startEdit(r)}
+                      aria-label={`Edit route ${r.mapFrom} to ${r.mapTo}`}
+                      className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPendingDelete(r)}
+                      aria-label={`Delete route ${r.mapFrom} to ${r.mapTo}`}
+                      className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      <DeleteConfirmDialog
+        open={Boolean(pendingDelete)}
+        onOpenChange={(next) => {
+          if (!next) setPendingDelete(null);
+        }}
+        title="Delete Transport Route"
+        description={
+          pendingDelete
+            ? `Are you sure you want to delete the route ${pendingDelete.mapFrom} → ${pendingDelete.mapTo}? Linked vehicles will be unassigned.`
+            : "Are you sure you want to delete this transport route?"
+        }
+        onConfirm={confirmDelete}
+      />
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
             <DialogTitle>{editingId ? "Edit Route" : "Add Transport Route"}</DialogTitle>
             <DialogDescription>
-              Routes feed the Vehicle Fee prefill on Receive Payment when a student matches the
-              pickup hub.
+              Set pickup → drop pairs with separate morning, evening, and combined shift fees. The
+              both-shift fee prefills Vehicle Fee on Receive Payment.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={submit} className="space-y-3">
@@ -3826,17 +4019,49 @@ function TransportCard({
                 placeholder="e.g. Main Campus Drop-off"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                Fee (₹)
-              </Label>
-              <Input
-                inputMode="numeric"
-                value={form.fee}
-                onChange={(e) => setForm({ ...form, fee: e.target.value.replace(/[^0-9]/g, "") })}
-                placeholder="0"
-                className="font-mono"
-              />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Morning Fee (₹)
+                </Label>
+                <Input
+                  inputMode="numeric"
+                  value={form.morningFee}
+                  onChange={(e) =>
+                    setForm({ ...form, morningFee: e.target.value.replace(/[^0-9]/g, "") })
+                  }
+                  placeholder="0"
+                  className="font-mono"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Evening Fee (₹)
+                </Label>
+                <Input
+                  inputMode="numeric"
+                  value={form.eveningFee}
+                  onChange={(e) =>
+                    setForm({ ...form, eveningFee: e.target.value.replace(/[^0-9]/g, "") })
+                  }
+                  placeholder="0"
+                  className="font-mono"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Both Shifts (₹)
+                </Label>
+                <Input
+                  inputMode="numeric"
+                  value={form.bothFee}
+                  onChange={(e) =>
+                    setForm({ ...form, bothFee: e.target.value.replace(/[^0-9]/g, "") })
+                  }
+                  placeholder="0"
+                  className="font-mono"
+                />
+              </div>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
