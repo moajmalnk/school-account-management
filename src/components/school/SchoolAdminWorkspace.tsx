@@ -461,15 +461,49 @@ export function SchoolDashboard() {
                 label="Total"
                 value={formatInr(totalBalance)}
                 tone="lime"
-                className="col-span-2 lg:col-start-3"
+                className="col-span-2 lg:col-start-3 hidden lg:flex"
               />
             </DashboardStatGrid>
+
+            <div
+              className={cn(
+                "grid gap-2 sm:gap-3 lg:hidden",
+                unreadNotifications > 0 ? "grid-cols-2" : "grid-cols-1",
+              )}
+            >
+              <DashboardStatCard
+                label="Total"
+                value={formatInr(totalBalance)}
+                tone="lime"
+              />
+              {unreadNotifications > 0 && (
+                <Link
+                  to="/tenant/notifications"
+                  className="flex h-[92px] min-w-0 flex-col justify-start rounded-[1.35rem] border border-[#E5E5E5] bg-white p-3 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_32px_-24px_rgba(0,0,0,0.12)] transition-colors hover:border-black/15 hover:bg-[#FAFAFA] sm:h-[100px] sm:p-4"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-semibold uppercase leading-snug tracking-wider text-black/45">
+                      Alerts
+                    </span>
+                    <Bell className="h-3.5 w-3.5 shrink-0 text-black/40" />
+                  </div>
+                  <div className="mt-auto min-w-0">
+                    <div className="font-mono text-[17px] font-semibold leading-none tracking-tight text-black sm:text-[20px]">
+                      {unreadNotifications}
+                    </div>
+                    <p className="mt-1 truncate text-[10px] leading-tight text-black/50 sm:text-[11px]">
+                      unread · fee & staff updates
+                    </p>
+                  </div>
+                </Link>
+              )}
+            </div>
           </DashboardMetricsBand>
 
           {unreadNotifications > 0 && (
             <Link
               to="/tenant/notifications"
-              className="block rounded-[1.35rem] border border-[#E5E5E5] bg-white px-4 py-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-colors hover:border-black/15 hover:bg-[#FAFAFA] sm:px-5 sm:py-4"
+              className="hidden rounded-[1.35rem] border border-[#E5E5E5] bg-white px-4 py-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-colors hover:border-black/15 hover:bg-[#FAFAFA] sm:block sm:px-5 sm:py-4 lg:hidden"
             >
               <div className="flex items-start gap-3">
                 <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[#F4F4F5] text-black/55">
@@ -632,6 +666,47 @@ const STATUS_TABS: { key: StatusFilter; label: string }[] = [
   { key: "overdue", label: "Overdue" },
 ];
 
+function parseClassDivision(className: string) {
+  const dash = className.lastIndexOf(" - ");
+  if (dash === -1) {
+    return { grade: className.trim(), division: null as string | null };
+  }
+  return {
+    grade: className.slice(0, dash).trim(),
+    division: className.slice(dash + 3).trim() || null,
+  };
+}
+
+function studentMatchesClassDivisionFilter(
+  cls: string,
+  gradeFilter: string,
+  divisionFilter: string,
+) {
+  const { grade, division } = parseClassDivision(cls);
+  if (gradeFilter !== "all" && grade !== gradeFilter) return false;
+  if (divisionFilter !== "all" && division !== divisionFilter) return false;
+  return true;
+}
+
+function buildClassDivisionIndex(classNames: string[]) {
+  const gradeMap = new Map<string, Set<string>>();
+  for (const name of classNames) {
+    const { grade, division } = parseClassDivision(name);
+    if (!grade) continue;
+    if (!gradeMap.has(grade)) gradeMap.set(grade, new Set());
+    if (division) gradeMap.get(grade)!.add(division);
+  }
+  return gradeMap;
+}
+
+const directoryFilterPillClass = (active: boolean) =>
+  cn(
+    "shrink-0 rounded-full px-3 py-1.5 text-[12px] font-semibold transition-colors",
+    active
+      ? "bg-[#2563EB] text-white shadow-sm"
+      : "border border-[#E5E5E5] bg-[#DBEAFE] text-[#0F172A]/70 hover:border-[#2563EB]/25 hover:bg-[#BFDBFE] hover:text-[#0F172A]",
+  );
+
 const phoneDigits = (raw?: string) => (raw ?? "").replace(/[^0-9]/g, "");
 
 const formatPhone = (raw?: string) => {
@@ -711,7 +786,7 @@ const directoryMobileCardClass =
 function StudentFeesStatusBadge({ due }: { due: number }) {
   if (due === 0) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#D1FAE5] px-2.5 py-1 text-[10.5px] font-semibold text-[#10B981]">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#DBEAFE] px-2.5 py-1 text-[10.5px] font-semibold text-[#10B981]">
         <span className="h-1.5 w-1.5 rounded-full bg-[#10B981]" />
         Paid
       </span>
@@ -970,6 +1045,7 @@ export function StudentsLedger() {
   const defaultClass = classes[0]?.className ?? "";
   const [form, setForm] = useState<AdmitStudentForm>(() => emptyAdmitForm(defaultClass));
   const [gradeFilter, setGradeFilter] = useState<string>("all");
+  const [divisionFilter, setDivisionFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [enrollmentFilter, setEnrollmentFilter] = useState<EnrollmentFilter>("all");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -983,6 +1059,10 @@ export function StudentsLedger() {
         : { ...prev, cls: defaultClass },
     );
   }, [classes, defaultClass]);
+
+  useEffect(() => {
+    setDivisionFilter("all");
+  }, [gradeFilter]);
 
   const openAdmitDialog = () => {
     setForm(emptyAdmitForm(defaultClass));
@@ -1016,14 +1096,31 @@ export function StudentsLedger() {
     [activeStudentViewId, students],
   );
 
-  const grades = useMemo(
-    () => Array.from(new Set(students.map((s) => s.cls.split(" - ")[0]))).sort(),
-    [students],
+  const classDivisionIndex = useMemo(() => {
+    const names = [
+      ...classes.map((c) => c.className),
+      ...students.map((s) => s.cls),
+    ];
+    return buildClassDivisionIndex(names);
+  }, [classes, students]);
+
+  const gradeOptions = useMemo(
+    () => Array.from(classDivisionIndex.keys()).sort((a, b) => a.localeCompare(b, "en")),
+    [classDivisionIndex],
   );
+
+  const divisionOptions = useMemo(() => {
+    if (gradeFilter === "all") {
+      const divisions = new Set<string>();
+      classDivisionIndex.forEach((set) => set.forEach((d) => divisions.add(d)));
+      return Array.from(divisions).sort();
+    }
+    return Array.from(classDivisionIndex.get(gradeFilter) ?? []).sort();
+  }, [classDivisionIndex, gradeFilter]);
 
   const filtered = useMemo(() => {
     return students
-      .filter((s) => gradeFilter === "all" || s.cls.startsWith(gradeFilter))
+      .filter((s) => studentMatchesClassDivisionFilter(s.cls, gradeFilter, divisionFilter))
       .filter((s) =>
         statusFilter === "all" ? true : statusFilter === "paid" ? s.due === 0 : s.due > 0,
       )
@@ -1035,7 +1132,7 @@ export function StudentsLedger() {
             ? active
             : !active;
       });
-  }, [students, gradeFilter, statusFilter, enrollmentFilter]);
+  }, [students, gradeFilter, divisionFilter, statusFilter, enrollmentFilter]);
 
   const analytics = useMemo(
     () => ({
@@ -1157,7 +1254,11 @@ export function StudentsLedger() {
       timeStyle: "short",
     });
     const contextLabel = [
-      gradeFilter === "all" ? "All Grades" : gradeFilter,
+      gradeFilter === "all"
+        ? "All Grades"
+        : divisionFilter === "all"
+          ? gradeFilter
+          : `${gradeFilter} · Div ${divisionFilter}`,
       statusFilter === "all"
         ? "All Students"
         : statusFilter === "paid"
@@ -1187,7 +1288,7 @@ export function StudentsLedger() {
         th, td { padding: 8px 10px; border-bottom: 1px solid #E5E5E5; text-align: left; }
         th { font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: #888; }
         tbody tr:nth-child(odd) { background: #FAFAFA; }
-        .paid { color: #047857; font-weight: 600; }
+        .paid { color: #10B981; font-weight: 600; }
         .overdue { color: #EF4444; font-weight: 600; }
       </style></head><body>
         <h1>Silver Hills Global · Students Directory</h1>
@@ -1266,20 +1367,6 @@ export function StudentsLedger() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 rounded-2xl border-[#E5E5E5] p-2">
               <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                Grade
-              </DropdownMenuLabel>
-              <DropdownMenuRadioGroup value={gradeFilter} onValueChange={setGradeFilter}>
-                <DropdownMenuRadioItem value="all" className="rounded-xl text-[13px]">
-                  All grades
-                </DropdownMenuRadioItem>
-                {grades.map((g) => (
-                  <DropdownMenuRadioItem key={g} value={g} className="rounded-xl text-[13px]">
-                    {g}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-              <DropdownMenuSeparator className="my-2" />
-              <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
                 Fees Status
               </DropdownMenuLabel>
               <DropdownMenuRadioGroup
@@ -1353,6 +1440,83 @@ export function StudentsLedger() {
             <Plus className="h-3.5 w-3.5" />
             Admit Student
           </button>
+        </div>
+      </div>
+
+      <div className="rounded-[1.35rem] border border-[#E5E5E5] bg-white px-4 py-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:gap-5">
+            <div className="min-w-0 flex-1">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                Class / Grade
+              </div>
+              <div className="mobile-scrollbar-none mt-2 flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setGradeFilter("all")}
+                  className={directoryFilterPillClass(gradeFilter === "all")}
+                >
+                  All
+                </button>
+                {gradeOptions.map((grade) => (
+                  <button
+                    key={grade}
+                    type="button"
+                    onClick={() => setGradeFilter(grade)}
+                    className={directoryFilterPillClass(gradeFilter === grade)}
+                  >
+                    {grade}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                Division
+              </div>
+              <div className="mobile-scrollbar-none mt-2 flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setDivisionFilter("all")}
+                  className={directoryFilterPillClass(divisionFilter === "all")}
+                >
+                  All
+                </button>
+                {divisionOptions.map((division) => (
+                  <button
+                    key={division}
+                    type="button"
+                    onClick={() => setDivisionFilter(division)}
+                    className={directoryFilterPillClass(divisionFilter === division)}
+                  >
+                    {division}
+                  </button>
+                ))}
+                {divisionOptions.length === 0 && (
+                  <span className="px-1 py-1.5 text-[12px] text-black/40">No divisions configured</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex shrink-0 items-center justify-between gap-3 lg:flex-col lg:items-end lg:justify-end">
+            <span className="font-mono text-[11px] text-black/45">
+              {filtered.length} shown
+            </span>
+            {(gradeFilter !== "all" || divisionFilter !== "all") && (
+              <button
+                type="button"
+                onClick={() => {
+                  setGradeFilter("all");
+                  setDivisionFilter("all");
+                }}
+                className="text-[11px] font-semibold text-black/55 underline-offset-2 hover:text-black hover:underline"
+              >
+                Clear class filters
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

@@ -21,12 +21,12 @@ export function EnrollmentStatusBadge({
     <span
       className={cn(
         "inline-flex w-auto shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[10.5px] font-semibold",
-        active ? "bg-[#DBEAFE] text-black" : "bg-black/8 text-black/55",
+        active ? "bg-[#DBEAFE] text-[#0F172A]" : "bg-black/8 text-black/55",
         className,
       )}
     >
       <span
-        className={cn("h-1.5 w-1.5 rounded-full", active ? "bg-[#65A30D]" : "bg-black/35")}
+        className={cn("h-1.5 w-1.5 rounded-full", active ? "bg-[#2563EB]" : "bg-black/35")}
       />
       {active ? "Active" : "Inactive"}
     </span>

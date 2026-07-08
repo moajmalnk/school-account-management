@@ -1249,7 +1249,7 @@ function SeverityBadge({ severity }: { severity: AuditEvent["severity"] }) {
   > = {
     info: { bg: "bg-sky-100", fg: "text-sky-700", Icon: Info, label: "Info" },
     success: {
-      bg: "bg-[#D1FAE5]",
+      bg: "bg-[#DBEAFE]",
       fg: "text-[#10B981]",
       Icon: CheckCircle2,
       label: "OK",
