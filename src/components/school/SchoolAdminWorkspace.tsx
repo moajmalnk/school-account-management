@@ -3456,7 +3456,7 @@ function MakePayment() {
           </div>
           <div>
             <FieldLabel>Mode</FieldLabel>
-            <div className="grid grid-cols-1 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {["Bank Transfer · NEFT", "UPI Business", "Cheque"].map((m) => {
                 const active = mode === m;
                 return (
@@ -3465,7 +3465,7 @@ function MakePayment() {
                     type="button"
                     onClick={() => setMode(m)}
                     className={cn(
-                      "w-full rounded-2xl px-4 py-2.5 text-left text-[14px] font-medium transition-colors",
+                      "w-full rounded-2xl px-3 py-2.5 text-center text-[13px] font-medium transition-colors sm:px-4 sm:text-left sm:text-[14px]",
                       active
                         ? "bg-[#2563EB] text-white shadow-sm"
                         : "bg-[#DBEAFE]/50 text-slate-700 hover:bg-[#DBEAFE]",
