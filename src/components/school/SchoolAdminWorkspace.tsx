@@ -26,6 +26,10 @@ import {
   Scale,
   GraduationCap,
   Briefcase,
+  HandCoins,
+  Banknote,
+  Landmark,
+  TriangleAlert,
   Users,
   Filter,
   Bus,
@@ -85,6 +89,7 @@ import {
   type ThemeSettings,
   type TransportRoute,
   type TransportVehicle,
+  type TenantNotification,
 } from "@/lib/tenant-store";
 import { StudentProfileDetail } from "@/components/school/StudentProfileDetail";
 import { StaffProfileDetail } from "@/components/school/StaffProfileDetail";
@@ -110,7 +115,7 @@ import {
   type PaymentPeriod,
 } from "@/lib/payment-period";
 import { useAuth } from "@/lib/auth";
-import { cn, type CornerSide, type Tone } from "@/lib/utils";
+import { cn, glassCardClass, glassInsetClass, glassPanelClass, glassTableWrapClass, premiumCardClass, type CornerSide, type Tone } from "@/lib/utils";
 
 const MADE_PAYMENTS = [
   {
@@ -257,6 +262,680 @@ function dashboardValueSize(value: string): string {
   return "text-[17px] sm:text-[20px]";
 }
 
+function MobileDashboardSectionTitle({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <h2
+      className={cn(
+        "text-[18px] font-bold leading-tight tracking-tight text-slate-900",
+        className,
+      )}
+    >
+      {children}
+    </h2>
+  );
+}
+
+const MobileSectionTitle = MobileDashboardSectionTitle;
+
+const mobileOutlineBtn =
+  "inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full border border-slate-200/80 bg-white px-4 text-[12.5px] font-semibold text-slate-900 shadow-sm transition-colors hover:bg-slate-50";
+
+const mobilePrimaryBtn =
+  "inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 px-4 text-[12.5px] font-semibold text-white shadow-md shadow-blue-200/40 transition-all duration-200 hover:opacity-95";
+
+function MobileCompactStat({
+  label,
+  value,
+  icon: Icon,
+  iconClass,
+  valueClass = "text-slate-900",
+}: {
+  label: string;
+  value: string | number;
+  icon: typeof CheckCircle2;
+  iconClass: string;
+  valueClass?: string;
+}) {
+  return (
+    <div className="flex min-w-0 flex-col items-center px-1 py-3 text-center">
+      <Icon className={cn("h-4 w-4 shrink-0", iconClass)} strokeWidth={2.25} />
+      <div className="mt-1.5 text-[10px] font-medium leading-tight text-slate-500">{label}</div>
+      <div
+        className={cn(
+          "mt-0.5 font-mono text-[20px] font-bold leading-none tracking-tight",
+          valueClass,
+        )}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function MobileStatsOverview({
+  items,
+}: {
+  items: {
+    label: string;
+    value: string | number;
+    icon: typeof CheckCircle2;
+    iconClass: string;
+    valueClass?: string;
+  }[];
+}) {
+  return (
+    <section className="w-full space-y-3 md:hidden">
+      <MobileSectionTitle>Overview</MobileSectionTitle>
+      <div className={cn(premiumCardClass, "grid grid-cols-3 divide-x divide-slate-100 p-0")}>
+        {items.map((item) => (
+          <MobileCompactStat key={item.label} {...item} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+const workspacePanelClass = cn(
+  glassCardClass,
+  "md:!rounded-3xl lg:organic-card lg:!rounded-[2rem]",
+);
+
+function MobileInsightSplit({
+  icon: Icon,
+  iconBg,
+  iconColor,
+  label,
+  value,
+  sublabel,
+}: {
+  icon: typeof GraduationCap;
+  iconBg: string;
+  iconColor: string;
+  label: string;
+  value: string;
+  sublabel: string;
+}) {
+  return (
+    <div className="flex min-w-0 flex-col items-center px-2 py-3 text-center">
+      <div
+        className={cn(
+          "grid h-14 w-14 shrink-0 place-items-center rounded-full",
+          iconBg,
+        )}
+      >
+        <Icon className={cn("h-7 w-7", iconColor)} strokeWidth={2} />
+      </div>
+      <div className="mt-3 w-full text-[12px] font-medium leading-snug text-slate-500">{label}</div>
+      <div className="mt-1 w-full text-[15px] font-bold leading-tight text-slate-900">
+        {value} {sublabel}
+      </div>
+    </div>
+  );
+}
+
+function MobileFinancialDetailTile({
+  title,
+  value,
+  icon: Icon,
+  iconBg,
+  iconColor,
+}: {
+  title: string;
+  value: string;
+  icon: typeof HandCoins;
+  iconBg: string;
+  iconColor: string;
+}) {
+  return (
+    <div className="relative flex min-h-[104px] min-w-0 flex-col justify-end rounded-[1.25rem] border border-slate-100/70 bg-white p-3.5 shadow-sm shadow-slate-200/35">
+      <div
+        className={cn(
+          "absolute right-3 top-3 grid h-8 w-8 shrink-0 place-items-center rounded-full",
+          iconBg,
+        )}
+      >
+        <Icon className={cn("h-4 w-4", iconColor)} strokeWidth={2.25} />
+      </div>
+      <div className="min-w-0 pr-10">
+        <div className="text-[12px] font-medium leading-snug text-slate-500">{title}</div>
+        <div className="mt-1 truncate font-mono text-[15px] font-bold leading-tight tracking-tight text-slate-900">
+          {value}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type MobileDashboardMetrics = {
+  studentCount: number;
+  staffCount: number;
+  periodIncome: number;
+  expenseTotal: number;
+  totalDue: number;
+  salaryOutstanding: number;
+  inHand: number;
+  inBank: number;
+  unreadNotifications: number;
+  onCollectFee: () => void;
+};
+
+function MobilePremiumDashboard({
+  studentCount,
+  staffCount,
+  periodIncome,
+  expenseTotal,
+  totalDue,
+  salaryOutstanding,
+  inHand,
+  inBank,
+  unreadNotifications,
+  onCollectFee,
+}: MobileDashboardMetrics) {
+  return (
+    <div className="w-full space-y-6 md:hidden">
+      <section className="w-full space-y-3">
+        <MobileDashboardSectionTitle>Key Insights</MobileDashboardSectionTitle>
+        <div className={cn(premiumCardClass, "w-full overflow-hidden p-0")}>
+          <div className="grid w-full grid-cols-2 divide-x divide-slate-100">
+            <MobileInsightSplit
+              icon={GraduationCap}
+              iconBg="bg-[#DBEAFE]"
+              iconColor="text-[#2563EB]"
+              label="Total Students"
+              value={studentCount.toLocaleString("en-IN")}
+              sublabel="Students"
+            />
+            <MobileInsightSplit
+              icon={Briefcase}
+              iconBg="bg-slate-100"
+              iconColor="text-slate-700"
+              label="Total Staff"
+              value={staffCount.toLocaleString("en-IN")}
+              sublabel="Staff"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section className="w-full space-y-3">
+        <MobileDashboardSectionTitle>Financial Overview</MobileDashboardSectionTitle>
+        <div className="grid w-full grid-cols-2 gap-3">
+          <div className="flex min-h-[112px] min-w-0 flex-col justify-between rounded-[1.25rem] bg-[#D1F2E1] p-4">
+            <div className="text-[12px] font-medium text-slate-800">Total Income</div>
+            <div className="mt-3 truncate font-mono text-[17px] font-bold leading-tight tracking-tight text-slate-900">
+              {formatInr(periodIncome)}
+            </div>
+          </div>
+          <div className="relative flex min-h-[112px] min-w-0 flex-col justify-between overflow-hidden rounded-[1.25rem] bg-[#3B5998] p-4 text-white">
+            <TriangleAlert
+              className="absolute right-3 top-3 h-4 w-4 text-amber-300"
+              strokeWidth={2.25}
+              aria-hidden
+            />
+            <div className="pr-6 text-[12px] font-medium text-white/90">Total Expense</div>
+            <div className="mt-3 truncate font-mono text-[17px] font-bold leading-tight tracking-tight text-white">
+              {formatInr(expenseTotal)}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="w-full space-y-3">
+        <MobileDashboardSectionTitle>Financial Detail</MobileDashboardSectionTitle>
+        <div className="grid w-full grid-cols-2 gap-3">
+          <MobileFinancialDetailTile
+            title="Fees Outstanding"
+            value={formatInr(totalDue)}
+            icon={HandCoins}
+            iconBg="bg-[#DBEAFE]"
+            iconColor="text-[#2563EB]"
+          />
+          <MobileFinancialDetailTile
+            title="Salary Outstanding"
+            value={formatInr(salaryOutstanding)}
+            icon={Banknote}
+            iconBg="bg-amber-50"
+            iconColor="text-amber-600"
+          />
+          <MobileFinancialDetailTile
+            title="Cash In Hand"
+            value={formatInr(inHand)}
+            icon={Banknote}
+            iconBg="bg-emerald-50"
+            iconColor="text-[#10B981]"
+          />
+          <MobileFinancialDetailTile
+            title="Bank Balance"
+            value={formatInr(inBank)}
+            icon={Landmark}
+            iconBg="bg-violet-50"
+            iconColor="text-violet-600"
+          />
+        </div>
+      </section>
+
+      {unreadNotifications > 0 && (
+        <Link
+          to="/tenant/notifications"
+          className={cn(
+            premiumCardClass,
+            "flex w-full items-center gap-3 p-4 transition-colors hover:border-slate-200",
+          )}
+        >
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#DBEAFE]">
+            <Bell className="h-4 w-4 text-[#2563EB]" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] font-semibold text-slate-900">
+              {unreadNotifications} unread alert{unreadNotifications === 1 ? "" : "s"}
+            </div>
+            <p className="mt-0.5 text-[12px] text-slate-500">Fee reminders & staff updates</p>
+          </div>
+        </Link>
+      )}
+
+      <button
+        type="button"
+        onClick={onCollectFee}
+        className="w-full rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 py-4 text-center text-[15px] font-semibold tracking-wide text-white shadow-md shadow-blue-200/50 transition-all duration-200 hover:opacity-95"
+      >
+        Collect Fee
+      </button>
+    </div>
+  );
+}
+
+function GlassProgressRing({
+  value,
+  stroke = "#2563EB",
+  label,
+}: {
+  value: number;
+  stroke?: string;
+  label: string;
+}) {
+  const r = 34;
+  const c = 2 * Math.PI * r;
+  const pct = Math.min(100, Math.max(0, value));
+  const offset = c - (pct / 100) * c;
+
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <svg className="h-[88px] w-[88px]" viewBox="0 0 88 88" aria-hidden>
+        <circle cx="44" cy="44" r={r} fill="none" stroke="rgba(15,23,42,0.08)" strokeWidth="7" />
+        <circle
+          cx="44"
+          cy="44"
+          r={r}
+          fill="none"
+          stroke={stroke}
+          strokeWidth="7"
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={offset}
+          transform="rotate(-90 44 44)"
+        />
+        <text
+          x="44"
+          y="47"
+          textAnchor="middle"
+          className="fill-slate-900 text-[13px] font-bold"
+          style={{ fontFamily: "Inter, sans-serif" }}
+        >
+          {Math.round(pct)}%
+        </text>
+      </svg>
+      <span className="text-[10px] font-medium text-slate-500">{label}</span>
+    </div>
+  );
+}
+
+type GlassModuleCardProps = {
+  title: string;
+  icon: typeof Users;
+  accent: "blue" | "orange";
+  stats: { label: string; value: string | number; tone?: "default" | "success" | "danger" }[];
+  ringValue: number;
+  ringLabel: string;
+  actionLabel: string;
+  onAction: () => void;
+};
+
+function GlassModuleCard({
+  title,
+  icon: Icon,
+  accent,
+  stats,
+  ringValue,
+  ringLabel,
+  actionLabel,
+  onAction,
+}: GlassModuleCardProps) {
+  const accentBar = accent === "blue" ? "bg-[#2563EB]" : "bg-orange-500";
+  const ringColor = accent === "blue" ? "#2563EB" : "#f97316";
+
+  return (
+    <div className={cn(glassCardClass, "relative flex flex-col overflow-hidden p-5")}>
+      <div className={cn("absolute inset-x-0 top-0 h-1", accentBar)} />
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center gap-2.5">
+          <div className="grid h-10 w-10 place-items-center rounded-xl bg-white/60 shadow-sm">
+            <Icon className="h-5 w-5 text-slate-700" strokeWidth={2} />
+          </div>
+          <h3 className="text-[15px] font-bold text-slate-900">{title}</h3>
+        </div>
+        <GlassProgressRing value={ringValue} stroke={ringColor} label={ringLabel} />
+      </div>
+      <ul className="mt-4 space-y-2">
+        {stats.map((s) => (
+          <li key={s.label} className="flex items-center justify-between text-[13px]">
+            <span className="text-slate-600">{s.label}</span>
+            <span
+              className={cn(
+                "font-mono font-semibold",
+                s.tone === "success" && "text-[#10B981]",
+                s.tone === "danger" && "text-[#EF4444]",
+                !s.tone && "text-slate-900",
+              )}
+            >
+              {s.value}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <button
+        type="button"
+        onClick={onAction}
+        className="mt-5 w-full rounded-xl bg-gradient-to-r from-[#2563EB] to-[#4C69A4] py-3 text-[13px] font-semibold text-white shadow-md shadow-blue-900/15 transition-opacity hover:opacity-95"
+      >
+        {actionLabel}
+      </button>
+    </div>
+  );
+}
+
+type GlassDesktopDashboardProps = {
+  students: Student[];
+  staff: Staff[];
+  periodIncome: number;
+  expenseTotal: number;
+  totalDue: number;
+  salaryOutstanding: number;
+  inHand: number;
+  inBank: number;
+  totalBalance: number;
+  overdueStudents: Student[];
+  overdueWatchlist: Student[];
+  recentReceipts: Payment[];
+  unreadNotifications: number;
+  notifications: TenantNotification[];
+  dashboardTodos: string[];
+  setDashboardTodos: React.Dispatch<React.SetStateAction<string[]>>;
+  dashboardNote: string;
+  setDashboardNote: (v: string) => void;
+  period: PaymentPeriod;
+  setPeriod: (p: PaymentPeriod) => void;
+  customRange: CustomDateRange;
+  setCustomRange: (r: CustomDateRange) => void;
+  onCollectFee: () => void;
+  onViewStudents: () => void;
+  onViewStaff: () => void;
+};
+
+function GlassDesktopDashboard({
+  students,
+  staff,
+  periodIncome,
+  expenseTotal,
+  totalDue,
+  salaryOutstanding,
+  inHand,
+  inBank,
+  totalBalance,
+  overdueStudents,
+  overdueWatchlist,
+  recentReceipts,
+  unreadNotifications,
+  notifications,
+  dashboardTodos,
+  setDashboardTodos,
+  dashboardNote,
+  setDashboardNote,
+  period,
+  setPeriod,
+  customRange,
+  setCustomRange,
+  onCollectFee,
+  onViewStudents,
+  onViewStaff,
+}: GlassDesktopDashboardProps) {
+  const paidCount = students.filter((s) => s.due === 0).length;
+  const overdueCount = students.filter((s) => s.due > 0).length;
+  const activeStaff = staff.filter((s) => s.active).length;
+  const paidPct = students.length ? (paidCount / students.length) * 100 : 0;
+  const activeStaffPct = staff.length ? (activeStaff / staff.length) * 100 : 0;
+
+  const updateTodo = (index: number, value: string) => {
+    setDashboardTodos((current) => {
+      const next = [...current];
+      next[index] = value;
+      return next;
+    });
+  };
+
+  const unreadFeed = notifications.filter((n) => !n.read).slice(0, 5);
+
+  return (
+    <div className="hidden space-y-5 md:block">
+      <div className="grid grid-cols-12 gap-5">
+        <div className="col-span-12 space-y-5 xl:col-span-8">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+            <GlassModuleCard
+              title="All Students"
+              icon={Users}
+              accent="blue"
+              ringValue={paidPct}
+              ringLabel="Paid"
+              stats={[
+                { label: "Enrolled", value: students.length },
+                { label: "Paid", value: paidCount, tone: "success" },
+                { label: "Overdue", value: overdueCount, tone: "danger" },
+              ]}
+              actionLabel="View Students"
+              onAction={onViewStudents}
+            />
+            <GlassModuleCard
+              title="All Staff"
+              icon={Briefcase}
+              accent="orange"
+              ringValue={activeStaffPct}
+              ringLabel="Active"
+              stats={[
+                { label: "Total", value: staff.length },
+                { label: "Active", value: activeStaff, tone: "success" },
+                { label: "Inactive", value: staff.length - activeStaff },
+              ]}
+              actionLabel="View Staff"
+              onAction={onViewStaff}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+            {[
+              { label: "Total Income", value: formatInr(periodIncome), tone: "bg-[#D1F2E1]" },
+              { label: "Total Expense", value: formatInr(expenseTotal), tone: "bg-[#3B5998] text-white" },
+              { label: "Fees Outstanding", value: formatInr(totalDue), tone: "glass-inset" },
+              { label: "Cash + Bank", value: formatInr(totalBalance), tone: "glass-inset" },
+            ].map((item) => (
+              <div
+                key={item.label}
+                className={cn(
+                  "flex min-h-[100px] flex-col justify-between rounded-2xl p-4",
+                  item.tone === "glass-inset" ? glassInsetClass : item.tone,
+                  item.tone === "bg-[#3B5998] text-white" && "text-white",
+                )}
+              >
+                <div
+                  className={cn(
+                    "text-[12px] font-medium",
+                    item.tone === "bg-[#3B5998] text-white" ? "text-white/90" : "text-slate-600",
+                  )}
+                >
+                  {item.label}
+                </div>
+                <div className="mt-2 truncate font-mono text-[16px] font-bold leading-tight xl:text-[17px]">
+                  {item.value}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+            <div className={cn(glassCardClass, "flex flex-col p-5")}>
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-[15px] font-bold text-slate-900">Overdue Watchlist</h3>
+                <span className="rounded-full bg-[#2563EB] px-2.5 py-1 text-[10px] font-semibold text-white">
+                  {overdueStudents.length} overdue
+                </span>
+              </div>
+              <div className="mt-4 flex-1 space-y-2">
+                {overdueWatchlist.length === 0 && (
+                  <div className={cn(glassInsetClass, "px-4 py-6 text-center text-[12px] text-slate-500")}>
+                    All student balances are cleared
+                  </div>
+                )}
+                {overdueWatchlist.map((student) => (
+                  <div
+                    key={student.id}
+                    className={cn(glassInsetClass, "flex items-center justify-between gap-3 px-3.5 py-2.5")}
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-[13px] font-semibold text-slate-900">{student.name}</div>
+                      <div className="text-[11px] text-slate-500">
+                        {student.cls} · {student.id}
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className="font-mono text-[13px] font-semibold text-slate-900">
+                        {formatInr(student.due)}
+                      </div>
+                      <div className="text-[10px] font-semibold uppercase text-[#EF4444]">Overdue</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className={cn(glassCardClass, "flex flex-col p-5")}>
+              <h3 className="text-[15px] font-bold text-slate-900">Recent Receipts</h3>
+              <p className="mt-1 text-[12px] text-slate-500">
+                Latest inbound payments · {recentReceipts.length} shown
+              </p>
+              <div className="mt-4 flex-1 divide-y divide-white/50">
+                {recentReceipts.length === 0 && (
+                  <div className="py-6 text-center text-[12px] text-slate-500">No receipts logged yet</div>
+                )}
+                {recentReceipts.map((payment) => (
+                  <div key={payment.id} className="flex items-center justify-between gap-3 py-3 first:pt-0">
+                    <div className="min-w-0">
+                      <div className="truncate text-[13px] font-semibold text-slate-900">{payment.name}</div>
+                      <div className="mt-0.5 text-[11px] text-slate-500">
+                        {payment.cat} · {payment.mode}
+                      </div>
+                    </div>
+                    <div className="shrink-0 font-mono text-[13px] font-semibold text-slate-900">
+                      {formatInr(payment.amount)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <aside className="col-span-12 space-y-4 xl:col-span-4">
+          <div className={cn(glassPanelClass, "p-5")}>
+            <DashboardPeriodFilter
+              period={period}
+              onPeriodChange={setPeriod}
+              customRange={customRange}
+              onCustomRangeChange={setCustomRange}
+            />
+            <button
+              type="button"
+              onClick={onCollectFee}
+              className="mt-4 w-full rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 py-3.5 text-[14px] font-semibold text-white shadow-md shadow-blue-200/40 transition-opacity hover:opacity-95"
+            >
+              Collect Fee
+            </button>
+          </div>
+
+          <div className={cn(glassCardClass, "p-5")}>
+            <div className="mb-3 flex items-center gap-2 border-b border-white/50 pb-3">
+              <button type="button" className="text-[13px] font-bold text-[#2563EB]">
+                Alerts
+              </button>
+              <span className="text-[13px] text-slate-400">·</span>
+              <span className="text-[13px] font-medium text-slate-500">Notes</span>
+            </div>
+            {unreadFeed.length === 0 ? (
+              <div className="py-8 text-center text-[12px] text-slate-500">No unread alerts</div>
+            ) : (
+              <ul className="space-y-2">
+                {unreadFeed.map((n) => (
+                  <li key={n.id} className={cn(glassInsetClass, "px-3 py-2.5 text-[12px]")}>
+                    <div className="font-semibold text-slate-800">{n.title}</div>
+                    <p className="mt-0.5 line-clamp-2 text-slate-500">{n.body}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {unreadNotifications > 0 && (
+              <Link
+                to="/tenant/notifications"
+                className="mt-3 block text-center text-[12px] font-semibold text-[#2563EB] hover:underline"
+              >
+                View all {unreadNotifications} alerts
+              </Link>
+            )}
+          </div>
+
+          <div className={cn(glassCardClass, "space-y-3 p-5")}>
+            <h3 className="text-[15px] font-bold text-slate-900">To do</h3>
+            {dashboardTodos.map((item, index) => (
+              <div key={index} className="flex items-center gap-2">
+                <span className="w-5 text-right text-[11px] font-semibold text-slate-400">{index + 1}.</span>
+                <Input
+                  value={item}
+                  onChange={(e) => updateTodo(index, e.target.value)}
+                  placeholder={`Task ${index + 1}`}
+                  className={cn(glassInsetClass, "h-9 flex-1 border-white/50 bg-white/40")}
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className={cn(glassCardClass, "p-5")}>
+            <h3 className="text-[15px] font-bold text-slate-900">Quick Note</h3>
+            <Textarea
+              value={dashboardNote}
+              onChange={(e) => setDashboardNote(e.target.value)}
+              placeholder="Write a quick note for today..."
+              className={cn(glassInsetClass, "mt-3 min-h-[120px] resize-none border-white/50 bg-white/40")}
+            />
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
 function DashboardStatGrid({
   children,
   className,
@@ -399,260 +1078,48 @@ export function SchoolDashboard() {
     [notifications],
   );
 
-  const updateTodo = (index: number, value: string) => {
-    setDashboardTodos((current) => {
-      const next = [...current];
-      next[index] = value;
-      return next;
-    });
-  };
-
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between lg:hidden">
-        <h1 className="text-[28px] font-semibold leading-none tracking-tight text-black sm:text-title">
-          Home
-        </h1>
-        <DashboardPeriodFilter
-          period={period}
-          onPeriodChange={setPeriod}
-          customRange={customRange}
-          onCustomRangeChange={setCustomRange}
-          className="sm:max-w-[220px]"
-        />
-      </div>
+      <MobilePremiumDashboard
+        studentCount={students.length}
+        staffCount={staff.length}
+        periodIncome={periodIncome}
+        expenseTotal={expenseTotal}
+        totalDue={totalDue}
+        salaryOutstanding={salaryOutstanding}
+        inHand={inHand}
+        inBank={inBank}
+        unreadNotifications={unreadNotifications}
+        onCollectFee={() => navigate({ to: "/tenant/finance", search: { tab: "receive" } })}
+      />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start lg:gap-5">
-        <div className="min-w-0 space-y-4 sm:space-y-5">
-          <h1 className="hidden text-[28px] font-semibold leading-none tracking-tight text-black lg:block sm:text-title">
-            Home
-          </h1>
-
-          <DashboardMetricsBand>
-            <DashboardStatGrid columns={4} className="gap-x-2 gap-y-2 sm:gap-3">
-              <DashboardSectionHeading title="Our Strength" className="col-span-1 lg:col-span-2" />
-              <DashboardSectionHeading
-                title="Our Financial Overview"
-                className="col-span-1 lg:col-span-2"
-              />
-            </DashboardStatGrid>
-            <DashboardStatGrid columns={4}>
-              <DashboardStatCard
-                label="Total Students"
-                value={students.length.toLocaleString("en-IN")}
-              />
-              <DashboardStatCard label="Total Staff" value={staff.length.toString()} />
-              <DashboardStatCard label="Income" value={formatInr(periodIncome)} tone="lime" />
-              <DashboardStatCard label="Expense" value={formatInr(expenseTotal)} />
-            </DashboardStatGrid>
-          </DashboardMetricsBand>
-
-          <DashboardMetricsBand>
-            <DashboardStatGrid columns={4} className="gap-x-2 gap-y-2 sm:gap-3">
-              <DashboardSectionHeading title="Our Outstandings" className="col-span-1 lg:col-span-2" />
-              <DashboardSectionHeading title="Current balance" className="col-span-1 lg:col-span-2" />
-            </DashboardStatGrid>
-            <DashboardStatGrid columns={4}>
-              <DashboardStatCard label="Fees out" value={formatInr(totalDue)} />
-              <DashboardStatCard label="Salary out" value={formatInr(salaryOutstanding)} />
-              <DashboardStatCard label="In hand" value={formatInr(inHand)} />
-              <DashboardStatCard label="In bank" value={formatInr(inBank)} />
-              <DashboardStatCard
-                label="Total"
-                value={formatInr(totalBalance)}
-                tone="lime"
-                className="col-span-2 lg:col-start-3 hidden lg:flex"
-              />
-            </DashboardStatGrid>
-
-            <div
-              className={cn(
-                "grid gap-2 sm:gap-3 lg:hidden",
-                unreadNotifications > 0 ? "grid-cols-2" : "grid-cols-1",
-              )}
-            >
-              <DashboardStatCard
-                label="Total"
-                value={formatInr(totalBalance)}
-                tone="lime"
-              />
-              {unreadNotifications > 0 && (
-                <Link
-                  to="/tenant/notifications"
-                  className="flex h-[92px] min-w-0 flex-col justify-start rounded-[1.35rem] border border-[#E5E5E5] bg-white p-3 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_32px_-24px_rgba(0,0,0,0.12)] transition-colors hover:border-black/15 hover:bg-[#FAFAFA] sm:h-[100px] sm:p-4"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[10px] font-semibold uppercase leading-snug tracking-wider text-black/45">
-                      Alerts
-                    </span>
-                    <Bell className="h-3.5 w-3.5 shrink-0 text-black/40" />
-                  </div>
-                  <div className="mt-auto min-w-0">
-                    <div className="font-mono text-[17px] font-semibold leading-none tracking-tight text-black sm:text-[20px]">
-                      {unreadNotifications}
-                    </div>
-                    <p className="mt-1 truncate text-[10px] leading-tight text-black/50 sm:text-[11px]">
-                      unread · fee & staff updates
-                    </p>
-                  </div>
-                </Link>
-              )}
-            </div>
-          </DashboardMetricsBand>
-
-          {unreadNotifications > 0 && (
-            <Link
-              to="/tenant/notifications"
-              className="hidden rounded-[1.35rem] border border-[#E5E5E5] bg-white px-4 py-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-colors hover:border-black/15 hover:bg-[#FAFAFA] sm:block sm:px-5 sm:py-4 lg:hidden"
-            >
-              <div className="flex items-start gap-3">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[#F4F4F5] text-black/55">
-                  <Bell className="h-4 w-4" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[14px] font-semibold text-black">
-                    {unreadNotifications} unread tenant alert{unreadNotifications === 1 ? "" : "s"}
-                  </div>
-                  <p className="mt-0.5 text-[12px] text-black/55">
-                    Fee reminders, admissions, and staff updates
-                  </p>
-                </div>
-              </div>
-            </Link>
-          )}
-        </div>
-
-        <aside className="flex w-full flex-col gap-3 lg:sticky lg:top-6 lg:w-[280px] lg:shrink-0">
-          <div className="hidden lg:block">
-            <DashboardPeriodFilter
-              period={period}
-              onPeriodChange={setPeriod}
-              customRange={customRange}
-              onCustomRangeChange={setCustomRange}
-            />
-          </div>
-
-          <Button
-            type="button"
-            onClick={() => navigate({ to: "/tenant/finance", search: { tab: "receive" } })}
-            className="h-12 w-full rounded-[1.35rem] bg-black text-[14px] font-semibold text-white hover:bg-black/90"
-          >
-            Collect fee
-          </Button>
-
-          <OrganicCard tone="white" cornerSide="tr" padded className="w-full space-y-3">
-            <div className="text-title">To do</div>
-            <div className="space-y-2">
-              {dashboardTodos.map((item, index) => (
-                <div key={index} className="flex items-center gap-2.5">
-                  <span className="w-5 shrink-0 text-right text-[11px] font-semibold tabular-nums text-black/45">
-                    {index + 1}.
-                  </span>
-                  <Input
-                    value={item}
-                    onChange={(event) => updateTodo(index, event.target.value)}
-                    placeholder={`Task ${index + 1}`}
-                    className="h-9 min-w-0 flex-1 rounded-xl border-[#E5E5E5] bg-[#FAFAFA]"
-                  />
-                </div>
-              ))}
-            </div>
-          </OrganicCard>
-        </aside>
-      </div>
-
-      <div className="grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_280px] lg:gap-5">
-            <OrganicCard tone="white" cornerSide="bl" padded className="flex h-full flex-col">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-title">Overdue Watchlist</div>
-                </div>
-                <span className="rounded-full bg-[#2563EB] px-2.5 py-1 text-[10px] font-semibold text-white">
-                  {overdueStudents.length} overdue
-                </span>
-              </div>
-              <div className="mt-4 flex-1 space-y-2">
-                {overdueWatchlist.length === 0 && (
-                  <div className="rounded-2xl bg-[#F4F4F5] px-4 py-6 text-center text-[12px] text-black/55">
-                    All student balances are cleared
-                  </div>
-                )}
-                {overdueWatchlist.map((student) => (
-                  <div
-                    key={student.id}
-                    className="flex items-center justify-between gap-3 rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5"
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate text-[13px] font-semibold text-black">
-                        {student.name}
-                      </div>
-                      <div className="text-[11px] text-black/55">
-                        {student.cls} · {student.id}
-                      </div>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <div className="font-mono text-[13px] font-semibold tabular-nums whitespace-nowrap text-black">
-                        {formatInr(student.due)}
-                      </div>
-                      <div className="text-[10px] font-semibold uppercase tracking-wider text-[#EF4444]">
-                        Overdue
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </OrganicCard>
-
-            <OrganicCard tone="white" cornerSide="tr" padded className="flex h-full flex-col">
-              <div className="text-title">Recent Receipts</div>
-              <div className="mt-1 text-[12.5px] text-black/55">
-                Latest inbound payments · {recentReceipts.length} shown
-              </div>
-              <div className="mt-4 flex-1 divide-y divide-[#F0F0F0]">
-                {recentReceipts.length === 0 && (
-                  <div className="py-6 text-center text-[12px] text-black/55">
-                    No receipts logged yet
-                  </div>
-                )}
-                {recentReceipts.map((payment) => (
-                  <div
-                    key={payment.id}
-                    className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate text-[13px] font-semibold text-black">
-                        {payment.name}
-                      </div>
-                      <div className="mt-0.5 text-[11px] text-black/55">
-                        {payment.cat} · {payment.mode} · {payment.time}
-                      </div>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <div className="font-mono text-[13px] font-semibold tabular-nums whitespace-nowrap text-black">
-                        {formatInr(payment.amount)}
-                      </div>
-                      <div className="font-mono text-[10px] text-black/45">{payment.id}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </OrganicCard>
-
-            <OrganicCard
-              tone="white"
-              cornerSide="bl"
-              padded
-              className="flex h-full flex-col sm:col-span-2 lg:col-span-1"
-            >
-              <div className="text-title">Note</div>
-              <Textarea
-                value={dashboardNote}
-                onChange={(event) => setDashboardNote(event.target.value)}
-                placeholder="Write a quick note for today..."
-                className="mobile-scrollbar-none mt-3 min-h-[220px] flex-1 resize-none overflow-y-auto rounded-2xl border-[#E5E5E5] bg-[#FAFAFA] text-[13px] sm:min-h-[280px] lg:min-h-0"
-              />
-            </OrganicCard>
-      </div>
+      <GlassDesktopDashboard
+        students={students}
+        staff={staff}
+        periodIncome={periodIncome}
+        expenseTotal={expenseTotal}
+        totalDue={totalDue}
+        salaryOutstanding={salaryOutstanding}
+        inHand={inHand}
+        inBank={inBank}
+        totalBalance={totalBalance}
+        overdueStudents={overdueStudents}
+        overdueWatchlist={overdueWatchlist}
+        recentReceipts={recentReceipts}
+        unreadNotifications={unreadNotifications}
+        notifications={notifications}
+        dashboardTodos={dashboardTodos}
+        setDashboardTodos={setDashboardTodos}
+        dashboardNote={dashboardNote}
+        setDashboardNote={setDashboardNote}
+        period={period}
+        setPeriod={setPeriod}
+        customRange={customRange}
+        setCustomRange={setCustomRange}
+        onCollectFee={() => navigate({ to: "/tenant/finance", search: { tab: "receive" } })}
+        onViewStudents={() => navigate({ to: "/tenant/students" })}
+        onViewStaff={() => navigate({ to: "/tenant/staff" })}
+      />
     </div>
   );
 }
@@ -761,11 +1228,11 @@ function personInitials(name: string) {
 }
 
 const directoryStatCardClass =
-  "flex min-w-0 flex-1 flex-row items-center justify-between gap-2 p-2.5 lg:min-h-[108px] lg:flex-col lg:items-stretch lg:justify-between lg:p-6";
+  "flex min-w-0 flex-1 flex-row items-center justify-between gap-2 p-2.5 md:min-h-[108px] md:flex-col md:items-stretch md:justify-between md:p-6";
 const directoryStatLabelClass =
-  "text-[8px] font-semibold uppercase leading-tight tracking-wider lg:text-[10px]";
+  "text-[8px] font-semibold uppercase leading-tight tracking-wider md:text-[10px]";
 const directoryStatValueClass =
-  "shrink-0 font-mono text-[18px] font-semibold leading-none tracking-tight text-black lg:text-[32px]";
+  "shrink-0 font-mono text-[18px] font-semibold leading-none tracking-tight text-black md:text-[32px]";
 
 function DirectoryPersonAvatar({ name, photoUrl }: { name: string; photoUrl?: string }) {
   if (photoUrl) {
@@ -780,8 +1247,15 @@ function DirectoryPersonAvatar({ name, photoUrl }: { name: string; photoUrl?: st
   );
 }
 
-const directoryMobileCardClass =
-  "flex w-full flex-col gap-3 rounded-[1.35rem] border border-[#E8E8E8] bg-white p-3.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_32px_-24px_rgba(0,0,0,0.18)] transition-all hover:border-black/12 hover:bg-[#FAFAFA] active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-2";
+const directoryMobileCardClass = cn(
+  premiumCardClass,
+  "flex flex-col gap-3 p-4 text-left transition-all active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-2",
+);
+
+const directoryEmptyClass = cn(
+  premiumCardClass,
+  "border-dashed px-4 py-10 text-center text-[13px] text-slate-500",
+);
 
 function StudentFeesStatusBadge({ due }: { due: number }) {
   if (due === 0) {
@@ -811,9 +1285,9 @@ function StudentsDirectoryTable({
 }) {
   return (
     <>
-      <div className="space-y-2.5 lg:hidden">
+      <div className="space-y-2.5 md:hidden">
         {students.length === 0 && (
-          <div className="rounded-[1.35rem] border border-dashed border-[#E5E5E5] bg-white px-4 py-10 text-center text-[13px] text-black/55">
+          <div className={directoryEmptyClass}>
             No students match the current filters.
           </div>
         )}
@@ -839,10 +1313,10 @@ function StudentsDirectoryTable({
                 <div className="flex min-w-0 items-center gap-3">
                   <DirectoryPersonAvatar name={student.name} photoUrl={student.photoUrl} />
                   <div className="min-w-0">
-                    <div className="truncate text-[14px] font-semibold leading-tight text-black">
+                    <div className="truncate text-[14px] font-semibold leading-tight text-slate-900">
                       {student.name}
                     </div>
-                    <div className="mt-0.5 truncate font-mono text-[10.5px] text-black/45">
+                    <div className="mt-0.5 truncate font-mono text-[10.5px] text-slate-400">
                       {student.id}
                     </div>
                   </div>
@@ -851,7 +1325,7 @@ function StudentsDirectoryTable({
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex max-w-full truncate rounded-full bg-[#DBEAFE] px-2.5 py-1 text-[10.5px] font-semibold text-black">
+                <span className="inline-flex max-w-full truncate rounded-full bg-[#DBEAFE] px-2.5 py-1 text-[10.5px] font-semibold text-[#0F172A]">
                   {student.cls}
                 </span>
                 <EnrollmentStatusBadge active={isRecordActive(student.active)} />
@@ -883,7 +1357,8 @@ function StudentsDirectoryTable({
         })}
       </div>
 
-      <div className="mobile-scrollbar-none hidden w-full overflow-x-auto rounded-[2rem] border border-slate-100/80 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_24px_60px_-32px_rgba(0,0,0,0.18)] lg:block">
+      <div className="mobile-scrollbar-none hidden w-full overflow-x-auto md:block">
+        <div className={glassTableWrapClass}>
       <table className="w-full min-w-[720px] table-fixed border-collapse text-left">
         <colgroup>
           <col className="w-[26%]" />
@@ -1024,6 +1499,7 @@ function StudentsDirectoryTable({
           })}
         </tbody>
       </table>
+        </div>
       </div>
     </>
   );
@@ -1314,53 +1790,73 @@ export function StudentsLedger() {
     );
   }
 
-  const outlineBtn =
-    "inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-4 text-[12.5px] font-semibold text-black transition-colors hover:border-black/20 hover:bg-[#F4F4F5]";
-
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <div className="flex min-w-0 flex-row gap-1.5 lg:gap-3">
-        <OrganicCard tone="white" cornerSide="tr" padded className={directoryStatCardClass}>
-          <div className="flex min-w-0 flex-1 items-center justify-between gap-1 lg:items-start lg:gap-2">
-            <div className={cn(directoryStatLabelClass, "text-black/45")}>Paid</div>
-            <CheckCircle2 className="h-3 w-3 shrink-0 text-[#10B981] lg:h-4 lg:w-4" />
+    <div className="w-full space-y-6 lg:space-y-6">
+      <MobileStatsOverview
+        items={[
+          {
+            label: "Paid",
+            value: analytics.paid,
+            icon: CheckCircle2,
+            iconClass: "text-[#10B981]",
+          },
+          {
+            label: "Overdue",
+            value: analytics.overdue,
+            icon: AlertTriangle,
+            iconClass: "text-[#EF4444]",
+          },
+          {
+            label: "Total",
+            value: analytics.total,
+            icon: Users,
+            iconClass: "text-[#2563EB]",
+          },
+        ]}
+      />
+
+      <div className="hidden min-w-0 flex-row gap-1.5 md:flex md:gap-3">
+        <div className={cn(glassCardClass, directoryStatCardClass)}>
+          <div className="flex min-w-0 flex-1 items-center justify-between gap-1 md:items-start md:gap-2">
+            <div className={cn(directoryStatLabelClass, "text-slate-500")}>Paid</div>
+            <CheckCircle2 className="h-3 w-3 shrink-0 text-[#10B981] md:h-4 md:w-4" />
           </div>
           <div className={directoryStatValueClass}>{analytics.paid}</div>
-        </OrganicCard>
+        </div>
 
-        <OrganicCard tone="white" cornerSide="bl" padded className={directoryStatCardClass}>
-          <div className="flex min-w-0 flex-1 items-center justify-between gap-1 lg:items-start lg:gap-2">
-            <div className={cn(directoryStatLabelClass, "text-black/45")}>Overdue</div>
-            <AlertTriangle className="h-3 w-3 shrink-0 text-[#EF4444] lg:h-4 lg:w-4" />
+        <div className={cn(glassCardClass, directoryStatCardClass)}>
+          <div className="flex min-w-0 flex-1 items-center justify-between gap-1 md:items-start md:gap-2">
+            <div className={cn(directoryStatLabelClass, "text-slate-500")}>Overdue</div>
+            <AlertTriangle className="h-3 w-3 shrink-0 text-[#EF4444] md:h-4 md:w-4" />
           </div>
           <div className={directoryStatValueClass}>{analytics.overdue}</div>
-        </OrganicCard>
+        </div>
 
-        <OrganicCard tone="limePale" cornerSide="tr" padded className={directoryStatCardClass}>
-          <div className="flex min-w-0 flex-1 items-center justify-between gap-1 lg:items-start lg:gap-2">
-            <div className={cn(directoryStatLabelClass, "text-black/55")}>
-              <span className="lg:hidden">Total</span>
-              <span className="hidden lg:inline">Total Students</span>
+        <div className={cn(glassCardClass, directoryStatCardClass, "bg-[#DBEAFE]/40")}>
+          <div className="flex min-w-0 flex-1 items-center justify-between gap-1 md:items-start md:gap-2">
+            <div className={cn(directoryStatLabelClass, "text-slate-600")}>
+              <span className="md:hidden">Total</span>
+              <span className="hidden md:inline">Total Students</span>
             </div>
-            <Users className="h-3 w-3 shrink-0 text-black/40 lg:h-4 lg:w-4" />
+            <Users className="h-3 w-3 shrink-0 text-slate-400 md:h-4 md:w-4" />
           </div>
-          <div className="shrink-0 text-right lg:text-left">
+          <div className="shrink-0 text-right md:text-left">
             <div className={directoryStatValueClass}>{analytics.total}</div>
-            <div className="mt-0.5 font-mono text-[9px] text-black/55 lg:mt-1.5 lg:text-[11px]">
+            <div className="mt-0.5 font-mono text-[9px] text-slate-500 md:mt-1.5 md:text-[11px]">
               {analytics.male}M · {analytics.female}F
             </div>
           </div>
-        </OrganicCard>
+        </div>
       </div>
 
-      <div className="flex w-full flex-col items-center gap-3 text-center lg:flex-row lg:items-center lg:justify-between lg:text-left">
-        <h1 className="w-full shrink-0 text-center text-[28px] font-semibold leading-none tracking-tight text-black lg:w-auto lg:text-left sm:text-title">
+      <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <h1 className="w-full shrink-0 text-[18px] font-bold leading-tight tracking-tight text-slate-900 md:text-[28px] md:font-semibold">
           Students Directory
         </h1>
-        <div className="mobile-scrollbar-none flex w-full items-center justify-center gap-2 overflow-x-auto lg:w-auto lg:shrink-0 lg:justify-end">
+        <div className="mobile-scrollbar-none flex w-full items-center gap-2 overflow-x-auto md:w-auto md:shrink-0 md:justify-end">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button type="button" className={outlineBtn}>
+              <button type="button" className={mobileOutlineBtn}>
                 <Filter className="h-3.5 w-3.5" />
                 Filter
               </button>
@@ -1402,7 +1898,7 @@ export function StudentsLedger() {
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button type="button" className={outlineBtn}>
+              <button type="button" className={mobileOutlineBtn}>
                 <Download className="h-3.5 w-3.5" />
                 Export
               </button>
@@ -1435,7 +1931,10 @@ export function StudentsLedger() {
           <button
             type="button"
             onClick={openAdmitDialog}
-            className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-black px-4 text-[12.5px] font-semibold text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)] transition-colors hover:bg-black/85"
+            className={cn(
+              mobilePrimaryBtn,
+              "md:rounded-full md:bg-gradient-to-r md:from-[#2563EB] md:to-[#4C69A4] md:shadow-md md:shadow-blue-900/15 md:hover:opacity-95 md:hover:bg-gradient-to-r",
+            )}
           >
             <Plus className="h-3.5 w-3.5" />
             Admit Student
@@ -1443,11 +1942,11 @@ export function StudentsLedger() {
         </div>
       </div>
 
-      <div className="rounded-[1.35rem] border border-[#E5E5E5] bg-white px-4 py-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+      <div className={cn(glassCardClass, "p-4 md:p-5")}>
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:gap-5">
             <div className="min-w-0 flex-1">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+              <div className="text-[12px] font-medium text-slate-500 md:text-[10px] md:font-semibold md:uppercase md:tracking-wider">
                 Class / Grade
               </div>
               <div className="mobile-scrollbar-none mt-2 flex flex-wrap gap-1.5">
@@ -1472,7 +1971,7 @@ export function StudentsLedger() {
             </div>
 
             <div className="min-w-0 flex-1">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+              <div className="text-[12px] font-medium text-slate-500 md:text-[10px] md:font-semibold md:uppercase md:tracking-wider">
                 Division
               </div>
               <div className="mobile-scrollbar-none mt-2 flex flex-wrap gap-1.5">
@@ -1500,7 +1999,7 @@ export function StudentsLedger() {
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center justify-between gap-3 lg:flex-col lg:items-end lg:justify-end">
+          <div className="flex shrink-0 items-center justify-between gap-3 md:flex-col md:items-end md:justify-end">
             <span className="font-mono text-[11px] text-black/45">
               {filtered.length} shown
             </span>
@@ -1921,56 +2420,76 @@ export function StaffRoster() {
     );
   }
 
-  const outlineBtn =
-    "inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-4 text-[12.5px] font-semibold text-black transition-colors hover:border-black/20 hover:bg-[#F4F4F5]";
-
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <div className="flex min-w-0 flex-row gap-1.5 lg:gap-3">
-        <OrganicCard tone="white" cornerSide="tr" padded className={directoryStatCardClass}>
-          <div className="flex min-w-0 flex-1 items-center justify-between gap-1 lg:items-start lg:gap-2">
-            <div className={cn(directoryStatLabelClass, "text-black/45")}>Teachers</div>
-            <GraduationCap className="h-3 w-3 shrink-0 text-black/35 lg:h-4 lg:w-4" />
+    <div className="w-full space-y-6 lg:space-y-6">
+      <MobileStatsOverview
+        items={[
+          {
+            label: "Teachers",
+            value: analytics.teachers,
+            icon: GraduationCap,
+            iconClass: "text-[#2563EB]",
+          },
+          {
+            label: "Admin",
+            value: analytics.nonTeaching,
+            icon: Briefcase,
+            iconClass: "text-slate-600",
+          },
+          {
+            label: "Total",
+            value: analytics.total,
+            icon: Users,
+            iconClass: "text-[#2563EB]",
+          },
+        ]}
+      />
+
+      <div className="hidden min-w-0 flex-row gap-1.5 md:flex md:gap-3">
+        <div className={cn(glassCardClass, directoryStatCardClass)}>
+          <div className="flex min-w-0 flex-1 items-center justify-between gap-1 md:items-start md:gap-2">
+            <div className={cn(directoryStatLabelClass, "text-slate-500")}>Teachers</div>
+            <GraduationCap className="h-3 w-3 shrink-0 text-slate-400 md:h-4 md:w-4" />
           </div>
           <div className={directoryStatValueClass}>{analytics.teachers}</div>
-        </OrganicCard>
+        </div>
 
-        <OrganicCard tone="white" cornerSide="bl" padded className={directoryStatCardClass}>
-          <div className="flex min-w-0 flex-1 items-center justify-between gap-1 lg:items-start lg:gap-2">
-            <div className={cn(directoryStatLabelClass, "text-black/45")}>
-              <span className="lg:hidden">Admin</span>
-              <span className="hidden lg:inline">Non-Teaching / Administrative</span>
+        <div className={cn(glassCardClass, directoryStatCardClass)}>
+          <div className="flex min-w-0 flex-1 items-center justify-between gap-1 md:items-start md:gap-2">
+            <div className={cn(directoryStatLabelClass, "text-slate-500")}>
+              <span className="md:hidden">Admin</span>
+              <span className="hidden md:inline">Non-Teaching / Administrative</span>
             </div>
-            <Briefcase className="h-3 w-3 shrink-0 text-black/35 lg:h-4 lg:w-4" />
+            <Briefcase className="h-3 w-3 shrink-0 text-slate-400 md:h-4 md:w-4" />
           </div>
           <div className={directoryStatValueClass}>{analytics.nonTeaching}</div>
-        </OrganicCard>
+        </div>
 
-        <OrganicCard tone="limePale" cornerSide="tr" padded className={directoryStatCardClass}>
-          <div className="flex min-w-0 flex-1 items-center justify-between gap-1 lg:items-start lg:gap-2">
-            <div className={cn(directoryStatLabelClass, "text-black/55")}>
-              <span className="lg:hidden">Total</span>
-              <span className="hidden lg:inline">Total Staff</span>
+        <div className={cn(glassCardClass, directoryStatCardClass, "bg-[#DBEAFE]/40")}>
+          <div className="flex min-w-0 flex-1 items-center justify-between gap-1 md:items-start md:gap-2">
+            <div className={cn(directoryStatLabelClass, "text-slate-600")}>
+              <span className="md:hidden">Total</span>
+              <span className="hidden md:inline">Total Staff</span>
             </div>
-            <Users className="h-3 w-3 shrink-0 text-black/40 lg:h-4 lg:w-4" />
+            <Users className="h-3 w-3 shrink-0 text-slate-400 md:h-4 md:w-4" />
           </div>
-          <div className="shrink-0 text-right lg:text-left">
+          <div className="shrink-0 text-right md:text-left">
             <div className={directoryStatValueClass}>{analytics.total}</div>
-            <div className="mt-0.5 font-mono text-[9px] text-black/55 lg:mt-1.5 lg:text-[11px]">
+            <div className="mt-0.5 font-mono text-[9px] text-slate-500 md:mt-1.5 md:text-[11px]">
               {analytics.active}A · {analytics.inactive}I
             </div>
           </div>
-        </OrganicCard>
+        </div>
       </div>
 
-      <div className="flex w-full flex-col items-center gap-3 text-center lg:flex-row lg:items-center lg:justify-between lg:text-left">
-        <h1 className="w-full shrink-0 text-center text-[28px] font-semibold leading-none tracking-tight text-black lg:w-auto lg:text-left sm:text-title">
+      <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <h1 className="w-full shrink-0 text-[18px] font-bold leading-tight tracking-tight text-slate-900 md:text-[28px] md:font-semibold">
           Staff Directory
         </h1>
-        <div className="mobile-scrollbar-none flex w-full items-center justify-center gap-2 overflow-x-auto lg:w-auto lg:shrink-0 lg:justify-end">
+        <div className="mobile-scrollbar-none flex w-full items-center gap-2 overflow-x-auto md:w-auto md:shrink-0 md:justify-end">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button type="button" className={outlineBtn}>
+              <button type="button" className={mobileOutlineBtn}>
                 <Filter className="h-3.5 w-3.5" />
                 Filter
               </button>
@@ -2010,7 +2529,7 @@ export function StaffRoster() {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <button type="button" onClick={handleExport} className={outlineBtn}>
+          <button type="button" onClick={handleExport} className={mobileOutlineBtn}>
             <Download className="h-3.5 w-3.5" />
             Export
           </button>
@@ -2018,7 +2537,10 @@ export function StaffRoster() {
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-black px-4 text-[12.5px] font-semibold text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)] transition-colors hover:bg-black/85"
+            className={cn(
+              mobilePrimaryBtn,
+              "md:rounded-full md:bg-gradient-to-r md:from-[#2563EB] md:to-[#4C69A4] md:shadow-md md:shadow-blue-900/15 md:hover:opacity-95 md:hover:bg-gradient-to-r",
+            )}
           >
             <Plus className="h-3.5 w-3.5" />
             Recruit Staff
@@ -2026,9 +2548,9 @@ export function StaffRoster() {
         </div>
       </div>
 
-      <div className="space-y-2.5 lg:hidden">
+      <div className="space-y-2.5 md:hidden">
         {filteredStaff.length === 0 && (
-          <div className="rounded-[1.35rem] border border-dashed border-[#E5E5E5] bg-white px-4 py-10 text-center text-[13px] text-black/55">
+          <div className={directoryEmptyClass}>
             No staff records match the current filters.
           </div>
         )}
@@ -2066,7 +2588,7 @@ export function StaffRoster() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex max-w-full truncate rounded-full bg-[#DBEAFE] px-2.5 py-1 text-[10.5px] font-semibold text-black">
+                <span className="inline-flex max-w-full truncate rounded-full bg-[#DBEAFE] px-2.5 py-1 text-[10.5px] font-semibold text-[#0F172A]">
                   {member.role}
                 </span>
                 <span className="inline-flex max-w-full truncate rounded-full bg-[#F4F4F5] px-2.5 py-1 text-[10.5px] font-medium text-black/75">
@@ -2098,7 +2620,8 @@ export function StaffRoster() {
         })}
       </div>
 
-      <div className="mobile-scrollbar-none hidden overflow-x-auto rounded-[2rem] border border-slate-100/80 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_24px_60px_-32px_rgba(0,0,0,0.18)] sm:p-6 lg:block">
+      <div className="mobile-scrollbar-none hidden overflow-x-auto md:block">
+        <div className={cn(glassTableWrapClass, "p-4 sm:p-6")}>
         <table className="w-full min-w-[640px] border-collapse text-left">
           <thead>
             <tr>
@@ -2163,6 +2686,7 @@ export function StaffRoster() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -2319,35 +2843,38 @@ export function FinanceModule() {
   };
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="w-full space-y-6 lg:space-y-6">
+      <MobileSectionTitle className="md:hidden">Finance</MobileSectionTitle>
+
       <button
         type="button"
         onClick={() => setSectionOpen(true)}
-        className="flex w-full items-center gap-3 rounded-[1.35rem] border border-[#E5E5E5] bg-white p-3.5 text-left shadow-[0_10px_28px_-24px_rgba(0,0,0,0.35)] transition-colors hover:bg-[#FAFAFA] lg:hidden"
+        className={cn(
+          premiumCardClass,
+          "flex w-full items-center gap-3 p-4 text-left transition-colors hover:border-slate-200 md:hidden",
+        )}
       >
-        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-black text-white">
+        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#2563EB] text-white shadow-sm">
           <ActiveIcon className="h-5 w-5" strokeWidth={2} />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-            Finance Section
-          </div>
-          <div className="truncate text-[15px] font-semibold text-black">{activeTab.l}</div>
+          <div className="text-[12px] font-medium text-slate-500">Finance Section</div>
+          <div className="truncate text-[15px] font-semibold text-slate-900">{activeTab.l}</div>
         </div>
-        <ChevronDown className="h-5 w-5 shrink-0 text-black/45" />
+        <ChevronDown className="h-5 w-5 shrink-0 text-slate-400" />
       </button>
 
       <Sheet open={sectionOpen} onOpenChange={setSectionOpen}>
         <SheetContent
           side="bottom"
-          className="max-h-[85dvh] rounded-t-[1.75rem] border-0 bg-[#0F1115] p-0 pb-[calc(1rem+env(safe-area-inset-bottom))] lg:hidden [&>button]:hidden"
+          className="max-h-[85dvh] rounded-t-[2rem] border-t border-slate-100 bg-white p-0 pb-[calc(1rem+env(safe-area-inset-bottom))] md:hidden [&>button]:hidden"
         >
           <div className="flex justify-center pt-3">
-            <div className="h-1 w-10 rounded-full bg-white/20" />
+            <div className="h-1 w-10 rounded-full bg-slate-200" />
           </div>
           <SheetHeader className="space-y-1 px-5 pb-4 pt-2 text-left">
-            <SheetTitle className="text-[22px] font-semibold text-white">Select Section</SheetTitle>
-            <SheetDescription className="text-[13px] text-white/55">
+            <SheetTitle className="text-[22px] font-bold text-slate-900">Select Section</SheetTitle>
+            <SheetDescription className="text-[13px] text-slate-500">
               Navigate to different finance areas
             </SheetDescription>
           </SheetHeader>
@@ -2360,22 +2887,24 @@ export function FinanceModule() {
                   key={t.k}
                   type="button"
                   onClick={() => selectSection(t.k)}
-                  className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left transition-colors ${
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left transition-colors",
                     active
-                      ? "bg-[#2563EB] text-white"
-                      : "bg-white/[0.06] text-white hover:bg-white/[0.1]"
-                  }`}
+                      ? "bg-[#2563EB] text-white shadow-sm"
+                      : "bg-slate-50 text-slate-900 hover:bg-[#DBEAFE]",
+                  )}
                 >
                   <div
-                    className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${
-                      active ? "bg-black/10" : "bg-white/10"
-                    }`}
+                    className={cn(
+                      "grid h-10 w-10 shrink-0 place-items-center rounded-xl",
+                      active ? "bg-white/20" : "bg-white",
+                    )}
                   >
                     <Icon className="h-[18px] w-[18px]" strokeWidth={2} />
                   </div>
                   <span className="min-w-0 flex-1 text-[15px] font-medium">{t.l}</span>
                   {active && (
-                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-black text-white">
+                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white text-[#2563EB]">
                       <Check className="h-4 w-4" strokeWidth={2.5} />
                     </span>
                   )}
@@ -2386,8 +2915,8 @@ export function FinanceModule() {
         </SheetContent>
       </Sheet>
 
-      <div className="hidden w-full lg:block">
-        <div className="grid w-full grid-cols-12 gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
+      <div className="hidden w-full md:block">
+        <div className={cn(glassPanelClass, "grid w-full grid-cols-12 gap-1 p-1.5")}>
           {tabs.map((t) => {
             const active = tab === t.k;
             return (
@@ -2395,9 +2924,12 @@ export function FinanceModule() {
                 key={t.k}
                 type="button"
                 onClick={() => setTab(t.k)}
-                className={`col-span-2 rounded-full px-4 py-2 text-center text-[12.5px] font-medium leading-tight transition-all ${
-                  active ? "bg-black text-white shadow-sm" : "text-black/65 hover:text-black"
-                }`}
+                className={cn(
+                  "col-span-2 rounded-xl px-3 py-2.5 text-center text-[12px] font-medium leading-tight transition-all",
+                  active
+                    ? "bg-gradient-to-r from-[#2563EB] to-[#4C69A4] text-white shadow-sm"
+                    : "text-slate-600 hover:bg-white/50 hover:text-slate-900",
+                )}
               >
                 {t.l}
               </button>
@@ -2547,7 +3079,7 @@ function ReceivePayment() {
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      <OrganicCard tone="white" cornerSide="tr" padded>
+      <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="text-title">Inbound Fee Capture</div>
@@ -2679,7 +3211,7 @@ function ReceivePayment() {
         </div>
       </OrganicCard>
 
-      <OrganicCard tone="white" cornerSide="bl" padded>
+      <OrganicCard tone="white" cornerSide="bl" padded className={workspacePanelClass}>
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <div className="text-title">Payment History</div>
@@ -2872,7 +3404,7 @@ function MakePayment() {
 
   return (
     <div className="grid grid-cols-12 gap-4 sm:gap-5">
-      <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12 lg:col-span-8">
+      <OrganicCard tone="white" cornerSide="tr" padded className={cn(workspacePanelClass, "col-span-12 lg:col-span-8")}>
         <div className="text-title">Outbound Disbursal</div>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
@@ -2947,7 +3479,7 @@ function MakePayment() {
         </div>
       </OrganicCard>
 
-      <OrganicCard tone="white" cornerSide="bl" padded className="col-span-12 lg:col-span-4">
+      <OrganicCard tone="white" cornerSide="bl" padded className={cn(workspacePanelClass, "col-span-12 lg:col-span-4")}>
         <div className="text-title">Top Pending Obligations</div>
         <div className="mt-3 space-y-3">
           {obligations.length === 0 && (
@@ -2992,7 +3524,7 @@ function MakePayment() {
         </div>
       </OrganicCard>
 
-      <OrganicCard tone="white" cornerSide="br" padded className="col-span-12">
+      <OrganicCard tone="white" cornerSide="br" padded className={cn(workspacePanelClass, "col-span-12")}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="text-title">Made Payment Details</div>
@@ -3158,9 +3690,10 @@ export function SchoolSettings() {
   } = useTenantStore();
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="w-full space-y-6 lg:space-y-6">
+      <MobileSectionTitle className="md:hidden">Settings</MobileSectionTitle>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
         <DepartmentsCard
           departments={departments}
           setDepartments={setDepartments}
@@ -3184,7 +3717,7 @@ export function SchoolSettings() {
       </div>
 
       <div className="grid grid-cols-12 gap-5">
-        <div className="col-span-12 space-y-5 lg:col-span-6">
+        <div className="col-span-12 space-y-5 md:col-span-6">
           <VehicleCard
             transportVehicles={transportVehicles}
             setTransportVehicles={setTransportVehicles}
@@ -3197,7 +3730,7 @@ export function SchoolSettings() {
             setTransportVehicles={setTransportVehicles}
           />
         </div>
-        <div className="col-span-12 lg:col-span-6">
+        <div className="col-span-12 md:col-span-6">
           <CategoriesCard
             paymentCategories={paymentCategories}
             setPaymentCategories={setPaymentCategories}
@@ -3226,14 +3759,14 @@ function CardHeader({
   return (
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[18px] font-bold leading-tight tracking-tight text-black">
+        <div className="truncate text-[18px] font-bold leading-tight tracking-tight text-slate-900 lg:text-black">
           {title}
         </div>
-        <p className="mt-1 text-[12px] text-black/55">{subtitle}</p>
+        <p className="mt-1 text-[12px] text-slate-500 lg:text-black/55">{subtitle}</p>
       </div>
       <button
         onClick={onAction}
-        className="inline-flex shrink-0 items-center gap-1 rounded-full bg-black px-3 py-2 text-[11.5px] font-semibold text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)] transition-colors hover:bg-black/85"
+        className="inline-flex shrink-0 items-center gap-1 rounded-full bg-gradient-to-r from-[#2563EB] to-[#4C69A4] px-3 py-2 text-[11.5px] font-semibold text-white shadow-md shadow-blue-900/15 transition-all hover:opacity-95"
         aria-label={actionLabel}
       >
         <Plus className="h-3.5 w-3.5" /> Add
@@ -3363,7 +3896,7 @@ function DepartmentsCard({
   };
 
   return (
-    <OrganicCard tone="white" cornerSide="tr" padded>
+    <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
       <CardHeader
         title="Departments"
         subtitle={`${departments.length} divisions · live staff counts`}
@@ -3559,7 +4092,7 @@ function RolesCard({
   };
 
   return (
-    <OrganicCard tone="white" cornerSide="bl" padded>
+    <OrganicCard tone="white" cornerSide="bl" padded className={workspacePanelClass}>
       <CardHeader
         title="Roles"
         subtitle={`${roles.length} role definitions · select in Recruit Staff`}
@@ -3758,7 +4291,7 @@ function ClassesCard({
   };
 
   return (
-    <OrganicCard tone="white" cornerSide="tr" padded>
+    <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
       <CardHeader
         title="Class Tiers & Tuition"
         subtitle="Receipt amounts prefill from this matrix"
@@ -4007,7 +4540,7 @@ function VehicleCard({
   const activeCount = transportVehicles.filter((v) => v.active).length;
 
   return (
-    <OrganicCard tone="white" cornerSide="tr" padded>
+    <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
       <CardHeader
         title="Vehicle Management"
         subtitle={`${activeCount} active · ${transportVehicles.length} total in fleet`}
@@ -4350,7 +4883,7 @@ function TransportCard({
   const inr = (n: number) => `₹ ${n.toLocaleString("en-IN")}`;
 
   return (
-    <OrganicCard tone="white" cornerSide="bl" padded>
+    <OrganicCard tone="white" cornerSide="bl" padded className={workspacePanelClass}>
       <CardHeader
         title="Transport Routes"
         subtitle={`${transportRoutes.length} routes · morning, evening & both-shift fees`}
@@ -4592,7 +5125,7 @@ function CategoriesCard({
   };
 
   return (
-    <OrganicCard tone="white" cornerSide="tr" padded>
+    <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
       <div className="text-[18px] font-bold leading-tight tracking-tight text-black">
         System Constants
       </div>

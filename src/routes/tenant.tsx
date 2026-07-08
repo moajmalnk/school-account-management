@@ -1,31 +1,17 @@
-import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import {
-  ArrowUpRight,
-  Bell,
-  LayoutDashboard,
-  LogOut,
-  Settings,
-  UserCog,
-  Users,
-  Wallet,
-} from "lucide-react";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Bell } from "lucide-react";
+import { useEffect } from "react";
 
+import {
+  TenantDesktopTopBar,
+  TenantGlassSidebar,
+} from "@/components/layout/TenantGlassShell";
 import {
   MobileTabBar,
   mobileMainPadding,
   type MobileTabItem,
 } from "@/components/layout/MobileTabBar";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { LayoutDashboard, Settings, UserCog, Users, Wallet } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { TenantStoreProvider, useTenantStore } from "@/lib/tenant-store";
 
@@ -33,27 +19,13 @@ export const Route = createFileRoute("/tenant")({
   component: TenantLayout,
 });
 
-type NavEntry = {
-  to: string;
-  label: string;
-  shortLabel: string;
-  icon: typeof LayoutDashboard;
-};
-
-const NAV: NavEntry[] = [
-  { to: "/tenant/dashboard", label: "Dashboard", shortLabel: "Home", icon: LayoutDashboard },
-  { to: "/tenant/students", label: "Students", shortLabel: "Students", icon: Users },
-  { to: "/tenant/staff", label: "Staff", shortLabel: "Staff", icon: UserCog },
-  { to: "/tenant/finance", label: "Finance", shortLabel: "Finance", icon: Wallet },
-  { to: "/tenant/settings", label: "Settings", shortLabel: "Settings", icon: Settings },
+const MOBILE_TABS: MobileTabItem[] = [
+  { to: "/tenant/dashboard", label: "Home", icon: LayoutDashboard, match: (p) => p.startsWith("/tenant/dashboard") },
+  { to: "/tenant/students", label: "Students", icon: Users, match: (p) => p.startsWith("/tenant/students") },
+  { to: "/tenant/staff", label: "Staff", icon: UserCog, match: (p) => p.startsWith("/tenant/staff") },
+  { to: "/tenant/finance", label: "Finance", icon: Wallet, match: (p) => p.startsWith("/tenant/finance") },
+  { to: "/tenant/settings", label: "Settings", icon: Settings, match: (p) => p.startsWith("/tenant/settings") },
 ];
-
-const MOBILE_TABS: MobileTabItem[] = NAV.map((n) => ({
-  to: n.to,
-  label: n.shortLabel,
-  icon: n.icon,
-  match: (pathname) => pathname.startsWith(n.to),
-}));
 
 function TenantLayout() {
   const navigate = useNavigate();
@@ -68,9 +40,9 @@ function TenantLayout() {
 
   if (!hydrated || !session || session.role !== "school_admin") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#F4F6F9]">
-        <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-black/45">
-          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-black/45" />
+      <div className="tenant-canvas flex min-h-screen items-center justify-center">
+        <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-slate-500">
+          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[#2563EB]/60" />
           Validating tenant session…
         </div>
       </div>
@@ -79,13 +51,16 @@ function TenantLayout() {
 
   return (
     <TenantStoreProvider>
-      <div className="min-h-dvh bg-[#F4F6F9] text-black">
+      <div className="tenant-canvas min-h-dvh text-slate-900">
         <TenantMobileHeader />
-        <div className="flex min-h-[calc(100dvh-5rem)] items-stretch gap-4 px-3 py-4 sm:px-4 lg:min-h-[calc(100dvh-3rem)] lg:gap-6 lg:p-6">
-          <TenantSidebar />
-          <main className={`mobile-app-rail min-w-0 flex-1 ${mobileMainPadding}`}>
-            <Outlet />
-          </main>
+        <div className="mx-auto flex min-h-dvh max-w-[1600px] gap-4 px-4 py-4 md:gap-5 md:px-5 md:py-5">
+          <TenantGlassSidebar />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <TenantDesktopTopBar />
+            <main className={`min-w-0 flex-1 ${mobileMainPadding} md:pb-6`}>
+              <Outlet />
+            </main>
+          </div>
         </div>
         <TenantMobileNav />
       </div>
@@ -99,34 +74,38 @@ function TenantMobileHeader() {
   const { notifications } = useTenantStore();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const onNotifications = pathname.startsWith("/tenant/notifications");
-  const active = onNotifications
-    ? { label: "Notifications" }
-    : NAV.find((n) => pathname.startsWith(n.to));
+  const NAV_LABELS: Record<string, string> = {
+    "/tenant/dashboard": "DASHBOARD",
+    "/tenant/students": "STUDENTS",
+    "/tenant/staff": "STAFF",
+    "/tenant/finance": "FINANCE",
+    "/tenant/settings": "SETTINGS",
+  };
+  const activeKey = Object.keys(NAV_LABELS).find((k) => pathname.startsWith(k));
   const unreadCount = notifications.filter((n) => !n.read).length;
+  const tenantLabel = (session?.tenantName ?? "Silver Hills Global").toUpperCase();
+  const sectionLabel = onNotifications ? "NOTIFICATIONS" : activeKey ? NAV_LABELS[activeKey] : "DASHBOARD";
 
   return (
-    <header className="sticky top-0 z-30 bg-[#F4F6F9]/92 px-3 pb-2 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl sm:px-4 lg:hidden">
-      <div className="mobile-app-rail flex items-center gap-2.5 rounded-[1.75rem] border border-white/70 bg-white/88 px-3 py-2.5 shadow-[0_14px_44px_-32px_rgba(0,0,0,0.45)]">
-        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-black text-xs font-bold text-white">
+    <header className="sticky top-0 z-30 bg-gradient-to-b from-white/80 to-transparent px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl md:hidden">
+      <div className="flex w-full items-center gap-3">
+        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#2563EB] to-[#4C69A4] text-[11px] font-bold text-white">
           SH
         </div>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[14px] font-semibold text-black">
-            {session?.tenantName ?? "Silver Hills Global"}
-          </div>
-          <div className="truncate text-[10px] uppercase tracking-wider text-black/45">
-            {active?.label ?? "Tenant Workspace"}
+          <div className="truncate text-[11px] font-bold uppercase leading-tight tracking-[0.04em] text-slate-900">
+            {tenantLabel} - {sectionLabel}
           </div>
         </div>
         <button
           type="button"
           onClick={() => navigate({ to: "/tenant/notifications" })}
           aria-label="Notifications"
-          className="relative grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[#E5E5E5] bg-[#F4F4F5] text-black/60 transition-colors hover:bg-black hover:text-white"
+          className="relative grid h-11 w-11 shrink-0 place-items-center rounded-full border border-white/80 bg-white/70 text-slate-600 shadow-sm backdrop-blur-md"
         >
-          <Bell className="h-4 w-4" />
+          <Bell className="h-[18px] w-[18px]" />
           {unreadCount > 0 && (
-            <span className="absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-[#F4F4F5] bg-[#2563EB]" />
+            <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full border-2 border-white bg-[#2563EB]" />
           )}
         </button>
       </div>
@@ -136,122 +115,5 @@ function TenantMobileHeader() {
 
 function TenantMobileNav() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  return <MobileTabBar items={MOBILE_TABS} pathname={pathname} />;
-}
-
-function TenantSidebar() {
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const navigate = useNavigate();
-  const { session, logout } = useAuth();
-  const { notifications } = useTenantStore();
-  const [pendingLogout, setPendingLogout] = useState(false);
-  const unreadCount = notifications.filter((n) => !n.read).length;
-
-  const confirmLogout = () => {
-    const name = session?.displayName ?? "Tenant Admin";
-    logout();
-    toast.success("Signed out · session cleared", { description: `Goodbye, ${name}` });
-    setPendingLogout(false);
-    navigate({ to: "/login", replace: true });
-  };
-
-  return (
-    <>
-      <aside className="sticky top-6 hidden h-[calc(100dvh-5rem)] w-64 shrink-0 flex-col overflow-hidden rounded-[2rem] border border-[#E5E5E5] bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_24px_60px_-32px_rgba(0,0,0,0.18)] lg:flex lg:h-[calc(100dvh-3rem)]">
-      <div className="mb-5 flex items-center gap-2.5 px-2 pt-1">
-        <div className="grid h-10 w-10 place-items-center rounded-2xl bg-black text-sm font-bold text-white">
-          SH
-        </div>
-        <div className="min-w-0 flex-1 leading-tight">
-          <div className="text-[14px] font-semibold text-black">
-            {session?.tenantName ?? "Silver Hills Global"}
-          </div>
-          <div className="text-[10px] uppercase tracking-wider text-black/45">Tenant Workspace</div>
-        </div>
-        <button
-          type="button"
-          onClick={() => navigate({ to: "/tenant/notifications" })}
-          aria-label="Notifications"
-          className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full border border-[#E5E5E5] bg-[#F4F4F5] text-black/60 transition-colors hover:bg-black hover:text-white"
-        >
-          <Bell className="h-3.5 w-3.5" />
-          {unreadCount > 0 && (
-            <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full border-2 border-[#F4F4F5] bg-[#2563EB]" />
-          )}
-        </button>
-      </div>
-
-      <nav className="min-h-0 flex-1 space-y-1">
-        {NAV.map((n) => {
-          const Icon = n.icon;
-          const active = pathname.startsWith(n.to);
-          return (
-            <Link
-              key={n.to}
-              to={n.to}
-              className={`group flex w-full items-center gap-3 rounded-2xl px-3.5 py-2.5 text-[13.5px] font-medium transition-colors ${
-                active
-                  ? "bg-[#0F172A] text-white shadow-sm"
-                  : "text-black/70 hover:bg-[#DBEAFE] hover:text-[#0F172A]"
-              }`}
-            >
-              <Icon className="h-4 w-4" />
-              <span className="flex-1">{n.label}</span>
-              {active && <ArrowUpRight className="h-4 w-4" strokeWidth={2.25} />}
-            </Link>
-          );
-        })}
-      </nav>
-
-      <div className="mt-auto flex items-center gap-2 rounded-2xl bg-[#F4F4F5] p-3">
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[12.5px] font-semibold text-black">
-            {session?.displayName ?? "Tenant Admin"}
-          </div>
-          <div className="mt-0.5 truncate font-mono text-[10px] text-black/55">
-            {session?.email ?? "silverhills@tenant.com"}
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => setPendingLogout(true)}
-          aria-label="Logout"
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-black/65 transition-colors hover:bg-[#FEE2E2] hover:text-[#EF4444]"
-        >
-          <LogOut className="h-4 w-4" />
-        </button>
-      </div>
-    </aside>
-
-      <Dialog
-        open={pendingLogout}
-        onOpenChange={(next) => {
-          if (!next) setPendingLogout(false);
-        }}
-      >
-        <DialogContent className="max-w-sm rounded-[1.5rem] border border-[#E5E5E5] bg-white p-6">
-          <DialogHeader>
-            <DialogTitle className="text-[22px] font-semibold text-black">Sign Out</DialogTitle>
-            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
-              Are you sure you want to sign out of{" "}
-              {session?.tenantName ?? "Silver Hills Global"}? You will need to log in again to
-              access this workspace.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="mt-5 flex-row justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setPendingLogout(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={confirmLogout}
-              className="rounded-full bg-[#EF4444] text-white hover:bg-[#DC2626]"
-            >
-              Sign Out
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
+  return <MobileTabBar items={MOBILE_TABS} pathname={pathname} className="md:hidden" />;
 }

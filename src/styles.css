@@ -123,6 +123,63 @@
     display: none;
   }
 
+  .tenant-canvas {
+    background:
+      radial-gradient(ellipse 80% 60% at 10% 0%, rgba(147, 197, 253, 0.45), transparent 55%),
+      radial-gradient(ellipse 70% 55% at 90% 10%, rgba(129, 140, 248, 0.35), transparent 50%),
+      linear-gradient(160deg, #e8eef8 0%, #dbeafe 38%, #c7d9f5 68%, #e0e7ff 100%);
+  }
+
+  .glass-panel {
+    border: 1px solid rgba(255, 255, 255, 0.62);
+    background: rgba(255, 255, 255, 0.48);
+    box-shadow:
+      0 8px 32px rgba(37, 99, 235, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(22px);
+    -webkit-backdrop-filter: blur(22px);
+  }
+
+  .glass-card {
+    border: 1px solid rgba(255, 255, 255, 0.72);
+    background: rgba(255, 255, 255, 0.58);
+    box-shadow:
+      0 4px 24px rgba(15, 23, 42, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+  }
+
+  .glass-inset {
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.32);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .glass-nav-tile {
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    background: rgba(255, 255, 255, 0.35);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    transition:
+      background 0.2s ease,
+      border-color 0.2s ease,
+      box-shadow 0.2s ease,
+      transform 0.2s ease;
+  }
+
+  .glass-nav-tile:hover {
+    background: rgba(255, 255, 255, 0.55);
+    border-color: rgba(255, 255, 255, 0.85);
+  }
+
+  .glass-nav-tile-active {
+    border-color: rgba(37, 99, 235, 0.35);
+    background: rgba(37, 99, 235, 0.14);
+    box-shadow: 0 4px 18px rgba(37, 99, 235, 0.12);
+  }
+
   @media (min-width: 1024px) {
     .mobile-app-rail {
       max-width: none;

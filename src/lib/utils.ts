@@ -35,3 +35,15 @@ export const cornerClasses: Record<CornerSide, string> = {
   bl: "organic-corner-bl",
   br: "organic-corner-br",
 };
+
+/** Uniform premium card shell for mobile-first workspace panels */
+export const premiumCardClass =
+  "rounded-[2.5rem] border border-slate-100/60 bg-white shadow-sm shadow-slate-200/40";
+
+/** Glassmorphism shells — tablet & desktop */
+export const glassPanelClass = "glass-panel rounded-3xl";
+export const glassCardClass = "glass-card rounded-2xl";
+export const glassInsetClass = "glass-inset rounded-xl";
+export const glassNavTileClass = "glass-nav-tile rounded-2xl";
+export const glassTableWrapClass =
+  "glass-card overflow-hidden rounded-3xl border border-white/70";
