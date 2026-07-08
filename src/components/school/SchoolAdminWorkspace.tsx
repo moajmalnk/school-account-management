@@ -3444,37 +3444,40 @@ function MakePayment() {
               className="min-h-[80px] w-full rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-black/15"
             />
           </div>
-          <div>
-            <FieldLabel>Amount (₹)</FieldLabel>
-            <Input
-              inputMode="numeric"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ""))}
-              placeholder="0"
-              className="font-mono"
-            />
-          </div>
-          <div>
-            <FieldLabel>Mode</FieldLabel>
-            <div className="grid grid-cols-3 gap-2">
-              {["Bank Transfer · NEFT", "UPI Business", "Cheque"].map((m) => {
-                const active = mode === m;
-                return (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setMode(m)}
-                    className={cn(
-                      "w-full rounded-2xl px-3 py-2.5 text-center text-[13px] font-medium transition-colors sm:px-4 sm:text-left sm:text-[14px]",
-                      active
-                        ? "bg-[#2563EB] text-white shadow-sm"
-                        : "bg-[#DBEAFE]/50 text-slate-700 hover:bg-[#DBEAFE]",
-                    )}
-                  >
-                    {m}
-                  </button>
-                );
-              })}
+          <div className="grid grid-cols-1 gap-4 sm:col-span-2 sm:grid-cols-[minmax(0,0.45fr)_minmax(0,0.55fr)] sm:items-start">
+            <div>
+              <FieldLabel>Amount (₹)</FieldLabel>
+              <Input
+                inputMode="numeric"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ""))}
+                placeholder="0"
+                className="font-mono"
+              />
+            </div>
+            <div>
+              <FieldLabel>Mode</FieldLabel>
+              <div className="grid grid-cols-3 gap-2">
+                {["Bank", "UPI", "Cheque"].map((m) => {
+                  const active = mode === m;
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setMode(m)}
+                      className={cn(
+                        "h-11 w-full rounded-2xl px-2 text-center text-[12px] font-medium leading-tight whitespace-nowrap transition-colors sm:px-3",
+                        active
+                          ? "bg-[#2563EB] text-white shadow-sm"
+                          : "bg-[#DBEAFE]/50 text-slate-700 hover:bg-[#DBEAFE]",
+                      )}
+                      title={m}
+                    >
+                      {m}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
