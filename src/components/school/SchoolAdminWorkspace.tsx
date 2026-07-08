@@ -3456,15 +3456,26 @@ function MakePayment() {
           </div>
           <div>
             <FieldLabel>Mode</FieldLabel>
-            <FieldSelect
-              value={mode}
-              onValueChange={setMode}
-              options={[
-                { value: "Bank Transfer · NEFT", label: "Bank Transfer · NEFT" },
-                { value: "UPI Business", label: "UPI Business" },
-                { value: "Cheque", label: "Cheque" },
-              ]}
-            />
+            <div className="grid grid-cols-1 gap-2">
+              {["Bank Transfer · NEFT", "UPI Business", "Cheque"].map((m) => {
+                const active = mode === m;
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setMode(m)}
+                    className={cn(
+                      "w-full rounded-2xl px-4 py-2.5 text-left text-[14px] font-medium transition-colors",
+                      active
+                        ? "bg-[#2563EB] text-white shadow-sm"
+                        : "bg-[#DBEAFE]/50 text-slate-700 hover:bg-[#DBEAFE]",
+                    )}
+                  >
+                    {m}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
         <div className="mt-5 flex justify-end">
