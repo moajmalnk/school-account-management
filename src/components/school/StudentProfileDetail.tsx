@@ -26,6 +26,11 @@ import type { Student } from "@/lib/tenant-store";
 import { useTenantStore } from "@/lib/tenant-store";
 import { downloadReceiptPdf } from "@/lib/finance-export";
 import { useAuth } from "@/lib/auth";
+import {
+  EnrollmentStatusBadge,
+  isRecordActive,
+  ProfileAccountActions,
+} from "@/components/school/ProfileAccountActions";
 import { cn } from "@/lib/utils";
 
 type LedgerStatus = "Paid" | "Partially Paid" | "Overdue";
@@ -247,6 +252,24 @@ export function StudentProfileDetail({
     );
   };
 
+  const isActive = isRecordActive(student.active);
+
+  const toggleActive = (nextActive: boolean) => {
+    setStudents((prev) =>
+      prev.map((s) => (s.id === student.id ? { ...s, active: nextActive } : s)),
+    );
+    toast.success(
+      nextActive ? `${student.name} reactivated` : `${student.name} deactivated`,
+      { description: student.id },
+    );
+  };
+
+  const deleteStudent = () => {
+    setStudents((prev) => prev.filter((s) => s.id !== student.id));
+    toast.error(`${student.name} removed from directory`, { description: student.id });
+    onBack();
+  };
+
   return (
     <div className="flex flex-col gap-4 sm:gap-6">
       <TopBar
@@ -266,6 +289,7 @@ export function StudentProfileDetail({
           <IdentityHeader
             student={student}
             onPhotoChange={updatePhoto}
+            active={isActive}
           />
 
           <div className="mt-6 flex min-h-0 flex-1 flex-col">
@@ -372,6 +396,15 @@ export function StudentProfileDetail({
           </div>
         </div>
       </div>
+
+      <ProfileAccountActions
+        name={student.name}
+        recordId={student.id}
+        active={isActive}
+        entityLabel="student"
+        onToggleActive={toggleActive}
+        onDelete={deleteStudent}
+      />
     </div>
   );
 }
@@ -407,7 +440,7 @@ function TopBar({
         className="inline-flex h-10 shrink-0 items-center justify-center gap-1 rounded-full border border-[#E5E5E5] bg-[#FAFAFA] px-3 text-[11.5px] font-medium text-black/75 transition-colors hover:bg-[#F4F4F5] sm:gap-1.5 sm:px-4 sm:text-[13px]"
       >
         <ArrowLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-        <span className="hidden min-[380px]:inline sm:inline">Back to list</span>
+        <span className="hidden min-[380px]:inline sm:inline">Back</span>
       </button>
 
       <button
@@ -427,7 +460,7 @@ function TopBar({
         ) : (
           <>
             <Pencil className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            <span>Edit Profile</span>
+            <span>Edit</span>
           </>
         )}
       </button>
@@ -438,9 +471,11 @@ function TopBar({
 function IdentityHeader({
   student,
   onPhotoChange,
+  active,
 }: {
   student: Student;
   onPhotoChange: (photoUrl: string | undefined) => void;
+  active: boolean;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -522,6 +557,7 @@ function IdentityHeader({
               {student.gender}
             </span>
           )}
+          <EnrollmentStatusBadge active={active} />
         </div>
       </div>
     </div>

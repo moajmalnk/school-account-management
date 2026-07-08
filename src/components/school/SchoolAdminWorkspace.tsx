@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useNavigate, useSearch, Link } from "@tanstack/react-router";
 import {
   TrendingUp,
   Plus,
   AlertTriangle,
+  Bell,
   CheckCircle2,
   Printer,
   Download,
@@ -27,12 +28,12 @@ import {
   Briefcase,
   Users,
   Filter,
-  Eye,
   Bus,
 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -87,6 +88,7 @@ import {
 } from "@/lib/tenant-store";
 import { StudentProfileDetail } from "@/components/school/StudentProfileDetail";
 import { StaffProfileDetail } from "@/components/school/StaffProfileDetail";
+import { EnrollmentStatusBadge, isRecordActive } from "@/components/school/ProfileAccountActions";
 import { FinanceBarCard, FinanceDonutCard } from "@/components/school/finance-charts";
 import {
   BalanceSheetReport,
@@ -352,6 +354,7 @@ export function SchoolDashboard() {
     setDashboardTodos,
     dashboardNote,
     setDashboardNote,
+    notifications,
   } = useTenantStore();
 
   const [period, setPeriod] = useState<PaymentPeriod>("this_month");
@@ -381,6 +384,11 @@ export function SchoolDashboard() {
   const overdueWatchlist = useMemo(
     () => [...overdueStudents].sort((a, b) => b.due - a.due).slice(0, 5),
     [overdueStudents],
+  );
+
+  const unreadNotifications = useMemo(
+    () => notifications.filter((n) => !n.read).length,
+    [notifications],
   );
 
   const updateTodo = (index: number, value: string) => {
@@ -449,6 +457,27 @@ export function SchoolDashboard() {
               />
             </DashboardStatGrid>
           </DashboardMetricsBand>
+
+          {unreadNotifications > 0 && (
+            <Link
+              to="/tenant/notifications"
+              className="block rounded-[1.35rem] border border-[#E5E5E5] bg-white px-4 py-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-colors hover:border-black/15 hover:bg-[#FAFAFA] sm:px-5 sm:py-4"
+            >
+              <div className="flex items-start gap-3">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[#F4F4F5] text-black/55">
+                  <Bell className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[14px] font-semibold text-black">
+                    {unreadNotifications} unread tenant alert{unreadNotifications === 1 ? "" : "s"}
+                  </div>
+                  <p className="mt-0.5 text-[12px] text-black/55">
+                    Fee reminders, admissions, and staff updates
+                  </p>
+                </div>
+              </div>
+            </Link>
+          )}
         </div>
 
         <aside className="flex w-full flex-col gap-3 lg:sticky lg:top-6 lg:w-[280px] lg:shrink-0">
@@ -587,6 +616,7 @@ export function SchoolDashboard() {
 }
 
 type StatusFilter = "all" | "paid" | "overdue";
+type EnrollmentFilter = "all" | "active" | "inactive";
 
 const STATUS_TABS: { key: StatusFilter; label: string }[] = [
   { key: "all", label: "All Students" },
@@ -647,6 +677,29 @@ function personInitials(name: string) {
     .toUpperCase();
 }
 
+const directoryStatCardClass =
+  "flex min-w-0 flex-1 flex-row items-center justify-between gap-2 p-2.5 lg:min-h-[108px] lg:flex-col lg:items-stretch lg:justify-between lg:p-6";
+const directoryStatLabelClass =
+  "text-[8px] font-semibold uppercase leading-tight tracking-wider lg:text-[10px]";
+const directoryStatValueClass =
+  "shrink-0 font-mono text-[18px] font-semibold leading-none tracking-tight text-black lg:text-[32px]";
+
+function DirectoryPersonAvatar({ name, photoUrl }: { name: string; photoUrl?: string }) {
+  if (photoUrl) {
+    return (
+      <img src={photoUrl} alt="" className="h-11 w-11 shrink-0 rounded-2xl object-cover ring-1 ring-black/5" />
+    );
+  }
+  return (
+    <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-black text-[12px] font-semibold text-white">
+      {personInitials(name)}
+    </div>
+  );
+}
+
+const directoryMobileCardClass =
+  "flex w-full flex-col gap-3 rounded-[1.35rem] border border-[#E8E8E8] bg-white p-3.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_32px_-24px_rgba(0,0,0,0.18)] transition-all hover:border-black/12 hover:bg-[#FAFAFA] active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C7F33C] focus-visible:ring-offset-2";
+
 function StudentFeesStatusBadge({ due }: { due: number }) {
   if (due === 0) {
     return (
@@ -674,17 +727,91 @@ function StudentsDirectoryTable({
   onEditData: (id: string) => void;
 }) {
   return (
-    <div className="mobile-scrollbar-none w-full overflow-x-auto rounded-[2rem] border border-slate-100/80 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_24px_60px_-32px_rgba(0,0,0,0.18)]">
+    <>
+      <div className="space-y-2.5 lg:hidden">
+        {students.length === 0 && (
+          <div className="rounded-[1.35rem] border border-dashed border-[#E5E5E5] bg-white px-4 py-10 text-center text-[13px] text-black/55">
+            No students match the current filters.
+          </div>
+        )}
+        {students.map((student) => {
+          const digits = phoneDigits(student.phone);
+          const hasPhone = digits.length > 0;
+          return (
+            <div
+              key={student.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => onViewProfile(student.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onViewProfile(student.id);
+                }
+              }}
+              aria-label={`Open profile for ${student.name}`}
+              className={cn(directoryMobileCardClass, "cursor-pointer")}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <DirectoryPersonAvatar name={student.name} photoUrl={student.photoUrl} />
+                  <div className="min-w-0">
+                    <div className="truncate text-[14px] font-semibold leading-tight text-black">
+                      {student.name}
+                    </div>
+                    <div className="mt-0.5 truncate font-mono text-[10.5px] text-black/45">
+                      {student.id}
+                    </div>
+                  </div>
+                </div>
+                <StudentFeesStatusBadge due={student.due} />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex max-w-full truncate rounded-full bg-[#E1F2AE] px-2.5 py-1 text-[10.5px] font-semibold text-black">
+                  {student.cls}
+                </span>
+                <EnrollmentStatusBadge active={isRecordActive(student.active)} />
+              </div>
+
+              <div className="flex items-center justify-between gap-2 border-t border-[#F0F0F0] pt-2.5">
+                <div className="min-w-0">
+                  <div className="truncate text-[12px] font-medium text-black/75">
+                    {student.guardian}
+                  </div>
+                  <div className="mt-0.5 truncate font-mono text-[10.5px] text-black/45">
+                    {hasPhone ? formatPhone(student.phone) : "No contact on file"}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEditData(student.id);
+                  }}
+                  aria-label={`Edit data for ${student.name}`}
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-[#E5E5E5] bg-[#F4F4F5] text-black/60 transition-colors hover:border-black/20 hover:bg-white hover:text-black"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mobile-scrollbar-none hidden w-full overflow-x-auto rounded-[2rem] border border-slate-100/80 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_24px_60px_-32px_rgba(0,0,0,0.18)] lg:block">
       <table className="w-full min-w-[720px] table-fixed border-collapse text-left">
         <colgroup>
-          <col className="w-[30%]" />
-          <col className="w-[14%]" />
-          <col className="w-[28%]" />
-          <col className="w-[28%]" />
+          <col className="w-[26%]" />
+          <col className="w-[12%]" />
+          <col className="w-[12%]" />
+          <col className="w-[26%]" />
+          <col className="w-[24%]" />
         </colgroup>
         <thead>
           <tr>
-            {["Student", "Class", "Guardian & Contact", "Fees Status"].map((header) => (
+            {["Student", "Class", "Status", "Guardian & Contact", "Fees Status"].map((header) => (
               <th
                 key={header}
                 className="border-b border-slate-100 px-4 pb-4 pt-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400 sm:px-6 sm:pt-5"
@@ -697,7 +824,7 @@ function StudentsDirectoryTable({
         <tbody>
           {students.length === 0 && (
             <tr>
-              <td colSpan={4} className="px-4 py-10 text-center text-[13px] text-black/55 sm:px-6">
+              <td colSpan={5} className="px-4 py-10 text-center text-[13px] text-black/55 sm:px-6">
                 No students match the current filters.
               </td>
             </tr>
@@ -748,6 +875,9 @@ function StudentsDirectoryTable({
                   <span className="inline-flex max-w-full truncate rounded-full bg-[#E1F2AE] px-2.5 py-1 text-[11px] font-medium text-black">
                     {student.cls}
                   </span>
+                </td>
+                <td className="px-4 py-3.5 align-middle sm:px-6">
+                  <EnrollmentStatusBadge active={isRecordActive(student.active)} />
                 </td>
                 <td className="px-4 py-3.5 align-middle sm:px-6">
                   <div className="min-w-0">
@@ -811,7 +941,8 @@ function StudentsDirectoryTable({
           })}
         </tbody>
       </table>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -832,6 +963,7 @@ export function StudentsLedger() {
   const [form, setForm] = useState<AdmitStudentForm>(() => emptyAdmitForm(defaultClass));
   const [gradeFilter, setGradeFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [enrollmentFilter, setEnrollmentFilter] = useState<EnrollmentFilter>("all");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const admitPhotoRef = useRef<HTMLInputElement>(null);
 
@@ -886,8 +1018,16 @@ export function StudentsLedger() {
       .filter((s) => gradeFilter === "all" || s.cls.startsWith(gradeFilter))
       .filter((s) =>
         statusFilter === "all" ? true : statusFilter === "paid" ? s.due === 0 : s.due > 0,
-      );
-  }, [students, gradeFilter, statusFilter]);
+      )
+      .filter((s) => {
+        const active = isRecordActive(s.active);
+        return enrollmentFilter === "all"
+          ? true
+          : enrollmentFilter === "active"
+            ? active
+            : !active;
+      });
+  }, [students, gradeFilter, statusFilter, enrollmentFilter]);
 
   const analytics = useMemo(
     () => ({
@@ -919,6 +1059,7 @@ export function StudentsLedger() {
       email: form.email.trim() || undefined,
       address: form.address.trim() || undefined,
       photoUrl: form.photoUrl || undefined,
+      active: true,
     };
     setStudents((prev) => [newStu, ...prev]);
     toast.success(`${newStu.name} admitted`, { description: `${newStu.id} · ${newStu.cls}` });
@@ -1069,59 +1210,45 @@ export function StudentsLedger() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <OrganicCard tone="white" cornerSide="tr" padded className="flex min-h-[108px] flex-col justify-between">
-          <div className="flex items-start justify-between gap-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-              Paid
-            </div>
-            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+      <div className="flex min-w-0 flex-row gap-1.5 lg:gap-3">
+        <OrganicCard tone="white" cornerSide="tr" padded className={directoryStatCardClass}>
+          <div className="flex min-w-0 flex-1 items-center justify-between gap-1 lg:items-start lg:gap-2">
+            <div className={cn(directoryStatLabelClass, "text-black/45")}>Paid</div>
+            <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-600 lg:h-4 lg:w-4" />
           </div>
-          <div className="font-mono text-[28px] font-semibold leading-none tracking-tight text-black sm:text-[32px]">
-            {analytics.paid}
-          </div>
+          <div className={directoryStatValueClass}>{analytics.paid}</div>
         </OrganicCard>
 
-        <OrganicCard tone="white" cornerSide="bl" padded className="flex min-h-[108px] flex-col justify-between">
-          <div className="flex items-start justify-between gap-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-              Overdue
-            </div>
-            <AlertTriangle className="h-4 w-4 shrink-0 text-[#B91C1C]" />
+        <OrganicCard tone="white" cornerSide="bl" padded className={directoryStatCardClass}>
+          <div className="flex min-w-0 flex-1 items-center justify-between gap-1 lg:items-start lg:gap-2">
+            <div className={cn(directoryStatLabelClass, "text-black/45")}>Overdue</div>
+            <AlertTriangle className="h-3 w-3 shrink-0 text-[#B91C1C] lg:h-4 lg:w-4" />
           </div>
-          <div className="font-mono text-[28px] font-semibold leading-none tracking-tight text-black sm:text-[32px]">
-            {analytics.overdue}
-          </div>
+          <div className={directoryStatValueClass}>{analytics.overdue}</div>
         </OrganicCard>
 
-        <OrganicCard
-          tone="limePale"
-          cornerSide="tr"
-          padded
-          className="flex min-h-[108px] flex-col justify-between"
-        >
-          <div className="flex items-start justify-between gap-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/55">
-              Total Students
+        <OrganicCard tone="limePale" cornerSide="tr" padded className={directoryStatCardClass}>
+          <div className="flex min-w-0 flex-1 items-center justify-between gap-1 lg:items-start lg:gap-2">
+            <div className={cn(directoryStatLabelClass, "text-black/55")}>
+              <span className="lg:hidden">Total</span>
+              <span className="hidden lg:inline">Total Students</span>
             </div>
-            <Users className="h-4 w-4 shrink-0 text-black/40" />
+            <Users className="h-3 w-3 shrink-0 text-black/40 lg:h-4 lg:w-4" />
           </div>
-          <div>
-            <div className="font-mono text-[28px] font-semibold leading-none tracking-tight text-black sm:text-[32px]">
-              {analytics.total}
-            </div>
-            <div className="mt-1.5 font-mono text-[11px] text-black/55">
+          <div className="shrink-0 text-right lg:text-left">
+            <div className={directoryStatValueClass}>{analytics.total}</div>
+            <div className="mt-0.5 font-mono text-[9px] text-black/55 lg:mt-1.5 lg:text-[11px]">
               {analytics.male}M · {analytics.female}F
             </div>
           </div>
         </OrganicCard>
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-[28px] font-semibold leading-none tracking-tight text-black sm:text-title">
+      <div className="flex w-full flex-col items-center gap-3 text-center lg:flex-row lg:items-center lg:justify-between lg:text-left">
+        <h1 className="w-full shrink-0 text-center text-[28px] font-semibold leading-none tracking-tight text-black lg:w-auto lg:text-left sm:text-title">
           Students Directory
         </h1>
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="mobile-scrollbar-none flex w-full items-center justify-center gap-2 overflow-x-auto lg:w-auto lg:shrink-0 lg:justify-end">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button type="button" className={outlineBtn}>
@@ -1157,21 +1284,59 @@ export function StudentsLedger() {
                   </DropdownMenuRadioItem>
                 ))}
               </DropdownMenuRadioGroup>
+              <DropdownMenuSeparator className="my-2" />
+              <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                Enrollment
+              </DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={enrollmentFilter}
+                onValueChange={(v) => setEnrollmentFilter(v as EnrollmentFilter)}
+              >
+                <DropdownMenuRadioItem value="all" className="rounded-xl text-[13px]">
+                  All students
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="active" className="rounded-xl text-[13px]">
+                  Active
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="inactive" className="rounded-xl text-[13px]">
+                  Inactive
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <button type="button" onClick={downloadPdf} className={outlineBtn}>
-            <Printer className="h-3.5 w-3.5" />
-            Download PDF
-          </button>
-          <button type="button" onClick={exportCsv} className={outlineBtn}>
-            <Download className="h-3.5 w-3.5" />
-            Export CSV
-          </button>
-          <button type="button" onClick={handleImportClick} className={outlineBtn}>
-            <Upload className="h-3.5 w-3.5" />
-            Import CSV
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className={outlineBtn}>
+                <Download className="h-3.5 w-3.5" />
+                Export
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52 rounded-2xl border-[#E5E5E5] p-2">
+              <DropdownMenuItem
+                onClick={downloadPdf}
+                className="cursor-pointer gap-2 rounded-xl text-[13px]"
+              >
+                <Printer className="h-3.5 w-3.5" />
+                Download PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={exportCsv}
+                className="cursor-pointer gap-2 rounded-xl text-[13px]"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Export CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleImportClick}
+                className="cursor-pointer gap-2 rounded-xl text-[13px]"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                Import CSV
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <button
             type="button"
             onClick={openAdmitDialog}
@@ -1439,22 +1604,6 @@ function isTeachingStaff(member: Staff): boolean {
   return member.role.toLowerCase().includes("teacher");
 }
 
-function StaffStatusBadge({ active }: { active: boolean }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10.5px] font-semibold",
-        active ? "bg-[#E1F2AE] text-black" : "bg-black/8 text-black/55",
-      )}
-    >
-      <span
-        className={cn("h-1.5 w-1.5 rounded-full", active ? "bg-[#65A30D]" : "bg-black/35")}
-      />
-      {active ? "Active" : "Inactive"}
-    </span>
-  );
-}
-
 export function StaffRoster() {
   const { staff, setStaff, departments, roles } = useTenantStore();
   const navigate = useNavigate();
@@ -1463,12 +1612,13 @@ export function StaffRoster() {
   const initialEdit = search.edit === "1";
 
   const openStaff = (id: string) => navigate({ to: "/tenant/staff", search: { id } });
+  const openStaffEdit = (id: string) =>
+    navigate({ to: "/tenant/staff", search: { id, edit: "1" } });
   const closeStaff = () => navigate({ to: "/tenant/staff", search: {} });
 
   const defaultDept = departments[0]?.name ?? "";
   const defaultRole = roles[0]?.title ?? "Teacher";
   const [open, setOpen] = useState(false);
-  const [pendingRemoval, setPendingRemoval] = useState<Staff | null>(null);
   const [deptFilter, setDeptFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<StaffStatusFilter>("all");
   const [form, setForm] = useState({
@@ -1513,10 +1663,14 @@ export function StaffRoster() {
     const activeMembers = staff.filter((s) => s.active);
     const teachers = activeMembers.filter(isTeachingStaff).length;
     const nonTeaching = activeMembers.filter((s) => !isTeachingStaff(s)).length;
+    const active = staff.filter((s) => s.active).length;
+    const inactive = staff.length - active;
     return {
       teachers,
       nonTeaching,
       total: staff.length,
+      active,
+      inactive,
     };
   }, [staff]);
 
@@ -1568,18 +1722,6 @@ export function StaffRoster() {
     setOpen(false);
   };
 
-  const removeStaff = (id: string) => {
-    const s = staff.find((x) => x.id === id);
-    setStaff((prev) => prev.filter((x) => x.id !== id));
-    toast.error(`${s?.name} removed from roster`);
-  };
-
-  const confirmRemoveStaff = () => {
-    if (!pendingRemoval) return;
-    removeStaff(pendingRemoval.id);
-    setPendingRemoval(null);
-  };
-
   const handleExport = () => {
     downloadCsv(
       "staff-directory.csv",
@@ -1612,54 +1754,48 @@ export function StaffRoster() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <OrganicCard tone="white" cornerSide="tr" padded className="flex min-h-[108px] flex-col justify-between">
-          <div className="flex items-start justify-between gap-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-              Teachers
-            </div>
-            <GraduationCap className="h-4 w-4 shrink-0 text-black/35" />
+      <div className="flex min-w-0 flex-row gap-1.5 lg:gap-3">
+        <OrganicCard tone="white" cornerSide="tr" padded className={directoryStatCardClass}>
+          <div className="flex min-w-0 flex-1 items-center justify-between gap-1 lg:items-start lg:gap-2">
+            <div className={cn(directoryStatLabelClass, "text-black/45")}>Teachers</div>
+            <GraduationCap className="h-3 w-3 shrink-0 text-black/35 lg:h-4 lg:w-4" />
           </div>
-          <div className="font-mono text-[28px] font-semibold leading-none tracking-tight text-black sm:text-[32px]">
-            {analytics.teachers}
-          </div>
+          <div className={directoryStatValueClass}>{analytics.teachers}</div>
         </OrganicCard>
 
-        <OrganicCard tone="white" cornerSide="bl" padded className="flex min-h-[108px] flex-col justify-between">
-          <div className="flex items-start justify-between gap-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-              Non-Teaching / Administrative
+        <OrganicCard tone="white" cornerSide="bl" padded className={directoryStatCardClass}>
+          <div className="flex min-w-0 flex-1 items-center justify-between gap-1 lg:items-start lg:gap-2">
+            <div className={cn(directoryStatLabelClass, "text-black/45")}>
+              <span className="lg:hidden">Admin</span>
+              <span className="hidden lg:inline">Non-Teaching / Administrative</span>
             </div>
-            <Briefcase className="h-4 w-4 shrink-0 text-black/35" />
+            <Briefcase className="h-3 w-3 shrink-0 text-black/35 lg:h-4 lg:w-4" />
           </div>
-          <div className="font-mono text-[28px] font-semibold leading-none tracking-tight text-black sm:text-[32px]">
-            {analytics.nonTeaching}
-          </div>
+          <div className={directoryStatValueClass}>{analytics.nonTeaching}</div>
         </OrganicCard>
 
-        <OrganicCard
-          tone="limePale"
-          cornerSide="tr"
-          padded
-          className="flex min-h-[108px] flex-col justify-between sm:col-span-1"
-        >
-          <div className="flex items-start justify-between gap-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/55">
-              Total Staff
+        <OrganicCard tone="limePale" cornerSide="tr" padded className={directoryStatCardClass}>
+          <div className="flex min-w-0 flex-1 items-center justify-between gap-1 lg:items-start lg:gap-2">
+            <div className={cn(directoryStatLabelClass, "text-black/55")}>
+              <span className="lg:hidden">Total</span>
+              <span className="hidden lg:inline">Total Staff</span>
             </div>
-            <Users className="h-4 w-4 shrink-0 text-black/40" />
+            <Users className="h-3 w-3 shrink-0 text-black/40 lg:h-4 lg:w-4" />
           </div>
-          <div className="font-mono text-[28px] font-semibold leading-none tracking-tight text-black sm:text-[32px]">
-            {analytics.total}
+          <div className="shrink-0 text-right lg:text-left">
+            <div className={directoryStatValueClass}>{analytics.total}</div>
+            <div className="mt-0.5 font-mono text-[9px] text-black/55 lg:mt-1.5 lg:text-[11px]">
+              {analytics.active}A · {analytics.inactive}I
+            </div>
           </div>
         </OrganicCard>
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-[28px] font-semibold leading-none tracking-tight text-black sm:text-title">
+      <div className="flex w-full flex-col items-center gap-3 text-center lg:flex-row lg:items-center lg:justify-between lg:text-left">
+        <h1 className="w-full shrink-0 text-center text-[28px] font-semibold leading-none tracking-tight text-black lg:w-auto lg:text-left sm:text-title">
           Staff Directory
         </h1>
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="mobile-scrollbar-none flex w-full items-center justify-center gap-2 overflow-x-auto lg:w-auto lg:shrink-0 lg:justify-end">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button type="button" className={outlineBtn}>
@@ -1718,7 +1854,79 @@ export function StaffRoster() {
         </div>
       </div>
 
-      <div className="mobile-scrollbar-none overflow-x-auto rounded-[2rem] border border-slate-100/80 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_24px_60px_-32px_rgba(0,0,0,0.18)] sm:p-6">
+      <div className="space-y-2.5 lg:hidden">
+        {filteredStaff.length === 0 && (
+          <div className="rounded-[1.35rem] border border-dashed border-[#E5E5E5] bg-white px-4 py-10 text-center text-[13px] text-black/55">
+            No staff records match the current filters.
+          </div>
+        )}
+        {filteredStaff.map((member) => {
+          const digits = phoneDigits(member.phone);
+          const hasPhone = digits.length > 0;
+          return (
+            <div
+              key={member.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => openStaff(member.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  openStaff(member.id);
+                }
+              }}
+              aria-label={`Open profile for ${member.name}`}
+              className={cn(directoryMobileCardClass, "cursor-pointer")}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <DirectoryPersonAvatar name={member.name} photoUrl={member.photoUrl} />
+                  <div className="min-w-0">
+                    <div className="truncate text-[14px] font-semibold leading-tight text-black">
+                      {member.name}
+                    </div>
+                    <div className="mt-0.5 truncate font-mono text-[10.5px] text-black/45">
+                      {member.id}
+                    </div>
+                  </div>
+                </div>
+                <EnrollmentStatusBadge active={member.active} />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex max-w-full truncate rounded-full bg-[#E1F2AE] px-2.5 py-1 text-[10.5px] font-semibold text-black">
+                  {member.role}
+                </span>
+                <span className="inline-flex max-w-full truncate rounded-full bg-[#F4F4F5] px-2.5 py-1 text-[10.5px] font-medium text-black/75">
+                  {member.dept}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 border-t border-[#F0F0F0] pt-2.5">
+                <div className="min-w-0">
+                  <div className="truncate text-[12px] font-medium text-black/75">{member.role}</div>
+                  <div className="mt-0.5 truncate font-mono text-[10.5px] text-black/45">
+                    {hasPhone ? formatPhone(member.phone) : "No contact on file"}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openStaffEdit(member.id);
+                  }}
+                  aria-label={`Edit profile for ${member.name}`}
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-[#E5E5E5] bg-[#F4F4F5] text-black/60 transition-colors hover:border-black/20 hover:bg-white hover:text-black"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mobile-scrollbar-none hidden overflow-x-auto rounded-[2rem] border border-slate-100/80 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_24px_60px_-32px_rgba(0,0,0,0.18)] sm:p-6 lg:block">
         <table className="w-full min-w-[640px] border-collapse text-left">
           <thead>
             <tr>
@@ -1735,13 +1943,26 @@ export function StaffRoster() {
           <tbody>
             {filteredStaff.length === 0 && (
               <tr>
-                <td colSpan={5} className="py-10 text-center text-[13px] text-black/55">
+                <td colSpan={4} className="py-10 text-center text-[13px] text-black/55">
                   No staff records match the current filters.
                 </td>
               </tr>
             )}
             {filteredStaff.map((member) => (
-              <tr key={member.id} className="border-b border-slate-50 last:border-0">
+              <tr
+                key={member.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => openStaff(member.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    openStaff(member.id);
+                  }
+                }}
+                aria-label={`Open profile for ${member.name}`}
+                className="cursor-pointer border-b border-slate-50 transition-colors last:border-0 hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C7F33C]"
+              >
                 <td className="py-3.5 pr-4 align-middle">
                   <div className="flex min-w-0 items-center gap-3">
                     {member.photoUrl ? (
@@ -1764,29 +1985,7 @@ export function StaffRoster() {
                 <td className="py-3.5 pr-4 align-middle text-[13px] text-black/75">{member.role}</td>
                 <td className="py-3.5 pr-4 align-middle text-[13px] text-black/75">{member.dept}</td>
                 <td className="py-3.5 pr-4 align-middle">
-                  <StaffStatusBadge active={member.active} />
-                </td>
-                <td className="py-3.5 align-middle">
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => openStaff(member.id)}
-                      aria-label={`View profile for ${member.name}`}
-                      title="View Profile"
-                      className="grid h-9 w-9 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/65 transition-colors hover:border-black/20 hover:bg-[#F4F4F5]"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPendingRemoval(member)}
-                      aria-label={`Remove ${member.name}`}
-                      title="Remove Record"
-                      className="grid h-9 w-9 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
+                  <EnrollmentStatusBadge active={member.active} />
                 </td>
               </tr>
             ))}
@@ -1907,36 +2106,6 @@ export function StaffRoster() {
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={Boolean(pendingRemoval)}
-        onOpenChange={(next) => {
-          if (!next) setPendingRemoval(null);
-        }}
-      >
-        <DialogContent className="max-w-sm rounded-[1.5rem] border border-[#E5E5E5] bg-white p-6">
-          <DialogHeader>
-            <DialogTitle className="text-[22px] font-semibold text-black">Remove Staff</DialogTitle>
-            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
-              {pendingRemoval
-                ? `Are you sure you want to remove ${pendingRemoval.name} (${pendingRemoval.id}) from the roster? This action cannot be undone.`
-                : "Are you sure you want to remove this staff profile?"}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="mt-5 flex-row justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setPendingRemoval(null)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={confirmRemoveStaff}
-              className="rounded-full bg-[#B91C1C] text-white hover:bg-[#991B1B]"
-            >
-              Remove
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
@@ -2505,6 +2674,30 @@ function MakePayment() {
     setIsSubmitting(false);
   };
 
+  const handleDownloadDisbursals = () => {
+    if (!madePayments.length) {
+      toast.error("Nothing to download · no disbursals recorded yet");
+      return;
+    }
+    downloadCsv(
+      "made-payments.csv",
+      ["ID", "Payee", "Type", "Description", "Mode", "Amount (INR)", "Status", "Time"],
+      madePayments.map((p) => [
+        p.id,
+        p.payee,
+        p.payeeType,
+        p.desc,
+        p.mode,
+        p.amount,
+        p.status,
+        p.time,
+      ]),
+    );
+    toast.success("Made payments exported", {
+      description: `${madePayments.length} disbursal${madePayments.length === 1 ? "" : "s"} saved to CSV`,
+    });
+  };
+
   return (
     <div className="grid grid-cols-12 gap-4 sm:gap-5">
       <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12 lg:col-span-8">
@@ -2628,9 +2821,21 @@ function MakePayment() {
       </OrganicCard>
 
       <OrganicCard tone="white" cornerSide="br" padded className="col-span-12">
-        <div className="text-title">Made Payment Details</div>
-        <div className="mt-1 text-[11.5px] text-black/55">
-          {madePayments.length} disbursals · most recent
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-title">Made Payment Details</div>
+            <div className="mt-1 text-[11.5px] text-black/55">
+              {madePayments.length} disbursals · most recent
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleDownloadDisbursals}
+            className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3.5 text-[12px] font-semibold text-black transition-colors hover:border-black/20 hover:bg-[#F4F4F5]"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Download CSV
+          </button>
         </div>
         <div className="mobile-scrollbar-none mt-3 max-h-[420px] divide-y divide-[#F0F0F0] overflow-y-auto">
           {madePayments.length === 0 && (
@@ -3530,14 +3735,27 @@ function VehicleCard({
     capacity: "",
     driverName: "",
     driverPhone: "",
-    routeId: "",
+    routeIds: [] as string[],
     active: true,
   });
 
-  const routeLabel = (routeId?: string) => {
-    if (!routeId) return "—";
+  const routeLabel = (routeId: string) => {
     const route = transportRoutes.find((r) => r.id === routeId);
     return route ? `${route.mapFrom} → ${route.mapTo}` : routeId;
+  };
+
+  const routesLabel = (routeIds: string[]) => {
+    if (routeIds.length === 0) return "—";
+    return routeIds.map(routeLabel).join(", ");
+  };
+
+  const toggleRoute = (routeId: string) => {
+    setForm((prev) => ({
+      ...prev,
+      routeIds: prev.routeIds.includes(routeId)
+        ? prev.routeIds.filter((id) => id !== routeId)
+        : [...prev.routeIds, routeId],
+    }));
   };
 
   const startCreate = () => {
@@ -3548,7 +3766,7 @@ function VehicleCard({
       capacity: "",
       driverName: "",
       driverPhone: "",
-      routeId: "",
+      routeIds: [],
       active: true,
     });
     setOpen(true);
@@ -3562,7 +3780,7 @@ function VehicleCard({
       capacity: String(v.capacity),
       driverName: v.driverName ?? "",
       driverPhone: v.driverPhone ?? "",
-      routeId: v.routeId ?? "",
+      routeIds: [...v.routeIds],
       active: v.active,
     });
     setOpen(true);
@@ -3587,7 +3805,7 @@ function VehicleCard({
       capacity,
       driverName: form.driverName.trim() || undefined,
       driverPhone: form.driverPhone.trim() || undefined,
-      routeId: form.routeId || undefined,
+      routeIds: form.routeIds,
       active: form.active,
     };
     if (editingId) {
@@ -3626,68 +3844,97 @@ function VehicleCard({
       />
 
       <div className="mt-4 overflow-x-auto rounded-2xl border border-[#EFEFEF]">
-        <div className="min-w-[520px]">
-          <div className="grid grid-cols-[1fr_1fr_0.6fr_1.2fr_auto] gap-2 bg-[#F4F4F5] px-3.5 py-2 text-[10px] font-semibold uppercase tracking-wider text-black/55">
-            <span>Vehicle</span>
-            <span>Registration</span>
-            <span className="text-right">Seats</span>
-            <span>Assigned Route</span>
-            <span />
-          </div>
-          {transportVehicles.length === 0 ? (
-            <div className="px-3.5 py-6 text-center text-[12px] text-black/55">
-              No vehicles in fleet yet
-            </div>
-          ) : (
-            transportVehicles.map((v) => (
-              <div
-                key={v.id}
-                className="grid grid-cols-[1fr_1fr_0.6fr_1.2fr_auto] items-center gap-2 border-t border-[#EFEFEF] px-3.5 py-2.5 text-[12.5px] last:border-b-0"
-              >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 truncate font-medium text-black">
-                    <Bus className="h-3.5 w-3.5 shrink-0 text-black/40" />
-                    {v.name}
-                  </div>
-                  <div className="mt-0.5 truncate text-[10.5px] text-black/45">
-                    {v.driverName ?? "No driver assigned"}
-                  </div>
-                </div>
-                <span className="truncate font-mono text-[11.5px] text-black/70">
-                  {v.registrationNo}
-                </span>
-                <span className="text-right font-mono text-black">{v.capacity}</span>
-                <span className="truncate text-[11.5px] text-black/70">{routeLabel(v.routeId)}</span>
-                <div className="flex shrink-0 items-center gap-1">
-                  <span
-                    className={cn(
-                      "mr-1 hidden rounded-full px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider sm:inline",
-                      v.active ? "bg-[#C7F33C] text-black" : "bg-black/10 text-black/50",
-                    )}
-                  >
-                    {v.active ? "Active" : "Idle"}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => startEdit(v)}
-                    aria-label={`Edit vehicle ${v.name}`}
-                    className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPendingDelete(v)}
-                    aria-label={`Delete vehicle ${v.name}`}
-                    className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+        <table className="w-full min-w-[720px] table-fixed border-collapse text-left">
+          <colgroup>
+            <col className="w-[24%]" />
+            <col className="w-[18%]" />
+            <col className="w-[8%]" />
+            <col className="w-[30%]" />
+            <col className="w-[10%]" />
+            <col className="w-[10%]" />
+          </colgroup>
+          <thead>
+            <tr className="bg-[#F4F4F5] text-[10px] font-semibold uppercase tracking-wider text-black/55">
+              <th className="px-3.5 py-2 font-semibold">Vehicle</th>
+              <th className="px-3.5 py-2 font-semibold">Registration</th>
+              <th className="px-3.5 py-2 text-right font-semibold">Seats</th>
+              <th className="px-3.5 py-2 font-semibold">Assigned Routes</th>
+              <th className="px-3.5 py-2 font-semibold">Status</th>
+              <th className="px-3.5 py-2 text-right font-semibold">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {transportVehicles.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-3.5 py-6 text-center text-[12px] text-black/55">
+                  No vehicles in fleet yet
+                </td>
+              </tr>
+            ) : (
+              transportVehicles.map((v) => (
+                <tr key={v.id} className="border-t border-[#EFEFEF] text-[12.5px]">
+                  <td className="px-3.5 py-2.5 align-middle">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 truncate font-medium text-black">
+                        <Bus className="h-3.5 w-3.5 shrink-0 text-black/40" />
+                        {v.name}
+                      </div>
+                      <div className="mt-0.5 truncate text-[10.5px] text-black/45">
+                        {v.driverName ?? "No driver assigned"}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-3.5 py-2.5 align-middle">
+                    <span className="block truncate font-mono text-[11.5px] text-black/70">
+                      {v.registrationNo}
+                    </span>
+                  </td>
+                  <td className="px-3.5 py-2.5 text-right align-middle font-mono text-black">
+                    {v.capacity}
+                  </td>
+                  <td className="px-3.5 py-2.5 align-middle">
+                    <span
+                      className="block truncate text-[11.5px] text-black/70"
+                      title={routesLabel(v.routeIds)}
+                    >
+                      {routesLabel(v.routeIds)}
+                    </span>
+                  </td>
+                  <td className="px-3.5 py-2.5 align-middle">
+                    <span
+                      className={cn(
+                        "inline-flex rounded-full px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider",
+                        v.active ? "bg-[#C7F33C] text-black" : "bg-black/10 text-black/50",
+                      )}
+                    >
+                      {v.active ? "Active" : "Idle"}
+                    </span>
+                  </td>
+                  <td className="px-3.5 py-2.5 align-middle">
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        onClick={() => startEdit(v)}
+                        aria-label={`Edit vehicle ${v.name}`}
+                        className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPendingDelete(v)}
+                        aria-label={`Delete vehicle ${v.name}`}
+                        className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
 
       <DeleteConfirmDialog
@@ -3709,7 +3956,8 @@ function VehicleCard({
           <DialogHeader>
             <DialogTitle>{editingId ? "Edit Vehicle" : "Add Vehicle"}</DialogTitle>
             <DialogDescription>
-              Register buses and vans, assign drivers, and link each vehicle to a transport route.
+              Register buses and vans, assign drivers, and link each vehicle to one or more transport
+              routes.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={submit} className="space-y-3">
@@ -3754,23 +4002,6 @@ function VehicleCard({
               </div>
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                  Assigned Route
-                </Label>
-                <FieldSelect
-                  value={form.routeId ?? ""}
-                  onValueChange={(routeId) => setForm({ ...form, routeId })}
-                  options={transportRoutes.map((r) => ({
-                    value: r.id,
-                    label: `${r.mapFrom} → ${r.mapTo}`,
-                  }))}
-                  placeholder="No route assigned"
-                  disabled={transportRoutes.length === 0}
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
                   Driver Name
                 </Label>
                 <Input
@@ -3779,17 +4010,57 @@ function VehicleCard({
                   placeholder="Optional"
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                  Driver Phone
-                </Label>
-                <Input
-                  value={form.driverPhone}
-                  onChange={(e) => setForm({ ...form, driverPhone: e.target.value })}
-                  placeholder="Optional"
-                  className="font-mono"
-                />
-              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                Assigned Routes
+              </Label>
+              {transportRoutes.length === 0 ? (
+                <p className="rounded-2xl border border-dashed border-[#E5E5E5] px-3 py-4 text-center text-[12px] text-black/45">
+                  No routes configured yet
+                </p>
+              ) : (
+                <div className="max-h-44 space-y-1 overflow-y-auto rounded-2xl border border-[#E5E5E5] bg-[#FAFAFA] p-2">
+                  {transportRoutes.map((r) => {
+                    const checked = form.routeIds.includes(r.id);
+                    return (
+                      <label
+                        key={r.id}
+                        className={cn(
+                          "flex cursor-pointer items-start gap-2.5 rounded-xl px-2.5 py-2 transition-colors",
+                          checked ? "bg-[#E1F2AE]" : "hover:bg-white",
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleRoute(r.id)}
+                          className="mt-0.5 h-4 w-4 shrink-0 rounded border-black/20 accent-black"
+                        />
+                        <span className="min-w-0 text-[12px] leading-snug text-black">
+                          {r.mapFrom} → {r.mapTo}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+              <p className="text-[10.5px] text-black/45">
+                {form.routeIds.length === 0
+                  ? "No routes selected"
+                  : `${form.routeIds.length} route${form.routeIds.length === 1 ? "" : "s"} selected`}
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                Driver Phone
+              </Label>
+              <Input
+                value={form.driverPhone}
+                onChange={(e) => setForm({ ...form, driverPhone: e.target.value })}
+                placeholder="Optional"
+                className="font-mono"
+              />
             </div>
             <label className="flex cursor-pointer items-center gap-2 rounded-2xl border border-[#E5E5E5] bg-[#FAFAFA] px-3 py-2.5">
               <input
@@ -3837,8 +4108,8 @@ function TransportCard({
     bothFee: "",
   });
 
-  const vehicleForRoute = (routeId: string) =>
-    transportVehicles.find((v) => v.routeId === routeId);
+  const vehiclesForRoute = (routeId: string) =>
+    transportVehicles.filter((v) => v.routeIds.includes(routeId));
 
   const startCreate = () => {
     setEditingId(null);
@@ -3890,7 +4161,10 @@ function TransportCard({
   const remove = (r: TransportRoute) => {
     setTransportRoutes((prev) => prev.filter((x) => x.id !== r.id));
     setTransportVehicles((prev) =>
-      prev.map((v) => (v.routeId === r.id ? { ...v, routeId: undefined } : v)),
+      prev.map((v) => ({
+        ...v,
+        routeIds: v.routeIds.filter((id) => id !== r.id),
+      })),
     );
     toast.error(`${r.mapFrom} → ${r.mapTo} removed`);
   };
@@ -3913,65 +4187,87 @@ function TransportCard({
       />
 
       <div className="mt-4 overflow-x-auto rounded-2xl border border-[#EFEFEF]">
-        <div className="min-w-[640px]">
-          <div className="grid grid-cols-[1.2fr_1.2fr_0.65fr_0.65fr_0.65fr_0.8fr_auto] gap-2 bg-[#F4F4F5] px-3.5 py-2 text-[10px] font-semibold uppercase tracking-wider text-black/55">
-            <span>From</span>
-            <span>To</span>
-            <span className="text-right">Morning</span>
-            <span className="text-right">Evening</span>
-            <span className="text-right">Both</span>
-            <span>Vehicle</span>
-            <span />
-          </div>
-          {transportRoutes.length === 0 ? (
-            <div className="px-3.5 py-6 text-center text-[12px] text-black/55">
-              No routes mapped yet
-            </div>
-          ) : (
-            transportRoutes.map((r) => {
-              const vehicle = vehicleForRoute(r.id);
-              return (
-                <div
-                  key={r.id}
-                  className="grid grid-cols-[1.2fr_1.2fr_0.65fr_0.65fr_0.65fr_0.8fr_auto] items-center gap-2 border-t border-[#EFEFEF] px-3.5 py-2.5 text-[12.5px] last:border-b-0"
-                >
-                  <span className="truncate text-black">{r.mapFrom}</span>
-                  <span className="truncate text-black/75">{r.mapTo}</span>
-                  <span className="text-right font-mono text-[11.5px] text-black">
-                    {inr(r.morningFee)}
-                  </span>
-                  <span className="text-right font-mono text-[11.5px] text-black">
-                    {inr(r.eveningFee)}
-                  </span>
-                  <span className="text-right font-mono text-[11.5px] font-semibold text-black">
-                    {inr(r.bothFee)}
-                  </span>
-                  <span className="truncate text-[11px] text-black/60">
-                    {vehicle ? vehicle.name : "—"}
-                  </span>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => startEdit(r)}
-                      aria-label={`Edit route ${r.mapFrom} to ${r.mapTo}`}
-                      className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPendingDelete(r)}
-                      aria-label={`Delete route ${r.mapFrom} to ${r.mapTo}`}
-                      className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
+        <table className="w-full min-w-[760px] table-fixed border-collapse text-left">
+          <colgroup>
+            <col className="w-[20%]" />
+            <col className="w-[20%]" />
+            <col className="w-[11%]" />
+            <col className="w-[11%]" />
+            <col className="w-[11%]" />
+            <col className="w-[15%]" />
+            <col className="w-[12%]" />
+          </colgroup>
+          <thead>
+            <tr className="bg-[#F4F4F5] text-[10px] font-semibold uppercase tracking-wider text-black/55">
+              <th className="px-3.5 py-2 font-semibold">From</th>
+              <th className="px-3.5 py-2 font-semibold">To</th>
+              <th className="px-3.5 py-2 text-right font-semibold">Morning</th>
+              <th className="px-3.5 py-2 text-right font-semibold">Evening</th>
+              <th className="px-3.5 py-2 text-right font-semibold">Both</th>
+              <th className="px-3.5 py-2 font-semibold">Vehicles</th>
+              <th className="px-3.5 py-2 text-right font-semibold">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {transportRoutes.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-3.5 py-6 text-center text-[12px] text-black/55">
+                  No routes mapped yet
+                </td>
+              </tr>
+            ) : (
+              transportRoutes.map((r) => {
+                const vehicles = vehiclesForRoute(r.id);
+                const vehicleNames =
+                  vehicles.length === 0 ? "—" : vehicles.map((v) => v.name).join(", ");
+                return (
+                  <tr key={r.id} className="border-t border-[#EFEFEF] text-[12.5px]">
+                    <td className="px-3.5 py-2.5 align-middle">
+                      <span className="block truncate text-black">{r.mapFrom}</span>
+                    </td>
+                    <td className="px-3.5 py-2.5 align-middle">
+                      <span className="block truncate text-black/75">{r.mapTo}</span>
+                    </td>
+                    <td className="px-3.5 py-2.5 text-right align-middle font-mono text-[11.5px] text-black">
+                      {inr(r.morningFee)}
+                    </td>
+                    <td className="px-3.5 py-2.5 text-right align-middle font-mono text-[11.5px] text-black">
+                      {inr(r.eveningFee)}
+                    </td>
+                    <td className="px-3.5 py-2.5 text-right align-middle font-mono text-[11.5px] font-semibold text-black">
+                      {inr(r.bothFee)}
+                    </td>
+                    <td className="px-3.5 py-2.5 align-middle">
+                      <span className="block truncate text-[11px] text-black/60" title={vehicleNames}>
+                        {vehicleNames}
+                      </span>
+                    </td>
+                    <td className="px-3.5 py-2.5 align-middle">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={() => startEdit(r)}
+                          aria-label={`Edit route ${r.mapFrom} to ${r.mapTo}`}
+                          className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPendingDelete(r)}
+                          aria-label={`Delete route ${r.mapFrom} to ${r.mapTo}`}
+                          className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
       </div>
 
       <DeleteConfirmDialog

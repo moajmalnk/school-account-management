@@ -72,6 +72,10 @@ export function downloadTablePdf({
   doc.save(filename);
 }
 
+function formatInrPdf(amount: number) {
+  return `Rs. ${amount.toLocaleString("en-IN")}`;
+}
+
 export function downloadReceiptPdf(payment: Payment, schoolName: string, academicYear: string) {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -81,7 +85,9 @@ export function downloadReceiptPdf(payment: Payment, schoolName: string, academi
     dateStyle: "medium",
     timeStyle: "short",
   });
-  const amountFormatted = `₹ ${payment.amount.toLocaleString("en-IN")}`;
+  const amountFormatted = formatInrPdf(payment.amount);
+  const summaryLabelWidth = 98;
+  const summaryAmountWidth = contentWidth - summaryLabelWidth;
 
   doc.setFillColor(199, 243, 60);
   doc.rect(0, 0, pageWidth, 34, "F");
@@ -143,7 +149,7 @@ export function downloadReceiptPdf(payment: Payment, schoolName: string, academi
     },
     columnStyles: {
       0: { cellWidth: 54, fontStyle: "bold", textColor: [90, 90, 90], fillColor: [248, 248, 248] },
-      1: { cellWidth: contentWidth - 54, fontStyle: "bold" },
+      1: { cellWidth: contentWidth - 54, fontStyle: "bold", halign: "left" },
     },
     didParseCell: (data) => {
       if (data.section === "body" && data.row.index === 5) {
@@ -151,6 +157,7 @@ export function downloadReceiptPdf(payment: Payment, schoolName: string, academi
         data.cell.styles.fontSize = 11;
         if (data.column.index === 1) {
           data.cell.styles.halign = "right";
+          data.cell.styles.cellPadding = { top: 5, right: 8, bottom: 5, left: 6 };
         }
       }
     },
@@ -169,24 +176,26 @@ export function downloadReceiptPdf(payment: Payment, schoolName: string, academi
           content: amountFormatted,
           styles: {
             fontStyle: "bold",
-            fontSize: 16,
+            fontSize: 14,
             halign: "right",
             fillColor: [199, 243, 60],
             textColor: [0, 0, 0],
+            cellPadding: { top: 8, right: 10, bottom: 8, left: 8 },
           },
         },
       ],
     ],
     theme: "grid",
     styles: {
-      cellPadding: { top: 7, right: 8, bottom: 7, left: 8 },
+      cellPadding: { top: 8, right: 8, bottom: 8, left: 8 },
       lineColor: [0, 0, 0],
       lineWidth: 0.35,
       valign: "middle",
+      overflow: "linebreak",
     },
     columnStyles: {
-      0: { cellWidth: contentWidth * 0.58 },
-      1: { cellWidth: contentWidth * 0.42 },
+      0: { cellWidth: summaryLabelWidth },
+      1: { cellWidth: summaryAmountWidth, halign: "right" },
     },
   });
 

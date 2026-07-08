@@ -27,7 +27,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth";
-import { TenantStoreProvider } from "@/lib/tenant-store";
+import { TenantStoreProvider, useTenantStore } from "@/lib/tenant-store";
 
 export const Route = createFileRoute("/tenant")({
   component: TenantLayout,
@@ -95,8 +95,14 @@ function TenantLayout() {
 
 function TenantMobileHeader() {
   const { session } = useAuth();
+  const navigate = useNavigate();
+  const { notifications } = useTenantStore();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const active = NAV.find((n) => pathname.startsWith(n.to));
+  const onNotifications = pathname.startsWith("/tenant/notifications");
+  const active = onNotifications
+    ? { label: "Notifications" }
+    : NAV.find((n) => pathname.startsWith(n.to));
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
     <header className="sticky top-0 z-30 bg-[#EAEAEA]/92 px-3 pb-2 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl sm:px-4 lg:hidden">
@@ -114,16 +120,14 @@ function TenantMobileHeader() {
         </div>
         <button
           type="button"
-          onClick={() =>
-            toast("3 unread tenant alerts", {
-              description: "Fee reminders, admissions, and staff updates",
-            })
-          }
+          onClick={() => navigate({ to: "/tenant/notifications" })}
           aria-label="Notifications"
           className="relative grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[#E5E5E5] bg-[#F4F4F5] text-black/60 transition-colors hover:bg-black hover:text-white"
         >
           <Bell className="h-4 w-4" />
-          <span className="absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-[#F4F4F5] bg-[#C7F33C]" />
+          {unreadCount > 0 && (
+            <span className="absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-[#F4F4F5] bg-[#C7F33C]" />
+          )}
         </button>
       </div>
     </header>
@@ -139,7 +143,9 @@ function TenantSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
   const { session, logout } = useAuth();
+  const { notifications } = useTenantStore();
   const [pendingLogout, setPendingLogout] = useState(false);
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   const confirmLogout = () => {
     const name = session?.displayName ?? "Tenant Admin";
@@ -156,12 +162,23 @@ function TenantSidebar() {
         <div className="grid h-10 w-10 place-items-center rounded-2xl bg-black text-sm font-bold text-white">
           SH
         </div>
-        <div className="leading-tight">
+        <div className="min-w-0 flex-1 leading-tight">
           <div className="text-[14px] font-semibold text-black">
             {session?.tenantName ?? "Silver Hills Global"}
           </div>
           <div className="text-[10px] uppercase tracking-wider text-black/45">Tenant Workspace</div>
         </div>
+        <button
+          type="button"
+          onClick={() => navigate({ to: "/tenant/notifications" })}
+          aria-label="Notifications"
+          className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full border border-[#E5E5E5] bg-[#F4F4F5] text-black/60 transition-colors hover:bg-black hover:text-white"
+        >
+          <Bell className="h-3.5 w-3.5" />
+          {unreadCount > 0 && (
+            <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full border-2 border-[#F4F4F5] bg-[#C7F33C]" />
+          )}
+        </button>
       </div>
 
       <nav className="min-h-0 flex-1 space-y-1">

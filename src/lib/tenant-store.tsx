@@ -21,6 +21,7 @@ export type Student = {
   email?: string;
   address?: string;
   photoUrl?: string;
+  active?: boolean;
 };
 
 export type StaffDocumentAttachment = {
@@ -97,6 +98,25 @@ function normalizeStaffDocuments(raw: StaffDocument[] | undefined): StaffDocumen
   });
 }
 
+export function normalizeStudent(
+  raw: Partial<Student> & Pick<Student, "id" | "name" | "cls" | "guardian" | "due">,
+): Student {
+  return {
+    id: raw.id,
+    name: raw.name,
+    cls: raw.cls,
+    guardian: raw.guardian,
+    due: typeof raw.due === "number" && Number.isFinite(raw.due) ? raw.due : 0,
+    gender: raw.gender === "M" || raw.gender === "F" ? raw.gender : undefined,
+    phone: typeof raw.phone === "string" ? raw.phone : undefined,
+    dob: typeof raw.dob === "string" ? raw.dob : undefined,
+    email: typeof raw.email === "string" ? raw.email : undefined,
+    address: typeof raw.address === "string" ? raw.address : undefined,
+    photoUrl: typeof raw.photoUrl === "string" && raw.photoUrl ? raw.photoUrl : undefined,
+    active: typeof raw.active === "boolean" ? raw.active : true,
+  };
+}
+
 export function normalizeStaff(raw: Partial<Staff> & Pick<Staff, "id" | "name" | "role" | "dept" | "active">): Staff {
   return {
     id: raw.id,
@@ -152,7 +172,7 @@ export type TransportVehicle = {
   capacity: number;
   driverName?: string;
   driverPhone?: string;
-  routeId?: string;
+  routeIds: string[];
   active: boolean;
 };
 
@@ -176,8 +196,22 @@ export type ThemeSettings = {
   density: "Comfortable" | "Compact";
 };
 
-const STORAGE_KEY = "school-accounts/tenant-store/v7";
+export type TenantNotification = {
+  id: string;
+  title: string;
+  body: string;
+  category: "fees" | "admissions" | "staff" | "system";
+  read: boolean;
+  createdAt: string;
+  timeLabel: string;
+  href?: string;
+};
+
+const STORAGE_KEY = "school-accounts/tenant-store/v10";
 const LEGACY_STORAGE_KEYS = [
+  "school-accounts/tenant-store/v9",
+  "school-accounts/tenant-store/v8",
+  "school-accounts/tenant-store/v7",
   "school-accounts/tenant-store/v6",
   "school-accounts/tenant-store/v5",
   "school-accounts/tenant-store/v4",
@@ -214,6 +248,11 @@ function normalizeTransportVehicle(raw: unknown): TransportVehicle | null {
   if (typeof v.id !== "string" || typeof v.name !== "string" || typeof v.registrationNo !== "string") {
     return null;
   }
+  const routeIds = Array.isArray(v.routeIds)
+    ? v.routeIds.filter((id): id is string => typeof id === "string" && id.length > 0)
+    : typeof v.routeId === "string" && v.routeId
+      ? [v.routeId]
+      : [];
   return {
     id: v.id,
     name: v.name,
@@ -221,7 +260,7 @@ function normalizeTransportVehicle(raw: unknown): TransportVehicle | null {
     capacity: typeof v.capacity === "number" ? v.capacity : 0,
     driverName: typeof v.driverName === "string" ? v.driverName : undefined,
     driverPhone: typeof v.driverPhone === "string" ? v.driverPhone : undefined,
-    routeId: typeof v.routeId === "string" ? v.routeId : undefined,
+    routeIds,
     active: typeof v.active === "boolean" ? v.active : true,
   };
 }
@@ -233,6 +272,86 @@ function normalizeDashboardTodos(raw: unknown): string[] {
   const items = raw.map((item) => (typeof item === "string" ? item : ""));
   while (items.length < 5) items.push("");
   return items.slice(0, 5);
+}
+
+const NOTIFICATION_CATEGORIES = ["fees", "admissions", "staff", "system"] as const;
+
+export const SEED_NOTIFICATIONS: TenantNotification[] = [
+  {
+    id: "NTF-001",
+    title: "Fee reminders pending",
+    body: "3 students have overdue balances. Review the watchlist and send reminders.",
+    category: "fees",
+    read: false,
+    createdAt: "2026-07-08T04:30:00.000Z",
+    timeLabel: "1h ago",
+    href: "/tenant/students",
+  },
+  {
+    id: "NTF-002",
+    title: "New admission logged",
+    body: "Muhammed was admitted to LKG. Confirm guardian contact details.",
+    category: "admissions",
+    read: false,
+    createdAt: "2026-07-07T11:15:00.000Z",
+    timeLabel: "Yesterday",
+    href: "/tenant/students",
+  },
+  {
+    id: "NTF-003",
+    title: "Staff roster updated",
+    body: "A new transport coordinator was added to the staff directory.",
+    category: "staff",
+    read: false,
+    createdAt: "2026-07-06T09:00:00.000Z",
+    timeLabel: "2d ago",
+    href: "/tenant/staff",
+  },
+  {
+    id: "NTF-004",
+    title: "Monthly finance snapshot",
+    body: "July operating expenses were recorded. Open finance to review ledgers.",
+    category: "system",
+    read: true,
+    createdAt: "2026-07-01T08:00:00.000Z",
+    timeLabel: "1w ago",
+    href: "/tenant/finance",
+  },
+];
+
+function normalizeTenantNotification(raw: unknown): TenantNotification | null {
+  if (!raw || typeof raw !== "object") return null;
+  const n = raw as Record<string, unknown>;
+  if (
+    typeof n.id !== "string" ||
+    typeof n.title !== "string" ||
+    typeof n.body !== "string" ||
+    typeof n.createdAt !== "string" ||
+    typeof n.timeLabel !== "string"
+  ) {
+    return null;
+  }
+  const category = NOTIFICATION_CATEGORIES.includes(n.category as (typeof NOTIFICATION_CATEGORIES)[number])
+    ? (n.category as TenantNotification["category"])
+    : "system";
+  return {
+    id: n.id,
+    title: n.title,
+    body: n.body,
+    category,
+    read: typeof n.read === "boolean" ? n.read : false,
+    createdAt: n.createdAt,
+    timeLabel: n.timeLabel,
+    href: typeof n.href === "string" ? n.href : undefined,
+  };
+}
+
+function normalizeNotifications(raw: unknown): TenantNotification[] {
+  if (!Array.isArray(raw)) return [...SEED_NOTIFICATIONS];
+  const items = raw
+    .map(normalizeTenantNotification)
+    .filter((n): n is TenantNotification => n !== null);
+  return items.length > 0 ? items : [...SEED_NOTIFICATIONS];
 }
 
 export const SEED_STUDENTS: Student[] = [
@@ -605,7 +724,7 @@ export const SEED_VEHICLES: TransportVehicle[] = [
     capacity: 42,
     driverName: "Rajan Kumar",
     driverPhone: "9847012345",
-    routeId: "TR-001",
+    routeIds: ["TR-001", "TR-002"],
     active: true,
   },
   {
@@ -615,7 +734,7 @@ export const SEED_VEHICLES: TransportVehicle[] = [
     capacity: 36,
     driverName: "Suresh Nair",
     driverPhone: "9847098765",
-    routeId: "TR-002",
+    routeIds: ["TR-002"],
     active: true,
   },
   {
@@ -624,7 +743,7 @@ export const SEED_VEHICLES: TransportVehicle[] = [
     registrationNo: "MH-02-EF-1190",
     capacity: 14,
     driverName: "Imran Sheikh",
-    routeId: "TR-003",
+    routeIds: ["TR-003"],
     active: true,
   },
 ];
@@ -661,6 +780,7 @@ type Snapshot = {
   themeSettings: ThemeSettings;
   dashboardTodos: string[];
   dashboardNote: string;
+  notifications: TenantNotification[];
 };
 
 type TenantStoreValue = {
@@ -690,6 +810,8 @@ type TenantStoreValue = {
   setDashboardTodos: Dispatch<SetStateAction<string[]>>;
   dashboardNote: string;
   setDashboardNote: Dispatch<SetStateAction<string>>;
+  notifications: TenantNotification[];
+  setNotifications: Dispatch<SetStateAction<TenantNotification[]>>;
   resetTenant: () => void;
 };
 
@@ -720,7 +842,7 @@ function parseSnapshot(raw: string): Snapshot | null {
     return null;
   }
   return {
-    students: parsed.students,
+    students: parsed.students.map((s) => normalizeStudent(s as Student)),
     staff: parsed.staff.map((s) => normalizeStaff(s as Staff)),
     payments: parsed.payments,
     departments: parsed.departments,
@@ -741,6 +863,7 @@ function parseSnapshot(raw: string): Snapshot | null {
       : SEED_THEME_SETTINGS,
     dashboardTodos: normalizeDashboardTodos(parsed.dashboardTodos),
     dashboardNote: typeof parsed.dashboardNote === "string" ? parsed.dashboardNote : "",
+    notifications: normalizeNotifications(parsed.notifications),
   };
 }
 
@@ -783,6 +906,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
   const [themeSettings, setThemeSettings] = useState<ThemeSettings>(SEED_THEME_SETTINGS);
   const [dashboardTodos, setDashboardTodos] = useState<string[]>([...DEFAULT_DASHBOARD_TODOS]);
   const [dashboardNote, setDashboardNote] = useState("");
+  const [notifications, setNotifications] = useState<TenantNotification[]>([...SEED_NOTIFICATIONS]);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -801,6 +925,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       setThemeSettings(snap.themeSettings);
       setDashboardTodos(snap.dashboardTodos);
       setDashboardNote(snap.dashboardNote);
+      setNotifications(snap.notifications);
     }
     setHydrated(true);
   }, []);
@@ -821,6 +946,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       themeSettings,
       dashboardTodos,
       dashboardNote,
+      notifications,
     });
   }, [
     hydrated,
@@ -837,6 +963,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
     themeSettings,
     dashboardTodos,
     dashboardNote,
+    notifications,
   ]);
 
   const resetTenant = () => {
@@ -853,6 +980,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
     setThemeSettings(SEED_THEME_SETTINGS);
     setDashboardTodos([...DEFAULT_DASHBOARD_TODOS]);
     setDashboardNote("");
+    setNotifications([...SEED_NOTIFICATIONS]);
     writeSnapshot({
       students: SEED_STUDENTS,
       staff: SEED_STAFF,
@@ -867,6 +995,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       themeSettings: SEED_THEME_SETTINGS,
       dashboardTodos: [...DEFAULT_DASHBOARD_TODOS],
       dashboardNote: "",
+      notifications: [...SEED_NOTIFICATIONS],
     });
   };
 
@@ -898,6 +1027,8 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       setDashboardTodos,
       dashboardNote,
       setDashboardNote,
+      notifications,
+      setNotifications,
       resetTenant,
     }),
     [
@@ -914,6 +1045,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       themeSettings,
       dashboardTodos,
       dashboardNote,
+      notifications,
     ],
   );
 

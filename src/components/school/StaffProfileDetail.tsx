@@ -2,9 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
-  MessageSquare,
   Pencil,
-  Phone,
   Camera,
   X,
   FileText,
@@ -32,14 +30,16 @@ import {
 } from "@/components/ui/select";
 import type { Staff, StaffDocument, StaffDocumentAttachment } from "@/lib/tenant-store";
 import { DEFAULT_STAFF_DOCUMENTS, useTenantStore } from "@/lib/tenant-store";
+import {
+  isRecordActive,
+  ProfileAccountActions,
+} from "@/components/school/ProfileAccountActions";
 import { cn } from "@/lib/utils";
 
 const META_LABEL = "text-black/45 font-semibold tracking-wider text-[11px] uppercase";
 const CARD_FRAME = "rounded-[2rem] bg-white border border-slate-100 shadow-sm p-6";
 const MAX_FILE_BYTES = 1_500_000;
 const MAX_FILES_PER_DOC = 8;
-
-const phoneDigits = (raw?: string) => (raw ?? "").replace(/[^0-9]/g, "");
 
 function initials(name: string) {
   return name
@@ -244,7 +244,6 @@ export function StaffProfileDetail({
     });
   }, [staff.documents]);
 
-  const digits = phoneDigits(staff.phone);
   const totalSalary = useMemo(
     () => staff.basicSalary + staff.additionalAllowances,
     [staff.basicSalary, staff.additionalAllowances],
@@ -411,22 +410,6 @@ export function StaffProfileDetail({
     setEditOpen(false);
   };
 
-  const handleMessage = () => {
-    if (!digits) {
-      toast.error("No phone number on file for this staff member");
-      return;
-    }
-    window.location.href = `sms:${digits}`;
-  };
-
-  const handleCall = () => {
-    if (!digits) {
-      toast.error("No phone number on file for this staff member");
-      return;
-    }
-    window.location.href = `tel:${digits}`;
-  };
-
   const updatePhoto = (photoUrl: string | undefined) => {
     setStaff((prev) =>
       prev.map((s) => (s.id === staff.id ? { ...s, photoUrl } : s)),
@@ -436,58 +419,56 @@ export function StaffProfileDetail({
     );
   };
 
+  const isActive = isRecordActive(staff.active);
+
+  const toggleActive = (nextActive: boolean) => {
+    setStaff((prev) =>
+      prev.map((s) => (s.id === staff.id ? { ...s, active: nextActive } : s)),
+    );
+    toast.success(
+      nextActive ? `${staff.name} reactivated` : `${staff.name} deactivated`,
+      { description: staff.id },
+    );
+  };
+
+  const deleteStaff = () => {
+    setStaff((prev) => prev.filter((s) => s.id !== staff.id));
+    toast.error(`${staff.name} removed from roster`, { description: staff.id });
+    onBack();
+  };
+
   return (
     <div className="flex flex-col gap-4 sm:gap-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center">
+      <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
+        <div className="flex min-w-0 flex-col items-center gap-4 sm:flex-row sm:items-center">
           <StaffPhotoAvatar staff={staff} onPhotoChange={updatePhoto} />
           <div className="min-w-0">
             <h1 className="truncate text-xl font-semibold text-black sm:text-2xl">{staff.name}</h1>
             <p className="mt-0.5 text-sm text-black/60">{staff.role}</p>
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5 sm:justify-start">
               <span className="inline-flex rounded-full bg-[#E1F2AE] px-2.5 py-0.5 text-[11px] font-medium text-black">
                 {staff.dept}
               </span>
               <span
                 className={cn(
                   "inline-flex rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold",
-                  staff.active ? "bg-[#C7F33C] text-black" : "bg-black/10 text-black/55",
+                  isActive ? "bg-[#C7F33C] text-black" : "bg-black/10 text-black/55",
                 )}
               >
-                {staff.active ? "Active" : "Inactive"}
+                {isActive ? "Active" : "Inactive"}
               </span>
             </div>
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={handleMessage}
-            disabled={!digits}
-            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-black transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
-          >
-            <MessageSquare className="h-4 w-4" />
-            Message
-          </button>
-          <button
-            type="button"
-            onClick={handleCall}
-            disabled={!digits}
-            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-black transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
-          >
-            <Phone className="h-4 w-4" />
-            Call
-          </button>
-          <button
-            type="button"
-            onClick={toggleEdit}
-            className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
-          >
-            <Pencil className="h-4 w-4" />
-            Edit Profile
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={toggleEdit}
+          className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
+        >
+          <Pencil className="h-4 w-4" />
+          Edit Profile
+        </button>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
@@ -606,6 +587,15 @@ export function StaffProfileDetail({
           </div>
         </section>
       </div>
+
+      <ProfileAccountActions
+        name={staff.name}
+        recordId={staff.id}
+        active={isActive}
+        entityLabel="staff member"
+        onToggleActive={toggleActive}
+        onDelete={deleteStaff}
+      />
 
       <Dialog
         open={editOpen}
