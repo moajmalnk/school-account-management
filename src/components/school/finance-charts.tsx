@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/chart";
 import type { CornerSide } from "@/lib/utils";
 
-const CHART_COLORS = ["#000000", "#C7F33C", "#E1F2AE", "#9CA3AF", "#525252"];
+const CHART_COLORS = ["#000000", "#2563EB", "#DBEAFE", "#9CA3AF", "#525252"];
 
 type Segment = { label: string; value: number };
 

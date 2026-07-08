@@ -186,7 +186,7 @@ export function DatePicker({
           type="button"
           disabled={disabled}
           className={cn(
-            "inline-flex h-10 w-full items-center justify-between gap-2 border bg-white text-left text-[13px] font-medium text-black transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C7F33C] focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50",
+            "inline-flex h-10 w-full items-center justify-between gap-2 border bg-white text-left text-[13px] font-medium text-black transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50",
             variant === "pill"
               ? "rounded-full border-black px-4 hover:bg-[#FAFAFA]"
               : "rounded-2xl border-[#E5E5E5] px-3 hover:border-black/30 focus-visible:ring-black/15",
@@ -229,7 +229,7 @@ export function DatePicker({
                   <SelectItem
                     key={m}
                     value={String(i)}
-                    className="rounded-xl text-[12px] focus:bg-[#E1F2AE] data-[state=checked]:bg-[#C7F33C] data-[state=checked]:text-black"
+                    className="rounded-xl text-[12px] focus:bg-[#DBEAFE] data-[state=checked]:bg-[#2563EB] data-[state=checked]:text-white"
                   >
                     {m.slice(0, 3)}
                   </SelectItem>
@@ -248,7 +248,7 @@ export function DatePicker({
                   <SelectItem
                     key={y}
                     value={String(y)}
-                    className="rounded-xl font-mono text-[12px] focus:bg-[#E1F2AE] data-[state=checked]:bg-[#C7F33C] data-[state=checked]:text-black"
+                    className="rounded-xl font-mono text-[12px] focus:bg-[#DBEAFE] data-[state=checked]:bg-[#2563EB] data-[state=checked]:text-white"
                   >
                     {y}
                   </SelectItem>
@@ -294,7 +294,7 @@ export function DatePicker({
                     className={cn(
                       "grid h-7 w-7 place-items-center rounded-full font-mono text-[11.5px] leading-none transition",
                       isSel
-                        ? "bg-[#C7F33C] font-semibold text-black shadow-[0_4px_10px_-6px_rgba(0,0,0,0.35)]"
+                        ? "bg-[#2563EB] font-semibold text-white shadow-[0_4px_10px_-6px_rgba(0,0,0,0.35)]"
                         : isToday
                           ? "ring-1 ring-inset ring-black/60 group-hover/cell:bg-black/5"
                           : "group-hover/cell:bg-[#F4F4F5]",

@@ -35,12 +35,14 @@ function MetricCard({
 }) {
   const isLime = tone === "lime";
   const isBlack = tone === "black";
-  const accentBg = isLime ? "bg-black" : isBlack ? "bg-[#C7F33C]" : "bg-black";
-  const accentFg = isLime ? "text-white" : isBlack ? "text-black" : "text-white";
+  const accentBg = isLime ? "bg-white" : isBlack ? "bg-[#2563EB]" : "bg-[#0F172A]";
+  const accentFg = isLime ? "text-[#2563EB]" : isBlack ? "text-white" : "text-white";
 
   return (
     <OrganicCard tone={tone} cornerSide={cornerSide} arrow padded>
-      <div className={`text-[12px] font-medium ${isLime || isBlack ? "" : "text-black/55"}`}>
+      <div
+        className={`text-[12px] font-medium ${isLime ? "text-white/75" : isBlack ? "text-white/75" : "text-black/55"}`}
+      >
         {label}
       </div>
       <div className="mt-3 flex items-center gap-3">
@@ -50,16 +52,22 @@ function MetricCard({
           <Icon className="h-4 w-4" />
         </div>
         <div className="flex items-baseline gap-1.5">
-          <div className="font-mono text-[28px] font-semibold tracking-tight">{value}</div>
+          <div
+            className={`font-mono text-[28px] font-semibold tracking-tight ${isLime || isBlack ? "text-white" : ""}`}
+          >
+            {value}
+          </div>
           {heartbeat && (
             <span
               className="relative ml-1 inline-block h-2 w-2 rounded-full heartbeat-dot"
-              style={{ backgroundColor: isLime ? "#000000" : "#C7F33C" }}
+              style={{ backgroundColor: isLime ? "#FFFFFF" : "#2563EB" }}
             />
           )}
         </div>
       </div>
-      {sub && <div className="mt-1 text-[12px]">{sub}</div>}
+      {sub && (
+        <div className={`mt-1 text-[12px] ${isLime || isBlack ? "text-white/70" : ""}`}>{sub}</div>
+      )}
       {spark && (
         <div className="mt-4 flex h-10 items-end gap-1">
           {spark.map((v, i) => (
@@ -68,15 +76,15 @@ function MetricCard({
               className="flex-1 rounded-md"
               style={{
                 height: `${v}%`,
-                backgroundColor: isLime ? "rgba(0,0,0,0.2)" : "rgba(0,0,0,0.08)",
+                backgroundColor: isLime ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.08)",
               }}
             >
               <div
                 className="h-full w-full rounded-md"
                 style={{
                   background: isLime
-                    ? "linear-gradient(180deg, rgba(0,0,0,0.45), #000000)"
-                    : "linear-gradient(180deg, rgba(199,243,60,0.65), #C7F33C)",
+                    ? "linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.25))"
+                    : "linear-gradient(180deg, rgba(37,99,235,0.65), #2563EB)",
                 }}
               />
             </div>
@@ -171,13 +179,13 @@ export function OverviewView() {
                       className="absolute inset-0 rounded-t-xl"
                       style={{
                         background: isPeak
-                          ? "linear-gradient(180deg,#C7F33C 0%, #E1F2AE 100%)"
+                          ? "linear-gradient(180deg,#2563EB 0%, #DBEAFE 100%)"
                           : "linear-gradient(180deg,#000000 0%, #1F1F1F 100%)",
                       }}
                     />
                     {isPeak && (
                       <div
-                        className="absolute -top-1 left-1/2 h-2.5 w-2.5 -translate-x-1/2 rounded-full ring-4 ring-[#C7F33C]/30"
+                        className="absolute -top-1 left-1/2 h-2.5 w-2.5 -translate-x-1/2 rounded-full ring-4 ring-[#2563EB]/30"
                         style={{ backgroundColor: "#000000" }}
                       />
                     )}
@@ -197,14 +205,14 @@ export function OverviewView() {
           <div className="mt-1 text-[13px] text-black/55">Across 142 tenants</div>
           <div className="mt-5 flex h-3 overflow-hidden rounded-full bg-[#F4F4F5]">
             <div className="h-full" style={{ width: "30%", backgroundColor: "#000000" }} />
-            <div className="h-full" style={{ width: "55%", backgroundColor: "#C7F33C" }} />
-            <div className="h-full" style={{ width: "15%", backgroundColor: "#E1F2AE" }} />
+            <div className="h-full" style={{ width: "55%", backgroundColor: "#2563EB" }} />
+            <div className="h-full" style={{ width: "15%", backgroundColor: "#DBEAFE" }} />
           </div>
           <div className="mt-5 space-y-3">
             {[
               { label: "Basic", pct: 30, count: 43, color: "#000000" },
-              { label: "Premium", pct: 55, count: 78, color: "#C7F33C" },
-              { label: "Enterprise", pct: 15, count: 21, color: "#E1F2AE" },
+              { label: "Premium", pct: 55, count: 78, color: "#2563EB" },
+              { label: "Enterprise", pct: 15, count: 21, color: "#DBEAFE" },
             ].map((p) => (
               <div key={p.label} className="flex items-center justify-between">
                 <div className="flex items-center gap-2">

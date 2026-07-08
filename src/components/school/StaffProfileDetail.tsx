@@ -99,7 +99,7 @@ function StaffPhotoAvatar({
         onClick={() => fileInputRef.current?.click()}
         aria-label={`Change photo for ${staff.name}`}
         title="Change photo"
-        className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#C7F33C] text-black shadow-sm transition-colors hover:bg-black hover:text-[#C7F33C]"
+        className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#2563EB] text-white shadow-sm transition-colors hover:bg-black hover:text-[#2563EB]"
       >
         <Camera className="h-3.5 w-3.5" />
       </button>
@@ -109,7 +109,7 @@ function StaffPhotoAvatar({
           onClick={() => onPhotoChange(undefined)}
           aria-label={`Remove photo for ${staff.name}`}
           title="Remove photo"
-          className="absolute -left-1 -top-1 grid h-6 w-6 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 shadow-sm transition-colors hover:bg-[#FEE2E2] hover:text-[#B91C1C]"
+          className="absolute -left-1 -top-1 grid h-6 w-6 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 shadow-sm transition-colors hover:bg-[#FEE2E2] hover:text-[#EF4444]"
         >
           <X className="h-3 w-3" />
         </button>
@@ -446,13 +446,13 @@ export function StaffProfileDetail({
             <h1 className="truncate text-xl font-semibold text-black sm:text-2xl">{staff.name}</h1>
             <p className="mt-0.5 text-sm text-black/60">{staff.role}</p>
             <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5 sm:justify-start">
-              <span className="inline-flex rounded-full bg-[#E1F2AE] px-2.5 py-0.5 text-[11px] font-medium text-black">
+              <span className="inline-flex rounded-full bg-[#DBEAFE] px-2.5 py-0.5 text-[11px] font-medium text-black">
                 {staff.dept}
               </span>
               <span
                 className={cn(
                   "inline-flex rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold",
-                  isActive ? "bg-[#C7F33C] text-black" : "bg-black/10 text-black/55",
+                  isActive ? "bg-[#2563EB] text-white" : "bg-black/10 text-black/55",
                 )}
               >
                 {isActive ? "Active" : "Inactive"}
@@ -629,7 +629,7 @@ export function StaffProfileDetail({
                   type="button"
                   onClick={() => editPhotoRef.current?.click()}
                   aria-label="Upload profile photo"
-                  className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#C7F33C] text-black shadow-sm"
+                  className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#2563EB] text-white shadow-sm"
                 >
                   <Camera className="h-3.5 w-3.5" />
                 </button>
@@ -641,7 +641,7 @@ export function StaffProfileDetail({
                   <button
                     type="button"
                     onClick={() => setDraft((prev) => ({ ...prev, photoUrl: "" }))}
-                    className="mt-1.5 text-[11px] font-semibold text-[#B91C1C] hover:underline"
+                    className="mt-1.5 text-[11px] font-semibold text-[#EF4444] hover:underline"
                   >
                     Remove photo
                   </button>
@@ -677,7 +677,7 @@ export function StaffProfileDetail({
                 onValueChange={(role) => setDraft({ ...draft, role })}
                 disabled={roles.length === 0}
               >
-                <SelectTrigger className="h-10 w-full rounded-2xl border border-[#E5E5E5] bg-white px-3 text-[13px] font-normal text-black shadow-none focus:ring-2 focus:ring-[#C7F33C]">
+                <SelectTrigger className="h-10 w-full rounded-2xl border border-[#E5E5E5] bg-white px-3 text-[13px] font-normal text-black shadow-none focus:ring-2 focus:ring-[#2563EB]">
                   <SelectValue placeholder="No roles configured" />
                 </SelectTrigger>
                 <SelectContent className="z-[250] rounded-2xl border border-[#E5E5E5] bg-white p-1.5">
@@ -703,7 +703,7 @@ export function StaffProfileDetail({
                   onValueChange={(dept) => setDraft({ ...draft, dept })}
                   disabled={departments.length === 0}
                 >
-                  <SelectTrigger className="h-10 w-full rounded-2xl border border-[#E5E5E5] bg-white px-3 text-[13px] font-normal text-black shadow-none focus:ring-2 focus:ring-[#C7F33C]">
+                  <SelectTrigger className="h-10 w-full rounded-2xl border border-[#E5E5E5] bg-white px-3 text-[13px] font-normal text-black shadow-none focus:ring-2 focus:ring-[#2563EB]">
                     <SelectValue placeholder="No departments configured" />
                   </SelectTrigger>
                   <SelectContent className="z-[250] rounded-2xl border border-[#E5E5E5] bg-white p-1.5">
@@ -764,7 +764,7 @@ function DocumentCard({
         <span
           className={cn(
             "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
-            complete ? "bg-[#E1F2AE] text-black" : "bg-slate-200/80 font-medium text-black/50",
+            complete ? "bg-[#DBEAFE] text-black" : "bg-slate-200/80 font-medium text-black/50",
           )}
         >
           {complete ? "On file" : "Not provided"}

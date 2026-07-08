@@ -20,8 +20,8 @@ const categoryMeta: Record<
   TenantNotification["category"],
   { label: string; icon: typeof Bell; tone: string }
 > = {
-  fees: { label: "Fees", icon: Wallet, tone: "bg-[#FEE2E2] text-[#B91C1C]" },
-  admissions: { label: "Admissions", icon: GraduationCap, tone: "bg-[#E1F2AE] text-black" },
+  fees: { label: "Fees", icon: Wallet, tone: "bg-[#FEE2E2] text-[#EF4444]" },
+  admissions: { label: "Admissions", icon: GraduationCap, tone: "bg-[#DBEAFE] text-black" },
   staff: { label: "Staff", icon: UserCog, tone: "bg-[#F4F4F5] text-black" },
   system: { label: "System", icon: Bell, tone: "bg-black text-white" },
 };
@@ -91,7 +91,7 @@ export function NotificationsPage() {
                 onClick={() => setFilter(tab.key)}
                 className={cn(
                   "rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition-colors",
-                  active ? "bg-[#C7F33C] text-black" : "text-black/55 hover:bg-black/5",
+                  active ? "bg-[#2563EB] text-white" : "text-black/55 hover:bg-black/5",
                 )}
               >
                 {tab.label}
@@ -155,7 +155,7 @@ export function NotificationsPage() {
                             {notification.title}
                           </span>
                           {!notification.read && (
-                            <span className="h-2 w-2 shrink-0 rounded-full bg-[#C7F33C]" />
+                            <span className="h-2 w-2 shrink-0 rounded-full bg-[#2563EB]" />
                           )}
                         </div>
                         <p className="mt-1 text-[12.5px] leading-relaxed text-black/60">

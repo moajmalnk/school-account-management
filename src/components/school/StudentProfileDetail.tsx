@@ -322,7 +322,7 @@ export function StudentProfileDetail({
                       href={waHref}
                       target="_blank"
                       rel="noreferrer noopener"
-                      className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#C7F33C] px-2.5 py-1 text-[11px] font-semibold text-black shadow-sm transition-colors hover:bg-black hover:text-white"
+                      className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#2563EB] px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition-colors hover:bg-[#0F172A] hover:text-white"
                     >
                       <MessageCircle className="h-3 w-3" /> Quick Connect
                     </a>
@@ -353,7 +353,7 @@ export function StudentProfileDetail({
               <div>
                 <div className={META_LABEL}>Class</div>
                 <div className="mt-1.5">
-                  <span className="inline-flex rounded-full bg-[#E1F2AE] px-3 py-1.5 text-[12px] font-semibold text-black">
+                  <span className="inline-flex rounded-full bg-[#DBEAFE] px-3 py-1.5 text-[12px] font-semibold text-black">
                     {student.cls}
                   </span>
                 </div>
@@ -379,7 +379,7 @@ export function StudentProfileDetail({
               label="Total Paid"
               value={inr(fees.totalPaid)}
               cornerSide="bl"
-              valueClassName="text-emerald-600"
+              valueClassName="text-[#10B981]"
             />
             <BalanceTile balance={fees.balance} overdue={fees.overdue} />
           </div>
@@ -448,7 +448,7 @@ function TopBar({
         onClick={onToggleEdit}
         className={`inline-flex h-10 shrink-0 items-center justify-center gap-1 rounded-full px-3 text-[11.5px] font-semibold shadow-sm transition-colors sm:gap-1.5 sm:px-5 sm:text-[13px] ${
           editing
-            ? "bg-[#C7F33C] text-black hover:bg-[#E1F2AE]"
+            ? "bg-[#2563EB] text-white hover:bg-[#DBEAFE]"
             : "bg-black text-white hover:bg-black/85"
         }`}
       >
@@ -519,7 +519,7 @@ function IdentityHeader({
           onClick={() => fileInputRef.current?.click()}
           aria-label={`Change photo for ${student.name}`}
           title="Change photo"
-          className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#C7F33C] text-black shadow-sm transition-colors hover:bg-black hover:text-[#C7F33C]"
+          className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#2563EB] text-white shadow-sm transition-colors hover:bg-black hover:text-[#2563EB]"
         >
           <Camera className="h-3.5 w-3.5" />
         </button>
@@ -529,7 +529,7 @@ function IdentityHeader({
             onClick={() => onPhotoChange(undefined)}
             aria-label={`Remove photo for ${student.name}`}
             title="Remove photo"
-            className="absolute -left-1 -top-1 grid h-6 w-6 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 shadow-sm transition-colors hover:bg-[#FEE2E2] hover:text-[#B91C1C]"
+            className="absolute -left-1 -top-1 grid h-6 w-6 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 shadow-sm transition-colors hover:bg-[#FEE2E2] hover:text-[#EF4444]"
           >
             <X className="h-3 w-3" />
           </button>
@@ -551,7 +551,7 @@ function IdentityHeader({
           {student.gender && (
             <span
               className={`rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold ${
-                student.gender === "F" ? "bg-black text-[#C7F33C]" : "bg-black text-white"
+                student.gender === "F" ? "bg-black text-[#2563EB]" : "bg-black text-white"
               }`}
             >
               {student.gender}
@@ -684,7 +684,7 @@ function BalanceTile({ balance, overdue }: { balance: number; overdue: boolean }
         <div className="mt-3 font-mono text-2xl font-semibold tracking-tight text-black">
           {inr(balance)}
         </div>
-        <span className="mt-2 inline-flex items-center rounded-full bg-black px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-[#C7F33C]">
+        <span className="mt-2 inline-flex items-center rounded-full bg-[#0F172A] px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-[#10B981]">
           [ CLEARED ]
         </span>
       </OrganicCard>
@@ -693,17 +693,17 @@ function BalanceTile({ balance, overdue }: { balance: number; overdue: boolean }
   return (
     <OrganicCard tone="lime" cornerSide="br" padded>
       <div className="flex items-start justify-between">
-        <div className="text-[11px] font-semibold uppercase tracking-wider text-black/70">
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-white/75">
           Current Balance
         </div>
-        <span className="grid h-7 w-7 place-items-center rounded-full bg-black">
-          <AlertTriangle className="h-3.5 w-3.5 text-[#C7F33C]" />
+        <span className="grid h-7 w-7 place-items-center rounded-full bg-[#0F172A]">
+          <AlertTriangle className="h-3.5 w-3.5 text-[#EF4444]" />
         </span>
       </div>
-      <div className="mt-3 font-mono text-2xl font-semibold tracking-tight text-black">
+      <div className="mt-3 font-mono text-2xl font-semibold tracking-tight text-white">
         {inr(balance)}
       </div>
-      <span className="overdue-flash mt-2 inline-flex items-center rounded-full bg-black px-2.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-[#C7F33C]">
+      <span className="overdue-flash mt-2 inline-flex items-center rounded-full bg-[#0F172A] px-2.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-[#EF4444]">
         [ OVERDUE ]
       </span>
     </OrganicCard>
@@ -739,7 +739,7 @@ function FeesTable({ ledger }: { ledger: LedgerRow[] }) {
               type="button"
               onClick={() => setSelectedRow(r)}
               aria-label={`View details for ${r.desc}`}
-              className="w-full rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 text-left transition-colors hover:border-black/15 hover:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C7F33C]"
+              className="w-full rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 text-left transition-colors hover:border-black/15 hover:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
@@ -827,7 +827,7 @@ function FeesTable({ ledger }: { ledger: LedgerRow[] }) {
                     }
                   }}
                   aria-label={`View details for ${r.desc}`}
-                  className="cursor-pointer border-b border-[#F0F0F0] transition-colors last:border-b-0 hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C7F33C]"
+                  className="cursor-pointer border-b border-[#F0F0F0] transition-colors last:border-b-0 hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2563EB]"
                 >
                   <td className="py-4 pl-1 pr-4 font-mono text-[13px] text-black/55">{r.date}</td>
                   <td className="px-4 py-4 text-[13px] font-medium text-black">{r.desc}</td>
@@ -894,7 +894,7 @@ function FeesTable({ ledger }: { ledger: LedgerRow[] }) {
                 </div>
                 <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#F4F4F5]">
                   <div
-                    className="h-full rounded-full bg-[#C7F33C] transition-all"
+                    className="h-full rounded-full bg-[#2563EB] transition-all"
                     style={{ width: `${paidPct}%` }}
                   />
                 </div>
@@ -970,7 +970,7 @@ function ReceiptsList({
             {receipts.length} historical digital receipts
           </div>
         </div>
-        <span className="inline-flex items-center gap-1 rounded-full bg-[#C7F33C] px-2.5 py-1 text-[10.5px] font-semibold text-black">
+        <span className="inline-flex items-center gap-1 rounded-full bg-[#2563EB] px-2.5 py-1 text-[10.5px] font-semibold text-white">
           <span className="h-1.5 w-1.5 rounded-full bg-black" />
           Reconciled
         </span>
@@ -1012,11 +1012,11 @@ const STATUS_STYLE: Record<LedgerStatus, { wrap: string; dot: string }> = {
     dot: "bg-black",
   },
   "Partially Paid": {
-    wrap: "bg-[#E1F2AE] text-black",
+    wrap: "bg-[#DBEAFE] text-black",
     dot: "bg-black",
   },
   Overdue: {
-    wrap: "bg-[#C7F33C] text-black",
+    wrap: "bg-[#2563EB] text-white",
     dot: "bg-black",
   },
 };

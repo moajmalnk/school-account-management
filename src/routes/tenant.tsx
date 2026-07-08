@@ -68,7 +68,7 @@ function TenantLayout() {
 
   if (!hydrated || !session || session.role !== "school_admin") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#EAEAEA]">
+      <div className="flex min-h-screen items-center justify-center bg-[#F4F6F9]">
         <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-black/45">
           <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-black/45" />
           Validating tenant session…
@@ -79,7 +79,7 @@ function TenantLayout() {
 
   return (
     <TenantStoreProvider>
-      <div className="min-h-dvh bg-[#EAEAEA] text-black">
+      <div className="min-h-dvh bg-[#F4F6F9] text-black">
         <TenantMobileHeader />
         <div className="flex min-h-[calc(100dvh-5rem)] items-stretch gap-4 px-3 py-4 sm:px-4 lg:min-h-[calc(100dvh-3rem)] lg:gap-6 lg:p-6">
           <TenantSidebar />
@@ -105,7 +105,7 @@ function TenantMobileHeader() {
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
-    <header className="sticky top-0 z-30 bg-[#EAEAEA]/92 px-3 pb-2 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl sm:px-4 lg:hidden">
+    <header className="sticky top-0 z-30 bg-[#F4F6F9]/92 px-3 pb-2 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl sm:px-4 lg:hidden">
       <div className="mobile-app-rail flex items-center gap-2.5 rounded-[1.75rem] border border-white/70 bg-white/88 px-3 py-2.5 shadow-[0_14px_44px_-32px_rgba(0,0,0,0.45)]">
         <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-black text-xs font-bold text-white">
           SH
@@ -126,7 +126,7 @@ function TenantMobileHeader() {
         >
           <Bell className="h-4 w-4" />
           {unreadCount > 0 && (
-            <span className="absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-[#F4F4F5] bg-[#C7F33C]" />
+            <span className="absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-[#F4F4F5] bg-[#2563EB]" />
           )}
         </button>
       </div>
@@ -176,7 +176,7 @@ function TenantSidebar() {
         >
           <Bell className="h-3.5 w-3.5" />
           {unreadCount > 0 && (
-            <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full border-2 border-[#F4F4F5] bg-[#C7F33C]" />
+            <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full border-2 border-[#F4F4F5] bg-[#2563EB]" />
           )}
         </button>
       </div>
@@ -191,8 +191,8 @@ function TenantSidebar() {
               to={n.to}
               className={`group flex w-full items-center gap-3 rounded-2xl px-3.5 py-2.5 text-[13.5px] font-medium transition-colors ${
                 active
-                  ? "bg-[#C7F33C] text-black shadow-sm"
-                  : "text-black/70 hover:bg-[#F4F4F5] hover:text-black"
+                  ? "bg-[#0F172A] text-white shadow-sm"
+                  : "text-black/70 hover:bg-[#DBEAFE] hover:text-[#0F172A]"
               }`}
             >
               <Icon className="h-4 w-4" />
@@ -216,7 +216,7 @@ function TenantSidebar() {
           type="button"
           onClick={() => setPendingLogout(true)}
           aria-label="Logout"
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-black/65 transition-colors hover:bg-[#FEE2E2] hover:text-[#B91C1C]"
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-black/65 transition-colors hover:bg-[#FEE2E2] hover:text-[#EF4444]"
         >
           <LogOut className="h-4 w-4" />
         </button>
@@ -245,7 +245,7 @@ function TenantSidebar() {
             <Button
               type="button"
               onClick={confirmLogout}
-              className="rounded-full bg-[#B91C1C] text-white hover:bg-[#991B1B]"
+              className="rounded-full bg-[#EF4444] text-white hover:bg-[#DC2626]"
             >
               Sign Out
             </Button>

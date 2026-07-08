@@ -6,7 +6,7 @@ import { AuthProvider } from "@/lib/auth";
 
 function NotFoundComponent() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#EAEAEA] px-4">
+    <div className="flex min-h-screen items-center justify-center bg-[#F4F6F9] px-4">
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold text-black">404</h1>
         <h2 className="mt-4 text-xl font-semibold text-black">Page not found</h2>
@@ -31,7 +31,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#EAEAEA] px-4">
+    <div className="flex min-h-screen items-center justify-center bg-[#F4F6F9] px-4">
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold tracking-tight text-black">This page didn't load</h1>
         <p className="mt-2 text-sm text-black/55">

@@ -319,6 +319,8 @@ function DashboardStatCard({
   tone?: Tone;
   className?: string;
 }) {
+  const isHighlight = tone === "lime";
+
   return (
     <OrganicCard
       tone={tone}
@@ -329,12 +331,18 @@ function DashboardStatCard({
         className,
       )}
     >
-      <div className="text-[10px] font-semibold uppercase leading-snug tracking-wider text-black/45">
+      <div
+        className={cn(
+          "text-[10px] font-semibold uppercase leading-snug tracking-wider",
+          isHighlight ? "text-white/75" : "text-black/45",
+        )}
+      >
         {label}
       </div>
       <div
         className={cn(
-          "mt-auto min-w-0 font-mono font-semibold leading-none tracking-tight text-black tabular-nums",
+          "mt-auto min-w-0 font-mono font-semibold leading-none tracking-tight tabular-nums",
+          isHighlight ? "text-white" : "text-black",
           dashboardValueSize(value),
         )}
       >
@@ -525,7 +533,7 @@ export function SchoolDashboard() {
                 <div>
                   <div className="text-title">Overdue Watchlist</div>
                 </div>
-                <span className="rounded-full bg-[#C7F33C] px-2.5 py-1 text-[10px] font-semibold text-black">
+                <span className="rounded-full bg-[#2563EB] px-2.5 py-1 text-[10px] font-semibold text-white">
                   {overdueStudents.length} overdue
                 </span>
               </div>
@@ -552,7 +560,7 @@ export function SchoolDashboard() {
                       <div className="font-mono text-[13px] font-semibold tabular-nums whitespace-nowrap text-black">
                         {formatInr(student.due)}
                       </div>
-                      <div className="text-[10px] font-semibold uppercase tracking-wider text-[#B91C1C]">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-[#EF4444]">
                         Overdue
                       </div>
                     </div>
@@ -698,20 +706,20 @@ function DirectoryPersonAvatar({ name, photoUrl }: { name: string; photoUrl?: st
 }
 
 const directoryMobileCardClass =
-  "flex w-full flex-col gap-3 rounded-[1.35rem] border border-[#E8E8E8] bg-white p-3.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_32px_-24px_rgba(0,0,0,0.18)] transition-all hover:border-black/12 hover:bg-[#FAFAFA] active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C7F33C] focus-visible:ring-offset-2";
+  "flex w-full flex-col gap-3 rounded-[1.35rem] border border-[#E8E8E8] bg-white p-3.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_32px_-24px_rgba(0,0,0,0.18)] transition-all hover:border-black/12 hover:bg-[#FAFAFA] active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-2";
 
 function StudentFeesStatusBadge({ due }: { due: number }) {
   if (due === 0) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[10.5px] font-semibold text-emerald-700">
-        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#D1FAE5] px-2.5 py-1 text-[10.5px] font-semibold text-[#10B981]">
+        <span className="h-1.5 w-1.5 rounded-full bg-[#10B981]" />
         Paid
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FEE2E2] px-2.5 py-1 text-[10.5px] font-semibold text-[#B91C1C]">
-      <span className="h-1.5 w-1.5 rounded-full bg-[#B91C1C]" />
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FEE2E2] px-2.5 py-1 text-[10.5px] font-semibold text-[#EF4444]">
+      <span className="h-1.5 w-1.5 rounded-full bg-[#EF4444]" />
       Overdue
     </span>
   );
@@ -768,7 +776,7 @@ function StudentsDirectoryTable({
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex max-w-full truncate rounded-full bg-[#E1F2AE] px-2.5 py-1 text-[10.5px] font-semibold text-black">
+                <span className="inline-flex max-w-full truncate rounded-full bg-[#DBEAFE] px-2.5 py-1 text-[10.5px] font-semibold text-black">
                   {student.cls}
                 </span>
                 <EnrollmentStatusBadge active={isRecordActive(student.active)} />
@@ -846,7 +854,7 @@ function StudentsDirectoryTable({
                   }
                 }}
                 aria-label={`Open profile for ${student.name}`}
-                className="cursor-pointer border-b border-slate-50 transition-colors last:border-0 hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C7F33C]"
+                className="cursor-pointer border-b border-slate-50 transition-colors last:border-0 hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2563EB]"
               >
                 <td className="px-4 py-3.5 align-middle sm:px-6">
                   <div className="flex min-w-0 items-center gap-3">
@@ -872,7 +880,7 @@ function StudentsDirectoryTable({
                   </div>
                 </td>
                 <td className="px-4 py-3.5 align-middle sm:px-6">
-                  <span className="inline-flex max-w-full truncate rounded-full bg-[#E1F2AE] px-2.5 py-1 text-[11px] font-medium text-black">
+                  <span className="inline-flex max-w-full truncate rounded-full bg-[#DBEAFE] px-2.5 py-1 text-[11px] font-medium text-black">
                     {student.cls}
                   </span>
                 </td>
@@ -1180,7 +1188,7 @@ export function StudentsLedger() {
         th { font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: #888; }
         tbody tr:nth-child(odd) { background: #FAFAFA; }
         .paid { color: #047857; font-weight: 600; }
-        .overdue { color: #B91C1C; font-weight: 600; }
+        .overdue { color: #EF4444; font-weight: 600; }
       </style></head><body>
         <h1>Silver Hills Global · Students Directory</h1>
         <div class="meta">${contextLabel} · ${filtered.length} students · printed ${stampedAt}</div>
@@ -1214,7 +1222,7 @@ export function StudentsLedger() {
         <OrganicCard tone="white" cornerSide="tr" padded className={directoryStatCardClass}>
           <div className="flex min-w-0 flex-1 items-center justify-between gap-1 lg:items-start lg:gap-2">
             <div className={cn(directoryStatLabelClass, "text-black/45")}>Paid</div>
-            <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-600 lg:h-4 lg:w-4" />
+            <CheckCircle2 className="h-3 w-3 shrink-0 text-[#10B981] lg:h-4 lg:w-4" />
           </div>
           <div className={directoryStatValueClass}>{analytics.paid}</div>
         </OrganicCard>
@@ -1222,7 +1230,7 @@ export function StudentsLedger() {
         <OrganicCard tone="white" cornerSide="bl" padded className={directoryStatCardClass}>
           <div className="flex min-w-0 flex-1 items-center justify-between gap-1 lg:items-start lg:gap-2">
             <div className={cn(directoryStatLabelClass, "text-black/45")}>Overdue</div>
-            <AlertTriangle className="h-3 w-3 shrink-0 text-[#B91C1C] lg:h-4 lg:w-4" />
+            <AlertTriangle className="h-3 w-3 shrink-0 text-[#EF4444] lg:h-4 lg:w-4" />
           </div>
           <div className={directoryStatValueClass}>{analytics.overdue}</div>
         </OrganicCard>
@@ -1388,7 +1396,7 @@ export function StudentsLedger() {
                   type="button"
                   onClick={() => admitPhotoRef.current?.click()}
                   aria-label="Upload profile photo"
-                  className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#C7F33C] text-black shadow-sm"
+                  className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#2563EB] text-white shadow-sm"
                 >
                   <Camera className="h-3.5 w-3.5" />
                 </button>
@@ -1400,7 +1408,7 @@ export function StudentsLedger() {
                   <button
                     type="button"
                     onClick={() => setForm((prev) => ({ ...prev, photoUrl: "" }))}
-                    className="mt-1.5 text-[11px] font-semibold text-[#B91C1C] hover:underline"
+                    className="mt-1.5 text-[11px] font-semibold text-[#EF4444] hover:underline"
                   >
                     Remove photo
                   </button>
@@ -1458,7 +1466,7 @@ export function StudentsLedger() {
                       className={cn(
                         "min-h-9 flex-1 rounded-full text-[12px] font-semibold transition-colors",
                         form.gender === g.key
-                          ? "bg-[#C7F33C] text-black"
+                          ? "bg-[#2563EB] text-white"
                           : "text-black/55 hover:bg-black/5",
                       )}
                     >
@@ -1579,7 +1587,7 @@ function ContactAction({
 }) {
   const palette =
     accent === "emerald"
-      ? "bg-emerald-500 text-white hover:bg-emerald-600"
+      ? "bg-[#10B981] text-white hover:bg-[#059669]"
       : "bg-black text-white hover:bg-black/85";
   return (
     <button
@@ -1894,7 +1902,7 @@ export function StaffRoster() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex max-w-full truncate rounded-full bg-[#E1F2AE] px-2.5 py-1 text-[10.5px] font-semibold text-black">
+                <span className="inline-flex max-w-full truncate rounded-full bg-[#DBEAFE] px-2.5 py-1 text-[10.5px] font-semibold text-black">
                   {member.role}
                 </span>
                 <span className="inline-flex max-w-full truncate rounded-full bg-[#F4F4F5] px-2.5 py-1 text-[10.5px] font-medium text-black/75">
@@ -1961,7 +1969,7 @@ export function StaffRoster() {
                   }
                 }}
                 aria-label={`Open profile for ${member.name}`}
-                className="cursor-pointer border-b border-slate-50 transition-colors last:border-0 hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C7F33C]"
+                className="cursor-pointer border-b border-slate-50 transition-colors last:border-0 hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2563EB]"
               >
                 <td className="py-3.5 pr-4 align-middle">
                   <div className="flex min-w-0 items-center gap-3">
@@ -2019,7 +2027,7 @@ export function StaffRoster() {
                   type="button"
                   onClick={() => recruitPhotoRef.current?.click()}
                   aria-label="Upload profile photo"
-                  className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#C7F33C] text-black shadow-sm"
+                  className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#2563EB] text-white shadow-sm"
                 >
                   <Camera className="h-3.5 w-3.5" />
                 </button>
@@ -2031,7 +2039,7 @@ export function StaffRoster() {
                   <button
                     type="button"
                     onClick={() => setForm((prev) => ({ ...prev, photoUrl: "" }))}
-                    className="mt-1.5 text-[11px] font-semibold text-[#B91C1C] hover:underline"
+                    className="mt-1.5 text-[11px] font-semibold text-[#EF4444] hover:underline"
                   >
                     Remove photo
                   </button>
@@ -2190,7 +2198,7 @@ export function FinanceModule() {
                   onClick={() => selectSection(t.k)}
                   className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left transition-colors ${
                     active
-                      ? "bg-[#C7F33C] text-black"
+                      ? "bg-[#2563EB] text-white"
                       : "bg-white/[0.06] text-white hover:bg-white/[0.1]"
                   }`}
                 >
@@ -2387,7 +2395,7 @@ function ReceivePayment() {
             <span
               className={cn(
                 "inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[11.5px] font-semibold",
-                selected.due > 0 ? "bg-[#FEF3C7] text-black" : "bg-[#E1F2AE] text-black",
+                selected.due > 0 ? "bg-[#FEF3C7] text-black" : "bg-[#DBEAFE] text-black",
               )}
             >
               {selected.due > 0 ? (
@@ -2481,7 +2489,7 @@ function ReceivePayment() {
                   onClick={() => setCategory(c.label)}
                   className={`rounded-full border px-3.5 py-1.5 text-[12px] font-medium transition-colors ${
                     active
-                      ? "border-transparent bg-[#C7F33C] text-black"
+                      ? "border-transparent bg-[#2563EB] text-white"
                       : "border-[#E5E5E5] text-black/65 hover:bg-[#F4F4F5]"
                   }`}
                 >
@@ -2792,8 +2800,8 @@ function MakePayment() {
                 onClick={() => applyObligation(p)}
                 className={`w-full rounded-2xl p-3 text-left transition-colors ${
                   isSelected
-                    ? "bg-[#C7F33C] text-black ring-2 ring-black/10"
-                    : "bg-[#F4F4F5] text-black hover:bg-[#ECECED]"
+                    ? "bg-[#2563EB] text-white ring-2 ring-[#0F172A]/10"
+                    : "bg-[#DBEAFE] text-[#0F172A] hover:bg-[#BFDBFE]"
                 }`}
               >
                 <div className="flex items-center justify-between text-[12.5px]">
@@ -2808,7 +2816,7 @@ function MakePayment() {
                   <span>{p.desc}</span>
                   <span
                     className={`rounded-full px-2 py-0.5 ${
-                      isSelected ? "bg-black text-[#C7F33C]" : "bg-black/10 text-black/65"
+                      isSelected ? "bg-black text-[#2563EB]" : "bg-black/10 text-black/65"
                     }`}
                   >
                     Due {p.due}
@@ -2857,8 +2865,8 @@ function MakePayment() {
                     className={cn(
                       "rounded-full px-2 py-0.5 text-[10px] font-semibold",
                       payment.status === "Cleared"
-                        ? "bg-[#E1F2AE] text-black"
-                        : "bg-black text-[#C7F33C]",
+                        ? "bg-[#DBEAFE] text-black"
+                        : "bg-black text-[#2563EB]",
                     )}
                   >
                     {payment.status}
@@ -2953,7 +2961,7 @@ function LedgerAnalytics() {
         <FinanceBarCard
           title="Outflow by Category"
           cornerSide="bl"
-          fill="#C7F33C"
+          fill="#2563EB"
           segments={LEDGER_OUTFLOW_SEGMENTS}
         />
       </div>
@@ -3107,7 +3115,7 @@ function DeleteConfirmDialog({
           <Button
             type="button"
             onClick={onConfirm}
-            className="rounded-full bg-[#B91C1C] text-white hover:bg-[#991B1B]"
+            className="rounded-full bg-[#EF4444] text-white hover:bg-[#DC2626]"
           >
             Delete
           </Button>
@@ -3220,7 +3228,7 @@ function DepartmentsCard({
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-                <span className="rounded-full bg-[#E1F2AE] px-2 py-0.5 font-mono text-[10px] font-semibold text-black sm:px-2.5 sm:text-[11px]">
+                <span className="rounded-full bg-[#DBEAFE] px-2 py-0.5 font-mono text-[10px] font-semibold text-black sm:px-2.5 sm:text-[11px]">
                   <span className="sm:hidden">{count}</span>
                   <span className="hidden sm:inline">{count} staff</span>
                 </span>
@@ -3236,7 +3244,7 @@ function DepartmentsCard({
                   type="button"
                   onClick={() => setPendingDelete(d)}
                   aria-label={`Delete ${d.name}`}
-                  className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                  className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -3421,7 +3429,7 @@ function RolesCard({
                   type="button"
                   onClick={() => setPendingDelete(r)}
                   aria-label={`Delete ${r.title}`}
-                  className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                  className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -3607,7 +3615,7 @@ function ClassesCard({
                 <span className="font-mono text-black">
                   ₹ {c.tuitionFeeAmount.toLocaleString("en-IN")}
                 </span>
-                <span className="rounded-full bg-[#E1F2AE] px-2 py-0.5 text-[10.5px] font-semibold text-black">
+                <span className="rounded-full bg-[#DBEAFE] px-2 py-0.5 text-[10.5px] font-semibold text-black">
                   {c.billingCycle}
                 </span>
               </div>
@@ -3625,7 +3633,7 @@ function ClassesCard({
                 type="button"
                 onClick={() => setPendingDelete(c)}
                 aria-label={`Delete ${c.className}`}
-                className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
@@ -3904,7 +3912,7 @@ function VehicleCard({
                     <span
                       className={cn(
                         "inline-flex rounded-full px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider",
-                        v.active ? "bg-[#C7F33C] text-black" : "bg-black/10 text-black/50",
+                        v.active ? "bg-[#2563EB] text-white" : "bg-black/10 text-black/50",
                       )}
                     >
                       {v.active ? "Active" : "Idle"}
@@ -3924,7 +3932,7 @@ function VehicleCard({
                         type="button"
                         onClick={() => setPendingDelete(v)}
                         aria-label={`Delete vehicle ${v.name}`}
-                        className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                        className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -4028,7 +4036,7 @@ function VehicleCard({
                         key={r.id}
                         className={cn(
                           "flex cursor-pointer items-start gap-2.5 rounded-xl px-2.5 py-2 transition-colors",
-                          checked ? "bg-[#E1F2AE]" : "hover:bg-white",
+                          checked ? "bg-[#DBEAFE]" : "hover:bg-white",
                         )}
                       >
                         <input
@@ -4256,7 +4264,7 @@ function TransportCard({
                           type="button"
                           onClick={() => setPendingDelete(r)}
                           aria-label={`Delete route ${r.mapFrom} to ${r.mapTo}`}
-                          className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                          className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -4492,7 +4500,7 @@ function CategoriesCard({
           {paymentCategories.map((c) => (
             <span
               key={c.id}
-              className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-[#E1F2AE] px-3 py-1 text-[12px] font-semibold text-black"
+              className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-[#DBEAFE] px-3 py-1 text-[12px] font-semibold text-black"
             >
               {c.label}
               <button
@@ -4587,7 +4595,7 @@ function FieldSelect({
       <Select value={resolvedValue} onValueChange={onValueChange} disabled={disabled}>
         <SelectTrigger
           className={cn(
-            "h-10 w-full rounded-2xl border border-[#E5E5E5] bg-white px-3 text-[13px] font-normal text-black shadow-none focus:ring-2 focus:ring-[#C7F33C] focus:ring-offset-0",
+            "h-10 w-full rounded-2xl border border-[#E5E5E5] bg-white px-3 text-[13px] font-normal text-black shadow-none focus:ring-2 focus:ring-[#2563EB] focus:ring-offset-0",
             triggerClassName,
           )}
         >
@@ -4601,7 +4609,7 @@ function FieldSelect({
             <SelectItem
               key={opt.value}
               value={opt.value}
-              className="cursor-pointer rounded-xl py-2 pl-3 pr-8 text-[13px] text-black focus:bg-[#E1F2AE] focus:text-black data-[highlighted]:bg-[#E1F2AE] data-[highlighted]:text-black data-[state=checked]:bg-[#C7F33C] data-[state=checked]:font-semibold data-[state=checked]:text-black"
+              className="cursor-pointer rounded-xl py-2 pl-3 pr-8 text-[13px] text-black focus:bg-[#DBEAFE] focus:text-black data-[highlighted]:bg-[#DBEAFE] data-[highlighted]:text-black data-[state=checked]:bg-[#2563EB] data-[state=checked]:font-semibold data-[state=checked]:text-white"
             >
               {opt.label}
             </SelectItem>

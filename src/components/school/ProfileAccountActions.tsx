@@ -21,7 +21,7 @@ export function EnrollmentStatusBadge({
     <span
       className={cn(
         "inline-flex w-auto shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[10.5px] font-semibold",
-        active ? "bg-[#E1F2AE] text-black" : "bg-black/8 text-black/55",
+        active ? "bg-[#DBEAFE] text-black" : "bg-black/8 text-black/55",
         className,
       )}
     >
@@ -83,7 +83,7 @@ export function ProfileAccountActions({
             <Button
               type="button"
               variant="outline"
-              className="rounded-full border-[#C7F33C] bg-[#F7FDE8] text-black hover:bg-[#E1F2AE]"
+              className="rounded-full border-[#2563EB] bg-[#EFF6FF] text-[#0F172A] hover:bg-[#DBEAFE]"
               onClick={() => onToggleActive(true)}
             >
               Reactivate
@@ -92,7 +92,7 @@ export function ProfileAccountActions({
           <Button
             type="button"
             variant="outline"
-            className="rounded-full border-[#FECACA] text-[#B91C1C] hover:bg-[#FEF2F2]"
+            className="rounded-full border-[#FECACA] text-[#EF4444] hover:bg-[#FEF2F2]"
             onClick={() => setConfirmDelete(true)}
           >
             Delete permanently
@@ -146,7 +146,7 @@ export function ProfileAccountActions({
             </Button>
             <Button
               type="button"
-              className="rounded-full bg-[#B91C1C] text-white hover:bg-[#991B1B]"
+              className="rounded-full bg-[#EF4444] text-white hover:bg-[#DC2626]"
               onClick={() => {
                 onDelete();
                 setConfirmDelete(false);

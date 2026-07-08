@@ -8,22 +8,23 @@ export function cn(...inputs: ClassValue[]) {
 export type Tone = "white" | "lime" | "limePale" | "black";
 
 export const TONE_HEX = {
-  ink: "#000000",
-  canvas: "#EAEAEA",
+  ink: "#0F172A",
+  canvas: "#F4F6F9",
   surface: "#FFFFFF",
-  surfaceMuted: "#F4F4F5",
+  surfaceMuted: "#F4F6F9",
   hairline: "#E5E5E5",
-  lime: "#C7F33C",
-  limePale: "#E1F2AE",
-  destructive: "#B91C1C",
+  lime: "#2563EB",
+  limePale: "#DBEAFE",
+  success: "#10B981",
+  destructive: "#EF4444",
   destructiveSoft: "#FEE2E2",
 } as const;
 
 export const toneClasses: Record<Tone, string> = {
-  white: "bg-white text-black border border-[#E5E5E5]",
-  lime: "bg-[#C7F33C] text-black border border-black/0",
-  limePale: "bg-[#E1F2AE] text-black border border-black/0",
-  black: "bg-black text-white border border-black",
+  white: "bg-white text-[#0F172A] border border-[#E5E5E5]",
+  lime: "bg-[#2563EB] text-white border border-black/0",
+  limePale: "bg-[#DBEAFE] text-[#0F172A] border border-black/0",
+  black: "bg-[#0F172A] text-white border border-[#0F172A]",
 };
 
 export type CornerSide = "tl" | "tr" | "bl" | "br";

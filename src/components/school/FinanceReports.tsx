@@ -216,7 +216,7 @@ function SummaryStrip({ items }: { items: { label: string; value: string; accent
           key={item.label}
           className={cn(
             "rounded-2xl p-4",
-            item.accent ? "bg-[#C7F33C] text-black" : "bg-[#F4F4F5] text-black",
+            item.accent ? "bg-[#2563EB] text-white" : "bg-[#F4F4F5] text-black",
           )}
         >
           <div className="text-[10px] font-semibold uppercase tracking-wider text-black/55">
@@ -353,7 +353,7 @@ export function ProfitLossReport() {
         padded
         className="col-span-12 max-h-[calc(100dvh-9rem)] overflow-hidden p-4 sm:p-6 lg:col-span-4"
       >
-        <div className="text-[28px] font-semibold leading-none tracking-tight sm:text-title">
+        <div className="text-[28px] font-semibold leading-none tracking-tight text-white sm:text-title">
           Statement Summary
         </div>
         <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-3 lg:grid-cols-1">
@@ -398,7 +398,7 @@ export function ProfitLossReport() {
         <FinanceBarCard
           title="Expense Breakdown"
           cornerSide="bl"
-          fill="#C7F33C"
+          fill="#2563EB"
           segments={OPERATING_EXPENSES.map((item) => ({
             label: item.account.replace(" & ", " · "),
             value: item.amount,

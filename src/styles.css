@@ -7,12 +7,12 @@
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
-  --color-lime: #c7f33c;
-  --color-lime-pale: #e1f2ae;
-  --color-ink: #000000;
-  --color-canvas: #eaeaea;
+  --color-lime: #2563eb;
+  --color-lime-pale: #dbeafe;
+  --color-ink: #0f172a;
+  --color-canvas: #f4f6f9;
   --color-surface: #ffffff;
-  --color-surface-muted: #f4f4f5;
+  --color-surface-muted: #f4f6f9;
   --color-hairline: #e5e5e5;
 }
 
@@ -38,14 +38,14 @@
     line-height: 1.1;
     font-weight: 600;
     letter-spacing: -0.02em;
-    color: #000000;
+    color: #0f172a;
   }
   .text-title {
     font-size: clamp(22px, 6.5vw, 28px);
     line-height: 1.15;
     font-weight: 600;
     letter-spacing: -0.015em;
-    color: #000000;
+    color: #0f172a;
   }
   .text-body {
     font-size: 16px;
@@ -70,7 +70,7 @@
   position: absolute;
   inset: -4px;
   border-radius: 9999px;
-  background: #c7f33c;
+  background: #2563eb;
   opacity: 0.45;
   animation: heartbeat 1.4s ease-in-out infinite;
 }
@@ -90,7 +90,7 @@
 
 /* Asymmetric organic corner — replaces a single corner of a rounded card with a deeper smooth curve.
    Background + foreground colors come from Tailwind tone utilities applied via toneClasses; do NOT
-   hardcode them here or they will override .bg-black / .bg-[#C7F33C] / etc. due to source order. */
+   hardcode them here or they will override .bg-black / .bg-[#2563EB] / etc. due to source order. */
 @layer components {
   .organic-card {
     position: relative;
@@ -198,38 +198,38 @@
 
 :root {
   --radius: 2rem;
-  --background: #eaeaea;
-  --foreground: #000000;
+  --background: #f4f6f9;
+  --foreground: #0f172a;
   --card: #ffffff;
-  --card-foreground: #000000;
+  --card-foreground: #0f172a;
   --popover: #ffffff;
-  --popover-foreground: #000000;
-  --primary: #000000;
+  --popover-foreground: #0f172a;
+  --primary: #0f172a;
   --primary-foreground: #ffffff;
-  --secondary: #f4f4f5;
-  --secondary-foreground: #000000;
-  --muted: #f4f4f5;
-  --muted-foreground: #6b7280;
-  --accent: #f4f4f5;
-  --accent-foreground: #000000;
-  --destructive: #b91c1c;
+  --secondary: #dbeafe;
+  --secondary-foreground: #0f172a;
+  --muted: #f4f6f9;
+  --muted-foreground: #64748b;
+  --accent: #dbeafe;
+  --accent-foreground: #0f172a;
+  --destructive: #ef4444;
   --destructive-foreground: #ffffff;
   --border: #e5e5e5;
   --input: #e5e5e5;
-  --ring: #000000;
-  --chart-1: #000000;
-  --chart-2: #c7f33c;
-  --chart-3: #e1f2ae;
-  --chart-4: #6b7280;
-  --chart-5: #b91c1c;
+  --ring: #2563eb;
+  --chart-1: #0f172a;
+  --chart-2: #2563eb;
+  --chart-3: #dbeafe;
+  --chart-4: #64748b;
+  --chart-5: #ef4444;
   --sidebar: #ffffff;
-  --sidebar-foreground: #000000;
-  --sidebar-primary: #000000;
+  --sidebar-foreground: #0f172a;
+  --sidebar-primary: #2563eb;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f4f4f5;
-  --sidebar-accent-foreground: #000000;
+  --sidebar-accent: #dbeafe;
+  --sidebar-accent-foreground: #0f172a;
   --sidebar-border: #e5e5e5;
-  --sidebar-ring: #000000;
+  --sidebar-ring: #2563eb;
 }
 
 .dark {
@@ -239,32 +239,32 @@
   --card-foreground: #fafafa;
   --popover: #141414;
   --popover-foreground: #fafafa;
-  --primary: #c7f33c;
-  --primary-foreground: #000000;
-  --secondary: #1f1f1f;
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+  --secondary: #1e293b;
   --secondary-foreground: #fafafa;
   --muted: #1f1f1f;
   --muted-foreground: #a1a1aa;
-  --accent: #1f1f1f;
+  --accent: #1e293b;
   --accent-foreground: #fafafa;
-  --destructive: #dc2626;
+  --destructive: #ef4444;
   --destructive-foreground: #fafafa;
   --border: rgba(255, 255, 255, 0.1);
   --input: rgba(255, 255, 255, 0.15);
-  --ring: #c7f33c;
-  --chart-1: #c7f33c;
-  --chart-2: #e1f2ae;
+  --ring: #2563eb;
+  --chart-1: #2563eb;
+  --chart-2: #dbeafe;
   --chart-3: #fafafa;
   --chart-4: #a1a1aa;
-  --chart-5: #dc2626;
+  --chart-5: #ef4444;
   --sidebar: #141414;
   --sidebar-foreground: #fafafa;
-  --sidebar-primary: #c7f33c;
-  --sidebar-primary-foreground: #000000;
-  --sidebar-accent: #1f1f1f;
+  --sidebar-primary: #2563eb;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1e293b;
   --sidebar-accent-foreground: #fafafa;
   --sidebar-border: rgba(255, 255, 255, 0.1);
-  --sidebar-ring: #c7f33c;
+  --sidebar-ring: #2563eb;
 }
 
 @layer base {

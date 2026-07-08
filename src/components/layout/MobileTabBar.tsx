@@ -37,8 +37,8 @@ export function MobileTabBar({ items, pathname, className }: MobileTabBarProps) 
               className={cn(
                 "relative flex min-h-[54px] min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-[1.5rem] px-1 text-[10.5px] font-semibold transition-all duration-200",
                 active
-                  ? "bg-black text-white shadow-[0_10px_24px_-16px_rgba(0,0,0,0.7)]"
-                  : "text-black/50 hover:bg-[#F4F4F5] hover:text-black",
+                  ? "bg-[#0F172A] text-white shadow-[0_10px_24px_-16px_rgba(15,23,42,0.55)]"
+                  : "text-[#0F172A]/50 hover:bg-[#DBEAFE] hover:text-[#0F172A]",
               )}
             >
               <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={active ? 2.4 : 2} />

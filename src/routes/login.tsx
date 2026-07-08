@@ -102,7 +102,7 @@ function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-dvh items-center justify-center overflow-x-hidden bg-[#EAEAEA] px-3 py-[calc(1rem+env(safe-area-inset-top))] sm:px-4 sm:py-12">
+    <div className="flex min-h-dvh items-center justify-center overflow-x-hidden bg-[#F4F6F9] px-3 py-[calc(1rem+env(safe-area-inset-top))] sm:px-4 sm:py-12">
       <div className="w-full max-w-md">
         <div className="mb-5 flex flex-col items-center text-center sm:mb-8">
           <div className="flex items-center gap-3 rounded-[1.75rem] border border-white/70 bg-white/80 px-3 py-2.5 shadow-[0_14px_44px_-32px_rgba(0,0,0,0.45)] backdrop-blur-xl">
@@ -127,7 +127,7 @@ function LoginPage() {
           {bannerError && (
             <div
               role="alert"
-              className="mt-4 flex items-start gap-2 rounded-2xl border border-[#B91C1C]/20 bg-[#FEE2E2] px-3 py-2.5 text-[12px] text-[#B91C1C]"
+              className="mt-4 flex items-start gap-2 rounded-2xl border border-[#EF4444]/20 bg-[#FEE2E2] px-3 py-2.5 text-[12px] text-[#EF4444]"
             >
               <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span>{INVALID_CREDENTIALS_MESSAGE}</span>
@@ -155,11 +155,11 @@ function LoginPage() {
                 placeholder={tierMeta.placeholderEmail}
                 aria-invalid={!!fieldErrors.email}
                 className={`h-12 w-full rounded-2xl border bg-white px-4 text-[14px] outline-none transition-colors placeholder:text-black/35 focus:border-black focus:ring-2 focus:ring-black/5 ${
-                  fieldErrors.email ? "border-[#B91C1C]/40" : "border-[#E5E5E5]"
+                  fieldErrors.email ? "border-[#EF4444]/40" : "border-[#E5E5E5]"
                 }`}
               />
               {fieldErrors.email && (
-                <div className="text-[11px] text-[#B91C1C]">{fieldErrors.email}</div>
+                <div className="text-[11px] text-[#EF4444]">{fieldErrors.email}</div>
               )}
             </div>
 
@@ -185,7 +185,7 @@ function LoginPage() {
                   placeholder="••••••••"
                   aria-invalid={!!fieldErrors.password}
                   className={`h-12 w-full rounded-2xl border bg-white px-4 pr-11 text-[14px] outline-none transition-colors placeholder:text-black/35 focus:border-black focus:ring-2 focus:ring-black/5 ${
-                    fieldErrors.password ? "border-[#B91C1C]/40" : "border-[#E5E5E5]"
+                    fieldErrors.password ? "border-[#EF4444]/40" : "border-[#E5E5E5]"
                   }`}
                 />
                 <button
@@ -198,7 +198,7 @@ function LoginPage() {
                 </button>
               </div>
               {fieldErrors.password && (
-                <div className="text-[11px] text-[#B91C1C]">{fieldErrors.password}</div>
+                <div className="text-[11px] text-[#EF4444]">{fieldErrors.password}</div>
               )}
             </div>
 
@@ -207,7 +207,7 @@ function LoginPage() {
               disabled={submitting}
               className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-black text-[13.5px] font-semibold text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)] transition-colors hover:bg-black/90 disabled:opacity-60"
             >
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#C7F33C]" />
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#2563EB]" />
               Authenticate · {tier === "super_admin" ? "Super Admin" : "Tenant Workspace"}
             </button>
           </form>
@@ -229,8 +229,8 @@ function LoginPage() {
                   type="button"
                   onClick={() => handleAutofill(t.key)}
                   aria-label={`Auto-fill ${t.label} credentials`}
-                  className={`group flex min-h-12 w-full items-center justify-between gap-3 rounded-2xl border px-3 py-2.5 text-left font-mono text-[10.5px] transition-all hover:-translate-y-px hover:border-black/30 hover:bg-[#E1F2AE] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 ${
-                    isActive ? "border-black/30 bg-[#E1F2AE]" : "border-[#E5E5E5] bg-[#F4F4F5]"
+                  className={`group flex min-h-12 w-full items-center justify-between gap-3 rounded-2xl border px-3 py-2.5 text-left font-mono text-[10.5px] transition-all hover:-translate-y-px hover:border-black/30 hover:bg-[#DBEAFE] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 ${
+                    isActive ? "border-black/30 bg-[#DBEAFE]" : "border-[#E5E5E5] bg-[#F4F4F5]"
                   }`}
                 >
                   <span className="flex items-center gap-2">

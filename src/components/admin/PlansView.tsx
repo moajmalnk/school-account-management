@@ -41,7 +41,7 @@ const INITIAL: TierData[] = [
   },
   {
     name: "Premium",
-    accent: "#C7F33C",
+    accent: "#2563EB",
     monthly: 12999,
     annually: 129999,
     flags: {
@@ -145,7 +145,7 @@ export function PlansView() {
               <div className="flex items-center gap-2">
                 <span
                   className="h-2.5 w-2.5 rounded-full"
-                  style={{ backgroundColor: isBlack ? "#C7F33C" : isLime ? "#000000" : "#000000" }}
+                  style={{ backgroundColor: isBlack ? "#2563EB" : isLime ? "#000000" : "#000000" }}
                 />
                 <Input
                   value={t.name}
@@ -205,7 +205,7 @@ export function PlansView() {
                       <div className="flex min-w-0 items-center gap-2">
                         <Check
                           className={`h-3.5 w-3.5 shrink-0 ${on ? "" : "opacity-30"}`}
-                          style={{ color: isBlack ? "#C7F33C" : "#000000" }}
+                          style={{ color: isBlack ? "#2563EB" : "#000000" }}
                         />
                         <span
                           className={`truncate text-[12px] ${
@@ -232,7 +232,7 @@ export function PlansView() {
                   isLime
                     ? "bg-black text-white hover:bg-black/85"
                     : isBlack
-                      ? "bg-[#C7F33C] text-black hover:bg-white"
+                      ? "bg-[#2563EB] text-white hover:bg-white"
                       : "bg-black text-white hover:bg-black/85"
                 }`}
               >

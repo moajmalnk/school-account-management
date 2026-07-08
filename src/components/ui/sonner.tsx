@@ -21,7 +21,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
           closeButton:
             "group-[.toast]:left-auto group-[.toast]:right-2 group-[.toast]:top-2 group-[.toast]:size-6 group-[.toast]:rounded-full group-[.toast]:border-black/10 group-[.toast]:bg-white group-[.toast]:text-black/55 group-[.toast]:opacity-0 group-[.toast]:transition-opacity group-hover/toast:group-[.toast]:opacity-100",
           icon: "shrink-0",
-          success: "group-[.toaster]:border-emerald-200/80",
+          success: "group-[.toaster]:border-[#10B981]/30",
           error: "group-[.toaster]:border-rose-200/80",
           warning: "group-[.toaster]:border-amber-200/80",
           info: "group-[.toaster]:border-sky-200/80",

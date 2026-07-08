@@ -73,7 +73,7 @@ export function ArrowGlyph({
   onClick,
   ...rest
 }: ArrowGlyphProps) {
-  const isOnLime = tone === "lime";
+  const isOnHighlight = tone === "lime";
   const isOnBlack = tone === "black";
 
   // Position floats opposite the cut corner on the same edge for a balanced silhouette.
@@ -84,11 +84,11 @@ export function ArrowGlyph({
     br: "absolute right-4 bottom-4",
   };
 
-  const inkClass = isOnLime
-    ? "bg-black text-white hover:bg-black/85"
+  const inkClass = isOnHighlight
+    ? "bg-white text-[#2563EB] hover:bg-white/90"
     : isOnBlack
-      ? "bg-white text-black hover:bg-white/90"
-      : "bg-white text-black border border-black hover:bg-black hover:text-white";
+      ? "bg-white text-[#0F172A] hover:bg-white/90"
+      : "bg-white text-[#0F172A] border border-[#0F172A] hover:bg-[#0F172A] hover:text-white";
 
   return (
     <button
