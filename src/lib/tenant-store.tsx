@@ -144,6 +144,11 @@ export type Payment = {
   mode: string;
   amount: number;
   time: string;
+  /** Student receipts reduce ledger due; external are school income only */
+  payerType?: "student" | "external";
+  className?: string;
+  /** Optional free-text note on the receipt */
+  narration?: string;
 };
 
 export type Department = {
@@ -194,6 +199,7 @@ export type ThemeSettings = {
   mode: "System" | "Light" | "High Contrast";
   accent: "Neon Lime" | "Pale Lime" | "Ink";
   density: "Comfortable" | "Compact";
+  navPlacement: "Left" | "Right" | "Top" | "Bottom";
 };
 
 export type TenantNotification = {
@@ -270,8 +276,8 @@ export const DEFAULT_DASHBOARD_TODOS = ["", "", "", "", ""] as const;
 function normalizeDashboardTodos(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [...DEFAULT_DASHBOARD_TODOS];
   const items = raw.map((item) => (typeof item === "string" ? item : ""));
-  while (items.length < 5) items.push("");
-  return items.slice(0, 5);
+  if (items.length === 0) return [...DEFAULT_DASHBOARD_TODOS];
+  return items.slice(0, 20);
 }
 
 const NOTIFICATION_CATEGORIES = ["fees", "admissions", "staff", "system"] as const;
@@ -755,15 +761,51 @@ export const SEED_PAYMENT_CATEGORIES: PaymentCategory[] = [
   { id: "PC-004", label: "Other" },
 ];
 
-export const ACADEMIC_YEAR_OPTIONS = ["AY 2024-25", "AY 2025-26", "AY 2026-27"] as const;
+export const SEED_ACADEMIC_YEARS = ["AY 2024-25", "AY 2025-26", "AY 2026-27"];
+/** @deprecated Prefer `academicYears` from the tenant store */
+export const ACADEMIC_YEAR_OPTIONS = SEED_ACADEMIC_YEARS;
 export const SEED_ACADEMIC_YEAR = "AY 2025-26";
+
+/** Normalize free-text into `AY YYYY-YY` when possible. */
+export function normalizeAcademicYearLabel(input: string): string | null {
+  const trimmed = input.trim().replace(/\s+/g, " ");
+  if (!trimmed) return null;
+
+  const match = trimmed.match(/^(?:AY\s*)?(\d{4})\s*[-–/]\s*(\d{2}|\d{4})$/i);
+  if (match) {
+    const start = match[1];
+    const endRaw = match[2];
+    const end = endRaw.length === 4 ? endRaw.slice(2) : endRaw;
+    return `AY ${start}-${end}`;
+  }
+
+  if (/^AY\s+/i.test(trimmed)) {
+    return trimmed.replace(/^AY\s+/i, "AY ");
+  }
+
+  return `AY ${trimmed}`;
+}
+
+function ensureAcademicYearInList(years: string[], active: string): string[] {
+  const cleaned = years.map((y) => y.trim()).filter(Boolean);
+  if (active && !cleaned.includes(active)) cleaned.push(active);
+  return cleaned.length > 0 ? cleaned : [...SEED_ACADEMIC_YEARS];
+}
+
 export const THEME_MODE_OPTIONS: ThemeSettings["mode"][] = ["System", "Light", "High Contrast"];
 export const THEME_ACCENT_OPTIONS: ThemeSettings["accent"][] = ["Neon Lime", "Pale Lime", "Ink"];
 export const THEME_DENSITY_OPTIONS: ThemeSettings["density"][] = ["Comfortable", "Compact"];
+export const THEME_NAV_PLACEMENT_OPTIONS: ThemeSettings["navPlacement"][] = [
+  "Left",
+  "Right",
+  "Top",
+  "Bottom",
+];
 export const SEED_THEME_SETTINGS: ThemeSettings = {
   mode: "System",
   accent: "Neon Lime",
   density: "Comfortable",
+  navPlacement: "Left",
 };
 
 type Snapshot = {
@@ -776,6 +818,7 @@ type Snapshot = {
   transportRoutes: TransportRoute[];
   transportVehicles: TransportVehicle[];
   paymentCategories: PaymentCategory[];
+  academicYears: string[];
   academicYear: string;
   themeSettings: ThemeSettings;
   dashboardTodos: string[];
@@ -802,6 +845,8 @@ type TenantStoreValue = {
   setTransportVehicles: Dispatch<SetStateAction<TransportVehicle[]>>;
   paymentCategories: PaymentCategory[];
   setPaymentCategories: Dispatch<SetStateAction<PaymentCategory[]>>;
+  academicYears: string[];
+  setAcademicYears: Dispatch<SetStateAction<string[]>>;
   academicYear: string;
   setAcademicYear: Dispatch<SetStateAction<string>>;
   themeSettings: ThemeSettings;
@@ -815,7 +860,9 @@ type TenantStoreValue = {
   resetTenant: () => void;
 };
 
-function isThemeSettings(value: unknown): value is ThemeSettings {
+function isThemeSettings(value: unknown): value is Omit<ThemeSettings, "navPlacement"> & {
+  navPlacement?: ThemeSettings["navPlacement"];
+} {
   const candidate = value as Partial<ThemeSettings> | null;
   return (
     !!candidate &&
@@ -823,6 +870,19 @@ function isThemeSettings(value: unknown): value is ThemeSettings {
     THEME_ACCENT_OPTIONS.includes(candidate.accent as ThemeSettings["accent"]) &&
     THEME_DENSITY_OPTIONS.includes(candidate.density as ThemeSettings["density"])
   );
+}
+
+function normalizeThemeSettings(value: unknown): ThemeSettings {
+  if (!isThemeSettings(value)) return SEED_THEME_SETTINGS;
+  const placement = value.navPlacement;
+  return {
+    mode: value.mode,
+    accent: value.accent,
+    density: value.density,
+    navPlacement: THEME_NAV_PLACEMENT_OPTIONS.includes(placement as ThemeSettings["navPlacement"])
+      ? (placement as ThemeSettings["navPlacement"])
+      : "Left",
+  };
 }
 
 function parseSnapshot(raw: string): Snapshot | null {
@@ -857,10 +917,14 @@ function parseSnapshot(raw: string): Snapshot | null {
           .filter((v): v is TransportVehicle => v !== null)
       : [...SEED_VEHICLES],
     paymentCategories: parsed.paymentCategories,
+    academicYears: ensureAcademicYearInList(
+      Array.isArray(parsed.academicYears)
+        ? parsed.academicYears.filter((y): y is string => typeof y === "string")
+        : [...SEED_ACADEMIC_YEARS],
+      parsed.academicYear,
+    ),
     academicYear: parsed.academicYear,
-    themeSettings: isThemeSettings(parsed.themeSettings)
-      ? parsed.themeSettings
-      : SEED_THEME_SETTINGS,
+    themeSettings: normalizeThemeSettings(parsed.themeSettings),
     dashboardTodos: normalizeDashboardTodos(parsed.dashboardTodos),
     dashboardNote: typeof parsed.dashboardNote === "string" ? parsed.dashboardNote : "",
     notifications: normalizeNotifications(parsed.notifications),
@@ -902,6 +966,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
   const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>(SEED_VEHICLES);
   const [paymentCategories, setPaymentCategories] =
     useState<PaymentCategory[]>(SEED_PAYMENT_CATEGORIES);
+  const [academicYears, setAcademicYears] = useState<string[]>([...SEED_ACADEMIC_YEARS]);
   const [academicYear, setAcademicYear] = useState<string>(SEED_ACADEMIC_YEAR);
   const [themeSettings, setThemeSettings] = useState<ThemeSettings>(SEED_THEME_SETTINGS);
   const [dashboardTodos, setDashboardTodos] = useState<string[]>([...DEFAULT_DASHBOARD_TODOS]);
@@ -921,6 +986,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       setTransportRoutes(snap.transportRoutes);
       setTransportVehicles(snap.transportVehicles);
       setPaymentCategories(snap.paymentCategories);
+      setAcademicYears(snap.academicYears);
       setAcademicYear(snap.academicYear);
       setThemeSettings(snap.themeSettings);
       setDashboardTodos(snap.dashboardTodos);
@@ -942,6 +1008,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       transportRoutes,
       transportVehicles,
       paymentCategories,
+      academicYears,
       academicYear,
       themeSettings,
       dashboardTodos,
@@ -959,6 +1026,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
     transportRoutes,
     transportVehicles,
     paymentCategories,
+    academicYears,
     academicYear,
     themeSettings,
     dashboardTodos,
@@ -976,6 +1044,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
     setTransportRoutes(SEED_TRANSPORT);
     setTransportVehicles(SEED_VEHICLES);
     setPaymentCategories(SEED_PAYMENT_CATEGORIES);
+    setAcademicYears([...SEED_ACADEMIC_YEARS]);
     setAcademicYear(SEED_ACADEMIC_YEAR);
     setThemeSettings(SEED_THEME_SETTINGS);
     setDashboardTodos([...DEFAULT_DASHBOARD_TODOS]);
@@ -991,6 +1060,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       transportRoutes: SEED_TRANSPORT,
       transportVehicles: SEED_VEHICLES,
       paymentCategories: SEED_PAYMENT_CATEGORIES,
+      academicYears: [...SEED_ACADEMIC_YEARS],
       academicYear: SEED_ACADEMIC_YEAR,
       themeSettings: SEED_THEME_SETTINGS,
       dashboardTodos: [...DEFAULT_DASHBOARD_TODOS],
@@ -1019,6 +1089,8 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       setTransportVehicles,
       paymentCategories,
       setPaymentCategories,
+      academicYears,
+      setAcademicYears,
       academicYear,
       setAcademicYear,
       themeSettings,
@@ -1041,6 +1113,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       transportRoutes,
       transportVehicles,
       paymentCategories,
+      academicYears,
       academicYear,
       themeSettings,
       dashboardTodos,

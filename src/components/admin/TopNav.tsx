@@ -116,7 +116,7 @@ export function TopNav() {
                 {initials}
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-60 rounded-2xl">
+            <DropdownMenuContent align="end" className="w-60 rounded-lg">
               <DropdownMenuLabel className="flex flex-col gap-0.5">
                 <span className="text-[12px] font-semibold text-black">
                   {session?.displayName ?? "Super Admin"}

@@ -1,19 +1,19 @@
 import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Bell } from "lucide-react";
+import { Bell, LayoutDashboard, Settings, UserCog, Users, Wallet } from "lucide-react";
 import { useEffect } from "react";
 
 import {
   TenantDesktopTopBar,
-  TenantGlassSidebar,
+  TenantMacDock,
 } from "@/components/layout/TenantGlassShell";
 import {
   MobileTabBar,
   mobileMainPadding,
   type MobileTabItem,
 } from "@/components/layout/MobileTabBar";
-import { LayoutDashboard, Settings, UserCog, Users, Wallet } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { TenantStoreProvider, useTenantStore } from "@/lib/tenant-store";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/tenant")({
   component: TenantLayout,
@@ -51,20 +51,56 @@ function TenantLayout() {
 
   return (
     <TenantStoreProvider>
-      <div className="tenant-canvas min-h-dvh text-slate-900">
-        <TenantMobileHeader />
-        <div className="mx-auto flex min-h-dvh max-w-[1600px] gap-4 px-4 py-4 md:gap-5 md:px-5 md:py-5">
-          <TenantGlassSidebar />
-          <div className="flex min-w-0 flex-1 flex-col">
-            <TenantDesktopTopBar />
-            <main className={`min-w-0 flex-1 ${mobileMainPadding} md:pb-6`}>
-              <Outlet />
-            </main>
-          </div>
-        </div>
-        <TenantMobileNav />
-      </div>
+      <TenantShell />
     </TenantStoreProvider>
+  );
+}
+
+function TenantShell() {
+  const { themeSettings } = useTenantStore();
+  const placement = themeSettings.navPlacement ?? "Left";
+  const isVertical = placement === "Left" || placement === "Right";
+  const isBottom = placement === "Bottom";
+  const isTop = placement === "Top";
+
+  return (
+    <div className="tenant-canvas min-h-dvh text-slate-900">
+      <TenantMobileHeader />
+      <div
+        className={cn(
+          "flex min-h-dvh w-full gap-4 px-4 py-4 md:gap-5 md:px-5 md:py-5",
+          isVertical && placement === "Left" && "flex-row",
+          isVertical && placement === "Right" && "flex-row-reverse",
+          (isTop || isBottom) && "flex-col",
+          isBottom && "md:pb-28",
+        )}
+      >
+        {isTop && <TenantMacDock placement={placement} className="order-first" />}
+        {isVertical && <TenantMacDock placement={placement} />}
+
+        <div className="relative z-0 flex min-w-0 flex-1 flex-col">
+          <TenantDesktopTopBar />
+          <main
+            className={cn(
+              "min-w-0 flex-1",
+              mobileMainPadding,
+              isBottom ? "md:pb-8" : "md:pb-6",
+            )}
+          >
+            <Outlet />
+          </main>
+        </div>
+      </div>
+
+      {isBottom && (
+        <TenantMacDock
+          placement={placement}
+          className="pointer-events-none fixed inset-x-0 bottom-4 z-50 hidden justify-center md:flex [&_a]:pointer-events-auto [&_button]:pointer-events-auto [&_div]:pointer-events-auto"
+        />
+      )}
+
+      <TenantMobileNav />
+    </div>
   );
 }
 

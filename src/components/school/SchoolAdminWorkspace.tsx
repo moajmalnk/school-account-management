@@ -21,6 +21,8 @@ import {
   ChevronDown,
   ArrowDownToLine,
   ArrowUpFromLine,
+  ArrowDownRight,
+  ArrowUpRight,
   ChartPie,
   BookOpen,
   Scale,
@@ -32,8 +34,23 @@ import {
   TriangleAlert,
   Users,
   Filter,
+  Search,
   Bus,
+  Calendar,
+  Clock,
+  Wallet,
+  ListTodo,
+  StickyNote,
+  Settings,
+  ChevronLeft,
 } from "lucide-react";
+import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, XAxis, YAxis } from "recharts";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -59,6 +76,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import {
   Sheet,
   SheetContent,
@@ -73,11 +99,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { DatePicker } from "@/components/ui/date-picker";
 import { OrganicCard } from "@/components/ui/organic-card";
 import {
-  ACADEMIC_YEAR_OPTIONS,
+  normalizeAcademicYearLabel,
   DEFAULT_STAFF_DOCUMENTS,
   THEME_ACCENT_OPTIONS,
   THEME_DENSITY_OPTIONS,
   THEME_MODE_OPTIONS,
+  THEME_NAV_PLACEMENT_OPTIONS,
   useTenantStore,
   type ClassConfig,
   type Department,
@@ -97,11 +124,16 @@ import { EnrollmentStatusBadge, isRecordActive } from "@/components/school/Profi
 import { FinanceBarCard, FinanceDonutCard } from "@/components/school/finance-charts";
 import {
   BalanceSheetReport,
+  DayBookReport,
+  FeesReport,
   GeneralLedgerReport,
   ProfitLossReport,
+  SalaryReport,
 } from "@/components/school/FinanceReports";
-import { downloadCsv, downloadReceiptPdf } from "@/lib/finance-export";
+import { downloadCsv, downloadReceiptPdf, downloadTablePdf } from "@/lib/finance-export";
 import {
+  ACCOUNTS_PAYABLE,
+  OPERATING_EXPENSES,
   bankBalance,
   cashOnHand,
   formatInr,
@@ -200,6 +232,22 @@ type MadePayment = Omit<(typeof MADE_PAYMENTS)[number], "status"> & {
   status: "Queued" | "Cleared";
 };
 
+const LEDGER_INCOME_SEGMENTS = [
+  { label: "Tuition", value: 1_840_000 },
+  { label: "Transport", value: 320_000 },
+  { label: "Donations", value: 95_000 },
+  { label: "Other", value: 42_000 },
+];
+
+const LEDGER_OUTFLOW_SEGMENTS = [
+  { label: "Salaries", value: 1_220_000 },
+  { label: "Vehicle Upkeep", value: 184_000 },
+  { label: "Utilities", value: 88_000 },
+  { label: "Rent", value: 240_000 },
+];
+
+const EXPENSE_CHART_COLORS = ["#2563EB", "#10B981", "#F59E0B", "#EF4444", "#64748B"];
+
 function formatDisbursalTime() {
   const now = new Date();
   return `Today · ${now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false })}`;
@@ -221,7 +269,7 @@ function DashboardPeriodFilter({
   return (
     <div className={cn("flex w-full flex-col gap-2", className)}>
       <Select value={period} onValueChange={(value) => onPeriodChange(value as PaymentPeriod)}>
-        <SelectTrigger className="h-10 w-full rounded-full border-[#E5E5E5] bg-white">
+        <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
           <SelectValue placeholder="Select period" />
         </SelectTrigger>
         <SelectContent>
@@ -234,21 +282,25 @@ function DashboardPeriodFilter({
       </Select>
       {period === "custom" && (
         <div className="grid grid-cols-1 gap-2">
-          <Input
-            type="date"
+          <DatePicker
             value={customRange.from}
-            onChange={(event) =>
-              onCustomRangeChange({ ...customRange, from: event.target.value })
-            }
-            className="h-9 w-full rounded-full border-[#E5E5E5] bg-white"
+            onChange={(from) => onCustomRangeChange({ ...customRange, from })}
+            placeholder="From date"
+            valueFormat="iso"
+            variant="pill"
+            max={customRange.to || undefined}
+            quickPicks={[{ label: "Today", getDate: (t) => t }]}
+            className="h-9 w-full"
           />
-          <Input
-            type="date"
+          <DatePicker
             value={customRange.to}
-            onChange={(event) =>
-              onCustomRangeChange({ ...customRange, to: event.target.value })
-            }
-            className="h-9 w-full rounded-full border-[#E5E5E5] bg-white"
+            onChange={(to) => onCustomRangeChange({ ...customRange, to })}
+            placeholder="To date"
+            valueFormat="iso"
+            variant="pill"
+            min={customRange.from || undefined}
+            quickPicks={[{ label: "Today", getDate: (t) => t }]}
+            className="h-9 w-full"
           />
         </div>
       )}
@@ -379,6 +431,15 @@ function MobileInsightSplit({
   );
 }
 
+const dashboardCountClass =
+  "min-w-0 max-w-full whitespace-normal break-words font-mono font-bold leading-none tracking-tight tabular-nums text-[clamp(1.5rem,3.6vw,2.5rem)]";
+
+const dashboardAmountClass =
+  "min-w-0 max-w-full whitespace-normal break-words font-mono font-bold leading-[1.1] tracking-tight tabular-nums text-[clamp(1.05rem,2.4vw,1.75rem)]";
+
+const dashboardAmountCompactClass =
+  "min-w-0 max-w-full whitespace-normal break-words font-mono font-bold leading-[1.1] tracking-tight tabular-nums text-[clamp(0.95rem,2.1vw,1.45rem)]";
+
 function MobileFinancialDetailTile({
   title,
   value,
@@ -404,7 +465,7 @@ function MobileFinancialDetailTile({
       </div>
       <div className="min-w-0 pr-10">
         <div className="text-[12px] font-medium leading-snug text-slate-500">{title}</div>
-        <div className="mt-1 truncate font-mono text-[15px] font-bold leading-tight tracking-tight text-slate-900">
+        <div className={cn(dashboardAmountCompactClass, "mt-1 text-slate-900")}>
           {value}
         </div>
       </div>
@@ -468,7 +529,7 @@ function MobilePremiumDashboard({
         <div className="grid w-full grid-cols-2 gap-3">
           <div className="flex min-h-[112px] min-w-0 flex-col justify-between rounded-[1.25rem] bg-[#D1F2E1] p-4">
             <div className="text-[12px] font-medium text-slate-800">Total Income</div>
-            <div className="mt-3 truncate font-mono text-[17px] font-bold leading-tight tracking-tight text-slate-900">
+            <div className={cn(dashboardAmountClass, "mt-3 text-slate-900")}>
               {formatInr(periodIncome)}
             </div>
           </div>
@@ -479,7 +540,7 @@ function MobilePremiumDashboard({
               aria-hidden
             />
             <div className="pr-6 text-[12px] font-medium text-white/90">Total Expense</div>
-            <div className="mt-3 truncate font-mono text-[17px] font-bold leading-tight tracking-tight text-white">
+            <div className={cn(dashboardAmountClass, "mt-3 text-white")}>
               {formatInr(expenseTotal)}
             </div>
           </div>
@@ -551,115 +612,6 @@ function MobilePremiumDashboard({
   );
 }
 
-function GlassProgressRing({
-  value,
-  stroke = "#2563EB",
-  label,
-}: {
-  value: number;
-  stroke?: string;
-  label: string;
-}) {
-  const r = 34;
-  const c = 2 * Math.PI * r;
-  const pct = Math.min(100, Math.max(0, value));
-  const offset = c - (pct / 100) * c;
-
-  return (
-    <div className="flex flex-col items-center gap-1">
-      <svg className="h-[88px] w-[88px]" viewBox="0 0 88 88" aria-hidden>
-        <circle cx="44" cy="44" r={r} fill="none" stroke="rgba(15,23,42,0.08)" strokeWidth="7" />
-        <circle
-          cx="44"
-          cy="44"
-          r={r}
-          fill="none"
-          stroke={stroke}
-          strokeWidth="7"
-          strokeLinecap="round"
-          strokeDasharray={c}
-          strokeDashoffset={offset}
-          transform="rotate(-90 44 44)"
-        />
-        <text
-          x="44"
-          y="47"
-          textAnchor="middle"
-          className="fill-slate-900 text-[13px] font-bold"
-          style={{ fontFamily: "Inter, sans-serif" }}
-        >
-          {Math.round(pct)}%
-        </text>
-      </svg>
-      <span className="text-[10px] font-medium text-slate-500">{label}</span>
-    </div>
-  );
-}
-
-type GlassModuleCardProps = {
-  title: string;
-  icon: typeof Users;
-  accent: "blue" | "orange";
-  stats: { label: string; value: string | number; tone?: "default" | "success" | "danger" }[];
-  ringValue: number;
-  ringLabel: string;
-  actionLabel: string;
-  onAction: () => void;
-};
-
-function GlassModuleCard({
-  title,
-  icon: Icon,
-  accent,
-  stats,
-  ringValue,
-  ringLabel,
-  actionLabel,
-  onAction,
-}: GlassModuleCardProps) {
-  const accentBar = accent === "blue" ? "bg-[#2563EB]" : "bg-orange-500";
-  const ringColor = accent === "blue" ? "#2563EB" : "#f97316";
-
-  return (
-    <div className={cn(glassCardClass, "relative flex flex-col overflow-hidden p-5")}>
-      <div className={cn("absolute inset-x-0 top-0 h-1", accentBar)} />
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-2.5">
-          <div className="grid h-10 w-10 place-items-center rounded-xl bg-white/60 shadow-sm">
-            <Icon className="h-5 w-5 text-slate-700" strokeWidth={2} />
-          </div>
-          <h3 className="text-[15px] font-bold text-slate-900">{title}</h3>
-        </div>
-        <GlassProgressRing value={ringValue} stroke={ringColor} label={ringLabel} />
-      </div>
-      <ul className="mt-4 space-y-2">
-        {stats.map((s) => (
-          <li key={s.label} className="flex items-center justify-between text-[13px]">
-            <span className="text-slate-600">{s.label}</span>
-            <span
-              className={cn(
-                "font-mono font-semibold",
-                s.tone === "success" && "text-[#10B981]",
-                s.tone === "danger" && "text-[#EF4444]",
-                !s.tone && "text-slate-900",
-              )}
-            >
-              {s.value}
-            </span>
-          </li>
-        ))}
-      </ul>
-      <button
-        type="button"
-        onClick={onAction}
-        className="mt-5 w-full rounded-xl bg-gradient-to-r from-[#2563EB] to-[#4C69A4] py-3 text-[13px] font-semibold text-white shadow-md shadow-blue-900/15 transition-opacity hover:opacity-95"
-      >
-        {actionLabel}
-      </button>
-    </div>
-  );
-}
-
 type GlassDesktopDashboardProps = {
   students: Student[];
   staff: Staff[];
@@ -671,10 +623,8 @@ type GlassDesktopDashboardProps = {
   inBank: number;
   totalBalance: number;
   overdueStudents: Student[];
-  overdueWatchlist: Student[];
   recentReceipts: Payment[];
   unreadNotifications: number;
-  notifications: TenantNotification[];
   dashboardTodos: string[];
   setDashboardTodos: React.Dispatch<React.SetStateAction<string[]>>;
   dashboardNote: string;
@@ -699,10 +649,8 @@ function GlassDesktopDashboard({
   inBank,
   totalBalance,
   overdueStudents,
-  overdueWatchlist,
   recentReceipts,
   unreadNotifications,
-  notifications,
   dashboardTodos,
   setDashboardTodos,
   dashboardNote,
@@ -715,11 +663,13 @@ function GlassDesktopDashboard({
   onViewStudents,
   onViewStaff,
 }: GlassDesktopDashboardProps) {
+  const { session } = useAuth();
   const paidCount = students.filter((s) => s.due === 0).length;
-  const overdueCount = students.filter((s) => s.due > 0).length;
   const activeStaff = staff.filter((s) => s.active).length;
-  const paidPct = students.length ? (paidCount / students.length) * 100 : 0;
-  const activeStaffPct = staff.length ? (activeStaff / staff.length) * 100 : 0;
+  const tenantName = session?.tenantName ?? "Silver Hills Global";
+  const displayName = session?.displayName ?? "Tenant Admin";
+
+  const [moreTodosOpen, setMoreTodosOpen] = useState(false);
 
   const updateTodo = (index: number, value: string) => {
     setDashboardTodos((current) => {
@@ -729,209 +679,538 @@ function GlassDesktopDashboard({
     });
   };
 
-  const unreadFeed = notifications.filter((n) => !n.read).slice(0, 5);
+  const addTodo = () => {
+    if (dashboardTodos.length >= 20) {
+      toast.error("Maximum 20 tasks reached");
+      return;
+    }
+    if (dashboardTodos.length >= 4) setMoreTodosOpen(true);
+    setDashboardTodos((current) => [...current, ""]);
+  };
+
+  const removeTodo = (index: number) => {
+    setDashboardTodos((current) => {
+      if (current.length <= 1) {
+        return [""];
+      }
+      return current.filter((_, i) => i !== index);
+    });
+  };
+
+  const visibleTodos = dashboardTodos.slice(0, 4);
+  const overflowTodos = dashboardTodos.slice(4);
+
+  const admissionWeeks = useMemo(() => {
+    const base = Math.max(1, Math.round(students.length / 5));
+    return [
+      { label: "W1", value: Math.max(1, base - 1) },
+      { label: "W2", value: base },
+      { label: "W3", value: base + 1 },
+      { label: "W4", value: Math.max(1, base - 1) },
+      { label: "W5", value: base + 2 },
+    ];
+  }, [students.length]);
+
+  const incomeExpenseWeeks = useMemo(() => {
+    const incomeShare = Math.round(periodIncome / 5);
+    const expenseShare = Math.round(expenseTotal / 5);
+    return ["W1", "W2", "W3", "W4", "W5"].map((label, index) => ({
+      label,
+      income: Math.max(0, incomeShare + (index - 2) * Math.round(incomeShare * 0.08)),
+      expense: Math.max(0, expenseShare + (2 - index) * Math.round(expenseShare * 0.06)),
+    }));
+  }, [periodIncome, expenseTotal]);
+
+  const newAdmissions = admissionWeeks.reduce((sum, week) => sum + week.value, 0);
+  const totalEnquiries = newAdmissions + overdueStudents.length + unreadNotifications;
+
+  const nowLabel = useMemo(() => {
+    const now = new Date();
+    return {
+      date: now.toLocaleDateString("en-IN", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      }),
+      time: now.toLocaleTimeString("en-IN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      }),
+    };
+  }, []);
+
+  const admissionChartConfig = {
+    value: { label: "Admissions", color: "#10B981" },
+  } satisfies ChartConfig;
+
+  const incomeExpenseChartConfig = {
+    income: { label: "Income", color: "#10B981" },
+    expense: { label: "Expense", color: "#EF4444" },
+  } satisfies ChartConfig;
+
+  const periodLabel =
+    PAYMENT_PERIOD_OPTIONS.find((option) => option.value === period)?.label ?? "This Month";
 
   return (
     <div className="hidden space-y-5 md:block">
       <div className="grid grid-cols-12 gap-5">
-        <div className="col-span-12 space-y-5 xl:col-span-8">
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-            <GlassModuleCard
-              title="All Students"
-              icon={Users}
-              accent="blue"
-              ringValue={paidPct}
-              ringLabel="Paid"
-              stats={[
-                { label: "Enrolled", value: students.length },
-                { label: "Paid", value: paidCount, tone: "success" },
-                { label: "Overdue", value: overdueCount, tone: "danger" },
-              ]}
-              actionLabel="View Students"
-              onAction={onViewStudents}
-            />
-            <GlassModuleCard
-              title="All Staff"
-              icon={Briefcase}
-              accent="orange"
-              ringValue={activeStaffPct}
-              ringLabel="Active"
-              stats={[
-                { label: "Total", value: staff.length },
-                { label: "Active", value: activeStaff, tone: "success" },
-                { label: "Inactive", value: staff.length - activeStaff },
-              ]}
-              actionLabel="View Staff"
-              onAction={onViewStaff}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-            {[
-              { label: "Total Income", value: formatInr(periodIncome), tone: "bg-[#D1F2E1]" },
-              { label: "Total Expense", value: formatInr(expenseTotal), tone: "bg-[#3B5998] text-white" },
-              { label: "Fees Outstanding", value: formatInr(totalDue), tone: "glass-inset" },
-              { label: "Cash + Bank", value: formatInr(totalBalance), tone: "glass-inset" },
-            ].map((item) => (
-              <div
-                key={item.label}
+        {/* Row 1–2 left/center + right stack */}
+        <div className="col-span-12 grid grid-cols-1 gap-5 xl:col-span-8 xl:grid-cols-2">
+          <section className={cn(glassCardClass, "flex flex-col p-5")}>
+            <DashboardPanelHeading icon={Users} title="School Overview" />
+            <div className="mt-4 grid flex-1 grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={onViewStudents}
                 className={cn(
-                  "flex min-h-[100px] flex-col justify-between rounded-2xl p-4",
-                  item.tone === "glass-inset" ? glassInsetClass : item.tone,
-                  item.tone === "bg-[#3B5998] text-white" && "text-white",
+                  glassInsetClass,
+                  "flex min-h-[128px] flex-col p-4 text-center transition-colors hover:bg-white/55",
                 )}
               >
-                <div
-                  className={cn(
-                    "text-[12px] font-medium",
-                    item.tone === "bg-[#3B5998] text-white" ? "text-white/90" : "text-slate-600",
-                  )}
-                >
-                  {item.label}
+                <div className="flex items-start justify-between gap-2 text-left">
+                  <span className="text-[12px] font-medium text-slate-600">Total Students</span>
+                  <span className="grid h-8 w-8 place-items-center rounded-lg bg-[#DBEAFE]">
+                    <GraduationCap className="h-4 w-4 text-[#2563EB]" />
+                  </span>
                 </div>
-                <div className="mt-2 truncate font-mono text-[16px] font-bold leading-tight xl:text-[17px]">
-                  {item.value}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-            <div className={cn(glassCardClass, "flex flex-col p-5")}>
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="text-[15px] font-bold text-slate-900">Overdue Watchlist</h3>
-                <span className="rounded-full bg-[#2563EB] px-2.5 py-1 text-[10px] font-semibold text-white">
-                  {overdueStudents.length} overdue
-                </span>
-              </div>
-              <div className="mt-4 flex-1 space-y-2">
-                {overdueWatchlist.length === 0 && (
-                  <div className={cn(glassInsetClass, "px-4 py-6 text-center text-[12px] text-slate-500")}>
-                    All student balances are cleared
+                <div className="flex flex-1 flex-col items-center justify-center">
+                  <div className={cn(dashboardCountClass, "text-slate-900")}>
+                    {students.length}
                   </div>
+                  <div className="mt-1 text-[11px] font-medium text-[#10B981]">
+                    {paidCount} paid · {students.length - paidCount} overdue
+                  </div>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={onViewStaff}
+                className={cn(
+                  glassInsetClass,
+                  "flex min-h-[128px] flex-col p-4 text-center transition-colors hover:bg-white/55",
                 )}
-                {overdueWatchlist.map((student) => (
-                  <div
-                    key={student.id}
-                    className={cn(glassInsetClass, "flex items-center justify-between gap-3 px-3.5 py-2.5")}
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate text-[13px] font-semibold text-slate-900">{student.name}</div>
-                      <div className="text-[11px] text-slate-500">
-                        {student.cls} · {student.id}
-                      </div>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <div className="font-mono text-[13px] font-semibold text-slate-900">
-                        {formatInr(student.due)}
-                      </div>
-                      <div className="text-[10px] font-semibold uppercase text-[#EF4444]">Overdue</div>
-                    </div>
+              >
+                <div className="flex items-start justify-between gap-2 text-left">
+                  <span className="text-[12px] font-medium text-slate-600">Total Staff</span>
+                  <span className="grid h-8 w-8 place-items-center rounded-lg bg-orange-50">
+                    <Briefcase className="h-4 w-4 text-orange-500" />
+                  </span>
+                </div>
+                <div className="flex flex-1 flex-col items-center justify-center">
+                  <div className={cn(dashboardCountClass, "text-slate-900")}>
+                    {staff.length}
                   </div>
-                ))}
+                  <div className="mt-1 text-[11px] font-medium text-slate-500">
+                    {activeStaff} active · {staff.length - activeStaff} inactive
+                  </div>
+                </div>
+              </button>
+            </div>
+          </section>
+
+          <section className={cn(glassCardClass, "flex flex-col p-5")}>
+            <div className="flex items-start justify-between gap-3">
+              <DashboardPanelHeading icon={Wallet} title="Financial Summary" />
+              <div className="w-[148px] shrink-0">
+                <DashboardPeriodFilter
+                  period={period}
+                  onPeriodChange={setPeriod}
+                  customRange={customRange}
+                  onCustomRangeChange={setCustomRange}
+                />
               </div>
             </div>
-
-            <div className={cn(glassCardClass, "flex flex-col p-5")}>
-              <h3 className="text-[15px] font-bold text-slate-900">Recent Receipts</h3>
-              <p className="mt-1 text-[12px] text-slate-500">
-                Latest inbound payments · {recentReceipts.length} shown
-              </p>
-              <div className="mt-4 flex-1 divide-y divide-white/50">
-                {recentReceipts.length === 0 && (
-                  <div className="py-6 text-center text-[12px] text-slate-500">No receipts logged yet</div>
-                )}
-                {recentReceipts.map((payment) => (
-                  <div key={payment.id} className="flex items-center justify-between gap-3 py-3 first:pt-0">
-                    <div className="min-w-0">
-                      <div className="truncate text-[13px] font-semibold text-slate-900">{payment.name}</div>
-                      <div className="mt-0.5 text-[11px] text-slate-500">
-                        {payment.cat} · {payment.mode}
-                      </div>
-                    </div>
-                    <div className="shrink-0 font-mono text-[13px] font-semibold text-slate-900">
-                      {formatInr(payment.amount)}
-                    </div>
-                  </div>
-                ))}
+            <div className="mt-4 grid flex-1 grid-cols-1 gap-3">
+              <div className="flex min-h-[100px] flex-col justify-between rounded-2xl bg-[#D1F2E1] p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-[12px] font-medium text-slate-800">Income</span>
+                  <span className="grid h-8 w-8 place-items-center rounded-lg bg-white/70">
+                    <ArrowUpRight className="h-4 w-4 text-[#10B981]" />
+                  </span>
+                </div>
+                <div className={cn(dashboardAmountClass, "whitespace-nowrap text-slate-900")}>
+                  {formatInr(periodIncome)}
+                </div>
+              </div>
+              <div className="relative flex min-h-[100px] flex-col justify-between overflow-hidden rounded-2xl bg-[#3B5998] p-4 text-white">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-[12px] font-medium text-white/90">Expense</span>
+                  <span className="grid h-8 w-8 place-items-center rounded-lg bg-white/15">
+                    <ArrowDownRight className="h-4 w-4 text-white" />
+                  </span>
+                </div>
+                <div className={cn(dashboardAmountClass, "whitespace-nowrap text-white")}>
+                  {formatInr(expenseTotal)}
+                </div>
               </div>
             </div>
-          </div>
+          </section>
+
+          <section className={cn(glassCardClass, "flex flex-col p-5")}>
+            <DashboardPanelHeading icon={HandCoins} title="Outstanding Payments" />
+            <div className="mt-4 grid flex-1 grid-cols-1 gap-3">
+              <div className={cn(glassInsetClass, "flex min-h-[100px] flex-col justify-between p-4")}>
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-[12px] font-medium text-slate-600">Fee Outstanding</span>
+                  <span className="grid h-8 w-8 place-items-center rounded-lg bg-[#DBEAFE]">
+                    <HandCoins className="h-4 w-4 text-[#2563EB]" />
+                  </span>
+                </div>
+                <div>
+                  <div className="text-[11px] font-medium text-slate-500">
+                    {overdueStudents.length} students
+                  </div>
+                  <div className={cn(dashboardAmountClass, "mt-1 whitespace-nowrap text-slate-900")}>
+                    {formatInr(totalDue)}
+                  </div>
+                </div>
+              </div>
+              <div className={cn(glassInsetClass, "flex min-h-[100px] flex-col justify-between p-4")}>
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-[12px] font-medium text-slate-600">Salary Outstanding</span>
+                  <span className="grid h-8 w-8 place-items-center rounded-lg bg-amber-50">
+                    <Banknote className="h-4 w-4 text-amber-600" />
+                  </span>
+                </div>
+                <div>
+                  <div className="text-[11px] font-medium text-slate-500">{activeStaff} staff</div>
+                  <div className={cn(dashboardAmountClass, "mt-1 whitespace-nowrap text-slate-900")}>
+                    {formatInr(salaryOutstanding)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className={cn(glassCardClass, "flex flex-col p-5")}>
+            <DashboardPanelHeading icon={Landmark} title="Cash Position" />
+            <div className="mt-4 grid flex-1 grid-cols-[1fr_1.05fr] gap-3">
+              <div className="grid gap-3">
+                <div className={cn(glassInsetClass, "flex min-h-[84px] flex-col justify-between p-3.5")}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[12px] font-medium text-slate-600">Cash In Hand</span>
+                    <Banknote className="h-3.5 w-3.5 text-[#10B981]" />
+                  </div>
+                  <div className={cn(dashboardAmountCompactClass, "text-slate-900")}>
+                    {formatInr(inHand)}
+                  </div>
+                </div>
+                <div className={cn(glassInsetClass, "flex min-h-[84px] flex-col justify-between p-3.5")}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[12px] font-medium text-slate-600">Bank Balance</span>
+                    <Landmark className="h-3.5 w-3.5 text-violet-600" />
+                  </div>
+                  <div className={cn(dashboardAmountCompactClass, "text-slate-900")}>
+                    {formatInr(inBank)}
+                  </div>
+                </div>
+              </div>
+              <div className="flex min-h-full flex-col justify-between rounded-2xl bg-[#DBEAFE]/70 p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-[12px] font-medium text-slate-700">Total Balance</span>
+                  <span className="grid h-8 w-8 place-items-center rounded-lg bg-white/80">
+                    <Wallet className="h-4 w-4 text-[#2563EB]" />
+                  </span>
+                </div>
+                <div className={cn(dashboardAmountClass, "text-slate-900")}>
+                  {formatInr(totalBalance)}
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
 
-        <aside className="col-span-12 space-y-4 xl:col-span-4">
-          <div className={cn(glassPanelClass, "p-5")}>
-            <DashboardPeriodFilter
-              period={period}
-              onPeriodChange={setPeriod}
-              customRange={customRange}
-              onCustomRangeChange={setCustomRange}
-            />
+        <aside className="col-span-12 flex h-full min-h-0 flex-col gap-5 xl:col-span-4">
+          <section className={cn(glassCardClass, "flex shrink-0 flex-col p-5")}>
             <button
               type="button"
               onClick={onCollectFee}
-              className="mt-4 w-full rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 py-3.5 text-[14px] font-semibold text-white shadow-md shadow-blue-200/40 transition-opacity hover:opacity-95"
+              className="mb-4 w-full rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 py-3 text-[13px] font-semibold text-white shadow-md shadow-blue-200/40 transition-opacity hover:opacity-95"
             >
               Collect Fee
             </button>
-          </div>
-
-          <div className={cn(glassCardClass, "p-5")}>
-            <div className="mb-3 flex items-center gap-2 border-b border-white/50 pb-3">
-              <button type="button" className="text-[13px] font-bold text-[#2563EB]">
-                Alerts
-              </button>
-              <span className="text-[13px] text-slate-400">·</span>
-              <span className="text-[13px] font-medium text-slate-500">Notes</span>
-            </div>
-            {unreadFeed.length === 0 ? (
-              <div className="py-8 text-center text-[12px] text-slate-500">No unread alerts</div>
-            ) : (
-              <ul className="space-y-2">
-                {unreadFeed.map((n) => (
-                  <li key={n.id} className={cn(glassInsetClass, "px-3 py-2.5 text-[12px]")}>
-                    <div className="font-semibold text-slate-800">{n.title}</div>
-                    <p className="mt-0.5 line-clamp-2 text-slate-500">{n.body}</p>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {unreadNotifications > 0 && (
-              <Link
-                to="/tenant/notifications"
-                className="mt-3 block text-center text-[12px] font-semibold text-[#2563EB] hover:underline"
+            <div className="flex items-center justify-between gap-2">
+              <DashboardPanelHeading icon={ListTodo} title="To Do List" />
+              <button
+                type="button"
+                onClick={addTodo}
+                className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg bg-[#2563EB] px-2.5 text-[11px] font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
               >
-                View all {unreadNotifications} alerts
-              </Link>
-            )}
-          </div>
+                <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+                Add
+              </button>
+            </div>
+            <div className="mt-4 space-y-2.5">
+              {visibleTodos.map((item, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full border border-slate-300">
+                    <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
+                  </span>
+                  <Input
+                    value={item}
+                    onChange={(e) => updateTodo(index, e.target.value)}
+                    placeholder={`Task ${index + 1}`}
+                    className={cn(glassInsetClass, "h-9 flex-1 border-white/50 bg-white/40")}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeTodo(index)}
+                    aria-label={`Remove task ${index + 1}`}
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-400 transition-colors hover:bg-[#FEE2E2] hover:text-[#EF4444]"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
 
-          <div className={cn(glassCardClass, "space-y-3 p-5")}>
-            <h3 className="text-[15px] font-bold text-slate-900">To do</h3>
-            {dashboardTodos.map((item, index) => (
-              <div key={index} className="flex items-center gap-2">
-                <span className="w-5 text-right text-[11px] font-semibold text-slate-400">{index + 1}.</span>
-                <Input
-                  value={item}
-                  onChange={(e) => updateTodo(index, e.target.value)}
-                  placeholder={`Task ${index + 1}`}
-                  className={cn(glassInsetClass, "h-9 flex-1 border-white/50 bg-white/40")}
-                />
-              </div>
-            ))}
-          </div>
+              {overflowTodos.length > 0 && (
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setMoreTodosOpen((open) => !open)}
+                    aria-expanded={moreTodosOpen}
+                    className={cn(
+                      glassInsetClass,
+                      "flex h-9 w-full items-center justify-between gap-2 px-3 text-left text-[12px] font-semibold text-slate-700 transition-colors hover:bg-white/60",
+                    )}
+                  >
+                    <span>
+                      {moreTodosOpen ? "Hide extra tasks" : `${overflowTodos.length} more task${overflowTodos.length === 1 ? "" : "s"}`}
+                    </span>
+                    <ChevronDown
+                      className={cn(
+                        "h-4 w-4 shrink-0 text-slate-500 transition-transform",
+                        moreTodosOpen && "rotate-180",
+                      )}
+                    />
+                  </button>
+                  {moreTodosOpen && (
+                    <div className={cn(glassInsetClass, "mt-2 space-y-2.5 p-2.5")}>
+                      {overflowTodos.map((item, overflowIndex) => {
+                        const index = overflowIndex + 4;
+                        return (
+                          <div key={index} className="flex items-center gap-2">
+                            <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full border border-slate-300">
+                              <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
+                            </span>
+                            <Input
+                              value={item}
+                              onChange={(e) => updateTodo(index, e.target.value)}
+                              placeholder={`Task ${index + 1}`}
+                              className="h-9 flex-1 rounded-xl border-white/50 bg-white/70"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removeTodo(index)}
+                              aria-label={`Remove task ${index + 1}`}
+                              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-400 transition-colors hover:bg-[#FEE2E2] hover:text-[#EF4444]"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </section>
 
-          <div className={cn(glassCardClass, "p-5")}>
-            <h3 className="text-[15px] font-bold text-slate-900">Quick Note</h3>
+          <section className={cn(glassCardClass, "flex min-h-0 flex-1 flex-col p-5")}>
+            <DashboardPanelHeading icon={StickyNote} title="Notes" />
             <Textarea
               value={dashboardNote}
               onChange={(e) => setDashboardNote(e.target.value)}
               placeholder="Write a quick note for today..."
-              className={cn(glassInsetClass, "mt-3 min-h-[120px] resize-none border-white/50 bg-white/40")}
+              className={cn(
+                glassInsetClass,
+                "mt-4 min-h-[72px] w-full flex-1 resize-none border-white/50 bg-white/40",
+              )}
             />
-          </div>
+          </section>
         </aside>
+
+        {/* Bottom row */}
+        <section className={cn(glassCardClass, "col-span-12 flex flex-col p-5 xl:col-span-4")}>
+          <div className="flex items-center justify-between gap-3">
+            <DashboardPanelHeading icon={GraduationCap} title="Student Admissions" />
+            <span className="rounded-full bg-white/60 px-2.5 py-1 text-[10px] font-semibold text-slate-600">
+              {periodLabel}
+            </span>
+          </div>
+          <ChartContainer config={admissionChartConfig} className="mt-4 h-[160px] w-full">
+            <LineChart data={admissionWeeks} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid vertical={false} strokeDasharray="4 4" stroke="rgba(15,23,42,0.08)" />
+              <XAxis
+                dataKey="label"
+                tickLine={false}
+                axisLine={false}
+                tick={{ fontSize: 10, fill: "#64748B" }}
+              />
+              <YAxis hide />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke="var(--color-value)"
+                strokeWidth={2.5}
+                dot={{ r: 3, fill: "#10B981" }}
+              />
+            </LineChart>
+          </ChartContainer>
+          <div className="mt-4 grid flex-1 grid-cols-1 gap-3">
+            <div className={cn(glassInsetClass, "flex flex-1 flex-col justify-center p-3.5")}>
+              <div className="text-[11px] font-medium text-slate-500">New Admissions</div>
+              <div className="mt-1 font-mono text-[16px] font-bold text-slate-900">{newAdmissions}</div>
+            </div>
+            <div className={cn(glassInsetClass, "flex flex-1 flex-col justify-center p-3.5")}>
+              <div className="text-[11px] font-medium text-slate-500">Total Enquiries</div>
+              <div className="mt-1 font-mono text-[16px] font-bold text-slate-900">{totalEnquiries}</div>
+            </div>
+          </div>
+        </section>
+
+        <section className={cn(glassCardClass, "col-span-12 flex flex-col p-5 xl:col-span-4")}>
+          <div className="flex items-center justify-between gap-3">
+            <DashboardPanelHeading icon={TrendingUp} title="Income vs Expense" />
+            <span className="rounded-full bg-white/60 px-2.5 py-1 text-[10px] font-semibold text-slate-600">
+              {periodLabel}
+            </span>
+          </div>
+          <ChartContainer config={incomeExpenseChartConfig} className="mt-4 h-[160px] w-full">
+            <BarChart data={incomeExpenseWeeks} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid vertical={false} strokeDasharray="4 4" stroke="rgba(15,23,42,0.08)" />
+              <XAxis
+                dataKey="label"
+                tickLine={false}
+                axisLine={false}
+                tick={{ fontSize: 10, fill: "#64748B" }}
+              />
+              <YAxis hide />
+              <ChartTooltip
+                content={
+                  <ChartTooltipContent
+                    formatter={(value, name) => [
+                      formatInr(Number(value)),
+                      String(name) === "income" ? "Income" : "Expense",
+                    ]}
+                  />
+                }
+              />
+              <Bar dataKey="income" fill="var(--color-income)" radius={[4, 4, 0, 0]} maxBarSize={14} />
+              <Bar dataKey="expense" fill="var(--color-expense)" radius={[4, 4, 0, 0]} maxBarSize={14} />
+            </BarChart>
+          </ChartContainer>
+          <div className="mt-4 grid grid-cols-1 gap-3">
+            <div className="rounded-2xl bg-[#D1F2E1] p-3.5">
+              <div className="text-[11px] font-medium text-slate-700">Total Income</div>
+              <div className={cn(dashboardAmountCompactClass, "mt-1 whitespace-nowrap text-slate-900")}>
+                {formatInr(periodIncome)}
+              </div>
+            </div>
+            <div className="rounded-2xl bg-[#3B5998] p-3.5 text-white">
+              <div className="text-[11px] font-medium text-white/90">Total Expense</div>
+              <div className={cn(dashboardAmountCompactClass, "mt-1 whitespace-nowrap text-white")}>
+                {formatInr(expenseTotal)}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className={cn(glassCardClass, "col-span-12 flex flex-col p-5 xl:col-span-4")}>
+          <div className="flex items-center justify-between gap-3">
+            <DashboardPanelHeading icon={ArrowDownToLine} title="Recent Transactions" />
+            <Link
+              to="/tenant/finance"
+              search={{ tab: "receive" }}
+              className="text-[12px] font-semibold text-[#2563EB] hover:underline"
+            >
+              View All
+            </Link>
+          </div>
+          <div className="mt-4 flex-1 divide-y divide-white/50">
+            {recentReceipts.length === 0 && (
+              <div className="py-6 text-center text-[12px] text-slate-500">No receipts logged yet</div>
+            )}
+            {recentReceipts.map((payment) => (
+              <div key={payment.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#D1F2E1]">
+                  <ArrowUpRight className="h-4 w-4 text-[#10B981]" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[13px] font-semibold text-slate-900">{payment.name}</div>
+                  <div className="mt-0.5 text-[11px] text-slate-500">
+                    {payment.cat} · {payment.mode}
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="font-mono text-[13px] font-semibold text-slate-900">
+                    {formatInr(payment.amount)}
+                  </div>
+                  <div className="mt-0.5 text-[10px] text-slate-500">{payment.time}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <footer
+          className={cn(
+            glassPanelClass,
+            "col-span-12 flex flex-wrap items-center justify-between gap-4 rounded-2xl px-5 py-3.5",
+          )}
+        >
+          <div className="min-w-0">
+            <div className="truncate text-[13px] font-bold uppercase tracking-wide text-slate-900">
+              {tenantName}
+            </div>
+            <div className="mt-0.5 text-[11px] text-slate-500">Tenant administration workspace</div>
+          </div>
+          <div className="flex flex-wrap items-center gap-4 text-[12px] text-slate-600">
+            <span className="inline-flex items-center gap-1.5">
+              <Calendar className="h-3.5 w-3.5 text-slate-500" />
+              {nowLabel.date}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Clock className="h-3.5 w-3.5 text-slate-500" />
+              {nowLabel.time}
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <div className="text-[13px] font-semibold text-slate-900">{displayName}</div>
+              <div className="text-[11px] text-slate-500">Administrator</div>
+            </div>
+            <Link
+              to="/tenant/settings"
+              aria-label="Settings"
+              className="glass-inset grid h-10 w-10 place-items-center rounded-xl text-slate-600 transition-colors hover:text-[#2563EB]"
+            >
+              <Settings className="h-[18px] w-[18px]" />
+            </Link>
+          </div>
+        </footer>
       </div>
+    </div>
+  );
+}
+
+function DashboardPanelHeading({
+  icon: Icon,
+  title,
+}: {
+  icon: typeof Users;
+  title: string;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="grid h-8 w-8 place-items-center rounded-lg bg-white/60 shadow-sm">
+        <Icon className="h-4 w-4 text-slate-700" strokeWidth={2} />
+      </span>
+      <h3 className="text-[12px] font-bold uppercase tracking-wider text-slate-900">{title}</h3>
     </div>
   );
 }
@@ -1068,11 +1347,6 @@ export function SchoolDashboard() {
 
   const recentReceipts = useMemo(() => filteredPayments.slice(0, 5), [filteredPayments]);
 
-  const overdueWatchlist = useMemo(
-    () => [...overdueStudents].sort((a, b) => b.due - a.due).slice(0, 5),
-    [overdueStudents],
-  );
-
   const unreadNotifications = useMemo(
     () => notifications.filter((n) => !n.read).length,
     [notifications],
@@ -1104,10 +1378,8 @@ export function SchoolDashboard() {
         inBank={inBank}
         totalBalance={totalBalance}
         overdueStudents={overdueStudents}
-        overdueWatchlist={overdueWatchlist}
         recentReceipts={recentReceipts}
         unreadNotifications={unreadNotifications}
-        notifications={notifications}
         dashboardTodos={dashboardTodos}
         setDashboardTodos={setDashboardTodos}
         dashboardNote={dashboardNote}
@@ -1166,14 +1438,6 @@ function buildClassDivisionIndex(classNames: string[]) {
   return gradeMap;
 }
 
-const directoryFilterPillClass = (active: boolean) =>
-  cn(
-    "shrink-0 rounded-full px-3 py-1.5 text-[12px] font-semibold transition-colors",
-    active
-      ? "bg-[#2563EB] text-white shadow-sm"
-      : "border border-[#E5E5E5] bg-[#DBEAFE] text-[#0F172A]/70 hover:border-[#2563EB]/25 hover:bg-[#BFDBFE] hover:text-[#0F172A]",
-  );
-
 const phoneDigits = (raw?: string) => (raw ?? "").replace(/[^0-9]/g, "");
 
 const formatPhone = (raw?: string) => {
@@ -1228,7 +1492,7 @@ function personInitials(name: string) {
 }
 
 const directoryStatCardClass =
-  "flex min-w-0 flex-1 flex-row items-center justify-between gap-2 p-2.5 md:min-h-[108px] md:flex-col md:items-stretch md:justify-between md:p-6";
+  "flex min-w-0 w-full flex-row items-center justify-between gap-2 p-2.5 md:min-h-[108px] md:flex-col md:items-stretch md:justify-between md:p-6";
 const directoryStatLabelClass =
   "text-[8px] font-semibold uppercase leading-tight tracking-wider md:text-[10px]";
 const directoryStatValueClass =
@@ -1372,7 +1636,10 @@ function StudentsDirectoryTable({
             {["Student", "Class", "Status", "Guardian & Contact", "Fees Status"].map((header) => (
               <th
                 key={header}
-                className="border-b border-slate-100 px-4 pb-4 pt-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400 sm:px-6 sm:pt-5"
+                className={cn(
+                  "border-b border-slate-100 px-4 pb-4 pt-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400 sm:px-6 sm:pt-5",
+                  header === "Fees Status" && "text-right",
+                )}
               >
                 {header}
               </th>
@@ -1448,7 +1715,7 @@ function StudentsDirectoryTable({
                   </div>
                 </td>
                 <td className="px-4 py-3.5 align-middle sm:px-6">
-                  <div className="flex w-full items-center justify-between gap-3">
+                  <div className="flex w-full items-center justify-end gap-3">
                     <div className="flex shrink-0 items-center gap-1">
                       <ContactAction
                         icon={MessageCircle}
@@ -1491,7 +1758,9 @@ function StudentsDirectoryTable({
                         }}
                       />
                     </div>
-                    <StudentFeesStatusBadge due={student.due} />
+                    <div className="flex w-[88px] shrink-0 justify-end">
+                      <StudentFeesStatusBadge due={student.due} />
+                    </div>
                   </div>
                 </td>
               </tr>
@@ -1815,7 +2084,7 @@ export function StudentsLedger() {
         ]}
       />
 
-      <div className="hidden min-w-0 flex-row gap-1.5 md:flex md:gap-3">
+      <div className="hidden w-full grid-cols-3 gap-3 md:grid">
         <div className={cn(glassCardClass, directoryStatCardClass)}>
           <div className="flex min-w-0 flex-1 items-center justify-between gap-1 md:items-start md:gap-2">
             <div className={cn(directoryStatLabelClass, "text-slate-500")}>Paid</div>
@@ -1849,11 +2118,11 @@ export function StudentsLedger() {
         </div>
       </div>
 
-      <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <h1 className="w-full shrink-0 text-[18px] font-bold leading-tight tracking-tight text-slate-900 md:text-[28px] md:font-semibold">
+      <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-4">
+        <h1 className="min-w-0 flex-1 text-[18px] font-bold leading-tight tracking-tight text-slate-900 md:text-[28px] md:font-semibold">
           Students Directory
         </h1>
-        <div className="mobile-scrollbar-none flex w-full items-center gap-2 overflow-x-auto md:w-auto md:shrink-0 md:justify-end">
+        <div className="mobile-scrollbar-none flex w-full items-center gap-2 overflow-x-auto md:w-auto md:shrink-0 md:justify-end md:overflow-visible">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button type="button" className={mobileOutlineBtn}>
@@ -1861,7 +2130,12 @@ export function StudentsLedger() {
                 Filter
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 rounded-2xl border-[#E5E5E5] p-2">
+            <DropdownMenuContent
+              align="end"
+              sideOffset={8}
+              collisionPadding={12}
+              className="z-[250] w-56 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+            >
               <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
                 Fees Status
               </DropdownMenuLabel>
@@ -1903,7 +2177,12 @@ export function StudentsLedger() {
                 Export
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52 rounded-2xl border-[#E5E5E5] p-2">
+            <DropdownMenuContent
+              align="end"
+              sideOffset={8}
+              collisionPadding={12}
+              className="z-[250] w-52 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+            >
               <DropdownMenuItem
                 onClick={downloadPdf}
                 className="cursor-pointer gap-2 rounded-xl text-[13px]"
@@ -1944,58 +2223,59 @@ export function StudentsLedger() {
 
       <div className={cn(glassCardClass, "p-4 md:p-5")}>
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:gap-5">
-            <div className="min-w-0 flex-1">
-              <div className="text-[12px] font-medium text-slate-500 md:text-[10px] md:font-semibold md:uppercase md:tracking-wider">
+          <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+            <div className="min-w-0">
+              <div className="mb-1.5 text-[12px] font-medium text-slate-500 md:text-[10px] md:font-semibold md:uppercase md:tracking-wider">
                 Class / Grade
               </div>
-              <div className="mobile-scrollbar-none mt-2 flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setGradeFilter("all")}
-                  className={directoryFilterPillClass(gradeFilter === "all")}
+              <Select value={gradeFilter} onValueChange={setGradeFilter}>
+                <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
+                  <SelectValue placeholder="All classes" />
+                </SelectTrigger>
+                <SelectContent
+                  position="popper"
+                  sideOffset={4}
+                  className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
                 >
-                  All
-                </button>
-                {gradeOptions.map((grade) => (
-                  <button
-                    key={grade}
-                    type="button"
-                    onClick={() => setGradeFilter(grade)}
-                    className={directoryFilterPillClass(gradeFilter === grade)}
-                  >
-                    {grade}
-                  </button>
-                ))}
-              </div>
+                  <SelectItem value="all" className="rounded-md">
+                    All classes
+                  </SelectItem>
+                  {gradeOptions.map((grade) => (
+                    <SelectItem key={grade} value={grade} className="rounded-md">
+                      {grade}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
-            <div className="min-w-0 flex-1">
-              <div className="text-[12px] font-medium text-slate-500 md:text-[10px] md:font-semibold md:uppercase md:tracking-wider">
+            <div className="min-w-0">
+              <div className="mb-1.5 text-[12px] font-medium text-slate-500 md:text-[10px] md:font-semibold md:uppercase md:tracking-wider">
                 Division
               </div>
-              <div className="mobile-scrollbar-none mt-2 flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setDivisionFilter("all")}
-                  className={directoryFilterPillClass(divisionFilter === "all")}
+              <Select
+                value={divisionFilter}
+                onValueChange={setDivisionFilter}
+                disabled={gradeFilter === "all" && divisionOptions.length === 0}
+              >
+                <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
+                  <SelectValue placeholder="All divisions" />
+                </SelectTrigger>
+                <SelectContent
+                  position="popper"
+                  sideOffset={4}
+                  className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
                 >
-                  All
-                </button>
-                {divisionOptions.map((division) => (
-                  <button
-                    key={division}
-                    type="button"
-                    onClick={() => setDivisionFilter(division)}
-                    className={directoryFilterPillClass(divisionFilter === division)}
-                  >
-                    {division}
-                  </button>
-                ))}
-                {divisionOptions.length === 0 && (
-                  <span className="px-1 py-1.5 text-[12px] text-black/40">No divisions configured</span>
-                )}
-              </div>
+                  <SelectItem value="all" className="rounded-md">
+                    All divisions
+                  </SelectItem>
+                  {divisionOptions.map((division) => (
+                    <SelectItem key={division} value={division} className="rounded-md">
+                      {division}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -2445,7 +2725,7 @@ export function StaffRoster() {
         ]}
       />
 
-      <div className="hidden min-w-0 flex-row gap-1.5 md:flex md:gap-3">
+      <div className="hidden w-full grid-cols-3 gap-3 md:grid">
         <div className={cn(glassCardClass, directoryStatCardClass)}>
           <div className="flex min-w-0 flex-1 items-center justify-between gap-1 md:items-start md:gap-2">
             <div className={cn(directoryStatLabelClass, "text-slate-500")}>Teachers</div>
@@ -2482,11 +2762,11 @@ export function StaffRoster() {
         </div>
       </div>
 
-      <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <h1 className="w-full shrink-0 text-[18px] font-bold leading-tight tracking-tight text-slate-900 md:text-[28px] md:font-semibold">
+      <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-4">
+        <h1 className="min-w-0 flex-1 text-[18px] font-bold leading-tight tracking-tight text-slate-900 md:text-[28px] md:font-semibold">
           Staff Directory
         </h1>
-        <div className="mobile-scrollbar-none flex w-full items-center gap-2 overflow-x-auto md:w-auto md:shrink-0 md:justify-end">
+        <div className="mobile-scrollbar-none flex w-full items-center gap-2 overflow-x-auto md:w-auto md:shrink-0 md:justify-end md:overflow-visible">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button type="button" className={mobileOutlineBtn}>
@@ -2494,7 +2774,12 @@ export function StaffRoster() {
                 Filter
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 rounded-2xl border-[#E5E5E5] p-2">
+            <DropdownMenuContent
+              align="end"
+              sideOffset={8}
+              collisionPadding={12}
+              className="z-[250] w-56 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+            >
               <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
                 Department
               </DropdownMenuLabel>
@@ -2620,72 +2905,89 @@ export function StaffRoster() {
         })}
       </div>
 
-      <div className="mobile-scrollbar-none hidden overflow-x-auto md:block">
-        <div className={cn(glassTableWrapClass, "p-4 sm:p-6")}>
-        <table className="w-full min-w-[640px] border-collapse text-left">
-          <thead>
-            <tr>
-              {["Name", "Role", "Department", "Status"].map((header) => (
-                <th
-                  key={header}
-                  className="border-b border-slate-100 pb-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400"
-                >
-                  {header}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filteredStaff.length === 0 && (
+      <div className="mobile-scrollbar-none hidden w-full overflow-x-auto md:block">
+        <div className={glassTableWrapClass}>
+          <table className="w-full min-w-[640px] table-fixed border-collapse text-left">
+            <colgroup>
+              <col className="w-[34%]" />
+              <col className="w-[24%]" />
+              <col className="w-[24%]" />
+              <col className="w-[18%]" />
+            </colgroup>
+            <thead>
               <tr>
-                <td colSpan={4} className="py-10 text-center text-[13px] text-black/55">
-                  No staff records match the current filters.
-                </td>
+                {["Name", "Role", "Department", "Status"].map((header) => (
+                  <th
+                    key={header}
+                    className="border-b border-slate-100 px-4 pb-4 pt-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400 sm:px-6 sm:pt-5"
+                  >
+                    {header}
+                  </th>
+                ))}
               </tr>
-            )}
-            {filteredStaff.map((member) => (
-              <tr
-                key={member.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => openStaff(member.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    openStaff(member.id);
-                  }
-                }}
-                aria-label={`Open profile for ${member.name}`}
-                className="cursor-pointer border-b border-slate-50 transition-colors last:border-0 hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2563EB]"
-              >
-                <td className="py-3.5 pr-4 align-middle">
-                  <div className="flex min-w-0 items-center gap-3">
-                    {member.photoUrl ? (
-                      <img
-                        src={member.photoUrl}
-                        alt=""
-                        className="h-10 w-10 shrink-0 rounded-xl object-cover"
-                      />
-                    ) : (
-                      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-black text-[12px] font-semibold text-white">
-                        {personInitials(member.name)}
+            </thead>
+            <tbody>
+              {filteredStaff.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={4}
+                    className="px-4 py-10 text-center text-[13px] text-black/55 sm:px-6"
+                  >
+                    No staff records match the current filters.
+                  </td>
+                </tr>
+              )}
+              {filteredStaff.map((member) => (
+                <tr
+                  key={member.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openStaff(member.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      openStaff(member.id);
+                    }
+                  }}
+                  aria-label={`Open profile for ${member.name}`}
+                  className="cursor-pointer border-b border-slate-50 transition-colors last:border-0 hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2563EB]"
+                >
+                  <td className="px-4 py-3.5 align-middle sm:px-6">
+                    <div className="flex min-w-0 items-center gap-3">
+                      {member.photoUrl ? (
+                        <img
+                          src={member.photoUrl}
+                          alt=""
+                          className="h-10 w-10 shrink-0 rounded-xl object-cover"
+                        />
+                      ) : (
+                        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-black text-[12px] font-semibold text-white">
+                          {personInitials(member.name)}
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <div className="truncate text-[13.5px] font-semibold text-black">
+                          {member.name}
+                        </div>
+                        <div className="mt-0.5 truncate font-mono text-[10.5px] text-black/45">
+                          {member.id}
+                        </div>
                       </div>
-                    )}
-                    <div className="min-w-0">
-                      <div className="truncate text-[13.5px] font-semibold text-black">{member.name}</div>
-                      <div className="mt-0.5 truncate font-mono text-[10.5px] text-black/45">{member.id}</div>
                     </div>
-                  </div>
-                </td>
-                <td className="py-3.5 pr-4 align-middle text-[13px] text-black/75">{member.role}</td>
-                <td className="py-3.5 pr-4 align-middle text-[13px] text-black/75">{member.dept}</td>
-                <td className="py-3.5 pr-4 align-middle">
-                  <EnrollmentStatusBadge active={member.active} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  </td>
+                  <td className="px-4 py-3.5 align-middle text-[13px] text-black/75 sm:px-6">
+                    <span className="block truncate">{member.role}</span>
+                  </td>
+                  <td className="px-4 py-3.5 align-middle text-[13px] text-black/75 sm:px-6">
+                    <span className="block truncate">{member.dept}</span>
+                  </td>
+                  <td className="px-4 py-3.5 align-middle sm:px-6">
+                    <EnrollmentStatusBadge active={member.active} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -2809,141 +3111,569 @@ export function StaffRoster() {
 }
 
 export function FinanceModule() {
-  type FinanceTabKey = "receive" | "make" | "analytics" | "ledger" | "pl" | "balance";
+  type FinanceView =
+    | "overview"
+    | "receive"
+    | "make"
+    | "analytics"
+    | "ledger"
+    | "pl"
+    | "balance"
+    | "fees"
+    | "salary"
+    | "daybook";
 
+  const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/finance" });
-  const [tab, setTab] = useState<FinanceTabKey>(search.tab ?? "receive");
-  const [sectionOpen, setSectionOpen] = useState(false);
+  const [view, setView] = useState<FinanceView>(search.tab ?? "overview");
 
   useEffect(() => {
-    if (search.tab) {
-      setTab(search.tab);
+    if (search.tab === "receive" || search.tab === "make") {
+      setView(search.tab);
+    } else if (!search.tab) {
+      setView((current) =>
+        current === "receive" || current === "make" ? "overview" : current,
+      );
     }
   }, [search.tab]);
 
-  const tabs: {
-    k: FinanceTabKey;
-    l: string;
-    icon: typeof ArrowDownToLine;
-  }[] = [
-    { k: "receive", l: "Receive Payment", icon: ArrowDownToLine },
-    { k: "make", l: "Make Payment", icon: ArrowUpFromLine },
-    { k: "analytics", l: "Ledger Analytics", icon: ChartPie },
-    { k: "ledger", l: "Ledger", icon: BookOpen },
-    { k: "pl", l: "Profit & Loss Account", icon: TrendingUp },
-    { k: "balance", l: "Balance Sheet", icon: Scale },
-  ];
+  const openView = (next: FinanceView) => {
+    setView(next);
+    if (next === "receive" || next === "make") {
+      navigate({ to: "/tenant/finance", search: { tab: next }, replace: true });
+      return;
+    }
+    navigate({ to: "/tenant/finance", search: {}, replace: true });
+  };
 
-  const activeTab = tabs.find((t) => t.k === tab) ?? tabs[0];
-  const ActiveIcon = activeTab.icon;
+  const backToOverview = () => {
+    setView("overview");
+    navigate({ to: "/tenant/finance", search: {}, replace: true });
+  };
 
-  const selectSection = (key: FinanceTabKey) => {
-    setTab(key);
-    setSectionOpen(false);
+  if (view === "receive") {
+    return (
+      <div className="w-full space-y-4 sm:space-y-5">
+        <FinanceFlowHeader
+          title="Receive Payment"
+          description="Capture inbound fee receipts"
+          onBack={backToOverview}
+        />
+        <ReceivePayment />
+      </div>
+    );
+  }
+
+  if (view === "make") {
+    return (
+      <div className="w-full space-y-4 sm:space-y-5">
+        <FinanceFlowHeader
+          title="Make Payment"
+          description="Authorise outbound disbursals"
+          onBack={backToOverview}
+        />
+        <MakePayment />
+      </div>
+    );
+  }
+
+  if (view === "analytics") {
+    return (
+      <div className="w-full space-y-4 sm:space-y-5">
+        <FinanceFlowHeader
+          title="Ledger Analytics"
+          description="Income and outflow distribution"
+          onBack={backToOverview}
+        />
+        <LedgerAnalytics />
+      </div>
+    );
+  }
+
+  if (view === "ledger") {
+    return (
+      <div className="w-full space-y-4 sm:space-y-5">
+        <FinanceFlowHeader title="Ledger" description="General ledger" onBack={backToOverview} />
+        <GeneralLedgerReport />
+      </div>
+    );
+  }
+
+  if (view === "pl") {
+    return (
+      <div className="w-full space-y-4 sm:space-y-5">
+        <FinanceFlowHeader
+          title="Profit & Loss"
+          description="Income versus operating expense"
+          onBack={backToOverview}
+        />
+        <ProfitLossReport />
+      </div>
+    );
+  }
+
+  if (view === "balance") {
+    return (
+      <div className="w-full space-y-4 sm:space-y-5">
+        <FinanceFlowHeader
+          title="Balance Sheet"
+          description="Position statement"
+          onBack={backToOverview}
+        />
+        <BalanceSheetReport />
+      </div>
+    );
+  }
+
+  if (view === "fees") {
+    return (
+      <div className="w-full space-y-4 sm:space-y-5">
+        <FinanceFlowHeader
+          title="Fees Report"
+          description="Student fee collections and outstanding dues"
+          onBack={backToOverview}
+        />
+        <FeesReport />
+      </div>
+    );
+  }
+
+  if (view === "salary") {
+    return (
+      <div className="w-full space-y-4 sm:space-y-5">
+        <FinanceFlowHeader
+          title="Salary Report"
+          description="Staff payroll register and salary obligations"
+          onBack={backToOverview}
+        />
+        <SalaryReport />
+      </div>
+    );
+  }
+
+  if (view === "daybook") {
+    return (
+      <div className="w-full space-y-4 sm:space-y-5">
+        <FinanceFlowHeader
+          title="Day Book"
+          description="Chronological cash book of receipts and payments"
+          onBack={backToOverview}
+        />
+        <DayBookReport />
+      </div>
+    );
+  }
+
+  return <FinanceOverview onOpenView={openView} />;
+}
+
+function FinanceFlowHeader({
+  title,
+  description,
+  onBack,
+}: {
+  title: string;
+  description: string;
+  onBack: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <button
+        type="button"
+        onClick={onBack}
+        className={cn(
+          glassInsetClass,
+          "inline-flex h-10 items-center gap-1.5 px-3 text-[13px] font-semibold text-slate-700 transition-colors hover:text-[#2563EB]",
+        )}
+      >
+        <ChevronLeft className="h-4 w-4" />
+        Finance overview
+      </button>
+      <div className="min-w-0">
+        <MobileSectionTitle className="md:hidden">{title}</MobileSectionTitle>
+        <div className="hidden md:block">
+          <div className="text-[15px] font-bold text-slate-900">{title}</div>
+          <p className="text-[12px] text-slate-500">{description}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FinanceOverview({
+  onOpenView,
+}: {
+  onOpenView: (
+    view:
+      | "receive"
+      | "make"
+      | "analytics"
+      | "ledger"
+      | "pl"
+      | "balance"
+      | "fees"
+      | "salary"
+      | "daybook",
+  ) => void;
+}) {
+  const { payments, academicYear } = useTenantStore();
+  const { session } = useAuth();
+  const schoolName = session?.tenantName ?? "Silver Hills Global";
+  const [incomePeriod, setIncomePeriod] = useState<PaymentPeriod>("this_month");
+  const [customRange, setCustomRange] = useState<CustomDateRange>({ from: "", to: "" });
+
+  const filteredPayments = useMemo(
+    () => filterPaymentsByPeriod(payments, incomePeriod, customRange),
+    [payments, incomePeriod, customRange],
+  );
+
+  const incomeSegments = useMemo(() => {
+    const buckets = new Map<string, number>();
+    for (const payment of filteredPayments) {
+      const key = payment.cat || "Other";
+      buckets.set(key, (buckets.get(key) ?? 0) + payment.amount);
+    }
+    const rows = Array.from(buckets.entries())
+      .map(([label, value]) => ({ label, value }))
+      .sort((a, b) => b.value - a.value);
+    if (rows.length) return rows;
+    return LEDGER_INCOME_SEGMENTS;
+  }, [filteredPayments]);
+
+  const incomeTotal = incomeSegments.reduce((sum, item) => sum + item.value, 0);
+
+  const expenseSegments = useMemo(
+    () => OPERATING_EXPENSES.map((item) => ({ label: item.account, value: item.amount })),
+    [],
+  );
+
+  const expenseChartConfig = {
+    value: { label: "Expense" },
+  } satisfies ChartConfig;
+
+  const overdueBills = useMemo(
+    () =>
+      ACCOUNTS_PAYABLE.map((item) => ({
+        name: item.payee,
+        amount: item.amount,
+        due: /payroll|salary/i.test(item.payee) ? "25 May" : "18 May",
+      })),
+    [],
+  );
+
+  const exportTransactionsCsv = () => {
+    if (!payments.length) {
+      toast.error("Nothing to export · no transactions yet");
+      return;
+    }
+    downloadCsv(
+      "finance-transactions.csv",
+      ["Transaction ID", "Account", "Category", "Mode", "Amount (INR)", "Time", "Status", "Narration"],
+      payments.map((p) => [
+        p.id,
+        p.name,
+        p.cat,
+        p.mode,
+        p.amount,
+        p.time,
+        "Complete",
+        p.narration ?? "",
+      ]),
+    );
+    toast.success("Transactions exported", {
+      description: `${payments.length} row${payments.length === 1 ? "" : "s"} saved to CSV`,
+    });
+  };
+
+  const exportTransactionsPdf = () => {
+    if (!payments.length) {
+      toast.error("Nothing to export · no transactions yet");
+      return;
+    }
+    downloadTablePdf({
+      filename: "finance-transactions.pdf",
+      title: "Finance Transactions",
+      subtitle: `${schoolName} · ${academicYear}`,
+      headers: ["ID", "Account", "Category", "Mode", "Amount", "Time", "Status", "Narration"],
+      rows: payments.map((p) => [
+        p.id,
+        p.name,
+        p.cat,
+        p.mode,
+        p.amount.toLocaleString("en-IN"),
+        p.time,
+        "Complete",
+        p.narration ?? "",
+      ]),
+    });
+    toast.success("Transactions PDF downloaded");
   };
 
   return (
-    <div className="w-full space-y-6 lg:space-y-6">
-      <MobileSectionTitle className="md:hidden">Finance</MobileSectionTitle>
-
-      <button
-        type="button"
-        onClick={() => setSectionOpen(true)}
-        className={cn(
-          premiumCardClass,
-          "flex w-full items-center gap-3 p-4 text-left transition-colors hover:border-slate-200 md:hidden",
-        )}
-      >
-        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#2563EB] text-white shadow-sm">
-          <ActiveIcon className="h-5 w-5" strokeWidth={2} />
+    <div className="w-full space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <MobileSectionTitle className="md:hidden">Finance</MobileSectionTitle>
+          <h2 className="hidden text-[18px] font-bold tracking-tight text-slate-900 md:block">
+            Finance overview
+          </h2>
+          <p className="mt-1 hidden text-[12px] text-slate-500 md:block">
+            Receive and make payments, review transactions, and track income vs expense
+          </p>
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="text-[12px] font-medium text-slate-500">Finance Section</div>
-          <div className="truncate text-[15px] font-semibold text-slate-900">{activeTab.l}</div>
-        </div>
-        <ChevronDown className="h-5 w-5 shrink-0 text-slate-400" />
-      </button>
-
-      <Sheet open={sectionOpen} onOpenChange={setSectionOpen}>
-        <SheetContent
-          side="bottom"
-          className="max-h-[85dvh] rounded-t-[2rem] border-t border-slate-100 bg-white p-0 pb-[calc(1rem+env(safe-area-inset-bottom))] md:hidden [&>button]:hidden"
-        >
-          <div className="flex justify-center pt-3">
-            <div className="h-1 w-10 rounded-full bg-slate-200" />
-          </div>
-          <SheetHeader className="space-y-1 px-5 pb-4 pt-2 text-left">
-            <SheetTitle className="text-[22px] font-bold text-slate-900">Select Section</SheetTitle>
-            <SheetDescription className="text-[13px] text-slate-500">
-              Navigate to different finance areas
-            </SheetDescription>
-          </SheetHeader>
-          <div className="mobile-scrollbar-none max-h-[min(52dvh,420px)] space-y-2 overflow-y-auto px-4 pb-2">
-            {tabs.map((t) => {
-              const Icon = t.icon;
-              const active = tab === t.k;
-              return (
-                <button
-                  key={t.k}
-                  type="button"
-                  onClick={() => selectSection(t.k)}
-                  className={cn(
-                    "flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left transition-colors",
-                    active
-                      ? "bg-[#2563EB] text-white shadow-sm"
-                      : "bg-slate-50 text-slate-900 hover:bg-[#DBEAFE]",
-                  )}
-                >
-                  <div
-                    className={cn(
-                      "grid h-10 w-10 shrink-0 place-items-center rounded-xl",
-                      active ? "bg-white/20" : "bg-white",
-                    )}
-                  >
-                    <Icon className="h-[18px] w-[18px]" strokeWidth={2} />
-                  </div>
-                  <span className="min-w-0 flex-1 text-[15px] font-medium">{t.l}</span>
-                  {active && (
-                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white text-[#2563EB]">
-                      <Check className="h-4 w-4" strokeWidth={2.5} />
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      <div className="hidden w-full md:block">
-        <div className={cn(glassPanelClass, "grid w-full grid-cols-12 gap-1 p-1.5")}>
-          {tabs.map((t) => {
-            const active = tab === t.k;
-            return (
-              <button
-                key={t.k}
-                type="button"
-                onClick={() => setTab(t.k)}
-                className={cn(
-                  "col-span-2 rounded-xl px-3 py-2.5 text-center text-[12px] font-medium leading-tight transition-all",
-                  active
-                    ? "bg-gradient-to-r from-[#2563EB] to-[#4C69A4] text-white shadow-sm"
-                    : "text-slate-600 hover:bg-white/50 hover:text-slate-900",
-                )}
-              >
-                {t.l}
-              </button>
-            );
-          })}
+        <div className="flex flex-wrap gap-2">
+          {(
+            [
+              { k: "fees" as const, l: "Fees Report" },
+              { k: "salary" as const, l: "Salary Report" },
+              { k: "daybook" as const, l: "Day Book" },
+              { k: "analytics" as const, l: "Analytics" },
+              { k: "ledger" as const, l: "Ledger" },
+              { k: "pl" as const, l: "P&L" },
+              { k: "balance" as const, l: "Balance Sheet" },
+            ] as const
+          ).map((item) => (
+            <button
+              key={item.k}
+              type="button"
+              onClick={() => onOpenView(item.k)}
+              className={cn(
+                glassInsetClass,
+                "px-3 py-1.5 text-[11px] font-semibold text-slate-600 transition-colors hover:text-[#2563EB]",
+              )}
+            >
+              {item.l}
+            </button>
+          ))}
         </div>
       </div>
 
-      {tab === "receive" && <ReceivePayment />}
-      {tab === "make" && <MakePayment />}
-      {tab === "analytics" && <LedgerAnalytics />}
-      {tab === "ledger" && <GeneralLedgerReport />}
-      {tab === "pl" && <ProfitLossReport />}
-      {tab === "balance" && <BalanceSheetReport />}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <button
+          type="button"
+          onClick={() => onOpenView("receive")}
+          className={cn(
+            glassCardClass,
+            "flex min-h-[96px] items-center gap-4 p-5 text-left transition-colors hover:bg-white/70",
+          )}
+        >
+          <span className="grid h-12 w-12 place-items-center rounded-2xl bg-[#D1F2E1]">
+            <ArrowDownToLine className="h-5 w-5 text-[#10B981]" />
+          </span>
+          <div>
+            <div className="text-[15px] font-bold text-slate-900">Receive payment</div>
+            <p className="mt-0.5 text-[12px] text-slate-500">Capture inbound fee receipts</p>
+          </div>
+        </button>
+        <button
+          type="button"
+          onClick={() => onOpenView("make")}
+          className={cn(
+            glassCardClass,
+            "flex min-h-[96px] items-center gap-4 p-5 text-left transition-colors hover:bg-white/70",
+          )}
+        >
+          <span className="grid h-12 w-12 place-items-center rounded-2xl bg-[#DBEAFE]">
+            <ArrowUpFromLine className="h-5 w-5 text-[#2563EB]" />
+          </span>
+          <div>
+            <div className="text-[15px] font-bold text-slate-900">Make payment</div>
+            <p className="mt-0.5 text-[12px] text-slate-500">Authorise outbound disbursals</p>
+          </div>
+        </button>
+      </div>
+
+      <section className={cn(glassCardClass, "p-5")}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-[15px] font-bold text-slate-900">Transactions</h3>
+            <p className="mt-0.5 text-[12px] text-slate-500">
+              {payments.length} receipt{payments.length === 1 ? "" : "s"} · most recent first
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 rounded-full border-[#E5E5E5] bg-white px-3.5 text-[12px]"
+              onClick={exportTransactionsCsv}
+            >
+              <Download className="mr-1.5 h-3.5 w-3.5" />
+              Export CSV
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 rounded-full border-[#E5E5E5] bg-white px-3.5 text-[12px]"
+              onClick={exportTransactionsPdf}
+            >
+              <Printer className="mr-1.5 h-3.5 w-3.5" />
+              PDF
+            </Button>
+          </div>
+        </div>
+
+        <div className="mobile-scrollbar-none mt-4 overflow-x-auto rounded-2xl border border-[#E5E5E5]">
+          <table className="w-full min-w-[720px] text-left text-[12.5px]">
+            <thead>
+              <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5]">
+                {["Transaction", "Account", "Date / Time", "Amount", "Status"].map((header) => (
+                  <th
+                    key={header}
+                    className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/55"
+                  >
+                    {header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {payments.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-3 py-8 text-center text-[12px] text-black/55">
+                    No transactions recorded yet
+                  </td>
+                </tr>
+              )}
+              {payments.map((p) => (
+                <tr key={p.id} className="border-b border-[#F0F0F0] last:border-0">
+                  <td className="px-3 py-3 font-mono text-[11px] text-black/70">{p.id}</td>
+                  <td className="px-3 py-3">
+                    <div className="font-medium text-black">{p.name}</div>
+                    <div className="text-[11px] text-black/50">
+                      {p.cat} · {p.mode}
+                      {p.payerType === "external" ? " · External" : ""}
+                      {p.narration ? ` · ${p.narration}` : ""}
+                    </div>
+                  </td>
+                  <td className="px-3 py-3 font-mono text-[11px] text-black/55">{p.time}</td>
+                  <td className="px-3 py-3 font-mono font-semibold text-black">
+                    ₹ {p.amount.toLocaleString("en-IN")}
+                  </td>
+                  <td className="px-3 py-3">
+                    <span className="inline-flex rounded-full bg-[#D1F2E1] px-2.5 py-1 text-[10px] font-semibold text-[#059669]">
+                      Complete
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <div className="grid grid-cols-12 gap-5">
+        <section className={cn(glassCardClass, "col-span-12 flex flex-col p-5 lg:col-span-4")}>
+          <h3 className="text-[15px] font-bold text-slate-900">Overdue Bills</h3>
+          <p className="mt-0.5 text-[12px] text-slate-500">
+            {overdueBills.length} open obligation{overdueBills.length === 1 ? "" : "s"}
+          </p>
+          <div className="mt-4 flex-1 space-y-2">
+            {overdueBills.map((bill, index) => (
+              <div
+                key={bill.name}
+                className={cn(glassInsetClass, "flex items-center justify-between gap-3 px-3.5 py-2.5")}
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-[13px] font-semibold text-slate-900">
+                    {index + 1}. {bill.name}
+                  </div>
+                  <div className="text-[11px] text-slate-500">Due {bill.due}</div>
+                </div>
+                <div className="shrink-0 font-mono text-[13px] font-semibold text-slate-900">
+                  {formatInr(bill.amount)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className={cn(glassCardClass, "col-span-12 flex flex-col p-5 lg:col-span-4")}>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-[15px] font-bold text-slate-900">Income</h3>
+              <p className="mt-0.5 text-[12px] text-slate-500">Category share</p>
+            </div>
+            <div className="w-[140px] shrink-0">
+              <DashboardPeriodFilter
+                period={incomePeriod}
+                onPeriodChange={setIncomePeriod}
+                customRange={customRange}
+                onCustomRangeChange={setCustomRange}
+              />
+            </div>
+          </div>
+          <div className="mt-4 space-y-3">
+            {incomeSegments.map((segment) => {
+              const pct = incomeTotal > 0 ? Math.round((segment.value / incomeTotal) * 100) : 0;
+              return (
+                <div key={segment.label}>
+                  <div className="mb-1.5 flex items-center justify-between gap-2 text-[12px]">
+                    <span className="font-medium text-slate-700">{segment.label}</span>
+                    <span className="font-mono text-slate-500">{pct}%</span>
+                  </div>
+                  <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className="h-full rounded-full bg-[#2563EB]"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className={cn(glassCardClass, "col-span-12 flex flex-col p-5 lg:col-span-4")}>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-[15px] font-bold text-slate-900">Expense</h3>
+              <p className="mt-0.5 text-[12px] text-slate-500">Operating outflow</p>
+            </div>
+            <span className="inline-flex items-center gap-1 rounded-full bg-white/60 px-2.5 py-1 text-[10px] font-semibold text-slate-600">
+              <Filter className="h-3 w-3" />
+              Filter
+            </span>
+          </div>
+          <ChartContainer config={expenseChartConfig} className="mx-auto mt-2 h-[180px] w-full max-w-[220px]">
+            <PieChart>
+              <ChartTooltip
+                content={
+                  <ChartTooltipContent
+                    formatter={(value, name) => [formatInr(Number(value)), String(name)]}
+                  />
+                }
+              />
+              <Pie
+                data={expenseSegments}
+                dataKey="value"
+                nameKey="label"
+                innerRadius="58%"
+                outerRadius="88%"
+                paddingAngle={2}
+                strokeWidth={0}
+              >
+                {expenseSegments.map((segment, index) => (
+                  <Cell
+                    key={segment.label}
+                    fill={EXPENSE_CHART_COLORS[index % EXPENSE_CHART_COLORS.length]}
+                  />
+                ))}
+              </Pie>
+            </PieChart>
+          </ChartContainer>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            {expenseSegments.slice(0, 4).map((segment) => (
+              <div key={segment.label} className={cn(glassInsetClass, "px-2.5 py-2")}>
+                <div className="truncate text-[10px] font-medium text-slate-500">{segment.label}</div>
+                <div className="mt-0.5 truncate font-mono text-[11px] font-semibold text-slate-900">
+                  {formatInr(segment.value)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
@@ -2953,6 +3683,16 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
     <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-black/55">
       {children}
     </div>
+  );
+}
+
+function categorySuggestsExternal(category: string) {
+  const lower = category.toLowerCase();
+  return (
+    lower.includes("donation") ||
+    lower.includes("grant") ||
+    lower.includes("sponsor") ||
+    lower.includes("other")
   );
 }
 
@@ -2974,14 +3714,19 @@ function ReceivePayment() {
     const fromStudents = Array.from(new Set(students.map((s) => s.cls)));
     return Array.from(new Set([...fromConfig, ...fromStudents]));
   }, [classConfigs, students]);
+  const [payerSource, setPayerSource] = useState<"student" | "external">("student");
+  const [externalPayer, setExternalPayer] = useState("");
   const [cls, setCls] = useState(classes[0] ?? "");
   const studentsInClass = useMemo(() => students.filter((s) => s.cls === cls), [students, cls]);
   const [stu, setStu] = useState(studentsInClass[0]?.name ?? students[0]?.name ?? "");
   const [category, setCategory] = useState(paymentCategories[0]?.label ?? "Tuition Fee");
   const [amount, setAmount] = useState("");
   const [mode, setMode] = useState("Bank");
+  const [narration, setNarration] = useState("");
+  const [historyQuery, setHistoryQuery] = useState("");
 
-  const selected = students.find((s) => s.name === stu);
+  const isExternal = payerSource === "external";
+  const selected = !isExternal ? students.find((s) => s.name === stu) : undefined;
 
   useEffect(() => {
     if (classes.length && !classes.includes(cls)) {
@@ -2990,11 +3735,12 @@ function ReceivePayment() {
   }, [classes, cls]);
 
   useEffect(() => {
+    if (isExternal) return;
     const pool = studentsInClass.length ? studentsInClass : students;
     if (pool.length && !pool.some((s) => s.name === stu)) {
       setStu(pool[0].name);
     }
-  }, [students, studentsInClass, stu]);
+  }, [students, studentsInClass, stu, isExternal]);
 
   useEffect(() => {
     if (paymentCategories.length && !paymentCategories.some((c) => c.label === category)) {
@@ -3020,20 +3766,30 @@ function ReceivePayment() {
   );
 
   const prefill = useMemo(() => {
+    if (isExternal) return undefined;
     const lower = category.toLowerCase();
     if (lower.includes("tuition")) return tuitionFee;
     if (lower.includes("vehicle") || lower.includes("transport") || lower.includes("bus"))
       return matchedRouteFee;
     return undefined;
-  }, [category, tuitionFee, matchedRouteFee]);
+  }, [category, tuitionFee, matchedRouteFee, isExternal]);
 
   useEffect(() => {
     if (prefill !== undefined && prefill > 0) {
       setAmount(String(prefill));
-    } else {
+    } else if (!isExternal) {
       setAmount("");
     }
-  }, [prefill]);
+  }, [prefill, isExternal]);
+
+  const selectCategory = (label: string) => {
+    setCategory(label);
+    if (categorySuggestsExternal(label)) {
+      setPayerSource("external");
+    } else {
+      setPayerSource("student");
+    }
+  };
 
   const handleRecord = () => {
     const value = Number(amount);
@@ -3041,12 +3797,41 @@ function ReceivePayment() {
       toast.error("Enter a valid amount");
       return;
     }
+
+    const now = new Date();
+    const stamp = `Today · ${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
+    const note = narration.trim();
+
+    if (isExternal) {
+      const payer = externalPayer.trim();
+      if (!payer) {
+        toast.error("Enter the donor / payer name");
+        return;
+      }
+      const newPayment: Payment = {
+        id: `RC-${9822 + payments.length}`,
+        name: payer,
+        cat: category,
+        mode,
+        amount: value,
+        time: stamp,
+        payerType: "external",
+        ...(note ? { narration: note } : {}),
+      };
+      setPayments((prev) => [newPayment, ...prev]);
+      toast.success(`Receipt ${newPayment.id} · ₹ ${value.toLocaleString("en-IN")} captured`, {
+        description: `External · ${payer} · ${category}`,
+      });
+      setAmount("");
+      setExternalPayer("");
+      setNarration("");
+      return;
+    }
+
     if (!selected) {
       toast.error("Select a valid student");
       return;
     }
-    const now = new Date();
-    const stamp = `Today · ${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
     const newPayment: Payment = {
       id: `RC-${9822 + payments.length}`,
       name: selected.name,
@@ -3054,6 +3839,9 @@ function ReceivePayment() {
       mode,
       amount: value,
       time: stamp,
+      payerType: "student",
+      className: selected.cls,
+      ...(note ? { narration: note } : {}),
     };
     setPayments((prev) => [newPayment, ...prev]);
     setStudents((prev) =>
@@ -3067,6 +3855,7 @@ function ReceivePayment() {
           : `${selected.name} · balance ₹ ${remaining.toLocaleString("en-IN")}`,
     });
     setAmount("");
+    setNarration("");
   };
 
   const todayTotal = useMemo(
@@ -3077,6 +3866,33 @@ function ReceivePayment() {
     [payments],
   );
 
+  const filteredPayments = useMemo(() => {
+    const q = historyQuery.trim().toLowerCase();
+    if (!q) return payments;
+    return payments.filter((p) => {
+      const haystack = [
+        p.id,
+        p.name,
+        p.cat,
+        p.mode,
+        p.time,
+        p.className ?? "",
+        p.narration ?? "",
+        p.payerType === "external" ? "external donor payer" : "student",
+        String(p.amount),
+        p.amount.toLocaleString("en-IN"),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [payments, historyQuery]);
+
+  const summaryName = isExternal ? externalPayer.trim() || "External payer" : stu;
+  const summaryContext = isExternal ? "External" : cls;
+  const canRecord =
+    Number(amount) > 0 && (isExternal ? externalPayer.trim().length > 0 : Boolean(selected));
+
   return (
     <div className="space-y-4 sm:space-y-5">
       <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
@@ -3084,10 +3900,12 @@ function ReceivePayment() {
           <div>
             <div className="text-title">Inbound Fee Capture</div>
             <p className="mt-1 text-[12px] text-black/55">
-              Post fee receipts to student ledgers · {academicYear}
+              {isExternal
+                ? `Record school income from external payers · ${academicYear}`
+                : `Post fee receipts to student ledgers · ${academicYear}`}
             </p>
           </div>
-          {selected && (
+          {!isExternal && selected && (
             <span
               className={cn(
                 "inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[11.5px] font-semibold",
@@ -3104,35 +3922,88 @@ function ReceivePayment() {
               )}
             </span>
           )}
+          {isExternal && (
+            <span className="inline-flex items-center gap-2 rounded-full bg-[#DBEAFE] px-3.5 py-1.5 text-[11.5px] font-semibold text-black">
+              External income
+            </span>
+          )}
         </div>
 
-        <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <div>
-            <FieldLabel>Class</FieldLabel>
-            <FieldSelect
-              value={cls}
-              onValueChange={(next) => {
-                setCls(next);
-                const first = students.find((s) => s.cls === next);
-                if (first) setStu(first.name);
-              }}
-              options={classes.map((c) => ({ value: c, label: c }))}
-              placeholder="Select class"
-              disabled={classes.length === 0}
-            />
+        <div className="mt-5">
+          <FieldLabel>Received From</FieldLabel>
+          <div className="flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1 sm:max-w-md">
+            {(
+              [
+                { key: "student" as const, label: "Student" },
+                { key: "external" as const, label: "External payer" },
+              ] as const
+            ).map((option) => {
+              const active = payerSource === option.key;
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => setPayerSource(option.key)}
+                  className={cn(
+                    "flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors",
+                    active ? "bg-black text-white" : "text-black/65 hover:text-black",
+                  )}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
           </div>
-          <div>
-            <FieldLabel>Student</FieldLabel>
-            <FieldSelect
-              value={stu}
-              onValueChange={setStu}
-              options={(studentsInClass.length ? studentsInClass : students).map((s) => ({
-                value: s.name,
-                label: s.name,
-              }))}
-              placeholder="Select student"
-            />
-          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {isExternal ? (
+            <div className="sm:col-span-2">
+              <FieldLabel>Donor / Payer Name</FieldLabel>
+              <Input
+                value={externalPayer}
+                onChange={(e) => setExternalPayer(e.target.value)}
+                placeholder="e.g. Parent Association · Ravi Kumar"
+                className="h-10"
+              />
+              <p className="mt-1 text-[10.5px] text-black/45">
+                Not linked to a student ledger · counted as school income only
+              </p>
+            </div>
+          ) : (
+            <>
+              <div>
+                <FieldLabel>Class</FieldLabel>
+                <FieldSelect
+                  value={cls}
+                  onValueChange={(next) => {
+                    setCls(next);
+                    const first = students.find((s) => s.cls === next);
+                    if (first) setStu(first.name);
+                  }}
+                  options={classes.map((c) => ({ value: c, label: c }))}
+                  placeholder="Select class"
+                  disabled={classes.length === 0}
+                  searchable
+                  searchPlaceholder="Search class..."
+                />
+              </div>
+              <div>
+                <FieldLabel>Student</FieldLabel>
+                <FieldSelect
+                  value={stu}
+                  onValueChange={setStu}
+                  options={(studentsInClass.length ? studentsInClass : students).map((s) => ({
+                    value: s.name,
+                    label: s.name,
+                  }))}
+                  placeholder="Select student"
+                  searchable
+                  searchPlaceholder="Search student..."
+                />
+              </div>
+            </>
+          )}
           <div>
             <FieldLabel>Amount (₹)</FieldLabel>
             <input
@@ -3156,6 +4027,7 @@ function ReceivePayment() {
                 return (
                   <button
                     key={m}
+                    type="button"
                     onClick={() => setMode(m)}
                     className={`flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors ${
                       active ? "bg-black text-white" : "text-black/65 hover:text-black"
@@ -3182,7 +4054,8 @@ function ReceivePayment() {
               return (
                 <button
                   key={c.id}
-                  onClick={() => setCategory(c.label)}
+                  type="button"
+                  onClick={() => selectCategory(c.label)}
                   className={`rounded-full border px-3.5 py-1.5 text-[12px] font-medium transition-colors ${
                     active
                       ? "border-transparent bg-[#2563EB] text-white"
@@ -3196,14 +4069,30 @@ function ReceivePayment() {
           </div>
         </div>
 
+        <div className="mt-4">
+          <FieldLabel>Narration</FieldLabel>
+          <Textarea
+            value={narration}
+            onChange={(e) => setNarration(e.target.value)}
+            placeholder="Optional note · purpose, reference, or remarks"
+            className="min-h-[72px] w-full resize-none rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[13px]"
+          />
+        </div>
+
         <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-[#ECECEC] bg-[#F4F4F5] p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="text-[12.5px] text-black/65">
-            Receipt for <span className="font-medium text-black">{stu}</span> · {cls} ·{" "}
-            <span className="font-medium text-black">{category}</span> · {mode}
+          <div className="min-w-0 text-[12.5px] text-black/65">
+            <div>
+              Receipt for <span className="font-medium text-black">{summaryName}</span> · {summaryContext} ·{" "}
+              <span className="font-medium text-black">{category}</span> · {mode}
+            </div>
+            {narration.trim() && (
+              <div className="mt-1 truncate text-[11px] text-black/45">“{narration.trim()}”</div>
+            )}
           </div>
           <button
+            type="button"
             onClick={handleRecord}
-            disabled={!Number(amount)}
+            disabled={!canRecord}
             className="w-full shrink-0 rounded-full bg-black px-5 py-2 text-[12.5px] font-semibold text-white shadow-sm transition-colors hover:bg-black/85 disabled:opacity-50 sm:w-auto"
           >
             Record ₹ {(Number(amount) || 0).toLocaleString("en-IN")}
@@ -3216,7 +4105,9 @@ function ReceivePayment() {
           <div>
             <div className="text-title">Payment History</div>
             <p className="mt-1 text-[11.5px] text-black/55">
-              {payments.length} receipts · most recent first
+              {historyQuery.trim()
+                ? `${filteredPayments.length} of ${payments.length} receipts`
+                : `${payments.length} receipts · most recent first`}
             </p>
           </div>
           <div className="rounded-2xl bg-[#F4F4F5] px-3.5 py-2 text-right">
@@ -3229,11 +4120,32 @@ function ReceivePayment() {
           </div>
         </div>
 
+        <div className="relative mt-4">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-black/40" />
+          <Input
+            value={historyQuery}
+            onChange={(e) => setHistoryQuery(e.target.value)}
+            placeholder="Search by payer, student, category, narration, amount…"
+            className="h-10 rounded-xl border-[#E5E5E5] bg-white pl-9 pr-9"
+            aria-label="Search payment history"
+          />
+          {historyQuery && (
+            <button
+              type="button"
+              onClick={() => setHistoryQuery("")}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full text-black/45 transition-colors hover:bg-[#F4F4F5] hover:text-black"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+
         <div className="mobile-scrollbar-none mt-4 overflow-x-auto rounded-2xl border border-[#E5E5E5]">
           <table className="w-full min-w-[640px] text-left text-[12.5px]">
             <thead>
               <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5]">
-                {["Student", "Category", "Mode", "Amount", "Time", ""].map((header) => (
+                {["Account", "Category", "Mode", "Amount", "Time", ""].map((header) => (
                   <th
                     key={header || "action"}
                     className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/55 last:text-right"
@@ -3244,16 +4156,30 @@ function ReceivePayment() {
               </tr>
             </thead>
             <tbody>
-              {payments.length === 0 && (
+              {filteredPayments.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-3 py-8 text-center text-[12px] text-black/55">
-                    No receipts recorded yet
+                    {payments.length === 0
+                      ? "No receipts recorded yet"
+                      : "No receipts match your search"}
                   </td>
                 </tr>
               )}
-              {payments.map((p) => (
+              {filteredPayments.map((p) => (
                 <tr key={p.id} className="border-b border-[#F0F0F0] last:border-0">
-                  <td className="px-3 py-3 font-medium text-black">{p.name}</td>
+                  <td className="px-3 py-3">
+                    <div className="font-medium text-black">{p.name}</div>
+                    <div className="text-[11px] text-black/45">
+                      {p.payerType === "external"
+                        ? "External payer"
+                        : p.className
+                          ? p.className
+                          : "Student"}
+                    </div>
+                    {p.narration && (
+                      <div className="mt-0.5 line-clamp-1 text-[11px] text-black/40">{p.narration}</div>
+                    )}
+                  </td>
                   <td className="px-3 py-3 text-black/70">{p.cat}</td>
                   <td className="px-3 py-3 text-black/70">{p.mode}</td>
                   <td className="px-3 py-3 font-mono font-semibold text-black">
@@ -3629,20 +4555,6 @@ function MakePayment() {
   );
 }
 
-const LEDGER_INCOME_SEGMENTS = [
-  { label: "Tuition", value: 1_840_000 },
-  { label: "Transport", value: 320_000 },
-  { label: "Donations", value: 95_000 },
-  { label: "Other", value: 42_000 },
-];
-
-const LEDGER_OUTFLOW_SEGMENTS = [
-  { label: "Salaries", value: 1_220_000 },
-  { label: "Vehicle Upkeep", value: 184_000 },
-  { label: "Utilities", value: 88_000 },
-  { label: "Rent", value: 240_000 },
-];
-
 function LedgerAnalytics() {
   return (
     <div className="grid grid-cols-12 gap-3 sm:gap-4 lg:gap-5">
@@ -3693,6 +4605,8 @@ export function SchoolSettings() {
     setTransportVehicles,
     paymentCategories,
     setPaymentCategories,
+    academicYears,
+    setAcademicYears,
     academicYear,
     setAcademicYear,
     themeSettings,
@@ -3731,12 +4645,14 @@ export function SchoolSettings() {
       </div>
 
       <div className="grid grid-cols-12 gap-5">
-        <div className="col-span-12 space-y-5 md:col-span-6">
+        <div className="col-span-12">
           <VehicleCard
             transportVehicles={transportVehicles}
             setTransportVehicles={setTransportVehicles}
             transportRoutes={transportRoutes}
           />
+        </div>
+        <div className="col-span-12 md:col-span-6">
           <TransportCard
             transportRoutes={transportRoutes}
             setTransportRoutes={setTransportRoutes}
@@ -3745,9 +4661,15 @@ export function SchoolSettings() {
           />
         </div>
         <div className="col-span-12 md:col-span-6">
-          <CategoriesCard
+          <FeeCategoriesCard
             paymentCategories={paymentCategories}
             setPaymentCategories={setPaymentCategories}
+          />
+        </div>
+        <div className="col-span-12">
+          <CategoriesCard
+            academicYears={academicYears}
+            setAcademicYears={setAcademicYears}
             academicYear={academicYear}
             setAcademicYear={setAcademicYear}
             themeSettings={themeSettings}
@@ -5093,49 +6015,242 @@ function TransportCard({
   );
 }
 
-function CategoriesCard({
+function FeeCategoriesCard({
   paymentCategories,
   setPaymentCategories,
+}: {
+  paymentCategories: PaymentCategory[];
+  setPaymentCategories: React.Dispatch<React.SetStateAction<PaymentCategory[]>>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<PaymentCategory | null>(null);
+  const [label, setLabel] = useState("");
+
+  const startCreate = () => {
+    setEditingId(null);
+    setLabel("");
+    setOpen(true);
+  };
+
+  const startEdit = (category: PaymentCategory) => {
+    setEditingId(category.id);
+    setLabel(category.label);
+    setOpen(true);
+  };
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const nextLabel = label.trim();
+    if (!nextLabel) {
+      toast.error("Fee category name is required");
+      return;
+    }
+    const duplicate = paymentCategories.some(
+      (c) =>
+        c.label.toLowerCase() === nextLabel.toLowerCase() &&
+        c.id !== editingId,
+    );
+    if (duplicate) {
+      toast.error(`${nextLabel} already exists`);
+      return;
+    }
+
+    if (editingId) {
+      setPaymentCategories((prev) =>
+        prev.map((c) => (c.id === editingId ? { ...c, label: nextLabel } : c)),
+      );
+      toast.success(`Fee category updated · ${nextLabel}`, {
+        description: "Shown on Receive Payment selectors",
+      });
+    } else {
+      const maxNum = paymentCategories.reduce((max, c) => {
+        const match = /^PC-(\d+)$/.exec(c.id);
+        return match ? Math.max(max, Number(match[1])) : max;
+      }, 0);
+      const nextId = `PC-${(maxNum + 1).toString().padStart(3, "0")}`;
+      setPaymentCategories((prev) => [...prev, { id: nextId, label: nextLabel }]);
+      toast.success(`Fee category added · ${nextLabel}`, {
+        description: "Now selectable on Receive Payment",
+      });
+    }
+    setOpen(false);
+  };
+
+  const remove = (category: PaymentCategory) => {
+    setPaymentCategories((prev) => prev.filter((c) => c.id !== category.id));
+    toast.error(`${category.label} removed`, {
+      description: "Existing receipts retain the label",
+    });
+  };
+
+  const confirmDelete = () => {
+    if (!pendingDelete) return;
+    remove(pendingDelete);
+    setPendingDelete(null);
+  };
+
+  return (
+    <OrganicCard tone="white" cornerSide="bl" padded className={workspacePanelClass}>
+      <CardHeader
+        title="Fee Categories"
+        subtitle={`${paymentCategories.length} categories · used on Receive Payment`}
+        actionLabel="Add Fee Category"
+        onAction={startCreate}
+      />
+
+      <div className="mt-4 space-y-2">
+        {paymentCategories.length === 0 && <EmptyRow label="No fee categories yet" />}
+        {paymentCategories.map((category) => (
+          <div
+            key={category.id}
+            className="flex items-center justify-between gap-3 rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5"
+          >
+            <div className="flex min-w-0 items-center gap-2.5">
+              <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[#DBEAFE] text-[10.5px] font-semibold text-[#2563EB]">
+                {category.label.slice(0, 2).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-[13px] font-semibold text-black">{category.label}</div>
+                <div className="font-mono text-[10.5px] uppercase tracking-wider text-black/45">
+                  {category.id}
+                </div>
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={() => startEdit(category)}
+                className="grid h-8 w-8 place-items-center rounded-full text-black/55 transition-colors hover:bg-black hover:text-white"
+                aria-label={`Edit ${category.label}`}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingDelete(category)}
+                className="grid h-8 w-8 place-items-center rounded-full text-black/55 transition-colors hover:bg-[#EF4444] hover:text-white"
+                aria-label={`Delete ${category.label}`}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) {
+            setEditingId(null);
+            setLabel("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm rounded-[1.5rem] border border-[#E5E5E5] bg-white p-6">
+          <DialogHeader>
+            <DialogTitle className="text-[22px] font-semibold text-black">
+              {editingId ? "Edit Fee Category" : "Add Fee Category"}
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
+              Categories appear as chips on Receive Payment · Fee Categories.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={submit} className="mt-4 space-y-4">
+            <div>
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                Category Name
+              </Label>
+              <Input
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                placeholder="e.g. Lab Fee"
+                className="mt-1.5"
+                autoFocus
+              />
+            </div>
+            <DialogFooter className="flex-row justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+                {editingId ? "Save Changes" : "Add Category"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <DeleteConfirmDialog
+        open={Boolean(pendingDelete)}
+        onOpenChange={(next) => {
+          if (!next) setPendingDelete(null);
+        }}
+        title="Delete Fee Category"
+        description={
+          pendingDelete
+            ? `Are you sure you want to remove "${pendingDelete.label}" from fee categories? Existing receipts will keep this label.`
+            : "Are you sure you want to delete this fee category?"
+        }
+        onConfirm={confirmDelete}
+      />
+    </OrganicCard>
+  );
+}
+
+function CategoriesCard({
+  academicYears,
+  setAcademicYears,
   academicYear,
   setAcademicYear,
   themeSettings,
   setThemeSettings,
 }: {
-  paymentCategories: PaymentCategory[];
-  setPaymentCategories: React.Dispatch<React.SetStateAction<PaymentCategory[]>>;
+  academicYears: string[];
+  setAcademicYears: React.Dispatch<React.SetStateAction<string[]>>;
   academicYear: string;
   setAcademicYear: React.Dispatch<React.SetStateAction<string>>;
   themeSettings: ThemeSettings;
   setThemeSettings: React.Dispatch<React.SetStateAction<ThemeSettings>>;
 }) {
-  const [draft, setDraft] = useState("");
-  const [pendingDelete, setPendingDelete] = useState<PaymentCategory | null>(null);
+  const [yearDraft, setYearDraft] = useState("");
+  const [pendingYearDelete, setPendingYearDelete] = useState<string | null>(null);
 
-  const addCategory = (e: React.FormEvent) => {
+  const addAcademicYear = (e: React.FormEvent) => {
     e.preventDefault();
-    const label = draft.trim();
-    if (!label) return;
-    if (paymentCategories.some((c) => c.label.toLowerCase() === label.toLowerCase())) {
-      toast.error(`${label} already exists`);
+    const nextLabel = normalizeAcademicYearLabel(yearDraft);
+    if (!nextLabel) return;
+    if (academicYears.some((y) => y.toLowerCase() === nextLabel.toLowerCase())) {
+      toast.error(`${nextLabel} already exists`);
       return;
     }
-    const nextId = `PC-${(paymentCategories.length + 1).toString().padStart(3, "0")}`;
-    setPaymentCategories((prev) => [...prev, { id: nextId, label }]);
-    toast.success(`Category added · ${label}`, {
-      description: "Now selectable on Receive Payment",
+    setAcademicYears((prev) => [...prev, nextLabel]);
+    setAcademicYear(nextLabel);
+    toast.success(`Academic year added · ${nextLabel}`, {
+      description: "Set as the active academic year",
     });
-    setDraft("");
+    setYearDraft("");
   };
 
-  const removeCategory = (c: PaymentCategory) => {
-    setPaymentCategories((prev) => prev.filter((x) => x.id !== c.id));
-    toast.error(`${c.label} removed`, { description: "Existing receipts retain the label" });
+  const removeAcademicYear = (year: string) => {
+    if (academicYears.length <= 1) {
+      toast.error("At least one academic year is required");
+      return;
+    }
+    const next = academicYears.filter((y) => y !== year);
+    setAcademicYears(next);
+    if (academicYear === year) {
+      setAcademicYear(next[0] ?? year);
+    }
+    toast.error(`${year} removed`);
   };
 
-  const confirmDelete = () => {
-    if (!pendingDelete) return;
-    removeCategory(pendingDelete);
-    setPendingDelete(null);
+  const confirmYearDelete = () => {
+    if (!pendingYearDelete) return;
+    removeAcademicYear(pendingYearDelete);
+    setPendingYearDelete(null);
   };
 
   return (
@@ -5144,26 +6259,68 @@ function CategoriesCard({
         System Constants
       </div>
       <p className="mt-1 text-[12px] text-black/55">
-        Academic year, theme frame, and payment categories for Finance selectors
+        Academic year, theme frame, and navigation dock for the workspace
       </p>
 
       <div className="mt-4 grid gap-3 rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5">
         <div>
-          <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-            Academic Year
-          </Label>
+          <div className="flex items-center justify-between">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              Academic Year
+            </Label>
+            <span className="font-mono text-[10.5px] text-black/45">
+              {academicYears.length} defined
+            </span>
+          </div>
           <FieldSelect
             value={academicYear}
             onValueChange={(y) => {
               setAcademicYear(y);
               toast.success(`Academic year set to ${y}`);
             }}
-            options={ACADEMIC_YEAR_OPTIONS.map((y) => ({ value: y, label: y }))}
+            options={academicYears.map((y) => ({ value: y, label: y }))}
             className="mt-1.5 font-medium"
           />
+
+          <div className="mt-2 flex flex-wrap gap-2">
+            {academicYears.map((y) => (
+              <span
+                key={y}
+                className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-3 py-1 text-[12px] font-semibold text-black"
+              >
+                {y}
+                {y === academicYear && (
+                  <span className="rounded-full bg-[#10B981]/15 px-1.5 py-0.5 text-[9px] font-bold text-[#10B981]">
+                    Active
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setPendingYearDelete(y)}
+                  className="grid h-4 w-4 place-items-center rounded-full text-black/55 hover:bg-black hover:text-white disabled:pointer-events-none disabled:opacity-40"
+                  aria-label={`Remove ${y}`}
+                  disabled={academicYears.length <= 1}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+
+          <form onSubmit={addAcademicYear} className="mt-3 flex gap-2">
+            <Input
+              value={yearDraft}
+              onChange={(e) => setYearDraft(e.target.value)}
+              placeholder="e.g. 2027-28"
+              className="flex-1"
+            />
+            <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+              <Plus className="mr-1 h-3.5 w-3.5" /> Add
+            </Button>
+          </form>
         </div>
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <ThemeSelect
             label="Theme"
             value={themeSettings.mode}
@@ -5191,66 +6348,34 @@ function CategoriesCard({
               toast.success(`Workspace density set to ${density}`);
             }}
           />
-        </div>
-      </div>
-
-      <div className="mt-4">
-        <div className="flex items-center justify-between">
-          <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-            Payment Categories
-          </Label>
-          <span className="font-mono text-[10.5px] text-black/45">
-            {paymentCategories.length} active
-          </span>
-        </div>
-
-        <div className="mt-2 flex flex-wrap gap-2">
-          {paymentCategories.length === 0 && (
-            <span className="text-[12px] text-black/55">No categories defined</span>
-          )}
-          {paymentCategories.map((c) => (
-            <span
-              key={c.id}
-              className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-[#DBEAFE] px-3 py-1 text-[12px] font-semibold text-black"
-            >
-              {c.label}
-              <button
-                type="button"
-                onClick={() => setPendingDelete(c)}
-                className="grid h-4 w-4 place-items-center rounded-full text-black/55 hover:bg-black hover:text-white"
-                aria-label={`Remove ${c.label}`}
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </span>
-          ))}
-        </div>
-
-        <form onSubmit={addCategory} className="mt-3 flex gap-2">
-          <Input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="e.g. Lab Fee"
-            className="flex-1"
+          <ThemeSelect
+            label="Navigation"
+            value={themeSettings.navPlacement ?? "Left"}
+            options={THEME_NAV_PLACEMENT_OPTIONS}
+            onChange={(navPlacement) => {
+              setThemeSettings((prev) => ({ ...prev, navPlacement }));
+              toast.success(`Navigation dock moved to ${navPlacement}`);
+            }}
           />
-          <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
-            <Plus className="mr-1 h-3.5 w-3.5" /> Add
-          </Button>
-        </form>
+        </div>
       </div>
 
       <DeleteConfirmDialog
-        open={Boolean(pendingDelete)}
+        open={Boolean(pendingYearDelete)}
         onOpenChange={(next) => {
-          if (!next) setPendingDelete(null);
+          if (!next) setPendingYearDelete(null);
         }}
-        title="Delete Payment Category"
+        title="Delete Academic Year"
         description={
-          pendingDelete
-            ? `Are you sure you want to remove "${pendingDelete.label}" from payment categories? Existing receipts will keep this label.`
-            : "Are you sure you want to delete this payment category?"
+          pendingYearDelete
+            ? `Are you sure you want to remove "${pendingYearDelete}" from academic years?${
+                pendingYearDelete === academicYear
+                  ? " The next year in the list will become active."
+                  : ""
+              }`
+            : "Are you sure you want to delete this academic year?"
         }
-        onConfirm={confirmDelete}
+        onConfirm={confirmYearDelete}
       />
     </OrganicCard>
   );
@@ -5290,6 +6415,8 @@ function FieldSelect({
   disabled,
   className,
   triggerClassName,
+  searchable = false,
+  searchPlaceholder = "Search…",
 }: {
   value: string;
   onValueChange: (value: string) => void;
@@ -5298,35 +6425,100 @@ function FieldSelect({
   disabled?: boolean;
   className?: string;
   triggerClassName?: string;
+  searchable?: boolean;
+  searchPlaceholder?: string;
 }) {
+  const [open, setOpen] = useState(false);
   const resolvedValue = options.some((o) => o.value === value) ? value : undefined;
+  const selectedLabel = options.find((o) => o.value === resolvedValue)?.label;
+
+  if (!searchable) {
+    return (
+      <div className={className}>
+        <Select value={resolvedValue} onValueChange={onValueChange} disabled={disabled}>
+          <SelectTrigger
+            className={cn(
+              "h-10 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 text-[13px] font-normal text-black shadow-none focus:ring-2 focus:ring-[#2563EB] focus:ring-offset-0",
+              triggerClassName,
+            )}
+          >
+            <SelectValue placeholder={placeholder} />
+          </SelectTrigger>
+          <SelectContent
+            position="popper"
+            className="z-[250] rounded-lg border border-[#E5E5E5] bg-white p-1.5 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+          >
+            {options.map((opt) => (
+              <SelectItem
+                key={opt.value}
+                value={opt.value}
+                className="cursor-pointer rounded-md py-2 pl-3 pr-8 text-[13px] text-black focus:bg-[#DBEAFE] focus:text-black data-[highlighted]:bg-[#DBEAFE] data-[highlighted]:text-black data-[state=checked]:bg-[#2563EB] data-[state=checked]:font-semibold data-[state=checked]:text-white"
+              >
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    );
+  }
 
   return (
     <div className={className}>
-      <Select value={resolvedValue} onValueChange={onValueChange} disabled={disabled}>
-        <SelectTrigger
-          className={cn(
-            "h-10 w-full rounded-2xl border border-[#E5E5E5] bg-white px-3 text-[13px] font-normal text-black shadow-none focus:ring-2 focus:ring-[#2563EB] focus:ring-offset-0",
-            triggerClassName,
-          )}
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            disabled={disabled}
+            className={cn(
+              "flex h-10 w-full items-center justify-between rounded-lg border border-[#E5E5E5] bg-white px-3 text-left text-[13px] font-normal text-black shadow-none transition-colors hover:bg-[#FAFAFA] focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50",
+              triggerClassName,
+            )}
+          >
+            <span className={cn("truncate", !selectedLabel && "text-black/45")}>
+              {selectedLabel ?? placeholder}
+            </span>
+            <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          className="z-[250] w-[var(--radix-popover-trigger-width)] rounded-lg border border-[#E5E5E5] bg-white p-0 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
         >
-          <SelectValue placeholder={placeholder} />
-        </SelectTrigger>
-        <SelectContent
-          position="popper"
-          className="z-[250] rounded-2xl border border-[#E5E5E5] bg-white p-1.5 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
-        >
-          {options.map((opt) => (
-            <SelectItem
-              key={opt.value}
-              value={opt.value}
-              className="cursor-pointer rounded-xl py-2 pl-3 pr-8 text-[13px] text-black focus:bg-[#DBEAFE] focus:text-black data-[highlighted]:bg-[#DBEAFE] data-[highlighted]:text-black data-[state=checked]:bg-[#2563EB] data-[state=checked]:font-semibold data-[state=checked]:text-white"
-            >
-              {opt.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+          <Command className="rounded-lg bg-white">
+            <CommandInput placeholder={searchPlaceholder} className="h-10 text-[13px]" />
+            <CommandList className="max-h-56">
+              <CommandEmpty className="py-4 text-center text-[12px] text-slate-500">
+                No matches found
+              </CommandEmpty>
+              <CommandGroup className="p-1.5">
+                {options.map((opt) => {
+                  const active = opt.value === resolvedValue;
+                  return (
+                    <CommandItem
+                      key={opt.value}
+                      value={opt.label}
+                      onSelect={() => {
+                        onValueChange(opt.value);
+                        setOpen(false);
+                      }}
+                      className={cn(
+                        "cursor-pointer rounded-md px-3 py-2 text-[13px]",
+                        active
+                          ? "bg-[#2563EB] font-semibold text-white data-[selected=true]:bg-[#2563EB] data-[selected=true]:text-white"
+                          : "text-black data-[selected=true]:bg-[#DBEAFE] data-[selected=true]:text-black",
+                      )}
+                    >
+                      <span className="min-w-0 flex-1 truncate">{opt.label}</span>
+                      {active && <Check className="h-4 w-4 shrink-0" />}
+                    </CommandItem>
+                  );
+                })}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }

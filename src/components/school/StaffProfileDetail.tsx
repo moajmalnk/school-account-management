@@ -59,6 +59,7 @@ function StaffPhotoAvatar({
   onPhotoChange: (photoUrl: string | undefined) => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [confirmRemove, setConfirmRemove] = useState(false);
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -82,46 +83,76 @@ function StaffPhotoAvatar({
   };
 
   return (
-    <div className="relative h-16 w-16 shrink-0">
-      {staff.photoUrl ? (
-        <img
-          src={staff.photoUrl}
-          alt={`${staff.name} profile`}
-          className="h-16 w-16 rounded-2xl object-cover"
-        />
-      ) : (
-        <div className="grid h-16 w-16 place-items-center rounded-2xl bg-black text-lg font-semibold text-white">
-          {initials(staff.name)}
-        </div>
-      )}
-      <button
-        type="button"
-        onClick={() => fileInputRef.current?.click()}
-        aria-label={`Change photo for ${staff.name}`}
-        title="Change photo"
-        className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#2563EB] text-white shadow-sm transition-colors hover:bg-black hover:text-[#2563EB]"
-      >
-        <Camera className="h-3.5 w-3.5" />
-      </button>
-      {staff.photoUrl && (
+    <>
+      <div className="relative h-16 w-16 shrink-0">
+        {staff.photoUrl ? (
+          <img
+            src={staff.photoUrl}
+            alt={`${staff.name} profile`}
+            className="h-16 w-16 rounded-2xl object-cover"
+          />
+        ) : (
+          <div className="grid h-16 w-16 place-items-center rounded-2xl bg-black text-lg font-semibold text-white">
+            {initials(staff.name)}
+          </div>
+        )}
         <button
           type="button"
-          onClick={() => onPhotoChange(undefined)}
-          aria-label={`Remove photo for ${staff.name}`}
-          title="Remove photo"
-          className="absolute -left-1 -top-1 grid h-6 w-6 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 shadow-sm transition-colors hover:bg-[#FEE2E2] hover:text-[#EF4444]"
+          onClick={() => fileInputRef.current?.click()}
+          aria-label={`Change photo for ${staff.name}`}
+          title="Change photo"
+          className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#2563EB] text-white shadow-sm transition-colors hover:bg-black hover:text-[#2563EB]"
         >
-          <X className="h-3 w-3" />
+          <Camera className="h-3.5 w-3.5" />
         </button>
-      )}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/webp,image/gif"
-        className="hidden"
-        onChange={handleFile}
-      />
-    </div>
+        {staff.photoUrl && (
+          <button
+            type="button"
+            onClick={() => setConfirmRemove(true)}
+            aria-label={`Remove photo for ${staff.name}`}
+            title="Remove photo"
+            className="absolute -left-1 -top-1 grid h-6 w-6 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 shadow-sm transition-colors hover:bg-[#FEE2E2] hover:text-[#EF4444]"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/gif"
+          className="hidden"
+          onChange={handleFile}
+        />
+      </div>
+
+      <Dialog open={confirmRemove} onOpenChange={setConfirmRemove}>
+        <DialogContent className="max-w-sm rounded-[1.5rem] border border-[#E5E5E5] bg-white p-6">
+          <DialogHeader>
+            <DialogTitle className="text-[22px] font-semibold text-black">
+              Remove photo
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
+              Remove {staff.name}&apos;s profile photo? You can upload a new one anytime.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-5 flex-row justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setConfirmRemove(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="rounded-full bg-[#EF4444] text-white hover:bg-[#DC2626]"
+              onClick={() => {
+                onPhotoChange(undefined);
+                setConfirmRemove(false);
+              }}
+            >
+              Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -677,10 +708,10 @@ export function StaffProfileDetail({
                 onValueChange={(role) => setDraft({ ...draft, role })}
                 disabled={roles.length === 0}
               >
-                <SelectTrigger className="h-10 w-full rounded-2xl border border-[#E5E5E5] bg-white px-3 text-[13px] font-normal text-black shadow-none focus:ring-2 focus:ring-[#2563EB]">
+                <SelectTrigger className="h-10 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 text-[13px] font-normal text-black shadow-none focus:ring-2 focus:ring-[#2563EB]">
                   <SelectValue placeholder="No roles configured" />
                 </SelectTrigger>
-                <SelectContent className="z-[250] rounded-2xl border border-[#E5E5E5] bg-white p-1.5">
+                <SelectContent className="z-[250] rounded-lg border border-[#E5E5E5] bg-white p-1.5">
                   {roles.map((r) => (
                     <SelectItem key={r.id} value={r.title}>
                       {r.title}
@@ -703,10 +734,10 @@ export function StaffProfileDetail({
                   onValueChange={(dept) => setDraft({ ...draft, dept })}
                   disabled={departments.length === 0}
                 >
-                  <SelectTrigger className="h-10 w-full rounded-2xl border border-[#E5E5E5] bg-white px-3 text-[13px] font-normal text-black shadow-none focus:ring-2 focus:ring-[#2563EB]">
+                  <SelectTrigger className="h-10 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 text-[13px] font-normal text-black shadow-none focus:ring-2 focus:ring-[#2563EB]">
                     <SelectValue placeholder="No departments configured" />
                   </SelectTrigger>
-                  <SelectContent className="z-[250] rounded-2xl border border-[#E5E5E5] bg-white p-1.5">
+                  <SelectContent className="z-[250] rounded-lg border border-[#E5E5E5] bg-white p-1.5">
                     {departments.map((d) => (
                       <SelectItem key={d.id} value={d.name}>
                         {d.name}

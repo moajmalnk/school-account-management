@@ -7,6 +7,7 @@ import {
   Download,
   MessageCircle,
   Pencil,
+  Phone,
   Check,
   AlertTriangle,
   CheckCircle2,
@@ -17,9 +18,11 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { OrganicCard } from "@/components/ui/organic-card";
 import type { Student } from "@/lib/tenant-store";
@@ -317,15 +320,25 @@ export function StudentProfileDetail({
                       {draft.phone || "—"}
                     </span>
                   )}
-                  {waHref && (
-                    <a
-                      href={waHref}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#2563EB] px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition-colors hover:bg-[#0F172A] hover:text-white"
-                    >
-                      <MessageCircle className="h-3 w-3" /> Quick Connect
-                    </a>
+                  {phoneDigits.length > 0 && (
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <a
+                        href={`tel:${phoneDigits}`}
+                        className="inline-flex items-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow-sm transition-colors hover:border-[#2563EB]/40 hover:bg-[#DBEAFE] hover:text-[#2563EB]"
+                      >
+                        <Phone className="h-3 w-3" /> Call
+                      </a>
+                      {waHref && (
+                        <a
+                          href={waHref}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="inline-flex items-center gap-1 rounded-full bg-[#2563EB] px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition-colors hover:bg-[#0F172A] hover:text-white"
+                        >
+                          <MessageCircle className="h-3 w-3" /> Quick Connect
+                        </a>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
@@ -384,7 +397,14 @@ export function StudentProfileDetail({
             <BalanceTile balance={fees.balance} overdue={fees.overdue} />
           </div>
 
-          <FeesTable ledger={ledger} />
+          <FeesTable
+            ledger={ledger}
+            student={student}
+            guardian={draft.guardian}
+            phone={draft.phone}
+            schoolName={schoolName}
+            academicYear={academicYear}
+          />
 
           <div className="mt-6">
             <ReceiptsList
@@ -478,6 +498,7 @@ function IdentityHeader({
   active: boolean;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [confirmRemove, setConfirmRemove] = useState(false);
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -501,66 +522,96 @@ function IdentityHeader({
   };
 
   return (
-    <div className="flex items-center gap-4">
-      <div className="relative h-16 w-16 shrink-0">
-        {student.photoUrl ? (
-          <img
-            src={student.photoUrl}
-            alt={`${student.name} profile`}
-            className="h-16 w-16 rounded-2xl object-cover"
-          />
-        ) : (
-          <div className="grid h-16 w-16 place-items-center rounded-2xl bg-black text-lg font-semibold text-white">
-            {initials(student.name)}
-          </div>
-        )}
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          aria-label={`Change photo for ${student.name}`}
-          title="Change photo"
-          className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#2563EB] text-white shadow-sm transition-colors hover:bg-black hover:text-[#2563EB]"
-        >
-          <Camera className="h-3.5 w-3.5" />
-        </button>
-        {student.photoUrl && (
+    <>
+      <div className="flex items-center gap-4">
+        <div className="relative h-16 w-16 shrink-0">
+          {student.photoUrl ? (
+            <img
+              src={student.photoUrl}
+              alt={`${student.name} profile`}
+              className="h-16 w-16 rounded-2xl object-cover"
+            />
+          ) : (
+            <div className="grid h-16 w-16 place-items-center rounded-2xl bg-black text-lg font-semibold text-white">
+              {initials(student.name)}
+            </div>
+          )}
           <button
             type="button"
-            onClick={() => onPhotoChange(undefined)}
-            aria-label={`Remove photo for ${student.name}`}
-            title="Remove photo"
-            className="absolute -left-1 -top-1 grid h-6 w-6 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 shadow-sm transition-colors hover:bg-[#FEE2E2] hover:text-[#EF4444]"
+            onClick={() => fileInputRef.current?.click()}
+            aria-label={`Change photo for ${student.name}`}
+            title="Change photo"
+            className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#2563EB] text-white shadow-sm transition-colors hover:bg-black hover:text-[#2563EB]"
           >
-            <X className="h-3 w-3" />
+            <Camera className="h-3.5 w-3.5" />
           </button>
-        )}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/gif"
-          className="hidden"
-          onChange={handleFile}
-        />
-      </div>
-      <div className="min-w-0">
-        <div className="truncate text-[18px] font-semibold text-black">{student.name}</div>
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          <span className="rounded-full bg-[#F4F4F5] px-2.5 py-0.5 font-mono text-[10.5px] font-medium text-black/65">
-            {student.id}
-          </span>
-          {student.gender && (
-            <span
-              className={`rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold ${
-                student.gender === "F" ? "bg-black text-[#2563EB]" : "bg-black text-white"
-              }`}
+          {student.photoUrl && (
+            <button
+              type="button"
+              onClick={() => setConfirmRemove(true)}
+              aria-label={`Remove photo for ${student.name}`}
+              title="Remove photo"
+              className="absolute -left-1 -top-1 grid h-6 w-6 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 shadow-sm transition-colors hover:bg-[#FEE2E2] hover:text-[#EF4444]"
             >
-              {student.gender}
-            </span>
+              <X className="h-3 w-3" />
+            </button>
           )}
-          <EnrollmentStatusBadge active={active} />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            className="hidden"
+            onChange={handleFile}
+          />
+        </div>
+        <div className="min-w-0">
+          <div className="truncate text-[18px] font-semibold text-black">{student.name}</div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <span className="rounded-full bg-[#F4F4F5] px-2.5 py-0.5 font-mono text-[10.5px] font-medium text-black/65">
+              {student.id}
+            </span>
+            {student.gender && (
+              <span
+                className={`rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold ${
+                  student.gender === "F" ? "bg-black text-[#2563EB]" : "bg-black text-white"
+                }`}
+              >
+                {student.gender}
+              </span>
+            )}
+            <EnrollmentStatusBadge active={active} />
+          </div>
         </div>
       </div>
-    </div>
+
+      <Dialog open={confirmRemove} onOpenChange={setConfirmRemove}>
+        <DialogContent className="max-w-sm rounded-[1.5rem] border border-[#E5E5E5] bg-white p-6">
+          <DialogHeader>
+            <DialogTitle className="text-[22px] font-semibold text-black">
+              Remove photo
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
+              Remove {student.name}&apos;s profile photo? You can upload a new one anytime.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-5 flex-row justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setConfirmRemove(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="rounded-full bg-[#EF4444] text-white hover:bg-[#DC2626]"
+              onClick={() => {
+                onPhotoChange(undefined);
+                setConfirmRemove(false);
+              }}
+            >
+              Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -710,12 +761,122 @@ function BalanceTile({ balance, overdue }: { balance: number; overdue: boolean }
   );
 }
 
-function FeesTable({ ledger }: { ledger: LedgerRow[] }) {
+function buildOverdueWhatsAppHref({
+  phone,
+  guardian,
+  studentName,
+  studentId,
+  schoolName,
+  academicYear,
+  row,
+}: {
+  phone: string;
+  guardian: string;
+  studentName: string;
+  studentId: string;
+  schoolName: string;
+  academicYear: string;
+  row: LedgerRow;
+}) {
+  const digits = phone.replace(/[^0-9]/g, "");
+  if (!digits) return null;
+  const to = `${digits.length === 10 ? "91" : ""}${digits}`;
+  const greetingName = guardian.trim() || "Parent/Guardian";
+  const message = [
+    `Dear ${greetingName},`,
+    "",
+    `This is a reminder from ${schoolName} regarding an overdue fee for ${studentName} (${studentId}).`,
+    "",
+    `Fee: ${row.desc}`,
+    `Due Date: ${row.due}`,
+    `Charge: ${inr(row.charge)}`,
+    `Paid: ${inr(row.paid)}`,
+    `Balance Due: ${inr(row.balance)}`,
+    `Academic Year: ${academicYear}`,
+    "",
+    "Please clear the outstanding amount at your earliest convenience.",
+    "",
+    "Thank you.",
+  ].join("\n");
+  return `https://wa.me/${to}?text=${encodeURIComponent(message)}`;
+}
+
+function OverdueWhatsAppButton({
+  href,
+  compact,
+}: {
+  href: string | null;
+  compact?: boolean;
+}) {
+  if (!href) {
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          toast.error("No contact phone on file", {
+            description: "Add a guardian phone number to send WhatsApp reminders.",
+          });
+        }}
+        className={cn(
+          "inline-flex items-center gap-1 rounded-full border border-[#25D366]/35 bg-[#25D366]/10 font-semibold text-[#128C7E] transition-colors hover:bg-[#25D366]/18",
+          compact ? "px-2 py-1 text-[10px]" : "px-2.5 py-1 text-[11px]",
+        )}
+      >
+        <MessageCircle className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />
+        WhatsApp
+      </button>
+    );
+  }
+
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer noopener"
+      onClick={(e) => e.stopPropagation()}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border border-[#25D366]/35 bg-[#25D366]/10 font-semibold text-[#128C7E] transition-colors hover:bg-[#25D366]/18",
+        compact ? "px-2 py-1 text-[10px]" : "px-2.5 py-1 text-[11px]",
+      )}
+    >
+      <MessageCircle className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />
+      WhatsApp
+    </a>
+  );
+}
+
+function FeesTable({
+  ledger,
+  student,
+  guardian,
+  phone,
+  schoolName,
+  academicYear,
+}: {
+  ledger: LedgerRow[];
+  student: Student;
+  guardian: string;
+  phone: string;
+  schoolName: string;
+  academicYear: string;
+}) {
   const [selectedRow, setSelectedRow] = useState<LedgerRow | null>(null);
   const paidPct =
     selectedRow && selectedRow.charge > 0
       ? Math.round((selectedRow.paid / selectedRow.charge) * 100)
       : 0;
+
+  const overdueHref = (row: LedgerRow) =>
+    buildOverdueWhatsAppHref({
+      phone,
+      guardian,
+      studentName: student.name,
+      studentId: student.id,
+      schoolName,
+      academicYear,
+      row,
+    });
 
   return (
     <>
@@ -746,7 +907,12 @@ function FeesTable({ ledger }: { ledger: LedgerRow[] }) {
                   <div className="truncate text-[14px] font-semibold text-black">{r.desc}</div>
                   <div className="mt-1 font-mono text-[11px] text-black/45">{r.date}</div>
                 </div>
-                <StatusBadge status={r.status} />
+                <div className="flex shrink-0 flex-col items-end gap-1.5">
+                  <StatusBadge status={r.status} />
+                  {r.status === "Overdue" && (
+                    <OverdueWhatsAppButton href={overdueHref(r)} compact />
+                  )}
+                </div>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2.5">
                 <div>
@@ -787,7 +953,7 @@ function FeesTable({ ledger }: { ledger: LedgerRow[] }) {
         </div>
 
         <div className="hidden overflow-x-auto md:block">
-          <table className="w-full min-w-[640px] border-collapse text-left">
+          <table className="w-full min-w-[720px] border-collapse text-left">
             <thead>
               <tr>
                 <th className="border-b border-[#E5E5E5] pb-4 pl-1 pr-4 text-[11px] font-semibold uppercase tracking-wider text-black/45">
@@ -846,7 +1012,12 @@ function FeesTable({ ledger }: { ledger: LedgerRow[] }) {
                     {inr(r.balance)}
                   </td>
                   <td className="py-4 pl-4 pr-1">
-                    <StatusBadge status={r.status} />
+                    <div className="flex flex-col items-start gap-1.5">
+                      <StatusBadge status={r.status} />
+                      {r.status === "Overdue" && (
+                        <OverdueWhatsAppButton href={overdueHref(r)} compact />
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -873,8 +1044,11 @@ function FeesTable({ ledger }: { ledger: LedgerRow[] }) {
                   Description
                 </div>
                 <div className="mt-1 text-[18px] font-semibold text-black">{selectedRow.desc}</div>
-                <div className="mt-2">
+                <div className="mt-2 flex flex-wrap items-center gap-2">
                   <StatusBadge status={selectedRow.status} />
+                  {selectedRow.status === "Overdue" && (
+                    <OverdueWhatsAppButton href={overdueHref(selectedRow)} />
+                  )}
                 </div>
               </div>
 

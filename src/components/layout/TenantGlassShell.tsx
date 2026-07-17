@@ -4,12 +4,15 @@ import {
   ChevronDown,
   LayoutDashboard,
   LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plus,
   Settings,
   UserCog,
   Users,
   Wallet,
 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -25,117 +28,267 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
-import { useTenantStore } from "@/lib/tenant-store";
-import { cn, glassNavTileClass, glassPanelClass } from "@/lib/utils";
+import { normalizeAcademicYearLabel, useTenantStore, type ThemeSettings } from "@/lib/tenant-store";
+import { cn, glassPanelClass } from "@/lib/utils";
 
 type NavEntry = {
   to: string;
   label: string;
   icon: typeof LayoutDashboard;
-  section: "workspace" | "operations";
 };
 
 const NAV: NavEntry[] = [
-  { to: "/tenant/dashboard", label: "Dashboard", icon: LayoutDashboard, section: "workspace" },
-  { to: "/tenant/students", label: "Students", icon: Users, section: "workspace" },
-  { to: "/tenant/staff", label: "Staff", icon: UserCog, section: "workspace" },
-  { to: "/tenant/finance", label: "Finance", icon: Wallet, section: "operations" },
-  { to: "/tenant/settings", label: "Settings", icon: Settings, section: "operations" },
+  { to: "/tenant/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/tenant/students", label: "Students", icon: Users },
+  { to: "/tenant/staff", label: "Staff", icon: UserCog },
+  { to: "/tenant/finance", label: "Finance", icon: Wallet },
+  { to: "/tenant/settings", label: "Settings", icon: Settings },
 ];
 
-const SECTIONS = [
-  { key: "workspace" as const, label: "Student Management" },
-  { key: "operations" as const, label: "Operations" },
-];
+const SIDEBAR_COLLAPSED_KEY = "tenant-sidebar-collapsed";
 
-export function TenantGlassSidebar() {
+function dockScale(distance: number) {
+  if (distance === 0) return 1.18;
+  if (distance === 1) return 1.08;
+  if (distance === 2) return 1.03;
+  return 1;
+}
+
+export function TenantMacDock({
+  placement: placementProp,
+  className,
+}: {
+  placement?: ThemeSettings["navPlacement"];
+  className?: string;
+}) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { session } = useAuth();
+  const { themeSettings } = useTenantStore();
+  const placement = placementProp ?? themeSettings.navPlacement ?? "Left";
   const tenantName = session?.tenantName ?? "Silver Hills Global";
-  const initials = tenantName
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+  const initials = useMemo(
+    () =>
+      tenantName
+        .split(" ")
+        .map((w) => w[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase(),
+    [tenantName],
+  );
+
+  const isVertical = placement === "Left" || placement === "Right";
+  const [hovered, setHovered] = useState<number | null>(null);
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+  });
+
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
+      return next;
+    });
+  };
+
+  const showCollapse = isVertical;
+  const expanded = isVertical && !collapsed;
 
   return (
     <aside
       className={cn(
-        glassPanelClass,
-        "sticky top-4 hidden h-[calc(100dvh-2rem)] w-[220px] shrink-0 flex-col overflow-hidden p-4 md:flex xl:w-[240px]",
+        "relative z-40 hidden shrink-0 overflow-visible transition-[width] duration-200 md:flex",
+        isVertical
+          ? cn(
+              "sticky top-4 h-[calc(100dvh-2rem)] flex-col",
+              expanded ? "w-[200px]" : "w-[76px] items-center",
+            )
+          : "w-full flex-row justify-center",
+        className,
       )}
+      onMouseLeave={() => setHovered(null)}
     >
-      <div className="mb-5 flex flex-col items-center gap-2 px-1 pt-1 text-center">
-        <div className="grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-[#2563EB] to-[#4C69A4] text-sm font-bold text-white shadow-lg shadow-blue-900/20">
+      <div
+        className={cn(
+          glassPanelClass,
+          "relative z-40 flex border border-white/70 bg-white/55 shadow-[0_12px_40px_-16px_rgba(15,23,42,0.35)] backdrop-blur-2xl",
+          isVertical
+            ? cn(
+                "h-full w-full flex-col overflow-visible rounded-[1.35rem] py-3",
+                expanded ? "items-stretch px-2.5" : "items-center px-1.5",
+              )
+            : "w-auto max-w-full flex-row items-center gap-1 overflow-visible rounded-[1.5rem] px-3 py-2",
+        )}
+      >
+        <div
+          className={cn(
+            "mb-2 grid shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-[#2563EB] to-[#4C69A4] font-bold text-white shadow-md shadow-blue-900/20",
+            expanded ? "mx-auto h-11 w-11 text-[11px]" : isVertical ? "h-10 w-10 text-[11px]" : "mr-2 h-10 w-10 text-[10px]",
+          )}
+          title={tenantName}
+        >
           {initials}
         </div>
-        <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-700">
-          {initials}
-        </div>
-      </div>
+        {expanded && (
+          <div className="mb-3 px-1 text-center text-[10px] font-bold uppercase tracking-[0.12em] text-slate-600">
+            {initials}
+          </div>
+        )}
 
-      <nav className="min-h-0 flex-1 space-y-5 overflow-y-auto mobile-scrollbar-none">
-        {SECTIONS.map((section) => (
-          <div key={section.key}>
-            <div className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-              {section.label}
-            </div>
-            <div className="flex flex-col gap-2">
-              {NAV.filter((n) => n.section === section.key).map((n) => {
-                const Icon = n.icon;
-                const active = pathname.startsWith(n.to);
-                return (
-                  <Link
-                    key={n.to}
-                    to={n.to}
+        <nav
+          className={cn(
+            "flex min-h-0 flex-1 overflow-visible",
+            isVertical
+              ? cn("w-full flex-col", expanded ? "gap-1.5" : "items-center gap-0.5")
+              : "flex-row items-center justify-center gap-0.5",
+          )}
+          aria-label="Primary navigation"
+        >
+          {NAV.map((item, index) => {
+            const Icon = item.icon;
+            const active = pathname.startsWith(item.to);
+            const distance = hovered === null ? 99 : Math.abs(hovered - index);
+            const scale = expanded ? 1 : dockScale(distance);
+            const tooltipSide =
+              placement === "Left"
+                ? "left-full top-1/2 ml-3 -translate-y-1/2"
+                : placement === "Right"
+                  ? "right-full top-1/2 mr-3 -translate-y-1/2"
+                  : placement === "Top"
+                    ? "left-1/2 top-full mt-3 -translate-x-1/2"
+                    : "bottom-full left-1/2 mb-3 -translate-x-1/2";
+
+            if (expanded) {
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  aria-label={item.label}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 transition-colors",
+                    active
+                      ? "bg-[#2563EB]/12 text-[#0F172A] ring-1 ring-[#2563EB]/25"
+                      : "text-slate-600 hover:bg-white/70 hover:text-slate-900",
+                  )}
+                >
+                  <span
                     className={cn(
-                      glassNavTileClass,
-                      "flex min-h-[52px] w-full items-center gap-3 px-3 py-2.5",
-                      active && "glass-nav-tile-active",
+                      "grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-white/70",
+                      active ? "bg-white text-[#2563EB]" : "bg-white/70 text-slate-700",
                     )}
                   >
-                    <div
-                      className={cn(
-                        "grid h-9 w-9 shrink-0 place-items-center rounded-xl",
-                        active ? "bg-white/70" : "bg-white/45",
-                      )}
-                    >
-                      <Icon
-                        className={cn(
-                          "h-[18px] w-[18px]",
-                          active ? "text-[#2563EB]" : "text-slate-600",
-                        )}
-                        strokeWidth={active ? 2.25 : 2}
-                      />
-                    </div>
-                    <span
-                      className={cn(
-                        "min-w-0 flex-1 text-[12px] font-semibold leading-tight",
-                        active ? "text-[#0F172A]" : "text-slate-600",
-                      )}
-                    >
-                      {n.label}
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </nav>
+                    <Icon className="h-[18px] w-[18px]" strokeWidth={active ? 2.35 : 2} />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[12px] font-semibold">{item.label}</span>
+                </Link>
+              );
+            }
+
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                aria-label={item.label}
+                aria-current={active ? "page" : undefined}
+                onMouseEnter={() => setHovered(index)}
+                className={cn(
+                  "group relative z-10 flex h-14 w-14 shrink-0 items-center justify-center",
+                  distance === 0 && "z-50",
+                )}
+              >
+                <span
+                  className={cn(
+                    "pointer-events-none absolute z-[60] whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[11px] font-semibold text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100",
+                    tooltipSide,
+                  )}
+                >
+                  {item.label}
+                </span>
+                <span
+                  className="relative flex flex-col items-center justify-center transition-transform duration-150 ease-out"
+                  style={{
+                    transform: `scale(${scale})`,
+                    transformOrigin: "center center",
+                    zIndex: distance === 0 ? 20 : 10 - Math.min(distance, 5),
+                  }}
+                >
+                  <span
+                    className={cn(
+                      "grid h-11 w-11 place-items-center rounded-[1.05rem] border border-white/70 bg-gradient-to-br from-white/95 to-white/70 shadow-[0_6px_18px_-10px_rgba(15,23,42,0.45)]",
+                      active && "ring-2 ring-[#2563EB]/40",
+                    )}
+                  >
+                    <Icon
+                      className={cn("h-5 w-5", active ? "text-[#2563EB]" : "text-slate-700")}
+                      strokeWidth={active ? 2.35 : 2}
+                    />
+                  </span>
+                  <span
+                    className={cn(
+                      "mt-1 h-1 w-1 rounded-full bg-slate-800 transition-opacity",
+                      active ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                </span>
+              </Link>
+            );
+          })}
+        </nav>
+
+        {showCollapse && (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              toggleCollapsed();
+            }}
+            aria-pressed={collapsed}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className={cn(
+              "mt-auto flex shrink-0 items-center justify-center gap-2 rounded-xl text-slate-500 transition-colors hover:bg-white/70 hover:text-[#2563EB]",
+              expanded ? "mx-1 h-10 w-auto px-3" : "h-10 w-10",
+            )}
+          >
+            {collapsed ? (
+              <PanelLeftOpen className="h-4 w-4" />
+            ) : (
+              <>
+                <PanelLeftClose className="h-4 w-4" />
+                <span className="text-[12px] font-semibold">Collapse</span>
+              </>
+            )}
+          </button>
+        )}
+      </div>
     </aside>
   );
+}
+
+/** @deprecated Prefer TenantMacDock */
+export function TenantGlassSidebar(props: { className?: string }) {
+  return <TenantMacDock {...props} />;
 }
 
 export function TenantDesktopTopBar() {
   const navigate = useNavigate();
   const { session, logout } = useAuth();
-  const { academicYear, notifications } = useTenantStore();
+  const { academicYear, setAcademicYear, academicYears, setAcademicYears, notifications } =
+    useTenantStore();
   const [pendingLogout, setPendingLogout] = useState(false);
+  const [addYearOpen, setAddYearOpen] = useState(false);
+  const [yearDraft, setYearDraft] = useState("");
   const unreadCount = notifications.filter((n) => !n.read).length;
   const tenantName = session?.tenantName ?? "Silver Hills Global";
 
@@ -145,6 +298,23 @@ export function TenantDesktopTopBar() {
     toast.success("Signed out · session cleared", { description: `Goodbye, ${name}` });
     setPendingLogout(false);
     navigate({ to: "/login", replace: true });
+  };
+
+  const submitNewYear = (e: FormEvent) => {
+    e.preventDefault();
+    const label = normalizeAcademicYearLabel(yearDraft);
+    if (!label) return;
+    if (academicYears.some((y) => y.toLowerCase() === label.toLowerCase())) {
+      toast.error(`${label} already exists`);
+      return;
+    }
+    setAcademicYears((prev) => [...prev, label]);
+    setAcademicYear(label);
+    toast.success(`Academic year added · ${label}`, {
+      description: "Set as the active academic year",
+    });
+    setYearDraft("");
+    setAddYearOpen(false);
   };
 
   return (
@@ -167,7 +337,7 @@ export function TenantDesktopTopBar() {
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="glass-inset flex items-center gap-2 rounded-full px-3 py-2 text-[12px] font-semibold text-slate-800 transition-colors hover:bg-white/50"
+                className="glass-inset flex items-center gap-2 rounded-lg px-3 py-2 text-[12px] font-semibold text-slate-800 transition-colors hover:bg-white/50"
               >
                 <span>{academicYear}</span>
                 <span className="rounded-full bg-[#10B981]/15 px-2 py-0.5 text-[10px] font-bold text-[#10B981]">
@@ -176,8 +346,34 @@ export function TenantDesktopTopBar() {
                 <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="rounded-2xl border-white/60 bg-white/90 backdrop-blur-xl">
-              <DropdownMenuItem className="rounded-xl text-[13px]">{academicYear}</DropdownMenuItem>
+            <DropdownMenuContent
+              align="end"
+              className="min-w-[11rem] rounded-lg border-white/60 bg-white/90 backdrop-blur-xl"
+            >
+              <DropdownMenuRadioGroup
+                value={academicYear}
+                onValueChange={(y) => {
+                  setAcademicYear(y);
+                  toast.success(`Academic year set to ${y}`);
+                }}
+              >
+                {academicYears.map((y) => (
+                  <DropdownMenuRadioItem key={y} value={y} className="rounded-md text-[13px]">
+                    {y}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="rounded-md text-[13px]"
+                onSelect={() => {
+                  setYearDraft("");
+                  setAddYearOpen(true);
+                }}
+              >
+                <Plus className="mr-2 h-3.5 w-3.5" />
+                Add academic year
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -212,6 +408,47 @@ export function TenantDesktopTopBar() {
           </button>
         </div>
       </header>
+
+      <Dialog
+        open={addYearOpen}
+        onOpenChange={(open) => {
+          setAddYearOpen(open);
+          if (!open) setYearDraft("");
+        }}
+      >
+        <DialogContent className="max-w-sm rounded-[1.5rem] border border-white/60 bg-white/90 p-6 backdrop-blur-xl">
+          <DialogHeader>
+            <DialogTitle className="text-[22px] font-semibold text-slate-900">
+              Add Academic Year
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-slate-500">
+              Enter a year range such as 2027-28. It will be normalized to AY format and set active.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={submitNewYear} className="mt-4 space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="header-academic-year" className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                Academic Year
+              </Label>
+              <Input
+                id="header-academic-year"
+                value={yearDraft}
+                onChange={(e) => setYearDraft(e.target.value)}
+                placeholder="e.g. 2027-28"
+                autoFocus
+              />
+            </div>
+            <DialogFooter className="flex-row justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setAddYearOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+                <Plus className="mr-1 h-3.5 w-3.5" /> Add
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={pendingLogout} onOpenChange={setPendingLogout}>
         <DialogContent className="max-w-sm rounded-[1.5rem] border border-white/60 bg-white/90 p-6 backdrop-blur-xl">

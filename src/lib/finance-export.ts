@@ -117,7 +117,13 @@ export function downloadReceiptPdf(payment: Payment, schoolName: string, academi
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(100, 100, 100);
-  doc.text("Fee collection acknowledgement · student account ledger", margin, titleY + 6);
+  doc.text(
+    payment.payerType === "external"
+      ? "Income acknowledgement · external payer"
+      : "Fee collection acknowledgement · student account ledger",
+    margin,
+    titleY + 6,
+  );
 
   autoTable(doc, {
     startY: titleY + 12,
@@ -126,11 +132,17 @@ export function downloadReceiptPdf(payment: Payment, schoolName: string, academi
     head: [["Field", "Details"]],
     body: [
       ["Receipt Number", payment.id],
-      ["Student Name", payment.name],
+      [payment.payerType === "external" ? "Payer Name" : "Student Name", payment.name],
+      ...(payment.payerType === "external"
+        ? [["Payer Type", "External"]]
+        : payment.className
+          ? [["Class", payment.className]]
+          : []),
       ["Fee Category", payment.cat],
       ["Payment Mode", payment.mode],
       ["Recorded On", payment.time],
       ["Amount Received", amountFormatted],
+      ...(payment.narration ? [["Narration", payment.narration]] : []),
     ],
     theme: "grid",
     styles: {

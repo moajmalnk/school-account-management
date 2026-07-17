@@ -188,8 +188,8 @@ export function DatePicker({
           className={cn(
             "inline-flex h-10 w-full items-center justify-between gap-2 border bg-white text-left text-[13px] font-medium text-black transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50",
             variant === "pill"
-              ? "rounded-full border-black px-4 hover:bg-[#FAFAFA]"
-              : "rounded-2xl border-[#E5E5E5] px-3 hover:border-black/30 focus-visible:ring-black/15",
+              ? "rounded-lg border-black px-4 hover:bg-[#FAFAFA]"
+              : "rounded-lg border-[#E5E5E5] px-3 hover:border-black/30 focus-visible:ring-black/15",
             !selected && "text-black/45",
             className,
           )}
@@ -205,7 +205,7 @@ export function DatePicker({
         sideOffset={6}
         collisionPadding={12}
         sticky="always"
-        className="z-[250] w-[min(280px,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-[#E5E5E5] bg-white p-0 shadow-[0_24px_60px_-24px_rgba(0,0,0,0.25)]"
+        className="z-[250] w-[min(280px,calc(100vw-1.5rem))] overflow-hidden rounded-lg border border-[#E5E5E5] bg-white p-0 shadow-[0_24px_60px_-24px_rgba(0,0,0,0.25)]"
       >
         <div className="flex items-center gap-1.5 border-b border-[#EEEEEE] px-2.5 py-2">
           <button
@@ -221,15 +221,15 @@ export function DatePicker({
               value={String(viewMonth.getMonth())}
               onValueChange={(v) => setViewMonth(new Date(viewMonth.getFullYear(), Number(v), 1))}
             >
-              <SelectTrigger className="h-7 w-[4.5rem] rounded-full border-transparent bg-transparent px-2 text-[12px] font-semibold shadow-none focus:ring-0">
+              <SelectTrigger className="h-7 w-[4.5rem] rounded-md border-transparent bg-transparent px-2 text-[12px] font-semibold shadow-none focus:ring-0">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="z-[300] rounded-2xl border border-[#E5E5E5] bg-white p-1">
+              <SelectContent className="z-[300] rounded-lg border border-[#E5E5E5] bg-white p-1">
                 {MONTHS.map((m, i) => (
                   <SelectItem
                     key={m}
                     value={String(i)}
-                    className="rounded-xl text-[12px] focus:bg-[#DBEAFE] data-[state=checked]:bg-[#2563EB] data-[state=checked]:text-white"
+                    className="rounded-md text-[12px] focus:bg-[#DBEAFE] data-[state=checked]:bg-[#2563EB] data-[state=checked]:text-white"
                   >
                     {m.slice(0, 3)}
                   </SelectItem>
@@ -240,15 +240,15 @@ export function DatePicker({
               value={String(viewMonth.getFullYear())}
               onValueChange={(v) => setViewMonth(new Date(Number(v), viewMonth.getMonth(), 1))}
             >
-              <SelectTrigger className="h-7 w-[4.5rem] rounded-full border-transparent bg-transparent px-2 text-[12px] font-semibold shadow-none focus:ring-0">
+              <SelectTrigger className="h-7 w-[4.5rem] rounded-md border-transparent bg-transparent px-2 text-[12px] font-semibold shadow-none focus:ring-0">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="z-[300] max-h-56 rounded-2xl border border-[#E5E5E5] bg-white p-1">
+              <SelectContent className="z-[300] max-h-56 rounded-lg border border-[#E5E5E5] bg-white p-1">
                 {yearOptions.map((y) => (
                   <SelectItem
                     key={y}
                     value={String(y)}
-                    className="rounded-xl font-mono text-[12px] focus:bg-[#DBEAFE] data-[state=checked]:bg-[#2563EB] data-[state=checked]:text-white"
+                    className="rounded-md font-mono text-[12px] focus:bg-[#DBEAFE] data-[state=checked]:bg-[#2563EB] data-[state=checked]:text-white"
                   >
                     {y}
                   </SelectItem>

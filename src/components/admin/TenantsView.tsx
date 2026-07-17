@@ -226,7 +226,7 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (name: string) 
           />
         </div>
         <Select value={tier} onValueChange={setTier}>
-          <SelectTrigger className="h-11 w-full rounded-full border-[#E5E5E5] bg-[#F4F4F5] text-[12px] sm:h-10 sm:w-[170px]">
+          <SelectTrigger className="h-11 w-full rounded-lg border-[#E5E5E5] bg-[#F4F4F5] text-[12px] sm:h-10 sm:w-[170px]">
             <SelectValue placeholder="All packages" />
           </SelectTrigger>
           <SelectContent>
@@ -237,7 +237,7 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (name: string) 
           </SelectContent>
         </Select>
         <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="h-11 w-full rounded-full border-[#E5E5E5] bg-[#F4F4F5] text-[12px] sm:h-10 sm:w-[170px]">
+          <SelectTrigger className="h-11 w-full rounded-lg border-[#E5E5E5] bg-[#F4F4F5] text-[12px] sm:h-10 sm:w-[170px]">
             <SelectValue placeholder="All statuses" />
           </SelectTrigger>
           <SelectContent>
@@ -912,7 +912,7 @@ function BillingRulesDrawer({
             </Field>
             <Field label="Currency">
               <Select value={draft.currency} onValueChange={(v) => set("currency", v as Currency)}>
-                <SelectTrigger className="h-10 rounded-2xl border-[#E5E5E5] bg-white text-[13px]">
+                <SelectTrigger className="h-10 rounded-lg border-[#E5E5E5] bg-white text-[13px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -973,7 +973,7 @@ function BillingRulesDrawer({
               value={draft.paymentMethod}
               onValueChange={(v) => set("paymentMethod", v as PaymentMethod)}
             >
-              <SelectTrigger className="h-10 rounded-2xl border-[#E5E5E5] bg-white text-[13px]">
+              <SelectTrigger className="h-10 rounded-lg border-[#E5E5E5] bg-white text-[13px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
