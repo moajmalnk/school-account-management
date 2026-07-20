@@ -20,7 +20,7 @@ export function MobileTabBar({ items, pathname, className }: MobileTabBarProps) 
   return (
     <nav
       className={cn(
-        "fixed inset-x-0 bottom-0 z-40 rounded-t-[1.5rem] border-t border-slate-100/80 bg-white lg:hidden",
+        "fixed inset-x-0 bottom-0 z-40 rounded-t-xl border-t border-slate-100/80 bg-white lg:hidden",
         "pb-[env(safe-area-inset-bottom)]",
         className,
       )}

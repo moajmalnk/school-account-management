@@ -86,7 +86,7 @@ export function FinanceDonutCard({
           {colored.map((segment) => {
             const pct = total > 0 ? Math.round((segment.value / total) * 100) : 0;
             return (
-              <div key={segment.label} className="min-w-0 rounded-xl bg-[#F4F4F5] px-2 py-1.5 sm:rounded-2xl sm:px-2.5 sm:py-2">
+              <div key={segment.label} className="min-w-0 rounded-xl bg-[#F4F4F5] px-2 py-1.5 sm:rounded-lg sm:px-2.5 sm:py-2">
                 <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px]">
                   <span
                     className="h-2 w-2 shrink-0 rounded-sm"

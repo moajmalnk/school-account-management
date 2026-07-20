@@ -44,7 +44,7 @@ export function TopNav() {
 
   return (
     <header className="sticky top-0 z-30 bg-[#F4F6F9]/92 px-3 pb-2 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl sm:px-4 sm:pt-[calc(1rem+env(safe-area-inset-top))] lg:border-b-0 lg:bg-transparent lg:px-6 lg:pb-0 lg:pt-6 lg:backdrop-blur-none">
-      <div className="mobile-app-rail flex items-center justify-between gap-3 rounded-[1.75rem] border border-white/70 bg-white/88 px-3 py-2.5 shadow-[0_14px_44px_-32px_rgba(0,0,0,0.45)] lg:mx-auto lg:max-w-[1480px] lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
+      <div className="mobile-app-rail flex items-center justify-between gap-3 rounded-xl border border-white/70 bg-white/88 px-3 py-2.5 shadow-[0_14px_44px_-32px_rgba(0,0,0,0.45)] lg:mx-auto lg:max-w-[1480px] lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
         <Link to="/super-admin/overview" className="flex min-w-0 items-center gap-2.5">
           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-black text-sm font-bold text-white">
             S

@@ -12,7 +12,7 @@ import {
   type MobileTabItem,
 } from "@/components/layout/MobileTabBar";
 import { useAuth } from "@/lib/auth";
-import { TenantStoreProvider, useTenantStore } from "@/lib/tenant-store";
+import { TenantStoreProvider, schoolInitials, useTenantStore } from "@/lib/tenant-store";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/tenant")({
@@ -107,7 +107,7 @@ function TenantShell() {
 function TenantMobileHeader() {
   const { session } = useAuth();
   const navigate = useNavigate();
-  const { notifications } = useTenantStore();
+  const { notifications, schoolDetails } = useTenantStore();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const onNotifications = pathname.startsWith("/tenant/notifications");
   const NAV_LABELS: Record<string, string> = {
@@ -119,14 +119,26 @@ function TenantMobileHeader() {
   };
   const activeKey = Object.keys(NAV_LABELS).find((k) => pathname.startsWith(k));
   const unreadCount = notifications.filter((n) => !n.read).length;
-  const tenantLabel = (session?.tenantName ?? "Silver Hills Global").toUpperCase();
+  const tenantName = schoolDetails.name || session?.tenantName || "Silver Hills Global";
+  const tenantLabel = tenantName.toUpperCase();
   const sectionLabel = onNotifications ? "NOTIFICATIONS" : activeKey ? NAV_LABELS[activeKey] : "DASHBOARD";
+  const logoUrl = schoolDetails.logoUrl;
+  const initials = schoolInitials(tenantName);
 
   return (
     <header className="sticky top-0 z-30 bg-gradient-to-b from-white/80 to-transparent px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl md:hidden">
       <div className="flex w-full items-center gap-3">
-        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#2563EB] to-[#4C69A4] text-[11px] font-bold text-white">
-          SH
+        <div
+          className={cn(
+            "grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl text-[11px] font-bold text-white",
+            !logoUrl && "bg-gradient-to-br from-[#2563EB] to-[#4C69A4]",
+          )}
+        >
+          {logoUrl ? (
+            <img src={logoUrl} alt={tenantName} className="h-full w-full object-cover" />
+          ) : (
+            initials
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <div className="truncate text-[11px] font-bold uppercase leading-tight tracking-[0.04em] text-slate-900">

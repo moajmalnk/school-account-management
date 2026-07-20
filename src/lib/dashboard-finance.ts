@@ -1,4 +1,9 @@
 import type { Payment } from "@/lib/tenant-store";
+import {
+  getPeriodDayCount,
+  type CustomDateRange,
+  type PaymentPeriod,
+} from "@/lib/payment-period";
 
 export const OPERATING_EXPENSES = [
   { account: "Salaries & Wages", amount: 1_220_000 },
@@ -17,6 +22,20 @@ export const ACCOUNTS_PAYABLE = [
 
 export function totalOperatingExpense(): number {
   return OPERATING_EXPENSES.reduce((sum, item) => sum + item.amount, 0);
+}
+
+/**
+ * Scale the monthly operating-expense baseline to the selected reporting period
+ * so dashboard totals move when the duration filter changes.
+ */
+export function operatingExpenseForPeriod(
+  period: PaymentPeriod,
+  customRange?: CustomDateRange,
+  reference = new Date(),
+): number {
+  const monthly = totalOperatingExpense();
+  const days = getPeriodDayCount(period, customRange, reference);
+  return Math.round((monthly * days) / 30);
 }
 
 export function totalAccountsPayable(): number {

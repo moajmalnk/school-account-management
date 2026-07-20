@@ -21,7 +21,6 @@ import {
 } from "@/components/ui/select";
 import { FinanceBarCard, FinanceDonutCard } from "@/components/school/finance-charts";
 import { OrganicCard } from "@/components/ui/organic-card";
-import { useAuth } from "@/lib/auth";
 import {
   ACCOUNTS_PAYABLE,
   OPERATING_EXPENSES,
@@ -133,7 +132,7 @@ function ExportBar({
           if (!next) setPendingExport(null);
         }}
       >
-        <DialogContent className="max-w-sm rounded-[1.5rem] border border-[#E5E5E5] bg-white p-6">
+        <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6">
           <DialogHeader>
             <DialogTitle className="text-[22px] font-semibold text-black">
               {pendingExport ? exportCopy[pendingExport].title : "Confirm Export"}
@@ -174,7 +173,7 @@ function ReportTable({
   compact?: boolean;
 }) {
   return (
-    <div className="mobile-scrollbar-none mt-4 overflow-x-auto rounded-2xl border border-[#E5E5E5]">
+    <div className="mobile-scrollbar-none mt-4 overflow-x-auto rounded-lg border border-[#E5E5E5]">
       <table
         className={cn(
           "w-full text-left text-[12.5px]",
@@ -223,7 +222,7 @@ function SummaryStrip({ items }: { items: { label: string; value: string; accent
         <div
           key={item.label}
           className={cn(
-            "rounded-2xl p-4",
+            "rounded-lg p-4",
             item.accent ? "bg-[#2563EB] text-white" : "bg-[#F4F4F5] text-black",
           )}
         >
@@ -238,9 +237,8 @@ function SummaryStrip({ items }: { items: { label: string; value: string; accent
 }
 
 export function GeneralLedgerReport() {
-  const { payments, academicYear } = useTenantStore();
-  const { session } = useAuth();
-  const schoolName = session?.tenantName ?? "Silver Hills Global";
+  const { payments, academicYear, schoolDetails } = useTenantStore();
+  const schoolName = schoolDetails.name || "Silver Hills Global";
 
   const rows = useMemo(() => buildLedgerRows(payments), [payments]);
   const totalDebit = rows.reduce((s, r) => s + r.debit, 0);
@@ -301,9 +299,8 @@ export function GeneralLedgerReport() {
 }
 
 export function ProfitLossReport() {
-  const { payments, academicYear } = useTenantStore();
-  const { session } = useAuth();
-  const schoolName = session?.tenantName ?? "Silver Hills Global";
+  const { payments, academicYear, schoolDetails } = useTenantStore();
+  const schoolName = schoolDetails.name || "Silver Hills Global";
 
   const incomeByCategory = useMemo(() => {
     const map = new Map<string, number>();
@@ -365,7 +362,7 @@ export function ProfitLossReport() {
           Statement Summary
         </div>
         <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-3 lg:grid-cols-1">
-          <div className="min-w-0 rounded-[1.35rem] bg-white/60 px-3 py-2.5 sm:rounded-2xl sm:p-3">
+          <div className="min-w-0 rounded-xl bg-white/60 px-3 py-2.5 sm:rounded-lg sm:p-3">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-black/55">
               Gross Income
             </div>
@@ -373,7 +370,7 @@ export function ProfitLossReport() {
               {inr(totalIncome)}
             </div>
           </div>
-          <div className="min-w-0 rounded-[1.35rem] bg-white/60 px-3 py-2.5 sm:rounded-2xl sm:p-3">
+          <div className="min-w-0 rounded-xl bg-white/60 px-3 py-2.5 sm:rounded-lg sm:p-3">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-black/55">
               Operating Expense
             </div>
@@ -381,7 +378,7 @@ export function ProfitLossReport() {
               {inr(totalExpense)}
             </div>
           </div>
-          <div className="min-w-0 rounded-[1.35rem] bg-black px-3 py-2.5 text-white sm:rounded-2xl sm:p-3">
+          <div className="min-w-0 rounded-xl bg-black px-3 py-2.5 text-white sm:rounded-lg sm:p-3">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-white/65">
               Net Surplus
             </div>
@@ -418,9 +415,8 @@ export function ProfitLossReport() {
 }
 
 export function BalanceSheetReport() {
-  const { payments, students, academicYear } = useTenantStore();
-  const { session } = useAuth();
-  const schoolName = session?.tenantName ?? "Silver Hills Global";
+  const { payments, students, academicYear, schoolDetails } = useTenantStore();
+  const schoolName = schoolDetails.name || "Silver Hills Global";
 
   const cashOnHand = useMemo(
     () => payments.filter((p) => p.mode === "Cash").reduce((s, p) => s + p.amount, 0),
@@ -506,14 +502,14 @@ export function BalanceSheetReport() {
           {ACCOUNTS_PAYABLE.map((p) => (
             <div
               key={p.payee}
-              className="flex items-center justify-between gap-3 rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5 text-[12.5px]"
+              className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5 text-[12.5px]"
             >
               <span className="min-w-0 flex-1 truncate font-medium text-black">{p.payee}</span>
               <span className="shrink-0 font-mono text-black">{inr(p.amount)}</span>
             </div>
           ))}
         </div>
-        <div className="mt-4 rounded-2xl bg-[#F4F4F5] p-4">
+        <div className="mt-4 rounded-lg bg-[#F4F4F5] p-4">
           <div className="text-[10px] font-semibold uppercase tracking-wider text-black/55">
             Fee Receivables
           </div>
@@ -628,9 +624,8 @@ function resolvePaymentClass(payment: Payment, students: Student[]) {
 }
 
 export function FeesReport() {
-  const { payments, students, academicYear } = useTenantStore();
-  const { session } = useAuth();
-  const schoolName = session?.tenantName ?? "Silver Hills Global";
+  const { payments, students, academicYear, schoolDetails } = useTenantStore();
+  const schoolName = schoolDetails.name || "Silver Hills Global";
 
   const [collectionQuery, setCollectionQuery] = useState("");
   const [collectionCategory, setCollectionCategory] = useState("all");
@@ -871,7 +866,7 @@ export function FeesReport() {
         </div>
 
         {collectionRows.length === 0 ? (
-          <div className="mt-4 rounded-2xl border border-dashed border-black/15 px-4 py-8 text-center text-[12px] text-black/55">
+          <div className="mt-4 rounded-lg border border-dashed border-black/15 px-4 py-8 text-center text-[12px] text-black/55">
             {feeReceipts.length === 0
               ? "No student fee receipts recorded yet"
               : "No collections match your search or filters"}
@@ -923,7 +918,7 @@ export function FeesReport() {
           </div>
 
           {outstandingRows.length === 0 ? (
-            <div className="mt-4 rounded-2xl border border-dashed border-black/15 px-4 py-6 text-center text-[12px] text-black/55">
+            <div className="mt-4 rounded-lg border border-dashed border-black/15 px-4 py-6 text-center text-[12px] text-black/55">
               {overdueStudents.length === 0
                 ? "All student balances are cleared"
                 : "No dues match your search or filters"}
@@ -948,9 +943,8 @@ export function FeesReport() {
 }
 
 export function SalaryReport() {
-  const { staff, academicYear } = useTenantStore();
-  const { session } = useAuth();
-  const schoolName = session?.tenantName ?? "Silver Hills Global";
+  const { staff, academicYear, schoolDetails } = useTenantStore();
+  const schoolName = schoolDetails.name || "Silver Hills Global";
 
   const [query, setQuery] = useState("");
   const [department, setDepartment] = useState("all");
@@ -1162,7 +1156,7 @@ export function SalaryReport() {
         </div>
 
         {tableRows.length === 0 ? (
-          <div className="mt-4 rounded-2xl border border-dashed border-black/15 px-4 py-8 text-center text-[12px] text-black/55">
+          <div className="mt-4 rounded-lg border border-dashed border-black/15 px-4 py-8 text-center text-[12px] text-black/55">
             {staff.length === 0
               ? "No staff on payroll"
               : "No staff match your search or filters"}
@@ -1211,7 +1205,7 @@ export function SalaryReport() {
           </div>
 
           {payableRows.length === 0 ? (
-            <div className="mt-4 rounded-2xl border border-dashed border-black/15 px-4 py-6 text-center text-[12px] text-black/55">
+            <div className="mt-4 rounded-lg border border-dashed border-black/15 px-4 py-6 text-center text-[12px] text-black/55">
               {salaryPayables.length === 0
                 ? "No open salary payables"
                 : "No obligations match your search"}
@@ -1246,9 +1240,8 @@ type DayBookEntry = {
 };
 
 export function DayBookReport() {
-  const { payments, academicYear } = useTenantStore();
-  const { session } = useAuth();
-  const schoolName = session?.tenantName ?? "Silver Hills Global";
+  const { payments, academicYear, schoolDetails } = useTenantStore();
+  const schoolName = schoolDetails.name || "Silver Hills Global";
 
   const [query, setQuery] = useState("");
   const [entryType, setEntryType] = useState<"all" | "Receipt" | "Payment">("all");
@@ -1439,7 +1432,7 @@ export function DayBookReport() {
         </div>
 
         {tableRows.length === 0 ? (
-          <div className="mt-4 rounded-2xl border border-dashed border-black/15 px-4 py-8 text-center text-[12px] text-black/55">
+          <div className="mt-4 rounded-lg border border-dashed border-black/15 px-4 py-8 text-center text-[12px] text-black/55">
             {entries.length === 0
               ? "No day book entries yet"
               : "No entries match your search or filters"}

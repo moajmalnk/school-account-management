@@ -105,7 +105,7 @@ function LoginPage() {
     <div className="flex min-h-dvh items-center justify-center overflow-x-hidden bg-[#F4F6F9] px-3 py-[calc(1rem+env(safe-area-inset-top))] sm:px-4 sm:py-12">
       <div className="w-full max-w-md">
         <div className="mb-5 flex flex-col items-center text-center sm:mb-8">
-          <div className="flex items-center gap-3 rounded-[1.75rem] border border-white/70 bg-white/80 px-3 py-2.5 shadow-[0_14px_44px_-32px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+          <div className="flex items-center gap-3 rounded-xl border border-white/70 bg-white/80 px-3 py-2.5 shadow-[0_14px_44px_-32px_rgba(0,0,0,0.45)] backdrop-blur-xl">
             <div className="grid h-11 w-11 place-items-center rounded-2xl bg-black text-base font-bold text-white">
               S
             </div>

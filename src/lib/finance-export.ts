@@ -76,7 +76,17 @@ function formatInrPdf(amount: number) {
   return `Rs. ${amount.toLocaleString("en-IN")}`;
 }
 
-export function downloadReceiptPdf(payment: Payment, schoolName: string, academicYear: string) {
+export function downloadReceiptPdf(
+  payment: Payment,
+  schoolName: string,
+  academicYear: string,
+  branding?: {
+    letterheadUrl?: string;
+    address?: string;
+    phone?: string;
+    email?: string;
+  },
+) {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 14;
@@ -89,27 +99,64 @@ export function downloadReceiptPdf(payment: Payment, schoolName: string, academi
   const summaryLabelWidth = 98;
   const summaryAmountWidth = contentWidth - summaryLabelWidth;
 
-  doc.setFillColor(199, 243, 60);
-  doc.rect(0, 0, pageWidth, 34, "F");
+  let headerBottom = 34;
+  if (branding?.letterheadUrl) {
+    try {
+      const format = branding.letterheadUrl.includes("image/png")
+        ? "PNG"
+        : branding.letterheadUrl.includes("image/webp")
+          ? "WEBP"
+          : "JPEG";
+      doc.addImage(branding.letterheadUrl, format, margin, 8, contentWidth, 28);
+      headerBottom = 42;
+    } catch {
+      doc.setFillColor(199, 243, 60);
+      doc.rect(0, 0, pageWidth, 34, "F");
+    }
+  } else {
+    doc.setFillColor(199, 243, 60);
+    doc.rect(0, 0, pageWidth, 34, "F");
+  }
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(20);
   doc.setTextColor(0, 0, 0);
-  doc.text(schoolName, margin, 15);
+  doc.text(schoolName, margin, branding?.letterheadUrl ? headerBottom + 8 : 15);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
-  doc.text(`Official Fee Receipt · ${academicYear}`, margin, 23);
+  doc.text(
+    `Official Fee Receipt · ${academicYear}`,
+    margin,
+    branding?.letterheadUrl ? headerBottom + 16 : 23,
+  );
+
+  const contactBits = [branding?.address, branding?.phone, branding?.email].filter(Boolean);
+  if (contactBits.length) {
+    doc.setFontSize(8);
+    doc.setTextColor(70, 70, 70);
+    doc.text(contactBits.join(" · "), margin, branding?.letterheadUrl ? headerBottom + 22 : 29, {
+      maxWidth: contentWidth * 0.62,
+    });
+  }
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
-  doc.text(payment.id, pageWidth - margin, 15, { align: "right" });
+  doc.setTextColor(0, 0, 0);
+  doc.text(payment.id, pageWidth - margin, branding?.letterheadUrl ? headerBottom + 8 : 15, {
+    align: "right",
+  });
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(45, 45, 45);
-  doc.text(`Issued ${generatedAt}`, pageWidth - margin, 22, { align: "right" });
+  doc.text(
+    `Issued ${generatedAt}`,
+    pageWidth - margin,
+    branding?.letterheadUrl ? headerBottom + 16 : 22,
+    { align: "right" },
+  );
 
-  const titleY = 46;
+  const titleY = branding?.letterheadUrl ? headerBottom + 34 : 46;
   doc.setFontSize(14);
   doc.setTextColor(0, 0, 0);
   doc.setFont("helvetica", "bold");

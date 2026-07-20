@@ -15,10 +15,10 @@ type OrganicCardProps = React.HTMLAttributes<HTMLDivElement> & {
 const SHADOW = "shadow-[0_1px_2px_rgba(0,0,0,0.04),0_24px_60px_-32px_rgba(0,0,0,0.18)]";
 
 const contentPadByCorner: Record<CornerSide, string> = {
-  tr: "pr-14",
-  tl: "pl-14",
-  br: "pr-14 pb-14",
-  bl: "pl-14 pb-14",
+  tr: "pr-10",
+  tl: "pl-10",
+  br: "pr-10 pb-10",
+  bl: "pl-10 pb-10",
 };
 
 export function OrganicCard({

@@ -33,10 +33,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { FloatingDock, type FloatingDockItem } from "@/components/ui/floating-dock";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
-import { normalizeAcademicYearLabel, useTenantStore, type ThemeSettings } from "@/lib/tenant-store";
+import {
+  normalizeAcademicYearLabel,
+  schoolInitials,
+  useTenantStore,
+  type ThemeSettings,
+} from "@/lib/tenant-store";
 import { cn, glassPanelClass } from "@/lib/utils";
 
 type NavEntry = {
@@ -71,19 +77,11 @@ export function TenantMacDock({
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { session } = useAuth();
-  const { themeSettings } = useTenantStore();
+  const { themeSettings, schoolDetails } = useTenantStore();
   const placement = placementProp ?? themeSettings.navPlacement ?? "Left";
-  const tenantName = session?.tenantName ?? "Silver Hills Global";
-  const initials = useMemo(
-    () =>
-      tenantName
-        .split(" ")
-        .map((w) => w[0])
-        .join("")
-        .slice(0, 2)
-        .toUpperCase(),
-    [tenantName],
-  );
+  const tenantName = schoolDetails.name || session?.tenantName || "Silver Hills Global";
+  const logoUrl = schoolDetails.logoUrl;
+  const initials = useMemo(() => schoolInitials(tenantName), [tenantName]);
 
   const isVertical = placement === "Left" || placement === "Right";
   const [hovered, setHovered] = useState<number | null>(null);
@@ -103,16 +101,50 @@ export function TenantMacDock({
   const showCollapse = isVertical;
   const expanded = isVertical && !collapsed;
 
+  const floatingItems = useMemo<FloatingDockItem[]>(
+    () =>
+      NAV.map((item) => {
+        const Icon = item.icon;
+        const active = pathname.startsWith(item.to);
+        return {
+          title: item.label,
+          href: item.to,
+          active,
+          icon: (
+            <Icon
+              className={cn("h-full w-full", active ? "text-[#2563EB]" : "text-slate-700")}
+              strokeWidth={active ? 2.35 : 2}
+            />
+          ),
+        };
+      }),
+    [pathname],
+  );
+
+  if (!isVertical) {
+    return (
+      <aside
+        className={cn(
+          "relative z-40 hidden w-full shrink-0 flex-row justify-center overflow-visible md:flex",
+          className,
+        )}
+        aria-label="Primary navigation"
+      >
+        <FloatingDock
+          desktopOnly
+          items={floatingItems}
+          desktopClassName="pointer-events-auto"
+        />
+      </aside>
+    );
+  }
+
   return (
     <aside
       className={cn(
         "relative z-40 hidden shrink-0 overflow-visible transition-[width] duration-200 md:flex",
-        isVertical
-          ? cn(
-              "sticky top-4 h-[calc(100dvh-2rem)] flex-col",
-              expanded ? "w-[200px]" : "w-[76px] items-center",
-            )
-          : "w-full flex-row justify-center",
+        "sticky top-4 h-[calc(100dvh-2rem)] flex-col",
+        expanded ? "w-[200px]" : "w-[76px] items-center",
         className,
       )}
       onMouseLeave={() => setHovered(null)}
@@ -120,23 +152,23 @@ export function TenantMacDock({
       <div
         className={cn(
           glassPanelClass,
-          "relative z-40 flex border border-white/70 bg-white/55 shadow-[0_12px_40px_-16px_rgba(15,23,42,0.35)] backdrop-blur-2xl",
-          isVertical
-            ? cn(
-                "h-full w-full flex-col overflow-visible rounded-[1.35rem] py-3",
-                expanded ? "items-stretch px-2.5" : "items-center px-1.5",
-              )
-            : "w-auto max-w-full flex-row items-center gap-1 overflow-visible rounded-[1.5rem] px-3 py-2",
+          "relative z-40 flex h-full w-full flex-col overflow-visible rounded-xl border border-white/70 bg-white/55 py-3 shadow-[0_12px_40px_-16px_rgba(15,23,42,0.35)] backdrop-blur-2xl",
+          expanded ? "items-stretch px-2.5" : "items-center px-1.5",
         )}
       >
         <div
           className={cn(
-            "mb-2 grid shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-[#2563EB] to-[#4C69A4] font-bold text-white shadow-md shadow-blue-900/20",
-            expanded ? "mx-auto h-11 w-11 text-[11px]" : isVertical ? "h-10 w-10 text-[11px]" : "mr-2 h-10 w-10 text-[10px]",
+            "mb-2 grid shrink-0 place-items-center overflow-hidden rounded-lg font-bold text-white shadow-md shadow-blue-900/20",
+            expanded ? "mx-auto h-11 w-11 text-[11px]" : "h-10 w-10 text-[11px]",
+            !logoUrl && "bg-gradient-to-br from-[#2563EB] to-[#4C69A4]",
           )}
           title={tenantName}
         >
-          {initials}
+          {logoUrl ? (
+            <img src={logoUrl} alt={tenantName} className="h-full w-full object-cover" />
+          ) : (
+            initials
+          )}
         </div>
         {expanded && (
           <div className="mb-3 px-1 text-center text-[10px] font-bold uppercase tracking-[0.12em] text-slate-600">
@@ -146,10 +178,8 @@ export function TenantMacDock({
 
         <nav
           className={cn(
-            "flex min-h-0 flex-1 overflow-visible",
-            isVertical
-              ? cn("w-full flex-col", expanded ? "gap-1.5" : "items-center gap-0.5")
-              : "flex-row items-center justify-center gap-0.5",
+            "flex min-h-0 w-full flex-1 flex-col overflow-visible",
+            expanded ? "gap-1.5" : "items-center gap-0.5",
           )}
           aria-label="Primary navigation"
         >
@@ -161,11 +191,7 @@ export function TenantMacDock({
             const tooltipSide =
               placement === "Left"
                 ? "left-full top-1/2 ml-3 -translate-y-1/2"
-                : placement === "Right"
-                  ? "right-full top-1/2 mr-3 -translate-y-1/2"
-                  : placement === "Top"
-                    ? "left-1/2 top-full mt-3 -translate-x-1/2"
-                    : "bottom-full left-1/2 mb-3 -translate-x-1/2";
+                : "right-full top-1/2 mr-3 -translate-y-1/2";
 
             if (expanded) {
               return (
@@ -224,7 +250,7 @@ export function TenantMacDock({
                 >
                   <span
                     className={cn(
-                      "grid h-11 w-11 place-items-center rounded-[1.05rem] border border-white/70 bg-gradient-to-br from-white/95 to-white/70 shadow-[0_6px_18px_-10px_rgba(15,23,42,0.45)]",
+                      "grid h-11 w-11 place-items-center rounded-lg border border-white/70 bg-gradient-to-br from-white/95 to-white/70 shadow-[0_6px_18px_-10px_rgba(15,23,42,0.45)]",
                       active && "ring-2 ring-[#2563EB]/40",
                     )}
                   >
@@ -284,13 +310,13 @@ export function TenantGlassSidebar(props: { className?: string }) {
 export function TenantDesktopTopBar() {
   const navigate = useNavigate();
   const { session, logout } = useAuth();
-  const { academicYear, setAcademicYear, academicYears, setAcademicYears, notifications } =
+  const { academicYear, setAcademicYear, academicYears, setAcademicYears, notifications, schoolDetails } =
     useTenantStore();
   const [pendingLogout, setPendingLogout] = useState(false);
   const [addYearOpen, setAddYearOpen] = useState(false);
   const [yearDraft, setYearDraft] = useState("");
   const unreadCount = notifications.filter((n) => !n.read).length;
-  const tenantName = session?.tenantName ?? "Silver Hills Global";
+  const tenantName = schoolDetails.name || session?.tenantName || "Silver Hills Global";
 
   const confirmLogout = () => {
     const name = session?.displayName ?? "Tenant Admin";
@@ -322,7 +348,7 @@ export function TenantDesktopTopBar() {
       <header
         className={cn(
           glassPanelClass,
-          "mb-5 hidden items-center justify-between gap-4 rounded-2xl px-5 py-3.5 md:flex",
+          "mb-5 hidden items-center justify-between gap-4 rounded-lg px-5 py-3.5 md:flex",
         )}
       >
         <div className="min-w-0">
@@ -416,7 +442,7 @@ export function TenantDesktopTopBar() {
           if (!open) setYearDraft("");
         }}
       >
-        <DialogContent className="max-w-sm rounded-[1.5rem] border border-white/60 bg-white/90 p-6 backdrop-blur-xl">
+        <DialogContent className="max-w-sm rounded-xl border border-white/60 bg-white/90 p-6 backdrop-blur-xl">
           <DialogHeader>
             <DialogTitle className="text-[22px] font-semibold text-slate-900">
               Add Academic Year
@@ -451,7 +477,7 @@ export function TenantDesktopTopBar() {
       </Dialog>
 
       <Dialog open={pendingLogout} onOpenChange={setPendingLogout}>
-        <DialogContent className="max-w-sm rounded-[1.5rem] border border-white/60 bg-white/90 p-6 backdrop-blur-xl">
+        <DialogContent className="max-w-sm rounded-xl border border-white/60 bg-white/90 p-6 backdrop-blur-xl">
           <DialogHeader>
             <DialogTitle className="text-[22px] font-semibold text-slate-900">Sign Out</DialogTitle>
             <DialogDescription className="mt-1 text-[13px] leading-relaxed text-slate-500">

@@ -37,7 +37,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const META_LABEL = "text-black/45 font-semibold tracking-wider text-[11px] uppercase";
-const CARD_FRAME = "rounded-[2rem] bg-white border border-slate-100 shadow-sm p-6";
+const CARD_FRAME = "rounded-xl bg-white border border-slate-100 shadow-sm p-6";
 const MAX_FILE_BYTES = 1_500_000;
 const MAX_FILES_PER_DOC = 8;
 
@@ -89,10 +89,10 @@ function StaffPhotoAvatar({
           <img
             src={staff.photoUrl}
             alt={`${staff.name} profile`}
-            className="h-16 w-16 rounded-2xl object-cover"
+            className="h-16 w-16 rounded-lg object-cover"
           />
         ) : (
-          <div className="grid h-16 w-16 place-items-center rounded-2xl bg-black text-lg font-semibold text-white">
+          <div className="grid h-16 w-16 place-items-center rounded-lg bg-black text-lg font-semibold text-white">
             {initials(staff.name)}
           </div>
         )}
@@ -126,7 +126,7 @@ function StaffPhotoAvatar({
       </div>
 
       <Dialog open={confirmRemove} onOpenChange={setConfirmRemove}>
-        <DialogContent className="max-w-sm rounded-[1.5rem] border border-[#E5E5E5] bg-white p-6">
+        <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6">
           <DialogHeader>
             <DialogTitle className="text-[22px] font-semibold text-black">
               Remove photo
@@ -560,7 +560,7 @@ export function StaffProfileDetail({
               />
             </div>
 
-            <div className="min-w-0 rounded-2xl bg-slate-50 p-4 sm:p-5">
+            <div className="min-w-0 rounded-lg bg-slate-50 p-4 sm:p-5">
               <div className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
                 Total Salary
               </div>
@@ -589,7 +589,7 @@ export function StaffProfileDetail({
                 Aadhaar and PAN records with multiple file attachments per document.
               </p>
             </div>
-            <div className="flex shrink-0 items-center gap-2 rounded-2xl bg-slate-50 px-4 py-3">
+            <div className="flex shrink-0 items-center gap-2 rounded-lg bg-slate-50 px-4 py-3">
               <FileText className="h-4 w-4 text-black/45" />
               <div className="text-right">
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
@@ -643,16 +643,16 @@ export function StaffProfileDetail({
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSaveProfile} className="space-y-3">
-            <div className="flex items-center gap-4 rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] p-3">
+            <div className="flex items-center gap-4 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3">
               <div className="relative h-14 w-14 shrink-0">
                 {draft.photoUrl ? (
                   <img
                     src={draft.photoUrl}
                     alt=""
-                    className="h-14 w-14 rounded-2xl object-cover"
+                    className="h-14 w-14 rounded-lg object-cover"
                   />
                 ) : (
-                  <div className="grid h-14 w-14 place-items-center rounded-2xl bg-black text-sm font-semibold text-white">
+                  <div className="grid h-14 w-14 place-items-center rounded-lg bg-black text-sm font-semibold text-white">
                     {draft.name.trim() ? initials(draft.name) : "?"}
                   </div>
                 )}
@@ -789,7 +789,7 @@ function DocumentCard({
   const complete = isDocumentComplete(doc);
 
   return (
-    <div className="min-w-0 rounded-2xl border border-slate-100 bg-slate-50/50 p-4">
+    <div className="min-w-0 rounded-lg border border-slate-100 bg-slate-50/50 p-4">
       <div className="flex items-start justify-between gap-2">
         <div className={META_LABEL}>{doc.label}</div>
         <span

@@ -18,6 +18,7 @@ import {
   X,
   Camera,
   Check,
+  Share2,
   ChevronDown,
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -43,6 +44,10 @@ import {
   StickyNote,
   Settings,
   ChevronLeft,
+  ImagePlus,
+  FileImage,
+  Paperclip,
+  FileText,
 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, XAxis, YAxis } from "recharts";
 import {
@@ -106,11 +111,15 @@ import {
   THEME_MODE_OPTIONS,
   THEME_NAV_PLACEMENT_OPTIONS,
   useTenantStore,
+  createStudentShareToken,
+  upsertStudentInSnapshot,
+  schoolInitials,
   type ClassConfig,
   type Department,
   type Payment,
   type PaymentCategory,
   type Role,
+  type SchoolDetails,
   type Staff,
   type Student,
   type ThemeSettings,
@@ -119,6 +128,7 @@ import {
   type TenantNotification,
 } from "@/lib/tenant-store";
 import { StudentProfileDetail } from "@/components/school/StudentProfileDetail";
+import { ShareParentLinkDialog } from "@/components/school/ShareParentLinkDialog";
 import { StaffProfileDetail } from "@/components/school/StaffProfileDetail";
 import { EnrollmentStatusBadge, isRecordActive } from "@/components/school/ProfileAccountActions";
 import { FinanceBarCard, FinanceDonutCard } from "@/components/school/finance-charts";
@@ -137,10 +147,11 @@ import {
   bankBalance,
   cashOnHand,
   formatInr,
+  operatingExpenseForPeriod,
   salaryPayable,
-  totalOperatingExpense,
 } from "@/lib/dashboard-finance";
 import {
+  buildIncomeExpenseSeries,
   filterPaymentsByPeriod,
   PAYMENT_PERIOD_OPTIONS,
   type CustomDateRange,
@@ -228,9 +239,35 @@ const PENDING_OBLIGATIONS = [
 ];
 
 type PendingObligation = (typeof PENDING_OBLIGATIONS)[number];
+type PaymentAttachment = {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  dataUrl: string;
+};
 type MadePayment = Omit<(typeof MADE_PAYMENTS)[number], "status"> & {
   status: "Queued" | "Cleared";
+  attachments?: PaymentAttachment[];
 };
+
+const MAX_DISBURSAL_ATTACHMENTS = 8;
+const MAX_DISBURSAL_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+
+function formatAttachmentSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(new Error(`Could not read ${file.name}`));
+    reader.readAsDataURL(file);
+  });
+}
 
 const LEDGER_INCOME_SEGMENTS = [
   { label: "Tuition", value: 1_840_000 },
@@ -281,7 +318,7 @@ function DashboardPeriodFilter({
         </SelectContent>
       </Select>
       {period === "custom" && (
-        <div className="grid grid-cols-1 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           <DatePicker
             value={customRange.from}
             onChange={(from) => onCustomRangeChange({ ...customRange, from })}
@@ -393,10 +430,7 @@ function MobileStatsOverview({
   );
 }
 
-const workspacePanelClass = cn(
-  glassCardClass,
-  "md:!rounded-3xl lg:organic-card lg:!rounded-[2rem]",
-);
+const workspacePanelClass = cn(glassCardClass, "rounded-2xl");
 
 function MobileInsightSplit({
   icon: Icon,
@@ -454,7 +488,7 @@ function MobileFinancialDetailTile({
   iconColor: string;
 }) {
   return (
-    <div className="relative flex min-h-[104px] min-w-0 flex-col justify-end rounded-[1.25rem] border border-slate-100/70 bg-white p-3.5 shadow-sm shadow-slate-200/35">
+    <div className="relative flex min-h-[104px] min-w-0 flex-col justify-end rounded-lg border border-slate-100/70 bg-white p-3.5 shadow-sm shadow-slate-200/35">
       <div
         className={cn(
           "absolute right-3 top-3 grid h-8 w-8 shrink-0 place-items-center rounded-full",
@@ -482,8 +516,10 @@ type MobileDashboardMetrics = {
   salaryOutstanding: number;
   inHand: number;
   inBank: number;
+  totalBalance: number;
   unreadNotifications: number;
-  onCollectFee: () => void;
+  onReceivePayment: () => void;
+  onMakePayment: () => void;
 };
 
 function MobilePremiumDashboard({
@@ -495,8 +531,10 @@ function MobilePremiumDashboard({
   salaryOutstanding,
   inHand,
   inBank,
+  totalBalance,
   unreadNotifications,
-  onCollectFee,
+  onReceivePayment,
+  onMakePayment,
 }: MobileDashboardMetrics) {
   return (
     <div className="w-full space-y-6 md:hidden">
@@ -527,13 +565,13 @@ function MobilePremiumDashboard({
       <section className="w-full space-y-3">
         <MobileDashboardSectionTitle>Financial Overview</MobileDashboardSectionTitle>
         <div className="grid w-full grid-cols-2 gap-3">
-          <div className="flex min-h-[112px] min-w-0 flex-col justify-between rounded-[1.25rem] bg-[#D1F2E1] p-4">
+          <div className="flex min-h-[112px] min-w-0 flex-col justify-between rounded-lg bg-[#D1F2E1] p-4">
             <div className="text-[12px] font-medium text-slate-800">Total Income</div>
             <div className={cn(dashboardAmountClass, "mt-3 text-slate-900")}>
               {formatInr(periodIncome)}
             </div>
           </div>
-          <div className="relative flex min-h-[112px] min-w-0 flex-col justify-between overflow-hidden rounded-[1.25rem] bg-[#3B5998] p-4 text-white">
+          <div className="relative flex min-h-[112px] min-w-0 flex-col justify-between overflow-hidden rounded-lg bg-[#3B5998] p-4 text-white">
             <TriangleAlert
               className="absolute right-3 top-3 h-4 w-4 text-amber-300"
               strokeWidth={2.25}
@@ -547,8 +585,8 @@ function MobilePremiumDashboard({
         </div>
       </section>
 
-      <section className="w-full space-y-3">
-        <MobileDashboardSectionTitle>Financial Detail</MobileDashboardSectionTitle>
+      <section className={cn(premiumCardClass, "w-full space-y-3 p-4")}>
+        <DashboardPanelHeading icon={HandCoins} title="Outstanding Payments" />
         <div className="grid w-full grid-cols-2 gap-3">
           <MobileFinancialDetailTile
             title="Fees Outstanding"
@@ -564,6 +602,12 @@ function MobilePremiumDashboard({
             iconBg="bg-amber-50"
             iconColor="text-amber-600"
           />
+        </div>
+      </section>
+
+      <section className={cn(premiumCardClass, "w-full space-y-3 p-4")}>
+        <DashboardPanelHeading icon={Landmark} title="Cash Position" />
+        <div className="grid w-full grid-cols-2 gap-3">
           <MobileFinancialDetailTile
             title="Cash In Hand"
             value={formatInr(inHand)}
@@ -578,6 +622,15 @@ function MobilePremiumDashboard({
             iconBg="bg-violet-50"
             iconColor="text-violet-600"
           />
+          <div className="col-span-2">
+            <MobileFinancialDetailTile
+              title="Total Balance"
+              value={formatInr(totalBalance)}
+              icon={Wallet}
+              iconBg="bg-[#DBEAFE]"
+              iconColor="text-[#2563EB]"
+            />
+          </div>
         </div>
       </section>
 
@@ -601,13 +654,40 @@ function MobilePremiumDashboard({
         </Link>
       )}
 
-      <button
-        type="button"
-        onClick={onCollectFee}
-        className="w-full rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 py-4 text-center text-[15px] font-semibold tracking-wide text-white shadow-md shadow-blue-200/50 transition-all duration-200 hover:opacity-95"
-      >
-        Collect Fee
-      </button>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <button
+          type="button"
+          onClick={onReceivePayment}
+          className={cn(
+            premiumCardClass,
+            "flex min-h-[88px] items-center gap-3 p-4 text-left transition-colors hover:border-slate-200",
+          )}
+        >
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-[#D1F2E1]">
+            <ArrowDownToLine className="h-5 w-5 text-[#10B981]" />
+          </span>
+          <div className="min-w-0">
+            <div className="text-[14px] font-bold text-slate-900">Receive payment</div>
+            <p className="mt-0.5 text-[12px] text-slate-500">Capture inbound fee receipts</p>
+          </div>
+        </button>
+        <button
+          type="button"
+          onClick={onMakePayment}
+          className={cn(
+            premiumCardClass,
+            "flex min-h-[88px] items-center gap-3 p-4 text-left transition-colors hover:border-slate-200",
+          )}
+        >
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-[#DBEAFE]">
+            <ArrowUpFromLine className="h-5 w-5 text-[#2563EB]" />
+          </span>
+          <div className="min-w-0">
+            <div className="text-[14px] font-bold text-slate-900">Make payment</div>
+            <p className="mt-0.5 text-[12px] text-slate-500">Pay vendors and salaries</p>
+          </div>
+        </button>
+      </div>
     </div>
   );
 }
@@ -617,6 +697,7 @@ type GlassDesktopDashboardProps = {
   staff: Staff[];
   periodIncome: number;
   expenseTotal: number;
+  periodPayments: Payment[];
   totalDue: number;
   salaryOutstanding: number;
   inHand: number;
@@ -633,8 +714,10 @@ type GlassDesktopDashboardProps = {
   setPeriod: (p: PaymentPeriod) => void;
   customRange: CustomDateRange;
   setCustomRange: (r: CustomDateRange) => void;
-  onCollectFee: () => void;
+  onReceivePayment: () => void;
+  onMakePayment: () => void;
   onViewStudents: () => void;
+  onAdmitStudent: () => void;
   onViewStaff: () => void;
 };
 
@@ -643,6 +726,7 @@ function GlassDesktopDashboard({
   staff,
   periodIncome,
   expenseTotal,
+  periodPayments,
   totalDue,
   salaryOutstanding,
   inHand,
@@ -659,14 +743,17 @@ function GlassDesktopDashboard({
   setPeriod,
   customRange,
   setCustomRange,
-  onCollectFee,
+  onReceivePayment,
+  onMakePayment,
   onViewStudents,
+  onAdmitStudent,
   onViewStaff,
 }: GlassDesktopDashboardProps) {
   const { session } = useAuth();
+  const { schoolDetails } = useTenantStore();
   const paidCount = students.filter((s) => s.due === 0).length;
   const activeStaff = staff.filter((s) => s.active).length;
-  const tenantName = session?.tenantName ?? "Silver Hills Global";
+  const tenantName = schoolDetails.name || session?.tenantName || "Silver Hills Global";
   const displayName = session?.displayName ?? "Tenant Admin";
 
   const [moreTodosOpen, setMoreTodosOpen] = useState(false);
@@ -711,18 +798,12 @@ function GlassDesktopDashboard({
     ];
   }, [students.length]);
 
-  const incomeExpenseWeeks = useMemo(() => {
-    const incomeShare = Math.round(periodIncome / 5);
-    const expenseShare = Math.round(expenseTotal / 5);
-    return ["W1", "W2", "W3", "W4", "W5"].map((label, index) => ({
-      label,
-      income: Math.max(0, incomeShare + (index - 2) * Math.round(incomeShare * 0.08)),
-      expense: Math.max(0, expenseShare + (2 - index) * Math.round(expenseShare * 0.06)),
-    }));
-  }, [periodIncome, expenseTotal]);
+  const incomeExpenseWeeks = useMemo(
+    () => buildIncomeExpenseSeries(periodPayments, expenseTotal, period, customRange),
+    [periodPayments, expenseTotal, period, customRange],
+  );
 
   const newAdmissions = admissionWeeks.reduce((sum, week) => sum + week.value, 0);
-  const totalEnquiries = newAdmissions + overdueStudents.length + unreadNotifications;
 
   const nowLabel = useMemo(() => {
     const now = new Date();
@@ -808,6 +889,14 @@ function GlassDesktopDashboard({
                 </div>
               </button>
             </div>
+            <button
+              type="button"
+              onClick={onAdmitStudent}
+              className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#2563EB] px-3 py-2.5 text-[12px] font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+            >
+              <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+              Admit a Student
+            </button>
           </section>
 
           <section className={cn(glassCardClass, "flex flex-col p-5")}>
@@ -822,26 +911,30 @@ function GlassDesktopDashboard({
                 />
               </div>
             </div>
-            <div className="mt-4 grid flex-1 grid-cols-1 gap-3">
-              <div className="flex min-h-[100px] flex-col justify-between rounded-2xl bg-[#D1F2E1] p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <span className="text-[12px] font-medium text-slate-800">Income</span>
-                  <span className="grid h-8 w-8 place-items-center rounded-lg bg-white/70">
-                    <ArrowUpRight className="h-4 w-4 text-[#10B981]" />
-                  </span>
+            <div className="mt-4 grid flex-1 grid-cols-2 gap-3">
+              <div
+                className={cn(
+                  glassInsetClass,
+                  "flex min-h-[112px] flex-col items-center justify-center px-3 py-4 text-center",
+                )}
+              >
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  Total Income
                 </div>
-                <div className={cn(dashboardAmountClass, "whitespace-nowrap text-slate-900")}>
+                <div className="mt-2 text-[18px] font-semibold tracking-tight text-emerald-700 tabular-nums sm:text-[20px]">
                   {formatInr(periodIncome)}
                 </div>
               </div>
-              <div className="relative flex min-h-[100px] flex-col justify-between overflow-hidden rounded-2xl bg-[#3B5998] p-4 text-white">
-                <div className="flex items-start justify-between gap-2">
-                  <span className="text-[12px] font-medium text-white/90">Expense</span>
-                  <span className="grid h-8 w-8 place-items-center rounded-lg bg-white/15">
-                    <ArrowDownRight className="h-4 w-4 text-white" />
-                  </span>
+              <div
+                className={cn(
+                  glassInsetClass,
+                  "flex min-h-[112px] flex-col items-center justify-center px-3 py-4 text-center",
+                )}
+              >
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  Total Expense
                 </div>
-                <div className={cn(dashboardAmountClass, "whitespace-nowrap text-white")}>
+                <div className="mt-2 text-[18px] font-semibold tracking-tight text-rose-700 tabular-nums sm:text-[20px]">
                   {formatInr(expenseTotal)}
                 </div>
               </div>
@@ -886,28 +979,26 @@ function GlassDesktopDashboard({
 
           <section className={cn(glassCardClass, "flex flex-col p-5")}>
             <DashboardPanelHeading icon={Landmark} title="Cash Position" />
-            <div className="mt-4 grid flex-1 grid-cols-[1fr_1.05fr] gap-3">
-              <div className="grid gap-3">
-                <div className={cn(glassInsetClass, "flex min-h-[84px] flex-col justify-between p-3.5")}>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[12px] font-medium text-slate-600">Cash In Hand</span>
-                    <Banknote className="h-3.5 w-3.5 text-[#10B981]" />
-                  </div>
-                  <div className={cn(dashboardAmountCompactClass, "text-slate-900")}>
-                    {formatInr(inHand)}
-                  </div>
+            <div className="mt-4 grid flex-1 grid-cols-2 gap-3">
+              <div className={cn(glassInsetClass, "flex min-h-[84px] flex-col justify-between p-3.5")}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12px] font-medium text-slate-600">Cash In Hand</span>
+                  <Banknote className="h-3.5 w-3.5 text-[#10B981]" />
                 </div>
-                <div className={cn(glassInsetClass, "flex min-h-[84px] flex-col justify-between p-3.5")}>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[12px] font-medium text-slate-600">Bank Balance</span>
-                    <Landmark className="h-3.5 w-3.5 text-violet-600" />
-                  </div>
-                  <div className={cn(dashboardAmountCompactClass, "text-slate-900")}>
-                    {formatInr(inBank)}
-                  </div>
+                <div className={cn(dashboardAmountCompactClass, "text-slate-900")}>
+                  {formatInr(inHand)}
                 </div>
               </div>
-              <div className="flex min-h-full flex-col justify-between rounded-2xl bg-[#DBEAFE]/70 p-4">
+              <div className={cn(glassInsetClass, "flex min-h-[84px] flex-col justify-between p-3.5")}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12px] font-medium text-slate-600">Bank Balance</span>
+                  <Landmark className="h-3.5 w-3.5 text-violet-600" />
+                </div>
+                <div className={cn(dashboardAmountCompactClass, "text-slate-900")}>
+                  {formatInr(inBank)}
+                </div>
+              </div>
+              <div className="col-span-2 flex min-h-[84px] flex-col justify-between rounded-lg bg-[#DBEAFE]/70 p-4">
                 <div className="flex items-start justify-between gap-2">
                   <span className="text-[12px] font-medium text-slate-700">Total Balance</span>
                   <span className="grid h-8 w-8 place-items-center rounded-lg bg-white/80">
@@ -923,14 +1014,42 @@ function GlassDesktopDashboard({
         </div>
 
         <aside className="col-span-12 flex h-full min-h-0 flex-col gap-5 xl:col-span-4">
-          <section className={cn(glassCardClass, "flex shrink-0 flex-col p-5")}>
+          <section className="grid shrink-0 grid-cols-2 gap-3">
             <button
               type="button"
-              onClick={onCollectFee}
-              className="mb-4 w-full rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 py-3 text-[13px] font-semibold text-white shadow-md shadow-blue-200/40 transition-opacity hover:opacity-95"
+              onClick={onReceivePayment}
+              className={cn(
+                glassCardClass,
+                "flex min-h-[96px] flex-col items-start gap-3 p-4 text-left transition-colors hover:bg-white/70",
+              )}
             >
-              Collect Fee
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-[#D1F2E1]">
+                <ArrowDownToLine className="h-5 w-5 text-[#10B981]" />
+              </span>
+              <div className="min-w-0">
+                <div className="text-[13px] font-bold leading-snug text-slate-900">Receive payment</div>
+                <p className="mt-0.5 text-[11px] leading-snug text-slate-500">Capture inbound fee receipts</p>
+              </div>
             </button>
+            <button
+              type="button"
+              onClick={onMakePayment}
+              className={cn(
+                glassCardClass,
+                "flex min-h-[96px] flex-col items-start gap-3 p-4 text-left transition-colors hover:bg-white/70",
+              )}
+            >
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-[#DBEAFE]">
+                <ArrowUpFromLine className="h-5 w-5 text-[#2563EB]" />
+              </span>
+              <div className="min-w-0">
+                <div className="text-[13px] font-bold leading-snug text-slate-900">Make payment</div>
+                <p className="mt-0.5 text-[11px] leading-snug text-slate-500">Pay vendors and salaries</p>
+              </div>
+            </button>
+          </section>
+
+          <section className={cn(glassCardClass, "flex min-h-0 flex-1 flex-col p-5")}>
             <div className="flex items-center justify-between gap-2">
               <DashboardPanelHeading icon={ListTodo} title="To Do List" />
               <button
@@ -1017,19 +1136,19 @@ function GlassDesktopDashboard({
                 </div>
               )}
             </div>
-          </section>
 
-          <section className={cn(glassCardClass, "flex min-h-0 flex-1 flex-col p-5")}>
-            <DashboardPanelHeading icon={StickyNote} title="Notes" />
-            <Textarea
-              value={dashboardNote}
-              onChange={(e) => setDashboardNote(e.target.value)}
-              placeholder="Write a quick note for today..."
-              className={cn(
-                glassInsetClass,
-                "mt-4 min-h-[72px] w-full flex-1 resize-none border-white/50 bg-white/40",
-              )}
-            />
+            <div className="mt-5 flex min-h-0 flex-1 flex-col border-t border-slate-200/60 pt-5">
+              <DashboardPanelHeading icon={StickyNote} title="Notes" />
+              <Textarea
+                value={dashboardNote}
+                onChange={(e) => setDashboardNote(e.target.value)}
+                placeholder="Write a quick note for today..."
+                className={cn(
+                  glassInsetClass,
+                  "mt-4 min-h-[72px] w-full flex-1 resize-none border-white/50 bg-white/40",
+                )}
+              />
+            </div>
           </section>
         </aside>
 
@@ -1062,13 +1181,9 @@ function GlassDesktopDashboard({
             </LineChart>
           </ChartContainer>
           <div className="mt-4 grid flex-1 grid-cols-1 gap-3">
-            <div className={cn(glassInsetClass, "flex flex-1 flex-col justify-center p-3.5")}>
-              <div className="text-[11px] font-medium text-slate-500">New Admissions</div>
-              <div className="mt-1 font-mono text-[16px] font-bold text-slate-900">{newAdmissions}</div>
-            </div>
-            <div className={cn(glassInsetClass, "flex flex-1 flex-col justify-center p-3.5")}>
-              <div className="text-[11px] font-medium text-slate-500">Total Enquiries</div>
-              <div className="mt-1 font-mono text-[16px] font-bold text-slate-900">{totalEnquiries}</div>
+            <div className={cn(glassInsetClass, "flex flex-1 flex-col items-center justify-center p-4 text-center")}>
+              <div className="text-[13px] font-medium text-slate-500">New Admissions</div>
+              <div className={cn(dashboardCountClass, "mt-2 text-slate-900")}>{newAdmissions}</div>
             </div>
           </div>
         </section>
@@ -1104,16 +1219,30 @@ function GlassDesktopDashboard({
               <Bar dataKey="expense" fill="var(--color-expense)" radius={[4, 4, 0, 0]} maxBarSize={14} />
             </BarChart>
           </ChartContainer>
-          <div className="mt-4 grid grid-cols-1 gap-3">
-            <div className="rounded-2xl bg-[#D1F2E1] p-3.5">
-              <div className="text-[11px] font-medium text-slate-700">Total Income</div>
-              <div className={cn(dashboardAmountCompactClass, "mt-1 whitespace-nowrap text-slate-900")}>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <div
+              className={cn(
+                glassInsetClass,
+                "flex flex-col items-center justify-center px-3 py-3.5 text-center",
+              )}
+            >
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                Total Income
+              </div>
+              <div className="mt-1.5 text-[15px] font-semibold tracking-tight text-emerald-700 tabular-nums">
                 {formatInr(periodIncome)}
               </div>
             </div>
-            <div className="rounded-2xl bg-[#3B5998] p-3.5 text-white">
-              <div className="text-[11px] font-medium text-white/90">Total Expense</div>
-              <div className={cn(dashboardAmountCompactClass, "mt-1 whitespace-nowrap text-white")}>
+            <div
+              className={cn(
+                glassInsetClass,
+                "flex flex-col items-center justify-center px-3 py-3.5 text-center",
+              )}
+            >
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                Total Expense
+              </div>
+              <div className="mt-1.5 text-[15px] font-semibold tracking-tight text-rose-700 tabular-nums">
                 {formatInr(expenseTotal)}
               </div>
             </div>
@@ -1160,7 +1289,7 @@ function GlassDesktopDashboard({
         <footer
           className={cn(
             glassPanelClass,
-            "col-span-12 flex flex-wrap items-center justify-between gap-4 rounded-2xl px-5 py-3.5",
+            "col-span-12 flex flex-wrap items-center justify-between gap-4 rounded-lg px-5 py-3.5",
           )}
         >
           <div className="min-w-0">
@@ -1342,7 +1471,10 @@ export function SchoolDashboard() {
   const inHand = useMemo(() => cashOnHand(payments), [payments]);
   const inBank = useMemo(() => bankBalance(payments), [payments]);
   const totalBalance = inHand + inBank;
-  const expenseTotal = totalOperatingExpense();
+  const expenseTotal = useMemo(
+    () => operatingExpenseForPeriod(period, customRange),
+    [period, customRange],
+  );
   const salaryOutstanding = salaryPayable();
 
   const recentReceipts = useMemo(() => filteredPayments.slice(0, 5), [filteredPayments]);
@@ -1363,8 +1495,10 @@ export function SchoolDashboard() {
         salaryOutstanding={salaryOutstanding}
         inHand={inHand}
         inBank={inBank}
+        totalBalance={totalBalance}
         unreadNotifications={unreadNotifications}
-        onCollectFee={() => navigate({ to: "/tenant/finance", search: { tab: "receive" } })}
+        onReceivePayment={() => navigate({ to: "/tenant/finance", search: { tab: "receive" } })}
+        onMakePayment={() => navigate({ to: "/tenant/finance", search: { tab: "make" } })}
       />
 
       <GlassDesktopDashboard
@@ -1372,6 +1506,7 @@ export function SchoolDashboard() {
         staff={staff}
         periodIncome={periodIncome}
         expenseTotal={expenseTotal}
+        periodPayments={filteredPayments}
         totalDue={totalDue}
         salaryOutstanding={salaryOutstanding}
         inHand={inHand}
@@ -1388,8 +1523,10 @@ export function SchoolDashboard() {
         setPeriod={setPeriod}
         customRange={customRange}
         setCustomRange={setCustomRange}
-        onCollectFee={() => navigate({ to: "/tenant/finance", search: { tab: "receive" } })}
+        onReceivePayment={() => navigate({ to: "/tenant/finance", search: { tab: "receive" } })}
+        onMakePayment={() => navigate({ to: "/tenant/finance", search: { tab: "make" } })}
         onViewStudents={() => navigate({ to: "/tenant/students" })}
+        onAdmitStudent={() => navigate({ to: "/tenant/students/admit" })}
         onViewStaff={() => navigate({ to: "/tenant/staff" })}
       />
     </div>
@@ -1453,12 +1590,7 @@ type AdmitStudentForm = {
   cls: string;
   guardian: string;
   due: string;
-  gender: "" | "M" | "F";
   phone: string;
-  dob: string;
-  email: string;
-  address: string;
-  photoUrl: string;
 };
 
 function emptyAdmitForm(cls: string): AdmitStudentForm {
@@ -1467,12 +1599,7 @@ function emptyAdmitForm(cls: string): AdmitStudentForm {
     cls,
     guardian: "",
     due: "",
-    gender: "",
     phone: "",
-    dob: "",
-    email: "",
-    address: "",
-    photoUrl: "",
   };
 }
 
@@ -1501,11 +1628,11 @@ const directoryStatValueClass =
 function DirectoryPersonAvatar({ name, photoUrl }: { name: string; photoUrl?: string }) {
   if (photoUrl) {
     return (
-      <img src={photoUrl} alt="" className="h-11 w-11 shrink-0 rounded-2xl object-cover ring-1 ring-black/5" />
+      <img src={photoUrl} alt="" className="h-11 w-11 shrink-0 rounded-lg object-cover ring-1 ring-black/5" />
     );
   }
   return (
-    <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-black text-[12px] font-semibold text-white">
+    <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-black text-[12px] font-semibold text-white">
       {personInitials(name)}
     </div>
   );
@@ -1774,27 +1901,17 @@ function StudentsDirectoryTable({
   );
 }
 
-export function StudentsLedger() {
+export function AdmitStudentPage() {
   const { students, setStudents, classes } = useTenantStore();
   const navigate = useNavigate();
-  const search = useSearch({ from: "/tenant/students" }) as { id?: string; edit?: string };
-  const activeStudentViewId = search.id ?? null;
-  const initialEdit = search.edit === "1";
-
-  const openStudent = (id: string) => navigate({ to: "/tenant/students", search: { id } });
-  const openStudentEdit = (id: string) =>
-    navigate({ to: "/tenant/students", search: { id, edit: "1" } });
-  const closeStudent = () => navigate({ to: "/tenant/students", search: {} });
-
-  const [open, setOpen] = useState(false);
   const defaultClass = classes[0]?.className ?? "";
   const [form, setForm] = useState<AdmitStudentForm>(() => emptyAdmitForm(defaultClass));
-  const [gradeFilter, setGradeFilter] = useState<string>("all");
-  const [divisionFilter, setDivisionFilter] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [enrollmentFilter, setEnrollmentFilter] = useState<EnrollmentFilter>("all");
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const admitPhotoRef = useRef<HTMLInputElement>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareToken, setShareToken] = useState("");
+  const [shareName, setShareName] = useState("");
+  const [sharePhone, setSharePhone] = useState("");
+  const [shareGuardian, setShareGuardian] = useState("");
+  const [admittedId, setAdmittedId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!defaultClass) return;
@@ -1805,35 +1922,214 @@ export function StudentsLedger() {
     );
   }, [classes, defaultClass]);
 
+  const backToStudents = () => navigate({ to: "/tenant/students" });
+
+  const createStudent = (): Student | null => {
+    if (!form.name.trim() || !form.guardian.trim()) {
+      toast.error("Name and guardian are required");
+      return null;
+    }
+    const nextNum = 2847 + students.filter((s) => s.id.startsWith("STU-28")).length;
+    const token = createStudentShareToken();
+    const newStu: Student = {
+      id: `STU-${nextNum}`,
+      name: form.name.trim(),
+      cls: form.cls,
+      guardian: form.guardian.trim(),
+      due: Number(form.due) || 0,
+      phone: form.phone.trim() || undefined,
+      shareToken: token,
+      active: true,
+    };
+    setStudents((prev) => [newStu, ...prev]);
+    upsertStudentInSnapshot(newStu);
+    return newStu;
+  };
+
+  const handleAdmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const newStu = createStudent();
+    if (!newStu) return;
+    toast.success(`${newStu.name} admitted`, {
+      description: `${newStu.id} · ${newStu.cls} · share the parent link to complete the profile`,
+    });
+    navigate({ to: "/tenant/students", search: { id: newStu.id } });
+  };
+
+  const handleAdmitAndShare = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const newStu = createStudent();
+    if (!newStu?.shareToken) return;
+    toast.success(`${newStu.name} admitted`, {
+      description: `${newStu.id} · share link ready for parents`,
+    });
+    setAdmittedId(newStu.id);
+    setShareToken(newStu.shareToken);
+    setShareName(newStu.name);
+    setSharePhone(newStu.phone ?? "");
+    setShareGuardian(newStu.guardian);
+    setShareOpen(true);
+  };
+
+  return (
+    <div className="w-full space-y-4 sm:space-y-5">
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={backToStudents}
+          className={cn(
+            glassInsetClass,
+            "inline-flex h-10 items-center gap-1.5 px-3 text-[13px] font-semibold text-slate-700 transition-colors hover:text-[#2563EB]",
+          )}
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Students directory
+        </button>
+        <div className="min-w-0">
+          <MobileSectionTitle className="md:hidden">Admit New Student</MobileSectionTitle>
+          <div className="hidden md:block">
+            <div className="text-[15px] font-bold text-slate-900">Admit New Student</div>
+            <p className="text-[12px] text-slate-500">
+              Fill school details, then share a link so parents can complete the rest.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <section className={cn(glassCardClass, "w-full p-5 md:p-6")}>
+        <form onSubmit={handleAdmit} className="space-y-4">
+          <div className="rounded-lg border border-[#DBEAFE] bg-[#EFF6FF]/70 px-3.5 py-3 text-[12px] text-slate-600">
+            Administrators enter name, class, guardian, contact, and initial due. Parents complete
+            photo, gender, date of birth, email, and address via the share link.
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              Full Name
+            </Label>
+            <Input
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="e.g. Ishaan Verma"
+              autoFocus
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              Class
+            </Label>
+            <FieldSelect
+              value={form.cls}
+              onValueChange={(cls) => setForm({ ...form, cls })}
+              options={classes.map((c) => ({ value: c.className, label: c.className }))}
+              placeholder="Select class"
+              disabled={classes.length === 0}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                Guardian Name
+              </Label>
+              <Input
+                value={form.guardian}
+                onChange={(e) => setForm({ ...form, guardian: e.target.value })}
+                placeholder="e.g. Anita Verma"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                Contact Phone
+              </Label>
+              <Input
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                placeholder="9810045221"
+                className="font-mono"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              Initial Due (₹)
+            </Label>
+            <Input
+              inputMode="numeric"
+              value={form.due}
+              onChange={(e) => setForm({ ...form, due: e.target.value.replace(/[^0-9]/g, "") })}
+              placeholder="0"
+              className="font-mono"
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={backToStudents}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleAdmitAndShare}
+              className="rounded-full"
+            >
+              <Share2 className="mr-1.5 h-3.5 w-3.5" />
+              Admit & Share
+            </Button>
+            <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+              Admit Student
+            </Button>
+          </div>
+        </form>
+      </section>
+
+      <ShareParentLinkDialog
+        open={shareOpen}
+        onOpenChange={(open) => {
+          setShareOpen(open);
+          if (!open && admittedId) {
+            navigate({ to: "/tenant/students", search: { id: admittedId } });
+          }
+        }}
+        token={shareToken}
+        studentName={shareName}
+        guardianPhone={sharePhone}
+        guardianName={shareGuardian}
+      />
+    </div>
+  );
+}
+
+
+export function StudentsLedger() {
+  const { students, setStudents, classes } = useTenantStore();
+  const navigate = useNavigate();
+  const search = useSearch({ from: "/tenant/students" }) as {
+    id?: string;
+    edit?: string;
+  };
+  const activeStudentViewId = search.id ?? null;
+  const initialEdit = search.edit === "1";
+  const defaultClass = classes[0]?.className ?? "";
+
+  const openStudent = (id: string) => navigate({ to: "/tenant/students", search: { id } });
+  const openStudentEdit = (id: string) =>
+    navigate({ to: "/tenant/students", search: { id, edit: "1" } });
+  const closeStudent = () => navigate({ to: "/tenant/students", search: {} });
+
+  const [gradeFilter, setGradeFilter] = useState<string>("all");
+  const [divisionFilter, setDivisionFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [enrollmentFilter, setEnrollmentFilter] = useState<EnrollmentFilter>("all");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     setDivisionFilter("all");
   }, [gradeFilter]);
 
-  const openAdmitDialog = () => {
-    setForm(emptyAdmitForm(defaultClass));
-    setOpen(true);
-  };
-
-  const handleAdmitPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast.error("Please choose a JPG, PNG, or WebP image");
-      return;
-    }
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error("Image must be 2 MB or smaller");
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = String(reader.result ?? "");
-      if (dataUrl) setForm((prev) => ({ ...prev, photoUrl: dataUrl }));
-    };
-    reader.onerror = () => toast.error("Could not read the selected image");
-    reader.readAsDataURL(file);
-    e.target.value = "";
-  };
+  const openAdmitPage = () => navigate({ to: "/tenant/students/admit" });
 
   const activeStudent = useMemo(
     () =>
@@ -1890,33 +2186,6 @@ export function StudentsLedger() {
     [students],
   );
 
-  const handleAdmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.name.trim() || !form.guardian.trim()) {
-      toast.error("Name and guardian are required");
-      return;
-    }
-    const nextNum = 2847 + students.filter((s) => s.id.startsWith("STU-28")).length;
-    const newStu: Student = {
-      id: `STU-${nextNum}`,
-      name: form.name.trim(),
-      cls: form.cls,
-      guardian: form.guardian.trim(),
-      due: Number(form.due) || 0,
-      gender: form.gender || undefined,
-      phone: form.phone.trim() || undefined,
-      dob: form.dob.trim() || undefined,
-      email: form.email.trim() || undefined,
-      address: form.address.trim() || undefined,
-      photoUrl: form.photoUrl || undefined,
-      active: true,
-    };
-    setStudents((prev) => [newStu, ...prev]);
-    toast.success(`${newStu.name} admitted`, { description: `${newStu.id} · ${newStu.cls}` });
-    setForm(emptyAdmitForm(defaultClass));
-    setOpen(false);
-  };
-
   const exportCsv = () => {
     if (!filtered.length) {
       toast.error("Nothing to export · current filter is empty");
@@ -1942,6 +2211,20 @@ export function StudentsLedger() {
   };
 
   const handleImportClick = () => fileInputRef.current?.click();
+
+  const downloadStudentTemplate = () => {
+    downloadCsv(
+      "students-bulk-upload-template.csv",
+      ["Name", "Class", "Guardian", "Phone", "Balance"],
+      [
+        ["Aarav Sharma", defaultClass || "LKG - A", "Rajesh Sharma", "9810045221", "0"],
+        ["Meera Iyer", "UKG - B", "Priya Iyer", "9876501234", "4500"],
+      ],
+    );
+    toast.success("Student template downloaded", {
+      description: "Fill the sample rows, save as CSV, then Upload CSV",
+    });
+  };
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -2197,19 +2480,42 @@ export function StudentsLedger() {
                 <Download className="h-3.5 w-3.5" />
                 Export CSV
               </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className={mobileOutlineBtn}>
+                <Upload className="h-3.5 w-3.5" />
+                Bulk Upload
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              sideOffset={8}
+              collisionPadding={12}
+              className="z-[250] w-56 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+            >
+              <DropdownMenuItem
+                onClick={downloadStudentTemplate}
+                className="cursor-pointer gap-2 rounded-xl text-[13px]"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Download template
+              </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={handleImportClick}
                 className="cursor-pointer gap-2 rounded-xl text-[13px]"
               >
                 <Upload className="h-3.5 w-3.5" />
-                Import CSV
+                Upload CSV
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
           <button
             type="button"
-            onClick={openAdmitDialog}
+            onClick={openAdmitPage}
             className={cn(
               mobilePrimaryBtn,
               "md:rounded-full md:bg-gradient-to-r md:from-[#2563EB] md:to-[#4C69A4] md:shadow-md md:shadow-blue-900/15 md:hover:opacity-95 md:hover:bg-gradient-to-r",
@@ -2312,205 +2618,6 @@ export function StudentsLedger() {
         onViewProfile={openStudent}
         onEditData={openStudentEdit}
       />
-
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[min(92dvh,720px)] overflow-y-auto sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Admit New Student</DialogTitle>
-            <DialogDescription>
-              Provision a fresh enrollment record into the Silver Hills tenant ledger.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleAdmit} className="space-y-3">
-            <div className="flex items-center gap-4 rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] p-3">
-              <div className="relative h-14 w-14 shrink-0">
-                {form.photoUrl ? (
-                  <img
-                    src={form.photoUrl}
-                    alt=""
-                    className="h-14 w-14 rounded-2xl object-cover"
-                  />
-                ) : (
-                  <div className="grid h-14 w-14 place-items-center rounded-2xl bg-black text-sm font-semibold text-white">
-                    {form.name.trim() ? personInitials(form.name) : "?"}
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={() => admitPhotoRef.current?.click()}
-                  aria-label="Upload profile photo"
-                  className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#2563EB] text-white shadow-sm"
-                >
-                  <Camera className="h-3.5 w-3.5" />
-                </button>
-              </div>
-              <div className="min-w-0 text-[12px] text-black/55">
-                <div className="font-medium text-black">Profile Photo</div>
-                <div className="mt-0.5">Optional · JPG, PNG or WebP up to 2 MB</div>
-                {form.photoUrl && (
-                  <button
-                    type="button"
-                    onClick={() => setForm((prev) => ({ ...prev, photoUrl: "" }))}
-                    className="mt-1.5 text-[11px] font-semibold text-[#EF4444] hover:underline"
-                  >
-                    Remove photo
-                  </button>
-                )}
-              </div>
-              <input
-                ref={admitPhotoRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                className="hidden"
-                onChange={handleAdmitPhoto}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                Full Name
-              </Label>
-              <Input
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="e.g. Ishaan Verma"
-                autoFocus
-              />
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                  Class
-                </Label>
-                <FieldSelect
-                  value={form.cls}
-                  onValueChange={(cls) => setForm({ ...form, cls })}
-                  options={classes.map((c) => ({ value: c.className, label: c.className }))}
-                  placeholder="Select class"
-                  disabled={classes.length === 0}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                  Gender
-                </Label>
-                <div className="inline-flex w-full items-center rounded-full border border-black/10 bg-white p-1">
-                  {(
-                    [
-                      { key: "M" as const, label: "Male" },
-                      { key: "F" as const, label: "Female" },
-                    ] as const
-                  ).map((g) => (
-                    <button
-                      key={g.key}
-                      type="button"
-                      onClick={() => setForm({ ...form, gender: g.key })}
-                      className={cn(
-                        "min-h-9 flex-1 rounded-full text-[12px] font-semibold transition-colors",
-                        form.gender === g.key
-                          ? "bg-[#2563EB] text-white"
-                          : "text-black/55 hover:bg-black/5",
-                      )}
-                    >
-                      {g.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                  Guardian Name
-                </Label>
-                <Input
-                  value={form.guardian}
-                  onChange={(e) => setForm({ ...form, guardian: e.target.value })}
-                  placeholder="e.g. Anita Verma"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                  Contact Phone
-                </Label>
-                <Input
-                  value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  placeholder="9810045221"
-                  className="font-mono"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                  Date of Birth
-                </Label>
-                <DatePicker
-                  value={form.dob}
-                  onChange={(dob) => setForm({ ...form, dob })}
-                  placeholder="14 Mar 2012"
-                  valueFormat="display"
-                  variant="pill"
-                  quickPicks={[]}
-                  min="1990-01-01"
-                  max={admitTodayISO()}
-                  className="h-9 w-full"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                  Initial Due (₹)
-                </Label>
-                <Input
-                  inputMode="numeric"
-                  value={form.due}
-                  onChange={(e) => setForm({ ...form, due: e.target.value.replace(/[^0-9]/g, "") })}
-                  placeholder="0"
-                  className="font-mono"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                Email Address
-              </Label>
-              <Input
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                placeholder="aarav.sharma@silverhills.in"
-                className="font-mono text-[13px]"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                Residential Mailing Address
-              </Label>
-              <Textarea
-                value={form.address}
-                onChange={(e) => setForm({ ...form, address: e.target.value })}
-                placeholder="B-204, Lotus Greens, Sector 21, Noida 201301"
-                className="min-h-[72px] resize-none rounded-2xl text-[13px]"
-              />
-            </div>
-
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
-                Admit Student
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
@@ -2580,6 +2687,7 @@ export function StaffRoster() {
     photoUrl: "",
   });
   const recruitPhotoRef = useRef<HTMLInputElement>(null);
+  const staffImportRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setForm((prev) => ({
@@ -2688,6 +2796,75 @@ export function StaffRoster() {
     toast.success("Staff directory exported", {
       description: `${filteredStaff.length} record${filteredStaff.length === 1 ? "" : "s"} saved to CSV`,
     });
+  };
+
+  const downloadStaffTemplate = () => {
+    downloadCsv(
+      "staff-bulk-upload-template.csv",
+      ["Name", "Role", "Department", "Phone", "ID"],
+      [
+        ["Ananya Menon", defaultRole || "Teacher", defaultDept || "LP", "9810012345", ""],
+        ["Rahul Nair", "Accountant", "Administrative", "9876501122", ""],
+      ],
+    );
+    toast.success("Staff template downloaded", {
+      description: "Fill the sample rows, save as CSV, then Upload CSV",
+    });
+  };
+
+  const handleStaffImportClick = () => staffImportRef.current?.click();
+
+  const handleStaffImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result ?? "");
+      const lines = text.trim().split(/\r?\n/);
+      if (!lines.length) {
+        toast.error("Empty CSV file");
+        return;
+      }
+      const start = /name|role|staff/i.test(lines[0] ?? "") ? 1 : 0;
+      const existingIds = new Set(staff.map((s) => s.id.toLowerCase()));
+      const fresh: Staff[] = [];
+      let nextSeq = staff.length + 22;
+      for (let i = start; i < lines.length; i++) {
+        const cells = lines[i].split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
+        const [name, role, dept, phone, idCell] = cells;
+        if (!name) continue;
+        let empId = (idCell || "").trim();
+        if (!empId || existingIds.has(empId.toLowerCase())) {
+          do {
+            empId = `STF-${String(nextSeq++).padStart(3, "0")}`;
+          } while (existingIds.has(empId.toLowerCase()));
+        }
+        existingIds.add(empId.toLowerCase());
+        fresh.push({
+          id: empId,
+          name,
+          role: role || defaultRole,
+          dept: dept || defaultDept,
+          active: true,
+          joinedAt: new Date().toISOString().slice(0, 10),
+          phone: phone || undefined,
+          basicSalary: 8000,
+          additionalAllowances: 0,
+          documents: DEFAULT_STAFF_DOCUMENTS.map((d) => ({ ...d })),
+        });
+      }
+      if (!fresh.length) {
+        toast.error("CSV had no parsable rows");
+      } else {
+        setStaff((prev) => [...fresh, ...prev]);
+        toast.success(`${fresh.length} staff imported`, {
+          description: "Appended to the staff directory",
+        });
+      }
+      if (staffImportRef.current) staffImportRef.current.value = "";
+    };
+    reader.onerror = () => toast.error("Could not read the selected file");
+    reader.readAsText(file);
   };
 
   if (activeStaff) {
@@ -2819,6 +2996,36 @@ export function StaffRoster() {
             Export
           </button>
 
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className={mobileOutlineBtn}>
+                <Upload className="h-3.5 w-3.5" />
+                Bulk Upload
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              sideOffset={8}
+              collisionPadding={12}
+              className="z-[250] w-56 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+            >
+              <DropdownMenuItem
+                onClick={downloadStaffTemplate}
+                className="cursor-pointer gap-2 rounded-xl text-[13px]"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Download template
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleStaffImportClick}
+                className="cursor-pointer gap-2 rounded-xl text-[13px]"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                Upload CSV
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <button
             type="button"
             onClick={() => setOpen(true)}
@@ -2832,6 +3039,14 @@ export function StaffRoster() {
           </button>
         </div>
       </div>
+
+      <input
+        ref={staffImportRef}
+        type="file"
+        accept=".csv,text/csv"
+        className="hidden"
+        onChange={handleStaffImport}
+      />
 
       <div className="space-y-2.5 md:hidden">
         {filteredStaff.length === 0 && (
@@ -3000,16 +3215,16 @@ export function StaffRoster() {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleRecruit} className="space-y-3">
-            <div className="flex items-center gap-4 rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] p-3">
+            <div className="flex items-center gap-4 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3">
               <div className="relative h-14 w-14 shrink-0">
                 {form.photoUrl ? (
                   <img
                     src={form.photoUrl}
                     alt=""
-                    className="h-14 w-14 rounded-2xl object-cover"
+                    className="h-14 w-14 rounded-lg object-cover"
                   />
                 ) : (
-                  <div className="grid h-14 w-14 place-items-center rounded-2xl bg-black text-sm font-semibold text-white">
+                  <div className="grid h-14 w-14 place-items-center rounded-lg bg-black text-sm font-semibold text-white">
                     {form.name.trim() ? personInitials(form.name) : "?"}
                   </div>
                 )}
@@ -3169,7 +3384,7 @@ export function FinanceModule() {
       <div className="w-full space-y-4 sm:space-y-5">
         <FinanceFlowHeader
           title="Make Payment"
-          description="Authorise outbound disbursals"
+          description="Pay vendors and salaries"
           onBack={backToOverview}
         />
         <MakePayment />
@@ -3316,9 +3531,8 @@ function FinanceOverview({
       | "daybook",
   ) => void;
 }) {
-  const { payments, academicYear } = useTenantStore();
-  const { session } = useAuth();
-  const schoolName = session?.tenantName ?? "Silver Hills Global";
+  const { payments, academicYear, schoolDetails } = useTenantStore();
+  const schoolName = schoolDetails.name || "Silver Hills Global";
   const [incomePeriod, setIncomePeriod] = useState<PaymentPeriod>("this_month");
   const [customRange, setCustomRange] = useState<CustomDateRange>({ from: "", to: "" });
 
@@ -3409,6 +3623,78 @@ function FinanceOverview({
     toast.success("Transactions PDF downloaded");
   };
 
+  const receiptBranding = {
+    letterheadUrl: schoolDetails.letterheadUrl,
+    address: schoolDetails.address,
+    phone: schoolDetails.phone,
+    email: schoolDetails.email,
+  };
+
+  const downloadTransaction = (payment: Payment) => {
+    downloadReceiptPdf(payment, schoolName, academicYear, receiptBranding);
+    toast.success(`Receipt ${payment.id} downloaded`);
+  };
+
+  const sharePayload = async (title: string, text: string) => {
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      try {
+        await navigator.share({ title, text });
+        toast.success("Shared", { description: title });
+        return;
+      } catch (err) {
+        if ((err as Error).name === "AbortError") return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Copied to clipboard", {
+        description: "Paste into WhatsApp, email, or chat",
+      });
+    } catch {
+      toast.error("Could not share · copy failed");
+    }
+  };
+
+  const shareTransactionsSummary = () => {
+    if (!payments.length) {
+      toast.error("Nothing to share · no transactions yet");
+      return;
+    }
+    const total = payments.reduce((sum, p) => sum + p.amount, 0);
+    const lines = [
+      `${schoolName} · Transactions`,
+      `Academic year: ${academicYear}`,
+      `${payments.length} receipt${payments.length === 1 ? "" : "s"} · Total ₹ ${total.toLocaleString("en-IN")}`,
+      "",
+      ...payments.slice(0, 12).map(
+        (p) =>
+          `• ${p.id} · ${p.name} · ₹ ${p.amount.toLocaleString("en-IN")} · ${p.time}`,
+      ),
+    ];
+    if (payments.length > 12) {
+      lines.push(`…and ${payments.length - 12} more`);
+    }
+    void sharePayload("Finance Transactions", lines.join("\n"));
+  };
+
+  const shareTransaction = (payment: Payment) => {
+    const text = [
+      `${schoolName} · Fee Receipt`,
+      `Receipt: ${payment.id}`,
+      `Account: ${payment.name}`,
+      `Category: ${payment.cat}`,
+      `Mode: ${payment.mode}`,
+      `Amount: ₹ ${payment.amount.toLocaleString("en-IN")}`,
+      `Time: ${payment.time}`,
+      `AY: ${academicYear}`,
+      "Status: Complete",
+      payment.narration ? `Note: ${payment.narration}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+    void sharePayload(`Receipt ${payment.id}`, text);
+  };
+
   return (
     <div className="w-full space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -3457,7 +3743,7 @@ function FinanceOverview({
             "flex min-h-[96px] items-center gap-4 p-5 text-left transition-colors hover:bg-white/70",
           )}
         >
-          <span className="grid h-12 w-12 place-items-center rounded-2xl bg-[#D1F2E1]">
+          <span className="grid h-12 w-12 place-items-center rounded-lg bg-[#D1F2E1]">
             <ArrowDownToLine className="h-5 w-5 text-[#10B981]" />
           </span>
           <div>
@@ -3473,94 +3759,15 @@ function FinanceOverview({
             "flex min-h-[96px] items-center gap-4 p-5 text-left transition-colors hover:bg-white/70",
           )}
         >
-          <span className="grid h-12 w-12 place-items-center rounded-2xl bg-[#DBEAFE]">
+          <span className="grid h-12 w-12 place-items-center rounded-lg bg-[#DBEAFE]">
             <ArrowUpFromLine className="h-5 w-5 text-[#2563EB]" />
           </span>
           <div>
             <div className="text-[15px] font-bold text-slate-900">Make payment</div>
-            <p className="mt-0.5 text-[12px] text-slate-500">Authorise outbound disbursals</p>
+            <p className="mt-0.5 text-[12px] text-slate-500">Pay vendors and salaries</p>
           </div>
         </button>
       </div>
-
-      <section className={cn(glassCardClass, "p-5")}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="text-[15px] font-bold text-slate-900">Transactions</h3>
-            <p className="mt-0.5 text-[12px] text-slate-500">
-              {payments.length} receipt{payments.length === 1 ? "" : "s"} · most recent first
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-9 rounded-full border-[#E5E5E5] bg-white px-3.5 text-[12px]"
-              onClick={exportTransactionsCsv}
-            >
-              <Download className="mr-1.5 h-3.5 w-3.5" />
-              Export CSV
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-9 rounded-full border-[#E5E5E5] bg-white px-3.5 text-[12px]"
-              onClick={exportTransactionsPdf}
-            >
-              <Printer className="mr-1.5 h-3.5 w-3.5" />
-              PDF
-            </Button>
-          </div>
-        </div>
-
-        <div className="mobile-scrollbar-none mt-4 overflow-x-auto rounded-2xl border border-[#E5E5E5]">
-          <table className="w-full min-w-[720px] text-left text-[12.5px]">
-            <thead>
-              <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5]">
-                {["Transaction", "Account", "Date / Time", "Amount", "Status"].map((header) => (
-                  <th
-                    key={header}
-                    className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/55"
-                  >
-                    {header}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {payments.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-3 py-8 text-center text-[12px] text-black/55">
-                    No transactions recorded yet
-                  </td>
-                </tr>
-              )}
-              {payments.map((p) => (
-                <tr key={p.id} className="border-b border-[#F0F0F0] last:border-0">
-                  <td className="px-3 py-3 font-mono text-[11px] text-black/70">{p.id}</td>
-                  <td className="px-3 py-3">
-                    <div className="font-medium text-black">{p.name}</div>
-                    <div className="text-[11px] text-black/50">
-                      {p.cat} · {p.mode}
-                      {p.payerType === "external" ? " · External" : ""}
-                      {p.narration ? ` · ${p.narration}` : ""}
-                    </div>
-                  </td>
-                  <td className="px-3 py-3 font-mono text-[11px] text-black/55">{p.time}</td>
-                  <td className="px-3 py-3 font-mono font-semibold text-black">
-                    ₹ {p.amount.toLocaleString("en-IN")}
-                  </td>
-                  <td className="px-3 py-3">
-                    <span className="inline-flex rounded-full bg-[#D1F2E1] px-2.5 py-1 text-[10px] font-semibold text-[#059669]">
-                      Complete
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
 
       <div className="grid grid-cols-12 gap-5">
         <section className={cn(glassCardClass, "col-span-12 flex flex-col p-5 lg:col-span-4")}>
@@ -3674,6 +3881,136 @@ function FinanceOverview({
           </div>
         </section>
       </div>
+
+      <section className={cn(glassCardClass, "p-5")}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-[15px] font-bold text-slate-900">Transactions</h3>
+            <p className="mt-0.5 text-[12px] text-slate-500">
+              {payments.length} receipt{payments.length === 1 ? "" : "s"} · most recent first
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9 rounded-full border-[#E5E5E5] bg-white px-3.5 text-[12px]"
+                >
+                  <Download className="mr-1.5 h-3.5 w-3.5" />
+                  Download
+                  <ChevronDown className="ml-1 h-3.5 w-3.5 opacity-60" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                sideOffset={8}
+                collisionPadding={12}
+                className="z-[250] w-48 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+              >
+                <DropdownMenuItem
+                  onClick={exportTransactionsPdf}
+                  className="cursor-pointer gap-2 rounded-xl text-[13px]"
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  Download PDF
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={exportTransactionsCsv}
+                  className="cursor-pointer gap-2 rounded-xl text-[13px]"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Export CSV
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 rounded-full border-[#E5E5E5] bg-white px-3.5 text-[12px]"
+              onClick={shareTransactionsSummary}
+            >
+              <Share2 className="mr-1.5 h-3.5 w-3.5" />
+              Share
+            </Button>
+          </div>
+        </div>
+
+        <div className="mobile-scrollbar-none mt-4 overflow-x-auto rounded-lg border border-[#E5E5E5]">
+          <table className="w-full min-w-[780px] text-left text-[12.5px]">
+            <thead>
+              <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5]">
+                {["Transaction", "Account", "Date / Time", "Amount", "Status", "Actions"].map(
+                  (header) => (
+                  <th
+                    key={header}
+                    className={cn(
+                      "px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/55",
+                      header === "Actions" && "text-right",
+                    )}
+                  >
+                    {header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {payments.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-3 py-8 text-center text-[12px] text-black/55">
+                    No transactions recorded yet
+                  </td>
+                </tr>
+              )}
+              {payments.map((p) => (
+                <tr key={p.id} className="border-b border-[#F0F0F0] last:border-0">
+                  <td className="px-3 py-3 font-mono text-[11px] text-black/70">{p.id}</td>
+                  <td className="px-3 py-3">
+                    <div className="font-medium text-black">{p.name}</div>
+                    <div className="text-[11px] text-black/50">
+                      {p.cat} · {p.mode}
+                      {p.payerType === "external" ? " · External" : ""}
+                      {p.narration ? ` · ${p.narration}` : ""}
+                    </div>
+                  </td>
+                  <td className="px-3 py-3 font-mono text-[11px] text-black/55">{p.time}</td>
+                  <td className="px-3 py-3 font-mono font-semibold text-black">
+                    ₹ {p.amount.toLocaleString("en-IN")}
+                  </td>
+                  <td className="px-3 py-3">
+                    <span className="inline-flex rounded-full bg-[#D1F2E1] px-2.5 py-1 text-[10px] font-semibold text-[#059669]">
+                      Complete
+                    </span>
+                  </td>
+                  <td className="px-3 py-3">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        type="button"
+                        aria-label={`Download receipt ${p.id}`}
+                        title="Download"
+                        onClick={() => downloadTransaction(p)}
+                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Share receipt ${p.id}`}
+                        title="Share"
+                        onClick={() => shareTransaction(p)}
+                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-[#2563EB] hover:bg-[#DBEAFE] hover:text-[#2563EB]"
+                      >
+                        <Share2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 }
@@ -3706,9 +4043,9 @@ function ReceivePayment() {
     transportRoutes,
     paymentCategories,
     academicYear,
+    schoolDetails,
   } = useTenantStore();
-  const { session } = useAuth();
-  const schoolName = session?.tenantName ?? "Silver Hills Global";
+  const schoolName = schoolDetails.name || "Silver Hills Global";
   const classes = useMemo(() => {
     const fromConfig = classConfigs.map((c) => c.className);
     const fromStudents = Array.from(new Set(students.map((s) => s.cls)));
@@ -4011,7 +4348,7 @@ function ReceivePayment() {
               onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ""))}
               inputMode="numeric"
               placeholder="0"
-              className="h-10 w-full rounded-2xl border border-[#E5E5E5] bg-white px-3 font-mono text-[13px]"
+              className="h-10 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 font-mono text-[13px]"
             />
             {prefill !== undefined && prefill > 0 && (
               <p className="mt-1 text-[10.5px] text-black/45">
@@ -4075,25 +4412,25 @@ function ReceivePayment() {
             value={narration}
             onChange={(e) => setNarration(e.target.value)}
             placeholder="Optional note · purpose, reference, or remarks"
-            className="min-h-[72px] w-full resize-none rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[13px]"
+            className="min-h-[72px] w-full resize-none rounded-lg border border-[#E5E5E5] bg-white px-3 py-2 text-[13px]"
           />
         </div>
 
-        <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-[#ECECEC] bg-[#F4F4F5] p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0 text-[12.5px] text-black/65">
+        <div className="mt-5 flex flex-col gap-4 rounded-xl border border-[#E8E8EA] bg-[#F8F8F9] p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:p-5">
+          <div className="min-w-0 text-[13px] leading-relaxed text-black/65">
             <div>
-              Receipt for <span className="font-medium text-black">{summaryName}</span> · {summaryContext} ·{" "}
-              <span className="font-medium text-black">{category}</span> · {mode}
+              Receipt for <span className="font-semibold text-black">{summaryName}</span> · {summaryContext} ·{" "}
+              <span className="font-semibold text-black">{category}</span> · {mode}
             </div>
             {narration.trim() && (
-              <div className="mt-1 truncate text-[11px] text-black/45">“{narration.trim()}”</div>
+              <div className="mt-1 truncate text-[12px] text-black/45">“{narration.trim()}”</div>
             )}
           </div>
           <button
             type="button"
             onClick={handleRecord}
             disabled={!canRecord}
-            className="w-full shrink-0 rounded-full bg-black px-5 py-2 text-[12.5px] font-semibold text-white shadow-sm transition-colors hover:bg-black/85 disabled:opacity-50 sm:w-auto"
+            className="inline-flex h-12 w-full shrink-0 items-center justify-center rounded-full bg-black px-8 text-[14px] font-semibold tracking-tight text-white shadow-[0_8px_24px_-10px_rgba(0,0,0,0.45)] transition-all hover:bg-[#0F172A] hover:shadow-[0_10px_28px_-10px_rgba(15,23,42,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none sm:h-12 sm:min-w-[200px] sm:w-auto"
           >
             Record ₹ {(Number(amount) || 0).toLocaleString("en-IN")}
           </button>
@@ -4110,7 +4447,7 @@ function ReceivePayment() {
                 : `${payments.length} receipts · most recent first`}
             </p>
           </div>
-          <div className="rounded-2xl bg-[#F4F4F5] px-3.5 py-2 text-right">
+          <div className="rounded-lg bg-[#F4F4F5] px-3.5 py-2 text-right">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
               Today&apos;s intake
             </div>
@@ -4141,7 +4478,7 @@ function ReceivePayment() {
           )}
         </div>
 
-        <div className="mobile-scrollbar-none mt-4 overflow-x-auto rounded-2xl border border-[#E5E5E5]">
+        <div className="mobile-scrollbar-none mt-4 overflow-x-auto rounded-lg border border-[#E5E5E5]">
           <table className="w-full min-w-[640px] text-left text-[12.5px]">
             <thead>
               <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5]">
@@ -4191,7 +4528,12 @@ function ReceivePayment() {
                       type="button"
                       aria-label={`Download receipt ${p.id}`}
                       onClick={() => {
-                        downloadReceiptPdf(p, schoolName, academicYear);
+                        downloadReceiptPdf(p, schoolName, academicYear, {
+                          letterheadUrl: schoolDetails.letterheadUrl,
+                          address: schoolDetails.address,
+                          phone: schoolDetails.phone,
+                          email: schoolDetails.email,
+                        });
                         toast.success(`Receipt ${p.id} downloaded`);
                       }}
                       className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
@@ -4225,8 +4567,10 @@ function MakePayment() {
     initialObligation ? String(initialObligation.amount) : "",
   );
   const [mode, setMode] = useState("UPI Business");
+  const [attachments, setAttachments] = useState<PaymentAttachment[]>([]);
   const [pendingAuthorisation, setPendingAuthorisation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
 
   const applyObligation = (obligation: PendingObligation) => {
     setSelectedObligationId(obligation.id);
@@ -4234,6 +4578,7 @@ function MakePayment() {
     setBeneficiary(obligation.payee);
     setDescription(obligation.desc);
     setAmount(String(obligation.amount));
+    setAttachments([]);
   };
 
   const resetForm = () => {
@@ -4243,6 +4588,54 @@ function MakePayment() {
     setDescription("");
     setAmount("");
     setMode("Bank Transfer · NEFT");
+    setAttachments([]);
+  };
+
+  const addAttachments = async (fileList: FileList | null) => {
+    if (!fileList?.length) return;
+    const room = MAX_DISBURSAL_ATTACHMENTS - attachments.length;
+    if (room <= 0) {
+      toast.error(`Maximum ${MAX_DISBURSAL_ATTACHMENTS} attachments allowed`);
+      return;
+    }
+
+    const files = Array.from(fileList).slice(0, room);
+    const next: PaymentAttachment[] = [];
+
+    for (const file of files) {
+      if (file.size > MAX_DISBURSAL_ATTACHMENT_BYTES) {
+        toast.error(`${file.name} is larger than 5 MB`);
+        continue;
+      }
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        if (!dataUrl) {
+          toast.error(`Could not read ${file.name}`);
+          continue;
+        }
+        next.push({
+          id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          name: file.name,
+          mimeType: file.type || "application/octet-stream",
+          size: file.size,
+          dataUrl,
+        });
+      } catch {
+        toast.error(`Could not read ${file.name}`);
+      }
+    }
+
+    if (!next.length) return;
+    setAttachments((prev) => [...prev, ...next]);
+    toast.success(
+      next.length === 1
+        ? `${next[0].name} attached`
+        : `${next.length} files attached`,
+    );
+  };
+
+  const removeAttachment = (id: string) => {
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
   };
 
   const requestAuthorisation = () => {
@@ -4266,7 +4659,7 @@ function MakePayment() {
     if (isSubmitting) return;
     const value = Number(amount.replace(/[^0-9]/g, ""));
     if (!beneficiary.trim() || !description.trim() || !value || value <= 0) {
-      toast.error("Complete all required fields before authorising");
+      toast.error("Complete all required fields before confirming");
       setPendingAuthorisation(false);
       return;
     }
@@ -4287,11 +4680,16 @@ function MakePayment() {
       payeeType,
       time: formatDisbursalTime(),
       status: "Queued",
+      attachments: attachments.length ? attachments : undefined,
     };
     setMadePayments((prev) => [disbursal, ...prev]);
 
-    toast.success("Authorisation queued for treasury approval", {
-      description: `${beneficiary.trim()} · ₹ ${value.toLocaleString("en-IN")} via ${mode}`,
+    toast.success("Payment confirmed", {
+      description: `${beneficiary.trim()} · ₹ ${value.toLocaleString("en-IN")} via ${mode}${
+        attachments.length
+          ? ` · ${attachments.length} attachment${attachments.length === 1 ? "" : "s"}`
+          : ""
+      }`,
     });
 
     const remaining = obligations.filter((item) => item.id !== selectedObligationId);
@@ -4331,7 +4729,7 @@ function MakePayment() {
   return (
     <div className="grid grid-cols-12 gap-4 sm:gap-5">
       <OrganicCard tone="white" cornerSide="tr" padded className={cn(workspacePanelClass, "col-span-12 lg:col-span-8")}>
-        <div className="text-title">Outbound Disbursal</div>
+        <DashboardPanelHeading icon={ArrowUpFromLine} title="Make Payment" />
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <FieldLabel>Payee Type</FieldLabel>
@@ -4367,7 +4765,7 @@ function MakePayment() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Describe the payment purpose"
-              className="min-h-[80px] w-full rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-black/15"
+              className="min-h-[80px] w-full rounded-lg border border-[#E5E5E5] bg-white px-3 py-2 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-black/15"
             />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:col-span-2 sm:grid-cols-[minmax(0,0.45fr)_minmax(0,0.55fr)] sm:items-start">
@@ -4392,7 +4790,7 @@ function MakePayment() {
                       type="button"
                       onClick={() => setMode(m)}
                       className={cn(
-                        "h-11 w-full rounded-2xl px-2 text-center text-[12px] font-medium leading-tight whitespace-nowrap transition-colors sm:px-3",
+                        "h-11 w-full rounded-lg px-2 text-center text-[12px] font-medium leading-tight whitespace-nowrap transition-colors sm:px-3",
                         active
                           ? "bg-[#2563EB] text-white shadow-sm"
                           : "bg-[#DBEAFE]/50 text-slate-700 hover:bg-[#DBEAFE]",
@@ -4406,24 +4804,91 @@ function MakePayment() {
               </div>
             </div>
           </div>
+
+          <div className="sm:col-span-2">
+            <div className="flex items-center justify-between gap-2">
+              <FieldLabel>Attachments</FieldLabel>
+              <span className="text-[10.5px] font-medium text-black/45">
+                {attachments.length} / {MAX_DISBURSAL_ATTACHMENTS} · max 5 MB each
+              </span>
+            </div>
+            <div className="rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] p-3">
+              {attachments.length > 0 ? (
+                <ul className="mb-3 space-y-2">
+                  {attachments.map((file) => (
+                    <li
+                      key={file.id}
+                      className="flex items-center gap-2 rounded-lg border border-[#EFEFEF] bg-white px-2.5 py-2"
+                    >
+                      <FileText className="h-3.5 w-3.5 shrink-0 text-black/40" />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[12px] font-medium text-black">{file.name}</div>
+                        <div className="font-mono text-[10px] text-black/45">
+                          {formatAttachmentSize(file.size)}
+                        </div>
+                      </div>
+                      <a
+                        href={file.dataUrl}
+                        download={file.name}
+                        className="inline-flex h-7 items-center rounded-lg border border-slate-200 px-2 text-[10.5px] font-semibold text-black/60 transition-colors hover:bg-slate-50"
+                      >
+                        Open
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => removeAttachment(file.id)}
+                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-red-200 text-red-600 transition-colors hover:bg-red-50"
+                        aria-label={`Remove ${file.name}`}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mb-3 text-[12px] text-black/45">
+                  Attach invoices, bills, approvals, or supporting documents.
+                </p>
+              )}
+              <input
+                ref={attachmentInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  void addAttachments(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => attachmentInputRef.current?.click()}
+                disabled={attachments.length >= MAX_DISBURSAL_ATTACHMENTS}
+                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3.5 text-[12px] font-semibold text-black transition-colors hover:border-black/20 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Paperclip className="h-3.5 w-3.5" />
+                Add files
+              </button>
+            </div>
+          </div>
         </div>
         <div className="mt-5 flex justify-end">
           <button
             type="button"
             onClick={requestAuthorisation}
             disabled={isSubmitting}
-            className="rounded-full bg-black px-5 py-2 text-[12.5px] font-semibold text-white shadow-sm transition-colors hover:bg-black/85 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-12 w-full items-center justify-center rounded-full bg-black px-8 text-[14px] font-semibold tracking-tight text-white shadow-[0_8px_24px_-10px_rgba(0,0,0,0.45)] transition-all hover:bg-[#0F172A] hover:shadow-[0_10px_28px_-10px_rgba(15,23,42,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none sm:w-auto sm:min-w-[200px]"
           >
-            Authorise Disbursal
+            Confirm Payment
           </button>
         </div>
       </OrganicCard>
 
       <OrganicCard tone="white" cornerSide="bl" padded className={cn(workspacePanelClass, "col-span-12 lg:col-span-4")}>
-        <div className="text-title">Top Pending Obligations</div>
+        <DashboardPanelHeading icon={AlertTriangle} title="Top Pending Obligations" />
         <div className="mt-3 space-y-3">
           {obligations.length === 0 && (
-            <div className="rounded-2xl border border-dashed border-black/15 bg-[#F4F4F5]/40 px-4 py-6 text-center text-[12px] text-black/55">
+            <div className="rounded-lg border border-dashed border-black/15 bg-[#F4F4F5]/40 px-4 py-6 text-center text-[12px] text-black/55">
               No pending obligations in the queue
             </div>
           )}
@@ -4434,9 +4899,9 @@ function MakePayment() {
                 key={p.id}
                 type="button"
                 onClick={() => applyObligation(p)}
-                className={`w-full rounded-2xl p-3 text-left transition-colors ${
+                className={`w-full rounded-lg p-3 text-left transition-colors ${
                   isSelected
-                    ? "bg-[#2563EB] text-white ring-2 ring-[#0F172A]/10"
+                    ? "bg-[#FEE2E2] text-[#7F1D1D] ring-2 ring-[#FECACA]"
                     : "bg-[#DBEAFE] text-[#0F172A] hover:bg-[#BFDBFE]"
                 }`}
               >
@@ -4446,13 +4911,13 @@ function MakePayment() {
                 </div>
                 <div
                   className={`mt-0.5 flex items-center justify-between text-[10.5px] ${
-                    isSelected ? "text-black/70" : "text-black/55"
+                    isSelected ? "text-[#991B1B]/75" : "text-black/55"
                   }`}
                 >
                   <span>{p.desc}</span>
                   <span
                     className={`rounded-full px-2 py-0.5 ${
-                      isSelected ? "bg-black text-[#2563EB]" : "bg-black/10 text-black/65"
+                      isSelected ? "bg-[#EF4444] text-white" : "bg-black/10 text-black/65"
                     }`}
                   >
                     Due {p.due}
@@ -4467,7 +4932,7 @@ function MakePayment() {
       <OrganicCard tone="white" cornerSide="br" padded className={cn(workspacePanelClass, "col-span-12")}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="text-title">Made Payment Details</div>
+            <DashboardPanelHeading icon={CheckCircle2} title="Made Payment Details" />
             <div className="mt-1 text-[11.5px] text-black/55">
               {madePayments.length} disbursals · most recent
             </div>
@@ -4512,9 +4977,34 @@ function MakePayment() {
               <div className="mt-0.5 flex items-center justify-between gap-2 text-[10.5px] text-black/55">
                 <span className="min-w-0 truncate">
                   {payment.payeeType} · {payment.desc} · {payment.mode}
+                  {(payment.attachments?.length ?? 0) > 0 && (
+                    <>
+                      {" · "}
+                      <span className="inline-flex items-center gap-0.5 font-semibold text-black/65">
+                        <Paperclip className="inline h-3 w-3" />
+                        {payment.attachments?.length}
+                      </span>
+                    </>
+                  )}
                 </span>
                 <span className="shrink-0 font-mono">{payment.time}</span>
               </div>
+              {(payment.attachments?.length ?? 0) > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {payment.attachments?.map((file) => (
+                    <a
+                      key={file.id}
+                      href={file.dataUrl}
+                      download={file.name}
+                      className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#E5E5E5] bg-[#FAFAFA] px-2 py-0.5 text-[10px] font-medium text-black/70 transition-colors hover:border-black/20 hover:bg-white"
+                      title={file.name}
+                    >
+                      <FileText className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{file.name}</span>
+                    </a>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -4526,14 +5016,17 @@ function MakePayment() {
           if (!next) setPendingAuthorisation(false);
         }}
       >
-        <DialogContent className="max-w-sm rounded-[1.5rem] border border-[#E5E5E5] bg-white p-6">
+        <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6">
           <DialogHeader>
             <DialogTitle className="text-[22px] font-semibold text-black">
-              Authorise Disbursal
+              Confirm Payment
             </DialogTitle>
             <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
-              Authorise ₹ {Number(amount || 0).toLocaleString("en-IN")} to {beneficiary.trim()} via{" "}
-              {mode}? This will queue the payment for treasury approval.
+              Pay ₹ {Number(amount || 0).toLocaleString("en-IN")} to {beneficiary.trim()} via {mode}
+              {attachments.length
+                ? ` with ${attachments.length} attachment${attachments.length === 1 ? "" : "s"}`
+                : ""}
+              ?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="mt-5 flex-row justify-end gap-2">
@@ -4544,9 +5037,9 @@ function MakePayment() {
               type="button"
               onClick={confirmAuthorisation}
               disabled={isSubmitting}
-              className="rounded-full bg-black text-white hover:bg-black/85"
+              className="h-11 rounded-full bg-black px-6 text-[13px] font-semibold text-white hover:bg-black/85"
             >
-              Authorise
+              Confirm Payment
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -4611,6 +5104,8 @@ export function SchoolSettings() {
     setAcademicYear,
     themeSettings,
     setThemeSettings,
+    schoolDetails,
+    setSchoolDetails,
     staff,
     setStaff,
     students,
@@ -4621,7 +5116,24 @@ export function SchoolSettings() {
     <div className="w-full space-y-6 lg:space-y-6">
       <MobileSectionTitle className="md:hidden">Settings</MobileSectionTitle>
 
+      <div className="grid grid-cols-12 gap-5">
+        <div className="col-span-12">
+          <SchoolDetailsCard
+            schoolDetails={schoolDetails}
+            setSchoolDetails={setSchoolDetails}
+            themeSettings={themeSettings}
+            setThemeSettings={setThemeSettings}
+          />
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <ClassesCard
+          classes={classes}
+          setClasses={setClasses}
+          students={students}
+          setStudents={setStudents}
+        />
         <DepartmentsCard
           departments={departments}
           setDepartments={setDepartments}
@@ -4636,12 +5148,6 @@ export function SchoolSettings() {
           staff={staff}
           setStaff={setStaff}
         />
-        <ClassesCard
-          classes={classes}
-          setClasses={setClasses}
-          students={students}
-          setStudents={setStudents}
-        />
       </div>
 
       <div className="grid grid-cols-12 gap-5">
@@ -4652,7 +5158,7 @@ export function SchoolSettings() {
             transportRoutes={transportRoutes}
           />
         </div>
-        <div className="col-span-12 md:col-span-6">
+        <div className="col-span-12">
           <TransportCard
             transportRoutes={transportRoutes}
             setTransportRoutes={setTransportRoutes}
@@ -4660,7 +5166,7 @@ export function SchoolSettings() {
             setTransportVehicles={setTransportVehicles}
           />
         </div>
-        <div className="col-span-12 md:col-span-6">
+        <div className="col-span-12">
           <FeeCategoriesCard
             paymentCategories={paymentCategories}
             setPaymentCategories={setPaymentCategories}
@@ -4713,7 +5219,7 @@ function CardHeader({
 
 function EmptyRow({ label }: { label: string }) {
   return (
-    <div className="rounded-2xl border border-dashed border-black/15 bg-[#F4F4F5]/40 px-4 py-6 text-center text-[12px] text-black/55">
+    <div className="rounded-lg border border-dashed border-black/15 bg-[#F4F4F5]/40 px-4 py-6 text-center text-[12px] text-black/55">
       {label}
     </div>
   );
@@ -4734,7 +5240,7 @@ function DeleteConfirmDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm rounded-[1.5rem] border border-[#E5E5E5] bg-white p-6">
+      <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6">
         <DialogHeader>
           <DialogTitle className="text-[22px] font-semibold text-black">{title}</DialogTitle>
           <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
@@ -4847,7 +5353,7 @@ function DepartmentsCard({
           return (
             <div
               key={d.id}
-              className="flex items-center justify-between gap-3 rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5"
+              className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5"
             >
               <div className="flex min-w-0 items-center gap-2.5">
                 <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-black text-[10.5px] font-semibold text-white">
@@ -5043,7 +5549,7 @@ function RolesCard({
           return (
             <div
               key={r.id}
-              className="flex items-center justify-between gap-3 rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5"
+              className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5"
             >
               <div className="min-w-0">
                 <div className="truncate text-[13px] font-semibold text-black">{r.title}</div>
@@ -5240,7 +5746,7 @@ function ClassesCard({
         {classes.map((c) => (
           <div
             key={c.id}
-            className="flex items-center justify-between gap-3 rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5"
+            className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5"
           >
             <div className="min-w-0">
               <div className="truncate text-[13px] font-semibold text-black">{c.className}</div>
@@ -5484,7 +5990,7 @@ function VehicleCard({
         onAction={startCreate}
       />
 
-      <div className="mt-4 overflow-x-auto rounded-2xl border border-[#EFEFEF]">
+      <div className="mt-4 overflow-x-auto rounded-lg border border-[#EFEFEF]">
         <table className="w-full min-w-[720px] table-fixed border-collapse text-left">
           <colgroup>
             <col className="w-[24%]" />
@@ -5657,11 +6163,11 @@ function VehicleCard({
                 Assigned Routes
               </Label>
               {transportRoutes.length === 0 ? (
-                <p className="rounded-2xl border border-dashed border-[#E5E5E5] px-3 py-4 text-center text-[12px] text-black/45">
+                <p className="rounded-lg border border-dashed border-[#E5E5E5] px-3 py-4 text-center text-[12px] text-black/45">
                   No routes configured yet
                 </p>
               ) : (
-                <div className="max-h-44 space-y-1 overflow-y-auto rounded-2xl border border-[#E5E5E5] bg-[#FAFAFA] p-2">
+                <div className="max-h-44 space-y-1 overflow-y-auto rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] p-2">
                   {transportRoutes.map((r) => {
                     const checked = form.routeIds.includes(r.id);
                     return (
@@ -5703,7 +6209,7 @@ function VehicleCard({
                 className="font-mono"
               />
             </div>
-            <label className="flex cursor-pointer items-center gap-2 rounded-2xl border border-[#E5E5E5] bg-[#FAFAFA] px-3 py-2.5">
+            <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] px-3 py-2.5">
               <input
                 type="checkbox"
                 checked={form.active}
@@ -5827,7 +6333,7 @@ function TransportCard({
         onAction={startCreate}
       />
 
-      <div className="mt-4 overflow-x-auto rounded-2xl border border-[#EFEFEF]">
+      <div className="mt-4 overflow-x-auto rounded-lg border border-[#EFEFEF]">
         <table className="w-full min-w-[760px] table-fixed border-collapse text-left">
           <colgroup>
             <col className="w-[20%]" />
@@ -6015,6 +6521,408 @@ function TransportCard({
   );
 }
 
+function readImageAsDataUrl(
+  file: File,
+  opts: { maxBytes: number; label: string },
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith("image/")) {
+      reject(new Error(`Please choose a JPG, PNG, or WebP ${opts.label}`));
+      return;
+    }
+    if (file.size > opts.maxBytes) {
+      reject(
+        new Error(
+          `${opts.label} must be ${Math.round(opts.maxBytes / (1024 * 1024))} MB or smaller`,
+        ),
+      );
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result ?? "");
+      if (!dataUrl) {
+        reject(new Error(`Could not read the selected ${opts.label.toLowerCase()}`));
+        return;
+      }
+      resolve(dataUrl);
+    };
+    reader.onerror = () =>
+      reject(new Error(`Could not read the selected ${opts.label.toLowerCase()}`));
+    reader.readAsDataURL(file);
+  });
+}
+
+function SchoolDetailsCard({
+  schoolDetails,
+  setSchoolDetails,
+  themeSettings,
+  setThemeSettings,
+}: {
+  schoolDetails: SchoolDetails;
+  setSchoolDetails: React.Dispatch<React.SetStateAction<SchoolDetails>>;
+  themeSettings: ThemeSettings;
+  setThemeSettings: React.Dispatch<React.SetStateAction<ThemeSettings>>;
+}) {
+  const { updateSession } = useAuth();
+  const [draft, setDraft] = useState<SchoolDetails>(schoolDetails);
+  const [themeDraft, setThemeDraft] = useState<Pick<ThemeSettings, "mode" | "accent">>({
+    mode: themeSettings.mode,
+    accent: themeSettings.accent,
+  });
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const letterheadInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setDraft(schoolDetails);
+  }, [schoolDetails]);
+
+  useEffect(() => {
+    setThemeDraft({ mode: themeSettings.mode, accent: themeSettings.accent });
+  }, [themeSettings.mode, themeSettings.accent]);
+
+  const detailsDirty = JSON.stringify(draft) !== JSON.stringify(schoolDetails);
+  const themeDirty =
+    themeDraft.mode !== themeSettings.mode || themeDraft.accent !== themeSettings.accent;
+  const dirty = detailsDirty || themeDirty;
+  const initials = schoolInitials(draft.name || "School");
+
+  const patch = <K extends keyof SchoolDetails>(key: K, value: SchoolDetails[K]) => {
+    setDraft((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const save = (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = draft.name.trim();
+    if (!name) {
+      toast.error("School name is required");
+      return;
+    }
+    const next: SchoolDetails = {
+      ...draft,
+      name,
+      tagline: draft.tagline.trim(),
+      address: draft.address.trim(),
+      phone: draft.phone.trim(),
+      email: draft.email.trim(),
+      website: draft.website.trim(),
+      registrationNo: draft.registrationNo.trim(),
+      affiliationNo: draft.affiliationNo.trim(),
+      principalName: draft.principalName.trim(),
+      establishedYear: draft.establishedYear.trim(),
+    };
+    setSchoolDetails(next);
+    if (themeDirty) {
+      setThemeSettings((prev) => ({
+        ...prev,
+        mode: themeDraft.mode,
+        accent: themeDraft.accent,
+      }));
+    }
+    updateSession({ tenantName: next.name });
+    toast.success("School details saved", {
+      description: `${next.name} · ${themeDraft.mode} · ${themeDraft.accent}`,
+    });
+  };
+
+  const onLogo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const dataUrl = await readImageAsDataUrl(file, {
+        maxBytes: 2 * 1024 * 1024,
+        label: "Logo",
+      });
+      patch("logoUrl", dataUrl);
+      toast.success("Logo ready — click Save Changes");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not upload logo");
+    }
+  };
+
+  const onLetterhead = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const dataUrl = await readImageAsDataUrl(file, {
+        maxBytes: 3 * 1024 * 1024,
+        label: "Letterhead",
+      });
+      patch("letterheadUrl", dataUrl);
+      toast.success("Letterhead ready — click Save Changes");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not upload letterhead");
+    }
+  };
+
+  return (
+    <OrganicCard tone="white" cornerSide="br" padded className={workspacePanelClass}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="text-[18px] font-bold leading-tight tracking-tight text-black">
+            School Details
+          </div>
+          <p className="mt-1 text-[12px] text-black/55">
+            Logo, letterhead, identity, theme, and accent used across the workspace
+          </p>
+        </div>
+        {dirty && (
+          <span className="w-fit shrink-0 rounded-full bg-[#FEF3C7] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#B45309]">
+            Unsaved
+          </span>
+        )}
+      </div>
+
+      <form onSubmit={save} className="mt-4 space-y-5">
+        <div className="grid grid-cols-12 gap-3">
+          <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3 sm:col-span-6 lg:col-span-4">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                Logo
+              </span>
+              <div className="flex items-center gap-1">
+                {draft.logoUrl && (
+                  <button
+                    type="button"
+                    onClick={() => patch("logoUrl", undefined)}
+                    className="grid h-7 w-7 place-items-center rounded-full text-black/45 hover:bg-[#FEE2E2] hover:text-[#EF4444]"
+                    aria-label="Remove logo"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => logoInputRef.current?.click()}
+                  className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px] font-semibold text-black shadow-sm ring-1 ring-black/10 hover:bg-black hover:text-white"
+                >
+                  <ImagePlus className="h-3.5 w-3.5" />
+                  Upload
+                </button>
+              </div>
+            </div>
+            <div className="mt-3 flex items-center gap-3">
+              {draft.logoUrl ? (
+                <img
+                  src={draft.logoUrl}
+                  alt="School logo"
+                  className="h-14 w-14 rounded-lg object-cover ring-1 ring-black/10"
+                />
+              ) : (
+                <div className="grid h-14 w-14 place-items-center rounded-lg bg-gradient-to-br from-[#2563EB] to-[#4C69A4] text-[13px] font-bold text-white">
+                  {initials}
+                </div>
+              )}
+              <p className="text-[11px] leading-relaxed text-black/50">
+                Shown on the navigation dock and headers. JPG/PNG · max 2 MB.
+              </p>
+            </div>
+            <input
+              ref={logoInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="hidden"
+              onChange={onLogo}
+            />
+          </div>
+
+          <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3 sm:col-span-6 lg:col-span-4">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                Letterhead
+              </span>
+              <div className="flex items-center gap-1">
+                {draft.letterheadUrl && (
+                  <button
+                    type="button"
+                    onClick={() => patch("letterheadUrl", undefined)}
+                    className="grid h-7 w-7 place-items-center rounded-full text-black/45 hover:bg-[#FEE2E2] hover:text-[#EF4444]"
+                    aria-label="Remove letterhead"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => letterheadInputRef.current?.click()}
+                  className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px] font-semibold text-black shadow-sm ring-1 ring-black/10 hover:bg-black hover:text-white"
+                >
+                  <FileImage className="h-3.5 w-3.5" />
+                  Upload
+                </button>
+              </div>
+            </div>
+            <div className="mt-3">
+              {draft.letterheadUrl ? (
+                <img
+                  src={draft.letterheadUrl}
+                  alt="School letterhead"
+                  className="h-16 w-full rounded-xl object-cover object-top ring-1 ring-black/10"
+                />
+              ) : (
+                <div className="flex h-16 items-center justify-center rounded-xl border border-dashed border-black/15 bg-white px-3 text-center text-[11px] text-black/45">
+                  Wide image for receipts & PDFs · max 3 MB
+                </div>
+              )}
+            </div>
+            <input
+              ref={letterheadInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="hidden"
+              onChange={onLetterhead}
+            />
+          </div>
+
+          <div className="col-span-12 grid grid-cols-1 gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3 sm:grid-cols-2 lg:col-span-4">
+            <ThemeSelect
+              label="Theme"
+              value={themeDraft.mode}
+              options={THEME_MODE_OPTIONS}
+              onChange={(mode) => setThemeDraft((prev) => ({ ...prev, mode }))}
+            />
+            <ThemeSelect
+              label="Accent Color"
+              value={themeDraft.accent}
+              options={THEME_ACCENT_OPTIONS}
+              onChange={(accent) => setThemeDraft((prev) => ({ ...prev, accent }))}
+            />
+            <p className="text-[11px] leading-relaxed text-black/50 sm:col-span-2">
+              Theme mode and accent color apply across the tenant workspace.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-12 gap-3">
+          <div className="col-span-12 lg:col-span-4">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              School Name
+            </Label>
+            <Input
+              value={draft.name}
+              onChange={(e) => patch("name", e.target.value)}
+              placeholder="e.g. Silver Hills Global"
+              className="mt-1.5"
+            />
+          </div>
+          <div className="col-span-12 sm:col-span-6 lg:col-span-4">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              Tagline
+            </Label>
+            <Input
+              value={draft.tagline}
+              onChange={(e) => patch("tagline", e.target.value)}
+              placeholder="Short motto or subtitle"
+              className="mt-1.5"
+            />
+          </div>
+          <div className="col-span-12 sm:col-span-6 lg:col-span-4">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              Website
+            </Label>
+            <Input
+              value={draft.website}
+              onChange={(e) => patch("website", e.target.value)}
+              placeholder="www.…"
+              className="mt-1.5"
+            />
+          </div>
+
+          <div className="col-span-12">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              Address
+            </Label>
+            <Textarea
+              value={draft.address}
+              onChange={(e) => patch("address", e.target.value)}
+              placeholder="Campus address"
+              className="mt-1.5 min-h-[72px] resize-none"
+            />
+          </div>
+
+          <div className="col-span-12 sm:col-span-6 lg:col-span-3">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              Phone
+            </Label>
+            <Input
+              value={draft.phone}
+              onChange={(e) => patch("phone", e.target.value)}
+              placeholder="+91 …"
+              className="mt-1.5"
+            />
+          </div>
+          <div className="col-span-12 sm:col-span-6 lg:col-span-3">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              Email
+            </Label>
+            <Input
+              type="email"
+              value={draft.email}
+              onChange={(e) => patch("email", e.target.value)}
+              placeholder="office@…"
+              className="mt-1.5"
+            />
+          </div>
+          <div className="col-span-12 sm:col-span-6 lg:col-span-3">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              Registration No.
+            </Label>
+            <Input
+              value={draft.registrationNo}
+              onChange={(e) => patch("registrationNo", e.target.value)}
+              className="mt-1.5 font-mono text-[12.5px]"
+            />
+          </div>
+          <div className="col-span-12 sm:col-span-6 lg:col-span-3">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              Affiliation No.
+            </Label>
+            <Input
+              value={draft.affiliationNo}
+              onChange={(e) => patch("affiliationNo", e.target.value)}
+              className="mt-1.5 font-mono text-[12.5px]"
+            />
+          </div>
+
+          <div className="col-span-12 sm:col-span-6 lg:col-span-6">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              Principal
+            </Label>
+            <Input
+              value={draft.principalName}
+              onChange={(e) => patch("principalName", e.target.value)}
+              className="mt-1.5"
+            />
+          </div>
+          <div className="col-span-12 sm:col-span-6 lg:col-span-6">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              Established
+            </Label>
+            <Input
+              value={draft.establishedYear}
+              onChange={(e) => patch("establishedYear", e.target.value)}
+              placeholder="e.g. 1998"
+              className="mt-1.5"
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end pt-1">
+          <Button
+            type="submit"
+            disabled={!dirty}
+            className="w-full rounded-full bg-black text-white hover:bg-black/85 disabled:opacity-40 sm:w-auto"
+          >
+            Save Changes
+          </Button>
+        </div>
+      </form>
+    </OrganicCard>
+  );
+}
+
 function FeeCategoriesCard({
   paymentCategories,
   setPaymentCategories,
@@ -6104,7 +7012,7 @@ function FeeCategoriesCard({
         {paymentCategories.map((category) => (
           <div
             key={category.id}
-            className="flex items-center justify-between gap-3 rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5"
+            className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5"
           >
             <div className="flex min-w-0 items-center gap-2.5">
               <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[#DBEAFE] text-[10.5px] font-semibold text-[#2563EB]">
@@ -6149,7 +7057,7 @@ function FeeCategoriesCard({
           }
         }}
       >
-        <DialogContent className="max-w-sm rounded-[1.5rem] border border-[#E5E5E5] bg-white p-6">
+        <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6">
           <DialogHeader>
             <DialogTitle className="text-[22px] font-semibold text-black">
               {editingId ? "Edit Fee Category" : "Add Fee Category"}
@@ -6259,10 +7167,10 @@ function CategoriesCard({
         System Constants
       </div>
       <p className="mt-1 text-[12px] text-black/55">
-        Academic year, theme frame, and navigation dock for the workspace
+        Academic year, workspace density, and navigation dock placement
       </p>
 
-      <div className="mt-4 grid gap-3 rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5">
+      <div className="mt-4 grid gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3.5">
         <div>
           <div className="flex items-center justify-between">
             <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
@@ -6320,25 +7228,7 @@ function CategoriesCard({
           </form>
         </div>
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <ThemeSelect
-            label="Theme"
-            value={themeSettings.mode}
-            options={THEME_MODE_OPTIONS}
-            onChange={(mode) => {
-              setThemeSettings((prev) => ({ ...prev, mode }));
-              toast.success(`Theme mode set to ${mode}`);
-            }}
-          />
-          <ThemeSelect
-            label="Accent"
-            value={themeSettings.accent}
-            options={THEME_ACCENT_OPTIONS}
-            onChange={(accent) => {
-              setThemeSettings((prev) => ({ ...prev, accent }));
-              toast.success(`Accent set to ${accent}`);
-            }}
-          />
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <ThemeSelect
             label="Density"
             value={themeSettings.density}

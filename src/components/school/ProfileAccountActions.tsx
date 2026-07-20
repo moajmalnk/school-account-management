@@ -57,7 +57,7 @@ export function ProfileAccountActions({
 
   return (
     <>
-      <section className="rounded-[2rem] border border-slate-100 bg-white p-5 shadow-sm sm:p-6">
+      <section className="rounded-xl border border-slate-100 bg-white p-5 shadow-sm sm:p-6">
         <div className="flex flex-col items-center gap-3 text-center lg:flex-row lg:items-start lg:justify-between lg:gap-4 lg:text-left">
           <div className="max-w-xl">
             <h2 className="text-base font-semibold text-black">Account Status</h2>
@@ -101,7 +101,7 @@ export function ProfileAccountActions({
       </section>
 
       <Dialog open={confirmDeactivate} onOpenChange={setConfirmDeactivate}>
-        <DialogContent className="max-w-sm rounded-[1.5rem] border border-[#E5E5E5] bg-white p-6">
+        <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6">
           <DialogHeader>
             <DialogTitle className="text-[22px] font-semibold text-black">
               Deactivate {entityLabel}
@@ -130,7 +130,7 @@ export function ProfileAccountActions({
       </Dialog>
 
       <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <DialogContent className="max-w-sm rounded-[1.5rem] border border-[#E5E5E5] bg-white p-6">
+        <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6">
           <DialogHeader>
             <DialogTitle className="text-[22px] font-semibold text-black">
               Delete {entityLabel}

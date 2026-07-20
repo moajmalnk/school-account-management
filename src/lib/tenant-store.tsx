@@ -9,6 +9,40 @@ import {
   type SetStateAction,
 } from "react";
 
+export type GuardianRelation = "Father" | "Mother" | "Others";
+
+export const STUDENT_RELIGIONS = [
+  "Buddhist",
+  "Christian",
+  "Hindu",
+  "Muslim",
+  "Islam",
+  "Other",
+  "Nil",
+] as const;
+
+export const STUDENT_CATEGORIES = [
+  "GENERAL",
+  "OBC",
+  "OEC",
+  "ST",
+  "SC",
+  "Others",
+] as const;
+
+export const BLOOD_GROUPS = [
+  "A+",
+  "B+",
+  "AB+",
+  "A-",
+  "B-",
+  "AB-",
+  "O+",
+  "O-",
+] as const;
+
+export const GUARDIAN_RELATIONS = ["Father", "Mother", "Others"] as const;
+
 export type Student = {
   id: string;
   name: string;
@@ -21,7 +55,22 @@ export type Student = {
   email?: string;
   address?: string;
   photoUrl?: string;
+  aadhaar?: string;
+  placeOfBirth?: string;
+  nationality?: string;
+  religion?: string;
+  studentCategory?: string;
+  bloodGroup?: string;
+  fatherOccupation?: string;
+  motherName?: string;
+  guardianRelation?: GuardianRelation;
+  guardianOccupation?: string;
+  needsBus?: boolean;
+  busPoint1?: string;
+  busPoint2?: string;
   active?: boolean;
+  /** Opaque token for the public parent profile link */
+  shareToken?: string;
 };
 
 export type StaffDocumentAttachment = {
@@ -98,9 +147,21 @@ function normalizeStaffDocuments(raw: StaffDocument[] | undefined): StaffDocumen
   });
 }
 
+function optionalTrimmedString(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
 export function normalizeStudent(
   raw: Partial<Student> & Pick<Student, "id" | "name" | "cls" | "guardian" | "due">,
 ): Student {
+  const guardianRelation = GUARDIAN_RELATIONS.includes(
+    raw.guardianRelation as GuardianRelation,
+  )
+    ? (raw.guardianRelation as GuardianRelation)
+    : undefined;
+
   return {
     id: raw.id,
     name: raw.name,
@@ -108,12 +169,29 @@ export function normalizeStudent(
     guardian: raw.guardian,
     due: typeof raw.due === "number" && Number.isFinite(raw.due) ? raw.due : 0,
     gender: raw.gender === "M" || raw.gender === "F" ? raw.gender : undefined,
-    phone: typeof raw.phone === "string" ? raw.phone : undefined,
-    dob: typeof raw.dob === "string" ? raw.dob : undefined,
-    email: typeof raw.email === "string" ? raw.email : undefined,
-    address: typeof raw.address === "string" ? raw.address : undefined,
-    photoUrl: typeof raw.photoUrl === "string" && raw.photoUrl ? raw.photoUrl : undefined,
+    phone: optionalTrimmedString(raw.phone),
+    dob: optionalTrimmedString(raw.dob),
+    email: optionalTrimmedString(raw.email),
+    address: optionalTrimmedString(raw.address),
+    photoUrl: optionalTrimmedString(raw.photoUrl),
+    aadhaar: optionalTrimmedString(raw.aadhaar),
+    placeOfBirth: optionalTrimmedString(raw.placeOfBirth),
+    nationality: optionalTrimmedString(raw.nationality),
+    religion: optionalTrimmedString(raw.religion),
+    studentCategory: optionalTrimmedString(raw.studentCategory),
+    bloodGroup: optionalTrimmedString(raw.bloodGroup),
+    fatherOccupation: optionalTrimmedString(raw.fatherOccupation),
+    motherName: optionalTrimmedString(raw.motherName),
+    guardianRelation,
+    guardianOccupation: optionalTrimmedString(raw.guardianOccupation),
+    needsBus: typeof raw.needsBus === "boolean" ? raw.needsBus : undefined,
+    busPoint1: optionalTrimmedString(raw.busPoint1),
+    busPoint2: optionalTrimmedString(raw.busPoint2),
     active: typeof raw.active === "boolean" ? raw.active : true,
+    shareToken:
+      typeof raw.shareToken === "string" && raw.shareToken.trim()
+        ? raw.shareToken.trim()
+        : undefined,
   };
 }
 
@@ -200,6 +278,21 @@ export type ThemeSettings = {
   accent: "Neon Lime" | "Pale Lime" | "Ink";
   density: "Comfortable" | "Compact";
   navPlacement: "Left" | "Right" | "Top" | "Bottom";
+};
+
+export type SchoolDetails = {
+  name: string;
+  logoUrl?: string;
+  letterheadUrl?: string;
+  tagline: string;
+  address: string;
+  phone: string;
+  email: string;
+  website: string;
+  registrationNo: string;
+  affiliationNo: string;
+  principalName: string;
+  establishedYear: string;
 };
 
 export type TenantNotification = {
@@ -808,6 +901,19 @@ export const SEED_THEME_SETTINGS: ThemeSettings = {
   navPlacement: "Left",
 };
 
+export const SEED_SCHOOL_DETAILS: SchoolDetails = {
+  name: "Silver Hills Global",
+  tagline: "Excellence in education",
+  address: "NH-66, Calicut Bypass, Kozhikode, Kerala 673601",
+  phone: "+91 495 240 1122",
+  email: "office@silverhills.edu.in",
+  website: "www.silverhills.edu.in",
+  registrationNo: "REG/KL/2014/0842",
+  affiliationNo: "CBSE/AFF/930821",
+  principalName: "Dr. Anitha Menon",
+  establishedYear: "1998",
+};
+
 type Snapshot = {
   students: Student[];
   staff: Staff[];
@@ -821,6 +927,7 @@ type Snapshot = {
   academicYears: string[];
   academicYear: string;
   themeSettings: ThemeSettings;
+  schoolDetails: SchoolDetails;
   dashboardTodos: string[];
   dashboardNote: string;
   notifications: TenantNotification[];
@@ -851,6 +958,8 @@ type TenantStoreValue = {
   setAcademicYear: Dispatch<SetStateAction<string>>;
   themeSettings: ThemeSettings;
   setThemeSettings: Dispatch<SetStateAction<ThemeSettings>>;
+  schoolDetails: SchoolDetails;
+  setSchoolDetails: Dispatch<SetStateAction<SchoolDetails>>;
   dashboardTodos: string[];
   setDashboardTodos: Dispatch<SetStateAction<string[]>>;
   dashboardNote: string;
@@ -883,6 +992,45 @@ function normalizeThemeSettings(value: unknown): ThemeSettings {
       ? (placement as ThemeSettings["navPlacement"])
       : "Left",
   };
+}
+
+function asTrimmedString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value.trim() : fallback;
+}
+
+function asOptionalDataUrl(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value.startsWith("data:image/")) return undefined;
+  return value;
+}
+
+export function normalizeSchoolDetails(value: unknown): SchoolDetails {
+  if (!value || typeof value !== "object") return { ...SEED_SCHOOL_DETAILS };
+  const raw = value as Partial<SchoolDetails>;
+  const name = asTrimmedString(raw.name, SEED_SCHOOL_DETAILS.name) || SEED_SCHOOL_DETAILS.name;
+  return {
+    name,
+    logoUrl: asOptionalDataUrl(raw.logoUrl),
+    letterheadUrl: asOptionalDataUrl(raw.letterheadUrl),
+    tagline: asTrimmedString(raw.tagline, SEED_SCHOOL_DETAILS.tagline),
+    address: asTrimmedString(raw.address, SEED_SCHOOL_DETAILS.address),
+    phone: asTrimmedString(raw.phone, SEED_SCHOOL_DETAILS.phone),
+    email: asTrimmedString(raw.email, SEED_SCHOOL_DETAILS.email),
+    website: asTrimmedString(raw.website, SEED_SCHOOL_DETAILS.website),
+    registrationNo: asTrimmedString(raw.registrationNo, SEED_SCHOOL_DETAILS.registrationNo),
+    affiliationNo: asTrimmedString(raw.affiliationNo, SEED_SCHOOL_DETAILS.affiliationNo),
+    principalName: asTrimmedString(raw.principalName, SEED_SCHOOL_DETAILS.principalName),
+    establishedYear: asTrimmedString(raw.establishedYear, SEED_SCHOOL_DETAILS.establishedYear),
+  };
+}
+
+export function schoolInitials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 }
 
 function parseSnapshot(raw: string): Snapshot | null {
@@ -925,6 +1073,11 @@ function parseSnapshot(raw: string): Snapshot | null {
     ),
     academicYear: parsed.academicYear,
     themeSettings: normalizeThemeSettings(parsed.themeSettings),
+    schoolDetails: normalizeSchoolDetails(
+      (parsed as Partial<Snapshot>).schoolDetails ?? {
+        name: SEED_SCHOOL_DETAILS.name,
+      },
+    ),
     dashboardTodos: normalizeDashboardTodos(parsed.dashboardTodos),
     dashboardNote: typeof parsed.dashboardNote === "string" ? parsed.dashboardNote : "",
     notifications: normalizeNotifications(parsed.notifications),
@@ -953,6 +1106,170 @@ function writeSnapshot(snapshot: Snapshot) {
   }
 }
 
+/** Generate a URL-safe share token for parent profile links. */
+export function createStudentShareToken(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID().replace(/-/g, "");
+  }
+  return `tok_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
+}
+
+export function parentStudentPath(token: string): string {
+  return `/parent/student/${token}`;
+}
+
+export function parentStudentAbsoluteUrl(token: string): string {
+  if (typeof window === "undefined") return parentStudentPath(token);
+  return `${window.location.origin}${parentStudentPath(token)}`;
+}
+
+export type ParentEditableStudentFields = {
+  guardian: string;
+  phone?: string;
+  gender?: "M" | "F";
+  dob?: string;
+  email?: string;
+  address?: string;
+  photoUrl?: string;
+  aadhaar?: string;
+  placeOfBirth?: string;
+  nationality?: string;
+  religion?: string;
+  studentCategory?: string;
+  bloodGroup?: string;
+  fatherOccupation?: string;
+  motherName?: string;
+  guardianRelation?: GuardianRelation;
+  guardianOccupation?: string;
+  needsBus?: boolean;
+  busPoint1?: string;
+  busPoint2?: string;
+};
+
+export function parentFieldsFromStudent(student: Student): ParentEditableStudentFields {
+  return {
+    guardian: student.guardian ?? "",
+    phone: student.phone ?? "",
+    gender: student.gender,
+    dob: student.dob ?? "",
+    email: student.email ?? "",
+    address: student.address ?? "",
+    photoUrl: student.photoUrl ?? "",
+    aadhaar: student.aadhaar ?? "",
+    placeOfBirth: student.placeOfBirth ?? "",
+    nationality: student.nationality ?? "",
+    religion: student.religion ?? "",
+    studentCategory: student.studentCategory ?? "",
+    bloodGroup: student.bloodGroup ?? "",
+    fatherOccupation: student.fatherOccupation ?? "",
+    motherName: student.motherName ?? "",
+    guardianRelation: student.guardianRelation,
+    guardianOccupation: student.guardianOccupation ?? "",
+    needsBus:
+      typeof student.needsBus === "boolean"
+        ? student.needsBus
+        : Boolean(student.busPoint1 || student.busPoint2),
+    busPoint1: student.busPoint1 ?? "",
+    busPoint2: student.busPoint2 ?? "",
+  };
+}
+
+/** Read a student by public share token from persisted tenant storage. */
+export function getStudentByShareToken(token: string): Student | null {
+  const normalized = token.trim();
+  if (!normalized) return null;
+  const snap = readSnapshot();
+  const fromSnap = snap?.students.find((s) => s.shareToken === normalized);
+  if (fromSnap) return fromSnap;
+  return SEED_STUDENTS.find((s) => s.shareToken === normalized) ?? null;
+}
+
+/** Transport routes from Settings (snapshot) for parent pickup/drop dropdowns. */
+export function getTransportRoutesForParent(): TransportRoute[] {
+  const snap = readSnapshot();
+  if (snap?.transportRoutes?.length) return snap.transportRoutes;
+  return [...SEED_TRANSPORT];
+}
+
+export function transportBusPointOptions(routes: TransportRoute[]): {
+  pickups: string[];
+  drops: string[];
+} {
+  const pickups = new Set<string>();
+  const drops = new Set<string>();
+  for (const route of routes) {
+    if (route.mapFrom.trim()) pickups.add(route.mapFrom.trim());
+    if (route.mapTo.trim()) drops.add(route.mapTo.trim());
+  }
+  return {
+    pickups: Array.from(pickups).sort((a, b) => a.localeCompare(b, "en")),
+    drops: Array.from(drops).sort((a, b) => a.localeCompare(b, "en")),
+  };
+}
+
+/**
+ * Apply parent-submitted profile updates for a share token.
+ * Admin fields (name, class, due) stay locked.
+ */
+export function applyParentStudentUpdate(
+  token: string,
+  patch: ParentEditableStudentFields,
+): Student | null {
+  const normalized = token.trim();
+  if (!normalized) return null;
+
+  const snap = readSnapshot();
+  if (!snap) return null;
+
+  const idx = snap.students.findIndex((s) => s.shareToken === normalized);
+  if (idx < 0) return null;
+
+  const current = snap.students[idx];
+  const guardian = patch.guardian.trim();
+  if (!guardian) return null;
+
+  const updated = normalizeStudent({
+    ...current,
+    guardian,
+    phone: patch.phone,
+    gender: patch.gender,
+    dob: patch.dob,
+    email: patch.email,
+    address: patch.address,
+    photoUrl: patch.photoUrl,
+    aadhaar: patch.aadhaar,
+    placeOfBirth: patch.placeOfBirth,
+    nationality: patch.nationality,
+    religion: patch.religion,
+    studentCategory: patch.studentCategory,
+    bloodGroup: patch.bloodGroup,
+    fatherOccupation: patch.fatherOccupation,
+    motherName: patch.motherName,
+    guardianRelation: patch.guardianRelation,
+    guardianOccupation: patch.guardianOccupation,
+    needsBus: patch.needsBus === true,
+    busPoint1: patch.needsBus ? patch.busPoint1 : undefined,
+    busPoint2: patch.needsBus ? patch.busPoint2 : undefined,
+  });
+
+  const nextStudents = [...snap.students];
+  nextStudents[idx] = updated;
+  writeSnapshot({ ...snap, students: nextStudents });
+  return updated;
+}
+
+/** Persist a student into localStorage immediately (so parent links work before React effects flush). */
+export function upsertStudentInSnapshot(student: Student) {
+  const snap = readSnapshot();
+  if (!snap) return;
+  const normalized = normalizeStudent(student);
+  const idx = snap.students.findIndex((s) => s.id === normalized.id);
+  const nextStudents = [...snap.students];
+  if (idx >= 0) nextStudents[idx] = { ...nextStudents[idx], ...normalized };
+  else nextStudents.unshift(normalized);
+  writeSnapshot({ ...snap, students: nextStudents });
+}
+
 const TenantStoreContext = createContext<TenantStoreValue | null>(null);
 
 export function TenantStoreProvider({ children }: { children: ReactNode }) {
@@ -969,6 +1286,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
   const [academicYears, setAcademicYears] = useState<string[]>([...SEED_ACADEMIC_YEARS]);
   const [academicYear, setAcademicYear] = useState<string>(SEED_ACADEMIC_YEAR);
   const [themeSettings, setThemeSettings] = useState<ThemeSettings>(SEED_THEME_SETTINGS);
+  const [schoolDetails, setSchoolDetails] = useState<SchoolDetails>(SEED_SCHOOL_DETAILS);
   const [dashboardTodos, setDashboardTodos] = useState<string[]>([...DEFAULT_DASHBOARD_TODOS]);
   const [dashboardNote, setDashboardNote] = useState("");
   const [notifications, setNotifications] = useState<TenantNotification[]>([...SEED_NOTIFICATIONS]);
@@ -989,11 +1307,23 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       setAcademicYears(snap.academicYears);
       setAcademicYear(snap.academicYear);
       setThemeSettings(snap.themeSettings);
+      setSchoolDetails(snap.schoolDetails);
       setDashboardTodos(snap.dashboardTodos);
       setDashboardNote(snap.dashboardNote);
       setNotifications(snap.notifications);
     }
     setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== STORAGE_KEY || !event.newValue) return;
+      const snap = parseSnapshot(event.newValue);
+      if (!snap) return;
+      setStudents(snap.students);
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   useEffect(() => {
@@ -1011,6 +1341,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       academicYears,
       academicYear,
       themeSettings,
+      schoolDetails,
       dashboardTodos,
       dashboardNote,
       notifications,
@@ -1029,6 +1360,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
     academicYears,
     academicYear,
     themeSettings,
+    schoolDetails,
     dashboardTodos,
     dashboardNote,
     notifications,
@@ -1047,6 +1379,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
     setAcademicYears([...SEED_ACADEMIC_YEARS]);
     setAcademicYear(SEED_ACADEMIC_YEAR);
     setThemeSettings(SEED_THEME_SETTINGS);
+    setSchoolDetails(SEED_SCHOOL_DETAILS);
     setDashboardTodos([...DEFAULT_DASHBOARD_TODOS]);
     setDashboardNote("");
     setNotifications([...SEED_NOTIFICATIONS]);
@@ -1063,6 +1396,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       academicYears: [...SEED_ACADEMIC_YEARS],
       academicYear: SEED_ACADEMIC_YEAR,
       themeSettings: SEED_THEME_SETTINGS,
+      schoolDetails: SEED_SCHOOL_DETAILS,
       dashboardTodos: [...DEFAULT_DASHBOARD_TODOS],
       dashboardNote: "",
       notifications: [...SEED_NOTIFICATIONS],
@@ -1095,6 +1429,8 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       setAcademicYear,
       themeSettings,
       setThemeSettings,
+      schoolDetails,
+      setSchoolDetails,
       dashboardTodos,
       setDashboardTodos,
       dashboardNote,
@@ -1116,6 +1452,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       academicYears,
       academicYear,
       themeSettings,
+      schoolDetails,
       dashboardTodos,
       dashboardNote,
       notifications,

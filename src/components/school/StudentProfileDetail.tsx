@@ -11,6 +11,7 @@ import {
   Check,
   AlertTriangle,
   CheckCircle2,
+  Share2,
   X,
 } from "lucide-react";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -23,10 +24,28 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { OrganicCard } from "@/components/ui/organic-card";
-import type { Student } from "@/lib/tenant-store";
-import { useTenantStore } from "@/lib/tenant-store";
+import {
+  BLOOD_GROUPS,
+  createStudentShareToken,
+  GUARDIAN_RELATIONS,
+  STUDENT_CATEGORIES,
+  STUDENT_RELIGIONS,
+  upsertStudentInSnapshot,
+  useTenantStore,
+  type GuardianRelation,
+  type Student,
+} from "@/lib/tenant-store";
+import { ShareParentLinkDialog } from "@/components/school/ShareParentLinkDialog";
 import { downloadReceiptPdf } from "@/lib/finance-export";
 import { useAuth } from "@/lib/auth";
 import {
@@ -37,6 +56,63 @@ import {
 import { cn } from "@/lib/utils";
 
 type LedgerStatus = "Paid" | "Partially Paid" | "Overdue";
+
+type StudentDraft = {
+  name: string;
+  gender: "" | "M" | "F";
+  cls: string;
+  guardian: string;
+  phone: string;
+  dob: string;
+  email: string;
+  address: string;
+  motherName: string;
+  fatherOccupation: string;
+  guardianRelation: "" | GuardianRelation;
+  guardianOccupation: string;
+  aadhaar: string;
+  placeOfBirth: string;
+  nationality: string;
+  religion: string;
+  studentCategory: string;
+  bloodGroup: string;
+  needsBus: boolean;
+  busPoint1: string;
+  busPoint2: string;
+};
+
+function draftFromStudent(student: Student): StudentDraft {
+  return {
+    name: student.name,
+    gender: student.gender ?? "",
+    cls: student.cls,
+    guardian: student.guardian,
+    phone: student.phone ?? "",
+    dob: student.dob ?? "",
+    email: student.email ?? "",
+    address: student.address ?? "",
+    motherName: student.motherName ?? "",
+    fatherOccupation: student.fatherOccupation ?? "",
+    guardianRelation: student.guardianRelation ?? "",
+    guardianOccupation: student.guardianOccupation ?? "",
+    aadhaar: student.aadhaar ?? "",
+    placeOfBirth: student.placeOfBirth ?? "",
+    nationality: student.nationality ?? "",
+    religion: student.religion ?? "",
+    studentCategory: student.studentCategory ?? "",
+    bloodGroup: student.bloodGroup ?? "",
+    needsBus:
+      student.needsBus === true ||
+      Boolean(student.busPoint1 || student.busPoint2),
+    busPoint1: student.busPoint1 ?? "",
+    busPoint2: student.busPoint2 ?? "",
+  };
+}
+
+function emptyToUndefined(value: string): string | undefined {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
 
 type LedgerRow = {
   date: string;
@@ -173,30 +249,38 @@ export function StudentProfileDetail({
   initialEdit?: boolean;
 }) {
   const navigate = useNavigate();
-  const { setStudents, academicYear } = useTenantStore();
+  const { setStudents, academicYear, schoolDetails, classes: classConfigs } = useTenantStore();
   const { session } = useAuth();
-  const schoolName = session?.tenantName ?? "Silver Hills Global";
+  const schoolName = schoolDetails.name || session?.tenantName || "Silver Hills Global";
   const [editing, setEditing] = useState(initialEdit);
-  const [draft, setDraft] = useState({
-    guardian: student.guardian,
-    phone: student.phone ?? "",
-    dob: student.dob ?? "",
-    email: student.email ?? "",
-    address: student.address ?? "",
-  });
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareToken, setShareToken] = useState(student.shareToken ?? "");
+  const [draft, setDraft] = useState<StudentDraft>(() => draftFromStudent(student));
+
+  const classOptions = useMemo(() => {
+    const fromConfig = classConfigs.map((c) => c.className);
+    return Array.from(new Set([...fromConfig, student.cls, draft.cls].filter(Boolean)));
+  }, [classConfigs, draft.cls, student.cls]);
 
   useEffect(() => {
-    setDraft({
-      guardian: student.guardian,
-      phone: student.phone ?? "",
-      dob: student.dob ?? "",
-      email: student.email ?? "",
-      address: student.address ?? "",
-    });
-  }, [student]);
+    setShareToken(student.shareToken ?? "");
+  }, [student.shareToken]);
+
+  // Only resync the draft when switching students, or when leaving edit mode
+  // after an external student update — never while the user is typing.
+  useEffect(() => {
+    if (!editing) {
+      setDraft(draftFromStudent(student));
+    }
+  }, [student, editing]);
+
+  useEffect(() => {
+    setDraft(draftFromStudent(student));
+  }, [student.id]);
 
   useEffect(() => {
     if (initialEdit) {
+      setEditing(true);
       navigate({ to: "/tenant/students", search: { id: student.id }, replace: true });
     }
   }, [initialEdit, navigate, student.id]);
@@ -210,38 +294,68 @@ export function StudentProfileDetail({
     ? `https://wa.me/${phoneDigits.length === 10 ? "91" : ""}${phoneDigits}`
     : undefined;
 
+  const patchDraft = <K extends keyof StudentDraft>(key: K, value: StudentDraft[K]) => {
+    setDraft((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const openShare = () => {
+    let token = student.shareToken ?? shareToken;
+    if (!token) {
+      token = createStudentShareToken();
+      const next = { ...student, shareToken: token };
+      setStudents((prev) => prev.map((s) => (s.id === student.id ? next : s)));
+      upsertStudentInSnapshot(next);
+    }
+    setShareToken(token);
+    setShareOpen(true);
+  };
+
   const toggleEdit = () => {
     if (editing) {
+      if (!draft.name.trim()) {
+        toast.error("Student name is required");
+        return;
+      }
       if (!draft.guardian.trim()) {
         toast.error("Guardian name is required");
         return;
       }
-      setStudents((prev) =>
-        prev.map((s) =>
-          s.id === student.id
-            ? {
-                ...s,
-                guardian: draft.guardian.trim(),
-                phone: draft.phone.trim() || undefined,
-                dob: draft.dob.trim() || undefined,
-                email: draft.email.trim() || undefined,
-                address: draft.address.trim() || undefined,
-              }
-            : s,
-        ),
-      );
-      toast.success(`${student.name}'s profile updated`, {
-        description: `${student.id} · guardian synced to ledger`,
+      if (!draft.cls.trim()) {
+        toast.error("Class is required");
+        return;
+      }
+      const updated: Student = {
+        ...student,
+        name: draft.name.trim(),
+        gender: draft.gender || undefined,
+        cls: draft.cls.trim(),
+        guardian: draft.guardian.trim(),
+        phone: emptyToUndefined(draft.phone),
+        dob: emptyToUndefined(draft.dob),
+        email: emptyToUndefined(draft.email),
+        address: emptyToUndefined(draft.address),
+        motherName: emptyToUndefined(draft.motherName),
+        fatherOccupation: emptyToUndefined(draft.fatherOccupation),
+        guardianRelation: draft.guardianRelation || undefined,
+        guardianOccupation: emptyToUndefined(draft.guardianOccupation),
+        aadhaar: emptyToUndefined(draft.aadhaar),
+        placeOfBirth: emptyToUndefined(draft.placeOfBirth),
+        nationality: emptyToUndefined(draft.nationality),
+        religion: emptyToUndefined(draft.religion),
+        studentCategory: emptyToUndefined(draft.studentCategory),
+        bloodGroup: emptyToUndefined(draft.bloodGroup),
+        needsBus: draft.needsBus,
+        busPoint1: draft.needsBus ? emptyToUndefined(draft.busPoint1) : undefined,
+        busPoint2: draft.needsBus ? emptyToUndefined(draft.busPoint2) : undefined,
+      };
+      setStudents((prev) => prev.map((s) => (s.id === student.id ? updated : s)));
+      upsertStudentInSnapshot(updated);
+      toast.success(`${updated.name}'s profile updated`, {
+        description: `${updated.id} · all profile fields saved`,
       });
       setEditing(false);
     } else {
-      setDraft({
-        guardian: student.guardian,
-        phone: student.phone ?? "",
-        dob: student.dob ?? "",
-        email: student.email ?? "",
-        address: student.address ?? "",
-      });
+      setDraft(draftFromStudent(student));
       setEditing(true);
     }
   };
@@ -276,32 +390,46 @@ export function StudentProfileDetail({
   return (
     <div className="flex flex-col gap-4 sm:gap-6">
       <TopBar
-        studentName={student.name}
+        studentName={editing ? draft.name : student.name}
         onBack={onBack}
         editing={editing}
         onToggleEdit={toggleEdit}
+        onShare={openShare}
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-12 lg:items-stretch">
+      <ShareParentLinkDialog
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        token={shareToken}
+        studentName={editing ? draft.name : student.name}
+        guardianPhone={draft.phone || student.phone}
+        guardianName={draft.guardian}
+      />
+
+      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-12 lg:items-start">
         <OrganicCard
           tone="white"
           cornerSide="tr"
           padded
-          className="flex h-full flex-col lg:col-span-4"
+          className="relative z-10 flex min-h-0 flex-col overflow-hidden lg:sticky lg:top-4 lg:col-span-4 lg:h-[calc(100dvh-8.5rem)]"
         >
           <IdentityHeader
             student={student}
+            displayName={draft.name}
+            gender={draft.gender}
+            editing={editing}
+            onNameChange={(name) => patchDraft("name", name)}
+            onGenderChange={(gender) => patchDraft("gender", gender)}
             onPhotoChange={updatePhoto}
             active={isActive}
           />
 
-          <div className="mt-6 flex min-h-0 flex-1 flex-col">
-            <div className="flex flex-col gap-5">
+          <div className="mobile-scrollbar-none mt-6 flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain pb-1">
               <MetaField
                 label="Guardian"
                 value={draft.guardian}
                 editing={editing}
-                onChange={(v) => setDraft({ ...draft, guardian: v })}
+                onChange={(v) => patchDraft("guardian", v)}
                 placeholder="Guardian full name"
               />
 
@@ -311,9 +439,9 @@ export function StudentProfileDetail({
                   {editing ? (
                     <Input
                       value={draft.phone}
-                      onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
+                      onChange={(e) => patchDraft("phone", e.target.value)}
                       placeholder="9810045221"
-                      className="h-9 flex-1 font-mono text-[13px]"
+                      className="h-9 flex-1 bg-white font-mono text-[13px]"
                     />
                   ) : (
                     <span className="font-mono text-[14px] font-medium text-black">
@@ -347,7 +475,7 @@ export function StudentProfileDetail({
                 label="Date of Birth"
                 value={draft.dob}
                 editing={editing}
-                onChange={(v) => setDraft({ ...draft, dob: v })}
+                onChange={(v) => patchDraft("dob", v)}
                 placeholder="14 Mar 2012"
                 date
               />
@@ -356,19 +484,35 @@ export function StudentProfileDetail({
                 label="Email Address"
                 value={draft.email}
                 editing={editing}
-                onChange={(v) => setDraft({ ...draft, email: v })}
+                onChange={(v) => patchDraft("email", v)}
                 placeholder="aarav.sharma@silverhills.in"
                 mono
               />
-            </div>
 
-            <div className="mt-auto flex min-h-0 flex-1 flex-col gap-5 border-t border-[#EFEFEF] pt-5">
-              <div>
+              <div className="border-t border-[#EFEFEF] pt-5">
                 <div className={META_LABEL}>Class</div>
                 <div className="mt-1.5">
-                  <span className="inline-flex rounded-full bg-[#DBEAFE] px-3 py-1.5 text-[12px] font-semibold text-black">
-                    {student.cls}
-                  </span>
+                  {editing ? (
+                    <Select value={draft.cls || undefined} onValueChange={(cls) => patchDraft("cls", cls)}>
+                      <SelectTrigger className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white text-[13px]">
+                        <SelectValue placeholder="Select class" />
+                      </SelectTrigger>
+                      <SelectContent
+                        position="popper"
+                        className="z-[250] rounded-lg border border-[#E5E5E5] bg-white"
+                      >
+                        {classOptions.map((cls) => (
+                          <SelectItem key={cls} value={cls}>
+                            {cls}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <span className="inline-flex rounded-full bg-[#DBEAFE] px-3 py-1.5 text-[12px] font-semibold text-black">
+                      {student.cls}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -376,12 +520,148 @@ export function StudentProfileDetail({
                 label="Residential Mailing Address"
                 value={draft.address}
                 editing={editing}
-                onChange={(v) => setDraft({ ...draft, address: v })}
+                onChange={(v) => patchDraft("address", v)}
                 placeholder="B-204, Lotus Greens, Sector 21, Noida 201301"
                 multiline
-                fill
               />
-            </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <MetaField
+                  label="Mother Name"
+                  value={draft.motherName}
+                  editing={editing}
+                  onChange={(v) => patchDraft("motherName", v)}
+                  placeholder="e.g. Anita Verma"
+                />
+                <MetaField
+                  label="Father Occupation"
+                  value={draft.fatherOccupation}
+                  editing={editing}
+                  onChange={(v) => patchDraft("fatherOccupation", v)}
+                  placeholder="e.g. Engineer"
+                />
+                <div>
+                  <div className={META_LABEL}>If Guardian Is</div>
+                  <div className="mt-1.5">
+                    {editing ? (
+                      <div className="relative z-10 inline-flex w-full items-center rounded-full border border-black/10 bg-white p-1">
+                        {GUARDIAN_RELATIONS.map((relation) => (
+                          <button
+                            key={relation}
+                            type="button"
+                            onClick={() => patchDraft("guardianRelation", relation)}
+                            className={cn(
+                              "min-h-8 flex-1 cursor-pointer rounded-full px-1 text-[11px] font-semibold transition-colors",
+                              draft.guardianRelation === relation
+                                ? "bg-[#2563EB] text-white"
+                                : "text-black/55 hover:bg-black/5",
+                            )}
+                          >
+                            {relation}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-[14px] font-medium text-black">
+                        {draft.guardianRelation || "—"}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <MetaField
+                  label="Guardian Occupation"
+                  value={draft.guardianOccupation}
+                  editing={editing}
+                  onChange={(v) => patchDraft("guardianOccupation", v)}
+                  placeholder="e.g. Teacher"
+                />
+                <MetaField
+                  label="Aadhaar"
+                  value={draft.aadhaar}
+                  editing={editing}
+                  onChange={(v) =>
+                    patchDraft("aadhaar", v.replace(/\D/g, "").slice(0, 12))
+                  }
+                  placeholder="12-digit Aadhaar"
+                  mono
+                />
+                <MetaField
+                  label="Place of Birth"
+                  value={draft.placeOfBirth}
+                  editing={editing}
+                  onChange={(v) => patchDraft("placeOfBirth", v)}
+                  placeholder="e.g. Kozhikode"
+                />
+                <MetaField
+                  label="Nationality"
+                  value={draft.nationality}
+                  editing={editing}
+                  onChange={(v) => patchDraft("nationality", v)}
+                  placeholder="e.g. Indian"
+                />
+                <MetaSelect
+                  label="Religion"
+                  value={draft.religion}
+                  editing={editing}
+                  onChange={(v) => patchDraft("religion", v)}
+                  options={[...STUDENT_RELIGIONS]}
+                  placeholder="Select religion"
+                />
+                <MetaSelect
+                  label="Student Category"
+                  value={draft.studentCategory}
+                  editing={editing}
+                  onChange={(v) => patchDraft("studentCategory", v)}
+                  options={[...STUDENT_CATEGORIES]}
+                  placeholder="Select category"
+                />
+                <MetaSelect
+                  label="Blood Group"
+                  value={draft.bloodGroup}
+                  editing={editing}
+                  onChange={(v) => patchDraft("bloodGroup", v)}
+                  options={[...BLOOD_GROUPS]}
+                  placeholder="Select blood group"
+                />
+                <div className="sm:col-span-2">
+                  <div className={META_LABEL}>School Bus</div>
+                  <div className="mt-1.5">
+                    {editing ? (
+                      <label className="flex items-center gap-2.5 rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] px-3 py-2.5 text-[13px] font-medium text-black">
+                        <Checkbox
+                          checked={draft.needsBus}
+                          onCheckedChange={(checked) =>
+                            patchDraft("needsBus", checked === true)
+                          }
+                        />
+                        Requires school bus transport
+                      </label>
+                    ) : (
+                      <div className="text-[14px] font-medium text-black">
+                        {draft.needsBus ? "Required" : "Not required"}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {draft.needsBus && (
+                  <>
+                    <MetaField
+                      label="Bus Point 1"
+                      value={draft.busPoint1}
+                      editing={editing}
+                      onChange={(v) => patchDraft("busPoint1", v)}
+                      placeholder="Pickup point"
+                    />
+                    <MetaField
+                      label="Bus Point 2"
+                      value={draft.busPoint2}
+                      editing={editing}
+                      onChange={(v) => patchDraft("busPoint2", v)}
+                      placeholder="Drop point"
+                    />
+                  </>
+                )}
+              </div>
           </div>
         </OrganicCard>
 
@@ -434,14 +714,16 @@ function TopBar({
   onBack,
   editing,
   onToggleEdit,
+  onShare,
 }: {
   studentName: string;
   onBack: () => void;
   editing: boolean;
   onToggleEdit: () => void;
+  onShare: () => void;
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-[1.5rem] border border-[#E5E5E5] bg-white p-2 shadow-[0_10px_28px_-24px_rgba(0,0,0,0.35)] sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none">
+    <div className="flex items-center gap-2 rounded-xl border border-[#E5E5E5] bg-white p-2 shadow-[0_10px_28px_-24px_rgba(0,0,0,0.35)] sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none">
       <div className="min-w-0 flex-1 truncate pl-0.5 text-[12px] sm:text-[14px]">
         <button
           type="button"
@@ -461,6 +743,15 @@ function TopBar({
       >
         <ArrowLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
         <span className="hidden min-[380px]:inline sm:inline">Back</span>
+      </button>
+
+      <button
+        type="button"
+        onClick={onShare}
+        className="inline-flex h-10 shrink-0 items-center justify-center gap-1 rounded-full border border-[#DBEAFE] bg-[#EFF6FF] px-3 text-[11.5px] font-semibold text-[#2563EB] transition-colors hover:bg-[#DBEAFE] sm:gap-1.5 sm:px-4 sm:text-[13px]"
+      >
+        <Share2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+        <span className="hidden min-[380px]:inline sm:inline">Share</span>
       </button>
 
       <button
@@ -490,10 +781,20 @@ function TopBar({
 
 function IdentityHeader({
   student,
+  displayName,
+  gender,
+  editing,
+  onNameChange,
+  onGenderChange,
   onPhotoChange,
   active,
 }: {
   student: Student;
+  displayName: string;
+  gender: "" | "M" | "F";
+  editing: boolean;
+  onNameChange: (name: string) => void;
+  onGenderChange: (gender: "" | "M" | "F") => void;
   onPhotoChange: (photoUrl: string | undefined) => void;
   active: boolean;
 }) {
@@ -528,18 +829,18 @@ function IdentityHeader({
           {student.photoUrl ? (
             <img
               src={student.photoUrl}
-              alt={`${student.name} profile`}
-              className="h-16 w-16 rounded-2xl object-cover"
+              alt={`${displayName} profile`}
+              className="h-16 w-16 rounded-lg object-cover"
             />
           ) : (
-            <div className="grid h-16 w-16 place-items-center rounded-2xl bg-black text-lg font-semibold text-white">
-              {initials(student.name)}
+            <div className="grid h-16 w-16 place-items-center rounded-lg bg-black text-lg font-semibold text-white">
+              {initials(displayName || student.name)}
             </div>
           )}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            aria-label={`Change photo for ${student.name}`}
+            aria-label={`Change photo for ${displayName}`}
             title="Change photo"
             className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#2563EB] text-white shadow-sm transition-colors hover:bg-black hover:text-[#2563EB]"
           >
@@ -549,7 +850,7 @@ function IdentityHeader({
             <button
               type="button"
               onClick={() => setConfirmRemove(true)}
-              aria-label={`Remove photo for ${student.name}`}
+              aria-label={`Remove photo for ${displayName}`}
               title="Remove photo"
               className="absolute -left-1 -top-1 grid h-6 w-6 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 shadow-sm transition-colors hover:bg-[#FEE2E2] hover:text-[#EF4444]"
             >
@@ -564,34 +865,74 @@ function IdentityHeader({
             onChange={handleFile}
           />
         </div>
-        <div className="min-w-0">
-          <div className="truncate text-[18px] font-semibold text-black">{student.name}</div>
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            <span className="rounded-full bg-[#F4F4F5] px-2.5 py-0.5 font-mono text-[10.5px] font-medium text-black/65">
-              {student.id}
-            </span>
-            {student.gender && (
-              <span
-                className={`rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold ${
-                  student.gender === "F" ? "bg-black text-[#2563EB]" : "bg-black text-white"
-                }`}
-              >
-                {student.gender}
+        <div className="min-w-0 flex-1">
+          {editing ? (
+            <div className="space-y-2">
+              <Input
+                value={displayName}
+                onChange={(e) => onNameChange(e.target.value)}
+                placeholder="Student full name"
+                className="h-9 text-[15px] font-semibold"
+              />
+              <div className="inline-flex items-center rounded-full border border-black/10 bg-white p-1">
+                {(["M", "F"] as const).map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => onGenderChange(g)}
+                    className={cn(
+                      "min-h-7 rounded-full px-3 text-[11px] font-semibold transition-colors",
+                      gender === g
+                        ? g === "F"
+                          ? "bg-black text-[#2563EB]"
+                          : "bg-black text-white"
+                        : "text-black/55 hover:bg-black/5",
+                    )}
+                  >
+                    {g === "M" ? "Male" : "Female"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="truncate text-[18px] font-semibold text-black">{displayName}</div>
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <span className="rounded-full bg-[#F4F4F5] px-2.5 py-0.5 font-mono text-[10.5px] font-medium text-black/65">
+                  {student.id}
+                </span>
+                {gender && (
+                  <span
+                    className={`rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold ${
+                      gender === "F" ? "bg-black text-[#2563EB]" : "bg-black text-white"
+                    }`}
+                  >
+                    {gender}
+                  </span>
+                )}
+                <EnrollmentStatusBadge active={active} />
+              </div>
+            </>
+          )}
+          {editing && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <span className="rounded-full bg-[#F4F4F5] px-2.5 py-0.5 font-mono text-[10.5px] font-medium text-black/65">
+                {student.id}
               </span>
-            )}
-            <EnrollmentStatusBadge active={active} />
-          </div>
+              <EnrollmentStatusBadge active={active} />
+            </div>
+          )}
         </div>
       </div>
 
       <Dialog open={confirmRemove} onOpenChange={setConfirmRemove}>
-        <DialogContent className="max-w-sm rounded-[1.5rem] border border-[#E5E5E5] bg-white p-6">
+        <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6">
           <DialogHeader>
             <DialogTitle className="text-[22px] font-semibold text-black">
               Remove photo
             </DialogTitle>
             <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
-              Remove {student.name}&apos;s profile photo? You can upload a new one anytime.
+              Remove {displayName}&apos;s profile photo? You can upload a new one anytime.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="mt-5 flex-row justify-end gap-2">
@@ -620,6 +961,49 @@ const todayISO = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
+function MetaSelect({
+  label,
+  value,
+  editing,
+  onChange,
+  options,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  editing: boolean;
+  onChange: (value: string) => void;
+  options: string[];
+  placeholder?: string;
+}) {
+  return (
+    <div>
+      <div className={META_LABEL}>{label}</div>
+      <div className="mt-1.5">
+        {editing ? (
+          <Select value={value || undefined} onValueChange={onChange}>
+            <SelectTrigger className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white text-[13px]">
+              <SelectValue placeholder={placeholder ?? "Select…"} />
+            </SelectTrigger>
+            <SelectContent
+              position="popper"
+              className="z-[250] rounded-lg border border-[#E5E5E5] bg-white"
+            >
+              {options.map((option) => (
+                <SelectItem key={option} value={option}>
+                  {option}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <div className="text-[14px] font-medium text-black">{value?.trim() ? value : "—"}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function MetaField({
   label,
   value,
@@ -629,7 +1013,6 @@ function MetaField({
   mono,
   multiline,
   date,
-  fill,
 }: {
   label: string;
   value: string;
@@ -639,12 +1022,11 @@ function MetaField({
   mono?: boolean;
   multiline?: boolean;
   date?: boolean;
-  fill?: boolean;
 }) {
   return (
-    <div className={cn(fill && "flex min-h-0 flex-1 flex-col")}>
+    <div>
       <div className={META_LABEL}>{label}</div>
-      <div className={cn("mt-1.5", fill && "flex min-h-0 flex-1 flex-col")}>
+      <div className="mt-1.5">
         {editing ? (
           date ? (
             <DatePicker
@@ -656,24 +1038,22 @@ function MetaField({
               quickPicks={[]}
               min="1990-01-01"
               max={todayISO()}
-              className="h-9"
+              className="h-9 bg-white"
             />
           ) : multiline ? (
             <textarea
               value={value}
               onChange={(e) => onChange(e.target.value)}
               placeholder={placeholder}
-              className={cn(
-                "w-full rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2 text-[13px] text-black shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10",
-                fill ? "min-h-[120px] flex-1 resize-none lg:min-h-0" : "min-h-[64px]",
-              )}
+              rows={3}
+              className="min-h-[72px] w-full resize-y rounded-lg border border-[#E5E5E5] bg-white px-3 py-2 text-[13px] text-black shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10"
             />
           ) : (
             <Input
               value={value}
               onChange={(e) => onChange(e.target.value)}
               placeholder={placeholder}
-              className={`h-9 text-[13px] ${mono ? "font-mono" : ""}`}
+              className={cn("h-9 bg-white text-[13px]", mono && "font-mono")}
             />
           )
         ) : (
@@ -682,8 +1062,6 @@ function MetaField({
               "text-[14px] font-medium",
               mono && "font-mono",
               multiline ? "whitespace-pre-line leading-snug text-black/85" : "text-black",
-              fill && multiline && "min-h-0 flex-1 rounded-2xl bg-[#FAFAFA] p-3",
-              fill && !multiline && "min-h-0 flex-1",
             )}
           >
             {value || <span className="font-normal text-black/40">—</span>}
@@ -900,7 +1278,7 @@ function FeesTable({
               type="button"
               onClick={() => setSelectedRow(r)}
               aria-label={`View details for ${r.desc}`}
-              className="w-full rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 text-left transition-colors hover:border-black/15 hover:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]"
+              className="w-full rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 text-left transition-colors hover:border-black/15 hover:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
@@ -1027,7 +1405,7 @@ function FeesTable({
       </OrganicCard>
 
       <Dialog open={Boolean(selectedRow)} onOpenChange={(open) => !open && setSelectedRow(null)}>
-        <DialogContent className="max-w-md rounded-[1.75rem] border border-[#E5E5E5] bg-white p-6">
+        <DialogContent className="max-w-md rounded-xl border border-[#E5E5E5] bg-white p-6">
           <DialogHeader>
             <DialogTitle className="text-[24px] font-semibold text-black">
               Fee Line Detail
@@ -1039,7 +1417,7 @@ function FeesTable({
 
           {selectedRow && (
             <div className="mt-2 space-y-3">
-              <div className="rounded-2xl bg-[#F4F4F5] p-4">
+              <div className="rounded-lg bg-[#F4F4F5] p-4">
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-black/50">
                   Description
                 </div>
@@ -1061,7 +1439,7 @@ function FeesTable({
                 <DetailField label="Collection" value={`${paidPct}% collected`} />
               </div>
 
-              <div className="rounded-2xl border border-[#E5E5E5] p-3">
+              <div className="rounded-lg border border-[#E5E5E5] p-3">
                 <div className="flex items-center justify-between text-[11px] text-black/55">
                   <span>Payment progress</span>
                   <span className="font-mono text-black">{paidPct}%</span>
@@ -1091,7 +1469,7 @@ function DetailField({
   mono?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-[#E5E5E5] p-3">
+    <div className="rounded-lg border border-[#E5E5E5] p-3">
       <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
         {label}
       </div>
@@ -1111,6 +1489,7 @@ function ReceiptsList({
   schoolName: string;
   academicYear: string;
 }) {
+  const { schoolDetails } = useTenantStore();
   const handleDownload = (r: Receipt) => {
     try {
       downloadReceiptPdf(
@@ -1124,6 +1503,12 @@ function ReceiptsList({
         },
         schoolName,
         academicYear,
+        {
+          letterheadUrl: schoolDetails.letterheadUrl,
+          address: schoolDetails.address,
+          phone: schoolDetails.phone,
+          email: schoolDetails.email,
+        },
       );
       toast.success(`Receipt ${r.id} downloaded`, {
         description: `PDF saved · ${inr(r.amount)}`,
@@ -1153,7 +1538,7 @@ function ReceiptsList({
         {receipts.map((r) => (
           <li
             key={r.id}
-            className="-mx-2 flex items-center gap-4 rounded-2xl px-3 py-3.5 transition-colors hover:bg-[#F4F4F5]"
+            className="-mx-2 flex items-center gap-4 rounded-lg px-3 py-3.5 transition-colors hover:bg-[#F4F4F5]"
           >
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
@@ -1169,7 +1554,7 @@ function ReceiptsList({
               type="button"
               onClick={() => handleDownload(r)}
               aria-label={`Download receipt ${r.id}`}
-              className="grid h-10 w-10 place-items-center rounded-2xl border border-[#E5E5E5] bg-white text-black/55 shadow-sm transition-colors hover:bg-black hover:text-white"
+              className="grid h-10 w-10 place-items-center rounded-lg border border-[#E5E5E5] bg-white text-black/55 shadow-sm transition-colors hover:bg-black hover:text-white"
             >
               <Download className="h-3.5 w-3.5" />
             </button>

@@ -25,6 +25,8 @@ import { Route as SuperAdminTenantsRouteImport } from './routes/super-admin/tena
 import { Route as SuperAdminPlansRouteImport } from './routes/super-admin/plans'
 import { Route as SuperAdminOverviewRouteImport } from './routes/super-admin/overview'
 import { Route as SuperAdminAuditsRouteImport } from './routes/super-admin/audits'
+import { Route as TenantStudentsAdmitRouteImport } from './routes/tenant/students_.admit'
+import { Route as ParentStudentTokenRouteImport } from './routes/parent/student.$token'
 
 const TenantRoute = TenantRouteImport.update({
   id: '/tenant',
@@ -106,6 +108,16 @@ const SuperAdminAuditsRoute = SuperAdminAuditsRouteImport.update({
   path: '/audits',
   getParentRoute: () => SuperAdminRoute,
 } as any)
+const TenantStudentsAdmitRoute = TenantStudentsAdmitRouteImport.update({
+  id: '/students_/admit',
+  path: '/students/admit',
+  getParentRoute: () => TenantRoute,
+} as any)
+const ParentStudentTokenRoute = ParentStudentTokenRouteImport.update({
+  id: '/parent/student/$token',
+  path: '/parent/student/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -124,6 +136,8 @@ export interface FileRoutesByFullPath {
   '/tenant/students': typeof TenantStudentsRoute
   '/super-admin/': typeof SuperAdminIndexRoute
   '/tenant/': typeof TenantIndexRoute
+  '/parent/student/$token': typeof ParentStudentTokenRoute
+  '/tenant/students/admit': typeof TenantStudentsAdmitRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -140,6 +154,8 @@ export interface FileRoutesByTo {
   '/tenant/students': typeof TenantStudentsRoute
   '/super-admin': typeof SuperAdminIndexRoute
   '/tenant': typeof TenantIndexRoute
+  '/parent/student/$token': typeof ParentStudentTokenRoute
+  '/tenant/students/admit': typeof TenantStudentsAdmitRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -159,6 +175,8 @@ export interface FileRoutesById {
   '/tenant/students': typeof TenantStudentsRoute
   '/super-admin/': typeof SuperAdminIndexRoute
   '/tenant/': typeof TenantIndexRoute
+  '/parent/student/$token': typeof ParentStudentTokenRoute
+  '/tenant/students_/admit': typeof TenantStudentsAdmitRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -179,6 +197,8 @@ export interface FileRouteTypes {
     | '/tenant/students'
     | '/super-admin/'
     | '/tenant/'
+    | '/parent/student/$token'
+    | '/tenant/students/admit'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -195,6 +215,8 @@ export interface FileRouteTypes {
     | '/tenant/students'
     | '/super-admin'
     | '/tenant'
+    | '/parent/student/$token'
+    | '/tenant/students/admit'
   id:
     | '__root__'
     | '/'
@@ -213,6 +235,8 @@ export interface FileRouteTypes {
     | '/tenant/students'
     | '/super-admin/'
     | '/tenant/'
+    | '/parent/student/$token'
+    | '/tenant/students_/admit'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -220,6 +244,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   SuperAdminRoute: typeof SuperAdminRouteWithChildren
   TenantRoute: typeof TenantRouteWithChildren
+  ParentStudentTokenRoute: typeof ParentStudentTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -336,6 +361,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SuperAdminAuditsRouteImport
       parentRoute: typeof SuperAdminRoute
     }
+    '/tenant/students_/admit': {
+      id: '/tenant/students_/admit'
+      path: '/students/admit'
+      fullPath: '/tenant/students/admit'
+      preLoaderRoute: typeof TenantStudentsAdmitRouteImport
+      parentRoute: typeof TenantRoute
+    }
+    '/parent/student/$token': {
+      id: '/parent/student/$token'
+      path: '/parent/student/$token'
+      fullPath: '/parent/student/$token'
+      preLoaderRoute: typeof ParentStudentTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -367,6 +406,7 @@ interface TenantRouteChildren {
   TenantStaffRoute: typeof TenantStaffRoute
   TenantStudentsRoute: typeof TenantStudentsRoute
   TenantIndexRoute: typeof TenantIndexRoute
+  TenantStudentsAdmitRoute: typeof TenantStudentsAdmitRoute
 }
 
 const TenantRouteChildren: TenantRouteChildren = {
@@ -377,6 +417,7 @@ const TenantRouteChildren: TenantRouteChildren = {
   TenantStaffRoute: TenantStaffRoute,
   TenantStudentsRoute: TenantStudentsRoute,
   TenantIndexRoute: TenantIndexRoute,
+  TenantStudentsAdmitRoute: TenantStudentsAdmitRoute,
 }
 
 const TenantRouteWithChildren =
@@ -387,6 +428,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   SuperAdminRoute: SuperAdminRouteWithChildren,
   TenantRoute: TenantRouteWithChildren,
+  ParentStudentTokenRoute: ParentStudentTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

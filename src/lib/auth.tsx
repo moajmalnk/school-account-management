@@ -27,6 +27,7 @@ type AuthState = {
   hydrated: boolean;
   login: (role: Role, email: string, password: string) => LoginResult;
   logout: () => void;
+  updateSession: (patch: Partial<Pick<Session, "displayName" | "tenantName">>) => void;
 };
 
 const STORAGE_KEY = "school-accounts/session/v1";
@@ -123,9 +124,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null);
   }, []);
 
+  const updateSession = useCallback<AuthState["updateSession"]>((patch) => {
+    setSession((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, ...patch };
+      writeSession(next);
+      return next;
+    });
+  }, []);
+
   const value = useMemo<AuthState>(
-    () => ({ session, hydrated, login, logout }),
-    [session, hydrated, login, logout],
+    () => ({ session, hydrated, login, logout, updateSession }),
+    [session, hydrated, login, logout, updateSession],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

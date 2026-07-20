@@ -163,3 +163,134 @@ export function filterPaymentsByPeriod(
     paymentMatchesPeriod(payment, period, customRange, reference),
   );
 }
+
+/** Inclusive calendar-day count for a selected period (min 1). */
+export function getPeriodDayCount(
+  period: PaymentPeriod,
+  customRange?: CustomDateRange,
+  reference = new Date(),
+): number {
+  const range = getPeriodRange(period, customRange, reference);
+  if (!range) return 30;
+  const start = startOfDay(range.start).getTime();
+  const end = startOfDay(range.end).getTime();
+  return Math.max(1, Math.round((end - start) / 86_400_000) + 1);
+}
+
+export type IncomeExpensePoint = {
+  label: string;
+  income: number;
+  expense: number;
+};
+
+/**
+ * Build chart points for the selected period.
+ * Income is summed from payments; expense is spread across the same buckets.
+ */
+export function buildIncomeExpenseSeries(
+  payments: Payment[],
+  expenseTotal: number,
+  period: PaymentPeriod,
+  customRange?: CustomDateRange,
+  reference = new Date(),
+): IncomeExpensePoint[] {
+  const range = getPeriodRange(period, customRange, reference);
+  if (!range) {
+    return [{ label: "All", income: payments.reduce((s, p) => s + p.amount, 0), expense: expenseTotal }];
+  }
+
+  const buckets = createPeriodBuckets(period, range.start, range.end, reference);
+  if (buckets.length === 0) {
+    return [{ label: "Period", income: 0, expense: expenseTotal }];
+  }
+
+  const incomeByBucket = buckets.map(() => 0);
+  for (const payment of payments) {
+    const date = parsePaymentDate(payment.time, reference);
+    if (!date) {
+      incomeByBucket[incomeByBucket.length - 1] += payment.amount;
+      continue;
+    }
+    const idx = buckets.findIndex((b) => date >= b.start && date <= b.end);
+    if (idx >= 0) incomeByBucket[idx] += payment.amount;
+  }
+
+  const weights = buckets.map((b) =>
+    Math.max(1, Math.round((startOfDay(b.end).getTime() - startOfDay(b.start).getTime()) / 86_400_000) + 1),
+  );
+  const weightSum = weights.reduce((s, w) => s + w, 0) || 1;
+
+  return buckets.map((bucket, index) => ({
+    label: bucket.label,
+    income: incomeByBucket[index],
+    expense: Math.round((expenseTotal * weights[index]) / weightSum),
+  }));
+}
+
+type PeriodBucket = { label: string; start: Date; end: Date };
+
+function createPeriodBuckets(
+  period: PaymentPeriod,
+  start: Date,
+  end: Date,
+  reference: Date,
+): PeriodBucket[] {
+  if (period === "today") {
+    const day = startOfDay(reference);
+    return [
+      { label: "AM", start: day, end: new Date(day.getFullYear(), day.getMonth(), day.getDate(), 11, 59, 59, 999) },
+      {
+        label: "PM",
+        start: new Date(day.getFullYear(), day.getMonth(), day.getDate(), 12, 0, 0, 0),
+        end: endOfDay(reference),
+      },
+    ];
+  }
+
+  if (period === "this_month" || period === "last_month") {
+    return weekBucketsInRange(start, end);
+  }
+
+  if (period === "last_3_months" || period === "last_6_months" || period === "last_year") {
+    return monthBucketsInRange(start, end);
+  }
+
+  // custom — prefer weeks if short, else months
+  const days = Math.max(
+    1,
+    Math.round((startOfDay(end).getTime() - startOfDay(start).getTime()) / 86_400_000) + 1,
+  );
+  if (days <= 45) return weekBucketsInRange(start, end);
+  return monthBucketsInRange(start, end);
+}
+
+function weekBucketsInRange(start: Date, end: Date): PeriodBucket[] {
+  const buckets: PeriodBucket[] = [];
+  let cursor = startOfDay(start);
+  let week = 1;
+  while (cursor <= end && week <= 6) {
+    const weekEnd = endOfDay(addDays(cursor, 6));
+    const clippedEnd = weekEnd > end ? end : weekEnd;
+    buckets.push({ label: `W${week}`, start: cursor, end: clippedEnd });
+    cursor = startOfDay(addDays(clippedEnd, 1));
+    week += 1;
+  }
+  return buckets;
+}
+
+function monthBucketsInRange(start: Date, end: Date): PeriodBucket[] {
+  const buckets: PeriodBucket[] = [];
+  let cursor = startOfMonth(start);
+  while (cursor <= end && buckets.length < 12) {
+    const monthEnd = endOfMonth(cursor);
+    const clippedStart = cursor < start ? start : cursor;
+    const clippedEnd = monthEnd > end ? end : monthEnd;
+    buckets.push({
+      label: cursor.toLocaleDateString("en-IN", { month: "short" }),
+      start: clippedStart,
+      end: clippedEnd,
+    });
+    cursor = startOfMonth(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1));
+  }
+  return buckets;
+}

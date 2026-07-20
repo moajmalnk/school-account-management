@@ -114,7 +114,7 @@ export function NotificationsPage() {
       <OrganicCard tone="white" cornerSide="tr" padded className="overflow-hidden">
         {visible.length === 0 ? (
           <div className="py-12 text-center">
-            <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-[#F4F4F5] text-black/40">
+            <div className="mx-auto grid h-12 w-12 place-items-center rounded-lg bg-[#F4F4F5] text-black/40">
               <Bell className="h-5 w-5" />
             </div>
             <div className="mt-3 text-[14px] font-semibold text-black">No notifications</div>
@@ -141,7 +141,7 @@ export function NotificationsPage() {
                 >
                   <div
                     className={cn(
-                      "grid h-10 w-10 shrink-0 place-items-center rounded-2xl",
+                      "grid h-10 w-10 shrink-0 place-items-center rounded-lg",
                       meta.tone,
                     )}
                   >
