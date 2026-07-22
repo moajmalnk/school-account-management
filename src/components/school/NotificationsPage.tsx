@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   Bell,
+  Bus,
   CheckCheck,
   GraduationCap,
   UserCog,
@@ -24,6 +25,7 @@ const categoryMeta: Record<
   admissions: { label: "Admissions", icon: GraduationCap, tone: "bg-[#DBEAFE] text-black" },
   staff: { label: "Staff", icon: UserCog, tone: "bg-[#F4F4F5] text-black" },
   system: { label: "System", icon: Bell, tone: "bg-black text-white" },
+  transport: { label: "Transport", icon: Bus, tone: "bg-[#FEF3C7] text-[#B45309]" },
 };
 
 export function NotificationsPage() {
@@ -57,7 +59,15 @@ export function NotificationsPage() {
 
   const openNotification = (notification: TenantNotification) => {
     markRead(notification.id);
-    if (notification.href) {
+    if (!notification.href) return;
+    try {
+      const url = new URL(notification.href, window.location.origin);
+      const search = Object.fromEntries(url.searchParams.entries());
+      navigate({
+        to: url.pathname,
+        search: Object.keys(search).length ? search : undefined,
+      });
+    } catch {
       navigate({ to: notification.href });
     }
   };

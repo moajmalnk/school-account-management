@@ -80,19 +80,80 @@ export type StaffDocumentAttachment = {
   size: number;
   dataUrl: string;
   uploadedAt: string;
+  /** Attachment folder / level within the document (Front, Back, custom, …) */
+  levelId: string;
+};
+
+export type StaffDocumentLevel = {
+  id: string;
+  label: string;
 };
 
 export type StaffDocument = {
   id: string;
   label: string;
   number: string;
+  levels: StaffDocumentLevel[];
   attachments: StaffDocumentAttachment[];
 };
 
-export const DEFAULT_STAFF_DOCUMENTS: StaffDocument[] = [
-  { id: "doc-aadhaar", label: "Aadhaar", number: "", attachments: [] },
-  { id: "doc-pan", label: "PAN Card", number: "", attachments: [] },
+/** Front / Back scans for Aadhaar and PAN */
+export const ID_CARD_ATTACHMENT_LEVELS: StaffDocumentLevel[] = [
+  { id: "front", label: "Front" },
+  { id: "back", label: "Back" },
 ];
+
+/** Single bucket for certificates, contracts, and other files */
+export const OTHER_ATTACHMENT_LEVELS: StaffDocumentLevel[] = [
+  { id: "files", label: "Files" },
+];
+
+/** @deprecated Prefer ID_CARD_ATTACHMENT_LEVELS / OTHER_ATTACHMENT_LEVELS */
+export const DEFAULT_ATTACHMENT_LEVELS: StaffDocumentLevel[] = [
+  ...ID_CARD_ATTACHMENT_LEVELS,
+  { id: "other", label: "Other" },
+];
+
+export const DEFAULT_STAFF_DOCUMENTS: StaffDocument[] = [
+  {
+    id: "doc-aadhaar",
+    label: "Aadhaar",
+    number: "",
+    levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+    attachments: [],
+  },
+  {
+    id: "doc-pan",
+    label: "PAN Card",
+    number: "",
+    levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+    attachments: [],
+  },
+  {
+    id: "doc-other",
+    label: "Other Attachments",
+    number: "",
+    levels: OTHER_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+    attachments: [],
+  },
+];
+
+export type StaffSalaryHistoryEntry = {
+  id: string;
+  amount: number;
+  mode: string;
+  paidAt: string;
+  description: string;
+  status: "Paid" | "Queued" | "Cleared";
+};
+
+export type StaffStatusEvent = {
+  id: string;
+  type: "joined" | "deactivated" | "reactivated";
+  /** ISO date-time string */
+  at: string;
+  note?: string;
+};
 
 export type Staff = {
   id: string;
@@ -102,10 +163,16 @@ export type Staff = {
   active: boolean;
   joinedAt: string;
   phone?: string;
+  /** Optional secondary contact number */
+  altPhone?: string;
+  /** Guardian / emergency contact number */
+  guardianPhone?: string;
   photoUrl?: string;
   basicSalary: number;
   additionalAllowances: number;
   documents: StaffDocument[];
+  salaryHistory: StaffSalaryHistoryEntry[];
+  statusHistory: StaffStatusEvent[];
 };
 
 function normalizeAttachment(raw: unknown): StaffDocumentAttachment | null {
@@ -119,6 +186,10 @@ function normalizeAttachment(raw: unknown): StaffDocumentAttachment | null {
   ) {
     return null;
   }
+  const levelId =
+    typeof attachment.levelId === "string" && attachment.levelId.trim()
+      ? attachment.levelId.trim()
+      : "other";
   return {
     id: attachment.id,
     name: attachment.name,
@@ -128,21 +199,145 @@ function normalizeAttachment(raw: unknown): StaffDocumentAttachment | null {
     dataUrl: attachment.dataUrl,
     uploadedAt:
       typeof attachment.uploadedAt === "string" ? attachment.uploadedAt : new Date().toISOString(),
+    levelId,
   };
+}
+
+function normalizeDocumentLevels(
+  raw: unknown,
+  defaultsInput: StaffDocumentLevel[],
+): StaffDocumentLevel[] {
+  const defaults = defaultsInput.map((l) => ({ ...l }));
+  if (!Array.isArray(raw) || !raw.length) return defaults;
+  const custom: StaffDocumentLevel[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const level = item as Partial<StaffDocumentLevel>;
+    if (typeof level.id !== "string" || typeof level.label !== "string") continue;
+    const id = level.id.trim();
+    const label = level.label.trim();
+    if (!id || !label || seen.has(id)) continue;
+    seen.add(id);
+    custom.push({ id, label });
+  }
+  if (!custom.length) return defaults;
+  // Keep default levels first, then any extras that still have files
+  const byId = new Map(custom.map((l) => [l.id, l]));
+  const merged = defaults.map((d) => byId.get(d.id) ?? d);
+  for (const level of custom) {
+    if (!defaults.some((d) => d.id === level.id)) merged.push(level);
+  }
+  return merged;
+}
+
+function normalizeSalaryHistory(raw: unknown): StaffSalaryHistoryEntry[] {
+  if (!Array.isArray(raw)) return [];
+  const entries: StaffSalaryHistoryEntry[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Partial<StaffSalaryHistoryEntry>;
+    if (
+      typeof row.id !== "string" ||
+      typeof row.amount !== "number" ||
+      !Number.isFinite(row.amount) ||
+      typeof row.paidAt !== "string"
+    ) {
+      continue;
+    }
+    const status =
+      row.status === "Paid" || row.status === "Queued" || row.status === "Cleared"
+        ? row.status
+        : "Paid";
+    entries.push({
+      id: row.id,
+      amount: row.amount,
+      mode: typeof row.mode === "string" && row.mode ? row.mode : "Bank",
+      paidAt: row.paidAt,
+      description:
+        typeof row.description === "string" && row.description
+          ? row.description
+          : "Salary payment",
+      status,
+    });
+  }
+  return entries;
+}
+
+function toJoinedIso(joinedAt: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(joinedAt)) {
+    return `${joinedAt}T09:30:00.000Z`;
+  }
+  const parsed = Date.parse(joinedAt);
+  if (!Number.isNaN(parsed)) return new Date(parsed).toISOString();
+  return new Date().toISOString();
+}
+
+function normalizeStatusHistory(
+  raw: unknown,
+  joinedAt: string,
+  staffId: string,
+): StaffStatusEvent[] {
+  const events: StaffStatusEvent[] = [];
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      if (!item || typeof item !== "object") continue;
+      const row = item as Partial<StaffStatusEvent>;
+      if (
+        typeof row.id !== "string" ||
+        typeof row.at !== "string" ||
+        (row.type !== "joined" && row.type !== "deactivated" && row.type !== "reactivated")
+      ) {
+        continue;
+      }
+      events.push({
+        id: row.id,
+        type: row.type,
+        at: row.at,
+        note: typeof row.note === "string" && row.note ? row.note : undefined,
+      });
+    }
+  }
+  if (!events.some((e) => e.type === "joined")) {
+    events.push({
+      id: `EVT-${staffId}-joined`,
+      type: "joined",
+      at: toJoinedIso(joinedAt),
+      note: "Joined the school roster",
+    });
+  }
+  return events.sort((a, b) => String(b.at).localeCompare(String(a.at)));
 }
 
 function normalizeStaffDocuments(raw: StaffDocument[] | undefined): StaffDocument[] {
   const byId = new Map(Array.isArray(raw) ? raw.map((d) => [d.id, d]) : []);
   return DEFAULT_STAFF_DOCUMENTS.map((def) => {
     const existing = byId.get(def.id);
+    const attachments = Array.isArray(existing?.attachments)
+      ? existing.attachments
+          .map(normalizeAttachment)
+          .filter((a): a is StaffDocumentAttachment => a !== null)
+      : [];
+    const levels = normalizeDocumentLevels(existing?.levels, def.levels);
+    // Ensure every attachment level exists in levels list
+    const levelIds = new Set(levels.map((l) => l.id));
+    for (const file of attachments) {
+      if (!levelIds.has(file.levelId)) {
+        const label =
+          file.levelId === "other"
+            ? "Other"
+            : file.levelId === "files"
+              ? "Files"
+              : file.levelId;
+        levels.push({ id: file.levelId, label });
+        levelIds.add(file.levelId);
+      }
+    }
     return {
       ...def,
       number: typeof existing?.number === "string" ? existing.number : "",
-      attachments: Array.isArray(existing?.attachments)
-        ? existing.attachments
-            .map(normalizeAttachment)
-            .filter((a): a is StaffDocumentAttachment => a !== null)
-        : [],
+      levels,
+      attachments,
     };
   });
 }
@@ -196,14 +391,20 @@ export function normalizeStudent(
 }
 
 export function normalizeStaff(raw: Partial<Staff> & Pick<Staff, "id" | "name" | "role" | "dept" | "active">): Staff {
+  const joinedAt = typeof raw.joinedAt === "string" && raw.joinedAt ? raw.joinedAt : "2025-01-01";
   return {
     id: raw.id,
     name: raw.name,
     role: raw.role,
     dept: raw.dept,
     active: raw.active,
-    joinedAt: typeof raw.joinedAt === "string" && raw.joinedAt ? raw.joinedAt : "2025-01-01",
+    joinedAt,
     phone: typeof raw.phone === "string" ? raw.phone : undefined,
+    altPhone: typeof raw.altPhone === "string" && raw.altPhone.trim() ? raw.altPhone.trim() : undefined,
+    guardianPhone:
+      typeof raw.guardianPhone === "string" && raw.guardianPhone.trim()
+        ? raw.guardianPhone.trim()
+        : undefined,
     photoUrl: typeof raw.photoUrl === "string" && raw.photoUrl ? raw.photoUrl : undefined,
     basicSalary:
       typeof raw.basicSalary === "number" && Number.isFinite(raw.basicSalary) ? raw.basicSalary : 8000,
@@ -212,6 +413,8 @@ export function normalizeStaff(raw: Partial<Staff> & Pick<Staff, "id" | "name" |
         ? raw.additionalAllowances
         : 0,
     documents: normalizeStaffDocuments(raw.documents),
+    salaryHistory: normalizeSalaryHistory(raw.salaryHistory),
+    statusHistory: normalizeStatusHistory(raw.statusHistory, joinedAt, raw.id),
   };
 }
 
@@ -243,9 +446,91 @@ export type Role = {
 
 export type ClassConfig = {
   id: string;
+  /** Combined display / student match key · e.g. "Grade 8 - B" */
   className: string;
+  /** Class level · e.g. "LKG", "Grade 8" */
+  grade: string;
+  /** Section / division · e.g. "A", "B" */
+  section: string;
   tuitionFeeAmount: number;
   billingCycle: "Monthly" | "Annually";
+  /** Optional class teacher from staff roster */
+  classTeacherId?: string;
+};
+
+export function composeClassName(grade: string, section: string) {
+  const g = grade.trim();
+  const s = section.trim();
+  if (g && s) return `${g} - ${s}`;
+  return g || s;
+}
+
+export function splitClassName(className: string): { grade: string; section: string } {
+  const dash = className.lastIndexOf(" - ");
+  if (dash === -1) {
+    return { grade: className.trim(), section: "" };
+  }
+  return {
+    grade: className.slice(0, dash).trim(),
+    section: className.slice(dash + 3).trim(),
+  };
+}
+
+export function normalizeClassConfig(
+  raw: Partial<ClassConfig> & Pick<ClassConfig, "id" | "tuitionFeeAmount" | "billingCycle"> & {
+    className?: string;
+  },
+): ClassConfig {
+  const fromParts =
+    typeof raw.grade === "string" || typeof raw.section === "string"
+      ? {
+          grade: (raw.grade ?? "").trim(),
+          section: (raw.section ?? "").trim(),
+        }
+      : splitClassName(typeof raw.className === "string" ? raw.className : "");
+  const grade = fromParts.grade;
+  const section = fromParts.section;
+  const className =
+    typeof raw.className === "string" && raw.className.trim()
+      ? raw.className.trim()
+      : composeClassName(grade, section);
+  return {
+    id: raw.id,
+    className,
+    grade: grade || splitClassName(className).grade,
+    section: section || splitClassName(className).section,
+    tuitionFeeAmount:
+      typeof raw.tuitionFeeAmount === "number" && Number.isFinite(raw.tuitionFeeAmount)
+        ? raw.tuitionFeeAmount
+        : 0,
+    billingCycle: raw.billingCycle === "Annually" ? "Annually" : "Monthly",
+    classTeacherId:
+      typeof raw.classTeacherId === "string" && raw.classTeacherId.trim()
+        ? raw.classTeacherId.trim()
+        : undefined,
+  };
+}
+
+export type VehicleOwnership = "owned" | "rental";
+
+export type VehicleDocumentKind = "rc" | "insurance" | "pollution" | "driverLicense";
+
+export type VehicleDocumentFile = {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  dataUrl: string;
+  uploadedAt: string;
+};
+
+export type VehicleDocument = {
+  kind: VehicleDocumentKind;
+  /** Validity end date as YYYY-MM-DD */
+  validUntil?: string;
+  /** Days before expiry to raise a notification (default 30) */
+  notifyDaysBefore?: number;
+  file?: VehicleDocumentFile;
 };
 
 export type TransportVehicle = {
@@ -253,11 +538,37 @@ export type TransportVehicle = {
   name: string;
   registrationNo: string;
   capacity: number;
+  /** Owned fleet vehicle or hired rental */
+  ownership: VehicleOwnership;
   driverName?: string;
   driverPhone?: string;
   routeIds: string[];
   active: boolean;
+  documents: VehicleDocument[];
 };
+
+export const VEHICLE_DOCUMENT_KINDS: VehicleDocumentKind[] = [
+  "rc",
+  "insurance",
+  "pollution",
+  "driverLicense",
+];
+
+export const VEHICLE_DOCUMENT_LABELS: Record<VehicleDocumentKind, string> = {
+  rc: "Registration Certificate (RC)",
+  insurance: "Insurance",
+  pollution: "Pollution Certificate",
+  driverLicense: "Driver Licence",
+};
+
+export const DEFAULT_VEHICLE_NOTIFY_DAYS = 30;
+
+export function createDefaultVehicleDocuments(): VehicleDocument[] {
+  return VEHICLE_DOCUMENT_KINDS.map((kind) => ({
+    kind,
+    notifyDaysBefore: DEFAULT_VEHICLE_NOTIFY_DAYS,
+  }));
+}
 
 export type TransportRoute = {
   id: string;
@@ -299,7 +610,7 @@ export type TenantNotification = {
   id: string;
   title: string;
   body: string;
-  category: "fees" | "admissions" | "staff" | "system";
+  category: "fees" | "admissions" | "staff" | "system" | "transport";
   read: boolean;
   createdAt: string;
   timeLabel: string;
@@ -316,6 +627,16 @@ const LEGACY_STORAGE_KEYS = [
   "school-accounts/tenant-store/v4",
   "school-accounts/tenant-store/v3",
 ] as const;
+
+/** Fired when navigation dock placement changes so the toast host can reposition. */
+export const NAV_PLACEMENT_CHANGE_EVENT = "school-accounts:nav-placement";
+
+export function notifyNavPlacementChange(placement: ThemeSettings["navPlacement"]) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(NAV_PLACEMENT_CHANGE_EVENT, { detail: placement }),
+  );
+}
 
 function normalizeTransportRoute(raw: unknown): TransportRoute | null {
   if (!raw || typeof raw !== "object") return null;
@@ -341,6 +662,61 @@ function normalizeTransportRoute(raw: unknown): TransportRoute | null {
   return { id: r.id, mapFrom: r.mapFrom, mapTo: r.mapTo, morningFee, eveningFee, bothFee };
 }
 
+function normalizeVehicleDocumentFile(raw: unknown): VehicleDocumentFile | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const f = raw as Partial<VehicleDocumentFile>;
+  if (
+    typeof f.id !== "string" ||
+    typeof f.name !== "string" ||
+    typeof f.dataUrl !== "string" ||
+    typeof f.size !== "number"
+  ) {
+    return undefined;
+  }
+  return {
+    id: f.id,
+    name: f.name,
+    mimeType: typeof f.mimeType === "string" ? f.mimeType : "application/octet-stream",
+    size: f.size,
+    dataUrl: f.dataUrl,
+    uploadedAt: typeof f.uploadedAt === "string" ? f.uploadedAt : new Date().toISOString(),
+  };
+}
+
+function normalizeVehicleDocuments(raw: unknown): VehicleDocument[] {
+  const byKind = new Map<VehicleDocumentKind, VehicleDocument>();
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      if (!item || typeof item !== "object") continue;
+      const doc = item as Partial<VehicleDocument>;
+      if (!VEHICLE_DOCUMENT_KINDS.includes(doc.kind as VehicleDocumentKind)) continue;
+      const kind = doc.kind as VehicleDocumentKind;
+      const notifyDaysBefore =
+        typeof doc.notifyDaysBefore === "number" &&
+        Number.isFinite(doc.notifyDaysBefore) &&
+        doc.notifyDaysBefore >= 0
+          ? Math.round(doc.notifyDaysBefore)
+          : DEFAULT_VEHICLE_NOTIFY_DAYS;
+      byKind.set(kind, {
+        kind,
+        validUntil:
+          typeof doc.validUntil === "string" && /^\d{4}-\d{2}-\d{2}/.test(doc.validUntil)
+            ? doc.validUntil.slice(0, 10)
+            : undefined,
+        notifyDaysBefore,
+        file: normalizeVehicleDocumentFile(doc.file),
+      });
+    }
+  }
+  return VEHICLE_DOCUMENT_KINDS.map(
+    (kind) =>
+      byKind.get(kind) ?? {
+        kind,
+        notifyDaysBefore: DEFAULT_VEHICLE_NOTIFY_DAYS,
+      },
+  );
+}
+
 function normalizeTransportVehicle(raw: unknown): TransportVehicle | null {
   if (!raw || typeof raw !== "object") return null;
   const v = raw as Record<string, unknown>;
@@ -352,15 +728,19 @@ function normalizeTransportVehicle(raw: unknown): TransportVehicle | null {
     : typeof v.routeId === "string" && v.routeId
       ? [v.routeId]
       : [];
+  const ownership: VehicleOwnership =
+    v.ownership === "rental" || v.ownership === "owned" ? v.ownership : "owned";
   return {
     id: v.id,
     name: v.name,
     registrationNo: v.registrationNo,
     capacity: typeof v.capacity === "number" ? v.capacity : 0,
+    ownership,
     driverName: typeof v.driverName === "string" ? v.driverName : undefined,
     driverPhone: typeof v.driverPhone === "string" ? v.driverPhone : undefined,
     routeIds,
     active: typeof v.active === "boolean" ? v.active : true,
+    documents: normalizeVehicleDocuments(v.documents),
   };
 }
 
@@ -373,7 +753,88 @@ function normalizeDashboardTodos(raw: unknown): string[] {
   return items.slice(0, 20);
 }
 
-const NOTIFICATION_CATEGORIES = ["fees", "admissions", "staff", "system"] as const;
+const NOTIFICATION_CATEGORIES = ["fees", "admissions", "staff", "system", "transport"] as const;
+
+/** Prefix for auto-generated vehicle document expiry alerts */
+export const VEHICLE_DOC_EXPIRY_PREFIX = "NTF-VH-DOC-";
+
+export function vehicleDocNotificationId(vehicleId: string, kind: VehicleDocumentKind) {
+  return `${VEHICLE_DOC_EXPIRY_PREFIX}${vehicleId}-${kind}`;
+}
+
+/** Calendar-day difference from today to YYYY-MM-DD (negative = already expired). */
+export function daysUntilDate(isoDate: string, now = new Date()): number | null {
+  const match = isoDate.slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const end = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((end.getTime() - start.getTime()) / 86_400_000);
+}
+
+export function buildVehicleDocExpiryNotifications(
+  vehicles: TransportVehicle[],
+  now = new Date(),
+): TenantNotification[] {
+  const alerts: TenantNotification[] = [];
+  const createdAt = now.toISOString();
+
+  for (const vehicle of vehicles) {
+    if (!vehicle.active) continue;
+    for (const doc of vehicle.documents ?? []) {
+      if (!doc.validUntil) continue;
+      const days = daysUntilDate(doc.validUntil, now);
+      if (days === null) continue;
+      const warnDays = doc.notifyDaysBefore ?? DEFAULT_VEHICLE_NOTIFY_DAYS;
+      if (days > warnDays) continue;
+
+      const label = VEHICLE_DOCUMENT_LABELS[doc.kind];
+      const expired = days < 0;
+      const title = expired
+        ? `${label} expired · ${vehicle.name}`
+        : days === 0
+          ? `${label} expires today · ${vehicle.name}`
+          : `${label} expires in ${days} day${days === 1 ? "" : "s"} · ${vehicle.name}`;
+      const body = expired
+        ? `${vehicle.name} (${vehicle.registrationNo}) — ${label} expired ${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} ago (${doc.validUntil}). Renew and update the attachment.`
+        : `${vehicle.name} (${vehicle.registrationNo}) — ${label} is valid until ${doc.validUntil}. Renew before expiry.`;
+
+      alerts.push({
+        id: vehicleDocNotificationId(vehicle.id, doc.kind),
+        title,
+        body,
+        category: "transport",
+        read: false,
+        createdAt,
+        timeLabel: expired ? "Expired" : days === 0 ? "Today" : `${days}d left`,
+        href: "/tenant/settings?tab=vehicles",
+      });
+    }
+  }
+
+  return alerts;
+}
+
+export function mergeVehicleExpiryNotifications(
+  existing: TenantNotification[],
+  vehicles: TransportVehicle[],
+  now = new Date(),
+): TenantNotification[] {
+  const fresh = buildVehicleDocExpiryNotifications(vehicles, now);
+  const previousById = new Map(
+    existing
+      .filter((n) => n.id.startsWith(VEHICLE_DOC_EXPIRY_PREFIX))
+      .map((n) => [n.id, n]),
+  );
+  const mergedFresh = fresh.map((n) => {
+    const prev = previousById.get(n.id);
+    if (prev && prev.body === n.body) {
+      return { ...n, read: prev.read, createdAt: prev.createdAt };
+    }
+    return n;
+  });
+  const others = existing.filter((n) => !n.id.startsWith(VEHICLE_DOC_EXPIRY_PREFIX));
+  return [...mergedFresh, ...others];
+}
 
 export const SEED_NOTIFICATIONS: TenantNotification[] = [
   {
@@ -561,11 +1022,41 @@ export const SEED_STAFF: Staff[] = [
     active: true,
     joinedAt: "2022-08-15",
     phone: "9847012345",
+    altPhone: "9847098765",
+    guardianPhone: "9876543210",
     basicSalary: 42000,
     additionalAllowances: 4000,
     documents: [
-      { id: "doc-aadhaar", label: "Aadhaar", number: "4567 8901 2345", attachments: [] },
-      { id: "doc-pan", label: "PAN Card", number: "ABDUL5678K", attachments: [] },
+      { id: "doc-aadhaar", label: "Aadhaar", number: "4567 8901 2345", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+      attachments: [] },
+      { id: "doc-pan", label: "PAN Card", number: "ABDUL5678K", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+      attachments: [] },
+    ],
+    salaryHistory: [
+      {
+        id: "SAL-STF-018-1",
+        amount: 46000,
+        mode: "Bank",
+        paidAt: "2026-06-01",
+        description: "Salary · June 2026",
+        status: "Cleared" as const,
+      },
+      {
+        id: "SAL-STF-018-2",
+        amount: 46000,
+        mode: "Bank",
+        paidAt: "2026-05-01",
+        description: "Salary · May 2026",
+        status: "Cleared" as const,
+      },
+    ],
+    statusHistory: [
+      {
+        id: "EVT-STF-018-joined",
+        type: "joined" as const,
+        at: "2022-08-15T09:30:00.000Z",
+        note: "Joined the school roster",
+      },
     ],
   },
   {
@@ -579,8 +1070,36 @@ export const SEED_STAFF: Staff[] = [
     basicSalary: 38000,
     additionalAllowances: 3500,
     documents: [
-      { id: "doc-aadhaar", label: "Aadhaar", number: "2345 6789 0123", attachments: [] },
-      { id: "doc-pan", label: "PAN Card", number: "AYISH1234P", attachments: [] },
+      { id: "doc-aadhaar", label: "Aadhaar", number: "2345 6789 0123", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+      attachments: [] },
+      { id: "doc-pan", label: "PAN Card", number: "AYISH1234P", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+      attachments: [] },
+    ],
+    salaryHistory: [
+      {
+        id: "SAL-STF-019-1",
+        amount: 41500,
+        mode: "Bank",
+        paidAt: "2026-06-01",
+        description: "Salary · June 2026",
+        status: "Cleared" as const,
+      },
+      {
+        id: "SAL-STF-019-2",
+        amount: 41500,
+        mode: "Bank",
+        paidAt: "2026-05-01",
+        description: "Salary · May 2026",
+        status: "Cleared" as const,
+      },
+    ],
+    statusHistory: [
+      {
+        id: "EVT-STF-019-joined",
+        type: "joined" as const,
+        at: "2021-06-01T09:30:00.000Z",
+        note: "Joined the school roster",
+      },
     ],
   },
   {
@@ -594,8 +1113,36 @@ export const SEED_STAFF: Staff[] = [
     basicSalary: 52000,
     additionalAllowances: 6000,
     documents: [
-      { id: "doc-aadhaar", label: "Aadhaar", number: "5678 9012 3456", attachments: [] },
-      { id: "doc-pan", label: "PAN Card", number: "SHAMI9012L", attachments: [] },
+      { id: "doc-aadhaar", label: "Aadhaar", number: "5678 9012 3456", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+      attachments: [] },
+      { id: "doc-pan", label: "PAN Card", number: "SHAMI9012L", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+      attachments: [] },
+    ],
+    salaryHistory: [
+      {
+        id: "SAL-STF-020-1",
+        amount: 58000,
+        mode: "Bank",
+        paidAt: "2026-06-01",
+        description: "Salary · June 2026",
+        status: "Cleared" as const,
+      },
+      {
+        id: "SAL-STF-020-2",
+        amount: 58000,
+        mode: "Bank",
+        paidAt: "2026-05-01",
+        description: "Salary · May 2026",
+        status: "Cleared" as const,
+      },
+    ],
+    statusHistory: [
+      {
+        id: "EVT-STF-020-joined",
+        type: "joined" as const,
+        at: "2020-04-10T09:30:00.000Z",
+        note: "Joined the school roster",
+      },
     ],
   },
   {
@@ -609,8 +1156,36 @@ export const SEED_STAFF: Staff[] = [
     basicSalary: 36000,
     additionalAllowances: 3000,
     documents: [
-      { id: "doc-aadhaar", label: "Aadhaar", number: "3456 7890 1234", attachments: [] },
-      { id: "doc-pan", label: "PAN Card", number: "FATHM3456H", attachments: [] },
+      { id: "doc-aadhaar", label: "Aadhaar", number: "3456 7890 1234", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+      attachments: [] },
+      { id: "doc-pan", label: "PAN Card", number: "FATHM3456H", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+      attachments: [] },
+    ],
+    salaryHistory: [
+      {
+        id: "SAL-STF-021-1",
+        amount: 39000,
+        mode: "Bank",
+        paidAt: "2026-06-01",
+        description: "Salary · June 2026",
+        status: "Cleared" as const,
+      },
+      {
+        id: "SAL-STF-021-2",
+        amount: 39000,
+        mode: "Bank",
+        paidAt: "2026-05-01",
+        description: "Salary · May 2026",
+        status: "Cleared" as const,
+      },
+    ],
+    statusHistory: [
+      {
+        id: "EVT-STF-021-joined",
+        type: "joined" as const,
+        at: "2023-01-12T09:30:00.000Z",
+        note: "Joined the school roster",
+      },
     ],
   },
   {
@@ -624,8 +1199,36 @@ export const SEED_STAFF: Staff[] = [
     basicSalary: 40000,
     additionalAllowances: 3500,
     documents: [
-      { id: "doc-aadhaar", label: "Aadhaar", number: "6789 0123 4567", attachments: [] },
-      { id: "doc-pan", label: "PAN Card", number: "RAHUL6789M", attachments: [] },
+      { id: "doc-aadhaar", label: "Aadhaar", number: "6789 0123 4567", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+      attachments: [] },
+      { id: "doc-pan", label: "PAN Card", number: "RAHUL6789M", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+      attachments: [] },
+    ],
+    salaryHistory: [
+      {
+        id: "SAL-STF-022-1",
+        amount: 43500,
+        mode: "Bank",
+        paidAt: "2026-06-01",
+        description: "Salary · June 2026",
+        status: "Cleared" as const,
+      },
+      {
+        id: "SAL-STF-022-2",
+        amount: 43500,
+        mode: "Bank",
+        paidAt: "2026-05-01",
+        description: "Salary · May 2026",
+        status: "Cleared" as const,
+      },
+    ],
+    statusHistory: [
+      {
+        id: "EVT-STF-022-joined",
+        type: "joined" as const,
+        at: "2022-11-05T09:30:00.000Z",
+        note: "Joined the school roster",
+      },
     ],
   },
   {
@@ -639,8 +1242,36 @@ export const SEED_STAFF: Staff[] = [
     basicSalary: 41000,
     additionalAllowances: 4000,
     documents: [
-      { id: "doc-aadhaar", label: "Aadhaar", number: "7890 1234 5678", attachments: [] },
-      { id: "doc-pan", label: "PAN Card", number: "SNEHA7890N", attachments: [] },
+      { id: "doc-aadhaar", label: "Aadhaar", number: "7890 1234 5678", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+      attachments: [] },
+      { id: "doc-pan", label: "PAN Card", number: "SNEHA7890N", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+      attachments: [] },
+    ],
+    salaryHistory: [
+      {
+        id: "SAL-STF-023-1",
+        amount: 45000,
+        mode: "Bank",
+        paidAt: "2026-06-01",
+        description: "Salary · June 2026",
+        status: "Cleared" as const,
+      },
+      {
+        id: "SAL-STF-023-2",
+        amount: 45000,
+        mode: "Bank",
+        paidAt: "2026-05-01",
+        description: "Salary · May 2026",
+        status: "Cleared" as const,
+      },
+    ],
+    statusHistory: [
+      {
+        id: "EVT-STF-023-joined",
+        type: "joined" as const,
+        at: "2021-08-20T09:30:00.000Z",
+        note: "Joined the school roster",
+      },
     ],
   },
   {
@@ -654,8 +1285,36 @@ export const SEED_STAFF: Staff[] = [
     basicSalary: 44000,
     additionalAllowances: 4500,
     documents: [
-      { id: "doc-aadhaar", label: "Aadhaar", number: "8901 2345 6789", attachments: [] },
-      { id: "doc-pan", label: "PAN Card", number: "VIKRM8901Q", attachments: [] },
+      { id: "doc-aadhaar", label: "Aadhaar", number: "8901 2345 6789", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+      attachments: [] },
+      { id: "doc-pan", label: "PAN Card", number: "VIKRM8901Q", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+      attachments: [] },
+    ],
+    salaryHistory: [
+      {
+        id: "SAL-STF-024-1",
+        amount: 48500,
+        mode: "Bank",
+        paidAt: "2026-06-01",
+        description: "Salary · June 2026",
+        status: "Cleared" as const,
+      },
+      {
+        id: "SAL-STF-024-2",
+        amount: 48500,
+        mode: "Bank",
+        paidAt: "2026-05-01",
+        description: "Salary · May 2026",
+        status: "Cleared" as const,
+      },
+    ],
+    statusHistory: [
+      {
+        id: "EVT-STF-024-joined",
+        type: "joined" as const,
+        at: "2019-07-15T09:30:00.000Z",
+        note: "Joined the school roster",
+      },
     ],
   },
   {
@@ -669,8 +1328,36 @@ export const SEED_STAFF: Staff[] = [
     basicSalary: 46000,
     additionalAllowances: 5000,
     documents: [
-      { id: "doc-aadhaar", label: "Aadhaar", number: "9012 3456 7890", attachments: [] },
-      { id: "doc-pan", label: "PAN Card", number: "LAKSH9012R", attachments: [] },
+      { id: "doc-aadhaar", label: "Aadhaar", number: "9012 3456 7890", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+      attachments: [] },
+      { id: "doc-pan", label: "PAN Card", number: "LAKSH9012R", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+      attachments: [] },
+    ],
+    salaryHistory: [
+      {
+        id: "SAL-STF-025-1",
+        amount: 51000,
+        mode: "Bank",
+        paidAt: "2026-06-01",
+        description: "Salary · June 2026",
+        status: "Cleared" as const,
+      },
+      {
+        id: "SAL-STF-025-2",
+        amount: 51000,
+        mode: "Bank",
+        paidAt: "2026-05-01",
+        description: "Salary · May 2026",
+        status: "Cleared" as const,
+      },
+    ],
+    statusHistory: [
+      {
+        id: "EVT-STF-025-joined",
+        type: "joined" as const,
+        at: "2018-06-01T09:30:00.000Z",
+        note: "Joined the school roster",
+      },
     ],
   },
   {
@@ -684,8 +1371,36 @@ export const SEED_STAFF: Staff[] = [
     basicSalary: 48000,
     additionalAllowances: 5500,
     documents: [
-      { id: "doc-aadhaar", label: "Aadhaar", number: "0123 4567 8901", attachments: [] },
-      { id: "doc-pan", label: "PAN Card", number: "JOSEP0123S", attachments: [] },
+      { id: "doc-aadhaar", label: "Aadhaar", number: "0123 4567 8901", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+      attachments: [] },
+      { id: "doc-pan", label: "PAN Card", number: "JOSEP0123S", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+      attachments: [] },
+    ],
+    salaryHistory: [
+      {
+        id: "SAL-STF-026-1",
+        amount: 53500,
+        mode: "Bank",
+        paidAt: "2026-06-01",
+        description: "Salary · June 2026",
+        status: "Cleared" as const,
+      },
+      {
+        id: "SAL-STF-026-2",
+        amount: 53500,
+        mode: "Bank",
+        paidAt: "2026-05-01",
+        description: "Salary · May 2026",
+        status: "Cleared" as const,
+      },
+    ],
+    statusHistory: [
+      {
+        id: "EVT-STF-026-joined",
+        type: "joined" as const,
+        at: "2017-05-18T09:30:00.000Z",
+        note: "Joined the school roster",
+      },
     ],
   },
   {
@@ -699,8 +1414,36 @@ export const SEED_STAFF: Staff[] = [
     basicSalary: 50000,
     additionalAllowances: 5000,
     documents: [
-      { id: "doc-aadhaar", label: "Aadhaar", number: "1234 5678 9012", attachments: [] },
-      { id: "doc-pan", label: "PAN Card", number: "PRIYA1234T", attachments: [] },
+      { id: "doc-aadhaar", label: "Aadhaar", number: "1234 5678 9012", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+      attachments: [] },
+      { id: "doc-pan", label: "PAN Card", number: "PRIYA1234T", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+      attachments: [] },
+    ],
+    salaryHistory: [
+      {
+        id: "SAL-STF-027-1",
+        amount: 55000,
+        mode: "Bank",
+        paidAt: "2026-06-01",
+        description: "Salary · June 2026",
+        status: "Cleared" as const,
+      },
+      {
+        id: "SAL-STF-027-2",
+        amount: 55000,
+        mode: "Bank",
+        paidAt: "2026-05-01",
+        description: "Salary · May 2026",
+        status: "Cleared" as const,
+      },
+    ],
+    statusHistory: [
+      {
+        id: "EVT-STF-027-joined",
+        type: "joined" as const,
+        at: "2020-09-01T09:30:00.000Z",
+        note: "Joined the school roster",
+      },
     ],
   },
 ];
@@ -764,12 +1507,54 @@ export const SEED_ROLES: Role[] = [
 ];
 
 export const SEED_CLASSES: ClassConfig[] = [
-  { id: "CLS-001", className: "LKG - M", tuitionFeeAmount: 3273, billingCycle: "Monthly" },
-  { id: "CLS-002", className: "Grade 4 - B", tuitionFeeAmount: 4000, billingCycle: "Monthly" },
-  { id: "CLS-003", className: "Grade 6 - C", tuitionFeeAmount: 4500, billingCycle: "Monthly" },
-  { id: "CLS-004", className: "Grade 8 - B", tuitionFeeAmount: 5200, billingCycle: "Monthly" },
-  { id: "CLS-005", className: "Grade 10 - A", tuitionFeeAmount: 6800, billingCycle: "Monthly" },
-  { id: "CLS-006", className: "Grade 12 - A", tuitionFeeAmount: 8400, billingCycle: "Monthly" },
+  {
+    id: "CLS-001",
+    className: "LKG - M",
+    grade: "LKG",
+    section: "M",
+    tuitionFeeAmount: 3273,
+    billingCycle: "Monthly",
+  },
+  {
+    id: "CLS-002",
+    className: "Grade 4 - B",
+    grade: "Grade 4",
+    section: "B",
+    tuitionFeeAmount: 4000,
+    billingCycle: "Monthly",
+  },
+  {
+    id: "CLS-003",
+    className: "Grade 6 - C",
+    grade: "Grade 6",
+    section: "C",
+    tuitionFeeAmount: 4500,
+    billingCycle: "Monthly",
+  },
+  {
+    id: "CLS-004",
+    className: "Grade 8 - B",
+    grade: "Grade 8",
+    section: "B",
+    tuitionFeeAmount: 5200,
+    billingCycle: "Monthly",
+  },
+  {
+    id: "CLS-005",
+    className: "Grade 10 - A",
+    grade: "Grade 10",
+    section: "A",
+    tuitionFeeAmount: 6800,
+    billingCycle: "Monthly",
+  },
+  {
+    id: "CLS-006",
+    className: "Grade 12 - A",
+    grade: "Grade 12",
+    section: "A",
+    tuitionFeeAmount: 8400,
+    billingCycle: "Monthly",
+  },
 ];
 
 export const SEED_TRANSPORT: TransportRoute[] = [
@@ -821,29 +1606,35 @@ export const SEED_VEHICLES: TransportVehicle[] = [
     name: "Bus 01",
     registrationNo: "KL-07-AB-4521",
     capacity: 42,
+    ownership: "owned",
     driverName: "Rajan Kumar",
     driverPhone: "9847012345",
     routeIds: ["TR-001", "TR-002"],
     active: true,
+    documents: createDefaultVehicleDocuments(),
   },
   {
     id: "VH-002",
     name: "Bus 02",
     registrationNo: "KL-07-CD-8832",
     capacity: 36,
+    ownership: "owned",
     driverName: "Suresh Nair",
     driverPhone: "9847098765",
     routeIds: ["TR-002"],
     active: true,
+    documents: createDefaultVehicleDocuments(),
   },
   {
     id: "VH-003",
     name: "Van 01",
     registrationNo: "MH-02-EF-1190",
     capacity: 14,
+    ownership: "rental",
     driverName: "Imran Sheikh",
     routeIds: ["TR-003"],
     active: true,
+    documents: createDefaultVehicleDocuments(),
   },
 ];
 
@@ -894,6 +1685,28 @@ export const THEME_NAV_PLACEMENT_OPTIONS: ThemeSettings["navPlacement"][] = [
   "Top",
   "Bottom",
 ];
+
+export function getStoredNavPlacement(): ThemeSettings["navPlacement"] {
+  if (typeof window === "undefined") return "Left";
+  try {
+    const raw =
+      window.localStorage.getItem(STORAGE_KEY) ??
+      LEGACY_STORAGE_KEYS.map((key) => window.localStorage.getItem(key)).find(Boolean);
+    if (!raw) return "Left";
+    const parsed = JSON.parse(raw) as { themeSettings?: { navPlacement?: unknown } };
+    const placement = parsed.themeSettings?.navPlacement;
+    if (
+      typeof placement === "string" &&
+      THEME_NAV_PLACEMENT_OPTIONS.includes(placement as ThemeSettings["navPlacement"])
+    ) {
+      return placement as ThemeSettings["navPlacement"];
+    }
+  } catch {
+    // ignore
+  }
+  return "Left";
+}
+
 export const SEED_THEME_SETTINGS: ThemeSettings = {
   mode: "System",
   accent: "Neon Lime",
@@ -1055,7 +1868,11 @@ function parseSnapshot(raw: string): Snapshot | null {
     payments: parsed.payments,
     departments: parsed.departments,
     roles: parsed.roles,
-    classes: parsed.classes,
+    classes: Array.isArray(parsed.classes)
+      ? parsed.classes.map((c) =>
+          normalizeClassConfig(c as Partial<ClassConfig> & Pick<ClassConfig, "id" | "tuitionFeeAmount" | "billingCycle">),
+        )
+      : [...SEED_CLASSES],
     transportRoutes: (parsed.transportRoutes ?? [])
       .map(normalizeTransportRoute)
       .filter((r): r is TransportRoute => r !== null),
@@ -1300,7 +2117,16 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       setPayments(snap.payments);
       setDepartments(snap.departments);
       setRoles(snap.roles);
-      setClasses(snap.classes);
+      setClasses(
+        Array.isArray(snap.classes)
+          ? snap.classes.map((c) =>
+              normalizeClassConfig(
+                c as Partial<ClassConfig> &
+                  Pick<ClassConfig, "id" | "tuitionFeeAmount" | "billingCycle">,
+              ),
+            )
+          : SEED_CLASSES,
+      );
       setTransportRoutes(snap.transportRoutes);
       setTransportVehicles(snap.transportVehicles);
       setPaymentCategories(snap.paymentCategories);
@@ -1325,6 +2151,20 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    setNotifications((prev) => {
+      const next = mergeVehicleExpiryNotifications(prev, transportVehicles);
+      const fingerprint = (list: TenantNotification[]) =>
+        list
+          .filter((n) => n.id.startsWith(VEHICLE_DOC_EXPIRY_PREFIX))
+          .map((n) => `${n.id}\0${n.body}\0${n.read}`)
+          .sort()
+          .join("\n");
+      return fingerprint(prev) === fingerprint(next) ? prev : next;
+    });
+  }, [hydrated, transportVehicles]);
 
   useEffect(() => {
     if (!hydrated) return;

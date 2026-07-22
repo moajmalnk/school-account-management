@@ -9,6 +9,7 @@ import {
   Paperclip,
   Upload,
   ExternalLink,
+  Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,8 +29,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Staff, StaffDocument, StaffDocumentAttachment } from "@/lib/tenant-store";
-import { DEFAULT_STAFF_DOCUMENTS, useTenantStore } from "@/lib/tenant-store";
+import type {
+  Staff,
+  StaffDocument,
+  StaffDocumentAttachment,
+} from "@/lib/tenant-store";
+import {
+  DEFAULT_STAFF_DOCUMENTS,
+  useTenantStore,
+} from "@/lib/tenant-store";
 import {
   isRecordActive,
   ProfileAccountActions,
@@ -157,11 +165,26 @@ function StaffPhotoAvatar({
 }
 
 function formatJoinedAt(iso: string) {
-  const d = new Date(iso.includes("T") ? iso : `${iso}T00:00:00`);
+  return formatStatusDateTime(iso.includes("T") ? iso : `${iso}T09:30:00`);
+}
+
+function formatStatusDateTime(iso: string) {
+  const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  const day = String(d.getDate()).padStart(2, "0");
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  return `${day}/${month}/${d.getFullYear()}`;
+  return d.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+function statusEventLabel(type: "joined" | "deactivated" | "reactivated") {
+  if (type === "joined") return "Joined";
+  if (type === "deactivated") return "Deactivated";
+  return "Reactivated";
 }
 
 function totalSalarySizeClass(formatted: string) {
@@ -212,6 +235,9 @@ export function StaffProfileDetail({
     role: staff.role,
     dept: staff.dept,
     id: staff.id,
+    phone: staff.phone ?? "",
+    altPhone: staff.altPhone ?? "",
+    guardianPhone: staff.guardianPhone ?? "",
     photoUrl: staff.photoUrl ?? "",
   });
   const editPhotoRef = useRef<HTMLInputElement>(null);
@@ -222,6 +248,9 @@ export function StaffProfileDetail({
       role: staff.role,
       dept: staff.dept,
       id: staff.id,
+      phone: staff.phone ?? "",
+      altPhone: staff.altPhone ?? "",
+      guardianPhone: staff.guardianPhone ?? "",
       photoUrl: staff.photoUrl ?? "",
     });
   };
@@ -239,27 +268,48 @@ export function StaffProfileDetail({
   useEffect(() => {
     const needsNormalize =
       !staff.documents?.length ||
-      staff.documents.some((d) => !Array.isArray(d.attachments)) ||
-      staff.documents.some((d) => !DEFAULT_STAFF_DOCUMENTS.some((def) => def.id === d.id));
+      !Array.isArray(staff.salaryHistory) ||
+      !Array.isArray(staff.statusHistory) ||
+      staff.documents.some((d) => !Array.isArray(d.attachments) || !Array.isArray(d.levels)) ||
+      DEFAULT_STAFF_DOCUMENTS.some((def) => !staff.documents?.some((d) => d.id === def.id));
     if (!needsNormalize) return;
     setStaff((prev) =>
       prev.map((s) =>
         s.id === staff.id
           ? {
               ...s,
+              salaryHistory: Array.isArray(s.salaryHistory) ? s.salaryHistory : [],
+              statusHistory: Array.isArray(s.statusHistory)
+                ? s.statusHistory
+                : [
+                    {
+                      id: `EVT-${s.id}-joined`,
+                      type: "joined" as const,
+                      at: `${s.joinedAt.includes("T") ? s.joinedAt : `${s.joinedAt}T09:30:00.000Z`}`,
+                      note: "Joined the school roster",
+                    },
+                  ],
               documents: DEFAULT_STAFF_DOCUMENTS.map((def) => {
                 const existing = s.documents?.find((d) => d.id === def.id);
+                const levels =
+                  existing?.levels?.length
+                    ? existing.levels
+                    : def.levels.map((l) => ({ ...l }));
                 return {
                   ...def,
                   number: existing?.number ?? "",
-                  attachments: existing?.attachments ?? [],
+                  levels,
+                  attachments: (existing?.attachments ?? []).map((a) => ({
+                    ...a,
+                    levelId: a.levelId || (def.id === "doc-other" ? "files" : "front"),
+                  })),
                 };
               }),
             }
           : s,
       ),
     );
-  }, [staff.documents, staff.id, setStaff]);
+  }, [staff.documents, staff.salaryHistory, staff.statusHistory, staff.id, setStaff]);
 
   const documents = useMemo(() => {
     const byId = new Map(
@@ -267,13 +317,56 @@ export function StaffProfileDetail({
     );
     return DEFAULT_STAFF_DOCUMENTS.map((def) => {
       const existing = byId.get(def.id);
+      const attachments = (existing?.attachments ?? []).map((a) => ({
+        ...a,
+        levelId: a.levelId || (def.id === "doc-other" ? "files" : "front"),
+      }));
+      const levels = (() => {
+        const base = def.levels.map((l) => ({ ...l }));
+        const levelIds = new Set(base.map((l) => l.id));
+        const existingLevels = existing?.levels ?? [];
+        for (const file of attachments) {
+          if (levelIds.has(file.levelId)) continue;
+          const known = existingLevels.find((l) => l.id === file.levelId);
+          base.push(
+            known ?? {
+              id: file.levelId,
+              label:
+                file.levelId === "other"
+                  ? "Other"
+                  : file.levelId === "files"
+                    ? "Files"
+                    : file.levelId,
+            },
+          );
+          levelIds.add(file.levelId);
+        }
+        return base;
+      })();
       return {
         ...def,
         number: existing?.number ?? "",
-        attachments: existing?.attachments ?? [],
+        levels,
+        attachments,
       };
     });
   }, [staff.documents]);
+
+  const salaryHistory = useMemo(
+    () =>
+      [...(staff.salaryHistory ?? [])].sort((a, b) =>
+        String(b.paidAt).localeCompare(String(a.paidAt)),
+      ),
+    [staff.salaryHistory],
+  );
+
+  const statusHistory = useMemo(
+    () =>
+      [...(staff.statusHistory ?? [])].sort((a, b) =>
+        String(b.at).localeCompare(String(a.at)),
+      ),
+    [staff.statusHistory],
+  );
 
   const totalSalary = useMemo(
     () => staff.basicSalary + staff.additionalAllowances,
@@ -329,7 +422,7 @@ export function StaffProfileDetail({
     );
   };
 
-  const addAttachments = async (docId: string, files: FileList | null) => {
+  const addAttachments = async (docId: string, levelId: string, files: FileList | null) => {
     if (!files?.length) return;
     const doc = documents.find((d) => d.id === docId);
     if (!doc) return;
@@ -358,6 +451,7 @@ export function StaffProfileDetail({
           size: file.size,
           dataUrl,
           uploadedAt: new Date().toISOString(),
+          levelId,
         });
         added += 1;
       } catch {
@@ -427,6 +521,9 @@ export function StaffProfileDetail({
               name: draft.name.trim(),
               role: draft.role.trim(),
               dept: draft.dept,
+              phone: draft.phone.trim() || undefined,
+              altPhone: draft.altPhone.trim() || undefined,
+              guardianPhone: draft.guardianPhone.trim() || undefined,
               photoUrl: draft.photoUrl || undefined,
             }
           : s,
@@ -453,12 +550,32 @@ export function StaffProfileDetail({
   const isActive = isRecordActive(staff.active);
 
   const toggleActive = (nextActive: boolean) => {
+    const at = new Date().toISOString();
+    const eventType = nextActive ? ("reactivated" as const) : ("deactivated" as const);
+    const event = {
+      id: `EVT-${staff.id}-${Date.now().toString().slice(-6)}`,
+      type: eventType,
+      at,
+      note: nextActive
+        ? "Account reactivated from archive"
+        : "Account deactivated and archived",
+    };
     setStaff((prev) =>
-      prev.map((s) => (s.id === staff.id ? { ...s, active: nextActive } : s)),
+      prev.map((s) =>
+        s.id === staff.id
+          ? {
+              ...s,
+              active: nextActive,
+              statusHistory: [event, ...(s.statusHistory ?? [])],
+            }
+          : s,
+      ),
     );
     toast.success(
       nextActive ? `${staff.name} reactivated` : `${staff.name} deactivated`,
-      { description: staff.id },
+      {
+        description: `${staff.id} · ${formatStatusDateTime(at)}`,
+      },
     );
   };
 
@@ -510,19 +627,25 @@ export function StaffProfileDetail({
               {staff.id}
             </MetaRow>
 
-            <MetaRow label="Date of Joining" mono>
-              {formatJoinedAt(staff.joinedAt)}
+            <MetaRow label="Date of Joining">
+              <span className="font-mono text-[13px]">{formatJoinedAt(staff.joinedAt)}</span>
             </MetaRow>
 
             <MetaRow label="Department" mono>
               {staff.dept}
             </MetaRow>
 
-            {staff.phone && (
-              <MetaRow label="Phone" mono>
-                {staff.phone}
-              </MetaRow>
-            )}
+            <MetaRow label="Phone" mono>
+              {staff.phone || <span className="font-normal text-black/40">—</span>}
+            </MetaRow>
+
+            <MetaRow label="Alternative Number" mono>
+              {staff.altPhone || <span className="font-normal text-black/40">—</span>}
+            </MetaRow>
+
+            <MetaRow label="Guardian Number" mono>
+              {staff.guardianPhone || <span className="font-normal text-black/40">—</span>}
+            </MetaRow>
           </div>
         </section>
 
@@ -586,7 +709,7 @@ export function StaffProfileDetail({
             <div>
               <h2 className="text-base font-semibold text-black">Identity Documents</h2>
               <p className="mt-1 text-[12.5px] text-black/50">
-                Aadhaar and PAN records with multiple file attachments per document.
+                Aadhaar, PAN Card, and any other attachments (certificates, contracts, etc.).
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2 rounded-lg bg-slate-50 px-4 py-3">
@@ -605,19 +728,143 @@ export function StaffProfileDetail({
             </div>
           </div>
 
-          <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {documents.map((doc) => (
               <DocumentCard
                 key={doc.id}
                 doc={doc}
                 onNumberChange={(number) => updateDocument(doc.id, number)}
-                onAttach={(files) => addAttachments(doc.id, files)}
+                onAttach={(levelId, files) => addAttachments(doc.id, levelId, files)}
                 onRemoveAttachment={(attachmentId) => removeAttachment(doc.id, attachmentId)}
               />
             ))}
           </div>
         </section>
+
+        <section className={cn(CARD_FRAME, "lg:col-span-2")}>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-black">Salary History</h2>
+              <p className="mt-1 text-[12.5px] text-black/50">
+                Past salary payments for {staff.name}.
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2 rounded-lg bg-slate-50 px-4 py-3">
+              <Wallet className="h-4 w-4 text-black/45" />
+              <div className="text-right">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                  Payments
+                </div>
+                <div className="font-mono text-lg font-bold text-black">{salaryHistory.length}</div>
+              </div>
+            </div>
+          </div>
+
+          {salaryHistory.length === 0 ? (
+            <div className="mt-5 rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center text-[13px] text-black/50">
+              No salary payments recorded yet. Confirm a salary payment from Finance → Make Payment
+              to see it here.
+            </div>
+          ) : (
+            <div className="mt-5 overflow-x-auto rounded-lg border border-slate-100">
+              <table className="w-full min-w-[560px] text-left text-[12.5px]">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50">
+                    {["Date", "Description", "Mode", "Amount", "Status"].map((header) => (
+                      <th
+                        key={header}
+                        className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/50"
+                      >
+                        {header}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {salaryHistory.map((row) => (
+                    <tr key={row.id} className="border-b border-slate-50 last:border-0">
+                      <td className="px-3 py-3 font-mono text-[11px] text-black/60">{row.paidAt}</td>
+                      <td className="px-3 py-3 font-medium text-black">{row.description}</td>
+                      <td className="px-3 py-3 text-black/65">{row.mode}</td>
+                      <td className="px-3 py-3 font-mono font-semibold text-black">
+                        ₹ {row.amount.toLocaleString("en-IN")}
+                      </td>
+                      <td className="px-3 py-3">
+                        <span
+                          className={cn(
+                            "inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold",
+                            row.status === "Cleared" || row.status === "Paid"
+                              ? "bg-[#D1F2E1] text-[#059669]"
+                              : "bg-[#FEF3C7] text-[#B45309]",
+                          )}
+                        >
+                          {row.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
       </div>
+
+      <section className={CARD_FRAME}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-black">Account History</h2>
+            <p className="mt-1 text-[12.5px] text-black/50">
+              Joined, deactivated, and reactivated events with date and time.
+            </p>
+          </div>
+          <span className="inline-flex w-fit rounded-full bg-slate-50 px-3 py-1.5 font-mono text-[11px] font-semibold text-black/60">
+            {statusHistory.length} event{statusHistory.length === 1 ? "" : "s"}
+          </span>
+        </div>
+
+        {statusHistory.length === 0 ? (
+          <div className="mt-5 rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center text-[13px] text-black/50">
+            No account events recorded yet.
+          </div>
+        ) : (
+          <ol className="mt-5 space-y-3">
+            {statusHistory.map((event) => {
+              const tone =
+                event.type === "joined"
+                  ? "bg-[#DBEAFE] text-[#1D4ED8]"
+                  : event.type === "deactivated"
+                    ? "bg-[#FEE2E2] text-[#B91C1C]"
+                    : "bg-[#D1F2E1] text-[#047857]";
+              return (
+                <li
+                  key={event.id}
+                  className="flex flex-col gap-2 rounded-lg border border-slate-100 bg-slate-50/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={cn(
+                          "inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                          tone,
+                        )}
+                      >
+                        {statusEventLabel(event.type)}
+                      </span>
+                      <span className="font-mono text-[12px] font-medium text-black">
+                        {formatStatusDateTime(event.at)}
+                      </span>
+                    </div>
+                    {event.note && (
+                      <p className="mt-1 text-[12px] text-black/55">{event.note}</p>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </section>
 
       <ProfileAccountActions
         name={staff.name}
@@ -759,6 +1006,46 @@ export function StaffProfileDetail({
               </div>
             </div>
 
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                Phone
+              </Label>
+              <Input
+                value={draft.phone}
+                onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
+                placeholder="Primary mobile"
+                className="font-mono"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Alternative Number
+                  <span className="ml-1 font-medium normal-case tracking-normal text-black/40">
+                    (optional)
+                  </span>
+                </Label>
+                <Input
+                  value={draft.altPhone}
+                  onChange={(e) => setDraft({ ...draft, altPhone: e.target.value })}
+                  placeholder="Optional"
+                  className="font-mono"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Guardian Number
+                </Label>
+                <Input
+                  value={draft.guardianPhone}
+                  onChange={(e) => setDraft({ ...draft, guardianPhone: e.target.value })}
+                  placeholder="Emergency / guardian"
+                  className="font-mono"
+                />
+              </div>
+            </div>
+
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditOpen(false)}>
                 Cancel
@@ -782,11 +1069,41 @@ function DocumentCard({
 }: {
   doc: StaffDocument;
   onNumberChange: (number: string) => void;
-  onAttach: (files: FileList | null) => void;
+  onAttach: (levelId: string, files: FileList | null) => void;
   onRemoveAttachment: (attachmentId: string) => void;
 }) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const isOther = doc.id === "doc-other";
   const complete = isDocumentComplete(doc);
+  const levels = useMemo(() => {
+    if (doc.levels?.length) return doc.levels;
+    if (doc.id === "doc-other") return [{ id: "files", label: "Files" }];
+    return [
+      { id: "front", label: "Front" },
+      { id: "back", label: "Back" },
+    ];
+  }, [doc.id, doc.levels]);
+  const showLevelTabs = !isOther && levels.length > 1;
+  const [activeLevelId, setActiveLevelId] = useState(() => levels[0]?.id ?? "front");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!levels.some((l) => l.id === activeLevelId)) {
+      setActiveLevelId(levels[0]?.id ?? "front");
+    }
+  }, [levels, activeLevelId]);
+
+  const levelFiles = showLevelTabs
+    ? doc.attachments.filter((a) => a.levelId === activeLevelId)
+    : doc.attachments;
+  const activeLevel = levels.find((l) => l.id === activeLevelId) ?? levels[0];
+  const attachLevelId = showLevelTabs ? activeLevelId : levels[0]?.id ?? "files";
+
+  const numberPlaceholder =
+    doc.id === "doc-aadhaar"
+      ? "XXXX XXXX XXXX"
+      : doc.id === "doc-pan"
+        ? "ABCDE1234F"
+        : "Optional reference";
 
   return (
     <div className="min-w-0 rounded-lg border border-slate-100 bg-slate-50/50 p-4">
@@ -802,83 +1119,140 @@ function DocumentCard({
         </span>
       </div>
 
-      <Input
-        value={doc.number}
-        onChange={(e) => onNumberChange(e.target.value)}
-        placeholder={doc.label === "Aadhaar" ? "XXXX XXXX XXXX" : "Enter number"}
-        className="mt-1.5 h-10 border-slate-200 bg-white font-mono text-[13px]"
-      />
+      {!isOther && (
+        <Input
+          value={doc.number}
+          onChange={(e) => onNumberChange(e.target.value)}
+          placeholder={numberPlaceholder}
+          className="mt-1.5 h-10 border-slate-200 bg-white font-mono text-[13px]"
+        />
+      )}
 
-      <div className="mt-4 border-t border-slate-200/80 pt-4">
+      {isOther && (
+        <p className="mt-1.5 text-[12px] leading-snug text-black/50">
+          Certificates, contracts, offer letters, or any other staff files.
+        </p>
+      )}
+
+      <div className={cn("border-t border-slate-200/80 pt-4", isOther ? "mt-3" : "mt-4")}>
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-black/45">
             <Paperclip className="h-3.5 w-3.5" />
-            Attachments
+            {showLevelTabs ? "Attachments" : "Files"}
           </div>
           <span className="font-mono text-[10px] text-black/45">
             {doc.attachments.length} / {MAX_FILES_PER_DOC}
           </span>
         </div>
 
-        {doc.attachments.length > 0 ? (
-          <ul className="mt-2 space-y-1.5">
-            {doc.attachments.map((file) => (
-              <li
-                key={file.id}
-                className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-2.5 py-2"
-              >
-                <FileText className="h-3.5 w-3.5 shrink-0 text-black/40" />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[12px] font-medium text-black">{file.name}</div>
-                  <div className="font-mono text-[10px] text-black/45">{formatFileSize(file.size)}</div>
-                </div>
-                <a
-                  href={file.dataUrl}
-                  download={file.name}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-black/60 transition-colors hover:bg-slate-50"
-                  aria-label={`Open ${file.name}`}
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                </a>
+        {showLevelTabs && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {levels.map((level) => {
+              const count = doc.attachments.filter((a) => a.levelId === level.id).length;
+              const active = level.id === activeLevelId;
+              return (
                 <button
+                  key={level.id}
                   type="button"
-                  onClick={() => onRemoveAttachment(file.id)}
-                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-red-200 text-red-600 transition-colors hover:bg-red-50"
-                  aria-label={`Remove ${file.name}`}
+                  onClick={() => setActiveLevelId(level.id)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors",
+                    active
+                      ? "bg-black text-white"
+                      : "bg-white text-black/65 ring-1 ring-slate-200 hover:bg-slate-100",
+                  )}
                 >
-                  <X className="h-3.5 w-3.5" />
+                  {level.label}
+                  <span
+                    className={cn(
+                      "font-mono text-[10px]",
+                      active ? "text-white/70" : "text-black/40",
+                    )}
+                  >
+                    {count}
+                  </span>
                 </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-2 text-[12px] text-black/45">No files attached yet.</p>
+              );
+            })}
+          </div>
         )}
 
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          accept="image/*,.pdf,.jpg,.jpeg,.png,.webp"
-          className="hidden"
-          onChange={(e) => {
-            onAttach(e.target.files);
-            e.target.value = "";
-          }}
-        />
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={doc.attachments.length >= MAX_FILES_PER_DOC}
-          className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-slate-300 bg-white text-[12px] font-medium text-black/70 transition-colors hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
-        >
-          <Upload className="h-3.5 w-3.5" />
-          Attach files
-        </button>
+        <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
+          {showLevelTabs && (
+            <div className="mb-2 text-[11px] font-semibold text-black/55">
+              {activeLevel?.label ?? "Side"} scan
+            </div>
+          )}
+          {levelFiles.length > 0 ? (
+            <ul className="space-y-1.5">
+              {levelFiles.map((file) => (
+                <li
+                  key={file.id}
+                  className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/80 px-2.5 py-2"
+                >
+                  <FileText className="h-3.5 w-3.5 shrink-0 text-black/40" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[12px] font-medium text-black">{file.name}</div>
+                    <div className="font-mono text-[10px] text-black/45">
+                      {formatFileSize(file.size)}
+                    </div>
+                  </div>
+                  <a
+                    href={file.dataUrl}
+                    download={file.name}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-black/60 transition-colors hover:bg-white"
+                    aria-label={`Open ${file.name}`}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => onRemoveAttachment(file.id)}
+                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-red-200 text-red-600 transition-colors hover:bg-red-50"
+                    aria-label={`Remove ${file.name}`}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-[12px] text-black/45">
+              {showLevelTabs
+                ? `No ${activeLevel?.label?.toLowerCase() ?? ""} file yet.`
+                : "No files attached yet."}
+            </p>
+          )}
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*,.pdf,.jpg,.jpeg,.png,.webp"
+            className="hidden"
+            onChange={(e) => {
+              onAttach(attachLevelId, e.target.files);
+              e.target.value = "";
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={doc.attachments.length >= MAX_FILES_PER_DOC}
+            className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-slate-300 bg-white text-[12px] font-medium text-black/70 transition-colors hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            <Upload className="h-3.5 w-3.5" />
+            {showLevelTabs
+              ? `Attach ${activeLevel?.label ?? "file"}`
+              : "Add files"}
+          </button>
+        </div>
+
         <p className="mt-1.5 text-[10px] text-black/40">
           PDF or images · up to {formatFileSize(MAX_FILE_BYTES)} each
+          {showLevelTabs ? " · Front and Back" : ""}
         </p>
       </div>
     </div>

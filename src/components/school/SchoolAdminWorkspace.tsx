@@ -48,6 +48,7 @@ import {
   FileImage,
   Paperclip,
   FileText,
+  ExternalLink,
 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, XAxis, YAxis } from "recharts";
 import {
@@ -105,6 +106,8 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { OrganicCard } from "@/components/ui/organic-card";
 import {
   normalizeAcademicYearLabel,
+  composeClassName,
+  normalizeClassConfig,
   DEFAULT_STAFF_DOCUMENTS,
   THEME_ACCENT_OPTIONS,
   THEME_DENSITY_OPTIONS,
@@ -113,7 +116,13 @@ import {
   useTenantStore,
   createStudentShareToken,
   upsertStudentInSnapshot,
+  notifyNavPlacementChange,
   schoolInitials,
+  createDefaultVehicleDocuments,
+  daysUntilDate,
+  VEHICLE_DOCUMENT_KINDS,
+  VEHICLE_DOCUMENT_LABELS,
+  DEFAULT_VEHICLE_NOTIFY_DAYS,
   type ClassConfig,
   type Department,
   type Payment,
@@ -126,6 +135,9 @@ import {
   type TransportRoute,
   type TransportVehicle,
   type TenantNotification,
+  type VehicleDocument,
+  type VehicleDocumentKind,
+  type VehicleOwnership,
 } from "@/lib/tenant-store";
 import { StudentProfileDetail } from "@/components/school/StudentProfileDetail";
 import { ShareParentLinkDialog } from "@/components/school/ShareParentLinkDialog";
@@ -2684,6 +2696,9 @@ export function StaffRoster() {
     role: defaultRole,
     dept: defaultDept,
     id: "",
+    phone: "",
+    altPhone: "",
+    guardianPhone: "",
     photoUrl: "",
   });
   const recruitPhotoRef = useRef<HTMLInputElement>(null);
@@ -2768,16 +2783,37 @@ export function StaffRoster() {
       dept: form.dept,
       active: true,
       joinedAt: new Date().toISOString().slice(0, 10),
+      phone: form.phone.trim() || undefined,
+      altPhone: form.altPhone.trim() || undefined,
+      guardianPhone: form.guardianPhone.trim() || undefined,
       photoUrl: form.photoUrl || undefined,
       basicSalary: 8000,
       additionalAllowances: 0,
       documents: DEFAULT_STAFF_DOCUMENTS.map((d) => ({ ...d })),
+      salaryHistory: [],
+      statusHistory: [
+        {
+          id: `EVT-${empId}-joined`,
+          type: "joined" as const,
+          at: new Date().toISOString(),
+          note: "Joined the school roster",
+        },
+      ],
     };
     setStaff((prev) => [newStaff, ...prev]);
     toast.success(`${newStaff.name} recruited`, {
       description: `${newStaff.id} · ${newStaff.dept}`,
     });
-    setForm({ name: "", role: defaultRole, dept: defaultDept, id: "", photoUrl: "" });
+    setForm({
+      name: "",
+      role: defaultRole,
+      dept: defaultDept,
+      id: "",
+      phone: "",
+      altPhone: "",
+      guardianPhone: "",
+      photoUrl: "",
+    });
     setOpen(false);
   };
 
@@ -2801,10 +2837,18 @@ export function StaffRoster() {
   const downloadStaffTemplate = () => {
     downloadCsv(
       "staff-bulk-upload-template.csv",
-      ["Name", "Role", "Department", "Phone", "ID"],
+      ["Name", "Role", "Department", "Phone", "AltPhone", "GuardianPhone", "ID"],
       [
-        ["Ananya Menon", defaultRole || "Teacher", defaultDept || "LP", "9810012345", ""],
-        ["Rahul Nair", "Accountant", "Administrative", "9876501122", ""],
+        [
+          "Ananya Menon",
+          defaultRole || "Teacher",
+          defaultDept || "LP",
+          "9810012345",
+          "9810098765",
+          "9876500001",
+          "",
+        ],
+        ["Rahul Nair", "Accountant", "Administrative", "9876501122", "", "9876501123", ""],
       ],
     );
     toast.success("Staff template downloaded", {
@@ -2831,7 +2875,20 @@ export function StaffRoster() {
       let nextSeq = staff.length + 22;
       for (let i = start; i < lines.length; i++) {
         const cells = lines[i].split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
-        const [name, role, dept, phone, idCell] = cells;
+        let name = "";
+        let role = "";
+        let dept = "";
+        let phone = "";
+        let altPhone = "";
+        let guardianPhone = "";
+        let idCell = "";
+        if (cells.length >= 7) {
+          [name, role, dept, phone, altPhone, guardianPhone, idCell] = cells;
+        } else if (cells.length >= 5) {
+          [name, role, dept, phone, idCell] = cells;
+        } else {
+          [name, role, dept, phone] = cells;
+        }
         if (!name) continue;
         let empId = (idCell || "").trim();
         if (!empId || existingIds.has(empId.toLowerCase())) {
@@ -2848,9 +2905,20 @@ export function StaffRoster() {
           active: true,
           joinedAt: new Date().toISOString().slice(0, 10),
           phone: phone || undefined,
+          altPhone: altPhone || undefined,
+          guardianPhone: guardianPhone || undefined,
           basicSalary: 8000,
           additionalAllowances: 0,
           documents: DEFAULT_STAFF_DOCUMENTS.map((d) => ({ ...d })),
+          salaryHistory: [],
+          statusHistory: [
+            {
+              id: `EVT-${empId}-joined`,
+              type: "joined" as const,
+              at: new Date().toISOString(),
+              note: "Joined the school roster",
+            },
+          ],
         });
       }
       if (!fresh.length) {
@@ -3310,6 +3378,44 @@ export function StaffRoster() {
                 />
               </div>
             </div>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                Phone
+              </Label>
+              <Input
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                placeholder="Primary mobile"
+                className="font-mono"
+              />
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Alternative Number
+                  <span className="ml-1 font-medium normal-case tracking-normal text-black/40">
+                    (optional)
+                  </span>
+                </Label>
+                <Input
+                  value={form.altPhone}
+                  onChange={(e) => setForm({ ...form, altPhone: e.target.value })}
+                  placeholder="Optional"
+                  className="font-mono"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Guardian Number
+                </Label>
+                <Input
+                  value={form.guardianPhone}
+                  onChange={(e) => setForm({ ...form, guardianPhone: e.target.value })}
+                  placeholder="Emergency / guardian"
+                  className="font-mono"
+                />
+              </div>
+            </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel
@@ -3369,12 +3475,7 @@ export function FinanceModule() {
   if (view === "receive") {
     return (
       <div className="w-full space-y-4 sm:space-y-5">
-        <FinanceFlowHeader
-          title="Receive Payment"
-          description="Capture inbound fee receipts"
-          onBack={backToOverview}
-        />
-        <ReceivePayment />
+        <ReceivePayment onBack={backToOverview} />
       </div>
     );
   }
@@ -3382,12 +3483,7 @@ export function FinanceModule() {
   if (view === "make") {
     return (
       <div className="w-full space-y-4 sm:space-y-5">
-        <FinanceFlowHeader
-          title="Make Payment"
-          description="Pay vendors and salaries"
-          onBack={backToOverview}
-        />
-        <MakePayment />
+        <MakePayment onBack={backToOverview} />
       </div>
     );
   }
@@ -3492,26 +3588,45 @@ function FinanceFlowHeader({
   onBack: () => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-3">
+    <div className="flex min-w-0 items-start gap-2.5 sm:items-center sm:gap-3">
       <button
         type="button"
         onClick={onBack}
+        aria-label="Back to finance overview"
         className={cn(
           glassInsetClass,
-          "inline-flex h-10 items-center gap-1.5 px-3 text-[13px] font-semibold text-slate-700 transition-colors hover:text-[#2563EB]",
+          "inline-flex h-9 w-9 shrink-0 items-center justify-center text-slate-700 transition-colors hover:text-[#2563EB] sm:h-10 sm:w-auto sm:gap-1.5 sm:px-3",
         )}
       >
-        <ChevronLeft className="h-4 w-4" />
-        Finance overview
+        <ChevronLeft className="h-4 w-4 shrink-0" />
+        <span className="hidden text-[13px] font-semibold sm:inline">Back</span>
       </button>
-      <div className="min-w-0">
-        <MobileSectionTitle className="md:hidden">{title}</MobileSectionTitle>
-        <div className="hidden md:block">
-          <div className="text-[15px] font-bold text-slate-900">{title}</div>
-          <p className="text-[12px] text-slate-500">{description}</p>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[17px] font-bold leading-tight tracking-tight text-slate-900 sm:text-[20px] lg:text-title">
+          {title}
         </div>
+        <p className="mt-0.5 text-[11.5px] leading-snug text-slate-500 sm:text-[12px]">
+          {description}
+        </p>
       </div>
     </div>
+  );
+}
+
+function FinancePageBackButton({ onBack }: { onBack: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onBack}
+      aria-label="Back to finance overview"
+      className={cn(
+        glassInsetClass,
+        "inline-flex h-9 w-9 shrink-0 items-center justify-center text-slate-700 transition-colors hover:text-[#2563EB] sm:h-10 sm:w-auto sm:gap-1.5 sm:px-3",
+      )}
+    >
+      <ChevronLeft className="h-4 w-4 shrink-0" />
+      <span className="hidden text-[13px] font-semibold sm:inline">Back</span>
+    </button>
   );
 }
 
@@ -3703,9 +3818,6 @@ function FinanceOverview({
           <h2 className="hidden text-[18px] font-bold tracking-tight text-slate-900 md:block">
             Finance overview
           </h2>
-          <p className="mt-1 hidden text-[12px] text-slate-500 md:block">
-            Receive and make payments, review transactions, and track income vs expense
-          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           {(
@@ -4033,7 +4145,7 @@ function categorySuggestsExternal(category: string) {
   );
 }
 
-function ReceivePayment() {
+function ReceivePayment({ onBack }: { onBack: () => void }) {
   const {
     students,
     setStudents,
@@ -4234,24 +4346,29 @@ function ReceivePayment() {
     <div className="space-y-4 sm:space-y-5">
       <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="text-title">Inbound Fee Capture</div>
-            <p className="mt-1 text-[12px] text-black/55">
-              {isExternal
-                ? `Record school income from external payers · ${academicYear}`
-                : `Post fee receipts to student ledgers · ${academicYear}`}
-            </p>
+          <div className="flex min-w-0 flex-1 items-start gap-2.5 sm:gap-3">
+            <FinancePageBackButton onBack={onBack} />
+            <div className="min-w-0 pt-0.5">
+              <div className="text-[17px] font-bold leading-tight tracking-tight text-black sm:text-title">
+                Inbound Fee Capture
+              </div>
+              <p className="mt-1 text-[11.5px] text-black/55 sm:text-[12px]">
+                {isExternal
+                  ? `Record school income from external payers · ${academicYear}`
+                  : `Post fee receipts to student ledgers · ${academicYear}`}
+              </p>
+            </div>
           </div>
           {!isExternal && selected && (
             <span
               className={cn(
-                "inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[11.5px] font-semibold",
+                "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-semibold sm:px-3.5 sm:text-[11.5px]",
                 selected.due > 0 ? "bg-[#FEF3C7] text-black" : "bg-[#DBEAFE] text-black",
               )}
             >
               {selected.due > 0 ? (
                 <>
-                  <AlertTriangle className="h-3.5 w-3.5" />
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                   Due ₹ {selected.due.toLocaleString("en-IN")}
                 </>
               ) : (
@@ -4260,7 +4377,7 @@ function ReceivePayment() {
             </span>
           )}
           {isExternal && (
-            <span className="inline-flex items-center gap-2 rounded-full bg-[#DBEAFE] px-3.5 py-1.5 text-[11.5px] font-semibold text-black">
+            <span className="inline-flex items-center gap-2 rounded-full bg-[#DBEAFE] px-3 py-1.5 text-[11px] font-semibold text-black sm:px-3.5 sm:text-[11.5px]">
               External income
             </span>
           )}
@@ -4551,7 +4668,120 @@ function ReceivePayment() {
   );
 }
 
-function MakePayment() {
+function StaffSearchSelect({
+  staff,
+  value,
+  onChange,
+  placeholder = "Choose staff member",
+  allowNone = false,
+  noneLabel = "No class teacher",
+}: {
+  staff: Staff[];
+  value: string;
+  onChange: (staffId: string) => void;
+  placeholder?: string;
+  allowNone?: boolean;
+  noneLabel?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const currentStaff = useMemo(
+    () =>
+      staff
+        .filter((member) => isRecordActive(member.active))
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [staff],
+  );
+  const selected = currentStaff.find((member) => member.id === value);
+  const formatStaff = (member: Staff) =>
+    `${member.name} · ${member.id} · ${member.role}${member.dept ? ` · ${member.dept}` : ""}`;
+  const label = selected
+    ? formatStaff(selected)
+    : allowNone && !value
+      ? noneLabel
+      : placeholder;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          role="combobox"
+          aria-expanded={open}
+          className={cn(
+            "flex h-10 w-full items-center justify-between rounded-lg border border-[#E5E5E5] bg-white px-3 text-left text-[13px] shadow-sm transition-colors hover:bg-[#FAFAFA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10",
+            selected || (allowNone && !value) ? "text-black" : "text-black/45",
+          )}
+        >
+          <span className="truncate">{label}</span>
+          <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="z-[250] w-[var(--radix-popover-trigger-width)] min-w-[300px] overflow-hidden p-0"
+      >
+        <Command className="rounded-lg border-0" shouldFilter>
+          <CommandInput placeholder="Search current staff…" className="h-10 text-[13px]" />
+          <CommandList className="max-h-64">
+            <CommandEmpty className="py-4 text-[12px] text-black/50">
+              No current staff found.
+            </CommandEmpty>
+            <CommandGroup
+              heading={`${currentStaff.length} current staff`}
+              className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-black/45"
+            >
+              {allowNone && (
+                <CommandItem
+                  value="__none__ no class teacher"
+                  onSelect={() => {
+                    onChange("");
+                    setOpen(false);
+                  }}
+                  className="cursor-pointer rounded-md text-[13px]"
+                >
+                  <Check
+                    className={cn("mr-2 h-3.5 w-3.5 shrink-0", !value ? "opacity-100" : "opacity-0")}
+                  />
+                  {noneLabel}
+                </CommandItem>
+              )}
+              {currentStaff.map((member) => (
+                  <CommandItem
+                    key={member.id}
+                    value={`${member.name} ${member.id} ${member.role} ${member.dept ?? ""}`}
+                    onSelect={() => {
+                      onChange(member.id);
+                      setOpen(false);
+                    }}
+                    className="cursor-pointer rounded-md text-[13px]"
+                  >
+                    <Check
+                      className={cn(
+                        "mr-2 h-3.5 w-3.5 shrink-0",
+                        value === member.id ? "opacity-100" : "opacity-0",
+                      )}
+                    />
+                    <span className="min-w-0 flex-1 truncate">
+                      <span className="font-medium text-black">{member.name}</span>
+                      <span className="text-black/45">
+                        {" "}
+                        · {member.id} · {member.role}
+                        {member.dept ? ` · ${member.dept}` : ""}
+                      </span>
+                    </span>
+                  </CommandItem>
+                ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function MakePayment({ onBack }: { onBack: () => void }) {
+  const { staff, setStaff } = useTenantStore();
   const initialObligation = PENDING_OBLIGATIONS[0];
   const [obligations, setObligations] = useState<PendingObligation[]>(PENDING_OBLIGATIONS);
   const [madePayments, setMadePayments] = useState<MadePayment[]>(MADE_PAYMENTS);
@@ -4561,6 +4791,7 @@ function MakePayment() {
   const [payeeType, setPayeeType] = useState<"Salary" | "Vendor">(
     initialObligation?.payeeType ?? "Salary",
   );
+  const [selectedStaffId, setSelectedStaffId] = useState<string>("");
   const [beneficiary, setBeneficiary] = useState(initialObligation?.payee ?? "");
   const [description, setDescription] = useState(initialObligation?.desc ?? "");
   const [amount, setAmount] = useState(
@@ -4572,6 +4803,42 @@ function MakePayment() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
 
+  const activeStaff = useMemo(
+    () =>
+      staff
+        .filter((member) => isRecordActive(member.active))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [staff],
+  );
+
+  useEffect(() => {
+    if (payeeType !== "Salary" || selectedStaffId || !beneficiary.trim()) return;
+    const matched = activeStaff.find(
+      (member) => member.name.toLowerCase() === beneficiary.trim().toLowerCase(),
+    );
+    if (matched) setSelectedStaffId(matched.id);
+  }, [activeStaff, beneficiary, payeeType, selectedStaffId]);
+
+  const matchStaffByName = (name: string) =>
+    activeStaff.find((member) => member.name.toLowerCase() === name.trim().toLowerCase());
+
+  const applyStaff = (memberId: string) => {
+    const member = activeStaff.find((s) => s.id === memberId);
+    if (!member) {
+      setSelectedStaffId("");
+      return;
+    }
+    setSelectedStaffId(member.id);
+    setBeneficiary(member.name);
+    const salaryTotal = (member.basicSalary || 0) + (member.additionalAllowances || 0);
+    if (salaryTotal > 0) {
+      setAmount(String(salaryTotal));
+    }
+    if (!description.trim() || /salary|payroll|staff/i.test(description)) {
+      setDescription(`Salary · ${member.role}${member.dept ? ` · ${member.dept}` : ""}`);
+    }
+  };
+
   const applyObligation = (obligation: PendingObligation) => {
     setSelectedObligationId(obligation.id);
     setPayeeType(obligation.payeeType);
@@ -4579,16 +4846,38 @@ function MakePayment() {
     setDescription(obligation.desc);
     setAmount(String(obligation.amount));
     setAttachments([]);
+    if (obligation.payeeType === "Salary") {
+      const matched = matchStaffByName(obligation.payee);
+      setSelectedStaffId(matched?.id ?? "");
+    } else {
+      setSelectedStaffId("");
+    }
   };
 
   const resetForm = () => {
     setSelectedObligationId(null);
     setPayeeType("Salary");
+    setSelectedStaffId("");
     setBeneficiary("");
     setDescription("");
     setAmount("");
     setMode("Bank Transfer · NEFT");
     setAttachments([]);
+  };
+
+  const setPayeeTypeAndClear = (next: "Salary" | "Vendor") => {
+    setPayeeType(next);
+    setSelectedObligationId(null);
+    if (next === "Vendor") {
+      setSelectedStaffId("");
+      if (selectedStaffId) {
+        setBeneficiary("");
+        setDescription("");
+        setAmount("");
+      }
+    } else if (next === "Salary" && !selectedStaffId) {
+      // Keep typed values; user can pick staff next
+    }
   };
 
   const addAttachments = async (fileList: FileList | null) => {
@@ -4640,8 +4929,12 @@ function MakePayment() {
 
   const requestAuthorisation = () => {
     const value = Number(amount.replace(/[^0-9]/g, ""));
+    if (payeeType === "Salary" && !selectedStaffId) {
+      toast.error("Choose a staff member");
+      return;
+    }
     if (!beneficiary.trim()) {
-      toast.error("Beneficiary name is required");
+      toast.error(payeeType === "Salary" ? "Choose a staff member" : "Beneficiary name is required");
       return;
     }
     if (!description.trim()) {
@@ -4683,6 +4976,30 @@ function MakePayment() {
       attachments: attachments.length ? attachments : undefined,
     };
     setMadePayments((prev) => [disbursal, ...prev]);
+
+    if (payeeType === "Salary" && selectedStaffId) {
+      const paidAt = new Date().toISOString().slice(0, 10);
+      setStaff((prev) =>
+        prev.map((member) =>
+          member.id === selectedStaffId
+            ? {
+                ...member,
+                salaryHistory: [
+                  {
+                    id: `SAL-${member.id}-${Date.now().toString().slice(-5)}`,
+                    amount: value,
+                    mode,
+                    paidAt,
+                    description: description.trim() || `Salary · ${member.name}`,
+                    status: "Queued" as const,
+                  },
+                  ...(member.salaryHistory ?? []),
+                ],
+              }
+            : member,
+        ),
+      );
+    }
 
     toast.success("Payment confirmed", {
       description: `${beneficiary.trim()} · ₹ ${value.toLocaleString("en-IN")} via ${mode}${
@@ -4729,7 +5046,12 @@ function MakePayment() {
   return (
     <div className="grid grid-cols-12 gap-4 sm:gap-5">
       <OrganicCard tone="white" cornerSide="tr" padded className={cn(workspacePanelClass, "col-span-12 lg:col-span-8")}>
-        <DashboardPanelHeading icon={ArrowUpFromLine} title="Make Payment" />
+        <div className="flex min-w-0 items-start gap-2.5 sm:items-center sm:gap-3">
+          <FinancePageBackButton onBack={onBack} />
+          <div className="min-w-0 flex-1">
+            <DashboardPanelHeading icon={ArrowUpFromLine} title="Make Payment" />
+          </div>
+        </div>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <FieldLabel>Payee Type</FieldLabel>
@@ -4740,7 +5062,7 @@ function MakePayment() {
                   <button
                     key={p}
                     type="button"
-                    onClick={() => setPayeeType(p)}
+                    onClick={() => setPayeeTypeAndClear(p)}
                     className={`flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium ${
                       active ? "bg-black text-white" : "text-black/65"
                     }`}
@@ -4752,12 +5074,26 @@ function MakePayment() {
             </div>
           </div>
           <div>
-            <FieldLabel>Beneficiary</FieldLabel>
-            <Input
-              value={beneficiary}
-              onChange={(e) => setBeneficiary(e.target.value)}
-              placeholder="e.g. BrightBus Logistics Pvt. Ltd."
-            />
+            <FieldLabel>{payeeType === "Salary" ? "Staff" : "Beneficiary"}</FieldLabel>
+            {payeeType === "Salary" ? (
+              <StaffSearchSelect
+                staff={activeStaff}
+                value={selectedStaffId}
+                onChange={(id) => applyStaff(id)}
+                placeholder="Choose current staff"
+              />
+            ) : (
+              <Input
+                value={beneficiary}
+                onChange={(e) => setBeneficiary(e.target.value)}
+                placeholder="e.g. BrightBus Logistics Pvt. Ltd."
+              />
+            )}
+            {payeeType === "Salary" && selectedStaffId && (
+              <p className="mt-1.5 text-[11px] text-black/45">
+                Amount prefilled from staff salary settings when available
+              </p>
+            )}
           </div>
           <div className="sm:col-span-2">
             <FieldLabel>Description / Line Items</FieldLabel>
@@ -5085,6 +5421,10 @@ function LedgerAnalytics() {
 }
 
 export function SchoolSettings() {
+  const navigate = useNavigate();
+  const search = useSearch({ from: "/tenant/settings" });
+  const activeTab = search.tab ?? "school";
+
   const {
     departments,
     setDepartments,
@@ -5112,76 +5452,128 @@ export function SchoolSettings() {
     setStudents,
   } = useTenantStore();
 
-  return (
-    <div className="w-full space-y-6 lg:space-y-6">
-      <MobileSectionTitle className="md:hidden">Settings</MobileSectionTitle>
+  const settingsTabs = [
+    { id: "school" as const, label: "School Details" },
+    { id: "classes" as const, label: "Class Tier" },
+    { id: "departments" as const, label: "Departments" },
+    { id: "roles" as const, label: "Roles" },
+    { id: "vehicles" as const, label: "Vehicles" },
+    { id: "transport" as const, label: "Transport" },
+    { id: "fees" as const, label: "Fee Categories" },
+    { id: "system" as const, label: "System" },
+  ];
 
-      <div className="grid grid-cols-12 gap-5">
-        <div className="col-span-12">
+  const setTab = (tab: (typeof settingsTabs)[number]["id"]) => {
+    navigate({
+      to: "/tenant/settings",
+      search: tab === "school" ? {} : { tab },
+      replace: true,
+    });
+  };
+
+  return (
+    <div className="grid w-full grid-cols-12 gap-3 sm:gap-4 lg:gap-5">
+      <div className="col-span-12 min-w-0">
+        <div className="mobile-scrollbar-none overflow-x-auto rounded-full border border-[#E5E5E5] bg-white/80 p-1 shadow-sm">
+          <div className="flex min-w-max gap-1 sm:min-w-0 sm:w-full">
+            {settingsTabs.map((tab) => {
+              const active = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setTab(tab.id)}
+                  className={cn(
+                    "shrink-0 rounded-full px-3 py-2 text-[11.5px] font-semibold transition-colors sm:min-w-0 sm:flex-1 sm:px-2 sm:text-[12px] lg:px-3.5",
+                    active
+                      ? "bg-black text-white shadow-sm"
+                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+                  )}
+                >
+                  <span className="block truncate text-center">{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div className="col-span-12 min-w-0">
+        {activeTab === "school" && (
           <SchoolDetailsCard
             schoolDetails={schoolDetails}
             setSchoolDetails={setSchoolDetails}
             themeSettings={themeSettings}
             setThemeSettings={setThemeSettings}
           />
-        </div>
-      </div>
+        )}
 
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-        <ClassesCard
-          classes={classes}
-          setClasses={setClasses}
-          students={students}
-          setStudents={setStudents}
-        />
-        <DepartmentsCard
-          departments={departments}
-          setDepartments={setDepartments}
-          staff={staff}
-          setStaff={setStaff}
-          roles={roles}
-        />
-        <RolesCard
-          roles={roles}
-          setRoles={setRoles}
-          departments={departments}
-          staff={staff}
-          setStaff={setStaff}
-        />
-      </div>
+        {activeTab === "classes" && (
+          <ClassesCard
+            classes={classes}
+            setClasses={setClasses}
+            students={students}
+            setStudents={setStudents}
+            staff={staff}
+          />
+        )}
 
-      <div className="grid grid-cols-12 gap-5">
-        <div className="col-span-12">
+        {activeTab === "departments" && (
+          <DepartmentsCard
+            departments={departments}
+            setDepartments={setDepartments}
+            staff={staff}
+            setStaff={setStaff}
+            roles={roles}
+          />
+        )}
+
+        {activeTab === "roles" && (
+          <RolesCard
+            roles={roles}
+            setRoles={setRoles}
+            departments={departments}
+            staff={staff}
+            setStaff={setStaff}
+          />
+        )}
+
+        {activeTab === "vehicles" && (
           <VehicleCard
             transportVehicles={transportVehicles}
             setTransportVehicles={setTransportVehicles}
             transportRoutes={transportRoutes}
           />
-        </div>
-        <div className="col-span-12">
+        )}
+
+        {activeTab === "transport" && (
           <TransportCard
             transportRoutes={transportRoutes}
             setTransportRoutes={setTransportRoutes}
             transportVehicles={transportVehicles}
             setTransportVehicles={setTransportVehicles}
           />
-        </div>
-        <div className="col-span-12">
+        )}
+
+        {activeTab === "fees" && (
           <FeeCategoriesCard
             paymentCategories={paymentCategories}
             setPaymentCategories={setPaymentCategories}
           />
-        </div>
-        <div className="col-span-12">
-          <CategoriesCard
-            academicYears={academicYears}
-            setAcademicYears={setAcademicYears}
-            academicYear={academicYear}
-            setAcademicYear={setAcademicYear}
-            themeSettings={themeSettings}
-            setThemeSettings={setThemeSettings}
-          />
-        </div>
+        )}
+
+        {activeTab === "system" && (
+          <div className="grid grid-cols-12 gap-3 sm:gap-4 lg:gap-5">
+            <CategoriesCard
+              academicYears={academicYears}
+              setAcademicYears={setAcademicYears}
+              academicYear={academicYear}
+              setAcademicYear={setAcademicYear}
+              themeSettings={themeSettings}
+              setThemeSettings={setThemeSettings}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -5644,54 +6036,100 @@ function ClassesCard({
   setClasses,
   students,
   setStudents,
+  staff,
 }: {
   classes: ClassConfig[];
   setClasses: React.Dispatch<React.SetStateAction<ClassConfig[]>>;
   students: Student[];
   setStudents: React.Dispatch<React.SetStateAction<Student[]>>;
+  staff: Staff[];
 }) {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ClassConfig | null>(null);
   const [form, setForm] = useState<{
-    className: string;
+    grade: string;
+    section: string;
     tuitionFeeAmount: string;
     billingCycle: ClassConfig["billingCycle"];
-  }>({ className: "", tuitionFeeAmount: "", billingCycle: "Monthly" });
+    classTeacherId: string;
+  }>({
+    grade: "",
+    section: "",
+    tuitionFeeAmount: "",
+    billingCycle: "Monthly",
+    classTeacherId: "",
+  });
+
+  const teacherOptions = useMemo(
+    () =>
+      staff
+        .filter((member) => isRecordActive(member.active))
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [staff],
+  );
+
+  const teacherName = (id?: string) =>
+    id ? teacherOptions.find((m) => m.id === id)?.name ?? staff.find((m) => m.id === id)?.name : undefined;
 
   const startCreate = () => {
     setEditingId(null);
-    setForm({ className: "", tuitionFeeAmount: "", billingCycle: "Monthly" });
+    setForm({
+      grade: "",
+      section: "",
+      tuitionFeeAmount: "",
+      billingCycle: "Monthly",
+      classTeacherId: "",
+    });
     setOpen(true);
   };
   const startEdit = (c: ClassConfig) => {
+    const normalized = normalizeClassConfig(c);
     setEditingId(c.id);
     setForm({
-      className: c.className,
-      tuitionFeeAmount: String(c.tuitionFeeAmount),
-      billingCycle: c.billingCycle,
+      grade: normalized.grade,
+      section: normalized.section,
+      tuitionFeeAmount: String(normalized.tuitionFeeAmount),
+      billingCycle: normalized.billingCycle,
+      classTeacherId: normalized.classTeacherId ?? "",
     });
     setOpen(true);
   };
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const className = form.className.trim();
+    const grade = form.grade.trim();
+    const section = form.section.trim();
     const tuitionFeeAmount = Number(form.tuitionFeeAmount);
-    if (!className) {
-      toast.error("Class name is required");
+    if (!grade) {
+      toast.error("Class is required");
+      return;
+    }
+    if (!section) {
+      toast.error("Grade / section is required");
       return;
     }
     if (!tuitionFeeAmount || tuitionFeeAmount <= 0) {
       toast.error("Tuition fee must be a positive amount");
       return;
     }
+    const className = composeClassName(grade, section);
+    const classTeacherId = form.classTeacherId || undefined;
     if (editingId) {
       const previous = classes.find((c) => c.id === editingId);
       setClasses((prev) =>
         prev.map((c) =>
           c.id === editingId
-            ? { ...c, className, tuitionFeeAmount, billingCycle: form.billingCycle }
+            ? {
+                ...c,
+                className,
+                grade,
+                section,
+                tuitionFeeAmount,
+                billingCycle: form.billingCycle,
+                classTeacherId,
+              }
             : c,
         ),
       );
@@ -5707,7 +6145,15 @@ function ClassesCard({
       const nextId = `CLS-${(classes.length + 1).toString().padStart(3, "0")}`;
       setClasses((prev) => [
         ...prev,
-        { id: nextId, className, tuitionFeeAmount, billingCycle: form.billingCycle },
+        {
+          id: nextId,
+          className,
+          grade,
+          section,
+          tuitionFeeAmount,
+          billingCycle: form.billingCycle,
+          classTeacherId,
+        },
       ]);
       toast.success(`${className} added`);
     }
@@ -5735,7 +6181,7 @@ function ClassesCard({
   return (
     <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
       <CardHeader
-        title="Class Tiers & Tuition"
+        title="Class Tier"
         subtitle="Receipt amounts prefill from this matrix"
         actionLabel="Add Class"
         onAction={startCreate}
@@ -5743,42 +6189,48 @@ function ClassesCard({
 
       <div className="mt-4 space-y-2">
         {classes.length === 0 && <EmptyRow label="No class tiers configured" />}
-        {classes.map((c) => (
-          <div
-            key={c.id}
-            className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5"
-          >
-            <div className="min-w-0">
-              <div className="truncate text-[13px] font-semibold text-black">{c.className}</div>
-              <div className="mt-0.5 flex items-center gap-2 text-[11.5px] text-black/55">
-                <span className="font-mono text-black">
-                  ₹ {c.tuitionFeeAmount.toLocaleString("en-IN")}
-                </span>
-                <span className="rounded-full bg-[#DBEAFE] px-2 py-0.5 text-[10.5px] font-semibold text-black">
-                  {c.billingCycle}
-                </span>
+        {classes.map((c) => {
+          const teacher = teacherName(c.classTeacherId);
+          return (
+            <div
+              key={c.id}
+              className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5"
+            >
+              <div className="min-w-0">
+                <div className="truncate text-[13px] font-semibold text-black">{c.className}</div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11.5px] text-black/55">
+                  <span className="font-mono text-black">
+                    ₹ {c.tuitionFeeAmount.toLocaleString("en-IN")}
+                  </span>
+                  <span className="rounded-full bg-[#DBEAFE] px-2 py-0.5 text-[10.5px] font-semibold text-black">
+                    {c.billingCycle}
+                  </span>
+                  {teacher && (
+                    <span className="truncate text-[11px] text-black/50">Teacher · {teacher}</span>
+                  )}
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => startEdit(c)}
+                  aria-label={`Edit ${c.className}`}
+                  className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPendingDelete(c)}
+                  aria-label={`Delete ${c.className}`}
+                  className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => startEdit(c)}
-                aria-label={`Edit ${c.className}`}
-                className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setPendingDelete(c)}
-                aria-label={`Delete ${c.className}`}
-                className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <DeleteConfirmDialog
@@ -5804,15 +6256,40 @@ function ClassesCard({
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={submit} className="space-y-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Class
+                </Label>
+                <Input
+                  value={form.grade}
+                  onChange={(e) => setForm({ ...form, grade: e.target.value })}
+                  placeholder="e.g. Grade 8"
+                  autoFocus
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Grade
+                </Label>
+                <Input
+                  value={form.section}
+                  onChange={(e) => setForm({ ...form, section: e.target.value })}
+                  placeholder="e.g. B"
+                />
+              </div>
+            </div>
             <div className="space-y-1.5">
               <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                Class / Grade Name
+                Class Teacher <span className="normal-case tracking-normal text-black/40">(optional)</span>
               </Label>
-              <Input
-                value={form.className}
-                onChange={(e) => setForm({ ...form, className: e.target.value })}
-                placeholder="e.g. Grade 8 - B"
-                autoFocus
+              <StaffSearchSelect
+                staff={teacherOptions}
+                value={form.classTeacherId}
+                onChange={(id) => setForm({ ...form, classTeacherId: id })}
+                placeholder="Choose staff member"
+                allowNone
+                noneLabel="No class teacher"
               />
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -5873,18 +6350,36 @@ function VehicleCard({
   setTransportVehicles: React.Dispatch<React.SetStateAction<TransportVehicle[]>>;
   transportRoutes: TransportRoute[];
 }) {
+  const MAX_VEHICLE_DOC_BYTES = 1_500_000;
+  const emptyDocs = (): VehicleDocument[] => createDefaultVehicleDocuments();
+
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<TransportVehicle | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [routeQuery, setRouteQuery] = useState("");
   const [form, setForm] = useState({
     name: "",
     registrationNo: "",
     capacity: "",
+    ownership: "owned" as VehicleOwnership,
     driverName: "",
     driverPhone: "",
     routeIds: [] as string[],
     active: true,
+    documents: emptyDocs(),
   });
+
+  const detailVehicle = useMemo(
+    () => (detailId ? (transportVehicles.find((v) => v.id === detailId) ?? null) : null),
+    [detailId, transportVehicles],
+  );
+
+  useEffect(() => {
+    if (detailId && !transportVehicles.some((v) => v.id === detailId)) {
+      setDetailId(null);
+    }
+  }, [detailId, transportVehicles]);
 
   const routeLabel = (routeId: string) => {
     const route = transportRoutes.find((r) => r.id === routeId);
@@ -5896,6 +6391,15 @@ function VehicleCard({
     return routeIds.map(routeLabel).join(", ");
   };
 
+  const filteredRoutes = useMemo(() => {
+    const q = routeQuery.trim().toLowerCase();
+    if (!q) return transportRoutes;
+    return transportRoutes.filter((r) => {
+      const haystack = `${r.mapFrom} ${r.mapTo} ${r.id}`.toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [transportRoutes, routeQuery]);
+
   const toggleRoute = (routeId: string) => {
     setForm((prev) => ({
       ...prev,
@@ -5905,30 +6409,80 @@ function VehicleCard({
     }));
   };
 
+  const patchDocument = (
+    kind: VehicleDocumentKind,
+    patch: Partial<Omit<VehicleDocument, "kind">>,
+  ) => {
+    setForm((prev) => ({
+      ...prev,
+      documents: prev.documents.map((doc) =>
+        doc.kind === kind ? { ...doc, ...patch } : doc,
+      ),
+    }));
+  };
+
+  const attachDocument = async (kind: VehicleDocumentKind, files: FileList | null) => {
+    const file = files?.[0];
+    if (!file) return;
+    if (file.size > MAX_VEHICLE_DOC_BYTES) {
+      toast.error(`${file.name} exceeds ${formatAttachmentSize(MAX_VEHICLE_DOC_BYTES)} limit`);
+      return;
+    }
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      patchDocument(kind, {
+        file: {
+          id: `vdoc-${Date.now().toString(36)}`,
+          name: file.name,
+          mimeType: file.type || "application/octet-stream",
+          size: file.size,
+          dataUrl,
+          uploadedAt: new Date().toISOString(),
+        },
+      });
+      toast.success(`${VEHICLE_DOCUMENT_LABELS[kind]} attached`);
+    } catch {
+      toast.error(`Could not read ${file.name}`);
+    }
+  };
+
   const startCreate = () => {
     setEditingId(null);
+    setRouteQuery("");
     setForm({
       name: "",
       registrationNo: "",
       capacity: "",
+      ownership: "owned",
       driverName: "",
       driverPhone: "",
       routeIds: [],
       active: true,
+      documents: emptyDocs(),
     });
     setOpen(true);
   };
 
   const startEdit = (v: TransportVehicle) => {
     setEditingId(v.id);
+    setRouteQuery("");
+    const docsByKind = new Map((v.documents ?? []).map((d) => [d.kind, d]));
     setForm({
       name: v.name,
       registrationNo: v.registrationNo,
       capacity: String(v.capacity),
+      ownership: v.ownership ?? "owned",
       driverName: v.driverName ?? "",
       driverPhone: v.driverPhone ?? "",
       routeIds: [...v.routeIds],
       active: v.active,
+      documents: VEHICLE_DOCUMENT_KINDS.map(
+        (kind) =>
+          docsByKind.get(kind) ?? {
+            kind,
+            notifyDaysBefore: DEFAULT_VEHICLE_NOTIFY_DAYS,
+          },
+      ),
     });
     setOpen(true);
   };
@@ -5946,14 +6500,21 @@ function VehicleCard({
       toast.error("Capacity must be a positive number");
       return;
     }
-    const payload = {
+    const payload: Omit<TransportVehicle, "id"> = {
       name,
       registrationNo,
       capacity,
+      ownership: form.ownership,
       driverName: form.driverName.trim() || undefined,
       driverPhone: form.driverPhone.trim() || undefined,
       routeIds: form.routeIds,
       active: form.active,
+      documents: form.documents.map((doc) => ({
+        kind: doc.kind,
+        validUntil: doc.validUntil || undefined,
+        notifyDaysBefore: doc.notifyDaysBefore ?? DEFAULT_VEHICLE_NOTIFY_DAYS,
+        file: doc.file,
+      })),
     };
     if (editingId) {
       setTransportVehicles((prev) =>
@@ -5975,13 +6536,299 @@ function VehicleCard({
 
   const confirmDelete = () => {
     if (!pendingDelete) return;
+    const deletedId = pendingDelete.id;
     remove(pendingDelete);
     setPendingDelete(null);
+    if (detailId === deletedId) setDetailId(null);
   };
 
   const activeCount = transportVehicles.filter((v) => v.active).length;
 
+  const docAlert = (v: TransportVehicle) => {
+    let worst: "expired" | "soon" | null = null;
+    for (const doc of v.documents ?? []) {
+      if (!doc.validUntil) continue;
+      const days = daysUntilDate(doc.validUntil);
+      if (days === null) continue;
+      const warn = doc.notifyDaysBefore ?? DEFAULT_VEHICLE_NOTIFY_DAYS;
+      if (days < 0) return "expired" as const;
+      if (days <= warn) worst = "soon";
+    }
+    return worst;
+  };
+
+  const formatValidUntil = (iso?: string) => {
+    if (!iso) return null;
+    const match = iso.slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return iso;
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return `${Number(match[3])} ${months[Number(match[2]) - 1]} ${match[1]}`;
+  };
+
+  const detailMeta = useMemo(() => {
+    if (!detailVehicle) return null;
+    const v = detailVehicle;
+    const alert = docAlert(v);
+    const docs = VEHICLE_DOCUMENT_KINDS.map((kind) => {
+      const existing = (v.documents ?? []).find((d) => d.kind === kind);
+      return (
+        existing ?? {
+          kind,
+          notifyDaysBefore: DEFAULT_VEHICLE_NOTIFY_DAYS,
+        }
+      );
+    });
+    const assignedRoutes = v.routeIds
+      .map((id) => transportRoutes.find((r) => r.id === id))
+      .filter((r): r is TransportRoute => Boolean(r));
+    return { v, alert, docs, assignedRoutes };
+  }, [detailVehicle, transportRoutes]);
+
   return (
+    <>
+      {detailMeta ? (
+      <OrganicCard
+        tone="white"
+        cornerSide="tr"
+        padded
+        className={cn(workspacePanelClass, "col-span-12")}
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 items-start gap-2.5 sm:gap-3">
+            <button
+              type="button"
+              onClick={() => setDetailId(null)}
+              aria-label="Back to vehicle list"
+              className={cn(
+                glassInsetClass,
+                "inline-flex h-9 w-9 shrink-0 items-center justify-center text-slate-700 transition-colors hover:text-[#2563EB] sm:h-10 sm:w-auto sm:gap-1.5 sm:px-3",
+              )}
+            >
+              <ChevronLeft className="h-4 w-4 shrink-0" />
+              <span className="hidden text-[13px] font-semibold sm:inline">Back</span>
+            </button>
+            <div className="min-w-0 pt-0.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-black text-white">
+                  <Bus className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="truncate text-[18px] font-bold leading-tight tracking-tight text-black sm:text-[20px]">
+                      {detailMeta.v.name}
+                    </h2>
+                    {detailMeta.alert && (
+                      <AlertTriangle
+                        className={cn(
+                          "h-4 w-4 shrink-0",
+                          detailMeta.alert === "expired" ? "text-[#EF4444]" : "text-[#D97706]",
+                        )}
+                      />
+                    )}
+                  </div>
+                  <p className="mt-0.5 font-mono text-[12px] text-black/50">
+                    {detailMeta.v.registrationNo}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            <span
+              className={cn(
+                "inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider",
+                detailMeta.v.active ? "bg-[#2563EB] text-white" : "bg-black/10 text-black/50",
+              )}
+            >
+              {detailMeta.v.active ? "Active" : "Idle"}
+            </span>
+            <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-black/60">
+              {detailMeta.v.ownership === "rental" ? "Rental" : "Owned"}
+            </span>
+            <button
+              type="button"
+              onClick={() => startEdit(detailMeta.v)}
+              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 text-[12px] font-semibold text-black/70 transition-colors hover:bg-[#F4F4F5] hover:text-black"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => setPendingDelete(detailMeta.v)}
+              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#FECACA] bg-[#FEF2F2] px-3 text-[12px] font-semibold text-[#EF4444] transition-colors hover:bg-[#FEE2E2]"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-12 gap-3">
+          <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4 sm:col-span-6 lg:col-span-4">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+              Driver
+            </div>
+            <div className="mt-1.5 text-[14px] font-medium text-black">
+              {detailMeta.v.driverName || (
+                <span className="font-normal text-black/40">Not assigned</span>
+              )}
+            </div>
+            <div className="mt-1 font-mono text-[12px] text-black/55">
+              {detailMeta.v.driverPhone || "No phone on file"}
+            </div>
+          </div>
+          <div className="col-span-6 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4 lg:col-span-4">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+              Seat Capacity
+            </div>
+            <div className="mt-1.5 font-mono text-[18px] font-bold text-black">
+              {detailMeta.v.capacity}
+            </div>
+          </div>
+          <div className="col-span-6 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4 lg:col-span-4">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+              Vehicle ID
+            </div>
+            <div className="mt-1.5 font-mono text-[14px] font-semibold text-black">
+              {detailMeta.v.id}
+            </div>
+          </div>
+
+          <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                Assigned Routes
+              </div>
+              <span className="font-mono text-[10.5px] text-black/45">
+                {detailMeta.assignedRoutes.length} linked
+              </span>
+            </div>
+            {detailMeta.assignedRoutes.length === 0 ? (
+              <p className="mt-3 text-[13px] text-black/45">No routes assigned to this vehicle.</p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {detailMeta.assignedRoutes.map((r) => (
+                  <li
+                    key={r.id}
+                    className="rounded-xl border border-[#E8E8EA] bg-white px-3.5 py-2.5 text-[13px] font-medium text-black"
+                  >
+                    {r.mapFrom} → {r.mapTo}
+                    <div className="mt-1 font-mono text-[10.5px] font-normal text-black/45">
+                      Morning ₹{r.morningFee.toLocaleString("en-IN")} · Evening ₹
+                      {r.eveningFee.toLocaleString("en-IN")} · Both ₹
+                      {r.bothFee.toLocaleString("en-IN")}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                <Paperclip className="h-3.5 w-3.5" />
+                Documents & Validity
+              </div>
+              <span className="font-mono text-[10.5px] text-black/45">
+                {detailMeta.docs.filter((d) => d.file || d.validUntil).length} /{" "}
+                {detailMeta.docs.length} on file
+              </span>
+            </div>
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {detailMeta.docs.map((doc) => {
+                const days = doc.validUntil ? daysUntilDate(doc.validUntil) : null;
+                const warn = doc.notifyDaysBefore ?? DEFAULT_VEHICLE_NOTIFY_DAYS;
+                const status =
+                  days === null
+                    ? null
+                    : days < 0
+                      ? "expired"
+                      : days <= warn
+                        ? "soon"
+                        : "ok";
+                return (
+                  <div
+                    key={doc.kind}
+                    className="rounded-lg border border-[#E8E8EA] bg-white p-3.5"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="text-[12.5px] font-semibold text-black">
+                        {VEHICLE_DOCUMENT_LABELS[doc.kind]}
+                      </div>
+                      {status && (
+                        <span
+                          className={cn(
+                            "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[9.5px] font-semibold uppercase",
+                            status === "expired"
+                              ? "bg-[#FEE2E2] text-[#B91C1C]"
+                              : status === "soon"
+                                ? "bg-[#FEF3C7] text-[#B45309]"
+                                : "bg-[#D1F2E1] text-[#047857]",
+                          )}
+                        >
+                          {status === "expired"
+                            ? "Expired"
+                            : status === "soon"
+                              ? `${days}d left`
+                              : "Valid"}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-[12px]">
+                      <div>
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-black/40">
+                          Valid until
+                        </div>
+                        <div className="mt-0.5 font-mono text-black/75">
+                          {formatValidUntil(doc.validUntil) ?? "—"}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-black/40">
+                          Alert window
+                        </div>
+                        <div className="mt-0.5 font-mono text-black/75">
+                          {doc.notifyDaysBefore ?? DEFAULT_VEHICLE_NOTIFY_DAYS} days
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-2.5">
+                      {doc.file ? (
+                        <a
+                          href={doc.file.dataUrl}
+                          download={doc.file.name}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/80 px-2.5 py-2 transition-colors hover:bg-slate-100"
+                        >
+                          <FileText className="h-3.5 w-3.5 shrink-0 text-black/40" />
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-[12px] font-medium text-black">
+                              {doc.file.name}
+                            </div>
+                            <div className="font-mono text-[10px] text-black/45">
+                              {formatAttachmentSize(doc.file.size)}
+                            </div>
+                          </div>
+                          <ExternalLink className="h-3.5 w-3.5 shrink-0 text-black/40" />
+                        </a>
+                      ) : (
+                        <p className="rounded-xl border border-dashed border-slate-200 px-2.5 py-2 text-[12px] text-black/40">
+                          No file attached
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </OrganicCard>
+      ) : (
+
     <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
       <CardHeader
         title="Vehicle Management"
@@ -5991,12 +6838,13 @@ function VehicleCard({
       />
 
       <div className="mt-4 overflow-x-auto rounded-lg border border-[#EFEFEF]">
-        <table className="w-full min-w-[720px] table-fixed border-collapse text-left">
+        <table className="w-full min-w-[780px] table-fixed border-collapse text-left">
           <colgroup>
-            <col className="w-[24%]" />
-            <col className="w-[18%]" />
+            <col className="w-[22%]" />
+            <col className="w-[16%]" />
             <col className="w-[8%]" />
-            <col className="w-[30%]" />
+            <col className="w-[10%]" />
+            <col className="w-[24%]" />
             <col className="w-[10%]" />
             <col className="w-[10%]" />
           </colgroup>
@@ -6005,6 +6853,7 @@ function VehicleCard({
               <th className="px-3.5 py-2 font-semibold">Vehicle</th>
               <th className="px-3.5 py-2 font-semibold">Registration</th>
               <th className="px-3.5 py-2 text-right font-semibold">Seats</th>
+              <th className="px-3.5 py-2 font-semibold">Type</th>
               <th className="px-3.5 py-2 font-semibold">Assigned Routes</th>
               <th className="px-3.5 py-2 font-semibold">Status</th>
               <th className="px-3.5 py-2 text-right font-semibold">Action</th>
@@ -6013,76 +6862,118 @@ function VehicleCard({
           <tbody>
             {transportVehicles.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3.5 py-6 text-center text-[12px] text-black/55">
+                <td colSpan={7} className="px-3.5 py-6 text-center text-[12px] text-black/55">
                   No vehicles in fleet yet
                 </td>
               </tr>
             ) : (
-              transportVehicles.map((v) => (
-                <tr key={v.id} className="border-t border-[#EFEFEF] text-[12.5px]">
-                  <td className="px-3.5 py-2.5 align-middle">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5 truncate font-medium text-black">
-                        <Bus className="h-3.5 w-3.5 shrink-0 text-black/40" />
-                        {v.name}
+              transportVehicles.map((v) => {
+                const alert = docAlert(v);
+                return (
+                  <tr
+                    key={v.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setDetailId(v.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setDetailId(v.id);
+                      }
+                    }}
+                    aria-label={`Open details for ${v.name}`}
+                    className="cursor-pointer border-t border-[#EFEFEF] text-[12.5px] transition-colors hover:bg-[#F8F8F9] focus-visible:bg-[#F8F8F9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2563EB]"
+                  >
+                    <td className="px-3.5 py-2.5 align-middle">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 truncate font-medium text-black">
+                          <Bus className="h-3.5 w-3.5 shrink-0 text-black/40" />
+                          {v.name}
+                          {alert && (
+                            <AlertTriangle
+                              className={cn(
+                                "h-3.5 w-3.5 shrink-0",
+                                alert === "expired" ? "text-[#EF4444]" : "text-[#D97706]",
+                              )}
+                              aria-label={
+                                alert === "expired"
+                                  ? "Document expired"
+                                  : "Document expiring soon"
+                              }
+                            />
+                          )}
+                        </div>
+                        <div className="mt-0.5 truncate text-[10.5px] text-black/45">
+                          {v.driverName ?? "No driver assigned"}
+                        </div>
                       </div>
-                      <div className="mt-0.5 truncate text-[10.5px] text-black/45">
-                        {v.driverName ?? "No driver assigned"}
+                    </td>
+                    <td className="px-3.5 py-2.5 align-middle">
+                      <span className="block truncate font-mono text-[11.5px] text-black/70">
+                        {v.registrationNo}
+                      </span>
+                    </td>
+                    <td className="px-3.5 py-2.5 text-right align-middle font-mono text-black">
+                      {v.capacity}
+                    </td>
+                    <td className="px-3.5 py-2.5 align-middle">
+                      <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-black/60">
+                        {v.ownership === "rental" ? "Rental" : "Owned"}
+                      </span>
+                    </td>
+                    <td className="px-3.5 py-2.5 align-middle">
+                      <span
+                        className="block truncate text-[11.5px] text-black/70"
+                        title={routesLabel(v.routeIds)}
+                      >
+                        {routesLabel(v.routeIds)}
+                      </span>
+                    </td>
+                    <td className="px-3.5 py-2.5 align-middle">
+                      <span
+                        className={cn(
+                          "inline-flex rounded-full px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider",
+                          v.active ? "bg-[#2563EB] text-white" : "bg-black/10 text-black/50",
+                        )}
+                      >
+                        {v.active ? "Active" : "Idle"}
+                      </span>
+                    </td>
+                    <td className="px-3.5 py-2.5 align-middle">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startEdit(v);
+                          }}
+                          aria-label={`Edit vehicle ${v.name}`}
+                          className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPendingDelete(v);
+                          }}
+                          aria-label={`Delete vehicle ${v.name}`}
+                          className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-3.5 py-2.5 align-middle">
-                    <span className="block truncate font-mono text-[11.5px] text-black/70">
-                      {v.registrationNo}
-                    </span>
-                  </td>
-                  <td className="px-3.5 py-2.5 text-right align-middle font-mono text-black">
-                    {v.capacity}
-                  </td>
-                  <td className="px-3.5 py-2.5 align-middle">
-                    <span
-                      className="block truncate text-[11.5px] text-black/70"
-                      title={routesLabel(v.routeIds)}
-                    >
-                      {routesLabel(v.routeIds)}
-                    </span>
-                  </td>
-                  <td className="px-3.5 py-2.5 align-middle">
-                    <span
-                      className={cn(
-                        "inline-flex rounded-full px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider",
-                        v.active ? "bg-[#2563EB] text-white" : "bg-black/10 text-black/50",
-                      )}
-                    >
-                      {v.active ? "Active" : "Idle"}
-                    </span>
-                  </td>
-                  <td className="px-3.5 py-2.5 align-middle">
-                    <div className="flex items-center justify-end gap-1">
-                      <button
-                        type="button"
-                        onClick={() => startEdit(v)}
-                        aria-label={`Edit vehicle ${v.name}`}
-                        className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPendingDelete(v)}
-                        aria-label={`Delete vehicle ${v.name}`}
-                        className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
       </div>
+    </OrganicCard>
+      )}
 
       <DeleteConfirmDialog
         open={Boolean(pendingDelete)}
@@ -6099,15 +6990,43 @@ function VehicleCard({
       />
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl lg:max-w-3xl">
           <DialogHeader>
             <DialogTitle>{editingId ? "Edit Vehicle" : "Add Vehicle"}</DialogTitle>
             <DialogDescription>
-              Register buses and vans, assign drivers, and link each vehicle to one or more transport
-              routes.
+              Register owned or rental vehicles, attach RC / insurance / pollution / licence
+              documents with validity dates. Expiry alerts appear in Notifications.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={submit} className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                Vehicle or Rental?
+              </Label>
+              <div className="inline-flex w-full rounded-full border border-[#E5E5E5] bg-[#F4F4F5] p-1">
+                {(
+                  [
+                    { id: "owned" as const, label: "Owned vehicle" },
+                    { id: "rental" as const, label: "Rental" },
+                  ] as const
+                ).map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setForm({ ...form, ownership: option.id })}
+                    className={cn(
+                      "flex-1 rounded-full px-3 py-2 text-[12px] font-semibold transition-colors",
+                      form.ownership === option.id
+                        ? "bg-black text-white"
+                        : "text-black/55 hover:text-black",
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
@@ -6167,35 +7086,55 @@ function VehicleCard({
                   No routes configured yet
                 </p>
               ) : (
-                <div className="max-h-44 space-y-1 overflow-y-auto rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] p-2">
-                  {transportRoutes.map((r) => {
-                    const checked = form.routeIds.includes(r.id);
-                    return (
-                      <label
-                        key={r.id}
-                        className={cn(
-                          "flex cursor-pointer items-start gap-2.5 rounded-xl px-2.5 py-2 transition-colors",
-                          checked ? "bg-[#DBEAFE]" : "hover:bg-white",
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleRoute(r.id)}
-                          className="mt-0.5 h-4 w-4 shrink-0 rounded border-black/20 accent-black"
-                        />
-                        <span className="min-w-0 text-[12px] leading-snug text-black">
-                          {r.mapFrom} → {r.mapTo}
-                        </span>
-                      </label>
-                    );
-                  })}
+                <div className="overflow-hidden rounded-lg border border-[#E5E5E5] bg-[#FAFAFA]">
+                  <div className="relative border-b border-[#E5E5E5] bg-white p-2">
+                    <Search className="pointer-events-none absolute left-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-black/40" />
+                    <Input
+                      value={routeQuery}
+                      onChange={(e) => setRouteQuery(e.target.value)}
+                      placeholder="Search routes…"
+                      className="h-9 border-[#E5E5E5] bg-white pl-8 text-[12px]"
+                    />
+                  </div>
+                  <div className="max-h-36 space-y-1 overflow-y-auto p-2">
+                    {filteredRoutes.length === 0 ? (
+                      <p className="px-2 py-3 text-center text-[12px] text-black/45">
+                        No routes match “{routeQuery.trim()}”
+                      </p>
+                    ) : (
+                      filteredRoutes.map((r) => {
+                        const checked = form.routeIds.includes(r.id);
+                        return (
+                          <label
+                            key={r.id}
+                            className={cn(
+                              "flex cursor-pointer items-start gap-2.5 rounded-xl px-2.5 py-2 transition-colors",
+                              checked ? "bg-[#DBEAFE]" : "hover:bg-white",
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleRoute(r.id)}
+                              className="mt-0.5 h-4 w-4 shrink-0 rounded border-black/20 accent-black"
+                            />
+                            <span className="min-w-0 text-[12px] leading-snug text-black">
+                              {r.mapFrom} → {r.mapTo}
+                            </span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
               )}
               <p className="text-[10.5px] text-black/45">
                 {form.routeIds.length === 0
                   ? "No routes selected"
                   : `${form.routeIds.length} route${form.routeIds.length === 1 ? "" : "s"} selected`}
+                {routeQuery.trim() && filteredRoutes.length > 0
+                  ? ` · showing ${filteredRoutes.length} of ${transportRoutes.length}`
+                  : ""}
               </p>
             </div>
             <div className="space-y-1.5">
@@ -6209,6 +7148,159 @@ function VehicleCard({
                 className="font-mono"
               />
             </div>
+
+            <div className="space-y-2 rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  <Paperclip className="h-3.5 w-3.5" />
+                  Documents & validity
+                </div>
+                <span className="text-[10px] text-black/40">
+                  Alerts before expiry
+                </span>
+              </div>
+              <div className="space-y-2.5">
+                {form.documents.map((doc) => {
+                  const days = doc.validUntil ? daysUntilDate(doc.validUntil) : null;
+                  const warn = doc.notifyDaysBefore ?? DEFAULT_VEHICLE_NOTIFY_DAYS;
+                  const status =
+                    days === null
+                      ? null
+                      : days < 0
+                        ? "expired"
+                        : days <= warn
+                          ? "soon"
+                          : "ok";
+                  return (
+                    <div
+                      key={doc.kind}
+                      className="rounded-lg border border-[#E8E8EA] bg-white p-3"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="text-[12px] font-semibold text-black">
+                          {VEHICLE_DOCUMENT_LABELS[doc.kind]}
+                        </div>
+                        {status && (
+                          <span
+                            className={cn(
+                              "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[9.5px] font-semibold uppercase",
+                              status === "expired"
+                                ? "bg-[#FEE2E2] text-[#B91C1C]"
+                                : status === "soon"
+                                  ? "bg-[#FEF3C7] text-[#B45309]"
+                                  : "bg-[#D1F2E1] text-[#047857]",
+                            )}
+                          >
+                            {status === "expired"
+                              ? "Expired"
+                              : status === "soon"
+                                ? `${days}d left`
+                                : "Valid"}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                            Valid until
+                          </Label>
+                          <DatePicker
+                            value={doc.validUntil ?? ""}
+                            onChange={(validUntil) =>
+                              patchDocument(doc.kind, {
+                                validUntil: validUntil || undefined,
+                              })
+                            }
+                            placeholder="dd/mm/yyyy"
+                            valueFormat="iso"
+                            className="h-9 text-[12px]"
+                            quickPicks={[
+                              { label: "Today", getDate: (t) => t },
+                              {
+                                label: "+1y",
+                                getDate: (t) =>
+                                  new Date(t.getFullYear() + 1, t.getMonth(), t.getDate()),
+                              },
+                            ]}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                            Notify days before
+                          </Label>
+                          <Input
+                            inputMode="numeric"
+                            value={String(doc.notifyDaysBefore ?? DEFAULT_VEHICLE_NOTIFY_DAYS)}
+                            onChange={(e) => {
+                              const n = Number(e.target.value.replace(/[^0-9]/g, ""));
+                              patchDocument(doc.kind, {
+                                notifyDaysBefore: Number.isFinite(n)
+                                  ? Math.min(365, n)
+                                  : DEFAULT_VEHICLE_NOTIFY_DAYS,
+                              });
+                            }}
+                            className="h-9 font-mono text-[12px]"
+                            placeholder="30"
+                          />
+                        </div>
+                      </div>
+                      <div className="mt-2">
+                        {doc.file ? (
+                          <div className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/80 px-2.5 py-2">
+                            <FileText className="h-3.5 w-3.5 shrink-0 text-black/40" />
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-[12px] font-medium text-black">
+                                {doc.file.name}
+                              </div>
+                              <div className="font-mono text-[10px] text-black/45">
+                                {formatAttachmentSize(doc.file.size)}
+                              </div>
+                            </div>
+                            <a
+                              href={doc.file.dataUrl}
+                              download={doc.file.name}
+                              target="_blank"
+                              rel="noreferrer noopener"
+                              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-black/60 hover:bg-white"
+                              aria-label={`Open ${doc.file.name}`}
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => patchDocument(doc.kind, { file: undefined })}
+                              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-red-200 text-red-600 hover:bg-red-50"
+                              aria-label={`Remove ${doc.file.name}`}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="inline-flex h-9 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-dashed border-slate-300 bg-white text-[12px] font-medium text-black/70 transition-colors hover:border-slate-400 hover:bg-slate-50">
+                            <Upload className="h-3.5 w-3.5" />
+                            Attach file
+                            <input
+                              type="file"
+                              accept="image/*,.pdf,.jpg,.jpeg,.png,.webp"
+                              className="hidden"
+                              onChange={(e) => {
+                                void attachDocument(doc.kind, e.target.files);
+                                e.target.value = "";
+                              }}
+                            />
+                          </label>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-black/40">
+                PDF or images · up to {formatAttachmentSize(MAX_VEHICLE_DOC_BYTES)} each ·
+                notifications appear under Notifications → Transport
+              </p>
+            </div>
+
             <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] px-3 py-2.5">
               <input
                 type="checkbox"
@@ -6216,7 +7308,7 @@ function VehicleCard({
                 onChange={(e) => setForm({ ...form, active: e.target.checked })}
                 className="h-4 w-4 rounded border-black/20 accent-black"
               />
-              <span className="text-[13px] font-medium text-black">Active in fleet</span>
+              <span className="text-[12.5px] font-medium text-black">Active in fleet</span>
             </label>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
@@ -6229,9 +7321,10 @@ function VehicleCard({
           </form>
         </DialogContent>
       </Dialog>
-    </OrganicCard>
+    </>
   );
 }
+
 
 function TransportCard({
   transportRoutes,
@@ -7162,7 +8255,12 @@ function CategoriesCard({
   };
 
   return (
-    <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
+    <OrganicCard
+      tone="white"
+      cornerSide="tr"
+      padded
+      className={cn(workspacePanelClass, "col-span-12")}
+    >
       <div className="text-[18px] font-bold leading-tight tracking-tight text-black">
         System Constants
       </div>
@@ -7170,8 +8268,8 @@ function CategoriesCard({
         Academic year, workspace density, and navigation dock placement
       </p>
 
-      <div className="mt-4 grid gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3.5">
-        <div>
+      <div className="mt-4 grid grid-cols-12 gap-3">
+        <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-8">
           <div className="flex items-center justify-between">
             <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
               Academic Year
@@ -7220,33 +8318,43 @@ function CategoriesCard({
               value={yearDraft}
               onChange={(e) => setYearDraft(e.target.value)}
               placeholder="e.g. 2027-28"
-              className="flex-1"
+              className="min-w-0 flex-1"
             />
-            <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+            <Button
+              type="submit"
+              className="shrink-0 rounded-full bg-black text-white hover:bg-black/85"
+            >
               <Plus className="mr-1 h-3.5 w-3.5" /> Add
             </Button>
           </form>
         </div>
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <ThemeSelect
-            label="Density"
-            value={themeSettings.density}
-            options={THEME_DENSITY_OPTIONS}
-            onChange={(density) => {
-              setThemeSettings((prev) => ({ ...prev, density }));
-              toast.success(`Workspace density set to ${density}`);
-            }}
-          />
-          <ThemeSelect
-            label="Navigation"
-            value={themeSettings.navPlacement ?? "Left"}
-            options={THEME_NAV_PLACEMENT_OPTIONS}
-            onChange={(navPlacement) => {
-              setThemeSettings((prev) => ({ ...prev, navPlacement }));
-              toast.success(`Navigation dock moved to ${navPlacement}`);
-            }}
-          />
+        <div className="col-span-12 grid grid-cols-12 gap-3 sm:col-span-12 lg:col-span-4">
+          <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 sm:col-span-6 lg:col-span-12">
+            <ThemeSelect
+              label="Density"
+              value={themeSettings.density}
+              options={THEME_DENSITY_OPTIONS}
+              onChange={(density) => {
+                setThemeSettings((prev) => ({ ...prev, density }));
+                toast.success(`Workspace density set to ${density}`);
+              }}
+            />
+          </div>
+          <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 sm:col-span-6 lg:col-span-12">
+            <ThemeSelect
+              label="Navigation"
+              value={themeSettings.navPlacement ?? "Left"}
+              options={THEME_NAV_PLACEMENT_OPTIONS}
+              onChange={(navPlacement) => {
+                setThemeSettings((prev) => ({ ...prev, navPlacement }));
+                notifyNavPlacementChange(navPlacement);
+                window.setTimeout(() => {
+                  toast.success(`Navigation dock moved to ${navPlacement}`);
+                }, 0);
+              }}
+            />
+          </div>
         </div>
       </div>
 

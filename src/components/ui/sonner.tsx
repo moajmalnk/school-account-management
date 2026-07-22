@@ -1,12 +1,59 @@
+import { useEffect, useState } from "react";
 import { Toaster as Sonner } from "sonner";
+
+import {
+  getStoredNavPlacement,
+  NAV_PLACEMENT_CHANGE_EVENT,
+  type ThemeSettings,
+} from "@/lib/tenant-store";
 
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
+function resolveToastPosition(placement: ThemeSettings["navPlacement"]): ToasterProps["position"] {
+  return placement === "Bottom" ? "top-right" : "bottom-center";
+}
+
 const Toaster = ({ ...props }: ToasterProps) => {
+  const [position, setPosition] = useState<ToasterProps["position"]>(() =>
+    resolveToastPosition(getStoredNavPlacement()),
+  );
+
+  useEffect(() => {
+    const sync = (placement?: ThemeSettings["navPlacement"]) => {
+      setPosition(resolveToastPosition(placement ?? getStoredNavPlacement()));
+    };
+
+    const onPlacement = (event: Event) => {
+      const detail = (event as CustomEvent<ThemeSettings["navPlacement"]>).detail;
+      sync(detail);
+    };
+
+    const onStorage = (event: StorageEvent) => {
+      if (event.key && !event.key.includes("tenant-store")) return;
+      sync();
+    };
+
+    window.addEventListener(NAV_PLACEMENT_CHANGE_EVENT, onPlacement);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(NAV_PLACEMENT_CHANGE_EVENT, onPlacement);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, []);
+
   return (
     <Sonner
+      key={position}
       theme="light"
       className="toaster group"
+      position={position}
+      richColors
+      closeButton
+      expand
+      offset={28}
+      gap={12}
+      visibleToasts={4}
+      duration={4500}
       toastOptions={{
         unstyled: false,
         classNames: {
@@ -35,6 +82,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
         } as React.CSSProperties
       }
       {...props}
+      position={position}
     />
   );
 };
