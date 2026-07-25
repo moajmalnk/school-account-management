@@ -348,28 +348,28 @@ export function TenantDesktopTopBar() {
       <header
         className={cn(
           glassPanelClass,
-          "mb-5 hidden items-center justify-between gap-4 rounded-lg px-5 py-3.5 md:flex",
+          "mb-5 hidden items-center justify-between gap-3 rounded-lg px-4 py-3.5 md:flex md:gap-4 md:px-5",
         )}
       >
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h1 className="truncate text-[15px] font-bold uppercase tracking-wide text-slate-900 xl:text-[16px]">
             {tenantName}
           </h1>
-          <p className="mt-0.5 text-[11px] text-slate-500">Tenant administration workspace</p>
+          <p className="mt-0.5 truncate text-[11px] text-slate-500">Tenant administration workspace</p>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="glass-inset flex items-center gap-2 rounded-lg px-3 py-2 text-[12px] font-semibold text-slate-800 transition-colors hover:bg-white/50"
+                className="glass-inset flex max-w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[12px] font-semibold text-slate-800 transition-colors hover:bg-white/50 sm:px-3"
               >
-                <span>{academicYear}</span>
-                <span className="rounded-full bg-[#10B981]/15 px-2 py-0.5 text-[10px] font-bold text-[#10B981]">
+                <span className="truncate">{academicYear}</span>
+                <span className="hidden rounded-full bg-[#10B981]/15 px-2 py-0.5 text-[10px] font-bold text-[#10B981] sm:inline">
                   Active
                 </span>
-                <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-500" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent

@@ -18,6 +18,7 @@ import {
   X,
   Camera,
   Check,
+  ClipboardList,
   Share2,
   ChevronDown,
   ArrowDownToLine,
@@ -35,6 +36,8 @@ import {
   TriangleAlert,
   Users,
   Filter,
+  Recycle,
+  RotateCcw,
   Search,
   Bus,
   Calendar,
@@ -98,6 +101,13 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -126,6 +136,7 @@ import {
   type ClassConfig,
   type Department,
   type Payment,
+  type PaymentAttachment,
   type PaymentCategory,
   type Role,
   type SchoolDetails,
@@ -142,10 +153,20 @@ import {
 import { StudentProfileDetail } from "@/components/school/StudentProfileDetail";
 import { ShareParentLinkDialog } from "@/components/school/ShareParentLinkDialog";
 import { StaffProfileDetail } from "@/components/school/StaffProfileDetail";
-import { EnrollmentStatusBadge, isRecordActive } from "@/components/school/ProfileAccountActions";
+import {
+  EnrollmentStatusBadge,
+  isRecordActive,
+  isRecordDeleted,
+} from "@/components/school/ProfileAccountActions";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  sendWhatsAppNotify,
+  toNotifyWhatsAppNumber,
+} from "@/lib/whatsapp-notify";
 import { FinanceBarCard, FinanceDonutCard } from "@/components/school/finance-charts";
 import {
   BalanceSheetReport,
+  BankReconciliationReport,
   DayBookReport,
   FeesReport,
   GeneralLedgerReport,
@@ -251,20 +272,13 @@ const PENDING_OBLIGATIONS = [
 ];
 
 type PendingObligation = (typeof PENDING_OBLIGATIONS)[number];
-type PaymentAttachment = {
-  id: string;
-  name: string;
-  mimeType: string;
-  size: number;
-  dataUrl: string;
-};
 type MadePayment = Omit<(typeof MADE_PAYMENTS)[number], "status"> & {
   status: "Queued" | "Cleared";
   attachments?: PaymentAttachment[];
 };
 
-const MAX_DISBURSAL_ATTACHMENTS = 8;
-const MAX_DISBURSAL_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+const MAX_PAYMENT_ATTACHMENTS = 8;
+const MAX_PAYMENT_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 
 function formatAttachmentSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -387,8 +401,17 @@ const MobileSectionTitle = MobileDashboardSectionTitle;
 const mobileOutlineBtn =
   "inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full border border-slate-200/80 bg-white px-4 text-[12.5px] font-semibold text-slate-900 shadow-sm transition-colors hover:bg-slate-50";
 
+/** Equal-width outline actions for directory toolbars on small screens */
+const directoryToolbarBtn = cn(
+  mobileOutlineBtn,
+  "min-w-0 flex-1 gap-1 px-2 text-[11.5px] sm:flex-none sm:gap-1.5 sm:px-4 sm:text-[12.5px]",
+);
+
 const mobilePrimaryBtn =
   "inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 px-4 text-[12.5px] font-semibold text-white shadow-md shadow-blue-200/40 transition-all duration-200 hover:opacity-95";
+
+const directoryToolbarRow =
+  "flex w-full min-w-0 items-center gap-1.5 sm:w-auto sm:flex-wrap sm:justify-end sm:gap-2";
 
 function MobileCompactStat({
   label,
@@ -431,7 +454,7 @@ function MobileStatsOverview({
   }[];
 }) {
   return (
-    <section className="w-full space-y-3 md:hidden">
+    <section className="w-full space-y-3 lg:hidden">
       <MobileSectionTitle>Overview</MobileSectionTitle>
       <div className={cn(premiumCardClass, "grid grid-cols-3 divide-x divide-slate-100 p-0")}>
         {items.map((item) => (
@@ -532,6 +555,7 @@ type MobileDashboardMetrics = {
   unreadNotifications: number;
   onReceivePayment: () => void;
   onMakePayment: () => void;
+  onAdmitStudent: () => void;
 };
 
 function MobilePremiumDashboard({
@@ -547,6 +571,7 @@ function MobilePremiumDashboard({
   unreadNotifications,
   onReceivePayment,
   onMakePayment,
+  onAdmitStudent,
 }: MobileDashboardMetrics) {
   return (
     <div className="w-full space-y-6 md:hidden">
@@ -572,6 +597,14 @@ function MobilePremiumDashboard({
             />
           </div>
         </div>
+        <button
+          type="button"
+          onClick={onAdmitStudent}
+          className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#2563EB] px-3 py-2.5 text-[12.5px] font-semibold text-white shadow-sm transition-opacity hover:opacity-90 active:scale-[0.99]"
+        >
+          <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+          New Admission
+        </button>
       </section>
 
       <section className="w-full space-y-3">
@@ -666,21 +699,21 @@ function MobilePremiumDashboard({
         </Link>
       )}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3">
         <button
           type="button"
           onClick={onReceivePayment}
           className={cn(
             premiumCardClass,
-            "flex min-h-[88px] items-center gap-3 p-4 text-left transition-colors hover:border-slate-200",
+            "flex min-h-[96px] flex-col items-start gap-2.5 p-3 text-left transition-colors hover:border-slate-200 sm:min-h-[88px] sm:flex-row sm:items-center sm:gap-3 sm:p-4",
           )}
         >
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-[#D1F2E1]">
-            <ArrowDownToLine className="h-5 w-5 text-[#10B981]" />
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#D1F2E1] sm:h-11 sm:w-11">
+            <ArrowDownToLine className="h-4 w-4 text-[#10B981] sm:h-5 sm:w-5" />
           </span>
           <div className="min-w-0">
-            <div className="text-[14px] font-bold text-slate-900">Receive payment</div>
-            <p className="mt-0.5 text-[12px] text-slate-500">Capture inbound fee receipts</p>
+            <div className="text-[12px] font-bold leading-snug text-slate-900 sm:text-[14px]">Receive payment</div>
+            <p className="mt-0.5 text-[10px] leading-snug text-slate-500 sm:text-[12px]">Capture inbound fee receipts</p>
           </div>
         </button>
         <button
@@ -688,15 +721,15 @@ function MobilePremiumDashboard({
           onClick={onMakePayment}
           className={cn(
             premiumCardClass,
-            "flex min-h-[88px] items-center gap-3 p-4 text-left transition-colors hover:border-slate-200",
+            "flex min-h-[96px] flex-col items-start gap-2.5 p-3 text-left transition-colors hover:border-slate-200 sm:min-h-[88px] sm:flex-row sm:items-center sm:gap-3 sm:p-4",
           )}
         >
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-[#DBEAFE]">
-            <ArrowUpFromLine className="h-5 w-5 text-[#2563EB]" />
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#DBEAFE] sm:h-11 sm:w-11">
+            <ArrowUpFromLine className="h-4 w-4 text-[#2563EB] sm:h-5 sm:w-5" />
           </span>
           <div className="min-w-0">
-            <div className="text-[14px] font-bold text-slate-900">Make payment</div>
-            <p className="mt-0.5 text-[12px] text-slate-500">Pay vendors and salaries</p>
+            <div className="text-[12px] font-bold leading-snug text-slate-900 sm:text-[14px]">Make payment</div>
+            <p className="mt-0.5 text-[10px] leading-snug text-slate-500 sm:text-[12px]">Pay vendors and salaries</p>
           </div>
         </button>
       </div>
@@ -763,8 +796,10 @@ function GlassDesktopDashboard({
 }: GlassDesktopDashboardProps) {
   const { session } = useAuth();
   const { schoolDetails } = useTenantStore();
-  const paidCount = students.filter((s) => s.due === 0).length;
-  const activeStaff = staff.filter((s) => s.active).length;
+  const liveStudents = students.filter((s) => !isRecordDeleted(s.deletedAt));
+  const liveStaff = staff.filter((s) => !isRecordDeleted(s.deletedAt));
+  const paidCount = liveStudents.filter((s) => s.due === 0).length;
+  const activeStaff = liveStaff.filter((s) => s.active).length;
   const tenantName = schoolDetails.name || session?.tenantName || "Silver Hills Global";
   const displayName = session?.displayName ?? "Tenant Admin";
 
@@ -800,7 +835,7 @@ function GlassDesktopDashboard({
   const overflowTodos = dashboardTodos.slice(4);
 
   const admissionWeeks = useMemo(() => {
-    const base = Math.max(1, Math.round(students.length / 5));
+    const base = Math.max(1, Math.round(liveStudents.length / 5));
     return [
       { label: "W1", value: Math.max(1, base - 1) },
       { label: "W2", value: base },
@@ -808,7 +843,7 @@ function GlassDesktopDashboard({
       { label: "W4", value: Math.max(1, base - 1) },
       { label: "W5", value: base + 2 },
     ];
-  }, [students.length]);
+  }, [liveStudents.length]);
 
   const incomeExpenseWeeks = useMemo(
     () => buildIncomeExpenseSeries(periodPayments, expenseTotal, period, customRange),
@@ -870,10 +905,10 @@ function GlassDesktopDashboard({
                 </div>
                 <div className="flex flex-1 flex-col items-center justify-center">
                   <div className={cn(dashboardCountClass, "text-slate-900")}>
-                    {students.length}
+                    {liveStudents.length}
                   </div>
                   <div className="mt-1 text-[11px] font-medium text-[#10B981]">
-                    {paidCount} paid · {students.length - paidCount} overdue
+                    {paidCount} paid · {liveStudents.length - paidCount} overdue
                   </div>
                 </div>
               </button>
@@ -893,10 +928,10 @@ function GlassDesktopDashboard({
                 </div>
                 <div className="flex flex-1 flex-col items-center justify-center">
                   <div className={cn(dashboardCountClass, "text-slate-900")}>
-                    {staff.length}
+                    {liveStaff.length}
                   </div>
                   <div className="mt-1 text-[11px] font-medium text-slate-500">
-                    {activeStaff} active · {staff.length - activeStaff} inactive
+                    {activeStaff} active · {liveStaff.length - activeStaff} inactive
                   </div>
                 </div>
               </button>
@@ -1467,8 +1502,10 @@ export function SchoolDashboard() {
   const [period, setPeriod] = useState<PaymentPeriod>("this_month");
   const [customRange, setCustomRange] = useState<CustomDateRange>({ from: "", to: "" });
 
-  const totalDue = students.reduce((acc, s) => acc + s.due, 0);
-  const overdueStudents = students.filter((s) => s.due > 0);
+  const liveStudents = students.filter((s) => !isRecordDeleted(s.deletedAt));
+  const liveStaff = staff.filter((s) => !isRecordDeleted(s.deletedAt));
+  const totalDue = liveStudents.reduce((acc, s) => acc + s.due, 0);
+  const overdueStudents = liveStudents.filter((s) => s.due > 0);
 
   const filteredPayments = useMemo(
     () => filterPaymentsByPeriod(payments, period, customRange),
@@ -1499,8 +1536,8 @@ export function SchoolDashboard() {
   return (
     <div className="space-y-4 sm:space-y-6">
       <MobilePremiumDashboard
-        studentCount={students.length}
-        staffCount={staff.length}
+        studentCount={liveStudents.length}
+        staffCount={liveStaff.length}
         periodIncome={periodIncome}
         expenseTotal={expenseTotal}
         totalDue={totalDue}
@@ -1511,6 +1548,7 @@ export function SchoolDashboard() {
         unreadNotifications={unreadNotifications}
         onReceivePayment={() => navigate({ to: "/tenant/finance", search: { tab: "receive" } })}
         onMakePayment={() => navigate({ to: "/tenant/finance", search: { tab: "make" } })}
+        onAdmitStudent={() => navigate({ to: "/tenant/students/admit" })}
       />
 
       <GlassDesktopDashboard
@@ -1640,25 +1678,147 @@ const directoryStatValueClass =
 function DirectoryPersonAvatar({ name, photoUrl }: { name: string; photoUrl?: string }) {
   if (photoUrl) {
     return (
-      <img src={photoUrl} alt="" className="h-11 w-11 shrink-0 rounded-lg object-cover ring-1 ring-black/5" />
+      <img
+        src={photoUrl}
+        alt=""
+        className="h-9 w-9 shrink-0 rounded-lg object-cover ring-1 ring-black/5 sm:h-10 sm:w-10"
+      />
     );
   }
   return (
-    <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-black text-[12px] font-semibold text-white">
+    <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-black text-[11px] font-semibold text-white sm:h-10 sm:w-10 sm:text-[12px]">
       {personInitials(name)}
     </div>
   );
 }
 
+const directoryMobileListClass =
+  "mx-auto grid w-full max-w-[min(100%,20.5rem)] grid-cols-1 gap-2.5 sm:max-w-md md:max-w-3xl md:grid-cols-2 md:gap-3";
+
 const directoryMobileCardClass = cn(
   premiumCardClass,
-  "flex flex-col gap-3 p-4 text-left transition-all active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-2",
+  "flex w-full min-w-0 flex-col gap-2.5 p-3 text-left transition-all active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-2 sm:gap-3 sm:p-3.5",
 );
 
 const directoryEmptyClass = cn(
   premiumCardClass,
   "border-dashed px-4 py-10 text-center text-[13px] text-slate-500",
 );
+
+function DirectoryFloatingAddButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-4 z-40 grid h-14 w-14 place-items-center rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xl shadow-blue-900/30 transition-all duration-200 hover:opacity-95 active:scale-95 md:hidden"
+    >
+      <Plus className="h-6 w-6" strokeWidth={2.5} />
+    </button>
+  );
+}
+
+function FinanceFloatingPaymentActions({
+  onReceive,
+  onMake,
+}: {
+  onReceive: () => void;
+  onMake: () => void;
+}) {
+  return (
+    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-40 px-3 md:hidden">
+      <div className="pointer-events-auto mx-auto flex max-w-lg gap-2">
+        <button
+          type="button"
+          onClick={onReceive}
+          aria-label="Receive payment"
+          className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full border border-[#A7F3D0] bg-[#D1F2E1] px-3 text-[12.5px] font-semibold text-[#065F46] shadow-lg shadow-emerald-900/10 transition-transform active:scale-[0.98]"
+        >
+          <ArrowDownToLine className="h-4 w-4 shrink-0" />
+          <span className="truncate">Receive</span>
+        </button>
+        <button
+          type="button"
+          onClick={onMake}
+          aria-label="Make payment"
+          className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full border border-[#BFDBFE] bg-[#DBEAFE] px-3 text-[12.5px] font-semibold text-[#1D4ED8] shadow-lg shadow-blue-900/10 transition-transform active:scale-[0.98]"
+        >
+          <ArrowUpFromLine className="h-4 w-4 shrink-0" />
+          <span className="truncate">Make</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function DirectoryRecycleBinList({
+  items,
+  emptyLabel,
+  subtitleFor,
+  onRestore,
+  onPurge,
+}: {
+  items: { id: string; name: string; photoUrl?: string; deletedAt?: string }[];
+  emptyLabel: string;
+  subtitleFor: (item: { id: string; name: string; deletedAt?: string }) => string;
+  onRestore: (id: string) => void;
+  onPurge: (id: string) => void;
+}) {
+  if (items.length === 0) {
+    return <div className={directoryEmptyClass}>{emptyLabel}</div>;
+  }
+
+  return (
+    <div className={directoryMobileListClass}>
+      {items.map((item) => {
+        const deletedLabel = item.deletedAt
+          ? new Date(item.deletedAt).toLocaleString("en-IN", {
+              dateStyle: "medium",
+              timeStyle: "short",
+            })
+          : "Deleted";
+        return (
+          <div
+            key={item.id}
+            className={cn(directoryMobileCardClass, "cursor-default sm:flex-row sm:items-center sm:justify-between")}
+          >
+            <div className="flex min-w-0 items-center gap-3">
+              <DirectoryPersonAvatar name={item.name} photoUrl={item.photoUrl} />
+              <div className="min-w-0">
+                <div className="truncate text-[14px] font-semibold leading-tight text-black">
+                  {item.name}
+                </div>
+                <div className="mt-0.5 truncate font-mono text-[10.5px] text-black/45">
+                  {subtitleFor(item)}
+                </div>
+                <div className="mt-1 text-[11px] text-black/40">Deleted {deletedLabel}</div>
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2 sm:justify-end">
+              <button
+                type="button"
+                onClick={() => onRestore(item.id)}
+                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#BFDBFE] bg-[#EFF6FF] px-3 text-[12px] font-semibold text-[#1D4ED8] transition-colors hover:bg-[#DBEAFE]"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                Restore
+              </button>
+              <button
+                type="button"
+                onClick={() => onPurge(item.id)}
+                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#FECACA] bg-[#FEF2F2] px-3 text-[12px] font-semibold text-[#EF4444] transition-colors hover:bg-[#FEE2E2]"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function StudentFeesStatusBadge({ due }: { due: number }) {
   if (due === 0) {
@@ -1677,26 +1837,98 @@ function StudentFeesStatusBadge({ due }: { due: number }) {
   );
 }
 
-function StudentsDirectoryTable({
-  students,
-  onViewProfile,
-  onEditData,
+function DirectoryEnrollmentStatusControl({
+  active,
+  onChange,
 }: {
-  students: Student[];
-  onViewProfile: (id: string) => void;
-  onEditData: (id: string) => void;
+  active: boolean;
+  onChange: (nextActive: boolean) => void;
 }) {
   return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+          aria-label={`Change status · currently ${active ? "Active" : "Inactive"}`}
+          className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-1"
+        >
+          <EnrollmentStatusBadge active={active} className="cursor-pointer hover:opacity-90" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        sideOffset={6}
+        collisionPadding={12}
+        className="z-[250] w-40 rounded-lg border-[#E5E5E5] bg-white p-1 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <DropdownMenuItem
+          className="cursor-pointer rounded-md text-[13px]"
+          disabled={active}
+          onClick={() => onChange(true)}
+        >
+          Active
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          className="cursor-pointer rounded-md text-[13px]"
+          disabled={!active}
+          onClick={() => onChange(false)}
+        >
+          Inactive
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function StudentsDirectoryTable({
+  students,
+  selectedIds,
+  onToggleSelect,
+  onToggleSelectAll,
+  onViewProfile,
+  onEditData,
+  onChangeStatus,
+}: {
+  students: Student[];
+  selectedIds: Set<string>;
+  onToggleSelect: (id: string, selected: boolean) => void;
+  onToggleSelectAll: (selected: boolean) => void;
+  onViewProfile: (id: string) => void;
+  onEditData: (id: string) => void;
+  onChangeStatus: (id: string, nextActive: boolean) => void;
+}) {
+  const allSelected = students.length > 0 && students.every((s) => selectedIds.has(s.id));
+  const someSelected = students.some((s) => selectedIds.has(s.id));
+
+  return (
     <>
-      <div className="space-y-2.5 md:hidden">
+      <div className={cn(directoryMobileListClass, "lg:hidden")}>
+        {students.length > 0 && (
+          <div className="flex items-center gap-2 px-0.5 md:col-span-2">
+            <Checkbox
+              checked={allSelected ? true : someSelected ? "indeterminate" : false}
+              onCheckedChange={(v) => onToggleSelectAll(v === true)}
+              aria-label="Select all students"
+            />
+            <span className="text-[12px] font-medium text-slate-500">
+              {allSelected ? "All selected" : someSelected ? `${selectedIds.size} selected` : "Select all"}
+            </span>
+          </div>
+        )}
         {students.length === 0 && (
-          <div className={directoryEmptyClass}>
+          <div className={cn(directoryEmptyClass, "md:col-span-2")}>
             No students match the current filters.
           </div>
         )}
         {students.map((student) => {
           const digits = phoneDigits(student.phone);
           const hasPhone = digits.length > 0;
+          const waHref = `https://wa.me/${digits.length === 10 ? "91" : ""}${digits}`;
+          const isSelected = selectedIds.has(student.id);
+          const isActive = isRecordActive(student.active);
           return (
             <div
               key={student.id}
@@ -1710,16 +1942,31 @@ function StudentsDirectoryTable({
                 }
               }}
               aria-label={`Open profile for ${student.name}`}
-              className={cn(directoryMobileCardClass, "cursor-pointer")}
+              className={cn(
+                directoryMobileCardClass,
+                "cursor-pointer",
+                isSelected && "ring-2 ring-[#2563EB]/35",
+              )}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    className="shrink-0"
+                  >
+                    <Checkbox
+                      checked={isSelected}
+                      onCheckedChange={(v) => onToggleSelect(student.id, v === true)}
+                      aria-label={`Select ${student.name}`}
+                    />
+                  </div>
                   <DirectoryPersonAvatar name={student.name} photoUrl={student.photoUrl} />
                   <div className="min-w-0">
-                    <div className="truncate text-[14px] font-semibold leading-tight text-slate-900">
+                    <div className="truncate text-[13.5px] font-semibold leading-tight text-slate-900 sm:text-[14px]">
                       {student.name}
                     </div>
-                    <div className="mt-0.5 truncate font-mono text-[10.5px] text-slate-400">
+                    <div className="mt-0.5 truncate font-mono text-[10px] text-slate-400 sm:text-[10.5px]">
                       {student.id}
                     </div>
                   </div>
@@ -1727,56 +1974,78 @@ function StudentsDirectoryTable({
                 <StudentFeesStatusBadge due={student.due} />
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex max-w-full truncate rounded-full bg-[#DBEAFE] px-2.5 py-1 text-[10.5px] font-semibold text-[#0F172A]">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <span className="inline-flex max-w-full truncate rounded-full bg-[#DBEAFE] px-2 py-0.5 text-[10px] font-semibold text-[#0F172A] sm:px-2.5 sm:py-1 sm:text-[10.5px]">
                   {student.cls}
                 </span>
-                <EnrollmentStatusBadge active={isRecordActive(student.active)} />
+                <DirectoryEnrollmentStatusControl
+                  active={isActive}
+                  onChange={(next) => onChangeStatus(student.id, next)}
+                />
               </div>
 
-              <div className="flex items-center justify-between gap-2 border-t border-[#F0F0F0] pt-2.5">
+              <div className="flex items-center justify-between gap-2 border-t border-[#F0F0F0] pt-2 sm:pt-2.5">
                 <div className="min-w-0">
-                  <div className="truncate text-[12px] font-medium text-black/75">
+                  <div className="truncate text-[11.5px] font-medium text-black/75 sm:text-[12px]">
                     {student.guardian}
                   </div>
-                  <div className="mt-0.5 truncate font-mono text-[10.5px] text-black/45">
+                  <div className="mt-0.5 truncate font-mono text-[10px] text-black/45 sm:text-[10.5px]">
                     {hasPhone ? formatPhone(student.phone) : "No contact on file"}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEditData(student.id);
-                  }}
-                  aria-label={`Edit data for ${student.name}`}
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-[#E5E5E5] bg-[#F4F4F5] text-black/60 transition-colors hover:border-black/20 hover:bg-white hover:text-black"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <ContactAction
+                    icon={Phone}
+                    label="Call"
+                    accent="ink"
+                    disabled={!hasPhone}
+                    onClick={() => {
+                      window.location.href = `tel:${digits}`;
+                    }}
+                  />
+                  <ContactAction
+                    icon={MessageCircle}
+                    label="WhatsApp"
+                    accent="emerald"
+                    disabled={!hasPhone}
+                    onClick={() => {
+                      window.open(waHref, "_blank", "noopener,noreferrer");
+                      toast.success(`WhatsApp opened for ${student.guardian}`);
+                    }}
+                  />
+                </div>
               </div>
             </div>
           );
         })}
       </div>
 
-      <div className="mobile-scrollbar-none hidden w-full overflow-x-auto md:block">
+      <div className="mobile-scrollbar-none hidden w-full max-w-full overflow-x-auto lg:block">
         <div className={glassTableWrapClass}>
-      <table className="w-full min-w-[720px] table-fixed border-collapse text-left">
+      <table className="w-full min-w-[900px] table-fixed border-collapse text-left">
         <colgroup>
-          <col className="w-[26%]" />
+          <col className="w-[44px]" />
+          <col className="w-[20%]" />
+          <col className="w-[15%]" />
           <col className="w-[12%]" />
-          <col className="w-[12%]" />
-          <col className="w-[26%]" />
-          <col className="w-[24%]" />
+          <col className="w-[21%]" />
+          <col className="w-[28%]" />
         </colgroup>
         <thead>
           <tr>
+            <th className="border-b border-slate-100 px-3 pb-4 pt-4 sm:px-4 lg:px-5 sm:pt-5">
+              <Checkbox
+                checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                onCheckedChange={(v) => onToggleSelectAll(v === true)}
+                aria-label="Select all students"
+                disabled={students.length === 0}
+              />
+            </th>
             {["Student", "Class", "Status", "Guardian & Contact", "Fees Status"].map((header) => (
               <th
                 key={header}
                 className={cn(
-                  "border-b border-slate-100 px-4 pb-4 pt-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400 sm:px-6 sm:pt-5",
+                  "border-b border-slate-100 px-3 pb-4 pt-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400 sm:px-4 lg:px-6 sm:pt-5",
                   header === "Fees Status" && "text-right",
                 )}
               >
@@ -1788,7 +2057,7 @@ function StudentsDirectoryTable({
         <tbody>
           {students.length === 0 && (
             <tr>
-              <td colSpan={5} className="px-4 py-10 text-center text-[13px] text-black/55 sm:px-6">
+              <td colSpan={6} className="px-4 py-10 text-center text-[13px] text-black/55 sm:px-6">
                 No students match the current filters.
               </td>
             </tr>
@@ -1797,6 +2066,8 @@ function StudentsDirectoryTable({
             const digits = phoneDigits(student.phone);
             const hasPhone = digits.length > 0;
             const waHref = `https://wa.me/${digits.length === 10 ? "91" : ""}${digits}`;
+            const isSelected = selectedIds.has(student.id);
+            const isActive = isRecordActive(student.active);
             return (
               <tr
                 key={student.id}
@@ -1810,9 +2081,23 @@ function StudentsDirectoryTable({
                   }
                 }}
                 aria-label={`Open profile for ${student.name}`}
-                className="cursor-pointer border-b border-slate-50 transition-colors last:border-0 hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2563EB]"
+                className={cn(
+                  "cursor-pointer border-b border-slate-50 transition-colors last:border-0 hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2563EB]",
+                  isSelected && "bg-[#EFF6FF]/70 hover:bg-[#EFF6FF]",
+                )}
               >
-                <td className="px-4 py-3.5 align-middle sm:px-6">
+                <td
+                  className="px-3 py-3.5 align-middle sm:px-4 lg:px-5"
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => e.stopPropagation()}
+                >
+                  <Checkbox
+                    checked={isSelected}
+                    onCheckedChange={(v) => onToggleSelect(student.id, v === true)}
+                    aria-label={`Select ${student.name}`}
+                  />
+                </td>
+                <td className="px-3 py-3.5 align-middle sm:px-4 lg:px-6">
                   <div className="flex min-w-0 items-center gap-3">
                     {student.photoUrl ? (
                       <img
@@ -1835,15 +2120,21 @@ function StudentsDirectoryTable({
                     </div>
                   </div>
                 </td>
-                <td className="px-4 py-3.5 align-middle sm:px-6">
-                  <span className="inline-flex max-w-full truncate rounded-full bg-[#DBEAFE] px-2.5 py-1 text-[11px] font-medium text-black">
+                <td className="min-w-0 px-3 py-3.5 align-middle sm:px-4 lg:px-6">
+                  <span
+                    title={student.cls}
+                    className="block w-fit max-w-full truncate rounded-full bg-[#DBEAFE] px-2.5 py-1 text-[11px] font-medium text-black"
+                  >
                     {student.cls}
                   </span>
                 </td>
-                <td className="px-4 py-3.5 align-middle sm:px-6">
-                  <EnrollmentStatusBadge active={isRecordActive(student.active)} />
+                <td className="px-3 py-3.5 align-middle sm:px-4 lg:px-6">
+                  <DirectoryEnrollmentStatusControl
+                    active={isActive}
+                    onChange={(next) => onChangeStatus(student.id, next)}
+                  />
                 </td>
-                <td className="px-4 py-3.5 align-middle sm:px-6">
+                <td className="min-w-0 px-3 py-3.5 align-middle sm:px-4 lg:px-6">
                   <div className="min-w-0">
                     <div className="truncate text-[13px] font-medium text-black">
                       {student.guardian}
@@ -1853,8 +2144,8 @@ function StudentsDirectoryTable({
                     </div>
                   </div>
                 </td>
-                <td className="px-4 py-3.5 align-middle sm:px-6">
-                  <div className="flex w-full items-center justify-end gap-3">
+                <td className="px-3 py-3.5 align-middle sm:px-4 lg:px-6">
+                  <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
                     <div className="flex shrink-0 items-center gap-1">
                       <ContactAction
                         icon={MessageCircle}
@@ -1963,7 +2254,7 @@ export function AdmitStudentPage() {
     const newStu = createStudent();
     if (!newStu) return;
     toast.success(`${newStu.name} admitted`, {
-      description: `${newStu.id} · ${newStu.cls} · share the parent link to complete the profile`,
+      description: `${newStu.id} · ${newStu.cls} · send the collection link to complete the profile`,
     });
     navigate({ to: "/tenant/students", search: { id: newStu.id } });
   };
@@ -1973,7 +2264,7 @@ export function AdmitStudentPage() {
     const newStu = createStudent();
     if (!newStu?.shareToken) return;
     toast.success(`${newStu.name} admitted`, {
-      description: `${newStu.id} · share link ready for parents`,
+      description: `${newStu.id} · collection link ready for parents`,
     });
     setAdmittedId(newStu.id);
     setShareToken(newStu.shareToken);
@@ -2002,7 +2293,7 @@ export function AdmitStudentPage() {
           <div className="hidden md:block">
             <div className="text-[15px] font-bold text-slate-900">Admit New Student</div>
             <p className="text-[12px] text-slate-500">
-              Fill school details, then share a link so parents can complete the rest.
+              Fill school details, then send a collection link so parents can complete the rest.
             </p>
           </div>
         </div>
@@ -2012,7 +2303,7 @@ export function AdmitStudentPage() {
         <form onSubmit={handleAdmit} className="space-y-4">
           <div className="rounded-lg border border-[#DBEAFE] bg-[#EFF6FF]/70 px-3.5 py-3 text-[12px] text-slate-600">
             Administrators enter name, class, guardian, contact, and initial due. Parents complete
-            photo, gender, date of birth, email, and address via the share link.
+            photo, gender, date of birth, email, and address via the collection link.
           </div>
 
           <div className="space-y-1.5">
@@ -2087,8 +2378,8 @@ export function AdmitStudentPage() {
               onClick={handleAdmitAndShare}
               className="rounded-full"
             >
-              <Share2 className="mr-1.5 h-3.5 w-3.5" />
-              Admit & Share
+              <ClipboardList className="mr-1.5 h-3.5 w-3.5" />
+              Admit & Collect
             </Button>
             <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
               Admit Student
@@ -2135,7 +2426,14 @@ export function StudentsLedger() {
   const [divisionFilter, setDivisionFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [enrollmentFilter, setEnrollmentFilter] = useState<EnrollmentFilter>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showRecycleBin, setShowRecycleBin] = useState(false);
+  const [pendingPurgeId, setPendingPurgeId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [bulkWhatsAppOpen, setBulkWhatsAppOpen] = useState(false);
+  const [bulkWhatsAppMsg, setBulkWhatsAppMsg] = useState("");
+  const [bulkWhatsAppSending, setBulkWhatsAppSending] = useState(false);
 
   useEffect(() => {
     setDivisionFilter("all");
@@ -2143,19 +2441,33 @@ export function StudentsLedger() {
 
   const openAdmitPage = () => navigate({ to: "/tenant/students/admit" });
 
+  const liveStudents = useMemo(
+    () => students.filter((s) => !isRecordDeleted(s.deletedAt)),
+    [students],
+  );
+  const deletedStudents = useMemo(
+    () =>
+      students
+        .filter((s) => isRecordDeleted(s.deletedAt))
+        .sort((a, b) => (b.deletedAt ?? "").localeCompare(a.deletedAt ?? "")),
+    [students],
+  );
+
   const activeStudent = useMemo(
     () =>
-      activeStudentViewId ? (students.find((s) => s.id === activeStudentViewId) ?? null) : null,
-    [activeStudentViewId, students],
+      activeStudentViewId
+        ? (liveStudents.find((s) => s.id === activeStudentViewId) ?? null)
+        : null,
+    [activeStudentViewId, liveStudents],
   );
 
   const classDivisionIndex = useMemo(() => {
     const names = [
       ...classes.map((c) => c.className),
-      ...students.map((s) => s.cls),
+      ...liveStudents.map((s) => s.cls),
     ];
     return buildClassDivisionIndex(names);
-  }, [classes, students]);
+  }, [classes, liveStudents]);
 
   const gradeOptions = useMemo(
     () => Array.from(classDivisionIndex.keys()).sort((a, b) => a.localeCompare(b, "en")),
@@ -2172,7 +2484,8 @@ export function StudentsLedger() {
   }, [classDivisionIndex, gradeFilter]);
 
   const filtered = useMemo(() => {
-    return students
+    const q = searchQuery.trim().toLowerCase();
+    return liveStudents
       .filter((s) => studentMatchesClassDivisionFilter(s.cls, gradeFilter, divisionFilter))
       .filter((s) =>
         statusFilter === "all" ? true : statusFilter === "paid" ? s.due === 0 : s.due > 0,
@@ -2184,18 +2497,194 @@ export function StudentsLedger() {
           : enrollmentFilter === "active"
             ? active
             : !active;
+      })
+      .filter((s) => {
+        if (!q) return true;
+        const haystack = [
+          s.name,
+          s.id,
+          s.guardian,
+          s.phone ?? "",
+          s.cls,
+          s.email ?? "",
+        ]
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(q);
       });
-  }, [students, gradeFilter, divisionFilter, statusFilter, enrollmentFilter]);
+  }, [liveStudents, gradeFilter, divisionFilter, statusFilter, enrollmentFilter, searchQuery]);
+
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      if (prev.size === 0) return prev;
+      const visible = new Set(filtered.map((s) => s.id));
+      const next = new Set<string>();
+      prev.forEach((id) => {
+        if (visible.has(id)) next.add(id);
+      });
+      return next.size === prev.size ? prev : next;
+    });
+  }, [filtered]);
+
+  const selectedStudents = useMemo(
+    () => filtered.filter((s) => selectedIds.has(s.id)),
+    [filtered, selectedIds],
+  );
+
+  const selectedWithPhone = useMemo(() => {
+    return selectedStudents
+      .map((s) => ({ student: s, number: toNotifyWhatsAppNumber(s.phone) }))
+      .filter((row): row is { student: Student; number: string } => Boolean(row.number));
+  }, [selectedStudents]);
+
+  const toggleSelect = (id: string, selected: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (selected) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = (selected: boolean) => {
+    setSelectedIds((prev) => {
+      if (!selected) {
+        const next = new Set(prev);
+        filtered.forEach((s) => next.delete(s.id));
+        return next;
+      }
+      const next = new Set(prev);
+      filtered.forEach((s) => next.add(s.id));
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const selectByFeesStatus = (kind: "paid" | "overdue") => {
+    const matches = filtered.filter((s) => (kind === "paid" ? s.due === 0 : s.due > 0));
+    if (!matches.length) {
+      toast.error(
+        kind === "paid"
+          ? "No paid students in the current view"
+          : "No overdue students in the current view",
+      );
+      return;
+    }
+    setSelectedIds(new Set(matches.map((s) => s.id)));
+    toast.success(
+      kind === "paid"
+        ? `${matches.length} paid student${matches.length === 1 ? "" : "s"} selected`
+        : `${matches.length} overdue student${matches.length === 1 ? "" : "s"} selected`,
+    );
+  };
+
+  const changeStudentStatus = (id: string, nextActive: boolean) => {
+    const target = liveStudents.find((s) => s.id === id);
+    if (!target || isRecordActive(target.active) === nextActive) return;
+    setStudents((prev) => prev.map((s) => (s.id === id ? { ...s, active: nextActive } : s)));
+    toast.success(nextActive ? `${target.name} reactivated` : `${target.name} deactivated`, {
+      description: target.id,
+    });
+  };
+
+  const restoreStudent = (id: string) => {
+    const target = deletedStudents.find((s) => s.id === id);
+    if (!target) return;
+    setStudents((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, deletedAt: undefined } : s)),
+    );
+    toast.success(`${target.name} restored to directory`, { description: target.id });
+  };
+
+  const purgeStudent = (id: string) => {
+    const target = deletedStudents.find((s) => s.id === id);
+    if (!target) return;
+    setStudents((prev) => prev.filter((s) => s.id !== id));
+    setPendingPurgeId(null);
+    toast.error(`${target.name} permanently deleted`, { description: target.id });
+  };
+
+  const bulkChangeStatus = (nextActive: boolean) => {
+    if (!selectedIds.size) {
+      toast.error("Select at least one student");
+      return;
+    }
+    const ids = selectedIds;
+    setStudents((prev) =>
+      prev.map((s) => (ids.has(s.id) ? { ...s, active: nextActive } : s)),
+    );
+    toast.success(
+      nextActive
+        ? `${ids.size} student${ids.size === 1 ? "" : "s"} set to Active`
+        : `${ids.size} student${ids.size === 1 ? "" : "s"} set to Inactive`,
+    );
+    clearSelection();
+  };
+
+  const openBulkWhatsApp = () => {
+    if (!selectedIds.size) {
+      toast.error("Select at least one student");
+      return;
+    }
+    if (!selectedWithPhone.length) {
+      toast.error("No WhatsApp numbers on selected students", {
+        description: "Add guardian phone numbers before sending",
+      });
+      return;
+    }
+    setBulkWhatsAppMsg(
+      "Dear Parent, this is a message from the school office regarding your ward.",
+    );
+    setBulkWhatsAppOpen(true);
+  };
+
+  const sendBulkWhatsApp = async () => {
+    if (!bulkWhatsAppMsg.trim()) {
+      toast.error("Enter a message to send");
+      return;
+    }
+    if (!selectedWithPhone.length) {
+      toast.error("No valid phone numbers selected");
+      return;
+    }
+    setBulkWhatsAppSending(true);
+    try {
+      const numbers = selectedWithPhone.map((row) => row.number);
+      const result = await sendWhatsAppNotify({
+        numbers,
+        message: bulkWhatsAppMsg,
+      });
+      if (!result.ok) {
+        toast.error("WhatsApp send failed", {
+          description: result.body.slice(0, 180) || `HTTP ${result.status}`,
+        });
+        return;
+      }
+      const skipped = selectedStudents.length - selectedWithPhone.length;
+      toast.success(`WhatsApp sent to ${numbers.length} guardian${numbers.length === 1 ? "" : "s"}`, {
+        description: skipped > 0 ? `${skipped} skipped · no phone on file` : result.body.slice(0, 120) || "Notify API accepted",
+      });
+      setBulkWhatsAppOpen(false);
+      clearSelection();
+    } catch (err) {
+      toast.error("WhatsApp send failed", {
+        description: err instanceof Error ? err.message : "Network error",
+      });
+    } finally {
+      setBulkWhatsAppSending(false);
+    }
+  };
 
   const analytics = useMemo(
     () => ({
-      paid: students.filter((s) => s.due === 0).length,
-      overdue: students.filter((s) => s.due > 0).length,
-      total: students.length,
-      male: students.filter((s) => s.gender === "M").length,
-      female: students.filter((s) => s.gender === "F").length,
+      paid: liveStudents.filter((s) => s.due === 0).length,
+      overdue: liveStudents.filter((s) => s.due > 0).length,
+      total: liveStudents.length,
+      male: liveStudents.filter((s) => s.gender === "M").length,
+      female: liveStudents.filter((s) => s.gender === "F").length,
     }),
-    [students],
+    [liveStudents],
   );
 
   const exportCsv = () => {
@@ -2355,7 +2844,7 @@ export function StudentsLedger() {
   }
 
   return (
-    <div className="w-full space-y-6 lg:space-y-6">
+    <div className="w-full min-w-0 max-w-full space-y-6 overflow-x-clip lg:space-y-6">
       <MobileStatsOverview
         items={[
           {
@@ -2379,7 +2868,7 @@ export function StudentsLedger() {
         ]}
       />
 
-      <div className="hidden w-full grid-cols-3 gap-3 md:grid">
+      <div className="hidden w-full grid-cols-3 gap-3 lg:grid">
         <div className={cn(glassCardClass, directoryStatCardClass)}>
           <div className="flex min-w-0 flex-1 items-center justify-between gap-1 md:items-start md:gap-2">
             <div className={cn(directoryStatLabelClass, "text-slate-500")}>Paid</div>
@@ -2413,206 +2902,285 @@ export function StudentsLedger() {
         </div>
       </div>
 
-      <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-4">
-        <h1 className="min-w-0 flex-1 text-[18px] font-bold leading-tight tracking-tight text-slate-900 md:text-[28px] md:font-semibold">
-          Students Directory
+      <div className="flex w-full min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between xl:gap-4">
+        <h1 className="shrink-0 text-[18px] font-bold leading-tight tracking-tight text-slate-900 md:text-[24px] md:font-semibold xl:min-w-0 xl:flex-1 xl:truncate xl:text-[28px]">
+          {showRecycleBin ? "Recycle Bin" : "Students Directory"}
         </h1>
-        <div className="mobile-scrollbar-none flex w-full items-center gap-2 overflow-x-auto md:w-auto md:shrink-0 md:justify-end md:overflow-visible">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button type="button" className={mobileOutlineBtn}>
-                <Filter className="h-3.5 w-3.5" />
-                Filter
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              sideOffset={8}
-              collisionPadding={12}
-              className="z-[250] w-56 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
-            >
-              <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                Fees Status
-              </DropdownMenuLabel>
-              <DropdownMenuRadioGroup
-                value={statusFilter}
-                onValueChange={(v) => setStatusFilter(v as StatusFilter)}
-              >
-                {STATUS_TABS.map((t) => (
-                  <DropdownMenuRadioItem key={t.key} value={t.key} className="rounded-xl text-[13px]">
-                    {t.label}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-              <DropdownMenuSeparator className="my-2" />
-              <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                Enrollment
-              </DropdownMenuLabel>
-              <DropdownMenuRadioGroup
-                value={enrollmentFilter}
-                onValueChange={(v) => setEnrollmentFilter(v as EnrollmentFilter)}
-              >
-                <DropdownMenuRadioItem value="all" className="rounded-xl text-[13px]">
-                  All students
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="active" className="rounded-xl text-[13px]">
-                  Active
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="inactive" className="rounded-xl text-[13px]">
-                  Inactive
-                </DropdownMenuRadioItem>
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button type="button" className={mobileOutlineBtn}>
-                <Download className="h-3.5 w-3.5" />
-                Export
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              sideOffset={8}
-              collisionPadding={12}
-              className="z-[250] w-52 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
-            >
-              <DropdownMenuItem
-                onClick={downloadPdf}
-                className="cursor-pointer gap-2 rounded-xl text-[13px]"
-              >
-                <Printer className="h-3.5 w-3.5" />
-                Download PDF
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={exportCsv}
-                className="cursor-pointer gap-2 rounded-xl text-[13px]"
-              >
-                <Download className="h-3.5 w-3.5" />
-                Export CSV
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button type="button" className={mobileOutlineBtn}>
-                <Upload className="h-3.5 w-3.5" />
-                Bulk Upload
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              sideOffset={8}
-              collisionPadding={12}
-              className="z-[250] w-56 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
-            >
-              <DropdownMenuItem
-                onClick={downloadStudentTemplate}
-                className="cursor-pointer gap-2 rounded-xl text-[13px]"
-              >
-                <Download className="h-3.5 w-3.5" />
-                Download template
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={handleImportClick}
-                className="cursor-pointer gap-2 rounded-xl text-[13px]"
-              >
-                <Upload className="h-3.5 w-3.5" />
-                Upload CSV
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
+        <div className={cn(directoryToolbarRow, "xl:max-w-full xl:shrink-0")}>
           <button
             type="button"
-            onClick={openAdmitPage}
+            onClick={() => setShowRecycleBin((v) => !v)}
             className={cn(
-              mobilePrimaryBtn,
-              "md:rounded-full md:bg-gradient-to-r md:from-[#2563EB] md:to-[#4C69A4] md:shadow-md md:shadow-blue-900/15 md:hover:opacity-95 md:hover:bg-gradient-to-r",
+              directoryToolbarBtn,
+              showRecycleBin
+                ? "border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] hover:bg-[#FEE2E2]"
+                : "text-slate-900",
+              showRecycleBin && "sm:flex-none",
             )}
+            aria-pressed={showRecycleBin}
           >
-            <Plus className="h-3.5 w-3.5" />
-            Admit Student
+            <Recycle className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate sm:hidden">Bin</span>
+            <span className="hidden truncate sm:inline">Recycle</span>
+            {deletedStudents.length > 0 && (
+              <span
+                className={cn(
+                  "ml-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 font-mono text-[10px] font-bold",
+                  showRecycleBin ? "bg-[#EF4444] text-white" : "bg-slate-900 text-white",
+                )}
+              >
+                {deletedStudents.length}
+              </span>
+            )}
           </button>
+
+          {!showRecycleBin && (
+            <>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" className={directoryToolbarBtn}>
+                    <Filter className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">Filter</span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  sideOffset={8}
+                  collisionPadding={12}
+                  className="z-[250] w-56 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+                >
+                  <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    Fees Status
+                  </DropdownMenuLabel>
+                  <DropdownMenuRadioGroup
+                    value={statusFilter}
+                    onValueChange={(v) => setStatusFilter(v as StatusFilter)}
+                  >
+                    {STATUS_TABS.map((t) => (
+                      <DropdownMenuRadioItem key={t.key} value={t.key} className="rounded-xl text-[13px]">
+                        {t.label}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                  <DropdownMenuSeparator className="my-2" />
+                  <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    Enrollment
+                  </DropdownMenuLabel>
+                  <DropdownMenuRadioGroup
+                    value={enrollmentFilter}
+                    onValueChange={(v) => setEnrollmentFilter(v as EnrollmentFilter)}
+                  >
+                    <DropdownMenuRadioItem value="all" className="rounded-xl text-[13px]">
+                      All students
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="active" className="rounded-xl text-[13px]">
+                      Active
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="inactive" className="rounded-xl text-[13px]">
+                      Inactive
+                    </DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" className={directoryToolbarBtn}>
+                    <Download className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">Export</span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  sideOffset={8}
+                  collisionPadding={12}
+                  className="z-[250] w-52 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+                >
+                  <DropdownMenuItem
+                    onClick={downloadPdf}
+                    className="cursor-pointer gap-2 rounded-xl text-[13px]"
+                  >
+                    <Printer className="h-3.5 w-3.5" />
+                    Download PDF
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={exportCsv}
+                    className="cursor-pointer gap-2 rounded-xl text-[13px]"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Export CSV
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" className={directoryToolbarBtn}>
+                    <Upload className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate sm:hidden">Upload</span>
+                    <span className="hidden truncate sm:inline">Bulk Upload</span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  sideOffset={8}
+                  collisionPadding={12}
+                  className="z-[250] w-56 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+                >
+                  <DropdownMenuItem
+                    onClick={downloadStudentTemplate}
+                    className="cursor-pointer gap-2 rounded-xl text-[13px]"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Download template
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={handleImportClick}
+                    className="cursor-pointer gap-2 rounded-xl text-[13px]"
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    Upload CSV
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <button
+                type="button"
+                onClick={openAdmitPage}
+                className={cn(
+                  mobilePrimaryBtn,
+                  "hidden md:inline-flex md:rounded-full md:bg-gradient-to-r md:from-[#2563EB] md:to-[#4C69A4] md:shadow-md md:shadow-blue-900/15 md:hover:opacity-95 md:hover:bg-gradient-to-r",
+                )}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Admit Student
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      <div className={cn(glassCardClass, "p-4 md:p-5")}>
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
-            <div className="min-w-0">
-              <div className="mb-1.5 text-[12px] font-medium text-slate-500 md:text-[10px] md:font-semibold md:uppercase md:tracking-wider">
-                Class / Grade
-              </div>
-              <Select value={gradeFilter} onValueChange={setGradeFilter}>
-                <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
-                  <SelectValue placeholder="All classes" />
-                </SelectTrigger>
-                <SelectContent
-                  position="popper"
-                  sideOffset={4}
-                  className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
-                >
-                  <SelectItem value="all" className="rounded-md">
-                    All classes
-                  </SelectItem>
-                  {gradeOptions.map((grade) => (
-                    <SelectItem key={grade} value={grade} className="rounded-md">
-                      {grade}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+      {showRecycleBin ? (
+        <div className="space-y-3">
+          <p className="text-[13px] text-slate-500">
+            Deleted students stay here until you restore them or delete permanently.
+          </p>
+          <DirectoryRecycleBinList
+            items={deletedStudents}
+            emptyLabel="Recycle bin is empty — no deleted students."
+            subtitleFor={(item) => {
+              const student = deletedStudents.find((s) => s.id === item.id);
+              return student ? `${student.id} · ${student.cls}` : item.id;
+            }}
+            onRestore={restoreStudent}
+            onPurge={setPendingPurgeId}
+          />
+        </div>
+      ) : (
+        <>
+      <div className={cn(glassCardClass, "min-w-0 p-4 md:p-5")}>
+        <div className="flex flex-col gap-3">
+          <div className="min-w-0">
+            <div className="mb-1.5 text-[12px] font-medium text-slate-500 md:text-[10px] md:font-semibold md:uppercase md:tracking-wider">
+              Search
             </div>
-
-            <div className="min-w-0">
-              <div className="mb-1.5 text-[12px] font-medium text-slate-500 md:text-[10px] md:font-semibold md:uppercase md:tracking-wider">
-                Division
-              </div>
-              <Select
-                value={divisionFilter}
-                onValueChange={setDivisionFilter}
-                disabled={gradeFilter === "all" && divisionOptions.length === 0}
-              >
-                <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
-                  <SelectValue placeholder="All divisions" />
-                </SelectTrigger>
-                <SelectContent
-                  position="popper"
-                  sideOffset={4}
-                  className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search name, ID, guardian, phone, class…"
+                className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white pl-9 pr-9"
+                aria-label="Search students"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  aria-label="Clear search"
+                  className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
                 >
-                  <SelectItem value="all" className="rounded-md">
-                    All divisions
-                  </SelectItem>
-                  {divisionOptions.map((division) => (
-                    <SelectItem key={division} value={division} className="rounded-md">
-                      {division}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center justify-between gap-3 md:flex-col md:items-end md:justify-end">
-            <span className="font-mono text-[11px] text-black/45">
-              {filtered.length} shown
-            </span>
-            {(gradeFilter !== "all" || divisionFilter !== "all") && (
-              <button
-                type="button"
-                onClick={() => {
-                  setGradeFilter("all");
-                  setDivisionFilter("all");
-                }}
-                className="text-[11px] font-semibold text-black/55 underline-offset-2 hover:text-black hover:underline"
-              >
-                Clear class filters
-              </button>
-            )}
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between lg:gap-4">
+            <div className="grid min-w-0 w-full flex-1 grid-cols-2 gap-2 md:gap-4">
+              <div className="min-w-0">
+                <div className="mb-1.5 text-[12px] font-medium text-slate-500 md:text-[10px] md:font-semibold md:uppercase md:tracking-wider">
+                  Class / Grade
+                </div>
+                <Select value={gradeFilter} onValueChange={setGradeFilter}>
+                  <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
+                    <SelectValue placeholder="All classes" />
+                  </SelectTrigger>
+                  <SelectContent
+                    position="popper"
+                    sideOffset={4}
+                    className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
+                  >
+                    <SelectItem value="all" className="rounded-md">
+                      All classes
+                    </SelectItem>
+                    {gradeOptions.map((grade) => (
+                      <SelectItem key={grade} value={grade} className="rounded-md">
+                        {grade}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="min-w-0">
+                <div className="mb-1.5 text-[12px] font-medium text-slate-500 md:text-[10px] md:font-semibold md:uppercase md:tracking-wider">
+                  Division
+                </div>
+                <Select
+                  value={divisionFilter}
+                  onValueChange={setDivisionFilter}
+                  disabled={gradeFilter === "all" && divisionOptions.length === 0}
+                >
+                  <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
+                    <SelectValue placeholder="All divisions" />
+                  </SelectTrigger>
+                  <SelectContent
+                    position="popper"
+                    sideOffset={4}
+                    className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
+                  >
+                    <SelectItem value="all" className="rounded-md">
+                      All divisions
+                    </SelectItem>
+                    {divisionOptions.map((division) => (
+                      <SelectItem key={division} value={division} className="rounded-md">
+                        {division}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end lg:flex-col lg:items-end lg:justify-end">
+              <span className="font-mono text-[11px] text-black/45">
+                {filtered.length} shown
+              </span>
+              {(gradeFilter !== "all" || divisionFilter !== "all" || searchQuery.trim()) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGradeFilter("all");
+                    setDivisionFilter("all");
+                    setSearchQuery("");
+                  }}
+                  className="text-[11px] font-semibold text-black/55 underline-offset-2 hover:text-black hover:underline"
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -2625,11 +3193,173 @@ export function StudentsLedger() {
         onChange={handleImport}
       />
 
+      {selectedIds.size > 0 && (
+      <div
+        className={cn(
+          glassCardClass,
+          "flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4",
+        )}
+      >
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="rounded-full bg-[#EFF6FF] px-2.5 py-1 text-[12px] font-semibold text-[#1D4ED8]">
+            {selectedIds.size} selected
+          </span>
+          <button
+            type="button"
+            onClick={() => toggleSelectAll(true)}
+            className="text-[12px] font-semibold text-slate-600 underline-offset-2 hover:text-slate-900 hover:underline"
+          >
+            Select all shown
+          </button>
+          <button
+            type="button"
+            onClick={() => selectByFeesStatus("overdue")}
+            className="text-[12px] font-semibold text-[#EF4444] underline-offset-2 hover:underline"
+          >
+            Select overdue
+          </button>
+          <button
+            type="button"
+            onClick={() => selectByFeesStatus("paid")}
+            className="text-[12px] font-semibold text-[#10B981] underline-offset-2 hover:underline"
+          >
+            Select paid
+          </button>
+          <button
+            type="button"
+            onClick={clearSelection}
+            className="text-[12px] font-semibold text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
+          >
+            Clear
+          </button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className={mobileOutlineBtn}>
+                Change Status
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              sideOffset={8}
+              collisionPadding={12}
+              className="z-[250] w-44 rounded-lg border-[#E5E5E5] bg-white p-1 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+            >
+              <DropdownMenuItem
+                className="cursor-pointer rounded-md text-[13px]"
+                onClick={() => bulkChangeStatus(true)}
+              >
+                Set Active
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer rounded-md text-[13px]"
+                onClick={() => bulkChangeStatus(false)}
+              >
+                Set Inactive
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <button
+            type="button"
+            onClick={openBulkWhatsApp}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#10B981] px-3 text-[13px] font-semibold text-white transition-colors hover:bg-[#059669]"
+          >
+            <MessageCircle className="h-3.5 w-3.5" />
+            Bulk WhatsApp
+          </button>
+        </div>
+      </div>
+      )}
+
       <StudentsDirectoryTable
         students={filtered}
+        selectedIds={selectedIds}
+        onToggleSelect={toggleSelect}
+        onToggleSelectAll={toggleSelectAll}
         onViewProfile={openStudent}
         onEditData={openStudentEdit}
+        onChangeStatus={changeStudentStatus}
       />
+        </>
+      )}
+
+      <DeleteConfirmDialog
+        open={Boolean(pendingPurgeId)}
+        onOpenChange={(next) => {
+          if (!next) setPendingPurgeId(null);
+        }}
+        title="Delete permanently"
+        description={
+          pendingPurgeId
+            ? `Permanently delete ${deletedStudents.find((s) => s.id === pendingPurgeId)?.name ?? "this student"} (${pendingPurgeId})? This cannot be undone.`
+            : "Permanently delete this student? This cannot be undone."
+        }
+        onConfirm={() => {
+          if (pendingPurgeId) purgeStudent(pendingPurgeId);
+        }}
+      />
+
+      <Dialog open={bulkWhatsAppOpen} onOpenChange={setBulkWhatsAppOpen}>
+        <DialogContent className="max-w-md rounded-xl border border-[#E5E5E5] bg-white p-6">
+          <DialogHeader>
+            <DialogTitle className="text-[20px] font-semibold text-black">
+              Bulk WhatsApp
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
+              Sends via BugRicer Notify to {selectedWithPhone.length} guardian
+              {selectedWithPhone.length === 1 ? "" : "s"}
+              {selectedStudents.length > selectedWithPhone.length
+                ? ` · ${selectedStudents.length - selectedWithPhone.length} without phone skipped`
+                : ""}
+              .
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-4 space-y-3">
+            <div>
+              <Label htmlFor="bulk-wa-msg" className="text-[12px] text-slate-500">
+                Message
+              </Label>
+              <Textarea
+                id="bulk-wa-msg"
+                value={bulkWhatsAppMsg}
+                onChange={(e) => setBulkWhatsAppMsg(e.target.value)}
+                rows={5}
+                placeholder="Type the WhatsApp message…"
+                className="mt-1.5 rounded-lg border-[#E5E5E5] bg-white text-[13px]"
+              />
+            </div>
+            <div className="rounded-lg bg-[#F8FAFC] px-3 py-2 font-mono text-[11px] text-slate-500">
+              {selectedWithPhone
+                .slice(0, 6)
+                .map((row) => row.number)
+                .join(", ")}
+              {selectedWithPhone.length > 6 ? ` · +${selectedWithPhone.length - 6} more` : ""}
+            </div>
+          </div>
+          <DialogFooter className="mt-5 flex-row justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={bulkWhatsAppSending}
+              onClick={() => setBulkWhatsAppOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={bulkWhatsAppSending || !selectedWithPhone.length}
+              className="rounded-full bg-[#10B981] text-white hover:bg-[#059669]"
+              onClick={() => void sendBulkWhatsApp()}
+            >
+              {bulkWhatsAppSending ? "Sending…" : `Send to ${selectedWithPhone.length}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <DirectoryFloatingAddButton label="Admit Student" onClick={openAdmitPage} />
     </div>
   );
 }
@@ -2691,6 +3421,12 @@ export function StaffRoster() {
   const [open, setOpen] = useState(false);
   const [deptFilter, setDeptFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<StaffStatusFilter>("all");
+  const [showRecycleBin, setShowRecycleBin] = useState(false);
+  const [pendingPurgeId, setPendingPurgeId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [bulkWhatsAppOpen, setBulkWhatsAppOpen] = useState(false);
+  const [bulkWhatsAppMsg, setBulkWhatsAppMsg] = useState("");
+  const [bulkWhatsAppSending, setBulkWhatsAppSending] = useState(false);
   const [form, setForm] = useState({
     name: "",
     role: defaultRole,
@@ -2712,41 +3448,219 @@ export function StaffRoster() {
     }));
   }, [departments, defaultDept, defaultRole, roles]);
 
+  const liveStaff = useMemo(
+    () => staff.filter((s) => !isRecordDeleted(s.deletedAt)),
+    [staff],
+  );
+  const deletedStaff = useMemo(
+    () =>
+      staff
+        .filter((s) => isRecordDeleted(s.deletedAt))
+        .sort((a, b) => (b.deletedAt ?? "").localeCompare(a.deletedAt ?? "")),
+    [staff],
+  );
+
   const activeStaff = useMemo(
-    () => (activeStaffViewId ? (staff.find((s) => s.id === activeStaffViewId) ?? null) : null),
-    [activeStaffViewId, staff],
+    () =>
+      activeStaffViewId
+        ? (liveStaff.find((s) => s.id === activeStaffViewId) ?? null)
+        : null,
+    [activeStaffViewId, liveStaff],
   );
 
   const departmentOptions = useMemo(() => {
-    const fromStaff = staff.map((s) => s.dept);
+    const fromStaff = liveStaff.map((s) => s.dept);
     const fromConfig = departments.map((d) => d.name);
     return Array.from(new Set([...fromConfig, ...fromStaff])).sort();
-  }, [departments, staff]);
+  }, [departments, liveStaff]);
 
   const filteredStaff = useMemo(() => {
-    return staff.filter((member) => {
+    return liveStaff.filter((member) => {
       const matchesDept = deptFilter === "all" || member.dept === deptFilter;
       const matchesStatus =
         statusFilter === "all" ||
         (statusFilter === "active" ? member.active : !member.active);
       return matchesDept && matchesStatus;
     });
-  }, [staff, deptFilter, statusFilter]);
+  }, [liveStaff, deptFilter, statusFilter]);
+
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      if (prev.size === 0) return prev;
+      const visible = new Set(filteredStaff.map((s) => s.id));
+      const next = new Set<string>();
+      prev.forEach((id) => {
+        if (visible.has(id)) next.add(id);
+      });
+      return next.size === prev.size ? prev : next;
+    });
+  }, [filteredStaff]);
+
+  const selectedStaff = useMemo(
+    () => filteredStaff.filter((s) => selectedIds.has(s.id)),
+    [filteredStaff, selectedIds],
+  );
+
+  const selectedStaffWithPhone = useMemo(() => {
+    return selectedStaff
+      .map((s) => ({ member: s, number: toNotifyWhatsAppNumber(s.phone) }))
+      .filter((row): row is { member: Staff; number: string } => Boolean(row.number));
+  }, [selectedStaff]);
+
+  const allStaffSelected =
+    filteredStaff.length > 0 && filteredStaff.every((s) => selectedIds.has(s.id));
+  const someStaffSelected = filteredStaff.some((s) => selectedIds.has(s.id));
+
+  const toggleStaffSelect = (id: string, selected: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (selected) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const toggleStaffSelectAll = (selected: boolean) => {
+    setSelectedIds((prev) => {
+      if (!selected) {
+        const next = new Set(prev);
+        filteredStaff.forEach((s) => next.delete(s.id));
+        return next;
+      }
+      const next = new Set(prev);
+      filteredStaff.forEach((s) => next.add(s.id));
+      return next;
+    });
+  };
+
+  const clearStaffSelection = () => setSelectedIds(new Set());
+
+  const selectStaffByStatus = (kind: "active" | "inactive") => {
+    const matches = filteredStaff.filter((s) => (kind === "active" ? s.active : !s.active));
+    if (!matches.length) {
+      toast.error(
+        kind === "active"
+          ? "No active staff in the current view"
+          : "No inactive staff in the current view",
+      );
+      return;
+    }
+    setSelectedIds(new Set(matches.map((s) => s.id)));
+    toast.success(
+      kind === "active"
+        ? `${matches.length} active staff selected`
+        : `${matches.length} inactive staff selected`,
+    );
+  };
+
+  const bulkChangeStaffStatus = (nextActive: boolean) => {
+    if (!selectedIds.size) {
+      toast.error("Select at least one staff member");
+      return;
+    }
+    const ids = selectedIds;
+    setStaff((prev) =>
+      prev.map((s) => (ids.has(s.id) ? { ...s, active: nextActive } : s)),
+    );
+    toast.success(
+      nextActive
+        ? `${ids.size} staff set to Active`
+        : `${ids.size} staff set to Inactive`,
+    );
+    clearStaffSelection();
+  };
+
+  const openStaffBulkWhatsApp = () => {
+    if (!selectedIds.size) {
+      toast.error("Select at least one staff member");
+      return;
+    }
+    if (!selectedStaffWithPhone.length) {
+      toast.error("No WhatsApp numbers on selected staff", {
+        description: "Add phone numbers before sending",
+      });
+      return;
+    }
+    setBulkWhatsAppMsg(
+      "Hello, this is a message from the school office.",
+    );
+    setBulkWhatsAppOpen(true);
+  };
+
+  const sendStaffBulkWhatsApp = async () => {
+    if (!bulkWhatsAppMsg.trim()) {
+      toast.error("Enter a message to send");
+      return;
+    }
+    if (!selectedStaffWithPhone.length) {
+      toast.error("No valid phone numbers selected");
+      return;
+    }
+    setBulkWhatsAppSending(true);
+    try {
+      const numbers = selectedStaffWithPhone.map((row) => row.number);
+      const result = await sendWhatsAppNotify({
+        numbers,
+        message: bulkWhatsAppMsg,
+      });
+      if (!result.ok) {
+        toast.error("WhatsApp send failed", {
+          description: result.body.slice(0, 180) || `HTTP ${result.status}`,
+        });
+        return;
+      }
+      const skipped = selectedStaff.length - selectedStaffWithPhone.length;
+      toast.success(
+        `WhatsApp sent to ${numbers.length} staff member${numbers.length === 1 ? "" : "s"}`,
+        {
+          description:
+            skipped > 0
+              ? `${skipped} skipped · no phone on file`
+              : result.body.slice(0, 120) || "Notify API accepted",
+        },
+      );
+      setBulkWhatsAppOpen(false);
+      clearStaffSelection();
+    } catch (err) {
+      toast.error("WhatsApp send failed", {
+        description: err instanceof Error ? err.message : "Network error",
+      });
+    } finally {
+      setBulkWhatsAppSending(false);
+    }
+  };
 
   const analytics = useMemo(() => {
-    const activeMembers = staff.filter((s) => s.active);
+    const activeMembers = liveStaff.filter((s) => s.active);
     const teachers = activeMembers.filter(isTeachingStaff).length;
     const nonTeaching = activeMembers.filter((s) => !isTeachingStaff(s)).length;
-    const active = staff.filter((s) => s.active).length;
-    const inactive = staff.length - active;
+    const active = liveStaff.filter((s) => s.active).length;
+    const inactive = liveStaff.length - active;
     return {
       teachers,
       nonTeaching,
-      total: staff.length,
+      total: liveStaff.length,
       active,
       inactive,
     };
-  }, [staff]);
+  }, [liveStaff]);
+
+  const restoreStaffMember = (id: string) => {
+    const target = deletedStaff.find((s) => s.id === id);
+    if (!target) return;
+    setStaff((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, deletedAt: undefined } : s)),
+    );
+    toast.success(`${target.name} restored to roster`, { description: target.id });
+  };
+
+  const purgeStaffMember = (id: string) => {
+    const target = deletedStaff.find((s) => s.id === id);
+    if (!target) return;
+    setStaff((prev) => prev.filter((s) => s.id !== id));
+    setPendingPurgeId(null);
+    toast.error(`${target.name} permanently deleted`, { description: target.id });
+  };
 
   const handleRecruitPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -2946,7 +3860,7 @@ export function StaffRoster() {
   }
 
   return (
-    <div className="w-full space-y-6 lg:space-y-6">
+    <div className="w-full min-w-0 max-w-full space-y-6 overflow-x-clip lg:space-y-6">
       <MobileStatsOverview
         items={[
           {
@@ -2970,7 +3884,7 @@ export function StaffRoster() {
         ]}
       />
 
-      <div className="hidden w-full grid-cols-3 gap-3 md:grid">
+      <div className="hidden w-full grid-cols-3 gap-3 lg:grid">
         <div className={cn(glassCardClass, directoryStatCardClass)}>
           <div className="flex min-w-0 flex-1 items-center justify-between gap-1 md:items-start md:gap-2">
             <div className={cn(directoryStatLabelClass, "text-slate-500")}>Teachers</div>
@@ -3007,104 +3921,136 @@ export function StaffRoster() {
         </div>
       </div>
 
-      <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-4">
-        <h1 className="min-w-0 flex-1 text-[18px] font-bold leading-tight tracking-tight text-slate-900 md:text-[28px] md:font-semibold">
-          Staff Directory
+      <div className="flex w-full min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between xl:gap-4">
+        <h1 className="shrink-0 text-[18px] font-bold leading-tight tracking-tight text-slate-900 md:text-[24px] md:font-semibold xl:min-w-0 xl:flex-1 xl:truncate xl:text-[28px]">
+          {showRecycleBin ? "Recycle Bin" : "Staff Directory"}
         </h1>
-        <div className="mobile-scrollbar-none flex w-full items-center gap-2 overflow-x-auto md:w-auto md:shrink-0 md:justify-end md:overflow-visible">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button type="button" className={mobileOutlineBtn}>
-                <Filter className="h-3.5 w-3.5" />
-                Filter
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              sideOffset={8}
-              collisionPadding={12}
-              className="z-[250] w-56 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
-            >
-              <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                Department
-              </DropdownMenuLabel>
-              <DropdownMenuRadioGroup value={deptFilter} onValueChange={setDeptFilter}>
-                <DropdownMenuRadioItem value="all" className="rounded-xl text-[13px]">
-                  All departments
-                </DropdownMenuRadioItem>
-                {departmentOptions.map((dept) => (
-                  <DropdownMenuRadioItem key={dept} value={dept} className="rounded-xl text-[13px]">
-                    {dept}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-              <DropdownMenuSeparator className="my-2" />
-              <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                Status
-              </DropdownMenuLabel>
-              <DropdownMenuRadioGroup
-                value={statusFilter}
-                onValueChange={(value) => setStatusFilter(value as StaffStatusFilter)}
-              >
-                <DropdownMenuRadioItem value="all" className="rounded-xl text-[13px]">
-                  All statuses
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="active" className="rounded-xl text-[13px]">
-                  Active
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="inactive" className="rounded-xl text-[13px]">
-                  Inactive
-                </DropdownMenuRadioItem>
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <button type="button" onClick={handleExport} className={mobileOutlineBtn}>
-            <Download className="h-3.5 w-3.5" />
-            Export
-          </button>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button type="button" className={mobileOutlineBtn}>
-                <Upload className="h-3.5 w-3.5" />
-                Bulk Upload
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              sideOffset={8}
-              collisionPadding={12}
-              className="z-[250] w-56 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
-            >
-              <DropdownMenuItem
-                onClick={downloadStaffTemplate}
-                className="cursor-pointer gap-2 rounded-xl text-[13px]"
-              >
-                <Download className="h-3.5 w-3.5" />
-                Download template
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={handleStaffImportClick}
-                className="cursor-pointer gap-2 rounded-xl text-[13px]"
-              >
-                <Upload className="h-3.5 w-3.5" />
-                Upload CSV
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
+        <div className={cn(directoryToolbarRow, "xl:max-w-full xl:shrink-0")}>
           <button
             type="button"
-            onClick={() => setOpen(true)}
+            onClick={() => setShowRecycleBin((v) => !v)}
             className={cn(
-              mobilePrimaryBtn,
-              "md:rounded-full md:bg-gradient-to-r md:from-[#2563EB] md:to-[#4C69A4] md:shadow-md md:shadow-blue-900/15 md:hover:opacity-95 md:hover:bg-gradient-to-r",
+              directoryToolbarBtn,
+              showRecycleBin
+                ? "border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] hover:bg-[#FEE2E2]"
+                : "text-slate-900",
+              showRecycleBin && "sm:flex-none",
             )}
+            aria-pressed={showRecycleBin}
           >
-            <Plus className="h-3.5 w-3.5" />
-            Recruit Staff
+            <Recycle className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate sm:hidden">Bin</span>
+            <span className="hidden truncate sm:inline">Recycle</span>
+            {deletedStaff.length > 0 && (
+              <span
+                className={cn(
+                  "ml-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 font-mono text-[10px] font-bold",
+                  showRecycleBin ? "bg-[#EF4444] text-white" : "bg-slate-900 text-white",
+                )}
+              >
+                {deletedStaff.length}
+              </span>
+            )}
           </button>
+
+          {!showRecycleBin && (
+            <>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" className={directoryToolbarBtn}>
+                    <Filter className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">Filter</span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  sideOffset={8}
+                  collisionPadding={12}
+                  className="z-[250] w-56 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+                >
+                  <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    Department
+                  </DropdownMenuLabel>
+                  <DropdownMenuRadioGroup value={deptFilter} onValueChange={setDeptFilter}>
+                    <DropdownMenuRadioItem value="all" className="rounded-xl text-[13px]">
+                      All departments
+                    </DropdownMenuRadioItem>
+                    {departmentOptions.map((dept) => (
+                      <DropdownMenuRadioItem key={dept} value={dept} className="rounded-xl text-[13px]">
+                        {dept}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                  <DropdownMenuSeparator className="my-2" />
+                  <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    Status
+                  </DropdownMenuLabel>
+                  <DropdownMenuRadioGroup
+                    value={statusFilter}
+                    onValueChange={(value) => setStatusFilter(value as StaffStatusFilter)}
+                  >
+                    <DropdownMenuRadioItem value="all" className="rounded-xl text-[13px]">
+                      All statuses
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="active" className="rounded-xl text-[13px]">
+                      Active
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="inactive" className="rounded-xl text-[13px]">
+                      Inactive
+                    </DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <button type="button" onClick={handleExport} className={directoryToolbarBtn}>
+                <Download className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">Export</span>
+              </button>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" className={directoryToolbarBtn}>
+                    <Upload className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate sm:hidden">Upload</span>
+                    <span className="hidden truncate sm:inline">Bulk Upload</span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  sideOffset={8}
+                  collisionPadding={12}
+                  className="z-[250] w-56 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+                >
+                  <DropdownMenuItem
+                    onClick={downloadStaffTemplate}
+                    className="cursor-pointer gap-2 rounded-xl text-[13px]"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Download template
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={handleStaffImportClick}
+                    className="cursor-pointer gap-2 rounded-xl text-[13px]"
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    Upload CSV
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <button
+                type="button"
+                onClick={() => setOpen(true)}
+                className={cn(
+                  mobilePrimaryBtn,
+                  "hidden md:inline-flex md:rounded-full md:bg-gradient-to-r md:from-[#2563EB] md:to-[#4C69A4] md:shadow-md md:shadow-blue-900/15 md:hover:opacity-95 md:hover:bg-gradient-to-r",
+                )}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Recruit Staff
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -3116,15 +4062,130 @@ export function StaffRoster() {
         onChange={handleStaffImport}
       />
 
-      <div className="space-y-2.5 md:hidden">
+      {showRecycleBin ? (
+        <div className="space-y-3">
+          <p className="text-[13px] text-slate-500">
+            Deleted staff stay here until you restore them or delete permanently.
+          </p>
+          <DirectoryRecycleBinList
+            items={deletedStaff}
+            emptyLabel="Recycle bin is empty — no deleted staff."
+            subtitleFor={(item) => {
+              const member = deletedStaff.find((s) => s.id === item.id);
+              return member ? `${member.id} · ${member.role}` : item.id;
+            }}
+            onRestore={restoreStaffMember}
+            onPurge={setPendingPurgeId}
+          />
+        </div>
+      ) : (
+        <>
+      {selectedIds.size > 0 && (
+      <div
+        className={cn(
+          glassCardClass,
+          "flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4",
+        )}
+      >
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="rounded-full bg-[#EFF6FF] px-2.5 py-1 text-[12px] font-semibold text-[#1D4ED8]">
+            {selectedIds.size} selected
+          </span>
+          <button
+            type="button"
+            onClick={() => toggleStaffSelectAll(true)}
+            className="text-[12px] font-semibold text-slate-600 underline-offset-2 hover:text-slate-900 hover:underline"
+          >
+            Select all shown
+          </button>
+          <button
+            type="button"
+            onClick={() => selectStaffByStatus("active")}
+            className="text-[12px] font-semibold text-[#2563EB] underline-offset-2 hover:underline"
+          >
+            Select active
+          </button>
+          <button
+            type="button"
+            onClick={() => selectStaffByStatus("inactive")}
+            className="text-[12px] font-semibold text-slate-500 underline-offset-2 hover:underline"
+          >
+            Select inactive
+          </button>
+          <button
+            type="button"
+            onClick={clearStaffSelection}
+            className="text-[12px] font-semibold text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
+          >
+            Clear
+          </button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className={mobileOutlineBtn}>
+                Change Status
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              sideOffset={8}
+              collisionPadding={12}
+              className="z-[250] w-44 rounded-lg border-[#E5E5E5] bg-white p-1 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+            >
+              <DropdownMenuItem
+                className="cursor-pointer rounded-md text-[13px]"
+                onClick={() => bulkChangeStaffStatus(true)}
+              >
+                Set Active
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer rounded-md text-[13px]"
+                onClick={() => bulkChangeStaffStatus(false)}
+              >
+                Set Inactive
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <button
+            type="button"
+            onClick={openStaffBulkWhatsApp}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#10B981] px-3 text-[13px] font-semibold text-white transition-colors hover:bg-[#059669]"
+          >
+            <MessageCircle className="h-3.5 w-3.5" />
+            Bulk WhatsApp
+          </button>
+        </div>
+      </div>
+      )}
+
+      <div className={cn(directoryMobileListClass, "lg:hidden")}>
+        {filteredStaff.length > 0 && (
+          <div className="flex items-center gap-2 px-0.5 md:col-span-2">
+            <Checkbox
+              checked={allStaffSelected ? true : someStaffSelected ? "indeterminate" : false}
+              onCheckedChange={(v) => toggleStaffSelectAll(v === true)}
+              aria-label="Select all staff"
+            />
+            <span className="text-[12px] font-medium text-slate-500">
+              {allStaffSelected
+                ? "All selected"
+                : someStaffSelected
+                  ? `${selectedIds.size} selected`
+                  : "Select all"}
+            </span>
+          </div>
+        )}
         {filteredStaff.length === 0 && (
-          <div className={directoryEmptyClass}>
+          <div className={cn(directoryEmptyClass, "md:col-span-2")}>
             No staff records match the current filters.
           </div>
         )}
         {filteredStaff.map((member) => {
           const digits = phoneDigits(member.phone);
           const hasPhone = digits.length > 0;
+          const isSelected = selectedIds.has(member.id);
           return (
             <div
               key={member.id}
@@ -3138,16 +4199,31 @@ export function StaffRoster() {
                 }
               }}
               aria-label={`Open profile for ${member.name}`}
-              className={cn(directoryMobileCardClass, "cursor-pointer")}
+              className={cn(
+                directoryMobileCardClass,
+                "cursor-pointer",
+                isSelected && "ring-2 ring-[#2563EB]/35",
+              )}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    className="shrink-0"
+                  >
+                    <Checkbox
+                      checked={isSelected}
+                      onCheckedChange={(v) => toggleStaffSelect(member.id, v === true)}
+                      aria-label={`Select ${member.name}`}
+                    />
+                  </div>
                   <DirectoryPersonAvatar name={member.name} photoUrl={member.photoUrl} />
                   <div className="min-w-0">
-                    <div className="truncate text-[14px] font-semibold leading-tight text-black">
+                    <div className="truncate text-[13.5px] font-semibold leading-tight text-black sm:text-[14px]">
                       {member.name}
                     </div>
-                    <div className="mt-0.5 truncate font-mono text-[10.5px] text-black/45">
+                    <div className="mt-0.5 truncate font-mono text-[10px] text-black/45 sm:text-[10.5px]">
                       {member.id}
                     </div>
                   </div>
@@ -3155,19 +4231,19 @@ export function StaffRoster() {
                 <EnrollmentStatusBadge active={member.active} />
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex max-w-full truncate rounded-full bg-[#DBEAFE] px-2.5 py-1 text-[10.5px] font-semibold text-[#0F172A]">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <span className="inline-flex max-w-full truncate rounded-full bg-[#DBEAFE] px-2 py-0.5 text-[10px] font-semibold text-[#0F172A] sm:px-2.5 sm:py-1 sm:text-[10.5px]">
                   {member.role}
                 </span>
-                <span className="inline-flex max-w-full truncate rounded-full bg-[#F4F4F5] px-2.5 py-1 text-[10.5px] font-medium text-black/75">
+                <span className="inline-flex max-w-full truncate rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-medium text-black/75 sm:px-2.5 sm:py-1 sm:text-[10.5px]">
                   {member.dept}
                 </span>
               </div>
 
-              <div className="flex items-center justify-between gap-2 border-t border-[#F0F0F0] pt-2.5">
+              <div className="flex items-center justify-between gap-2 border-t border-[#F0F0F0] pt-2 sm:pt-2.5">
                 <div className="min-w-0">
-                  <div className="truncate text-[12px] font-medium text-black/75">{member.role}</div>
-                  <div className="mt-0.5 truncate font-mono text-[10.5px] text-black/45">
+                  <div className="truncate text-[11.5px] font-medium text-black/75 sm:text-[12px]">{member.role}</div>
+                  <div className="mt-0.5 truncate font-mono text-[10px] text-black/45 sm:text-[10.5px]">
                     {hasPhone ? formatPhone(member.phone) : "No contact on file"}
                   </div>
                 </div>
@@ -3178,9 +4254,9 @@ export function StaffRoster() {
                     openStaffEdit(member.id);
                   }}
                   aria-label={`Edit profile for ${member.name}`}
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-[#E5E5E5] bg-[#F4F4F5] text-black/60 transition-colors hover:border-black/20 hover:bg-white hover:text-black"
+                  className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-[#E5E5E5] bg-[#F4F4F5] text-black/60 transition-colors hover:border-black/20 hover:bg-white hover:text-black sm:h-8 sm:w-8"
                 >
-                  <Pencil className="h-3.5 w-3.5" />
+                  <Pencil className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                 </button>
               </div>
             </div>
@@ -3188,17 +4264,26 @@ export function StaffRoster() {
         })}
       </div>
 
-      <div className="mobile-scrollbar-none hidden w-full overflow-x-auto md:block">
+      <div className="mobile-scrollbar-none hidden w-full max-w-full overflow-x-auto lg:block">
         <div className={glassTableWrapClass}>
-          <table className="w-full min-w-[640px] table-fixed border-collapse text-left">
+          <table className="w-full min-w-[700px] table-fixed border-collapse text-left">
             <colgroup>
-              <col className="w-[34%]" />
-              <col className="w-[24%]" />
-              <col className="w-[24%]" />
+              <col className="w-[44px]" />
+              <col className="w-[32%]" />
+              <col className="w-[22%]" />
+              <col className="w-[22%]" />
               <col className="w-[18%]" />
             </colgroup>
             <thead>
               <tr>
+                <th className="border-b border-slate-100 px-3 pb-4 pt-4 sm:px-4 sm:pt-5">
+                  <Checkbox
+                    checked={allStaffSelected ? true : someStaffSelected ? "indeterminate" : false}
+                    onCheckedChange={(v) => toggleStaffSelectAll(v === true)}
+                    aria-label="Select all staff"
+                    disabled={filteredStaff.length === 0}
+                  />
+                </th>
                 {["Name", "Role", "Department", "Status"].map((header) => (
                   <th
                     key={header}
@@ -3213,14 +4298,16 @@ export function StaffRoster() {
               {filteredStaff.length === 0 && (
                 <tr>
                   <td
-                    colSpan={4}
+                    colSpan={5}
                     className="px-4 py-10 text-center text-[13px] text-black/55 sm:px-6"
                   >
                     No staff records match the current filters.
                   </td>
                 </tr>
               )}
-              {filteredStaff.map((member) => (
+              {filteredStaff.map((member) => {
+                const isSelected = selectedIds.has(member.id);
+                return (
                 <tr
                   key={member.id}
                   role="button"
@@ -3233,8 +4320,22 @@ export function StaffRoster() {
                     }
                   }}
                   aria-label={`Open profile for ${member.name}`}
-                  className="cursor-pointer border-b border-slate-50 transition-colors last:border-0 hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2563EB]"
+                  className={cn(
+                    "cursor-pointer border-b border-slate-50 transition-colors last:border-0 hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2563EB]",
+                    isSelected && "bg-[#EFF6FF]/70 hover:bg-[#EFF6FF]",
+                  )}
                 >
+                  <td
+                    className="px-3 py-3.5 align-middle sm:px-4"
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  >
+                    <Checkbox
+                      checked={isSelected}
+                      onCheckedChange={(v) => toggleStaffSelect(member.id, v === true)}
+                      aria-label={`Select ${member.name}`}
+                    />
+                  </td>
                   <td className="px-4 py-3.5 align-middle sm:px-6">
                     <div className="flex min-w-0 items-center gap-3">
                       {member.photoUrl ? (
@@ -3268,11 +4369,90 @@ export function StaffRoster() {
                     <EnrollmentStatusBadge active={member.active} />
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
+        </>
+      )}
+
+      <DeleteConfirmDialog
+        open={Boolean(pendingPurgeId)}
+        onOpenChange={(next) => {
+          if (!next) setPendingPurgeId(null);
+        }}
+        title="Delete permanently"
+        description={
+          pendingPurgeId
+            ? `Permanently delete ${deletedStaff.find((s) => s.id === pendingPurgeId)?.name ?? "this staff member"} (${pendingPurgeId})? This cannot be undone.`
+            : "Permanently delete this staff member? This cannot be undone."
+        }
+        onConfirm={() => {
+          if (pendingPurgeId) purgeStaffMember(pendingPurgeId);
+        }}
+      />
+
+      <Dialog open={bulkWhatsAppOpen} onOpenChange={setBulkWhatsAppOpen}>
+        <DialogContent className="max-w-md rounded-xl border border-[#E5E5E5] bg-white p-6">
+          <DialogHeader>
+            <DialogTitle className="text-[20px] font-semibold text-black">
+              Bulk WhatsApp
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
+              Sends via BugRicer Notify to {selectedStaffWithPhone.length} staff
+              member{selectedStaffWithPhone.length === 1 ? "" : "s"}
+              {selectedStaff.length > selectedStaffWithPhone.length
+                ? ` · ${selectedStaff.length - selectedStaffWithPhone.length} without phone skipped`
+                : ""}
+              .
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-4 space-y-3">
+            <div>
+              <Label htmlFor="staff-bulk-wa-msg" className="text-[12px] text-slate-500">
+                Message
+              </Label>
+              <Textarea
+                id="staff-bulk-wa-msg"
+                value={bulkWhatsAppMsg}
+                onChange={(e) => setBulkWhatsAppMsg(e.target.value)}
+                rows={5}
+                placeholder="Type the WhatsApp message…"
+                className="mt-1.5 rounded-lg border-[#E5E5E5] bg-white text-[13px]"
+              />
+            </div>
+            <div className="rounded-lg bg-[#F8FAFC] px-3 py-2 font-mono text-[11px] text-slate-500">
+              {selectedStaffWithPhone
+                .slice(0, 6)
+                .map((row) => row.number)
+                .join(", ")}
+              {selectedStaffWithPhone.length > 6
+                ? ` · +${selectedStaffWithPhone.length - 6} more`
+                : ""}
+            </div>
+          </div>
+          <DialogFooter className="mt-5 flex-row justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={bulkWhatsAppSending}
+              onClick={() => setBulkWhatsAppOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={bulkWhatsAppSending || !selectedStaffWithPhone.length}
+              className="rounded-full bg-[#10B981] text-white hover:bg-[#059669]"
+              onClick={() => void sendStaffBulkWhatsApp()}
+            >
+              {bulkWhatsAppSending ? "Sending…" : `Send to ${selectedStaffWithPhone.length}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
@@ -3427,6 +4607,8 @@ export function StaffRoster() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <DirectoryFloatingAddButton label="Recruit Staff" onClick={() => setOpen(true)} />
     </div>
   );
 }
@@ -3442,7 +4624,8 @@ export function FinanceModule() {
     | "balance"
     | "fees"
     | "salary"
-    | "daybook";
+    | "daybook"
+    | "reconciliation";
 
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/finance" });
@@ -3575,6 +4758,19 @@ export function FinanceModule() {
     );
   }
 
+  if (view === "reconciliation") {
+    return (
+      <div className="w-full space-y-4 sm:space-y-5">
+        <FinanceFlowHeader
+          title="Bank Reconciliation"
+          description="Match bank & UPI receipts against the bank statement"
+          onBack={backToOverview}
+        />
+        <BankReconciliationReport />
+      </div>
+    );
+  }
+
   return <FinanceOverview onOpenView={openView} />;
 }
 
@@ -3643,13 +4839,35 @@ function FinanceOverview({
       | "balance"
       | "fees"
       | "salary"
-      | "daybook",
+      | "daybook"
+      | "reconciliation",
   ) => void;
 }) {
-  const { payments, academicYear, schoolDetails } = useTenantStore();
+  const { session } = useAuth();
+  const {
+    payments,
+    setPayments,
+    setStudents,
+    paymentCategories,
+    academicYear,
+    schoolDetails,
+  } = useTenantStore();
+  const isAdmin =
+    session?.role === "school_admin" || session?.role === "super_admin";
   const schoolName = schoolDetails.name || "Silver Hills Global";
   const [incomePeriod, setIncomePeriod] = useState<PaymentPeriod>("this_month");
   const [customRange, setCustomRange] = useState<CustomDateRange>({ from: "", to: "" });
+  const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
+  const [pendingDeletePayment, setPendingDeletePayment] = useState<Payment | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    cat: "",
+    mode: "Bank",
+    amount: "",
+    time: "",
+    narration: "",
+    payerType: "student" as "student" | "external",
+  });
 
   const filteredPayments = useMemo(
     () => filterPaymentsByPeriod(payments, incomePeriod, customRange),
@@ -3682,10 +4900,12 @@ function FinanceOverview({
 
   const overdueBills = useMemo(
     () =>
-      ACCOUNTS_PAYABLE.map((item) => ({
+      ACCOUNTS_PAYABLE.map((item, index) => ({
+        id: `OBL-${String(index + 1).padStart(3, "0")}`,
         name: item.payee,
         amount: item.amount,
         due: /payroll|salary/i.test(item.payee) ? "25 May" : "18 May",
+        type: /payroll|salary/i.test(item.payee) ? "Salary" : "Vendor",
       })),
     [],
   );
@@ -3810,43 +5030,219 @@ function FinanceOverview({
     void sharePayload(`Receipt ${payment.id}`, text);
   };
 
+  const isStudentReceipt = (payment: Payment) => payment.payerType !== "external";
+
+  const adjustStudentDue = (payment: Payment, delta: number) => {
+    if (!isStudentReceipt(payment) || delta === 0) return;
+    setStudents((prev) =>
+      prev.map((student) => {
+        if (student.name !== payment.name) return student;
+        if (payment.className && student.cls !== payment.className) return student;
+        return { ...student, due: Math.max(0, student.due + delta) };
+      }),
+    );
+  };
+
+  const openEditPayment = (payment: Payment) => {
+    if (!isAdmin) return;
+    setEditingPayment(payment);
+    setEditForm({
+      name: payment.name,
+      cat: payment.cat,
+      mode: payment.mode,
+      amount: String(payment.amount),
+      time: payment.time,
+      narration: payment.narration ?? "",
+      payerType: payment.payerType === "external" ? "external" : "student",
+    });
+  };
+
+  const saveEditedPayment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAdmin || !editingPayment) return;
+    const name = editForm.name.trim();
+    const amount = Number(editForm.amount);
+    const time = editForm.time.trim();
+    const cat = editForm.cat.trim();
+    const mode = editForm.mode.trim();
+    if (!name) {
+      toast.error("Account name is required");
+      return;
+    }
+    if (!cat) {
+      toast.error("Category is required");
+      return;
+    }
+    if (!mode) {
+      toast.error("Payment mode is required");
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Enter a valid amount");
+      return;
+    }
+    if (!time) {
+      toast.error("Date / time is required");
+      return;
+    }
+
+    const note = editForm.narration.trim();
+    const nextPayment: Payment = {
+      ...editingPayment,
+      name,
+      cat,
+      mode,
+      amount,
+      time,
+      payerType: editForm.payerType,
+      ...(note ? { narration: note } : { narration: undefined }),
+    };
+
+    if (isStudentReceipt(editingPayment) && isStudentReceipt(nextPayment)) {
+      adjustStudentDue(editingPayment, editingPayment.amount - amount);
+    } else if (isStudentReceipt(editingPayment) && !isStudentReceipt(nextPayment)) {
+      adjustStudentDue(editingPayment, editingPayment.amount);
+    } else if (!isStudentReceipt(editingPayment) && isStudentReceipt(nextPayment)) {
+      adjustStudentDue(nextPayment, -amount);
+    }
+
+    setPayments((prev) => prev.map((p) => (p.id === editingPayment.id ? nextPayment : p)));
+    toast.success(`Receipt ${editingPayment.id} updated`);
+    setEditingPayment(null);
+  };
+
+  const confirmDeletePayment = () => {
+    if (!isAdmin || !pendingDeletePayment) return;
+    adjustStudentDue(pendingDeletePayment, pendingDeletePayment.amount);
+    setPayments((prev) => prev.filter((p) => p.id !== pendingDeletePayment.id));
+    toast.error(`Receipt ${pendingDeletePayment.id} deleted`);
+    setPendingDeletePayment(null);
+  };
+
+  const shareOverdueBill = (bill: (typeof overdueBills)[number]) => {
+    const text = [
+      `${schoolName} · Overdue Bill`,
+      `Reference: ${bill.id}`,
+      `Payee: ${bill.name}`,
+      `Type: ${bill.type}`,
+      `Amount: ₹ ${bill.amount.toLocaleString("en-IN")}`,
+      `Due: ${bill.due}`,
+      `AY: ${academicYear}`,
+      "Status: Open",
+    ].join("\n");
+    void sharePayload(`Overdue · ${bill.name}`, text);
+  };
+
+  const payOverdueBill = (bill: (typeof overdueBills)[number]) => {
+    toast.success("Opening Make Payment", {
+      description: `${bill.name} · ₹ ${bill.amount.toLocaleString("en-IN")}`,
+    });
+    onOpenView("make");
+  };
+
   return (
-    <div className="w-full space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <MobileSectionTitle className="md:hidden">Finance</MobileSectionTitle>
-          <h2 className="hidden text-[18px] font-bold tracking-tight text-slate-900 md:block">
-            Finance overview
-          </h2>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {(
-            [
-              { k: "fees" as const, l: "Fees Report" },
-              { k: "salary" as const, l: "Salary Report" },
-              { k: "daybook" as const, l: "Day Book" },
-              { k: "analytics" as const, l: "Analytics" },
-              { k: "ledger" as const, l: "Ledger" },
-              { k: "pl" as const, l: "P&L" },
-              { k: "balance" as const, l: "Balance Sheet" },
-            ] as const
-          ).map((item) => (
+    <div className="w-full space-y-5 pb-24 md:pb-0">
+
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 xl:grid-cols-4">
+        {(
+          [
+            {
+              k: "fees" as const,
+              l: "Fees Report",
+              d: "Collections & dues",
+              icon: GraduationCap,
+              iconClass: "bg-[#DBEAFE] text-[#2563EB]",
+            },
+            {
+              k: "salary" as const,
+              l: "Salary Report",
+              d: "Payroll obligations",
+              icon: Users,
+              iconClass: "bg-[#F3E8FF] text-violet-600",
+            },
+            {
+              k: "daybook" as const,
+              l: "Day Book",
+              d: "Daily cash activity",
+              icon: BookOpen,
+              iconClass: "bg-[#FEF3C7] text-amber-700",
+            },
+            {
+              k: "analytics" as const,
+              l: "Analytics",
+              d: "Financial insights",
+              icon: ChartPie,
+              iconClass: "bg-[#D1F2E1] text-[#059669]",
+            },
+            {
+              k: "ledger" as const,
+              l: "Ledger",
+              d: "Account entries",
+              icon: ListTodo,
+              iconClass: "bg-[#E0E7FF] text-indigo-600",
+            },
+            {
+              k: "pl" as const,
+              l: "Profit & Loss",
+              d: "Income vs expense",
+              icon: TrendingUp,
+              iconClass: "bg-[#DCFCE7] text-emerald-700",
+            },
+            {
+              k: "balance" as const,
+              l: "Balance Sheet",
+              d: "Assets & liabilities",
+              icon: Scale,
+              iconClass: "bg-[#FCE7F3] text-pink-700",
+            },
+            {
+              k: "reconciliation" as const,
+              l: "Bank Reconciliation",
+              d: "Match statement & books",
+              icon: Landmark,
+              iconClass: "bg-[#CFFAFE] text-cyan-700",
+            },
+          ] as const
+        ).map((item, index, items) => {
+          const Icon = item.icon;
+          return (
             <button
               key={item.k}
               type="button"
               onClick={() => onOpenView(item.k)}
               className={cn(
-                glassInsetClass,
-                "px-3 py-1.5 text-[11px] font-semibold text-slate-600 transition-colors hover:text-[#2563EB]",
+                glassCardClass,
+                "group flex min-h-[116px] min-w-0 flex-col items-start justify-between gap-3 p-3.5 text-left transition-all hover:-translate-y-0.5 hover:border-white hover:bg-white/80 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] sm:min-h-[128px] sm:p-4",
+                items.length % 2 === 1 &&
+                  index === items.length - 1 &&
+                  "col-span-2 sm:col-span-1",
               )}
             >
-              {item.l}
+              <div className="flex w-full items-start justify-between gap-2">
+                <span
+                  className={cn(
+                    "grid h-9 w-9 shrink-0 place-items-center rounded-xl sm:h-10 sm:w-10",
+                    item.iconClass,
+                  )}
+                >
+                  <Icon className="h-4 w-4 sm:h-[18px] sm:w-[18px]" />
+                </span>
+                <ArrowUpRight className="h-4 w-4 shrink-0 text-slate-300 transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[#2563EB]" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[12.5px] font-bold leading-snug text-slate-900 sm:text-[14px]">
+                  {item.l}
+                </div>
+                <p className="mt-1 text-[10.5px] leading-snug text-slate-500 sm:text-[11.5px]">
+                  {item.d}
+                </p>
+              </div>
             </button>
-          ))}
-        </div>
+          );
+        })}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="hidden grid-cols-1 gap-4 sm:grid-cols-2 md:grid">
         <button
           type="button"
           onClick={() => onOpenView("receive")}
@@ -3882,31 +5278,6 @@ function FinanceOverview({
       </div>
 
       <div className="grid grid-cols-12 gap-5">
-        <section className={cn(glassCardClass, "col-span-12 flex flex-col p-5 lg:col-span-4")}>
-          <h3 className="text-[15px] font-bold text-slate-900">Overdue Bills</h3>
-          <p className="mt-0.5 text-[12px] text-slate-500">
-            {overdueBills.length} open obligation{overdueBills.length === 1 ? "" : "s"}
-          </p>
-          <div className="mt-4 flex-1 space-y-2">
-            {overdueBills.map((bill, index) => (
-              <div
-                key={bill.name}
-                className={cn(glassInsetClass, "flex items-center justify-between gap-3 px-3.5 py-2.5")}
-              >
-                <div className="min-w-0">
-                  <div className="truncate text-[13px] font-semibold text-slate-900">
-                    {index + 1}. {bill.name}
-                  </div>
-                  <div className="text-[11px] text-slate-500">Due {bill.due}</div>
-                </div>
-                <div className="shrink-0 font-mono text-[13px] font-semibold text-slate-900">
-                  {formatInr(bill.amount)}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
         <section className={cn(glassCardClass, "col-span-12 flex flex-col p-5 lg:col-span-4")}>
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -3992,6 +5363,53 @@ function FinanceOverview({
             ))}
           </div>
         </section>
+
+        <section className={cn(glassCardClass, "col-span-12 flex flex-col p-5 lg:col-span-4")}>
+          <h3 className="text-[15px] font-bold text-slate-900">Overdue Bills</h3>
+          <p className="mt-0.5 text-[12px] text-slate-500">
+            {overdueBills.length} open obligation{overdueBills.length === 1 ? "" : "s"}
+          </p>
+          <div className="mt-4 flex-1 space-y-2.5">
+            {overdueBills.map((bill, index) => (
+              <div
+                key={bill.id}
+                className={cn(glassInsetClass, "flex flex-col gap-2.5 px-3.5 py-3")}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-[13px] font-semibold text-slate-900">
+                      {index + 1}. {bill.name}
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-slate-500">
+                      Due {bill.due} · {bill.type}
+                    </div>
+                  </div>
+                  <div className="shrink-0 font-mono text-[13px] font-semibold text-slate-900">
+                    {formatInr(bill.amount)}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => payOverdueBill(bill)}
+                    className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-full bg-slate-950 px-3 text-[11.5px] font-semibold text-white transition-colors hover:bg-slate-800"
+                  >
+                    <HandCoins className="h-3.5 w-3.5" />
+                    Pay
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => shareOverdueBill(bill)}
+                    className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 text-[11.5px] font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+                  >
+                    <Share2 className="h-3.5 w-3.5" />
+                    Share
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
 
       <section className={cn(glassCardClass, "p-5")}>
@@ -4049,7 +5467,118 @@ function FinanceOverview({
           </div>
         </div>
 
-        <div className="mobile-scrollbar-none mt-4 overflow-x-auto rounded-lg border border-[#E5E5E5]">
+        <div className="mt-4 space-y-2.5 md:hidden">
+          {payments.length === 0 && (
+            <div className="rounded-xl border border-dashed border-[#E5E5E5] bg-white/60 px-4 py-8 text-center text-[12px] text-black/55">
+              No transactions recorded yet
+            </div>
+          )}
+          {payments.map((p) => (
+            <div
+              key={p.id}
+              className="rounded-xl border border-[#E5E5E5] bg-white p-3.5 shadow-sm shadow-slate-200/40"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate text-[13.5px] font-semibold text-slate-900">{p.name}</div>
+                  <div className="mt-0.5 truncate font-mono text-[10.5px] text-black/45">{p.id}</div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="font-mono text-[14px] font-bold text-slate-900">
+                    ₹ {p.amount.toLocaleString("en-IN")}
+                  </div>
+                  <span className="mt-1 inline-flex rounded-full bg-[#D1F2E1] px-2 py-0.5 text-[9.5px] font-semibold text-[#059669]">
+                    Complete
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                <span className="inline-flex max-w-full truncate rounded-full bg-[#DBEAFE] px-2 py-0.5 text-[10px] font-semibold text-[#0F172A]">
+                  {p.cat}
+                </span>
+                <span className="inline-flex max-w-full truncate rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-medium text-black/70">
+                  {p.mode}
+                </span>
+                {p.payerType === "external" && (
+                  <span className="inline-flex rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[10px] font-semibold text-[#B45309]">
+                    External
+                  </span>
+                )}
+              </div>
+
+              {p.narration && (
+                <p className="mt-2 line-clamp-2 text-[11.5px] leading-snug text-black/55">
+                  {p.narration}
+                </p>
+              )}
+
+              {(p.attachments?.length ?? 0) > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {p.attachments!.map((file) => (
+                    <a
+                      key={file.id}
+                      href={file.dataUrl}
+                      download={file.name}
+                      className="inline-flex max-w-full items-center gap-1 truncate rounded-full border border-[#E5E5E5] bg-[#F8F8F9] px-2 py-0.5 text-[10px] font-medium text-black/65 transition-colors hover:border-black/20 hover:bg-white"
+                    >
+                      <Paperclip className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{file.name}</span>
+                    </a>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-[#F0F0F0] pt-2.5">
+                <span className="min-w-0 truncate font-mono text-[10.5px] text-black/45">
+                  {p.time}
+                </span>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  {isAdmin && (
+                    <>
+                      <button
+                        type="button"
+                        aria-label={`Edit receipt ${p.id}`}
+                        onClick={() => openEditPayment(p)}
+                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Delete receipt ${p.id}`}
+                        onClick={() => setPendingDeletePayment(p)}
+                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    aria-label={`Download receipt ${p.id}`}
+                    onClick={() => downloadTransaction(p)}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#E5E5E5] px-2.5 text-[11px] font-semibold text-black/65 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    PDF
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Share receipt ${p.id}`}
+                    onClick={() => shareTransaction(p)}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#DBEAFE] bg-[#EFF6FF] px-2.5 text-[11px] font-semibold text-[#2563EB] transition-colors hover:bg-[#DBEAFE]"
+                  >
+                    <Share2 className="h-3.5 w-3.5" />
+                    Share
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mobile-scrollbar-none mt-4 hidden overflow-x-auto rounded-lg border border-[#E5E5E5] md:block">
           <table className="w-full min-w-[780px] text-left text-[12.5px]">
             <thead>
               <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5]">
@@ -4084,6 +5613,9 @@ function FinanceOverview({
                       {p.cat} · {p.mode}
                       {p.payerType === "external" ? " · External" : ""}
                       {p.narration ? ` · ${p.narration}` : ""}
+                      {(p.attachments?.length ?? 0) > 0
+                        ? ` · ${p.attachments!.length} file${p.attachments!.length === 1 ? "" : "s"}`
+                        : ""}
                     </div>
                   </td>
                   <td className="px-3 py-3 font-mono text-[11px] text-black/55">{p.time}</td>
@@ -4097,6 +5629,28 @@ function FinanceOverview({
                   </td>
                   <td className="px-3 py-3">
                     <div className="flex items-center justify-end gap-1.5">
+                      {isAdmin && (
+                        <>
+                          <button
+                            type="button"
+                            aria-label={`Edit receipt ${p.id}`}
+                            title="Edit"
+                            onClick={() => openEditPayment(p)}
+                            className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Delete receipt ${p.id}`}
+                            title="Delete"
+                            onClick={() => setPendingDeletePayment(p)}
+                            className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </>
+                      )}
                       <button
                         type="button"
                         aria-label={`Download receipt ${p.id}`}
@@ -4123,6 +5677,180 @@ function FinanceOverview({
           </table>
         </div>
       </section>
+
+      {isAdmin && (
+        <>
+          <Dialog
+            open={Boolean(editingPayment)}
+            onOpenChange={(open) => {
+              if (!open) setEditingPayment(null);
+            }}
+          >
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Edit Transaction</DialogTitle>
+                <DialogDescription>
+                  Update receipt {editingPayment?.id}. Student ledger balance adjusts automatically
+                  when the amount changes.
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={saveEditedPayment} className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                    Account
+                  </Label>
+                  <Input
+                    value={editForm.name}
+                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                    placeholder="Payer / student name"
+                    autoFocus
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                      Category
+                    </Label>
+                    <Select
+                      value={editForm.cat}
+                      onValueChange={(cat) =>
+                        setEditForm({
+                          ...editForm,
+                          cat,
+                          payerType: categorySuggestsExternal(cat) ? "external" : editForm.payerType,
+                        })
+                      }
+                    >
+                      <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
+                        <SelectValue placeholder="Category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from(
+                          new Set([
+                            ...paymentCategories.map((c) => c.label),
+                            editForm.cat,
+                          ].filter(Boolean)),
+                        ).map((label) => (
+                          <SelectItem key={label} value={label}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                      Mode
+                    </Label>
+                    <Select
+                      value={editForm.mode}
+                      onValueChange={(mode) => setEditForm({ ...editForm, mode })}
+                    >
+                      <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
+                        <SelectValue placeholder="Mode" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from(
+                          new Set(["Bank", "UPI", "Cash", editForm.mode].filter(Boolean)),
+                        ).map((mode) => (
+                          <SelectItem key={mode} value={mode}>
+                            {mode}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                      Amount (₹)
+                    </Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={editForm.amount}
+                      onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+                      className="font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                      Payer type
+                    </Label>
+                    <Select
+                      value={editForm.payerType}
+                      onValueChange={(payerType) =>
+                        setEditForm({
+                          ...editForm,
+                          payerType: payerType as "student" | "external",
+                        })
+                      }
+                    >
+                      <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="student">Student</SelectItem>
+                        <SelectItem value="external">External</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                    Date / Time
+                  </Label>
+                  <Input
+                    value={editForm.time}
+                    onChange={(e) => setEditForm({ ...editForm, time: e.target.value })}
+                    placeholder="e.g. Today · 10:22"
+                    className="font-mono"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                    Narration
+                  </Label>
+                  <Textarea
+                    value={editForm.narration}
+                    onChange={(e) => setEditForm({ ...editForm, narration: e.target.value })}
+                    placeholder="Optional note"
+                    className="min-h-[72px] resize-none"
+                  />
+                </div>
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setEditingPayment(null)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+                    Save changes
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+
+          <DeleteConfirmDialog
+            open={Boolean(pendingDeletePayment)}
+            onOpenChange={(open) => {
+              if (!open) setPendingDeletePayment(null);
+            }}
+            title="Delete Transaction"
+            description={
+              pendingDeletePayment
+                ? `Delete receipt ${pendingDeletePayment.id} for ${pendingDeletePayment.name} (₹ ${pendingDeletePayment.amount.toLocaleString("en-IN")})? This cannot be undone.`
+                : "Are you sure you want to delete this transaction?"
+            }
+            onConfirm={confirmDeletePayment}
+          />
+        </>
+      )}
+
+      <FinanceFloatingPaymentActions
+        onReceive={() => onOpenView("receive")}
+        onMake={() => onOpenView("make")}
+      />
     </div>
   );
 }
@@ -4146,6 +5874,7 @@ function categorySuggestsExternal(category: string) {
 }
 
 function ReceivePayment({ onBack }: { onBack: () => void }) {
+  const { session } = useAuth();
   const {
     students,
     setStudents,
@@ -4157,6 +5886,8 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
     academicYear,
     schoolDetails,
   } = useTenantStore();
+  const isAdmin =
+    session?.role === "school_admin" || session?.role === "super_admin";
   const schoolName = schoolDetails.name || "Silver Hills Global";
   const classes = useMemo(() => {
     const fromConfig = classConfigs.map((c) => c.className);
@@ -4172,7 +5903,21 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
   const [amount, setAmount] = useState("");
   const [mode, setMode] = useState("Bank");
   const [narration, setNarration] = useState("");
+  const [attachments, setAttachments] = useState<PaymentAttachment[]>([]);
   const [historyQuery, setHistoryQuery] = useState("");
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const [viewingPayment, setViewingPayment] = useState<Payment | null>(null);
+  const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
+  const [pendingDeletePayment, setPendingDeletePayment] = useState<Payment | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    cat: "",
+    mode: "Bank",
+    amount: "",
+    time: "",
+    narration: "",
+    payerType: "student" as "student" | "external",
+  });
 
   const isExternal = payerSource === "external";
   const selected = !isExternal ? students.find((s) => s.name === stu) : undefined;
@@ -4240,6 +5985,188 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
     }
   };
 
+  const addAttachments = async (fileList: FileList | null) => {
+    if (!fileList?.length) return;
+    const room = MAX_PAYMENT_ATTACHMENTS - attachments.length;
+    if (room <= 0) {
+      toast.error(`Maximum ${MAX_PAYMENT_ATTACHMENTS} attachments allowed`);
+      return;
+    }
+
+    const files = Array.from(fileList).slice(0, room);
+    const next: PaymentAttachment[] = [];
+
+    for (const file of files) {
+      if (file.size > MAX_PAYMENT_ATTACHMENT_BYTES) {
+        toast.error(`${file.name} is larger than 5 MB`);
+        continue;
+      }
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        if (!dataUrl) {
+          toast.error(`Could not read ${file.name}`);
+          continue;
+        }
+        next.push({
+          id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          name: file.name,
+          mimeType: file.type || "application/octet-stream",
+          size: file.size,
+          dataUrl,
+        });
+      } catch {
+        toast.error(`Could not read ${file.name}`);
+      }
+    }
+
+    if (!next.length) return;
+    setAttachments((prev) => [...prev, ...next]);
+    toast.success(
+      next.length === 1 ? `${next[0].name} attached` : `${next.length} files attached`,
+    );
+  };
+
+  const removeAttachment = (id: string) => {
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
+  };
+
+  const receiptBranding = {
+    letterheadUrl: schoolDetails.letterheadUrl,
+    address: schoolDetails.address,
+    phone: schoolDetails.phone,
+    email: schoolDetails.email,
+  };
+
+  const sharePayload = async (title: string, text: string) => {
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      try {
+        await navigator.share({ title, text });
+        toast.success("Shared", { description: title });
+        return;
+      } catch (err) {
+        if ((err as Error).name === "AbortError") return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Copied to clipboard", {
+        description: "Paste into WhatsApp, email, or chat",
+      });
+    } catch {
+      toast.error("Could not share · copy failed");
+    }
+  };
+
+  const isStudentReceipt = (payment: Payment) => payment.payerType !== "external";
+
+  const adjustStudentDue = (payment: Payment, delta: number) => {
+    if (!isStudentReceipt(payment) || delta === 0) return;
+    setStudents((prev) =>
+      prev.map((student) => {
+        if (student.name !== payment.name) return student;
+        if (payment.className && student.cls !== payment.className) return student;
+        return { ...student, due: Math.max(0, student.due + delta) };
+      }),
+    );
+  };
+
+  const downloadHistoryReceipt = (payment: Payment) => {
+    downloadReceiptPdf(payment, schoolName, academicYear, receiptBranding);
+    toast.success(`Receipt ${payment.id} downloaded`);
+  };
+
+  const shareHistoryReceipt = (payment: Payment) => {
+    const text = [
+      `${schoolName} · Fee Receipt`,
+      `Receipt: ${payment.id}`,
+      `Account: ${payment.name}`,
+      `Category: ${payment.cat}`,
+      `Mode: ${payment.mode}`,
+      `Amount: ₹ ${payment.amount.toLocaleString("en-IN")}`,
+      `Time: ${payment.time}`,
+      `AY: ${academicYear}`,
+      payment.narration ? `Note: ${payment.narration}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+    void sharePayload(`Receipt ${payment.id}`, text);
+  };
+
+  const openEditHistoryPayment = (payment: Payment) => {
+    setEditingPayment(payment);
+    setEditForm({
+      name: payment.name,
+      cat: payment.cat,
+      mode: payment.mode,
+      amount: String(payment.amount),
+      time: payment.time,
+      narration: payment.narration ?? "",
+      payerType: payment.payerType === "external" ? "external" : "student",
+    });
+  };
+
+  const saveEditedHistoryPayment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPayment) return;
+    const name = editForm.name.trim();
+    const nextAmount = Number(editForm.amount);
+    const time = editForm.time.trim();
+    const cat = editForm.cat.trim();
+    const nextMode = editForm.mode.trim();
+    if (!name) {
+      toast.error("Account name is required");
+      return;
+    }
+    if (!cat) {
+      toast.error("Category is required");
+      return;
+    }
+    if (!nextMode) {
+      toast.error("Payment mode is required");
+      return;
+    }
+    if (!Number.isFinite(nextAmount) || nextAmount <= 0) {
+      toast.error("Enter a valid amount");
+      return;
+    }
+    if (!time) {
+      toast.error("Date / time is required");
+      return;
+    }
+
+    const note = editForm.narration.trim();
+    const nextPayment: Payment = {
+      ...editingPayment,
+      name,
+      cat,
+      mode: nextMode,
+      amount: nextAmount,
+      time,
+      payerType: editForm.payerType,
+      ...(note ? { narration: note } : { narration: undefined }),
+    };
+
+    if (isStudentReceipt(editingPayment) && isStudentReceipt(nextPayment)) {
+      adjustStudentDue(editingPayment, editingPayment.amount - nextAmount);
+    } else if (isStudentReceipt(editingPayment) && !isStudentReceipt(nextPayment)) {
+      adjustStudentDue(editingPayment, editingPayment.amount);
+    } else if (!isStudentReceipt(editingPayment) && isStudentReceipt(nextPayment)) {
+      adjustStudentDue(nextPayment, -nextAmount);
+    }
+
+    setPayments((prev) => prev.map((p) => (p.id === editingPayment.id ? nextPayment : p)));
+    toast.success(`Receipt ${editingPayment.id} updated`);
+    setEditingPayment(null);
+  };
+
+  const confirmDeleteHistoryPayment = () => {
+    if (!pendingDeletePayment) return;
+    adjustStudentDue(pendingDeletePayment, pendingDeletePayment.amount);
+    setPayments((prev) => prev.filter((p) => p.id !== pendingDeletePayment.id));
+    toast.error(`Receipt ${pendingDeletePayment.id} deleted`);
+    setPendingDeletePayment(null);
+  };
+
   const handleRecord = () => {
     const value = Number(amount);
     if (!value || value <= 0) {
@@ -4250,6 +6177,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
     const now = new Date();
     const stamp = `Today · ${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
     const note = narration.trim();
+    const receiptAttachments = attachments.length ? attachments : undefined;
 
     if (isExternal) {
       const payer = externalPayer.trim();
@@ -4266,14 +6194,18 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
         time: stamp,
         payerType: "external",
         ...(note ? { narration: note } : {}),
+        ...(receiptAttachments ? { attachments: receiptAttachments } : {}),
       };
       setPayments((prev) => [newPayment, ...prev]);
       toast.success(`Receipt ${newPayment.id} · ₹ ${value.toLocaleString("en-IN")} captured`, {
-        description: `External · ${payer} · ${category}`,
+        description: `External · ${payer} · ${category}${
+          receiptAttachments ? ` · ${receiptAttachments.length} file${receiptAttachments.length === 1 ? "" : "s"}` : ""
+        }`,
       });
       setAmount("");
       setExternalPayer("");
       setNarration("");
+      setAttachments([]);
       return;
     }
 
@@ -4291,6 +6223,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
       payerType: "student",
       className: selected.cls,
       ...(note ? { narration: note } : {}),
+      ...(receiptAttachments ? { attachments: receiptAttachments } : {}),
     };
     setPayments((prev) => [newPayment, ...prev]);
     setStudents((prev) =>
@@ -4305,6 +6238,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
     });
     setAmount("");
     setNarration("");
+    setAttachments([]);
   };
 
   const todayTotal = useMemo(
@@ -4330,6 +6264,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
         p.payerType === "external" ? "external donor payer" : "student",
         String(p.amount),
         p.amount.toLocaleString("en-IN"),
+        ...(p.attachments?.map((a) => a.name) ?? []),
       ]
         .join(" ")
         .toLowerCase();
@@ -4533,11 +6468,85 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
           />
         </div>
 
+        <div className="mt-4">
+          <div className="flex items-center justify-between gap-2">
+            <FieldLabel>Attachments</FieldLabel>
+            <span className="text-[10.5px] font-medium text-black/45">
+              {attachments.length} / {MAX_PAYMENT_ATTACHMENTS} · max 5 MB each
+            </span>
+          </div>
+          <div className="rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] p-3">
+            {attachments.length > 0 ? (
+              <ul className="mb-3 space-y-2">
+                {attachments.map((file) => (
+                  <li
+                    key={file.id}
+                    className="flex items-center gap-2 rounded-lg border border-[#EFEFEF] bg-white px-2.5 py-2"
+                  >
+                    <FileText className="h-3.5 w-3.5 shrink-0 text-black/40" />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[12px] font-medium text-black">{file.name}</div>
+                      <div className="font-mono text-[10px] text-black/45">
+                        {formatAttachmentSize(file.size)}
+                      </div>
+                    </div>
+                    <a
+                      href={file.dataUrl}
+                      download={file.name}
+                      className="inline-flex h-7 items-center rounded-lg border border-slate-200 px-2 text-[10.5px] font-semibold text-black/60 transition-colors hover:bg-slate-50"
+                    >
+                      Open
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => removeAttachment(file.id)}
+                      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-red-200 text-red-600 transition-colors hover:bg-red-50"
+                      aria-label={`Remove ${file.name}`}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mb-3 text-[12px] text-black/45">
+                Attach bank slips, UPI screenshots, cheques, or supporting documents.
+              </p>
+            )}
+            <input
+              ref={attachmentInputRef}
+              type="file"
+              multiple
+              accept="image/*,.pdf,.jpg,.jpeg,.png,.webp"
+              className="hidden"
+              onChange={(e) => {
+                void addAttachments(e.target.files);
+                e.target.value = "";
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => attachmentInputRef.current?.click()}
+              disabled={attachments.length >= MAX_PAYMENT_ATTACHMENTS}
+              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3.5 text-[12px] font-semibold text-black transition-colors hover:border-black/20 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Paperclip className="h-3.5 w-3.5" />
+              Add files
+            </button>
+          </div>
+        </div>
+
         <div className="mt-5 flex flex-col gap-4 rounded-xl border border-[#E8E8EA] bg-[#F8F8F9] p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:p-5">
           <div className="min-w-0 text-[13px] leading-relaxed text-black/65">
             <div>
               Receipt for <span className="font-semibold text-black">{summaryName}</span> · {summaryContext} ·{" "}
               <span className="font-semibold text-black">{category}</span> · {mode}
+              {attachments.length > 0 && (
+                <span className="text-black/45">
+                  {" "}
+                  · {attachments.length} file{attachments.length === 1 ? "" : "s"}
+                </span>
+              )}
             </div>
             {narration.trim() && (
               <div className="mt-1 truncate text-[12px] text-black/45">“{narration.trim()}”</div>
@@ -4596,13 +6605,16 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
         </div>
 
         <div className="mobile-scrollbar-none mt-4 overflow-x-auto rounded-lg border border-[#E5E5E5]">
-          <table className="w-full min-w-[640px] text-left text-[12.5px]">
+          <table className="w-full min-w-[760px] text-left text-[12.5px]">
             <thead>
               <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5]">
-                {["Account", "Category", "Mode", "Amount", "Time", ""].map((header) => (
+                {["Account", "Category", "Mode", "Amount", "Time", "Actions"].map((header) => (
                   <th
-                    key={header || "action"}
-                    className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/55 last:text-right"
+                    key={header}
+                    className={cn(
+                      "px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/55",
+                      header === "Actions" && "text-right",
+                    )}
                   >
                     {header}
                   </th>
@@ -4633,6 +6645,12 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
                     {p.narration && (
                       <div className="mt-0.5 line-clamp-1 text-[11px] text-black/40">{p.narration}</div>
                     )}
+                    {(p.attachments?.length ?? 0) > 0 && (
+                      <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-medium text-black/55">
+                        <Paperclip className="h-3 w-3" />
+                        {p.attachments!.length} file{p.attachments!.length === 1 ? "" : "s"}
+                      </div>
+                    )}
                   </td>
                   <td className="px-3 py-3 text-black/70">{p.cat}</td>
                   <td className="px-3 py-3 text-black/70">{p.mode}</td>
@@ -4641,22 +6659,55 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
                   </td>
                   <td className="px-3 py-3 font-mono text-[11px] text-black/55">{p.time}</td>
                   <td className="px-3 py-3 text-right">
-                    <button
-                      type="button"
-                      aria-label={`Download receipt ${p.id}`}
-                      onClick={() => {
-                        downloadReceiptPdf(p, schoolName, academicYear, {
-                          letterheadUrl: schoolDetails.letterheadUrl,
-                          address: schoolDetails.address,
-                          phone: schoolDetails.phone,
-                          email: schoolDetails.email,
-                        });
-                        toast.success(`Receipt ${p.id} downloaded`);
-                      }}
-                      className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                    </button>
+                    <div className="inline-flex items-center justify-end gap-1.5">
+                      <button
+                        type="button"
+                        aria-label={`View receipt details ${p.id}`}
+                        title="View details"
+                        onClick={() => setViewingPayment(p)}
+                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                      >
+                        <ClipboardList className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Download receipt ${p.id}`}
+                        title="Download"
+                        onClick={() => downloadHistoryReceipt(p)}
+                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Edit receipt ${p.id}`}
+                        title="Edit"
+                        onClick={() => openEditHistoryPayment(p)}
+                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Share receipt ${p.id}`}
+                        title="Share"
+                        onClick={() => shareHistoryReceipt(p)}
+                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-[#2563EB] hover:bg-[#DBEAFE] hover:text-[#2563EB]"
+                      >
+                        <Share2 className="h-3.5 w-3.5" />
+                      </button>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          aria-label={`Delete receipt ${p.id}`}
+                          title="Delete"
+                          onClick={() => setPendingDeletePayment(p)}
+                          className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] text-[#EF4444] transition-colors hover:bg-[#FEF2F2]"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -4664,6 +6715,320 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
           </table>
         </div>
       </OrganicCard>
+
+      <Dialog
+        open={Boolean(viewingPayment)}
+        onOpenChange={(open) => {
+          if (!open) setViewingPayment(null);
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          {viewingPayment && (
+            <>
+              <DialogHeader>
+                <div className="flex items-start justify-between gap-3 pr-7">
+                  <div>
+                    <DialogTitle>Receipt Details</DialogTitle>
+                    <DialogDescription className="mt-1">
+                      Complete transaction record and supporting documents.
+                    </DialogDescription>
+                  </div>
+                  <span className="inline-flex shrink-0 rounded-full bg-[#D1F2E1] px-2.5 py-1 text-[10px] font-semibold text-[#059669]">
+                    Complete
+                  </span>
+                </div>
+              </DialogHeader>
+
+              <div className="rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="font-mono text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                      {viewingPayment.id}
+                    </div>
+                    <div className="mt-1 truncate text-[17px] font-bold text-black">
+                      {viewingPayment.name}
+                    </div>
+                    <div className="mt-0.5 text-[12px] text-black/50">
+                      {viewingPayment.payerType === "external"
+                        ? "External payer"
+                        : viewingPayment.className || "Student"}
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="font-mono text-[20px] font-bold text-black">
+                      ₹ {viewingPayment.amount.toLocaleString("en-IN")}
+                    </div>
+                    <div className="mt-1 font-mono text-[10.5px] text-black/45">
+                      {viewingPayment.time}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  ["Category", viewingPayment.cat],
+                  ["Payment mode", viewingPayment.mode],
+                  [
+                    "Payer type",
+                    viewingPayment.payerType === "external" ? "External" : "Student",
+                  ],
+                  ["Academic year", academicYear],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-xl border border-slate-100 bg-white p-3">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                      {label}
+                    </div>
+                    <div className="mt-1 text-[13px] font-semibold text-black">{value}</div>
+                  </div>
+                ))}
+              </div>
+
+              {viewingPayment.narration && (
+                <div className="rounded-xl border border-slate-100 bg-white p-3.5">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    Narration
+                  </div>
+                  <p className="mt-1.5 text-[12.5px] leading-relaxed text-black/65">
+                    {viewingPayment.narration}
+                  </p>
+                </div>
+              )}
+
+              <div>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                    <Paperclip className="h-3.5 w-3.5" />
+                    Attachments
+                  </div>
+                  <span className="font-mono text-[10.5px] text-black/45">
+                    {viewingPayment.attachments?.length ?? 0} file
+                    {(viewingPayment.attachments?.length ?? 0) === 1 ? "" : "s"}
+                  </span>
+                </div>
+
+                {(viewingPayment.attachments?.length ?? 0) > 0 ? (
+                  <ul className="mt-2 space-y-2">
+                    {viewingPayment.attachments!.map((file) => (
+                      <li
+                        key={file.id}
+                        className="flex min-w-0 items-center gap-2.5 rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-3"
+                      >
+                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white text-black/45">
+                          <FileText className="h-4 w-4" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[12px] font-semibold text-black">
+                            {file.name}
+                          </div>
+                          <div className="mt-0.5 font-mono text-[10px] text-black/45">
+                            {formatAttachmentSize(file.size)}
+                          </div>
+                        </div>
+                        <a
+                          href={file.dataUrl}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 text-[11px] font-semibold text-black/65 transition-colors hover:border-black/20 hover:text-black"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                          Open
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="mt-2 rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-4 py-6 text-center text-[12px] text-black/45">
+                    No supporting documents attached to this receipt.
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter className="gap-2 sm:justify-between">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setViewingPayment(null)}
+                >
+                  Close
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => downloadHistoryReceipt(viewingPayment)}
+                  className="rounded-full bg-black text-white hover:bg-black/85"
+                >
+                  <Download className="mr-1.5 h-3.5 w-3.5" />
+                  Download receipt
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(editingPayment)}
+        onOpenChange={(open) => {
+          if (!open) setEditingPayment(null);
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Receipt</DialogTitle>
+            <DialogDescription>
+              Update receipt {editingPayment?.id}. Student ledger balance adjusts automatically when
+              the amount changes.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={saveEditedHistoryPayment} className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                Account
+              </Label>
+              <Input
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                placeholder="Payer / student name"
+                autoFocus
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Category
+                </Label>
+                <Select
+                  value={editForm.cat}
+                  onValueChange={(cat) =>
+                    setEditForm({
+                      ...editForm,
+                      cat,
+                      payerType: categorySuggestsExternal(cat) ? "external" : editForm.payerType,
+                    })
+                  }
+                >
+                  <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
+                    <SelectValue placeholder="Category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from(
+                      new Set(
+                        [...paymentCategories.map((c) => c.label), editForm.cat].filter(Boolean),
+                      ),
+                    ).map((label) => (
+                      <SelectItem key={label} value={label}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Mode
+                </Label>
+                <Select
+                  value={editForm.mode}
+                  onValueChange={(nextMode) => setEditForm({ ...editForm, mode: nextMode })}
+                >
+                  <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
+                    <SelectValue placeholder="Mode" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from(
+                      new Set(["Bank", "UPI", "Cash", editForm.mode].filter(Boolean)),
+                    ).map((m) => (
+                      <SelectItem key={m} value={m}>
+                        {m}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Amount (₹)
+                </Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={editForm.amount}
+                  onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+                  className="font-mono"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Payer type
+                </Label>
+                <Select
+                  value={editForm.payerType}
+                  onValueChange={(payerType) =>
+                    setEditForm({
+                      ...editForm,
+                      payerType: payerType as "student" | "external",
+                    })
+                  }
+                >
+                  <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="student">Student</SelectItem>
+                    <SelectItem value="external">External</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                Date / Time
+              </Label>
+              <Input
+                value={editForm.time}
+                onChange={(e) => setEditForm({ ...editForm, time: e.target.value })}
+                placeholder="e.g. Today · 10:22"
+                className="font-mono"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                Narration
+              </Label>
+              <Textarea
+                value={editForm.narration}
+                onChange={(e) => setEditForm({ ...editForm, narration: e.target.value })}
+                placeholder="Optional note"
+                className="min-h-[72px] resize-none"
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditingPayment(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+                Save changes
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <DeleteConfirmDialog
+        open={Boolean(pendingDeletePayment)}
+        onOpenChange={(open) => {
+          if (!open) setPendingDeletePayment(null);
+        }}
+        title="Delete Receipt"
+        description={
+          pendingDeletePayment
+            ? `Delete receipt ${pendingDeletePayment.id} for ${pendingDeletePayment.name} (₹ ${pendingDeletePayment.amount.toLocaleString("en-IN")})? This cannot be undone.`
+            : "Are you sure you want to delete this receipt?"
+        }
+        onConfirm={confirmDeleteHistoryPayment}
+      />
     </div>
   );
 }
@@ -4687,7 +7052,7 @@ function StaffSearchSelect({
   const currentStaff = useMemo(
     () =>
       staff
-        .filter((member) => isRecordActive(member.active))
+        .filter((member) => isRecordActive(member.active) && !isRecordDeleted(member.deletedAt))
         .slice()
         .sort((a, b) => a.name.localeCompare(b.name)),
     [staff],
@@ -4802,11 +7167,22 @@ function MakePayment({ onBack }: { onBack: () => void }) {
   const [pendingAuthorisation, setPendingAuthorisation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const [editingDisbursal, setEditingDisbursal] = useState<MadePayment | null>(null);
+  const [pendingDeleteDisbursal, setPendingDeleteDisbursal] = useState<MadePayment | null>(null);
+  const [disbursalEditForm, setDisbursalEditForm] = useState({
+    payee: "",
+    desc: "",
+    amount: "",
+    mode: "UPI Business",
+    payeeType: "Vendor" as "Salary" | "Vendor",
+    status: "Queued" as "Queued" | "Cleared",
+    time: "",
+  });
 
   const activeStaff = useMemo(
     () =>
       staff
-        .filter((member) => isRecordActive(member.active))
+        .filter((member) => isRecordActive(member.active) && !isRecordDeleted(member.deletedAt))
         .sort((a, b) => a.name.localeCompare(b.name)),
     [staff],
   );
@@ -4882,9 +7258,9 @@ function MakePayment({ onBack }: { onBack: () => void }) {
 
   const addAttachments = async (fileList: FileList | null) => {
     if (!fileList?.length) return;
-    const room = MAX_DISBURSAL_ATTACHMENTS - attachments.length;
+    const room = MAX_PAYMENT_ATTACHMENTS - attachments.length;
     if (room <= 0) {
-      toast.error(`Maximum ${MAX_DISBURSAL_ATTACHMENTS} attachments allowed`);
+      toast.error(`Maximum ${MAX_PAYMENT_ATTACHMENTS} attachments allowed`);
       return;
     }
 
@@ -4892,7 +7268,7 @@ function MakePayment({ onBack }: { onBack: () => void }) {
     const next: PaymentAttachment[] = [];
 
     for (const file of files) {
-      if (file.size > MAX_DISBURSAL_ATTACHMENT_BYTES) {
+      if (file.size > MAX_PAYMENT_ATTACHMENT_BYTES) {
         toast.error(`${file.name} is larger than 5 MB`);
         continue;
       }
@@ -5043,6 +7419,128 @@ function MakePayment({ onBack }: { onBack: () => void }) {
     });
   };
 
+  const sharePayload = async (title: string, text: string) => {
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      try {
+        await navigator.share({ title, text });
+        toast.success("Shared", { description: title });
+        return;
+      } catch (err) {
+        if ((err as Error).name === "AbortError") return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Copied to clipboard", {
+        description: "Paste into WhatsApp, email, or chat",
+      });
+    } catch {
+      toast.error("Could not share · copy failed");
+    }
+  };
+
+  const downloadDisbursal = (payment: MadePayment) => {
+    downloadTablePdf({
+      filename: `${payment.id}-payment.pdf`,
+      title: "Payment Voucher",
+      subtitle: `${payment.id} · ${payment.status}`,
+      headers: ["Field", "Detail"],
+      rows: [
+        ["Payee", payment.payee],
+        ["Type", payment.payeeType],
+        ["Description", payment.desc],
+        ["Mode", payment.mode],
+        ["Amount", `₹ ${payment.amount.toLocaleString("en-IN")}`],
+        ["Status", payment.status],
+        ["Time", payment.time],
+      ],
+    });
+    toast.success(`Payment ${payment.id} downloaded`);
+  };
+
+  const shareDisbursal = (payment: MadePayment) => {
+    const text = [
+      `Payment Voucher · ${payment.id}`,
+      `Payee: ${payment.payee}`,
+      `Type: ${payment.payeeType}`,
+      `Description: ${payment.desc}`,
+      `Mode: ${payment.mode}`,
+      `Amount: ₹ ${payment.amount.toLocaleString("en-IN")}`,
+      `Status: ${payment.status}`,
+      `Time: ${payment.time}`,
+    ].join("\n");
+    void sharePayload(`Payment ${payment.id}`, text);
+  };
+
+  const openEditDisbursal = (payment: MadePayment) => {
+    setEditingDisbursal(payment);
+    setDisbursalEditForm({
+      payee: payment.payee,
+      desc: payment.desc,
+      amount: String(payment.amount),
+      mode: payment.mode,
+      payeeType: payment.payeeType,
+      status: payment.status,
+      time: payment.time,
+    });
+  };
+
+  const saveEditedDisbursal = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDisbursal) return;
+    const payee = disbursalEditForm.payee.trim();
+    const desc = disbursalEditForm.desc.trim();
+    const nextAmount = Number(disbursalEditForm.amount);
+    const modeValue = disbursalEditForm.mode.trim();
+    const time = disbursalEditForm.time.trim();
+    if (!payee) {
+      toast.error("Payee is required");
+      return;
+    }
+    if (!desc) {
+      toast.error("Description is required");
+      return;
+    }
+    if (!Number.isFinite(nextAmount) || nextAmount <= 0) {
+      toast.error("Enter a valid amount");
+      return;
+    }
+    if (!modeValue) {
+      toast.error("Payment mode is required");
+      return;
+    }
+    if (!time) {
+      toast.error("Time is required");
+      return;
+    }
+
+    setMadePayments((prev) =>
+      prev.map((p) =>
+        p.id === editingDisbursal.id
+          ? {
+              ...p,
+              payee,
+              desc,
+              amount: nextAmount,
+              mode: modeValue,
+              payeeType: disbursalEditForm.payeeType,
+              status: disbursalEditForm.status,
+              time,
+            }
+          : p,
+      ),
+    );
+    toast.success(`Payment ${editingDisbursal.id} updated`);
+    setEditingDisbursal(null);
+  };
+
+  const confirmDeleteDisbursal = () => {
+    if (!pendingDeleteDisbursal) return;
+    setMadePayments((prev) => prev.filter((p) => p.id !== pendingDeleteDisbursal.id));
+    toast.error(`Payment ${pendingDeleteDisbursal.id} deleted`);
+    setPendingDeleteDisbursal(null);
+  };
+
   return (
     <div className="grid grid-cols-12 gap-4 sm:gap-5">
       <OrganicCard tone="white" cornerSide="tr" padded className={cn(workspacePanelClass, "col-span-12 lg:col-span-8")}>
@@ -5117,8 +7615,8 @@ function MakePayment({ onBack }: { onBack: () => void }) {
             </div>
             <div>
               <FieldLabel>Mode</FieldLabel>
-              <div className="grid grid-cols-3 gap-2">
-                {["Bank", "UPI", "Cheque"].map((m) => {
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {["Bank", "UPI", "Cheque", "Cash"].map((m) => {
                   const active = mode === m;
                   return (
                     <button
@@ -5145,7 +7643,7 @@ function MakePayment({ onBack }: { onBack: () => void }) {
             <div className="flex items-center justify-between gap-2">
               <FieldLabel>Attachments</FieldLabel>
               <span className="text-[10.5px] font-medium text-black/45">
-                {attachments.length} / {MAX_DISBURSAL_ATTACHMENTS} · max 5 MB each
+                {attachments.length} / {MAX_PAYMENT_ATTACHMENTS} · max 5 MB each
               </span>
             </div>
             <div className="rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] p-3">
@@ -5199,7 +7697,7 @@ function MakePayment({ onBack }: { onBack: () => void }) {
               <button
                 type="button"
                 onClick={() => attachmentInputRef.current?.click()}
-                disabled={attachments.length >= MAX_DISBURSAL_ATTACHMENTS}
+                disabled={attachments.length >= MAX_PAYMENT_ATTACHMENTS}
                 className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3.5 text-[12px] font-semibold text-black transition-colors hover:border-black/20 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Paperclip className="h-3.5 w-3.5" />
@@ -5290,40 +7788,78 @@ function MakePayment({ onBack }: { onBack: () => void }) {
           )}
           {madePayments.map((payment) => (
             <div key={payment.id} className="py-2.5">
-              <div className="flex items-center justify-between gap-2 text-[12.5px]">
-                <span className="min-w-0 flex-1 truncate font-medium text-black">
-                  {payment.payee}
-                </span>
-                <div className="flex shrink-0 items-center gap-2">
-                  <span className="font-mono text-black">
-                    −₹ {payment.amount.toLocaleString("en-IN")}
-                  </span>
-                  <span
-                    className={cn(
-                      "rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                      payment.status === "Cleared"
-                        ? "bg-[#DBEAFE] text-black"
-                        : "bg-black text-[#2563EB]",
+              <div className="flex items-start justify-between gap-2 text-[12.5px]">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-medium text-black">{payment.payee}</div>
+                  <div className="mt-0.5 truncate text-[10.5px] text-black/55">
+                    {payment.payeeType} · {payment.desc} · {payment.mode}
+                    {(payment.attachments?.length ?? 0) > 0 && (
+                      <>
+                        {" · "}
+                        <span className="inline-flex items-center gap-0.5 font-semibold text-black/65">
+                          <Paperclip className="inline h-3 w-3" />
+                          {payment.attachments?.length}
+                        </span>
+                      </>
                     )}
-                  >
-                    {payment.status}
-                  </span>
+                  </div>
                 </div>
-              </div>
-              <div className="mt-0.5 flex items-center justify-between gap-2 text-[10.5px] text-black/55">
-                <span className="min-w-0 truncate">
-                  {payment.payeeType} · {payment.desc} · {payment.mode}
-                  {(payment.attachments?.length ?? 0) > 0 && (
-                    <>
-                      {" · "}
-                      <span className="inline-flex items-center gap-0.5 font-semibold text-black/65">
-                        <Paperclip className="inline h-3 w-3" />
-                        {payment.attachments?.length}
-                      </span>
-                    </>
-                  )}
-                </span>
-                <span className="shrink-0 font-mono">{payment.time}</span>
+                <div className="flex shrink-0 flex-col items-end gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-black">
+                      −₹ {payment.amount.toLocaleString("en-IN")}
+                    </span>
+                    <span
+                      className={cn(
+                        "rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                        payment.status === "Cleared"
+                          ? "bg-[#DBEAFE] text-black"
+                          : "bg-black text-[#2563EB]",
+                      )}
+                    >
+                      {payment.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      aria-label={`Download payment ${payment.id}`}
+                      title="Download"
+                      onClick={() => downloadDisbursal(payment)}
+                      className="inline-grid h-7 w-7 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Edit payment ${payment.id}`}
+                      title="Edit"
+                      onClick={() => openEditDisbursal(payment)}
+                      className="inline-grid h-7 w-7 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Share payment ${payment.id}`}
+                      title="Share"
+                      onClick={() => shareDisbursal(payment)}
+                      className="inline-grid h-7 w-7 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-[#2563EB] hover:bg-[#DBEAFE] hover:text-[#2563EB]"
+                    >
+                      <Share2 className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Delete payment ${payment.id}`}
+                      title="Delete"
+                      onClick={() => setPendingDeleteDisbursal(payment)}
+                      className="inline-grid h-7 w-7 place-items-center rounded-full border border-[#FECACA] text-[#EF4444] transition-colors hover:bg-[#FEF2F2]"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <span className="font-mono text-[10.5px] text-black/55">{payment.time}</span>
+                </div>
               </div>
               {(payment.attachments?.length ?? 0) > 0 && (
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -5345,6 +7881,176 @@ function MakePayment({ onBack }: { onBack: () => void }) {
           ))}
         </div>
       </OrganicCard>
+
+      <Dialog
+        open={Boolean(editingDisbursal)}
+        onOpenChange={(open) => {
+          if (!open) setEditingDisbursal(null);
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Payment</DialogTitle>
+            <DialogDescription>
+              Update disbursal {editingDisbursal?.id}.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={saveEditedDisbursal} className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                Payee
+              </Label>
+              <Input
+                value={disbursalEditForm.payee}
+                onChange={(e) =>
+                  setDisbursalEditForm({ ...disbursalEditForm, payee: e.target.value })
+                }
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                Description
+              </Label>
+              <Textarea
+                value={disbursalEditForm.desc}
+                onChange={(e) =>
+                  setDisbursalEditForm({ ...disbursalEditForm, desc: e.target.value })
+                }
+                className="min-h-[72px] resize-none"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Type
+                </Label>
+                <Select
+                  value={disbursalEditForm.payeeType}
+                  onValueChange={(payeeType) =>
+                    setDisbursalEditForm({
+                      ...disbursalEditForm,
+                      payeeType: payeeType as "Salary" | "Vendor",
+                    })
+                  }
+                >
+                  <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Salary">Salary</SelectItem>
+                    <SelectItem value="Vendor">Vendor</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Status
+                </Label>
+                <Select
+                  value={disbursalEditForm.status}
+                  onValueChange={(status) =>
+                    setDisbursalEditForm({
+                      ...disbursalEditForm,
+                      status: status as "Queued" | "Cleared",
+                    })
+                  }
+                >
+                  <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Queued">Queued</SelectItem>
+                    <SelectItem value="Cleared">Cleared</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Amount (₹)
+                </Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={disbursalEditForm.amount}
+                  onChange={(e) =>
+                    setDisbursalEditForm({ ...disbursalEditForm, amount: e.target.value })
+                  }
+                  className="font-mono"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Mode
+                </Label>
+                <Select
+                  value={disbursalEditForm.mode}
+                  onValueChange={(modeValue) =>
+                    setDisbursalEditForm({ ...disbursalEditForm, mode: modeValue })
+                  }
+                >
+                  <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from(
+                      new Set([
+                        "Bank",
+                        "UPI",
+                        "Cheque",
+                        "Cash",
+                        "UPI Business",
+                        "Bank Transfer · NEFT",
+                        disbursalEditForm.mode,
+                      ].filter(Boolean)),
+                    ).map((m) => (
+                      <SelectItem key={m} value={m}>
+                        {m}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                Time
+              </Label>
+              <Input
+                value={disbursalEditForm.time}
+                onChange={(e) =>
+                  setDisbursalEditForm({ ...disbursalEditForm, time: e.target.value })
+                }
+                className="font-mono"
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditingDisbursal(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+                Save changes
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <DeleteConfirmDialog
+        open={Boolean(pendingDeleteDisbursal)}
+        onOpenChange={(open) => {
+          if (!open) setPendingDeleteDisbursal(null);
+        }}
+        title="Delete Payment"
+        description={
+          pendingDeleteDisbursal
+            ? `Delete payment ${pendingDeleteDisbursal.id} to ${pendingDeleteDisbursal.payee} (₹ ${pendingDeleteDisbursal.amount.toLocaleString("en-IN")})? This cannot be undone.`
+            : "Are you sure you want to delete this payment?"
+        }
+        onConfirm={confirmDeleteDisbursal}
+      />
 
       <Dialog
         open={pendingAuthorisation}
@@ -5424,6 +8130,7 @@ export function SchoolSettings() {
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/settings" });
   const activeTab = search.tab ?? "school";
+  const [sectionSheetOpen, setSectionSheetOpen] = useState(false);
 
   const {
     departments,
@@ -5463,19 +8170,85 @@ export function SchoolSettings() {
     { id: "system" as const, label: "System" },
   ];
 
+  const activeTabLabel =
+    settingsTabs.find((tab) => tab.id === activeTab)?.label ?? "School Details";
+
   const setTab = (tab: (typeof settingsTabs)[number]["id"]) => {
     navigate({
       to: "/tenant/settings",
       search: tab === "school" ? {} : { tab },
       replace: true,
     });
+    setSectionSheetOpen(false);
   };
 
   return (
     <div className="grid w-full grid-cols-12 gap-3 sm:gap-4 lg:gap-5">
       <div className="col-span-12 min-w-0">
-        <div className="mobile-scrollbar-none overflow-x-auto rounded-full border border-[#E5E5E5] bg-white/80 p-1 shadow-sm">
-          <div className="flex min-w-max gap-1 sm:min-w-0 sm:w-full">
+        {/* Mobile / tablet: section picker opens a bottom sheet */}
+        <div className="lg:hidden">
+          <button
+            type="button"
+            onClick={() => setSectionSheetOpen(true)}
+            className={cn(
+              glassCardClass,
+              "flex h-12 w-full items-center justify-between gap-3 px-4 text-left transition-colors hover:bg-white/80",
+            )}
+            aria-haspopup="dialog"
+            aria-expanded={sectionSheetOpen}
+          >
+            <div className="min-w-0">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                Settings section
+              </div>
+              <div className="truncate text-[14px] font-semibold text-slate-900">
+                {activeTabLabel}
+              </div>
+            </div>
+            <ChevronDown className="h-4 w-4 shrink-0 text-slate-500" />
+          </button>
+
+          <Drawer open={sectionSheetOpen} onOpenChange={setSectionSheetOpen}>
+            <DrawerContent className="rounded-t-2xl border-[#E5E5E5] bg-white pb-[calc(1rem+env(safe-area-inset-bottom))]">
+              <DrawerHeader className="border-b border-slate-100 pb-3 text-left">
+                <DrawerTitle className="text-[17px] font-semibold text-slate-900">
+                  Settings
+                </DrawerTitle>
+                <DrawerDescription className="text-[13px] text-slate-500">
+                  Choose a section to manage
+                </DrawerDescription>
+              </DrawerHeader>
+              <div className="max-h-[min(70vh,28rem)] overflow-y-auto px-3 py-2">
+                <ul className="space-y-1">
+                  {settingsTabs.map((tab) => {
+                    const active = activeTab === tab.id;
+                    return (
+                      <li key={tab.id}>
+                        <button
+                          type="button"
+                          onClick={() => setTab(tab.id)}
+                          className={cn(
+                            "flex w-full items-center justify-between gap-3 rounded-xl px-3.5 py-3.5 text-left text-[14px] font-semibold transition-colors",
+                            active
+                              ? "bg-slate-900 text-white"
+                              : "text-slate-800 hover:bg-slate-50",
+                          )}
+                        >
+                          <span>{tab.label}</span>
+                          {active && <Check className="h-4 w-4 shrink-0" strokeWidth={2.5} />}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            </DrawerContent>
+          </Drawer>
+        </div>
+
+        {/* Desktop: horizontal tabs */}
+        <div className="mobile-scrollbar-none hidden overflow-x-auto rounded-full border border-[#E5E5E5] bg-white/80 p-1 shadow-sm lg:block">
+          <div className="flex min-w-max gap-1 lg:min-w-0 lg:w-full">
             {settingsTabs.map((tab) => {
               const active = activeTab === tab.id;
               return (
@@ -5484,7 +8257,7 @@ export function SchoolSettings() {
                   type="button"
                   onClick={() => setTab(tab.id)}
                   className={cn(
-                    "shrink-0 rounded-full px-3 py-2 text-[11.5px] font-semibold transition-colors sm:min-w-0 sm:flex-1 sm:px-2 sm:text-[12px] lg:px-3.5",
+                    "shrink-0 rounded-full px-3.5 py-2 text-[12px] font-semibold transition-colors lg:min-w-0 lg:flex-1",
                     active
                       ? "bg-black text-white shadow-sm"
                       : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
@@ -5741,7 +8514,9 @@ function DepartmentsCard({
       <div className="mt-4 space-y-2">
         {departments.length === 0 && <EmptyRow label="No departments yet" />}
         {departments.map((d) => {
-          const count = staff.filter((s) => s.dept === d.name).length;
+          const count = staff.filter(
+            (s) => s.dept === d.name && !isRecordDeleted(s.deletedAt),
+          ).length;
           return (
             <div
               key={d.id}
@@ -6064,7 +8839,7 @@ function ClassesCard({
   const teacherOptions = useMemo(
     () =>
       staff
-        .filter((member) => isRecordActive(member.active))
+        .filter((member) => isRecordActive(member.active) && !isRecordDeleted(member.deletedAt))
         .slice()
         .sort((a, b) => a.name.localeCompare(b.name)),
     [staff],
@@ -8330,7 +11105,7 @@ function CategoriesCard({
         </div>
 
         <div className="col-span-12 grid grid-cols-12 gap-3 sm:col-span-12 lg:col-span-4">
-          <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 sm:col-span-6 lg:col-span-12">
+          <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-12">
             <ThemeSelect
               label="Density"
               value={themeSettings.density}
@@ -8341,7 +11116,7 @@ function CategoriesCard({
               }}
             />
           </div>
-          <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 sm:col-span-6 lg:col-span-12">
+          <div className="col-span-12 hidden rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-12 lg:block">
             <ThemeSelect
               label="Navigation"
               value={themeSettings.navPlacement ?? "Left"}

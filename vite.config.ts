@@ -8,6 +8,14 @@ export default defineConfig({
   server: {
     host: "::",
     port: 8080,
+    proxy: {
+      "/api/bugricer-whatsapp": {
+        target: "https://notifyapi.bugricer.com",
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/api\/bugricer-whatsapp/, "/wapp/api"),
+      },
+    },
   },
   resolve: {
     alias: {

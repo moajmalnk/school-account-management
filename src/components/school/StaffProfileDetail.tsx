@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import {
   Pencil,
   Camera,
+  ChevronLeft,
   X,
   FileText,
   Paperclip,
@@ -29,19 +30,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type {
-  Staff,
-  StaffDocument,
-  StaffDocumentAttachment,
-} from "@/lib/tenant-store";
+import type { Staff, StaffDocument, StaffDocumentAttachment } from "@/lib/tenant-store";
+import { DEFAULT_STAFF_DOCUMENTS, useTenantStore } from "@/lib/tenant-store";
+import { isRecordActive, ProfileAccountActions } from "@/components/school/ProfileAccountActions";
 import {
-  DEFAULT_STAFF_DOCUMENTS,
-  useTenantStore,
-} from "@/lib/tenant-store";
-import {
-  isRecordActive,
-  ProfileAccountActions,
-} from "@/components/school/ProfileAccountActions";
+  ProfileDetailTabs,
+  ProfileTabPanel,
+  STAFF_PROFILE_TABS,
+  type ProfileDetailTabId,
+} from "@/components/school/ProfileDetailTabs";
 import { cn } from "@/lib/utils";
 
 const META_LABEL = "text-black/45 font-semibold tracking-wider text-[11px] uppercase";
@@ -136,9 +133,7 @@ function StaffPhotoAvatar({
       <Dialog open={confirmRemove} onOpenChange={setConfirmRemove}>
         <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6">
           <DialogHeader>
-            <DialogTitle className="text-[22px] font-semibold text-black">
-              Remove photo
-            </DialogTitle>
+            <DialogTitle className="text-[22px] font-semibold text-black">Remove photo</DialogTitle>
             <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
               Remove {staff.name}&apos;s profile photo? You can upload a new one anytime.
             </DialogDescription>
@@ -230,6 +225,7 @@ export function StaffProfileDetail({
   const navigate = useNavigate();
   const { setStaff, staff: allStaff, departments, roles } = useTenantStore();
   const [editOpen, setEditOpen] = useState(initialEdit);
+  const [activeTab, setActiveTab] = useState<ProfileDetailTabId>("profile");
   const [draft, setDraft] = useState({
     name: staff.name,
     role: staff.role,
@@ -291,10 +287,9 @@ export function StaffProfileDetail({
                   ],
               documents: DEFAULT_STAFF_DOCUMENTS.map((def) => {
                 const existing = s.documents?.find((d) => d.id === def.id);
-                const levels =
-                  existing?.levels?.length
-                    ? existing.levels
-                    : def.levels.map((l) => ({ ...l }));
+                const levels = existing?.levels?.length
+                  ? existing.levels
+                  : def.levels.map((l) => ({ ...l }));
                 return {
                   ...def,
                   number: existing?.number ?? "",
@@ -361,10 +356,7 @@ export function StaffProfileDetail({
   );
 
   const statusHistory = useMemo(
-    () =>
-      [...(staff.statusHistory ?? [])].sort((a, b) =>
-        String(b.at).localeCompare(String(a.at)),
-      ),
+    () => [...(staff.statusHistory ?? [])].sort((a, b) => String(b.at).localeCompare(String(a.at))),
     [staff.statusHistory],
   );
 
@@ -373,10 +365,7 @@ export function StaffProfileDetail({
     [staff.basicSalary, staff.additionalAllowances],
   );
 
-  const documentsOnFile = useMemo(
-    () => documents.filter(isDocumentComplete).length,
-    [documents],
-  );
+  const documentsOnFile = useMemo(() => documents.filter(isDocumentComplete).length, [documents]);
 
   const totalAttachments = useMemo(
     () => documents.reduce((sum, doc) => sum + (doc.attachments?.length ?? 0), 0),
@@ -384,9 +373,7 @@ export function StaffProfileDetail({
   );
 
   const updatePayroll = (patch: Partial<Pick<Staff, "basicSalary" | "additionalAllowances">>) => {
-    setStaff((prev) =>
-      prev.map((s) => (s.id === staff.id ? { ...s, ...patch } : s)),
-    );
+    setStaff((prev) => prev.map((s) => (s.id === staff.id ? { ...s, ...patch } : s)));
   };
 
   const updateDocument = (docId: string, number: string) => {
@@ -404,10 +391,7 @@ export function StaffProfileDetail({
     );
   };
 
-  const updateDocumentAttachments = (
-    docId: string,
-    attachments: StaffDocumentAttachment[],
-  ) => {
+  const updateDocumentAttachments = (docId: string, attachments: StaffDocumentAttachment[]) => {
     setStaff((prev) =>
       prev.map((s) =>
         s.id === staff.id
@@ -539,12 +523,8 @@ export function StaffProfileDetail({
   };
 
   const updatePhoto = (photoUrl: string | undefined) => {
-    setStaff((prev) =>
-      prev.map((s) => (s.id === staff.id ? { ...s, photoUrl } : s)),
-    );
-    toast.success(
-      photoUrl ? `${staff.name}'s photo updated` : `${staff.name}'s photo removed`,
-    );
+    setStaff((prev) => prev.map((s) => (s.id === staff.id ? { ...s, photoUrl } : s)));
+    toast.success(photoUrl ? `${staff.name}'s photo updated` : `${staff.name}'s photo removed`);
   };
 
   const isActive = isRecordActive(staff.active);
@@ -556,9 +536,7 @@ export function StaffProfileDetail({
       id: `EVT-${staff.id}-${Date.now().toString().slice(-6)}`,
       type: eventType,
       at,
-      note: nextActive
-        ? "Account reactivated from archive"
-        : "Account deactivated and archived",
+      note: nextActive ? "Account reactivated from archive" : "Account deactivated and archived",
     };
     setStaff((prev) =>
       prev.map((s) =>
@@ -571,22 +549,30 @@ export function StaffProfileDetail({
           : s,
       ),
     );
-    toast.success(
-      nextActive ? `${staff.name} reactivated` : `${staff.name} deactivated`,
-      {
-        description: `${staff.id} · ${formatStatusDateTime(at)}`,
-      },
-    );
+    toast.success(nextActive ? `${staff.name} reactivated` : `${staff.name} deactivated`, {
+      description: `${staff.id} · ${formatStatusDateTime(at)}`,
+    });
   };
 
   const deleteStaff = () => {
-    setStaff((prev) => prev.filter((s) => s.id !== staff.id));
-    toast.error(`${staff.name} removed from roster`, { description: staff.id });
+    setStaff((prev) =>
+      prev.map((s) => (s.id === staff.id ? { ...s, deletedAt: new Date().toISOString() } : s)),
+    );
+    toast.error(`${staff.name} moved to recycle bin`, { description: staff.id });
     onBack();
   };
 
   return (
-    <div className="flex flex-col gap-4 sm:gap-6">
+    <div className="flex flex-col gap-4 pb-[calc(5.75rem+env(safe-area-inset-bottom))] sm:gap-6 md:pb-0">
+      <button
+        type="button"
+        onClick={onBack}
+        className="inline-flex w-fit items-center gap-1.5 text-[13px] font-semibold text-slate-500 transition-colors hover:text-slate-900"
+      >
+        <ChevronLeft className="h-4 w-4 shrink-0" />
+        Back to Staff
+      </button>
+
       <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
         <div className="flex min-w-0 flex-col items-center gap-4 sm:flex-row sm:items-center">
           <StaffPhotoAvatar staff={staff} onPhotoChange={updatePhoto} />
@@ -619,252 +605,282 @@ export function StaffProfileDetail({
         </button>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
-        <section className={CARD_FRAME}>
-          <h2 className="text-base font-semibold text-black">Personal Information</h2>
-          <div className="mt-5 space-y-5">
-            <MetaRow label="Employee ID" mono>
-              {staff.id}
-            </MetaRow>
+      <ProfileDetailTabs tabs={STAFF_PROFILE_TABS} value={activeTab} onValueChange={setActiveTab}>
+        <ProfileTabPanel value="profile">
+          <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
+            <section className={CARD_FRAME}>
+              <h2 className="text-base font-semibold text-black">Personal Information</h2>
+              <p className="mt-1 text-[12.5px] text-black/50">
+                Contact and identity details for {staff.name}.
+              </p>
+              <div className="mt-5 space-y-5">
+                <MetaRow label="Employee ID" mono>
+                  {staff.id}
+                </MetaRow>
 
-            <MetaRow label="Date of Joining">
-              <span className="font-mono text-[13px]">{formatJoinedAt(staff.joinedAt)}</span>
-            </MetaRow>
+                <MetaRow label="Phone" mono>
+                  {staff.phone || <span className="font-normal text-black/40">—</span>}
+                </MetaRow>
 
-            <MetaRow label="Department" mono>
-              {staff.dept}
-            </MetaRow>
+                <MetaRow label="Alternative Number" mono>
+                  {staff.altPhone || <span className="font-normal text-black/40">—</span>}
+                </MetaRow>
 
-            <MetaRow label="Phone" mono>
-              {staff.phone || <span className="font-normal text-black/40">—</span>}
-            </MetaRow>
-
-            <MetaRow label="Alternative Number" mono>
-              {staff.altPhone || <span className="font-normal text-black/40">—</span>}
-            </MetaRow>
-
-            <MetaRow label="Guardian Number" mono>
-              {staff.guardianPhone || <span className="font-normal text-black/40">—</span>}
-            </MetaRow>
-          </div>
-        </section>
-
-        <section className={cn(CARD_FRAME, "min-w-0")}>
-          <h2 className="text-base font-semibold text-black">Payroll</h2>
-          <div className="mt-5 space-y-4">
-            <div>
-              <label className={META_LABEL} htmlFor="basic-salary">
-                Basic Salary (₹)
-              </label>
-              <Input
-                id="basic-salary"
-                type="text"
-                inputMode="numeric"
-                value={String(staff.basicSalary)}
-                onChange={(e) =>
-                  updatePayroll({ basicSalary: parseSalaryInput(e.target.value) })
-                }
-                className="mt-1.5 h-10 font-mono text-[14px]"
-              />
-            </div>
-            <div>
-              <label className={META_LABEL} htmlFor="additional-allowances">
-                Bonus / Additional Allowances (₹)
-              </label>
-              <Input
-                id="additional-allowances"
-                type="text"
-                inputMode="numeric"
-                value={String(staff.additionalAllowances)}
-                onChange={(e) =>
-                  updatePayroll({ additionalAllowances: parseSalaryInput(e.target.value) })
-                }
-                className="mt-1.5 h-10 font-mono text-[14px]"
-              />
-            </div>
-
-            <div className="min-w-0 rounded-lg bg-slate-50 p-4 sm:p-5">
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
-                Total Salary
+                <MetaRow label="Guardian Number" mono>
+                  {staff.guardianPhone || <span className="font-normal text-black/40">—</span>}
+                </MetaRow>
               </div>
-              <div className="mt-2 flex min-w-0 items-baseline gap-1.5">
-                <span className="shrink-0 font-mono text-base font-bold text-black sm:text-lg">
-                  ₹
-                </span>
-                <span
-                  className={cn(
-                    "min-w-0 flex-1 break-all font-mono font-bold tracking-tight text-black",
-                    totalSalarySizeClass(totalSalary.toLocaleString("en-IN")),
-                  )}
-                >
-                  {totalSalary.toLocaleString("en-IN")}
+            </section>
+
+            <section className={CARD_FRAME}>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h2 className="text-base font-semibold text-black">Account History</h2>
+                  <p className="mt-1 text-[12.5px] text-black/50">
+                    Joined, deactivated, and reactivated events.
+                  </p>
+                </div>
+                <span className="inline-flex w-fit rounded-full bg-slate-50 px-3 py-1.5 font-mono text-[11px] font-semibold text-black/60">
+                  {statusHistory.length} event{statusHistory.length === 1 ? "" : "s"}
                 </span>
               </div>
-            </div>
-          </div>
-        </section>
 
-        <section className={cn(CARD_FRAME, "lg:col-span-2")}>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h2 className="text-base font-semibold text-black">Identity Documents</h2>
-              <p className="mt-1 text-[12.5px] text-black/50">
-                Aadhaar, PAN Card, and any other attachments (certificates, contracts, etc.).
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-2 rounded-lg bg-slate-50 px-4 py-3">
-              <FileText className="h-4 w-4 text-black/45" />
-              <div className="text-right">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                  On File
+              {statusHistory.length === 0 ? (
+                <div className="mt-5 rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center text-[13px] text-black/50">
+                  No account events recorded yet.
                 </div>
-                <div className="font-mono text-lg font-bold text-black">
-                  {documentsOnFile} / {documents.length}
-                </div>
-                <div className="mt-0.5 font-mono text-[10px] text-black/45">
-                  {totalAttachments} attachment{totalAttachments === 1 ? "" : "s"}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {documents.map((doc) => (
-              <DocumentCard
-                key={doc.id}
-                doc={doc}
-                onNumberChange={(number) => updateDocument(doc.id, number)}
-                onAttach={(levelId, files) => addAttachments(doc.id, levelId, files)}
-                onRemoveAttachment={(attachmentId) => removeAttachment(doc.id, attachmentId)}
-              />
-            ))}
-          </div>
-        </section>
-
-        <section className={cn(CARD_FRAME, "lg:col-span-2")}>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h2 className="text-base font-semibold text-black">Salary History</h2>
-              <p className="mt-1 text-[12.5px] text-black/50">
-                Past salary payments for {staff.name}.
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-2 rounded-lg bg-slate-50 px-4 py-3">
-              <Wallet className="h-4 w-4 text-black/45" />
-              <div className="text-right">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                  Payments
-                </div>
-                <div className="font-mono text-lg font-bold text-black">{salaryHistory.length}</div>
-              </div>
-            </div>
-          </div>
-
-          {salaryHistory.length === 0 ? (
-            <div className="mt-5 rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center text-[13px] text-black/50">
-              No salary payments recorded yet. Confirm a salary payment from Finance → Make Payment
-              to see it here.
-            </div>
-          ) : (
-            <div className="mt-5 overflow-x-auto rounded-lg border border-slate-100">
-              <table className="w-full min-w-[560px] text-left text-[12.5px]">
-                <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50">
-                    {["Date", "Description", "Mode", "Amount", "Status"].map((header) => (
-                      <th
-                        key={header}
-                        className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/50"
+              ) : (
+                <ol className="mt-5 space-y-3">
+                  {statusHistory.map((event) => {
+                    const tone =
+                      event.type === "joined"
+                        ? "bg-[#DBEAFE] text-[#1D4ED8]"
+                        : event.type === "deactivated"
+                          ? "bg-[#FEE2E2] text-[#B91C1C]"
+                          : "bg-[#D1F2E1] text-[#047857]";
+                    return (
+                      <li
+                        key={event.id}
+                        className="flex flex-col gap-2 rounded-lg border border-slate-100 bg-slate-50/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
                       >
-                        {header}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {salaryHistory.map((row) => (
-                    <tr key={row.id} className="border-b border-slate-50 last:border-0">
-                      <td className="px-3 py-3 font-mono text-[11px] text-black/60">{row.paidAt}</td>
-                      <td className="px-3 py-3 font-medium text-black">{row.description}</td>
-                      <td className="px-3 py-3 text-black/65">{row.mode}</td>
-                      <td className="px-3 py-3 font-mono font-semibold text-black">
-                        ₹ {row.amount.toLocaleString("en-IN")}
-                      </td>
-                      <td className="px-3 py-3">
-                        <span
-                          className={cn(
-                            "inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold",
-                            row.status === "Cleared" || row.status === "Paid"
-                              ? "bg-[#D1F2E1] text-[#059669]"
-                              : "bg-[#FEF3C7] text-[#B45309]",
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={cn(
+                                "inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                                tone,
+                              )}
+                            >
+                              {statusEventLabel(event.type)}
+                            </span>
+                            <span className="font-mono text-[12px] font-medium text-black">
+                              {formatStatusDateTime(event.at)}
+                            </span>
+                          </div>
+                          {event.note && (
+                            <p className="mt-1 text-[12px] text-black/55">{event.note}</p>
                           )}
-                        >
-                          {row.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      </div>
-
-      <section className={CARD_FRAME}>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h2 className="text-base font-semibold text-black">Account History</h2>
-            <p className="mt-1 text-[12.5px] text-black/50">
-              Joined, deactivated, and reactivated events with date and time.
-            </p>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+            </section>
           </div>
-          <span className="inline-flex w-fit rounded-full bg-slate-50 px-3 py-1.5 font-mono text-[11px] font-semibold text-black/60">
-            {statusHistory.length} event{statusHistory.length === 1 ? "" : "s"}
-          </span>
-        </div>
+        </ProfileTabPanel>
 
-        {statusHistory.length === 0 ? (
-          <div className="mt-5 rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center text-[13px] text-black/50">
-            No account events recorded yet.
-          </div>
-        ) : (
-          <ol className="mt-5 space-y-3">
-            {statusHistory.map((event) => {
-              const tone =
-                event.type === "joined"
-                  ? "bg-[#DBEAFE] text-[#1D4ED8]"
-                  : event.type === "deactivated"
-                    ? "bg-[#FEE2E2] text-[#B91C1C]"
-                    : "bg-[#D1F2E1] text-[#047857]";
-              return (
-                <li
-                  key={event.id}
-                  className="flex flex-col gap-2 rounded-lg border border-slate-100 bg-slate-50/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={cn(
-                          "inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                          tone,
-                        )}
-                      >
-                        {statusEventLabel(event.type)}
-                      </span>
-                      <span className="font-mono text-[12px] font-medium text-black">
-                        {formatStatusDateTime(event.at)}
-                      </span>
-                    </div>
-                    {event.note && (
-                      <p className="mt-1 text-[12px] text-black/55">{event.note}</p>
-                    )}
+        <ProfileTabPanel value="professional">
+          <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
+            <section className={CARD_FRAME}>
+              <h2 className="text-base font-semibold text-black">Employment</h2>
+              <p className="mt-1 text-[12.5px] text-black/50">
+                Role, department, and joining details.
+              </p>
+              <div className="mt-5 space-y-5">
+                <MetaRow label="Role">{staff.role}</MetaRow>
+                <MetaRow label="Department" mono>
+                  {staff.dept}
+                </MetaRow>
+                <MetaRow label="Date of Joining">
+                  <span className="font-mono text-[13px]">{formatJoinedAt(staff.joinedAt)}</span>
+                </MetaRow>
+              </div>
+            </section>
+
+            <section className={cn(CARD_FRAME, "min-w-0")}>
+              <h2 className="text-base font-semibold text-black">Payroll Structure</h2>
+              <p className="mt-1 text-[12.5px] text-black/50">
+                Salary components used for make-payment runs.
+              </p>
+              <div className="mt-5 space-y-4">
+                <div>
+                  <label className={META_LABEL} htmlFor="basic-salary">
+                    Basic Salary (₹)
+                  </label>
+                  <Input
+                    id="basic-salary"
+                    type="text"
+                    inputMode="numeric"
+                    value={String(staff.basicSalary)}
+                    onChange={(e) =>
+                      updatePayroll({ basicSalary: parseSalaryInput(e.target.value) })
+                    }
+                    className="mt-1.5 h-10 font-mono text-[14px]"
+                  />
+                </div>
+                <div>
+                  <label className={META_LABEL} htmlFor="additional-allowances">
+                    Bonus / Additional Allowances (₹)
+                  </label>
+                  <Input
+                    id="additional-allowances"
+                    type="text"
+                    inputMode="numeric"
+                    value={String(staff.additionalAllowances)}
+                    onChange={(e) =>
+                      updatePayroll({ additionalAllowances: parseSalaryInput(e.target.value) })
+                    }
+                    className="mt-1.5 h-10 font-mono text-[14px]"
+                  />
+                </div>
+
+                <div className="min-w-0 rounded-lg bg-slate-50 p-4 sm:p-5">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                    Total Salary
                   </div>
-                </li>
-              );
-            })}
-          </ol>
-        )}
-      </section>
+                  <div className="mt-2 flex min-w-0 items-baseline gap-1.5">
+                    <span className="shrink-0 font-mono text-base font-bold text-black sm:text-lg">
+                      ₹
+                    </span>
+                    <span
+                      className={cn(
+                        "min-w-0 flex-1 break-all font-mono font-bold tracking-tight text-black",
+                        totalSalarySizeClass(totalSalary.toLocaleString("en-IN")),
+                      )}
+                    >
+                      {totalSalary.toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </ProfileTabPanel>
+
+        <ProfileTabPanel value="documents">
+          <section className={cn(CARD_FRAME)}>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-black">Identity Documents</h2>
+                <p className="mt-1 text-[12.5px] text-black/50">
+                  Aadhaar, PAN Card, and any other attachments (certificates, contracts, etc.).
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2 rounded-lg bg-slate-50 px-4 py-3">
+                <FileText className="h-4 w-4 text-black/45" />
+                <div className="text-right">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    On File
+                  </div>
+                  <div className="font-mono text-lg font-bold text-black">
+                    {documentsOnFile} / {documents.length}
+                  </div>
+                  <div className="mt-0.5 font-mono text-[10px] text-black/45">
+                    {totalAttachments} attachment{totalAttachments === 1 ? "" : "s"}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {documents.map((doc) => (
+                <DocumentCard
+                  key={doc.id}
+                  doc={doc}
+                  onNumberChange={(number) => updateDocument(doc.id, number)}
+                  onAttach={(levelId, files) => addAttachments(doc.id, levelId, files)}
+                  onRemoveAttachment={(attachmentId) => removeAttachment(doc.id, attachmentId)}
+                />
+              ))}
+            </div>
+          </section>
+        </ProfileTabPanel>
+
+        <ProfileTabPanel value="payments">
+          <section className={CARD_FRAME}>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-black">Salary History</h2>
+                <p className="mt-1 text-[12.5px] text-black/50">
+                  Past salary payments for {staff.name}.
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2 rounded-lg bg-slate-50 px-4 py-3">
+                <Wallet className="h-4 w-4 text-black/45" />
+                <div className="text-right">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    Payments
+                  </div>
+                  <div className="font-mono text-lg font-bold text-black">
+                    {salaryHistory.length}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {salaryHistory.length === 0 ? (
+              <div className="mt-5 rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center text-[13px] text-black/50">
+                No salary payments recorded yet. Confirm a salary payment from Finance → Make
+                Payment to see it here.
+              </div>
+            ) : (
+              <div className="mt-5 overflow-x-auto rounded-lg border border-slate-100">
+                <table className="w-full min-w-[560px] text-left text-[12.5px]">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50">
+                      {["Date", "Description", "Mode", "Amount", "Status"].map((header) => (
+                        <th
+                          key={header}
+                          className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/50"
+                        >
+                          {header}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {salaryHistory.map((row) => (
+                      <tr key={row.id} className="border-b border-slate-50 last:border-0">
+                        <td className="px-3 py-3 font-mono text-[11px] text-black/60">
+                          {row.paidAt}
+                        </td>
+                        <td className="px-3 py-3 font-medium text-black">{row.description}</td>
+                        <td className="px-3 py-3 text-black/65">{row.mode}</td>
+                        <td className="px-3 py-3 font-mono font-semibold text-black">
+                          ₹ {row.amount.toLocaleString("en-IN")}
+                        </td>
+                        <td className="px-3 py-3">
+                          <span
+                            className={cn(
+                              "inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold",
+                              row.status === "Cleared" || row.status === "Paid"
+                                ? "bg-[#D1F2E1] text-[#059669]"
+                                : "bg-[#FEF3C7] text-[#B45309]",
+                            )}
+                          >
+                            {row.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </ProfileTabPanel>
+      </ProfileDetailTabs>
 
       <ProfileAccountActions
         name={staff.name}
@@ -885,19 +901,13 @@ export function StaffProfileDetail({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Edit Staff Profile</DialogTitle>
-            <DialogDescription>
-              Update core roster details for {staff.name}.
-            </DialogDescription>
+            <DialogDescription>Update core roster details for {staff.name}.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSaveProfile} className="space-y-3">
             <div className="flex items-center gap-4 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3">
               <div className="relative h-14 w-14 shrink-0">
                 {draft.photoUrl ? (
-                  <img
-                    src={draft.photoUrl}
-                    alt=""
-                    className="h-14 w-14 rounded-lg object-cover"
-                  />
+                  <img src={draft.photoUrl} alt="" className="h-14 w-14 rounded-lg object-cover" />
                 ) : (
                   <div className="grid h-14 w-14 place-items-center rounded-lg bg-black text-sm font-semibold text-white">
                     {draft.name.trim() ? initials(draft.name) : "?"}
@@ -1096,7 +1106,7 @@ function DocumentCard({
     ? doc.attachments.filter((a) => a.levelId === activeLevelId)
     : doc.attachments;
   const activeLevel = levels.find((l) => l.id === activeLevelId) ?? levels[0];
-  const attachLevelId = showLevelTabs ? activeLevelId : levels[0]?.id ?? "files";
+  const attachLevelId = showLevelTabs ? activeLevelId : (levels[0]?.id ?? "files");
 
   const numberPlaceholder =
     doc.id === "doc-aadhaar"
@@ -1244,9 +1254,7 @@ function DocumentCard({
             className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-slate-300 bg-white text-[12px] font-medium text-black/70 transition-colors hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
           >
             <Upload className="h-3.5 w-3.5" />
-            {showLevelTabs
-              ? `Attach ${activeLevel?.label ?? "file"}`
-              : "Add files"}
+            {showLevelTabs ? `Attach ${activeLevel?.label ?? "file"}` : "Add files"}
           </button>
         </div>
 

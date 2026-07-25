@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Check, Copy, MessageCircle, Share2 } from "lucide-react";
+import { Check, ClipboardList, Copy, MessageCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -69,7 +69,7 @@ export function ShareParentLinkDialog({
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
-      toast.success("Parent link copied", {
+      toast.success("Collection link copied", {
         description: "Send it to the guardian to complete the profile",
       });
       window.setTimeout(() => setCopied(false), 2000);
@@ -91,7 +91,7 @@ export function ShareParentLinkDialog({
     toast.success("Opening WhatsApp", {
       description: guardianName?.trim()
         ? `Message drafted for ${guardianName.trim()}`
-        : "Parent link attached to the message",
+        : "Collection link attached to the message",
     });
   };
 
@@ -100,20 +100,20 @@ export function ShareParentLinkDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Share2 className="h-4 w-4 text-[#2563EB]" />
-            Share with parent
+            <ClipboardList className="h-4 w-4 text-[#2563EB]" />
+            Collect profile data
           </DialogTitle>
           <DialogDescription>
-            Send this private link so the guardian can complete {studentName}&apos;s profile.
-            School-filled details stay read-only; parents can update photo, gender, DOB, email,
-            address, phone, and guardian name.
+            Send this private link so the guardian can submit missing details for {studentName}&apos;s
+            profile. School-filled fields stay read-only; parents can update photo, gender, DOB,
+            email, address, phone, and guardian name.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-2">
             <label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-              Public parent link
+              Parent form link
             </label>
             <div className="flex gap-2">
               <Input readOnly value={url} className="font-mono text-[12px]" />
@@ -136,7 +136,7 @@ export function ShareParentLinkDialog({
               inputMode="tel"
             />
             <p className="text-[11px] text-black/45">
-              Opens WhatsApp with the parent link ready to send
+              Opens WhatsApp with the collection link ready to send
               {guardianName?.trim() ? ` to ${guardianName.trim()}` : ""}.
             </p>
           </div>

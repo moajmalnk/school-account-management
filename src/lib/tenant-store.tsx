@@ -71,6 +71,10 @@ export type Student = {
   active?: boolean;
   /** Opaque token for the public parent profile link */
   shareToken?: string;
+  /** Identity documents with optional file attachments */
+  documents?: StaffDocument[];
+  /** ISO timestamp when moved to recycle bin; absent means live in directory */
+  deletedAt?: string;
 };
 
 export type StaffDocumentAttachment = {
@@ -138,6 +142,27 @@ export const DEFAULT_STAFF_DOCUMENTS: StaffDocument[] = [
   },
 ];
 
+/** Student identity docs · Aadhaar + supporting files (birth/TC/etc.) */
+export const DEFAULT_STUDENT_DOCUMENTS: StaffDocument[] = [
+  {
+    id: "doc-aadhaar",
+    label: "Aadhaar",
+    number: "",
+    levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+    attachments: [],
+  },
+  {
+    id: "doc-other",
+    label: "Additional Files",
+    number: "",
+    levels: OTHER_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+    attachments: [],
+  },
+];
+
+export type StudentDocument = StaffDocument;
+export type StudentDocumentAttachment = StaffDocumentAttachment;
+
 export type StaffSalaryHistoryEntry = {
   id: string;
   amount: number;
@@ -173,6 +198,8 @@ export type Staff = {
   documents: StaffDocument[];
   salaryHistory: StaffSalaryHistoryEntry[];
   statusHistory: StaffStatusEvent[];
+  /** ISO timestamp when moved to recycle bin; absent means live on roster */
+  deletedAt?: string;
 };
 
 function normalizeAttachment(raw: unknown): StaffDocumentAttachment | null {
@@ -342,6 +369,46 @@ function normalizeStaffDocuments(raw: StaffDocument[] | undefined): StaffDocumen
   });
 }
 
+function normalizeStudentDocuments(
+  raw: StaffDocument[] | undefined,
+  aadhaar?: string,
+): StaffDocument[] {
+  const byId = new Map(Array.isArray(raw) ? raw.map((d) => [d.id, d]) : []);
+  return DEFAULT_STUDENT_DOCUMENTS.map((def) => {
+    const existing = byId.get(def.id);
+    const attachments = Array.isArray(existing?.attachments)
+      ? existing.attachments
+          .map(normalizeAttachment)
+          .filter((a): a is StaffDocumentAttachment => a !== null)
+      : [];
+    const levels = normalizeDocumentLevels(existing?.levels, def.levels);
+    const levelIds = new Set(levels.map((l) => l.id));
+    for (const file of attachments) {
+      if (!levelIds.has(file.levelId)) {
+        const label =
+          file.levelId === "other"
+            ? "Other"
+            : file.levelId === "files"
+              ? "Files"
+              : file.levelId;
+        levels.push({ id: file.levelId, label });
+        levelIds.add(file.levelId);
+      }
+    }
+    const existingNumber = typeof existing?.number === "string" ? existing.number.trim() : "";
+    const number =
+      def.id === "doc-aadhaar"
+        ? existingNumber || (aadhaar ?? "").trim()
+        : existingNumber;
+    return {
+      ...def,
+      number,
+      levels,
+      attachments,
+    };
+  });
+}
+
 function optionalTrimmedString(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
@@ -387,6 +454,9 @@ export function normalizeStudent(
       typeof raw.shareToken === "string" && raw.shareToken.trim()
         ? raw.shareToken.trim()
         : undefined,
+    documents: normalizeStudentDocuments(raw.documents, optionalTrimmedString(raw.aadhaar)),
+    deletedAt:
+      typeof raw.deletedAt === "string" && raw.deletedAt.trim() ? raw.deletedAt.trim() : undefined,
   };
 }
 
@@ -415,8 +485,18 @@ export function normalizeStaff(raw: Partial<Staff> & Pick<Staff, "id" | "name" |
     documents: normalizeStaffDocuments(raw.documents),
     salaryHistory: normalizeSalaryHistory(raw.salaryHistory),
     statusHistory: normalizeStatusHistory(raw.statusHistory, joinedAt, raw.id),
+    deletedAt:
+      typeof raw.deletedAt === "string" && raw.deletedAt.trim() ? raw.deletedAt.trim() : undefined,
   };
 }
+
+export type PaymentAttachment = {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  dataUrl: string;
+};
 
 export type Payment = {
   id: string;
@@ -430,6 +510,8 @@ export type Payment = {
   className?: string;
   /** Optional free-text note on the receipt */
   narration?: string;
+  /** Supporting files · bank slips, UPI screenshots, vouchers */
+  attachments?: PaymentAttachment[];
 };
 
 export type Department = {
@@ -1996,9 +2078,9 @@ export function getStudentByShareToken(token: string): Student | null {
   const normalized = token.trim();
   if (!normalized) return null;
   const snap = readSnapshot();
-  const fromSnap = snap?.students.find((s) => s.shareToken === normalized);
+  const fromSnap = snap?.students.find((s) => s.shareToken === normalized && !s.deletedAt);
   if (fromSnap) return fromSnap;
-  return SEED_STUDENTS.find((s) => s.shareToken === normalized) ?? null;
+  return SEED_STUDENTS.find((s) => s.shareToken === normalized && !s.deletedAt) ?? null;
 }
 
 /** Transport routes from Settings (snapshot) for parent pickup/drop dropdowns. */

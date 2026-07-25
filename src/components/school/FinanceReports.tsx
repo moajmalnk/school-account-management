@@ -1,8 +1,19 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Download, FileSpreadsheet, Search, X } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Download,
+  FileSpreadsheet,
+  Landmark,
+  RotateCcw,
+  Search,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 
+import { isRecordDeleted } from "@/components/school/ProfileAccountActions";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -426,7 +437,13 @@ export function BalanceSheetReport() {
     () => payments.filter((p) => p.mode !== "Cash").reduce((s, p) => s + p.amount, 0),
     [payments],
   );
-  const receivables = useMemo(() => students.reduce((s, st) => s + st.due, 0), [students]);
+  const receivables = useMemo(
+    () =>
+      students
+        .filter((st) => !isRecordDeleted(st.deletedAt))
+        .reduce((s, st) => s + st.due, 0),
+    [students],
+  );
   const payables = totalAccountsPayable();
   const totalAssets = cashOnHand + bankBalance + receivables;
   const equity = totalAssets - payables;
@@ -515,7 +532,7 @@ export function BalanceSheetReport() {
           </div>
           <div className="mt-1 font-mono text-[18px] font-semibold">{inr(receivables)}</div>
           <p className="mt-1 text-[11px] text-black/55">
-            Aggregated from {students.filter((s) => s.due > 0).length} students with open balances
+            Aggregated from {students.filter((s) => !isRecordDeleted(s.deletedAt) && s.due > 0).length} students with open balances
           </p>
         </div>
       </OrganicCard>
@@ -691,7 +708,10 @@ export function FeesReport() {
     });
   }, [feeReceipts, collectionQuery, collectionCategory, collectionMode, collectionClass]);
 
-  const overdueStudents = useMemo(() => students.filter((s) => s.due > 0), [students]);
+  const overdueStudents = useMemo(
+    () => students.filter((s) => !isRecordDeleted(s.deletedAt) && s.due > 0),
+    [students],
+  );
 
   const filteredDues = useMemo(() => {
     const q = duesQuery.trim().toLowerCase();
@@ -964,6 +984,7 @@ export function SalaryReport() {
   const filteredStaff = useMemo(() => {
     const q = query.trim().toLowerCase();
     return [...staff]
+      .filter((s) => !isRecordDeleted(s.deletedAt))
       .filter((s) => {
         if (status === "active" && !s.active) return false;
         if (status === "inactive" && s.active) return false;
@@ -1457,6 +1478,364 @@ export function DayBookReport() {
               </div>
             }
           />
+        )}
+      </OrganicCard>
+    </div>
+  );
+}
+
+type BankReconTxn = {
+  id: string;
+  time: string;
+  name: string;
+  cat: string;
+  mode: string;
+  amount: number;
+};
+
+export function BankReconciliationReport() {
+  const { payments, academicYear, schoolDetails } = useTenantStore();
+  const schoolName = schoolDetails.name || "Silver Hills Global";
+
+  const bankTxns = useMemo<BankReconTxn[]>(
+    () =>
+      payments
+        .filter((p) => p.mode !== "Cash")
+        .map((p) => ({
+          id: p.id,
+          time: p.time,
+          name: p.name,
+          cat: p.cat,
+          mode: p.mode,
+          amount: p.amount,
+        })),
+    [payments],
+  );
+
+  // Transactions are cleared by default; toggling adds them to the "pending" set
+  // (deposits in transit — recorded in books but not yet on the bank statement).
+  const [pending, setPending] = useState<Set<string>>(() => new Set());
+  const [statementInput, setStatementInput] = useState("");
+  const [query, setQuery] = useState("");
+  const [mode, setMode] = useState("all");
+
+  const modeOptions = useMemo(
+    () => Array.from(new Set(bankTxns.map((t) => t.mode))).sort(),
+    [bankTxns],
+  );
+
+  const isCleared = (id: string) => !pending.has(id);
+
+  const toggleCleared = (id: string) => {
+    setPending((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return bankTxns.filter((t) => {
+      if (mode !== "all" && t.mode !== mode) return false;
+      if (!q) return true;
+      const haystack = [t.id, t.time, t.name, t.cat, t.mode, String(t.amount)]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [bankTxns, query, mode]);
+
+  const bookBalance = useMemo(() => bankTxns.reduce((s, t) => s + t.amount, 0), [bankTxns]);
+  const clearedTotal = useMemo(
+    () => bankTxns.filter((t) => isCleared(t.id)).reduce((s, t) => s + t.amount, 0),
+    [bankTxns, pending],
+  );
+  const unclearedTotal = bookBalance - clearedTotal;
+  const unclearedCount = pending.size;
+
+  const statementBalance = statementInput.trim() === "" ? clearedTotal : Number(statementInput) || 0;
+  const difference = statementBalance - clearedTotal;
+  const reconciled = Math.abs(difference) < 0.5;
+
+  const markAllCleared = () => setPending(new Set());
+  const resetStatement = () => {
+    setPending(new Set());
+    setStatementInput("");
+  };
+
+  const reconStatementRows: (string | number)[][] = [
+    ["Balance as per Bank Statement", inr(statementBalance)],
+    [`Add: Deposits in transit (${unclearedCount} uncleared)`, inr(unclearedTotal)],
+    ["Adjusted Balance (per Books)", inr(statementBalance + unclearedTotal)],
+    ["Balance as per Books", inr(bookBalance)],
+    ["Unreconciled Difference", inr(difference)],
+  ];
+
+  const handleCsv = () => {
+    downloadCsv(
+      `bank-reconciliation-${academicYear.replace(/\s+/g, "-").toLowerCase()}.csv`,
+      ["Voucher", "Date/Time", "Account", "Category", "Mode", "Amount (INR)", "Status"],
+      bankTxns.map((t) => [
+        t.id,
+        t.time,
+        t.name,
+        t.cat,
+        t.mode,
+        t.amount,
+        isCleared(t.id) ? "Cleared" : "Uncleared",
+      ]),
+    );
+    toast.success("Bank reconciliation exported", { description: "CSV download started" });
+  };
+
+  const handlePdf = () => {
+    downloadTablePdf({
+      filename: `bank-reconciliation-${academicYear.replace(/\s+/g, "-").toLowerCase()}.pdf`,
+      title: "Bank Reconciliation Statement",
+      subtitle: `${schoolName} · ${academicYear}`,
+      headers: ["Voucher", "Date/Time", "Account", "Mode", "Amount", "Status"],
+      rows: bankTxns.map((t) => [
+        t.id,
+        t.time,
+        t.name,
+        t.mode,
+        t.amount.toLocaleString("en-IN"),
+        isCleared(t.id) ? "Cleared" : "Uncleared",
+      ]),
+      footer: `Statement ${inr(statementBalance)} · Cleared ${inr(clearedTotal)} · Uncleared ${inr(unclearedTotal)} · Difference ${inr(difference)}`,
+    });
+    toast.success("Bank reconciliation PDF downloaded");
+  };
+
+  return (
+    <div className="grid grid-cols-12 gap-4 sm:gap-5">
+      <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12 lg:col-span-7">
+        <ExportBar title="Bank Reconciliation" onCsv={handleCsv} onPdf={handlePdf} />
+        <p className="mt-1 text-[12px] text-black/55">
+          Match recorded bank &amp; UPI receipts against the bank statement · {academicYear}
+        </p>
+        <SummaryStrip
+          items={[
+            { label: "Balance per Books", value: inr(bookBalance) },
+            { label: "Cleared on Statement", value: inr(clearedTotal) },
+            { label: "Deposits in Transit", value: inr(unclearedTotal), accent: true },
+          ]}
+        />
+
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-semibold uppercase tracking-wider text-black/55">
+              Bank Statement Closing Balance
+            </label>
+            <div className="relative">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-[13px] text-black/45">
+                ₹
+              </span>
+              <Input
+                inputMode="numeric"
+                value={statementInput}
+                onChange={(e) => setStatementInput(e.target.value.replace(/[^0-9]/g, ""))}
+                placeholder={String(clearedTotal)}
+                className="h-10 rounded-xl border-[#E5E5E5] bg-white pl-7 font-mono"
+              />
+            </div>
+            <p className="text-[10.5px] text-black/45">
+              Leave blank to assume it matches cleared items.
+            </p>
+          </div>
+          <div className="flex items-end">
+            <div
+              className={cn(
+                "flex w-full items-center gap-3 rounded-xl border p-3.5",
+                reconciled
+                  ? "border-[#BBF7D0] bg-[#F0FDF4]"
+                  : "border-[#FED7AA] bg-[#FFF7ED]",
+              )}
+            >
+              <span
+                className={cn(
+                  "grid h-10 w-10 shrink-0 place-items-center rounded-full",
+                  reconciled ? "bg-[#DCFCE7] text-[#059669]" : "bg-[#FFEDD5] text-[#C2410C]",
+                )}
+              >
+                {reconciled ? (
+                  <CheckCircle2 className="h-5 w-5" />
+                ) : (
+                  <AlertTriangle className="h-5 w-5" />
+                )}
+              </span>
+              <div className="min-w-0">
+                <div className="text-[13px] font-bold text-black">
+                  {reconciled ? "Reconciled" : "Out of balance"}
+                </div>
+                <div className="truncate text-[11.5px] text-black/60">
+                  {reconciled
+                    ? "Statement matches cleared items"
+                    : `Difference of ${inr(Math.abs(difference))}`}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </OrganicCard>
+
+      <OrganicCard tone="white" cornerSide="bl" padded className="col-span-12 lg:col-span-5">
+        <div className="flex items-center gap-2">
+          <Landmark className="h-4 w-4 text-black/45" />
+          <div className="text-title">Reconciliation Statement</div>
+        </div>
+        <p className="mt-1 text-[12px] text-black/55">Bank statement to book balance</p>
+        <div className="mt-4 overflow-hidden rounded-lg border border-[#E5E5E5]">
+          {reconStatementRows.map(([label, value], i) => {
+            const isTotal = label === "Balance as per Books";
+            const isDiff = label === "Unreconciled Difference";
+            return (
+              <div
+                key={i}
+                className={cn(
+                  "flex items-center justify-between gap-3 px-3.5 py-2.5 text-[12.5px]",
+                  i !== reconStatementRows.length - 1 && "border-b border-[#F0F0F0]",
+                  isTotal && "bg-[#F4F4F5] font-semibold",
+                  isDiff && (reconciled ? "bg-[#F0FDF4]" : "bg-[#FFF7ED]"),
+                )}
+              >
+                <span className={cn("min-w-0 flex-1 text-black/70", (isTotal || isDiff) && "text-black")}>
+                  {label}
+                </span>
+                <span
+                  className={cn(
+                    "shrink-0 font-mono text-black",
+                    isDiff && (reconciled ? "text-[#059669]" : "text-[#C2410C]"),
+                  )}
+                >
+                  {value}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </OrganicCard>
+
+      <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-title">Bank &amp; UPI Transactions</div>
+            <p className="mt-1 text-[12px] text-black/55">
+              {filtered.length} of {bankTxns.length} · {unclearedCount} marked uncleared
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            {unclearedCount > 0 && (
+              <button
+                type="button"
+                onClick={markAllCleared}
+                className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#2563EB] hover:underline"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Clear all
+              </button>
+            )}
+            {(query || mode !== "all" || unclearedCount > 0 || statementInput) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery("");
+                  setMode("all");
+                  resetStatement();
+                }}
+                className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-black/55 hover:text-black"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                Reset
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div className="sm:col-span-2">
+            <ReportSearchInput
+              value={query}
+              onChange={setQuery}
+              placeholder="Search voucher, account, category…"
+            />
+          </div>
+          <ReportFilterSelect
+            value={mode}
+            onChange={setMode}
+            placeholder="All modes"
+            options={modeOptions}
+          />
+        </div>
+
+        {filtered.length === 0 ? (
+          <div className="mt-4 rounded-lg border border-dashed border-black/15 px-4 py-8 text-center text-[12px] text-black/55">
+            {bankTxns.length === 0
+              ? "No bank or UPI transactions to reconcile"
+              : "No transactions match your search or filters"}
+          </div>
+        ) : (
+          <div className="mobile-scrollbar-none mt-4 overflow-x-auto rounded-lg border border-[#E5E5E5]">
+            <table className="w-full min-w-[640px] text-left text-[12.5px]">
+              <thead>
+                <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5]">
+                  {["Cleared", "Voucher", "Account", "Mode", "Date / Time", "Amount"].map((h) => (
+                    <th
+                      key={h}
+                      className={cn(
+                        "px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/55",
+                        h === "Amount" && "text-right",
+                      )}
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((t) => {
+                  const cleared = isCleared(t.id);
+                  return (
+                    <tr
+                      key={t.id}
+                      className={cn(
+                        "border-b border-[#F0F0F0] last:border-0 transition-colors",
+                        !cleared && "bg-[#FFF7ED]/60",
+                      )}
+                    >
+                      <td className="px-3 py-2.5">
+                        <Checkbox
+                          checked={cleared}
+                          onCheckedChange={() => toggleCleared(t.id)}
+                          aria-label={`Mark ${t.id} as ${cleared ? "uncleared" : "cleared"}`}
+                        />
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-[11px] text-black/70">{t.id}</td>
+                      <td className="px-3 py-2.5">
+                        <div className="font-medium text-black">{t.name}</div>
+                        <div className="text-[11px] text-black/45">{t.cat}</div>
+                      </td>
+                      <td className="px-3 py-2.5 text-black/70">{t.mode}</td>
+                      <td className="px-3 py-2.5 font-mono text-[11px] text-black/55">{t.time}</td>
+                      <td className="px-3 py-2.5 text-right font-mono font-semibold text-black">
+                        {inr(t.amount)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-[#E5E5E5] bg-[#FAFAFA] text-[12px] font-semibold text-black">
+                  <td className="px-3 py-3" colSpan={5}>
+                    Cleared {inr(clearedTotal)} · Uncleared {inr(unclearedTotal)}
+                  </td>
+                  <td className="px-3 py-3 text-right font-mono">{inr(bookBalance)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         )}
       </OrganicCard>
     </div>

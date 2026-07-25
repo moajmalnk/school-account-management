@@ -1,17 +1,21 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
-  ArrowLeft,
   Camera,
+  ChevronLeft,
   Download,
+  ExternalLink,
+  FileText,
   MessageCircle,
+  Paperclip,
   Pencil,
   Phone,
-  Check,
   AlertTriangle,
   CheckCircle2,
-  Share2,
+  Send,
+  ClipboardList,
+  Upload,
   X,
 } from "lucide-react";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -33,26 +37,35 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { OrganicCard } from "@/components/ui/organic-card";
 import {
   BLOOD_GROUPS,
   createStudentShareToken,
+  DEFAULT_STUDENT_DOCUMENTS,
   GUARDIAN_RELATIONS,
   STUDENT_CATEGORIES,
   STUDENT_RELIGIONS,
   upsertStudentInSnapshot,
   useTenantStore,
   type GuardianRelation,
+  type StaffDocument,
+  type StaffDocumentAttachment,
   type Student,
 } from "@/lib/tenant-store";
 import { ShareParentLinkDialog } from "@/components/school/ShareParentLinkDialog";
 import { downloadReceiptPdf } from "@/lib/finance-export";
+import { sendWhatsAppNotify, toNotifyWhatsAppNumber } from "@/lib/whatsapp-notify";
 import { useAuth } from "@/lib/auth";
 import {
   EnrollmentStatusBadge,
   isRecordActive,
   ProfileAccountActions,
 } from "@/components/school/ProfileAccountActions";
+import {
+  ProfileDetailTabs,
+  ProfileTabPanel,
+  STUDENT_PROFILE_TABS,
+  type ProfileDetailTabId,
+} from "@/components/school/ProfileDetailTabs";
 import { cn } from "@/lib/utils";
 
 type LedgerStatus = "Paid" | "Partially Paid" | "Overdue";
@@ -101,9 +114,7 @@ function draftFromStudent(student: Student): StudentDraft {
     religion: student.religion ?? "",
     studentCategory: student.studentCategory ?? "",
     bloodGroup: student.bloodGroup ?? "",
-    needsBus:
-      student.needsBus === true ||
-      Boolean(student.busPoint1 || student.busPoint2),
+    needsBus: student.needsBus === true || Boolean(student.busPoint1 || student.busPoint2),
     busPoint1: student.busPoint1 ?? "",
     busPoint2: student.busPoint2 ?? "",
   };
@@ -132,8 +143,73 @@ type Receipt = {
 };
 
 const META_LABEL = "text-black/45 font-semibold tracking-wider text-[11px] uppercase";
+const CARD_FRAME = "rounded-xl bg-white border border-slate-100 shadow-sm p-6";
+const profileBottomPad = "pb-[calc(5.75rem+env(safe-area-inset-bottom))] md:pb-0";
+const MAX_FILES_PER_DOC = 8;
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function isDocumentComplete(doc: StaffDocument) {
+  return doc.number.trim().length > 0 || (doc.attachments?.length ?? 0) > 0;
+}
+
+function ensureStudentDocuments(student: Student): StaffDocument[] {
+  if (Array.isArray(student.documents) && student.documents.length > 0) {
+    const byId = new Map(student.documents.map((d) => [d.id, d]));
+    return DEFAULT_STUDENT_DOCUMENTS.map((def) => {
+      const existing = byId.get(def.id);
+      if (!existing) {
+        return {
+          ...def,
+          number: def.id === "doc-aadhaar" ? student.aadhaar ?? "" : "",
+          levels: def.levels.map((l) => ({ ...l })),
+          attachments: [],
+        };
+      }
+      return {
+        ...def,
+        number:
+          existing.number?.trim() ||
+          (def.id === "doc-aadhaar" ? student.aadhaar ?? "" : ""),
+        levels: existing.levels?.length ? existing.levels : def.levels.map((l) => ({ ...l })),
+        attachments: Array.isArray(existing.attachments) ? existing.attachments : [],
+      };
+    });
+  }
+  return DEFAULT_STUDENT_DOCUMENTS.map((def) => ({
+    ...def,
+    number: def.id === "doc-aadhaar" ? student.aadhaar ?? "" : "",
+    levels: def.levels.map((l) => ({ ...l })),
+    attachments: [],
+  }));
+}
 
 const inr = (n: number) => `₹ ${n.toLocaleString("en-IN")}`;
+
+function formatPhone(raw?: string) {
+  const digits = (raw ?? "").replace(/\D/g, "");
+  if (digits.length === 10) {
+    return `+91 ${digits.slice(0, 5)} ${digits.slice(5)}`;
+  }
+  if (digits.length === 12 && digits.startsWith("91")) {
+    return `+${digits.slice(0, 2)} ${digits.slice(2, 7)} ${digits.slice(7)}`;
+  }
+  return raw?.trim() || "";
+}
 
 function deriveFees(due: number) {
   const factor = due === 0 ? 0 : due / 5500;
@@ -239,564 +315,12 @@ function initials(name: string) {
     .toUpperCase();
 }
 
-export function StudentProfileDetail({
+function StudentPhotoAvatar({
   student,
-  onBack,
-  initialEdit = false,
-}: {
-  student: Student;
-  onBack: () => void;
-  initialEdit?: boolean;
-}) {
-  const navigate = useNavigate();
-  const { setStudents, academicYear, schoolDetails, classes: classConfigs } = useTenantStore();
-  const { session } = useAuth();
-  const schoolName = schoolDetails.name || session?.tenantName || "Silver Hills Global";
-  const [editing, setEditing] = useState(initialEdit);
-  const [shareOpen, setShareOpen] = useState(false);
-  const [shareToken, setShareToken] = useState(student.shareToken ?? "");
-  const [draft, setDraft] = useState<StudentDraft>(() => draftFromStudent(student));
-
-  const classOptions = useMemo(() => {
-    const fromConfig = classConfigs.map((c) => c.className);
-    return Array.from(new Set([...fromConfig, student.cls, draft.cls].filter(Boolean)));
-  }, [classConfigs, draft.cls, student.cls]);
-
-  useEffect(() => {
-    setShareToken(student.shareToken ?? "");
-  }, [student.shareToken]);
-
-  // Only resync the draft when switching students, or when leaving edit mode
-  // after an external student update — never while the user is typing.
-  useEffect(() => {
-    if (!editing) {
-      setDraft(draftFromStudent(student));
-    }
-  }, [student, editing]);
-
-  useEffect(() => {
-    setDraft(draftFromStudent(student));
-  }, [student.id]);
-
-  useEffect(() => {
-    if (initialEdit) {
-      setEditing(true);
-      navigate({ to: "/tenant/students", search: { id: student.id }, replace: true });
-    }
-  }, [initialEdit, navigate, student.id]);
-
-  const fees = useMemo(() => deriveFees(student.due), [student.due]);
-  const ledger = useMemo(() => deriveLedger(student.due), [student.due]);
-  const receipts = useMemo(() => deriveReceipts(student.due), [student.due]);
-
-  const phoneDigits = (draft.phone || "").replace(/[^0-9]/g, "");
-  const waHref = phoneDigits
-    ? `https://wa.me/${phoneDigits.length === 10 ? "91" : ""}${phoneDigits}`
-    : undefined;
-
-  const patchDraft = <K extends keyof StudentDraft>(key: K, value: StudentDraft[K]) => {
-    setDraft((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const openShare = () => {
-    let token = student.shareToken ?? shareToken;
-    if (!token) {
-      token = createStudentShareToken();
-      const next = { ...student, shareToken: token };
-      setStudents((prev) => prev.map((s) => (s.id === student.id ? next : s)));
-      upsertStudentInSnapshot(next);
-    }
-    setShareToken(token);
-    setShareOpen(true);
-  };
-
-  const toggleEdit = () => {
-    if (editing) {
-      if (!draft.name.trim()) {
-        toast.error("Student name is required");
-        return;
-      }
-      if (!draft.guardian.trim()) {
-        toast.error("Guardian name is required");
-        return;
-      }
-      if (!draft.cls.trim()) {
-        toast.error("Class is required");
-        return;
-      }
-      const updated: Student = {
-        ...student,
-        name: draft.name.trim(),
-        gender: draft.gender || undefined,
-        cls: draft.cls.trim(),
-        guardian: draft.guardian.trim(),
-        phone: emptyToUndefined(draft.phone),
-        dob: emptyToUndefined(draft.dob),
-        email: emptyToUndefined(draft.email),
-        address: emptyToUndefined(draft.address),
-        motherName: emptyToUndefined(draft.motherName),
-        fatherOccupation: emptyToUndefined(draft.fatherOccupation),
-        guardianRelation: draft.guardianRelation || undefined,
-        guardianOccupation: emptyToUndefined(draft.guardianOccupation),
-        aadhaar: emptyToUndefined(draft.aadhaar),
-        placeOfBirth: emptyToUndefined(draft.placeOfBirth),
-        nationality: emptyToUndefined(draft.nationality),
-        religion: emptyToUndefined(draft.religion),
-        studentCategory: emptyToUndefined(draft.studentCategory),
-        bloodGroup: emptyToUndefined(draft.bloodGroup),
-        needsBus: draft.needsBus,
-        busPoint1: draft.needsBus ? emptyToUndefined(draft.busPoint1) : undefined,
-        busPoint2: draft.needsBus ? emptyToUndefined(draft.busPoint2) : undefined,
-      };
-      setStudents((prev) => prev.map((s) => (s.id === student.id ? updated : s)));
-      upsertStudentInSnapshot(updated);
-      toast.success(`${updated.name}'s profile updated`, {
-        description: `${updated.id} · all profile fields saved`,
-      });
-      setEditing(false);
-    } else {
-      setDraft(draftFromStudent(student));
-      setEditing(true);
-    }
-  };
-
-  const updatePhoto = (photoUrl: string | undefined) => {
-    setStudents((prev) =>
-      prev.map((s) => (s.id === student.id ? { ...s, photoUrl } : s)),
-    );
-    toast.success(
-      photoUrl ? `${student.name}'s photo updated` : `${student.name}'s photo removed`,
-    );
-  };
-
-  const isActive = isRecordActive(student.active);
-
-  const toggleActive = (nextActive: boolean) => {
-    setStudents((prev) =>
-      prev.map((s) => (s.id === student.id ? { ...s, active: nextActive } : s)),
-    );
-    toast.success(
-      nextActive ? `${student.name} reactivated` : `${student.name} deactivated`,
-      { description: student.id },
-    );
-  };
-
-  const deleteStudent = () => {
-    setStudents((prev) => prev.filter((s) => s.id !== student.id));
-    toast.error(`${student.name} removed from directory`, { description: student.id });
-    onBack();
-  };
-
-  return (
-    <div className="flex flex-col gap-4 sm:gap-6">
-      <TopBar
-        studentName={editing ? draft.name : student.name}
-        onBack={onBack}
-        editing={editing}
-        onToggleEdit={toggleEdit}
-        onShare={openShare}
-      />
-
-      <ShareParentLinkDialog
-        open={shareOpen}
-        onOpenChange={setShareOpen}
-        token={shareToken}
-        studentName={editing ? draft.name : student.name}
-        guardianPhone={draft.phone || student.phone}
-        guardianName={draft.guardian}
-      />
-
-      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-12 lg:items-start">
-        <OrganicCard
-          tone="white"
-          cornerSide="tr"
-          padded
-          className="relative z-10 flex min-h-0 flex-col overflow-hidden lg:sticky lg:top-4 lg:col-span-4 lg:h-[calc(100dvh-8.5rem)]"
-        >
-          <IdentityHeader
-            student={student}
-            displayName={draft.name}
-            gender={draft.gender}
-            editing={editing}
-            onNameChange={(name) => patchDraft("name", name)}
-            onGenderChange={(gender) => patchDraft("gender", gender)}
-            onPhotoChange={updatePhoto}
-            active={isActive}
-          />
-
-          <div className="mobile-scrollbar-none mt-6 flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain pb-1">
-              <MetaField
-                label="Guardian"
-                value={draft.guardian}
-                editing={editing}
-                onChange={(v) => patchDraft("guardian", v)}
-                placeholder="Guardian full name"
-              />
-
-              <div>
-                <div className={META_LABEL}>Contact Phone</div>
-                <div className="mt-1.5 flex items-center justify-between gap-3">
-                  {editing ? (
-                    <Input
-                      value={draft.phone}
-                      onChange={(e) => patchDraft("phone", e.target.value)}
-                      placeholder="9810045221"
-                      className="h-9 flex-1 bg-white font-mono text-[13px]"
-                    />
-                  ) : (
-                    <span className="font-mono text-[14px] font-medium text-black">
-                      {draft.phone || "—"}
-                    </span>
-                  )}
-                  {phoneDigits.length > 0 && (
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      <a
-                        href={`tel:${phoneDigits}`}
-                        className="inline-flex items-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow-sm transition-colors hover:border-[#2563EB]/40 hover:bg-[#DBEAFE] hover:text-[#2563EB]"
-                      >
-                        <Phone className="h-3 w-3" /> Call
-                      </a>
-                      {waHref && (
-                        <a
-                          href={waHref}
-                          target="_blank"
-                          rel="noreferrer noopener"
-                          className="inline-flex items-center gap-1 rounded-full bg-[#2563EB] px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition-colors hover:bg-[#0F172A] hover:text-white"
-                        >
-                          <MessageCircle className="h-3 w-3" /> Quick Connect
-                        </a>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <MetaField
-                label="Date of Birth"
-                value={draft.dob}
-                editing={editing}
-                onChange={(v) => patchDraft("dob", v)}
-                placeholder="14 Mar 2012"
-                date
-              />
-
-              <MetaField
-                label="Email Address"
-                value={draft.email}
-                editing={editing}
-                onChange={(v) => patchDraft("email", v)}
-                placeholder="aarav.sharma@silverhills.in"
-                mono
-              />
-
-              <div className="border-t border-[#EFEFEF] pt-5">
-                <div className={META_LABEL}>Class</div>
-                <div className="mt-1.5">
-                  {editing ? (
-                    <Select value={draft.cls || undefined} onValueChange={(cls) => patchDraft("cls", cls)}>
-                      <SelectTrigger className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white text-[13px]">
-                        <SelectValue placeholder="Select class" />
-                      </SelectTrigger>
-                      <SelectContent
-                        position="popper"
-                        className="z-[250] rounded-lg border border-[#E5E5E5] bg-white"
-                      >
-                        {classOptions.map((cls) => (
-                          <SelectItem key={cls} value={cls}>
-                            {cls}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <span className="inline-flex rounded-full bg-[#DBEAFE] px-3 py-1.5 text-[12px] font-semibold text-black">
-                      {student.cls}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <MetaField
-                label="Residential Mailing Address"
-                value={draft.address}
-                editing={editing}
-                onChange={(v) => patchDraft("address", v)}
-                placeholder="B-204, Lotus Greens, Sector 21, Noida 201301"
-                multiline
-              />
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <MetaField
-                  label="Mother Name"
-                  value={draft.motherName}
-                  editing={editing}
-                  onChange={(v) => patchDraft("motherName", v)}
-                  placeholder="e.g. Anita Verma"
-                />
-                <MetaField
-                  label="Father Occupation"
-                  value={draft.fatherOccupation}
-                  editing={editing}
-                  onChange={(v) => patchDraft("fatherOccupation", v)}
-                  placeholder="e.g. Engineer"
-                />
-                <div>
-                  <div className={META_LABEL}>If Guardian Is</div>
-                  <div className="mt-1.5">
-                    {editing ? (
-                      <div className="relative z-10 inline-flex w-full items-center rounded-full border border-black/10 bg-white p-1">
-                        {GUARDIAN_RELATIONS.map((relation) => (
-                          <button
-                            key={relation}
-                            type="button"
-                            onClick={() => patchDraft("guardianRelation", relation)}
-                            className={cn(
-                              "min-h-8 flex-1 cursor-pointer rounded-full px-1 text-[11px] font-semibold transition-colors",
-                              draft.guardianRelation === relation
-                                ? "bg-[#2563EB] text-white"
-                                : "text-black/55 hover:bg-black/5",
-                            )}
-                          >
-                            {relation}
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-[14px] font-medium text-black">
-                        {draft.guardianRelation || "—"}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <MetaField
-                  label="Guardian Occupation"
-                  value={draft.guardianOccupation}
-                  editing={editing}
-                  onChange={(v) => patchDraft("guardianOccupation", v)}
-                  placeholder="e.g. Teacher"
-                />
-                <MetaField
-                  label="Aadhaar"
-                  value={draft.aadhaar}
-                  editing={editing}
-                  onChange={(v) =>
-                    patchDraft("aadhaar", v.replace(/\D/g, "").slice(0, 12))
-                  }
-                  placeholder="12-digit Aadhaar"
-                  mono
-                />
-                <MetaField
-                  label="Place of Birth"
-                  value={draft.placeOfBirth}
-                  editing={editing}
-                  onChange={(v) => patchDraft("placeOfBirth", v)}
-                  placeholder="e.g. Kozhikode"
-                />
-                <MetaField
-                  label="Nationality"
-                  value={draft.nationality}
-                  editing={editing}
-                  onChange={(v) => patchDraft("nationality", v)}
-                  placeholder="e.g. Indian"
-                />
-                <MetaSelect
-                  label="Religion"
-                  value={draft.religion}
-                  editing={editing}
-                  onChange={(v) => patchDraft("religion", v)}
-                  options={[...STUDENT_RELIGIONS]}
-                  placeholder="Select religion"
-                />
-                <MetaSelect
-                  label="Student Category"
-                  value={draft.studentCategory}
-                  editing={editing}
-                  onChange={(v) => patchDraft("studentCategory", v)}
-                  options={[...STUDENT_CATEGORIES]}
-                  placeholder="Select category"
-                />
-                <MetaSelect
-                  label="Blood Group"
-                  value={draft.bloodGroup}
-                  editing={editing}
-                  onChange={(v) => patchDraft("bloodGroup", v)}
-                  options={[...BLOOD_GROUPS]}
-                  placeholder="Select blood group"
-                />
-                <div className="sm:col-span-2">
-                  <div className={META_LABEL}>School Bus</div>
-                  <div className="mt-1.5">
-                    {editing ? (
-                      <label className="flex items-center gap-2.5 rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] px-3 py-2.5 text-[13px] font-medium text-black">
-                        <Checkbox
-                          checked={draft.needsBus}
-                          onCheckedChange={(checked) =>
-                            patchDraft("needsBus", checked === true)
-                          }
-                        />
-                        Requires school bus transport
-                      </label>
-                    ) : (
-                      <div className="text-[14px] font-medium text-black">
-                        {draft.needsBus ? "Required" : "Not required"}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                {draft.needsBus && (
-                  <>
-                    <MetaField
-                      label="Bus Point 1"
-                      value={draft.busPoint1}
-                      editing={editing}
-                      onChange={(v) => patchDraft("busPoint1", v)}
-                      placeholder="Pickup point"
-                    />
-                    <MetaField
-                      label="Bus Point 2"
-                      value={draft.busPoint2}
-                      editing={editing}
-                      onChange={(v) => patchDraft("busPoint2", v)}
-                      placeholder="Drop point"
-                    />
-                  </>
-                )}
-              </div>
-          </div>
-        </OrganicCard>
-
-        <div className="flex flex-col lg:col-span-8">
-          <div className="mb-4 grid grid-cols-1 gap-3 sm:mb-6 sm:gap-4 md:grid-cols-3">
-            <MetricTile label="Total Due" value={inr(fees.totalDue)} cornerSide="tr" />
-            <MetricTile
-              label="Total Paid"
-              value={inr(fees.totalPaid)}
-              cornerSide="bl"
-              valueClassName="text-[#10B981]"
-            />
-            <BalanceTile balance={fees.balance} overdue={fees.overdue} />
-          </div>
-
-          <FeesTable
-            ledger={ledger}
-            student={student}
-            guardian={draft.guardian}
-            phone={draft.phone}
-            schoolName={schoolName}
-            academicYear={academicYear}
-          />
-
-          <div className="mt-6">
-            <ReceiptsList
-              receipts={receipts}
-              student={student}
-              schoolName={schoolName}
-              academicYear={academicYear}
-            />
-          </div>
-        </div>
-      </div>
-
-      <ProfileAccountActions
-        name={student.name}
-        recordId={student.id}
-        active={isActive}
-        entityLabel="student"
-        onToggleActive={toggleActive}
-        onDelete={deleteStudent}
-      />
-    </div>
-  );
-}
-
-function TopBar({
-  studentName,
-  onBack,
-  editing,
-  onToggleEdit,
-  onShare,
-}: {
-  studentName: string;
-  onBack: () => void;
-  editing: boolean;
-  onToggleEdit: () => void;
-  onShare: () => void;
-}) {
-  return (
-    <div className="flex items-center gap-2 rounded-xl border border-[#E5E5E5] bg-white p-2 shadow-[0_10px_28px_-24px_rgba(0,0,0,0.35)] sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none">
-      <div className="min-w-0 flex-1 truncate pl-0.5 text-[12px] sm:text-[14px]">
-        <button
-          type="button"
-          onClick={onBack}
-          className="font-medium text-black/55 transition-colors hover:text-black"
-        >
-          Students
-        </button>
-        <span className="text-black/30"> / </span>
-        <span className="font-semibold text-black">{studentName}</span>
-      </div>
-
-      <button
-        type="button"
-        onClick={onBack}
-        className="inline-flex h-10 shrink-0 items-center justify-center gap-1 rounded-full border border-[#E5E5E5] bg-[#FAFAFA] px-3 text-[11.5px] font-medium text-black/75 transition-colors hover:bg-[#F4F4F5] sm:gap-1.5 sm:px-4 sm:text-[13px]"
-      >
-        <ArrowLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-        <span className="hidden min-[380px]:inline sm:inline">Back</span>
-      </button>
-
-      <button
-        type="button"
-        onClick={onShare}
-        className="inline-flex h-10 shrink-0 items-center justify-center gap-1 rounded-full border border-[#DBEAFE] bg-[#EFF6FF] px-3 text-[11.5px] font-semibold text-[#2563EB] transition-colors hover:bg-[#DBEAFE] sm:gap-1.5 sm:px-4 sm:text-[13px]"
-      >
-        <Share2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-        <span className="hidden min-[380px]:inline sm:inline">Share</span>
-      </button>
-
-      <button
-        type="button"
-        onClick={onToggleEdit}
-        className={`inline-flex h-10 shrink-0 items-center justify-center gap-1 rounded-full px-3 text-[11.5px] font-semibold shadow-sm transition-colors sm:gap-1.5 sm:px-5 sm:text-[13px] ${
-          editing
-            ? "bg-[#2563EB] text-white hover:bg-[#DBEAFE]"
-            : "bg-black text-white hover:bg-black/85"
-        }`}
-      >
-        {editing ? (
-          <>
-            <Check className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            <span>Save</span>
-          </>
-        ) : (
-          <>
-            <Pencil className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            <span>Edit</span>
-          </>
-        )}
-      </button>
-    </div>
-  );
-}
-
-function IdentityHeader({
-  student,
-  displayName,
-  gender,
-  editing,
-  onNameChange,
-  onGenderChange,
   onPhotoChange,
-  active,
 }: {
   student: Student;
-  displayName: string;
-  gender: "" | "M" | "F";
-  editing: boolean;
-  onNameChange: (name: string) => void;
-  onGenderChange: (gender: "" | "M" | "F") => void;
   onPhotoChange: (photoUrl: string | undefined) => void;
-  active: boolean;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
@@ -824,115 +348,53 @@ function IdentityHeader({
 
   return (
     <>
-      <div className="flex items-center gap-4">
-        <div className="relative h-16 w-16 shrink-0">
-          {student.photoUrl ? (
-            <img
-              src={student.photoUrl}
-              alt={`${displayName} profile`}
-              className="h-16 w-16 rounded-lg object-cover"
-            />
-          ) : (
-            <div className="grid h-16 w-16 place-items-center rounded-lg bg-black text-lg font-semibold text-white">
-              {initials(displayName || student.name)}
-            </div>
-          )}
+      <div className="relative h-16 w-16 shrink-0">
+        {student.photoUrl ? (
+          <img
+            src={student.photoUrl}
+            alt={`${student.name} profile`}
+            className="h-16 w-16 rounded-lg object-cover"
+          />
+        ) : (
+          <div className="grid h-16 w-16 place-items-center rounded-lg bg-black text-lg font-semibold text-white">
+            {initials(student.name)}
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          aria-label={`Change photo for ${student.name}`}
+          title="Change photo"
+          className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#2563EB] text-white shadow-sm transition-colors hover:bg-black hover:text-[#2563EB]"
+        >
+          <Camera className="h-3.5 w-3.5" />
+        </button>
+        {student.photoUrl && (
           <button
             type="button"
-            onClick={() => fileInputRef.current?.click()}
-            aria-label={`Change photo for ${displayName}`}
-            title="Change photo"
-            className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#2563EB] text-white shadow-sm transition-colors hover:bg-black hover:text-[#2563EB]"
+            onClick={() => setConfirmRemove(true)}
+            aria-label={`Remove photo for ${student.name}`}
+            title="Remove photo"
+            className="absolute -left-1 -top-1 grid h-6 w-6 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 shadow-sm transition-colors hover:bg-[#FEE2E2] hover:text-[#EF4444]"
           >
-            <Camera className="h-3.5 w-3.5" />
+            <X className="h-3 w-3" />
           </button>
-          {student.photoUrl && (
-            <button
-              type="button"
-              onClick={() => setConfirmRemove(true)}
-              aria-label={`Remove photo for ${displayName}`}
-              title="Remove photo"
-              className="absolute -left-1 -top-1 grid h-6 w-6 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 shadow-sm transition-colors hover:bg-[#FEE2E2] hover:text-[#EF4444]"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          )}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/gif"
-            className="hidden"
-            onChange={handleFile}
-          />
-        </div>
-        <div className="min-w-0 flex-1">
-          {editing ? (
-            <div className="space-y-2">
-              <Input
-                value={displayName}
-                onChange={(e) => onNameChange(e.target.value)}
-                placeholder="Student full name"
-                className="h-9 text-[15px] font-semibold"
-              />
-              <div className="inline-flex items-center rounded-full border border-black/10 bg-white p-1">
-                {(["M", "F"] as const).map((g) => (
-                  <button
-                    key={g}
-                    type="button"
-                    onClick={() => onGenderChange(g)}
-                    className={cn(
-                      "min-h-7 rounded-full px-3 text-[11px] font-semibold transition-colors",
-                      gender === g
-                        ? g === "F"
-                          ? "bg-black text-[#2563EB]"
-                          : "bg-black text-white"
-                        : "text-black/55 hover:bg-black/5",
-                    )}
-                  >
-                    {g === "M" ? "Male" : "Female"}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="truncate text-[18px] font-semibold text-black">{displayName}</div>
-              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                <span className="rounded-full bg-[#F4F4F5] px-2.5 py-0.5 font-mono text-[10.5px] font-medium text-black/65">
-                  {student.id}
-                </span>
-                {gender && (
-                  <span
-                    className={`rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold ${
-                      gender === "F" ? "bg-black text-[#2563EB]" : "bg-black text-white"
-                    }`}
-                  >
-                    {gender}
-                  </span>
-                )}
-                <EnrollmentStatusBadge active={active} />
-              </div>
-            </>
-          )}
-          {editing && (
-            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-              <span className="rounded-full bg-[#F4F4F5] px-2.5 py-0.5 font-mono text-[10.5px] font-medium text-black/65">
-                {student.id}
-              </span>
-              <EnrollmentStatusBadge active={active} />
-            </div>
-          )}
-        </div>
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/gif"
+          className="hidden"
+          onChange={handleFile}
+        />
       </div>
 
       <Dialog open={confirmRemove} onOpenChange={setConfirmRemove}>
         <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6">
           <DialogHeader>
-            <DialogTitle className="text-[22px] font-semibold text-black">
-              Remove photo
-            </DialogTitle>
+            <DialogTitle className="text-[22px] font-semibold text-black">Remove photo</DialogTitle>
             <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
-              Remove {displayName}&apos;s profile photo? You can upload a new one anytime.
+              Remove {student.name}&apos;s profile photo? You can upload a new one anytime.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="mt-5 flex-row justify-end gap-2">
@@ -953,6 +415,869 @@ function IdentityHeader({
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function MetaRow({
+  label,
+  mono,
+  children,
+}: {
+  label: string;
+  mono?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <div className={META_LABEL}>{label}</div>
+      <div className={cn("mt-1.5 text-[14px] font-medium text-black", mono && "font-mono")}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export function StudentProfileDetail({
+  student,
+  onBack,
+  initialEdit = false,
+}: {
+  student: Student;
+  onBack: () => void;
+  initialEdit?: boolean;
+}) {
+  const navigate = useNavigate();
+  const { setStudents, academicYear, schoolDetails, classes: classConfigs } = useTenantStore();
+  const { session } = useAuth();
+  const schoolName = schoolDetails.name || session?.tenantName || "Silver Hills Global";
+  const [editOpen, setEditOpen] = useState(initialEdit);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareToken, setShareToken] = useState(student.shareToken ?? "");
+  const [activeTab, setActiveTab] = useState<ProfileDetailTabId>("profile");
+  const [draft, setDraft] = useState<StudentDraft>(() => draftFromStudent(student));
+
+  const resetDraft = () => {
+    setDraft(draftFromStudent(student));
+  };
+
+  const classOptions = useMemo(() => {
+    const fromConfig = classConfigs.map((c) => c.className);
+    return Array.from(new Set([...fromConfig, student.cls, draft.cls].filter(Boolean)));
+  }, [classConfigs, draft.cls, student.cls]);
+
+  useEffect(() => {
+    setShareToken(student.shareToken ?? "");
+    if (!editOpen) {
+      setDraft(draftFromStudent(student));
+    }
+  }, [student, editOpen]);
+
+  useEffect(() => {
+    if (initialEdit) {
+      setEditOpen(true);
+      navigate({ to: "/tenant/students", search: { id: student.id }, replace: true });
+    }
+  }, [initialEdit, navigate, student.id]);
+
+  const fees = useMemo(() => deriveFees(student.due), [student.due]);
+  const ledger = useMemo(() => deriveLedger(student.due), [student.due]);
+  const receipts = useMemo(() => deriveReceipts(student.due), [student.due]);
+  const documents = useMemo(() => ensureStudentDocuments(student), [student]);
+
+  useEffect(() => {
+    const needsNormalize =
+      !Array.isArray(student.documents) ||
+      student.documents.length === 0 ||
+      DEFAULT_STUDENT_DOCUMENTS.some((def) => !student.documents?.some((d) => d.id === def.id));
+    if (!needsNormalize) return;
+    const next = { ...student, documents: ensureStudentDocuments(student) };
+    setStudents((prev) => prev.map((s) => (s.id === student.id ? next : s)));
+    upsertStudentInSnapshot(next);
+  }, [student, setStudents]);
+
+  const persistDocuments = (nextDocs: StaffDocument[], aadhaarOverride?: string) => {
+    const aadhaarDoc = nextDocs.find((d) => d.id === "doc-aadhaar");
+    const nextAadhaar =
+      aadhaarOverride !== undefined
+        ? aadhaarOverride.trim() || undefined
+        : aadhaarDoc?.number.trim() || student.aadhaar;
+    const updated: Student = {
+      ...student,
+      aadhaar: nextAadhaar,
+      documents: nextDocs,
+    };
+    setStudents((prev) => prev.map((s) => (s.id === student.id ? updated : s)));
+    upsertStudentInSnapshot(updated);
+  };
+
+  const updateDocumentNumber = (docId: string, number: string) => {
+    const nextDocs = documents.map((d) => (d.id === docId ? { ...d, number } : d));
+    persistDocuments(nextDocs, docId === "doc-aadhaar" ? number : undefined);
+  };
+
+  const updateDocumentAttachments = (docId: string, attachments: StaffDocumentAttachment[]) => {
+    const nextDocs = documents.map((d) => (d.id === docId ? { ...d, attachments } : d));
+    persistDocuments(nextDocs);
+  };
+
+  const attachFiles = async (docId: string, levelId: string, fileList: FileList | null) => {
+    if (!fileList?.length) return;
+    const doc = documents.find((d) => d.id === docId);
+    if (!doc) return;
+    const currentCount = doc.attachments?.length ?? 0;
+    if (currentCount >= MAX_FILES_PER_DOC) {
+      toast.error(`Maximum ${MAX_FILES_PER_DOC} files per document`);
+      return;
+    }
+
+    const next: StaffDocumentAttachment[] = [...(doc.attachments ?? [])];
+    for (const file of Array.from(fileList)) {
+      if (next.length >= MAX_FILES_PER_DOC) break;
+      if (file.size > MAX_FILE_BYTES) {
+        toast.error(`${file.name} is larger than 5 MB`);
+        continue;
+      }
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        if (!dataUrl) {
+          toast.error(`Could not read ${file.name}`);
+          continue;
+        }
+        next.push({
+          id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          name: file.name,
+          mimeType: file.type || "application/octet-stream",
+          size: file.size,
+          dataUrl,
+          uploadedAt: new Date().toISOString(),
+          levelId,
+        });
+      } catch {
+        toast.error(`Could not read ${file.name}`);
+      }
+    }
+
+    if (next.length === currentCount) return;
+    updateDocumentAttachments(docId, next);
+    const added = next.length - currentCount;
+    toast.success(
+      added === 1 ? `${next[next.length - 1].name} attached` : `${added} files attached`,
+    );
+  };
+
+  const removeAttachment = (docId: string, attachmentId: string) => {
+    const doc = documents.find((d) => d.id === docId);
+    if (!doc) return;
+    updateDocumentAttachments(
+      docId,
+      doc.attachments.filter((a) => a.id !== attachmentId),
+    );
+  };
+
+  const docsOnFile = documents.filter((d) => isDocumentComplete(d)).length;
+  const docsTotal = documents.length;
+
+  const phoneDigits = (student.phone || "").replace(/[^0-9]/g, "");
+  const waHref = phoneDigits
+    ? `https://wa.me/${phoneDigits.length === 10 ? "91" : ""}${phoneDigits}`
+    : undefined;
+
+  const patchDraft = <K extends keyof StudentDraft>(key: K, value: StudentDraft[K]) => {
+    setDraft((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const openShare = () => {
+    let token = student.shareToken ?? shareToken;
+    if (!token) {
+      token = createStudentShareToken();
+      const next = { ...student, shareToken: token };
+      setStudents((prev) => prev.map((s) => (s.id === student.id ? next : s)));
+      upsertStudentInSnapshot(next);
+    }
+    setShareToken(token);
+    setShareOpen(true);
+  };
+
+  const handleSaveProfile = (e: FormEvent) => {
+    e.preventDefault();
+    if (!draft.name.trim()) {
+      toast.error("Student name is required");
+      return;
+    }
+    if (!draft.guardian.trim()) {
+      toast.error("Guardian name is required");
+      return;
+    }
+    if (!draft.cls.trim()) {
+      toast.error("Class is required");
+      return;
+    }
+    const nextDocs = ensureStudentDocuments(student).map((d) =>
+      d.id === "doc-aadhaar" ? { ...d, number: draft.aadhaar.trim() } : d,
+    );
+    const updated: Student = {
+      ...student,
+      name: draft.name.trim(),
+      gender: draft.gender || undefined,
+      cls: draft.cls.trim(),
+      guardian: draft.guardian.trim(),
+      phone: emptyToUndefined(draft.phone),
+      dob: emptyToUndefined(draft.dob),
+      email: emptyToUndefined(draft.email),
+      address: emptyToUndefined(draft.address),
+      motherName: emptyToUndefined(draft.motherName),
+      fatherOccupation: emptyToUndefined(draft.fatherOccupation),
+      guardianRelation: draft.guardianRelation || undefined,
+      guardianOccupation: emptyToUndefined(draft.guardianOccupation),
+      aadhaar: emptyToUndefined(draft.aadhaar),
+      placeOfBirth: emptyToUndefined(draft.placeOfBirth),
+      nationality: emptyToUndefined(draft.nationality),
+      religion: emptyToUndefined(draft.religion),
+      studentCategory: emptyToUndefined(draft.studentCategory),
+      bloodGroup: emptyToUndefined(draft.bloodGroup),
+      needsBus: draft.needsBus,
+      busPoint1: draft.needsBus ? emptyToUndefined(draft.busPoint1) : undefined,
+      busPoint2: draft.needsBus ? emptyToUndefined(draft.busPoint2) : undefined,
+      documents: nextDocs,
+    };
+    setStudents((prev) => prev.map((s) => (s.id === student.id ? updated : s)));
+    upsertStudentInSnapshot(updated);
+    toast.success(`${updated.name}'s profile updated`, {
+      description: `${updated.id} · all profile fields saved`,
+    });
+    setEditOpen(false);
+  };
+
+  const updatePhoto = (photoUrl: string | undefined) => {
+    const updated = { ...student, photoUrl };
+    setStudents((prev) => prev.map((s) => (s.id === student.id ? updated : s)));
+    upsertStudentInSnapshot(updated);
+    toast.success(photoUrl ? `${student.name}'s photo updated` : `${student.name}'s photo removed`);
+  };
+
+  const isActive = isRecordActive(student.active);
+
+  const toggleActive = (nextActive: boolean) => {
+    setStudents((prev) =>
+      prev.map((s) => (s.id === student.id ? { ...s, active: nextActive } : s)),
+    );
+    toast.success(nextActive ? `${student.name} reactivated` : `${student.name} deactivated`, {
+      description: student.id,
+    });
+  };
+
+  const deleteStudent = () => {
+    setStudents((prev) =>
+      prev.map((s) => (s.id === student.id ? { ...s, deletedAt: new Date().toISOString() } : s)),
+    );
+    toast.error(`${student.name} moved to recycle bin`, { description: student.id });
+    onBack();
+  };
+
+  return (
+    <div className={cn("flex flex-col gap-4 sm:gap-6", profileBottomPad)}>
+      <button
+        type="button"
+        onClick={onBack}
+        className="inline-flex w-fit items-center gap-1.5 text-[13px] font-semibold text-slate-500 transition-colors hover:text-slate-900"
+      >
+        <ChevronLeft className="h-4 w-4 shrink-0" />
+        Back to Students
+      </button>
+
+      <ShareParentLinkDialog
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        token={shareToken}
+        studentName={student.name}
+        guardianPhone={student.phone}
+        guardianName={student.guardian}
+      />
+
+      <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
+        <div className="flex min-w-0 flex-col items-center gap-4 sm:flex-row sm:items-center">
+          <StudentPhotoAvatar student={student} onPhotoChange={updatePhoto} />
+          <div className="min-w-0">
+            <h1 className="truncate text-xl font-semibold text-black sm:text-2xl">
+              {student.name}
+            </h1>
+            <p className="mt-0.5 text-sm text-black/60">{student.cls}</p>
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5 sm:justify-start">
+              <span className="inline-flex rounded-full bg-[#F4F4F5] px-2.5 py-0.5 font-mono text-[10.5px] font-medium text-black/65">
+                {student.id}
+              </span>
+              {student.gender && (
+                <span
+                  className={cn(
+                    "rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold",
+                    student.gender === "F" ? "bg-black text-[#2563EB]" : "bg-black text-white",
+                  )}
+                >
+                  {student.gender}
+                </span>
+              )}
+              <EnrollmentStatusBadge active={isActive} />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex shrink-0 flex-wrap items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={openShare}
+            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#DBEAFE] bg-[#EFF6FF] px-4 text-sm font-semibold text-[#2563EB] transition-colors hover:bg-[#DBEAFE]"
+          >
+            <ClipboardList className="h-4 w-4" />
+            Collect
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              resetDraft();
+              setEditOpen(true);
+            }}
+            className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
+          >
+            <Pencil className="h-4 w-4" />
+            Edit Profile
+          </button>
+        </div>
+      </div>
+
+      <ProfileDetailTabs tabs={STUDENT_PROFILE_TABS} value={activeTab} onValueChange={setActiveTab}>
+        <ProfileTabPanel value="profile">
+          <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
+            <section className={CARD_FRAME}>
+              <h2 className="text-base font-semibold text-black">Personal Information</h2>
+              <p className="mt-1 text-[12.5px] text-black/50">
+                Core identity and guardian contact for {student.name}.
+              </p>
+              <div className="mt-5 space-y-5">
+                <MetaRow label="Guardian">{student.guardian}</MetaRow>
+
+                <div>
+                  <div className={META_LABEL}>Contact Phone</div>
+                  <div className="mt-1.5 flex flex-wrap items-center justify-between gap-3">
+                    <span className="font-mono text-[14px] font-medium text-black">
+                      {student.phone ? (
+                        formatPhone(student.phone)
+                      ) : (
+                        <span className="font-normal text-black/40">—</span>
+                      )}
+                    </span>
+                    {phoneDigits.length > 0 && (
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <a
+                          href={`tel:${phoneDigits}`}
+                          className="inline-flex items-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow-sm transition-colors hover:border-[#2563EB]/40 hover:bg-[#DBEAFE] hover:text-[#2563EB]"
+                        >
+                          <Phone className="h-3 w-3" /> Call
+                        </a>
+                        {waHref && (
+                          <a
+                            href={waHref}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className="inline-flex items-center gap-1 rounded-full bg-[#10B981] px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition-colors hover:bg-[#059669]"
+                          >
+                            <MessageCircle className="h-3 w-3" /> WhatsApp
+                          </a>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <MetaRow label="Date of Birth" mono>
+                  {student.dob || <span className="font-normal text-black/40">—</span>}
+                </MetaRow>
+
+                <MetaRow label="Email Address" mono>
+                  {student.email || <span className="font-normal text-black/40">—</span>}
+                </MetaRow>
+
+                <MetaRow label="Residential Mailing Address">
+                  {student.address ? (
+                    <span className="whitespace-pre-line leading-snug text-black/85">
+                      {student.address}
+                    </span>
+                  ) : (
+                    <span className="font-normal text-black/40">—</span>
+                  )}
+                </MetaRow>
+              </div>
+            </section>
+
+            <section className={CARD_FRAME}>
+              <h2 className="text-base font-semibold text-black">Family Details</h2>
+              <p className="mt-1 text-[12.5px] text-black/50">
+                Parent and guardian information on file.
+              </p>
+              <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <MetaRow label="Mother Name">
+                  {student.motherName || <span className="font-normal text-black/40">—</span>}
+                </MetaRow>
+                <MetaRow label="Father Occupation">
+                  {student.fatherOccupation || <span className="font-normal text-black/40">—</span>}
+                </MetaRow>
+                <MetaRow label="If Guardian Is">
+                  {student.guardianRelation || <span className="font-normal text-black/40">—</span>}
+                </MetaRow>
+                <MetaRow label="Guardian Occupation">
+                  {student.guardianOccupation || (
+                    <span className="font-normal text-black/40">—</span>
+                  )}
+                </MetaRow>
+              </div>
+            </section>
+          </div>
+        </ProfileTabPanel>
+
+        <ProfileTabPanel value="professional">
+          <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
+            <section className={CARD_FRAME}>
+              <h2 className="text-base font-semibold text-black">Academic Placement</h2>
+              <p className="mt-1 text-[12.5px] text-black/50">
+                Class assignment and school category details.
+              </p>
+              <div className="mt-5 space-y-5">
+                <div>
+                  <div className={META_LABEL}>Class</div>
+                  <div className="mt-1.5">
+                    <span className="inline-flex rounded-full bg-[#DBEAFE] px-3 py-1.5 text-[12px] font-semibold text-black">
+                      {student.cls}
+                    </span>
+                  </div>
+                </div>
+                <MetaRow label="Student Category">
+                  {student.studentCategory || <span className="font-normal text-black/40">—</span>}
+                </MetaRow>
+                <MetaRow label="Nationality">
+                  {student.nationality || <span className="font-normal text-black/40">—</span>}
+                </MetaRow>
+                <MetaRow label="Religion">
+                  {student.religion || <span className="font-normal text-black/40">—</span>}
+                </MetaRow>
+                <MetaRow label="Place of Birth">
+                  {student.placeOfBirth || <span className="font-normal text-black/40">—</span>}
+                </MetaRow>
+                <MetaRow label="Blood Group">
+                  {student.bloodGroup || <span className="font-normal text-black/40">—</span>}
+                </MetaRow>
+              </div>
+            </section>
+
+            <section className={CARD_FRAME}>
+              <h2 className="text-base font-semibold text-black">Transport</h2>
+              <p className="mt-1 text-[12.5px] text-black/50">
+                School bus requirement and pickup points.
+              </p>
+              <div className="mt-5 space-y-5">
+                <MetaRow label="School Bus">
+                  {student.needsBus ? "Required" : "Not required"}
+                </MetaRow>
+                {student.needsBus ? (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <MetaRow label="Bus Point 1">
+                      {student.busPoint1 || <span className="font-normal text-black/40">—</span>}
+                    </MetaRow>
+                    <MetaRow label="Bus Point 2">
+                      {student.busPoint2 || <span className="font-normal text-black/40">—</span>}
+                    </MetaRow>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 py-6 text-center text-[13px] text-black/50">
+                    No transport route assigned for this student.
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
+        </ProfileTabPanel>
+
+        <ProfileTabPanel value="documents">
+          <section className={CARD_FRAME}>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-black">Identity Documents</h2>
+                <p className="mt-1 text-[12.5px] text-black/50">
+                  Government ID and supporting records for {student.name}. Attach PDF or image
+                  scans directly here.
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2 rounded-lg bg-slate-50 px-4 py-3">
+                <FileText className="h-4 w-4 text-black/45" />
+                <div className="text-right">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    On File
+                  </div>
+                  <div className="font-mono text-lg font-bold text-black">
+                    {docsOnFile} / {docsTotal}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
+              {documents.map((doc) => (
+                <StudentDocumentCard
+                  key={doc.id}
+                  doc={doc}
+                  onNumberChange={(number) => updateDocumentNumber(doc.id, number)}
+                  onAttach={(levelId, files) => {
+                    void attachFiles(doc.id, levelId, files);
+                  }}
+                  onRemoveAttachment={(attachmentId) => removeAttachment(doc.id, attachmentId)}
+                />
+              ))}
+            </div>
+          </section>
+        </ProfileTabPanel>
+
+        <ProfileTabPanel value="payments" className="space-y-4 sm:space-y-6">
+          <section className={CARD_FRAME}>
+            <h2 className="text-base font-semibold text-black">Fees Overview</h2>
+            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <FeeStatBox label="Total Due" value={inr(fees.totalDue)} />
+              <FeeStatBox
+                label="Total Paid"
+                value={inr(fees.totalPaid)}
+                valueClassName="text-[#10B981]"
+              />
+              <FeeBalanceBox balance={fees.balance} overdue={fees.overdue} />
+            </div>
+          </section>
+
+          <section className={CARD_FRAME}>
+            <FeesTable
+              ledger={ledger}
+              student={student}
+              guardian={student.guardian}
+              phone={student.phone ?? ""}
+              schoolName={schoolName}
+              academicYear={academicYear}
+            />
+          </section>
+
+          <section className={CARD_FRAME}>
+            <ReceiptsList
+              receipts={receipts}
+              student={student}
+              guardian={student.guardian}
+              phone={student.phone}
+              schoolName={schoolName}
+              academicYear={academicYear}
+            />
+          </section>
+        </ProfileTabPanel>
+      </ProfileDetailTabs>
+
+      <ProfileAccountActions
+        name={student.name}
+        recordId={student.id}
+        active={isActive}
+        entityLabel="student"
+        onToggleActive={toggleActive}
+        onDelete={deleteStudent}
+      />
+
+      <Dialog
+        open={editOpen}
+        onOpenChange={(open) => {
+          setEditOpen(open);
+          if (!open) resetDraft();
+        }}
+      >
+        <DialogContent className="max-h-[min(90dvh,720px)] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Student Profile</DialogTitle>
+            <DialogDescription>Update core details for {student.name}.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSaveProfile} className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <MetaField
+                  label="Student Name"
+                  value={draft.name}
+                  editing
+                  onChange={(v) => patchDraft("name", v)}
+                  placeholder="Student full name"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <div className={META_LABEL}>Gender</div>
+                <div className="mt-1.5 inline-flex items-center rounded-full border border-black/10 bg-white p-1">
+                  {(["M", "F"] as const).map((g) => (
+                    <button
+                      key={g}
+                      type="button"
+                      onClick={() => patchDraft("gender", g)}
+                      className={cn(
+                        "min-h-8 rounded-full px-3 text-[11px] font-semibold transition-colors",
+                        draft.gender === g
+                          ? g === "F"
+                            ? "bg-black text-[#2563EB]"
+                            : "bg-black text-white"
+                          : "text-black/55 hover:bg-black/5",
+                      )}
+                    >
+                      {g === "M" ? "Male" : "Female"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <MetaField
+                label="Guardian"
+                value={draft.guardian}
+                editing
+                onChange={(v) => patchDraft("guardian", v)}
+                placeholder="Guardian full name"
+              />
+              <MetaField
+                label="Contact Phone"
+                value={draft.phone}
+                editing
+                onChange={(v) => patchDraft("phone", v)}
+                placeholder="9810045221"
+                mono
+              />
+              <MetaField
+                label="Date of Birth"
+                value={draft.dob}
+                editing
+                onChange={(v) => patchDraft("dob", v)}
+                placeholder="14 Mar 2012"
+                date
+              />
+              <MetaField
+                label="Email Address"
+                value={draft.email}
+                editing
+                onChange={(v) => patchDraft("email", v)}
+                placeholder="student@school.in"
+                mono
+              />
+              <div>
+                <div className={META_LABEL}>Class</div>
+                <div className="mt-1.5">
+                  <Select
+                    value={draft.cls || undefined}
+                    onValueChange={(cls) => patchDraft("cls", cls)}
+                  >
+                    <SelectTrigger className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white text-[13px]">
+                      <SelectValue placeholder="Select class" />
+                    </SelectTrigger>
+                    <SelectContent
+                      position="popper"
+                      className="z-[250] rounded-lg border border-[#E5E5E5] bg-white"
+                    >
+                      {classOptions.map((cls) => (
+                        <SelectItem key={cls} value={cls}>
+                          {cls}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="sm:col-span-2">
+                <MetaField
+                  label="Residential Mailing Address"
+                  value={draft.address}
+                  editing
+                  onChange={(v) => patchDraft("address", v)}
+                  placeholder="Full mailing address"
+                  multiline
+                />
+              </div>
+              <MetaField
+                label="Mother Name"
+                value={draft.motherName}
+                editing
+                onChange={(v) => patchDraft("motherName", v)}
+                placeholder="e.g. Anita Verma"
+              />
+              <MetaField
+                label="Father Occupation"
+                value={draft.fatherOccupation}
+                editing
+                onChange={(v) => patchDraft("fatherOccupation", v)}
+                placeholder="e.g. Engineer"
+              />
+              <div>
+                <div className={META_LABEL}>If Guardian Is</div>
+                <div className="mt-1.5 inline-flex w-full items-center rounded-full border border-black/10 bg-white p-1">
+                  {GUARDIAN_RELATIONS.map((relation) => (
+                    <button
+                      key={relation}
+                      type="button"
+                      onClick={() => patchDraft("guardianRelation", relation)}
+                      className={cn(
+                        "min-h-8 flex-1 cursor-pointer rounded-full px-1 text-[11px] font-semibold transition-colors",
+                        draft.guardianRelation === relation
+                          ? "bg-[#2563EB] text-white"
+                          : "text-black/55 hover:bg-black/5",
+                      )}
+                    >
+                      {relation}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <MetaField
+                label="Guardian Occupation"
+                value={draft.guardianOccupation}
+                editing
+                onChange={(v) => patchDraft("guardianOccupation", v)}
+                placeholder="e.g. Teacher"
+              />
+              <MetaField
+                label="Aadhaar"
+                value={draft.aadhaar}
+                editing
+                onChange={(v) => patchDraft("aadhaar", v.replace(/\D/g, "").slice(0, 12))}
+                placeholder="12-digit Aadhaar"
+                mono
+              />
+              <MetaField
+                label="Place of Birth"
+                value={draft.placeOfBirth}
+                editing
+                onChange={(v) => patchDraft("placeOfBirth", v)}
+                placeholder="e.g. Kozhikode"
+              />
+              <MetaField
+                label="Nationality"
+                value={draft.nationality}
+                editing
+                onChange={(v) => patchDraft("nationality", v)}
+                placeholder="e.g. Indian"
+              />
+              <MetaSelect
+                label="Religion"
+                value={draft.religion}
+                editing
+                onChange={(v) => patchDraft("religion", v)}
+                options={[...STUDENT_RELIGIONS]}
+                placeholder="Select religion"
+              />
+              <MetaSelect
+                label="Student Category"
+                value={draft.studentCategory}
+                editing
+                onChange={(v) => patchDraft("studentCategory", v)}
+                options={[...STUDENT_CATEGORIES]}
+                placeholder="Select category"
+              />
+              <MetaSelect
+                label="Blood Group"
+                value={draft.bloodGroup}
+                editing
+                onChange={(v) => patchDraft("bloodGroup", v)}
+                options={[...BLOOD_GROUPS]}
+                placeholder="Select blood group"
+              />
+              <div className="sm:col-span-2">
+                <div className={META_LABEL}>School Bus</div>
+                <label className="mt-1.5 flex items-center gap-2.5 rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] px-3 py-2.5 text-[13px] font-medium text-black">
+                  <Checkbox
+                    checked={draft.needsBus}
+                    onCheckedChange={(checked) => patchDraft("needsBus", checked === true)}
+                  />
+                  Requires school bus transport
+                </label>
+              </div>
+              {draft.needsBus && (
+                <>
+                  <MetaField
+                    label="Bus Point 1"
+                    value={draft.busPoint1}
+                    editing
+                    onChange={(v) => patchDraft("busPoint1", v)}
+                    placeholder="Pickup point"
+                  />
+                  <MetaField
+                    label="Bus Point 2"
+                    value={draft.busPoint2}
+                    editing
+                    onChange={(v) => patchDraft("busPoint2", v)}
+                    placeholder="Drop point"
+                  />
+                </>
+              )}
+            </div>
+            <DialogFooter className="flex-row justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setEditOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function FeeStatBox({
+  label,
+  value,
+  valueClassName,
+}: {
+  label: string;
+  value: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="rounded-lg bg-slate-50 p-4">
+      <div className={META_LABEL}>{label}</div>
+      <div
+        className={cn(
+          "mt-2 font-mono text-xl font-semibold tracking-tight text-black",
+          valueClassName,
+        )}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function FeeBalanceBox({ balance, overdue }: { balance: number; overdue: boolean }) {
+  return (
+    <div className={cn("rounded-lg p-4", overdue ? "bg-[#2563EB]" : "bg-slate-50")}>
+      <div
+        className={cn(
+          "flex items-start justify-between",
+          overdue ? "text-white/75" : "text-black/55",
+        )}
+      >
+        <div className="text-[11px] font-semibold uppercase tracking-wider">Current Balance</div>
+        {overdue ? (
+          <AlertTriangle className="h-4 w-4 text-[#EF4444]" />
+        ) : (
+          <CheckCircle2 className="h-4 w-4 text-black" />
+        )}
+      </div>
+      <div
+        className={cn(
+          "mt-2 font-mono text-xl font-semibold tracking-tight",
+          overdue ? "text-white" : "text-black",
+        )}
+      >
+        {inr(balance)}
+      </div>
+      <span
+        className={cn(
+          "mt-2 inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider",
+          overdue ? "bg-[#0F172A] text-[#EF4444]" : "bg-[#0F172A] text-[#10B981]",
+        )}
+      >
+        {overdue ? "[ OVERDUE ]" : "[ CLEARED ]"}
+      </span>
+    </div>
   );
 }
 
@@ -1072,73 +1397,6 @@ function MetaField({
   );
 }
 
-function MetricTile({
-  label,
-  value,
-  cornerSide,
-  valueClassName,
-}: {
-  label: string;
-  value: string;
-  cornerSide: "tl" | "tr" | "bl" | "br";
-  valueClassName?: string;
-}) {
-  return (
-    <OrganicCard tone="white" cornerSide={cornerSide} padded>
-      <div className="flex items-start justify-between">
-        <div className={META_LABEL}>{label}</div>
-        <span className="h-2.5 w-2.5 rounded-full bg-black" />
-      </div>
-      <div
-        className={`mt-3 font-mono text-2xl font-semibold tracking-tight ${
-          valueClassName ?? "text-black"
-        }`}
-      >
-        {value}
-      </div>
-    </OrganicCard>
-  );
-}
-
-function BalanceTile({ balance, overdue }: { balance: number; overdue: boolean }) {
-  if (!overdue) {
-    return (
-      <OrganicCard tone="white" cornerSide="br" padded>
-        <div className="flex items-start justify-between">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-            Current Balance
-          </div>
-          <CheckCircle2 className="h-4 w-4 text-black" />
-        </div>
-        <div className="mt-3 font-mono text-2xl font-semibold tracking-tight text-black">
-          {inr(balance)}
-        </div>
-        <span className="mt-2 inline-flex items-center rounded-full bg-[#0F172A] px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-[#10B981]">
-          [ CLEARED ]
-        </span>
-      </OrganicCard>
-    );
-  }
-  return (
-    <OrganicCard tone="lime" cornerSide="br" padded>
-      <div className="flex items-start justify-between">
-        <div className="text-[11px] font-semibold uppercase tracking-wider text-white/75">
-          Current Balance
-        </div>
-        <span className="grid h-7 w-7 place-items-center rounded-full bg-[#0F172A]">
-          <AlertTriangle className="h-3.5 w-3.5 text-[#EF4444]" />
-        </span>
-      </div>
-      <div className="mt-3 font-mono text-2xl font-semibold tracking-tight text-white">
-        {inr(balance)}
-      </div>
-      <span className="overdue-flash mt-2 inline-flex items-center rounded-full bg-[#0F172A] px-2.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-[#EF4444]">
-        [ OVERDUE ]
-      </span>
-    </OrganicCard>
-  );
-}
-
 function buildOverdueWhatsAppHref({
   phone,
   guardian,
@@ -1179,13 +1437,7 @@ function buildOverdueWhatsAppHref({
   return `https://wa.me/${to}?text=${encodeURIComponent(message)}`;
 }
 
-function OverdueWhatsAppButton({
-  href,
-  compact,
-}: {
-  href: string | null;
-  compact?: boolean;
-}) {
+function OverdueWhatsAppButton({ href, compact }: { href: string | null; compact?: boolean }) {
   if (!href) {
     return (
       <button
@@ -1258,16 +1510,16 @@ function FeesTable({
 
   return (
     <>
-      <OrganicCard tone="white" cornerSide="tr" padded>
+      <div>
         <div className="mb-4 flex items-end justify-between gap-4">
           <div>
-            <div className="text-title">Fees Details</div>
+            <h2 className="text-base font-semibold text-black">Fees Details</h2>
             <div className="mt-1 text-[12px] text-black/55">
               Statement ledger sheet · {ledger.length} line items on file
             </div>
           </div>
           <span className="rounded-full border border-[#E5E5E5] bg-[#F4F4F5] px-2.5 py-1 font-mono text-[10.5px] font-medium text-black/65">
-            AY 2025-26
+            AY {academicYear}
           </span>
         </div>
 
@@ -1402,7 +1654,7 @@ function FeesTable({
             </tbody>
           </table>
         </div>
-      </OrganicCard>
+      </div>
 
       <Dialog open={Boolean(selectedRow)} onOpenChange={(open) => !open && setSelectedRow(null)}>
         <DialogContent className="max-w-md rounded-xl border border-[#E5E5E5] bg-white p-6">
@@ -1459,15 +1711,7 @@ function FeesTable({
   );
 }
 
-function DetailField({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
+function DetailField({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="rounded-lg border border-[#E5E5E5] p-3">
       <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
@@ -1481,15 +1725,21 @@ function DetailField({
 function ReceiptsList({
   receipts,
   student,
+  guardian,
+  phone,
   schoolName,
   academicYear,
 }: {
   receipts: Receipt[];
   student: Student;
+  guardian: string;
+  phone?: string;
   schoolName: string;
   academicYear: string;
 }) {
   const { schoolDetails } = useTenantStore();
+  const [sendingId, setSendingId] = useState<string | null>(null);
+
   const handleDownload = (r: Receipt) => {
     try {
       downloadReceiptPdf(
@@ -1520,11 +1770,59 @@ function ReceiptsList({
     }
   };
 
+  const handleSend = async (r: Receipt) => {
+    const number = toNotifyWhatsAppNumber(phone);
+    if (!number) {
+      toast.error("No guardian phone on file", {
+        description: "Add a contact phone to send this receipt on WhatsApp.",
+      });
+      return;
+    }
+
+    const greeting = guardian.trim() ? `Dear ${guardian.trim()},` : "Dear Parent,";
+    const message = [
+      greeting,
+      "",
+      `Please find the fee receipt for ${student.name} (${student.id}).`,
+      "",
+      `${schoolName} · Fee Receipt`,
+      `Receipt: ${r.id}`,
+      `Student: ${student.name} · ${student.cls}`,
+      `Mode: ${r.mode}`,
+      `Amount: ${inr(r.amount)}`,
+      `Date: ${r.date}`,
+      `AY: ${academicYear}`,
+      "Status: Complete",
+      "",
+      "Thank you.",
+    ].join("\n");
+
+    setSendingId(r.id);
+    try {
+      const result = await sendWhatsAppNotify({ numbers: [number], message });
+      if (!result.ok) {
+        toast.error(`Could not send receipt ${r.id}`, {
+          description: result.body.slice(0, 180) || `HTTP ${result.status}`,
+        });
+        return;
+      }
+      toast.success(`Receipt ${r.id} sent`, {
+        description: `WhatsApp · ${phone}`,
+      });
+    } catch (err) {
+      toast.error(`Could not send receipt ${r.id}`, {
+        description: err instanceof Error ? err.message : "Network error",
+      });
+    } finally {
+      setSendingId(null);
+    }
+  };
+
   return (
-    <OrganicCard tone="white" cornerSide="bl" padded>
+    <div>
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
-          <div className="text-title">Receipts</div>
+          <h2 className="text-base font-semibold text-black">Receipts</h2>
           <div className="mt-1 text-[12px] text-black/55">
             {receipts.length} historical digital receipts
           </div>
@@ -1535,33 +1833,56 @@ function ReceiptsList({
         </span>
       </div>
       <ul className="divide-y divide-[#F0F0F0]">
-        {receipts.map((r) => (
-          <li
-            key={r.id}
-            className="-mx-2 flex items-center gap-4 rounded-lg px-3 py-3.5 transition-colors hover:bg-[#F4F4F5]"
-          >
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-mono text-[13px] font-semibold text-black">{r.id}</span>
-                <span className="rounded-full bg-[#F4F4F5] px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-black/65">
-                  {r.mode}
-                </span>
-              </div>
-              <div className="mt-1 font-mono text-[11px] text-black/55">{r.date}</div>
-            </div>
-            <div className="font-mono text-base font-semibold text-black">{inr(r.amount)}</div>
-            <button
-              type="button"
-              onClick={() => handleDownload(r)}
-              aria-label={`Download receipt ${r.id}`}
-              className="grid h-10 w-10 place-items-center rounded-lg border border-[#E5E5E5] bg-white text-black/55 shadow-sm transition-colors hover:bg-black hover:text-white"
+        {receipts.map((r) => {
+          const isSending = sendingId === r.id;
+          return (
+            <li
+              key={r.id}
+              className="-mx-2 flex items-center gap-3 rounded-lg px-3 py-3.5 transition-colors hover:bg-[#F4F4F5] sm:gap-4"
             >
-              <Download className="h-3.5 w-3.5" />
-            </button>
-          </li>
-        ))}
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-[13px] font-semibold text-black">{r.id}</span>
+                  <span className="rounded-full bg-[#F4F4F5] px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-black/65">
+                    {r.mode}
+                  </span>
+                </div>
+                <div className="mt-1 font-mono text-[11px] text-black/55">{r.date}</div>
+              </div>
+              <div className="shrink-0 font-mono text-base font-semibold text-black">
+                {inr(r.amount)}
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => void handleSend(r)}
+                  disabled={isSending || sendingId !== null}
+                  aria-label={`Send receipt ${r.id}`}
+                  title="Send receipt"
+                  className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-[#25D366]/40 bg-[#25D366]/10 px-2.5 text-[11px] font-semibold text-[#128C7E] shadow-sm transition-colors hover:bg-[#25D366]/18 disabled:cursor-not-allowed disabled:opacity-60 sm:px-3"
+                >
+                  {isSending ? (
+                    <span className="font-mono text-[10px]">…</span>
+                  ) : (
+                    <Send className="h-3.5 w-3.5" />
+                  )}
+                  <span className="hidden sm:inline">{isSending ? "Sending" : "Send"}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDownload(r)}
+                  aria-label={`Download receipt ${r.id}`}
+                  title="Download receipt"
+                  className="grid h-10 w-10 place-items-center rounded-lg border border-[#E5E5E5] bg-white text-black/55 shadow-sm transition-colors hover:bg-black hover:text-white"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </li>
+          );
+        })}
       </ul>
-    </OrganicCard>
+    </div>
   );
 }
 
@@ -1589,5 +1910,194 @@ function StatusBadge({ status }: { status: LedgerStatus }) {
       <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
       {status}
     </span>
+  );
+}
+
+function StudentDocumentCard({
+  doc,
+  onNumberChange,
+  onAttach,
+  onRemoveAttachment,
+}: {
+  doc: StaffDocument;
+  onNumberChange: (number: string) => void;
+  onAttach: (levelId: string, files: FileList | null) => void;
+  onRemoveAttachment: (attachmentId: string) => void;
+}) {
+  const isOther = doc.id === "doc-other";
+  const complete = isDocumentComplete(doc);
+  const levels = useMemo(() => {
+    if (doc.levels?.length) return doc.levels;
+    if (isOther) return [{ id: "files", label: "Files" }];
+    return [
+      { id: "front", label: "Front" },
+      { id: "back", label: "Back" },
+    ];
+  }, [doc.levels, isOther]);
+  const showLevelTabs = !isOther && levels.length > 1;
+  const [activeLevelId, setActiveLevelId] = useState(() => levels[0]?.id ?? "front");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!levels.some((l) => l.id === activeLevelId)) {
+      setActiveLevelId(levels[0]?.id ?? "front");
+    }
+  }, [levels, activeLevelId]);
+
+  const levelFiles = showLevelTabs
+    ? doc.attachments.filter((a) => a.levelId === activeLevelId)
+    : doc.attachments;
+  const activeLevel = levels.find((l) => l.id === activeLevelId) ?? levels[0];
+  const attachLevelId = showLevelTabs ? activeLevelId : (levels[0]?.id ?? "files");
+
+  return (
+    <div className="min-w-0 rounded-xl border border-slate-100 bg-slate-50/50 p-4">
+      <div className="flex items-start justify-between gap-2">
+        <div className={META_LABEL}>{doc.label}</div>
+        <span
+          className={cn(
+            "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+            complete ? "bg-[#DBEAFE] text-black" : "bg-slate-200/80 font-medium text-black/50",
+          )}
+        >
+          {complete ? "On file" : "Not provided"}
+        </span>
+      </div>
+
+      {!isOther && (
+        <Input
+          value={doc.number}
+          onChange={(e) => onNumberChange(e.target.value)}
+          placeholder="XXXX XXXX XXXX"
+          className="mt-1.5 h-10 border-slate-200 bg-white font-mono text-[13px]"
+        />
+      )}
+
+      {isOther && (
+        <p className="mt-1.5 text-[12px] leading-snug text-black/50">
+          Birth certificate, transfer certificate, photos, or other supporting files.
+        </p>
+      )}
+
+      <div className={cn("border-t border-slate-200/80 pt-4", isOther ? "mt-3" : "mt-4")}>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-black/45">
+            <Paperclip className="h-3.5 w-3.5" />
+            {showLevelTabs ? "Attachments" : "Files"}
+          </div>
+          <span className="font-mono text-[10px] text-black/45">
+            {doc.attachments.length} / {MAX_FILES_PER_DOC}
+          </span>
+        </div>
+
+        {showLevelTabs && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {levels.map((level) => {
+              const count = doc.attachments.filter((a) => a.levelId === level.id).length;
+              const active = level.id === activeLevelId;
+              return (
+                <button
+                  key={level.id}
+                  type="button"
+                  onClick={() => setActiveLevelId(level.id)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors",
+                    active
+                      ? "bg-black text-white"
+                      : "bg-white text-black/65 ring-1 ring-slate-200 hover:bg-slate-100",
+                  )}
+                >
+                  {level.label}
+                  <span
+                    className={cn(
+                      "font-mono text-[10px]",
+                      active ? "text-white/70" : "text-black/40",
+                    )}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
+          {showLevelTabs && (
+            <div className="mb-2 text-[11px] font-semibold text-black/55">
+              {activeLevel?.label ?? "Side"} scan
+            </div>
+          )}
+          {levelFiles.length > 0 ? (
+            <ul className="space-y-1.5">
+              {levelFiles.map((file) => (
+                <li
+                  key={file.id}
+                  className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/80 px-2.5 py-2"
+                >
+                  <FileText className="h-3.5 w-3.5 shrink-0 text-black/40" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[12px] font-medium text-black">{file.name}</div>
+                    <div className="font-mono text-[10px] text-black/45">
+                      {formatFileSize(file.size)}
+                    </div>
+                  </div>
+                  <a
+                    href={file.dataUrl}
+                    download={file.name}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-black/60 transition-colors hover:bg-white"
+                    aria-label={`Open ${file.name}`}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => onRemoveAttachment(file.id)}
+                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-red-200 text-red-600 transition-colors hover:bg-red-50"
+                    aria-label={`Remove ${file.name}`}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-[12px] text-black/45">
+              {showLevelTabs
+                ? `No ${activeLevel?.label?.toLowerCase() ?? ""} file yet.`
+                : "No files attached yet."}
+            </p>
+          )}
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*,.pdf,.jpg,.jpeg,.png,.webp"
+            className="hidden"
+            onChange={(e) => {
+              onAttach(attachLevelId, e.target.files);
+              e.target.value = "";
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={doc.attachments.length >= MAX_FILES_PER_DOC}
+            className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-slate-300 bg-white text-[12px] font-medium text-black/70 transition-colors hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            <Upload className="h-3.5 w-3.5" />
+            {showLevelTabs ? `Attach ${activeLevel?.label ?? "file"}` : "Add files"}
+          </button>
+        </div>
+
+        <p className="mt-1.5 text-[10px] text-black/40">
+          PDF or images · up to {formatFileSize(MAX_FILE_BYTES)} each
+          {showLevelTabs ? " · Front and Back" : ""}
+        </p>
+      </div>
+    </div>
   );
 }

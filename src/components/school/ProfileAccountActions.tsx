@@ -37,6 +37,10 @@ export function isRecordActive(active: boolean | undefined) {
   return active !== false;
 }
 
+export function isRecordDeleted(deletedAt: string | undefined) {
+  return Boolean(deletedAt);
+}
+
 export function ProfileAccountActions({
   name,
   recordId,
@@ -62,8 +66,8 @@ export function ProfileAccountActions({
           <div className="max-w-xl">
             <h2 className="text-base font-semibold text-black">Account Status</h2>
             <p className="mt-1 text-[12.5px] leading-relaxed text-black/55">
-              Deactivate to archive this {entityLabel} without deleting records. Delete permanently
-              removes the profile from the directory.
+              Deactivate to archive this {entityLabel} without deleting records. Move to Recycle Bin
+              hides the profile from the directory — you can restore it later.
             </p>
           </div>
           <EnrollmentStatusBadge active={active} className="shrink-0" />
@@ -95,7 +99,7 @@ export function ProfileAccountActions({
             className="rounded-full border-[#FECACA] text-[#EF4444] hover:bg-[#FEF2F2]"
             onClick={() => setConfirmDelete(true)}
           >
-            Delete permanently
+            Move to Recycle Bin
           </Button>
         </div>
       </section>
@@ -133,11 +137,11 @@ export function ProfileAccountActions({
         <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6">
           <DialogHeader>
             <DialogTitle className="text-[22px] font-semibold text-black">
-              Delete {entityLabel}
+              Move to Recycle Bin
             </DialogTitle>
             <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
-              Are you sure you want to permanently delete {name} ({recordId})? This action cannot be
-              undone.
+              Move {name} ({recordId}) to the recycle bin? They will leave the directory and can be
+              restored later.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="mt-5 flex-row justify-end gap-2">
@@ -152,7 +156,7 @@ export function ProfileAccountActions({
                 setConfirmDelete(false);
               }}
             >
-              Delete
+              Move to Bin
             </Button>
           </DialogFooter>
         </DialogContent>

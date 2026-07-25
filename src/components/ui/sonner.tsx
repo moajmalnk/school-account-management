@@ -46,7 +46,6 @@ const Toaster = ({ ...props }: ToasterProps) => {
       key={position}
       theme="light"
       className="toaster group"
-      position={position}
       richColors
       closeButton
       expand
