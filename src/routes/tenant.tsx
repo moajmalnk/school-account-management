@@ -11,7 +11,13 @@ import {
   mobileMainPadding,
   type MobileTabItem,
 } from "@/components/layout/MobileTabBar";
-import { useAuth } from "@/lib/auth";
+import {
+  useAuth,
+  isTenantWorkspaceSession,
+  sessionCanAccessSettings,
+  sessionHasAnyFinance,
+  sessionHasPermission,
+} from "@/lib/auth";
 import { TenantStoreProvider, schoolInitials, useTenantStore } from "@/lib/tenant-store";
 import { cn } from "@/lib/utils";
 
@@ -33,12 +39,12 @@ function TenantLayout() {
 
   useEffect(() => {
     if (!hydrated) return;
-    if (!session || session.role !== "school_admin") {
+    if (!isTenantWorkspaceSession(session)) {
       navigate({ to: "/login", replace: true });
     }
   }, [hydrated, session, navigate]);
 
-  if (!hydrated || !session || session.role !== "school_admin") {
+  if (!hydrated || !isTenantWorkspaceSession(session)) {
     return (
       <div className="tenant-canvas flex min-h-screen items-center justify-center">
         <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-slate-500">
@@ -163,5 +169,14 @@ function TenantMobileHeader() {
 
 function TenantMobileNav() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  return <MobileTabBar items={MOBILE_TABS} pathname={pathname} className="md:hidden" />;
+  const { session } = useAuth();
+  const items = MOBILE_TABS.filter((tab) => {
+    if (tab.to.startsWith("/tenant/dashboard")) return sessionHasPermission(session, "dashboard");
+    if (tab.to.startsWith("/tenant/students")) return sessionHasPermission(session, "students");
+    if (tab.to.startsWith("/tenant/staff")) return sessionHasPermission(session, "staff");
+    if (tab.to.startsWith("/tenant/finance")) return sessionHasAnyFinance(session);
+    if (tab.to.startsWith("/tenant/settings")) return sessionCanAccessSettings(session);
+    return true;
+  });
+  return <MobileTabBar items={items} pathname={pathname} className="md:hidden" />;
 }

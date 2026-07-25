@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { StudentsLedger } from "@/components/school/SchoolAdminWorkspace";
+import { useRequirePermission } from "@/hooks/useRequirePermission";
 
 type StudentsSearch = { id?: string; edit?: string };
 
@@ -9,5 +10,10 @@ export const Route = createFileRoute("/tenant/students")({
     id: typeof search.id === "string" && search.id.length > 0 ? search.id : undefined,
     edit: search.edit === "1" ? "1" : undefined,
   }),
-  component: StudentsLedger,
+  component: StudentsRoute,
 });
+
+function StudentsRoute() {
+  useRequirePermission("students");
+  return <StudentsLedger />;
+}

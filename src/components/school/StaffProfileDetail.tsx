@@ -30,8 +30,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Staff, StaffDocument, StaffDocumentAttachment } from "@/lib/tenant-store";
-import { DEFAULT_STAFF_DOCUMENTS, useTenantStore } from "@/lib/tenant-store";
+import type { Staff, StaffDocument, StaffDocumentAttachment, TenantUser } from "@/lib/tenant-store";
+import {
+  DEFAULT_STAFF_DOCUMENTS,
+  normalizeTenantUser,
+  useTenantStore,
+} from "@/lib/tenant-store";
+import { sessionHasPermission, useAuth } from "@/lib/auth";
+import {
+  ALL_PERMISSIONS,
+  FINANCE_ONLY_PRESET,
+  PERMISSION_GROUPS,
+  PERMISSION_LABELS,
+  hasFullAccess,
+  summarizePermissions,
+  type PermissionKey,
+  type PermissionSet,
+} from "@/lib/permissions";
+import { Checkbox } from "@/components/ui/checkbox";
 import { isRecordActive, ProfileAccountActions } from "@/components/school/ProfileAccountActions";
 import {
   ProfileDetailTabs,
@@ -223,7 +239,117 @@ export function StaffProfileDetail({
   initialEdit?: boolean;
 }) {
   const navigate = useNavigate();
-  const { setStaff, staff: allStaff, departments, roles } = useTenantStore();
+  const { session } = useAuth();
+  const { setStaff, staff: allStaff, departments, roles, tenantUsers, setTenantUsers } =
+    useTenantStore();
+  const canManageUsers = sessionHasPermission(session, "settings.users");
+  const linkedUser = useMemo(
+    () => tenantUsers.find((u) => u.staffId === staff.id) ?? null,
+    [tenantUsers, staff.id],
+  );
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [loginForm, setLoginForm] = useState({
+    email: "",
+    password: "",
+    active: true,
+    allFunctions: false,
+    permissions: [] as PermissionKey[],
+  });
+
+  const openLoginDialog = () => {
+    const matchedRole = roles.find((r) => r.title === staff.role);
+    if (linkedUser) {
+      const all = hasFullAccess(linkedUser.permissions);
+      setLoginForm({
+        email: linkedUser.email,
+        password: linkedUser.password,
+        active: linkedUser.active,
+        allFunctions: all,
+        permissions: all ? [] : ([...linkedUser.permissions] as PermissionKey[]),
+      });
+    } else {
+      setLoginForm({
+        email: "",
+        password: "",
+        active: true,
+        allFunctions: false,
+        permissions: [...FINANCE_ONLY_PRESET],
+      });
+    }
+    void matchedRole;
+    setLoginOpen(true);
+  };
+
+  const saveStaffLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    const email = loginForm.email.trim().toLowerCase();
+    const password = loginForm.password;
+    if (!email.includes("@")) {
+      toast.error("Valid email is required");
+      return;
+    }
+    if (password.length < 4) {
+      toast.error("Password must be at least 4 characters");
+      return;
+    }
+    const permissions: PermissionSet = loginForm.allFunctions
+      ? ALL_PERMISSIONS
+      : loginForm.permissions;
+    if (!loginForm.allFunctions && loginForm.permissions.length === 0) {
+      toast.error("Assign at least one permission");
+      return;
+    }
+    const emailTaken = tenantUsers.some(
+      (u) => u.email === email && u.staffId !== staff.id,
+    );
+    if (emailTaken) {
+      toast.error("Email already used by another user");
+      return;
+    }
+    const matchedRole = roles.find((r) => r.title === staff.role);
+    if (linkedUser) {
+      setTenantUsers((prev) =>
+        prev.map((u) =>
+          u.id === linkedUser.id
+            ? normalizeTenantUser({
+                ...u,
+                email,
+                password,
+                displayName: staff.name,
+                roleId: matchedRole?.id,
+                staffId: staff.id,
+                permissions,
+                active: loginForm.active,
+              })
+            : u,
+        ),
+      );
+      toast.success("Workspace login updated", { description: email });
+    } else {
+      const next: TenantUser = normalizeTenantUser({
+        id: `USR-${Date.now().toString().slice(-6)}`,
+        email,
+        password,
+        displayName: staff.name,
+        roleId: matchedRole?.id,
+        staffId: staff.id,
+        permissions,
+        active: loginForm.active,
+        createdAt: new Date().toISOString(),
+      });
+      setTenantUsers((prev) => [next, ...prev]);
+      toast.success("Workspace login enabled", {
+        description: `${email} · sign in under School Admin tier`,
+      });
+    }
+    setLoginOpen(false);
+  };
+
+  const removeStaffLogin = () => {
+    if (!linkedUser) return;
+    setTenantUsers((prev) => prev.filter((u) => u.id !== linkedUser.id));
+    toast.error("Workspace login removed", { description: staff.name });
+  };
   const [editOpen, setEditOpen] = useState(initialEdit);
   const [activeTab, setActiveTab] = useState<ProfileDetailTabId>("profile");
   const [draft, setDraft] = useState({
@@ -882,6 +1008,62 @@ export function StaffProfileDetail({
         </ProfileTabPanel>
       </ProfileDetailTabs>
 
+      {canManageUsers && (
+        <section className={CARD_FRAME}>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-black">Workspace Login</h2>
+              <p className="mt-1 text-[12.5px] leading-relaxed text-black/55">
+                Allow this staff member to sign in with limited module permissions.
+              </p>
+              {linkedUser ? (
+                <div className="mt-2 text-[12px] text-black/60">
+                  <div className="font-medium text-black">{linkedUser.email}</div>
+                  <div className="mt-0.5">
+                    {linkedUser.active ? "Active" : "Inactive"} ·{" "}
+                    {summarizePermissions(linkedUser.permissions)}
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-2 text-[12px] text-black/45">No login enabled yet</p>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full"
+                onClick={openLoginDialog}
+              >
+                {linkedUser ? "Edit login" : "Enable login"}
+              </Button>
+              {linkedUser && (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={() =>
+                      navigate({ to: "/tenant/settings", search: { tab: "users" } })
+                    }
+                  >
+                    Manage in Users
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-full border-[#FECACA] text-[#EF4444] hover:bg-[#FEF2F2]"
+                    onClick={removeStaffLogin}
+                  >
+                    Remove login
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
       <ProfileAccountActions
         name={staff.name}
         recordId={staff.id}
@@ -890,6 +1072,122 @@ export function StaffProfileDetail({
         onToggleActive={toggleActive}
         onDelete={deleteStaff}
       />
+
+      <Dialog open={loginOpen} onOpenChange={setLoginOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {linkedUser ? "Edit workspace login" : "Enable workspace login"}
+            </DialogTitle>
+            <DialogDescription>
+              {staff.name} will sign in under the School Admin login tier with the email below.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={saveStaffLogin} className="space-y-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Email</Label>
+                <Input
+                  type="email"
+                  value={loginForm.email}
+                  onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
+                  placeholder="staff@school.edu"
+                  autoFocus
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Password</Label>
+                <Input
+                  type="text"
+                  value={loginForm.password}
+                  onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                  placeholder="Min 4 characters"
+                />
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="rounded-full border border-[#E5E5E5] bg-white px-2.5 py-1 text-[11px] font-semibold"
+                onClick={() =>
+                  setLoginForm((p) => ({ ...p, allFunctions: true, permissions: [] }))
+                }
+              >
+                All functions
+              </button>
+              <button
+                type="button"
+                className="rounded-full border border-[#E5E5E5] bg-white px-2.5 py-1 text-[11px] font-semibold"
+                onClick={() =>
+                  setLoginForm((p) => ({
+                    ...p,
+                    allFunctions: false,
+                    permissions: [...FINANCE_ONLY_PRESET],
+                  }))
+                }
+              >
+                Finance only
+              </button>
+            </div>
+            <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] p-3">
+              {PERMISSION_GROUPS.map((group) => (
+                <div key={group.id}>
+                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    {group.label}
+                  </div>
+                  <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                    {group.keys.map((key) => {
+                      const checked =
+                        loginForm.allFunctions || loginForm.permissions.includes(key);
+                      return (
+                        <label
+                          key={key}
+                          className="flex cursor-pointer items-center gap-2 text-[12px]"
+                        >
+                          <Checkbox
+                            checked={checked}
+                            disabled={loginForm.allFunctions}
+                            onCheckedChange={(v) => {
+                              setLoginForm((prev) => {
+                                const next = new Set(prev.permissions);
+                                if (v === true) next.add(key);
+                                else next.delete(key);
+                                return {
+                                  ...prev,
+                                  allFunctions: false,
+                                  permissions: Array.from(next),
+                                };
+                              });
+                            }}
+                          />
+                          {PERMISSION_LABELS[key]}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <label className="flex cursor-pointer items-center gap-2 text-[13px]">
+              <Checkbox
+                checked={loginForm.active}
+                onCheckedChange={(v) =>
+                  setLoginForm({ ...loginForm, active: v === true })
+                }
+              />
+              Active
+            </label>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setLoginOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+                Save login
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={editOpen}

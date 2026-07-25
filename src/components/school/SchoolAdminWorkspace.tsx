@@ -158,7 +158,15 @@ import {
   isRecordActive,
   isRecordDeleted,
 } from "@/components/school/ProfileAccountActions";
+import { SettingsUsersCard } from "@/components/school/SettingsUsersCard";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  sessionCanAccessSettings,
+  sessionCanAccessSettingsTab,
+  sessionCanAccessFinanceView,
+  useAuth,
+} from "@/lib/auth";
+import type { SettingsTabId } from "@/lib/permissions";
 import {
   sendWhatsAppNotify,
   sendPersonalizedWhatsApp,
@@ -197,7 +205,6 @@ import {
   type CustomDateRange,
   type PaymentPeriod,
 } from "@/lib/payment-period";
-import { useAuth } from "@/lib/auth";
 import { cn, glassCardClass, glassInsetClass, glassPanelClass, glassTableWrapClass, premiumCardClass, type CornerSide, type Tone } from "@/lib/utils";
 
 const MADE_PAYMENTS = [
@@ -3362,8 +3369,8 @@ export function StudentsLedger() {
       />
 
       <Dialog open={bulkWhatsAppOpen} onOpenChange={setBulkWhatsAppOpen}>
-        <DialogContent className="max-w-lg rounded-xl border border-[#E5E5E5] bg-white p-6">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[min(90dvh,760px)] w-[calc(100%-1.5rem)] max-w-2xl flex-col gap-0 overflow-hidden rounded-xl border border-[#E5E5E5] bg-white p-0 sm:max-w-2xl">
+          <DialogHeader className="shrink-0 space-y-1.5 border-b border-[#F0F0F0] px-5 pb-4 pt-5 pr-12 text-left sm:px-6 sm:pt-6">
             <DialogTitle className="text-[20px] font-semibold text-black">
               Bulk WhatsApp
             </DialogTitle>
@@ -3376,7 +3383,8 @@ export function StudentsLedger() {
               . Use {"{{amount}}"} and {"{{due_date}}"} for personalized overdue reminders.
             </DialogDescription>
           </DialogHeader>
-          <div className="mt-4 space-y-3">
+
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4 sm:px-6">
             <div>
               <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
                 <Label htmlFor="bulk-wa-msg" className="mr-1 text-[12px] text-slate-500">
@@ -3398,9 +3406,9 @@ export function StudentsLedger() {
                 id="bulk-wa-msg"
                 value={bulkWhatsAppMsg}
                 onChange={(e) => setBulkWhatsAppMsg(e.target.value)}
-                rows={7}
+                rows={5}
                 placeholder="Type the WhatsApp message… use {{amount}} {{due_date}}"
-                className="mt-0.5 rounded-lg border-[#E5E5E5] bg-white font-mono text-[12.5px] leading-relaxed"
+                className="mt-0.5 max-h-40 min-h-[120px] resize-y rounded-lg border-[#E5E5E5] bg-white font-mono text-[12.5px] leading-relaxed"
               />
             </div>
             {bulkWhatsAppPreview && (
@@ -3408,12 +3416,12 @@ export function StudentsLedger() {
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-[#2563EB]">
                   Preview · {selectedWithPhone[0]?.student.name}
                 </div>
-                <pre className="mt-1.5 whitespace-pre-wrap font-sans text-[12px] leading-relaxed text-slate-700">
+                <pre className="mt-1.5 max-h-36 overflow-y-auto whitespace-pre-wrap font-sans text-[12px] leading-relaxed text-slate-700">
                   {bulkWhatsAppPreview}
                 </pre>
               </div>
             )}
-            <div className="rounded-lg bg-[#F8FAFC] px-3 py-2 font-mono text-[11px] text-slate-500">
+            <div className="rounded-lg bg-[#F8FAFC] px-3 py-2 font-mono text-[11px] leading-relaxed text-slate-500">
               {selectedWithPhone
                 .slice(0, 6)
                 .map((row) => `${row.student.name.split(" ")[0]}:${row.number}`)
@@ -3421,7 +3429,8 @@ export function StudentsLedger() {
               {selectedWithPhone.length > 6 ? ` · +${selectedWithPhone.length - 6} more` : ""}
             </div>
           </div>
-          <DialogFooter className="mt-5 flex-row justify-end gap-2">
+
+          <DialogFooter className="shrink-0 flex-row justify-end gap-2 border-t border-[#F0F0F0] bg-white px-5 py-4 sm:px-6">
             <Button
               type="button"
               variant="outline"
@@ -4478,8 +4487,8 @@ export function StaffRoster() {
       />
 
       <Dialog open={bulkWhatsAppOpen} onOpenChange={setBulkWhatsAppOpen}>
-        <DialogContent className="max-w-md rounded-xl border border-[#E5E5E5] bg-white p-6">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[min(90dvh,640px)] w-[calc(100%-1.5rem)] max-w-xl flex-col gap-0 overflow-hidden rounded-xl border border-[#E5E5E5] bg-white p-0 sm:max-w-xl">
+          <DialogHeader className="shrink-0 space-y-1.5 border-b border-[#F0F0F0] px-5 pb-4 pt-5 pr-12 text-left sm:px-6 sm:pt-6">
             <DialogTitle className="text-[20px] font-semibold text-black">
               Bulk WhatsApp
             </DialogTitle>
@@ -4492,7 +4501,7 @@ export function StaffRoster() {
               .
             </DialogDescription>
           </DialogHeader>
-          <div className="mt-4 space-y-3">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4 sm:px-6">
             <div>
               <Label htmlFor="staff-bulk-wa-msg" className="text-[12px] text-slate-500">
                 Message
@@ -4503,10 +4512,10 @@ export function StaffRoster() {
                 onChange={(e) => setBulkWhatsAppMsg(e.target.value)}
                 rows={5}
                 placeholder="Type the WhatsApp message…"
-                className="mt-1.5 rounded-lg border-[#E5E5E5] bg-white text-[13px]"
+                className="mt-1.5 max-h-40 min-h-[120px] resize-y rounded-lg border-[#E5E5E5] bg-white text-[13px]"
               />
             </div>
-            <div className="rounded-lg bg-[#F8FAFC] px-3 py-2 font-mono text-[11px] text-slate-500">
+            <div className="rounded-lg bg-[#F8FAFC] px-3 py-2 font-mono text-[11px] leading-relaxed text-slate-500">
               {selectedStaffWithPhone
                 .slice(0, 6)
                 .map((row) => row.number)
@@ -4516,7 +4525,7 @@ export function StaffRoster() {
                 : ""}
             </div>
           </div>
-          <DialogFooter className="mt-5 flex-row justify-end gap-2">
+          <DialogFooter className="shrink-0 flex-row justify-end gap-2 border-t border-[#F0F0F0] bg-white px-5 py-4 sm:px-6">
             <Button
               type="button"
               variant="outline"
@@ -4710,6 +4719,7 @@ export function FinanceModule() {
     | "daybook"
     | "reconciliation";
 
+  const { session } = useAuth();
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/finance" });
   const [view, setView] = useState<FinanceView>(search.tab ?? "overview");
@@ -4724,7 +4734,41 @@ export function FinanceModule() {
     }
   }, [search.tab]);
 
+  useEffect(() => {
+    if (sessionCanAccessFinanceView(session, view)) return;
+    const fallbacks: FinanceView[] = [
+      "overview",
+      "receive",
+      "make",
+      "analytics",
+      "ledger",
+      "pl",
+      "balance",
+      "fees",
+      "salary",
+      "daybook",
+      "reconciliation",
+    ];
+    const next = fallbacks.find((v) => sessionCanAccessFinanceView(session, v));
+    if (!next) {
+      toast.error("You do not have access to finance");
+      navigate({ to: "/tenant/dashboard", replace: true });
+      return;
+    }
+    toast.error("You do not have access to this finance view");
+    setView(next);
+    if (next === "receive" || next === "make") {
+      navigate({ to: "/tenant/finance", search: { tab: next }, replace: true });
+    } else {
+      navigate({ to: "/tenant/finance", search: {}, replace: true });
+    }
+  }, [session, view, navigate]);
+
   const openView = (next: FinanceView) => {
+    if (!sessionCanAccessFinanceView(session, next)) {
+      toast.error("You do not have access to this finance view");
+      return;
+    }
     setView(next);
     if (next === "receive" || next === "make") {
       navigate({ to: "/tenant/finance", search: { tab: next }, replace: true });
@@ -5286,7 +5330,9 @@ function FinanceOverview({
               iconClass: "bg-[#CFFAFE] text-cyan-700",
             },
           ] as const
-        ).map((item, index, items) => {
+        )
+          .filter((item) => sessionCanAccessFinanceView(session, item.k))
+          .map((item, index, items) => {
           const Icon = item.icon;
           return (
             <button
@@ -5326,6 +5372,7 @@ function FinanceOverview({
       </div>
 
       <div className="hidden grid-cols-1 gap-4 sm:grid-cols-2 md:grid">
+        {sessionCanAccessFinanceView(session, "receive") && (
         <button
           type="button"
           onClick={() => onOpenView("receive")}
@@ -5342,6 +5389,8 @@ function FinanceOverview({
             <p className="mt-0.5 text-[12px] text-slate-500">Capture inbound fee receipts</p>
           </div>
         </button>
+        )}
+        {sessionCanAccessFinanceView(session, "make") && (
         <button
           type="button"
           onClick={() => onOpenView("make")}
@@ -5358,6 +5407,7 @@ function FinanceOverview({
             <p className="mt-0.5 text-[12px] text-slate-500">Pay vendors and salaries</p>
           </div>
         </button>
+        )}
       </div>
 
       <div className="grid grid-cols-12 gap-5">
@@ -8325,7 +8375,8 @@ function LedgerAnalytics() {
 export function SchoolSettings() {
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/settings" });
-  const activeTab = search.tab ?? "school";
+  const { session } = useAuth();
+  const activeTab = (search.tab ?? "school") as SettingsTabId;
   const [sectionSheetOpen, setSectionSheetOpen] = useState(false);
 
   const {
@@ -8333,6 +8384,8 @@ export function SchoolSettings() {
     setDepartments,
     roles,
     setRoles,
+    tenantUsers,
+    setTenantUsers,
     classes,
     setClasses,
     transportRoutes,
@@ -8355,21 +8408,48 @@ export function SchoolSettings() {
     setStudents,
   } = useTenantStore();
 
-  const settingsTabs = [
-    { id: "school" as const, label: "School Details" },
-    { id: "classes" as const, label: "Class Tier" },
-    { id: "departments" as const, label: "Departments" },
-    { id: "roles" as const, label: "Roles" },
-    { id: "vehicles" as const, label: "Vehicles" },
-    { id: "transport" as const, label: "Transport" },
-    { id: "fees" as const, label: "Fee Categories" },
-    { id: "system" as const, label: "System" },
-  ];
+  const allSettingsTabs: { id: SettingsTabId; label: string }[] = useMemo(
+    () => [
+      { id: "school", label: "School Details" },
+      { id: "classes", label: "Class Tier" },
+      { id: "departments", label: "Departments" },
+      { id: "roles", label: "Positions / Roles" },
+      { id: "users", label: "Users" },
+      { id: "vehicles", label: "Vehicles" },
+      { id: "transport", label: "Transport" },
+      { id: "fees", label: "Fee Categories" },
+      { id: "system", label: "System" },
+    ],
+    [],
+  );
+
+  const settingsTabs = useMemo(
+    () => allSettingsTabs.filter((tab) => sessionCanAccessSettingsTab(session, tab.id)),
+    [allSettingsTabs, session],
+  );
+
+  useEffect(() => {
+    if (!sessionCanAccessSettings(session)) {
+      toast.error("Settings access denied");
+      navigate({ to: "/tenant/dashboard", replace: true });
+      return;
+    }
+    if (!sessionCanAccessSettingsTab(session, activeTab)) {
+      const fallback = settingsTabs[0]?.id ?? "school";
+      navigate({
+        to: "/tenant/settings",
+        search: fallback === "school" ? {} : { tab: fallback },
+        replace: true,
+      });
+    }
+  }, [session, activeTab, navigate, settingsTabs]);
 
   const activeTabLabel =
-    settingsTabs.find((tab) => tab.id === activeTab)?.label ?? "School Details";
+    settingsTabs.find((tab) => tab.id === activeTab)?.label ??
+    allSettingsTabs.find((tab) => tab.id === activeTab)?.label ??
+    "School Details";
 
-  const setTab = (tab: (typeof settingsTabs)[number]["id"]) => {
+  const setTab = (tab: SettingsTabId) => {
     navigate({
       to: "/tenant/settings",
       search: tab === "school" ? {} : { tab },
@@ -8504,6 +8584,15 @@ export function SchoolSettings() {
             departments={departments}
             staff={staff}
             setStaff={setStaff}
+          />
+        )}
+
+        {activeTab === "users" && (
+          <SettingsUsersCard
+            tenantUsers={tenantUsers}
+            setTenantUsers={setTenantUsers}
+            roles={roles}
+            staff={staff}
           />
         )}
 
@@ -8899,9 +8988,9 @@ function RolesCard({
   return (
     <OrganicCard tone="white" cornerSide="bl" padded className={workspacePanelClass}>
       <CardHeader
-        title="Roles"
-        subtitle={`${roles.length} role definitions · select in Recruit Staff`}
-        actionLabel="Add Role"
+        title="Positions / Roles"
+        subtitle={`${roles.length} position & role names · used in Recruit Staff and Users`}
+        actionLabel="Add Position"
         onAction={startCreate}
       />
 
@@ -8946,11 +9035,11 @@ function RolesCard({
         onOpenChange={(next) => {
           if (!next) setPendingDelete(null);
         }}
-        title="Delete Role"
+        title="Delete Position / Role"
         description={
           pendingDelete
-            ? `Are you sure you want to delete the role "${pendingDelete.title}"? This action cannot be undone.`
-            : "Are you sure you want to delete this role?"
+            ? `Are you sure you want to delete "${pendingDelete.title}"? This action cannot be undone.`
+            : "Are you sure you want to delete this position?"
         }
         onConfirm={confirmDelete}
       />
@@ -8958,15 +9047,15 @@ function RolesCard({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{editingId ? "Rename Role" : "Add Role"}</DialogTitle>
+            <DialogTitle>{editingId ? "Edit Position / Role" : "Add Position / Role"}</DialogTitle>
             <DialogDescription>
-              Roles defined here become selectable inside the Recruit Staff workflow.
+              Position and role names become selectable in Recruit Staff and workspace Users.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={submit} className="space-y-3">
             <div className="space-y-1.5">
               <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                Role Title
+                Position / Role name
               </Label>
               <Input
                 value={form.title}

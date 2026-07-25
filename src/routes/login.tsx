@@ -5,14 +5,15 @@ import { toast } from "sonner";
 
 import { Label } from "@/components/ui/label";
 import { OrganicCard } from "@/components/ui/organic-card";
-import { INVALID_CREDENTIALS_MESSAGE, MOCK_CREDENTIALS, useAuth, type Role } from "@/lib/auth";
+import { INVALID_CREDENTIALS_MESSAGE, MOCK_CREDENTIALS, useAuth } from "@/lib/auth";
+import { firstAllowedTenantPath } from "@/lib/permissions";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
 
 type TierMeta = {
-  key: Role;
+  key: keyof typeof MOCK_CREDENTIALS;
   label: string;
   icon: typeof ShieldCheck;
   placeholderEmail: string;
@@ -36,7 +37,7 @@ const TIERS: TierMeta[] = [
 function LoginPage() {
   const navigate = useNavigate();
   const { session, hydrated, login } = useAuth();
-  const [tier, setTier] = useState<Role>("super_admin");
+  const [tier, setTier] = useState<keyof typeof MOCK_CREDENTIALS>("super_admin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -46,6 +47,10 @@ function LoginPage() {
 
   useEffect(() => {
     if (hydrated && session) {
+      if (session.role === "tenant_user") {
+        navigate({ to: firstAllowedTenantPath(session.permissions) });
+        return;
+      }
       const dest = MOCK_CREDENTIALS[session.role].redirect;
       navigate({ to: dest });
     }
@@ -53,14 +58,14 @@ function LoginPage() {
 
   const tierMeta = TIERS.find((t) => t.key === tier)!;
 
-  const handleTierSwitch = (next: Role) => {
+  const handleTierSwitch = (next: keyof typeof MOCK_CREDENTIALS) => {
     if (next === tier) return;
     setTier(next);
     setBannerError(false);
     setFieldErrors({});
   };
 
-  const handleAutofill = (next: Role) => {
+  const handleAutofill = (next: keyof typeof MOCK_CREDENTIALS) => {
     const creds = MOCK_CREDENTIALS[next];
     setTier(next);
     setEmail(creds.email);

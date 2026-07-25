@@ -8,6 +8,10 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
+import {
+  normalizePermissionSet,
+  type PermissionSet,
+} from "@/lib/permissions";
 
 export type GuardianRelation = "Father" | "Mother" | "Others";
 
@@ -525,6 +529,38 @@ export type Role = {
   title: string;
   departmentId: string;
 };
+
+export type TenantUser = {
+  id: string;
+  email: string;
+  password: string;
+  displayName: string;
+  roleId?: string;
+  staffId?: string;
+  permissions: PermissionSet;
+  active: boolean;
+  createdAt: string;
+};
+
+export function normalizeTenantUser(raw: Partial<TenantUser> & Pick<TenantUser, "id" | "email">): TenantUser {
+  const email = (raw.email ?? "").trim().toLowerCase();
+  return {
+    id: raw.id,
+    email,
+    password: typeof raw.password === "string" ? raw.password : "",
+    displayName: (raw.displayName ?? email.split("@")[0] ?? "User").trim() || "User",
+    roleId: raw.roleId?.trim() || undefined,
+    staffId: raw.staffId?.trim() || undefined,
+    permissions: normalizePermissionSet(raw.permissions),
+    active: raw.active !== false,
+    createdAt:
+      typeof raw.createdAt === "string" && raw.createdAt
+        ? raw.createdAt
+        : new Date().toISOString(),
+  };
+}
+
+export const SEED_TENANT_USERS: TenantUser[] = [];
 
 export type ClassConfig = {
   id: string;
@@ -1826,6 +1862,7 @@ type Snapshot = {
   dashboardTodos: string[];
   dashboardNote: string;
   notifications: TenantNotification[];
+  tenantUsers: TenantUser[];
 };
 
 type TenantStoreValue = {
@@ -1839,6 +1876,8 @@ type TenantStoreValue = {
   setDepartments: Dispatch<SetStateAction<Department[]>>;
   roles: Role[];
   setRoles: Dispatch<SetStateAction<Role[]>>;
+  tenantUsers: TenantUser[];
+  setTenantUsers: Dispatch<SetStateAction<TenantUser[]>>;
   classes: ClassConfig[];
   setClasses: Dispatch<SetStateAction<ClassConfig[]>>;
   transportRoutes: TransportRoute[];
@@ -1980,6 +2019,13 @@ function parseSnapshot(raw: string): Snapshot | null {
     dashboardTodos: normalizeDashboardTodos(parsed.dashboardTodos),
     dashboardNote: typeof parsed.dashboardNote === "string" ? parsed.dashboardNote : "",
     notifications: normalizeNotifications(parsed.notifications),
+    tenantUsers: Array.isArray((parsed as Partial<Snapshot>).tenantUsers)
+      ? ((parsed as Partial<Snapshot>).tenantUsers as Partial<TenantUser>[])
+          .filter((u): u is Partial<TenantUser> & Pick<TenantUser, "id" | "email"> =>
+            Boolean(u && typeof u.id === "string" && typeof u.email === "string"),
+          )
+          .map(normalizeTenantUser)
+      : [...SEED_TENANT_USERS],
   };
 }
 
@@ -2157,6 +2203,27 @@ export function applyParentStudentUpdate(
   return updated;
 }
 
+/** Lookup active tenant login credentials from persisted snapshot (used at login before React store mounts). */
+export function findActiveTenantUserByCredentials(
+  email: string,
+  password: string,
+): TenantUser | null {
+  const snap = readSnapshot();
+  if (!snap) return null;
+  const normalized = email.trim().toLowerCase();
+  return (
+    snap.tenantUsers.find(
+      (u) => u.active && u.email === normalized && u.password === password,
+    ) ?? null
+  );
+}
+
+export function findTenantUserByStaffId(staffId: string): TenantUser | null {
+  const snap = readSnapshot();
+  if (!snap) return null;
+  return snap.tenantUsers.find((u) => u.staffId === staffId) ?? null;
+}
+
 /** Persist a student into localStorage immediately (so parent links work before React effects flush). */
 export function upsertStudentInSnapshot(student: Student) {
   const snap = readSnapshot();
@@ -2177,6 +2244,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
   const [payments, setPayments] = useState<Payment[]>(SEED_PAYMENTS);
   const [departments, setDepartments] = useState<Department[]>(SEED_DEPARTMENTS);
   const [roles, setRoles] = useState<Role[]>(SEED_ROLES);
+  const [tenantUsers, setTenantUsers] = useState<TenantUser[]>(SEED_TENANT_USERS);
   const [classes, setClasses] = useState<ClassConfig[]>(SEED_CLASSES);
   const [transportRoutes, setTransportRoutes] = useState<TransportRoute[]>(SEED_TRANSPORT);
   const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>(SEED_VEHICLES);
@@ -2199,6 +2267,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       setPayments(snap.payments);
       setDepartments(snap.departments);
       setRoles(snap.roles);
+      setTenantUsers(snap.tenantUsers ?? SEED_TENANT_USERS);
       setClasses(
         Array.isArray(snap.classes)
           ? snap.classes.map((c) =>
@@ -2267,6 +2336,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       dashboardTodos,
       dashboardNote,
       notifications,
+      tenantUsers,
     });
   }, [
     hydrated,
@@ -2286,6 +2356,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
     dashboardTodos,
     dashboardNote,
     notifications,
+    tenantUsers,
   ]);
 
   const resetTenant = () => {
@@ -2294,6 +2365,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
     setPayments(SEED_PAYMENTS);
     setDepartments(SEED_DEPARTMENTS);
     setRoles(SEED_ROLES);
+    setTenantUsers(SEED_TENANT_USERS);
     setClasses(SEED_CLASSES);
     setTransportRoutes(SEED_TRANSPORT);
     setTransportVehicles(SEED_VEHICLES);
@@ -2322,6 +2394,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       dashboardTodos: [...DEFAULT_DASHBOARD_TODOS],
       dashboardNote: "",
       notifications: [...SEED_NOTIFICATIONS],
+      tenantUsers: SEED_TENANT_USERS,
     });
   };
 
@@ -2337,6 +2410,8 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       setDepartments,
       roles,
       setRoles,
+      tenantUsers,
+      setTenantUsers,
       classes,
       setClasses,
       transportRoutes,
@@ -2367,6 +2442,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       payments,
       departments,
       roles,
+      tenantUsers,
       classes,
       transportRoutes,
       transportVehicles,

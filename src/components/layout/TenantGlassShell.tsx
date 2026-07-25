@@ -36,7 +36,12 @@ import {
 import { FloatingDock, type FloatingDockItem } from "@/components/ui/floating-dock";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAuth } from "@/lib/auth";
+import {
+  sessionCanAccessSettings,
+  sessionHasAnyFinance,
+  sessionHasPermission,
+  useAuth,
+} from "@/lib/auth";
 import {
   normalizeAcademicYearLabel,
   schoolInitials,
@@ -58,6 +63,18 @@ const NAV: NavEntry[] = [
   { to: "/tenant/finance", label: "Finance", icon: Wallet },
   { to: "/tenant/settings", label: "Settings", icon: Settings },
 ];
+
+function navAllowed(
+  to: string,
+  session: ReturnType<typeof useAuth>["session"],
+): boolean {
+  if (to.startsWith("/tenant/dashboard")) return sessionHasPermission(session, "dashboard");
+  if (to.startsWith("/tenant/students")) return sessionHasPermission(session, "students");
+  if (to.startsWith("/tenant/staff")) return sessionHasPermission(session, "staff");
+  if (to.startsWith("/tenant/finance")) return sessionHasAnyFinance(session);
+  if (to.startsWith("/tenant/settings")) return sessionCanAccessSettings(session);
+  return true;
+}
 
 const SIDEBAR_COLLAPSED_KEY = "tenant-sidebar-collapsed";
 
@@ -101,9 +118,14 @@ export function TenantMacDock({
   const showCollapse = isVertical;
   const expanded = isVertical && !collapsed;
 
+  const visibleNav = useMemo(
+    () => NAV.filter((item) => navAllowed(item.to, session)),
+    [session],
+  );
+
   const floatingItems = useMemo<FloatingDockItem[]>(
     () =>
-      NAV.map((item) => {
+      visibleNav.map((item) => {
         const Icon = item.icon;
         const active = pathname.startsWith(item.to);
         return {
@@ -118,7 +140,7 @@ export function TenantMacDock({
           ),
         };
       }),
-    [pathname],
+    [pathname, visibleNav],
   );
 
   if (!isVertical) {
@@ -183,7 +205,7 @@ export function TenantMacDock({
           )}
           aria-label="Primary navigation"
         >
-          {NAV.map((item, index) => {
+          {visibleNav.map((item, index) => {
             const Icon = item.icon;
             const active = pathname.startsWith(item.to);
             const distance = hovered === null ? 99 : Math.abs(hovered - index);
