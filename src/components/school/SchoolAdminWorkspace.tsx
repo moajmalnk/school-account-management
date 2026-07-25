@@ -161,7 +161,14 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   sendWhatsAppNotify,
+  sendPersonalizedWhatsApp,
   toNotifyWhatsAppNumber,
+  templateHasPlaceholders,
+  renderWhatsAppTemplate,
+  buildStudentWhatsAppVars,
+  WHATSAPP_TEMPLATE_VARS,
+  DEFAULT_OVERDUE_WHATSAPP_TEMPLATE,
+  DEFAULT_GENERAL_WHATSAPP_TEMPLATE,
 } from "@/lib/whatsapp-notify";
 import { FinanceBarCard, FinanceDonutCard } from "@/components/school/finance-charts";
 import {
@@ -2407,7 +2414,7 @@ export function AdmitStudentPage() {
 
 
 export function StudentsLedger() {
-  const { students, setStudents, classes } = useTenantStore();
+  const { students, setStudents, classes, schoolDetails } = useTenantStore();
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/students" }) as {
     id?: string;
@@ -2416,6 +2423,7 @@ export function StudentsLedger() {
   const activeStudentViewId = search.id ?? null;
   const initialEdit = search.edit === "1";
   const defaultClass = classes[0]?.className ?? "";
+  const schoolName = schoolDetails.name || "Silver Hills Global";
 
   const openStudent = (id: string) => navigate({ to: "/tenant/students", search: { id } });
   const openStudentEdit = (id: string) =>
@@ -2633,11 +2641,26 @@ export function StudentsLedger() {
       });
       return;
     }
+    const hasOverdue = selectedWithPhone.some((row) => row.student.due > 0);
     setBulkWhatsAppMsg(
-      "Dear Parent, this is a message from the school office regarding your ward.",
+      hasOverdue ? DEFAULT_OVERDUE_WHATSAPP_TEMPLATE : DEFAULT_GENERAL_WHATSAPP_TEMPLATE,
     );
     setBulkWhatsAppOpen(true);
   };
+
+  const insertTemplateVar = (key: string) => {
+    const token = `{{${key}}}`;
+    setBulkWhatsAppMsg((prev) => (prev.trim() ? `${prev}${prev.endsWith(" ") ? "" : " "}${token}` : token));
+  };
+
+  const bulkWhatsAppPreview = useMemo(() => {
+    const sample = selectedWithPhone[0]?.student;
+    if (!sample || !bulkWhatsAppMsg.trim()) return "";
+    return renderWhatsAppTemplate(
+      bulkWhatsAppMsg,
+      buildStudentWhatsAppVars(sample, { schoolName, classes }),
+    );
+  }, [bulkWhatsAppMsg, selectedWithPhone, schoolName, classes]);
 
   const sendBulkWhatsApp = async () => {
     if (!bulkWhatsAppMsg.trim()) {
@@ -2650,21 +2673,58 @@ export function StudentsLedger() {
     }
     setBulkWhatsAppSending(true);
     try {
-      const numbers = selectedWithPhone.map((row) => row.number);
-      const result = await sendWhatsAppNotify({
-        numbers,
-        message: bulkWhatsAppMsg,
-      });
-      if (!result.ok) {
-        toast.error("WhatsApp send failed", {
-          description: result.body.slice(0, 180) || `HTTP ${result.status}`,
+      const personalized = templateHasPlaceholders(bulkWhatsAppMsg);
+      if (personalized) {
+        const recipients = selectedWithPhone.map((row) => ({
+          number: row.number,
+          message: renderWhatsAppTemplate(
+            bulkWhatsAppMsg,
+            buildStudentWhatsAppVars(row.student, { schoolName, classes }),
+          ),
+        }));
+        const result = await sendPersonalizedWhatsApp({ recipients });
+        const skipped = selectedStudents.length - selectedWithPhone.length;
+        if (result.sent === 0) {
+          toast.error("WhatsApp send failed", {
+            description: result.errors[0] ?? "No messages accepted",
+          });
+          return;
+        }
+        toast.success(
+          `WhatsApp sent to ${result.sent} guardian${result.sent === 1 ? "" : "s"}`,
+          {
+            description: [
+              result.failed > 0 ? `${result.failed} failed` : null,
+              skipped > 0 ? `${skipped} skipped · no phone` : null,
+              "Personalized per student",
+            ]
+              .filter(Boolean)
+              .join(" · "),
+          },
+        );
+      } else {
+        const numbers = selectedWithPhone.map((row) => row.number);
+        const result = await sendWhatsAppNotify({
+          numbers,
+          message: bulkWhatsAppMsg,
         });
-        return;
+        if (!result.ok) {
+          toast.error("WhatsApp send failed", {
+            description: result.body.slice(0, 180) || `HTTP ${result.status}`,
+          });
+          return;
+        }
+        const skipped = selectedStudents.length - selectedWithPhone.length;
+        toast.success(
+          `WhatsApp sent to ${numbers.length} guardian${numbers.length === 1 ? "" : "s"}`,
+          {
+            description:
+              skipped > 0
+                ? `${skipped} skipped · no phone on file`
+                : result.body.slice(0, 120) || "Notify API accepted",
+          },
+        );
       }
-      const skipped = selectedStudents.length - selectedWithPhone.length;
-      toast.success(`WhatsApp sent to ${numbers.length} guardian${numbers.length === 1 ? "" : "s"}`, {
-        description: skipped > 0 ? `${skipped} skipped · no phone on file` : result.body.slice(0, 120) || "Notify API accepted",
-      });
       setBulkWhatsAppOpen(false);
       clearSelection();
     } catch (err) {
@@ -3302,7 +3362,7 @@ export function StudentsLedger() {
       />
 
       <Dialog open={bulkWhatsAppOpen} onOpenChange={setBulkWhatsAppOpen}>
-        <DialogContent className="max-w-md rounded-xl border border-[#E5E5E5] bg-white p-6">
+        <DialogContent className="max-w-lg rounded-xl border border-[#E5E5E5] bg-white p-6">
           <DialogHeader>
             <DialogTitle className="text-[20px] font-semibold text-black">
               Bulk WhatsApp
@@ -3313,28 +3373,51 @@ export function StudentsLedger() {
               {selectedStudents.length > selectedWithPhone.length
                 ? ` · ${selectedStudents.length - selectedWithPhone.length} without phone skipped`
                 : ""}
-              .
+              . Use {"{{amount}}"} and {"{{due_date}}"} for personalized overdue reminders.
             </DialogDescription>
           </DialogHeader>
           <div className="mt-4 space-y-3">
             <div>
-              <Label htmlFor="bulk-wa-msg" className="text-[12px] text-slate-500">
-                Message
-              </Label>
+              <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+                <Label htmlFor="bulk-wa-msg" className="mr-1 text-[12px] text-slate-500">
+                  Message template
+                </Label>
+                {WHATSAPP_TEMPLATE_VARS.map((v) => (
+                  <button
+                    key={v.key}
+                    type="button"
+                    onClick={() => insertTemplateVar(v.key)}
+                    className="rounded-full border border-[#E5E5E5] bg-[#F8FAFC] px-2 py-0.5 font-mono text-[10px] font-medium text-slate-600 transition-colors hover:border-[#2563EB]/40 hover:bg-[#EFF6FF] hover:text-[#1D4ED8]"
+                    title={`Insert {{${v.key}}}`}
+                  >
+                    {`{{${v.key}}}`}
+                  </button>
+                ))}
+              </div>
               <Textarea
                 id="bulk-wa-msg"
                 value={bulkWhatsAppMsg}
                 onChange={(e) => setBulkWhatsAppMsg(e.target.value)}
-                rows={5}
-                placeholder="Type the WhatsApp message…"
-                className="mt-1.5 rounded-lg border-[#E5E5E5] bg-white text-[13px]"
+                rows={7}
+                placeholder="Type the WhatsApp message… use {{amount}} {{due_date}}"
+                className="mt-0.5 rounded-lg border-[#E5E5E5] bg-white font-mono text-[12.5px] leading-relaxed"
               />
             </div>
+            {bulkWhatsAppPreview && (
+              <div className="rounded-lg border border-[#DBEAFE] bg-[#F8FBFF] px-3 py-2.5">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-[#2563EB]">
+                  Preview · {selectedWithPhone[0]?.student.name}
+                </div>
+                <pre className="mt-1.5 whitespace-pre-wrap font-sans text-[12px] leading-relaxed text-slate-700">
+                  {bulkWhatsAppPreview}
+                </pre>
+              </div>
+            )}
             <div className="rounded-lg bg-[#F8FAFC] px-3 py-2 font-mono text-[11px] text-slate-500">
               {selectedWithPhone
                 .slice(0, 6)
-                .map((row) => row.number)
-                .join(", ")}
+                .map((row) => `${row.student.name.split(" ")[0]}:${row.number}`)
+                .join(" · ")}
               {selectedWithPhone.length > 6 ? ` · +${selectedWithPhone.length - 6} more` : ""}
             </div>
           </div>
