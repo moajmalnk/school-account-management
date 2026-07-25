@@ -130,8 +130,17 @@ import {
   VEHICLE_DOCUMENT_KINDS,
   VEHICLE_DOCUMENT_LABELS,
   DEFAULT_VEHICLE_NOTIFY_DAYS,
+  FEE_MONTHS,
+  FEE_TERM_KIND_LABELS,
+  currentFeeMonth,
+  categoryFeeTermKind,
+  resolvePaymentFeePeriod,
+  resolvePaymentFeePeriodKind,
   type ClassConfig,
   type Department,
+  type FeePeriodKind,
+  type FeeTerm,
+  type FeeTermKind,
   type Payment,
   type PaymentAttachment,
   type PaymentCategory,
@@ -5042,11 +5051,12 @@ function FinanceOverview({
     }
     downloadCsv(
       "finance-transactions.csv",
-      ["Transaction ID", "Account", "Category", "Mode", "Amount (INR)", "Time", "Status", "Narration"],
+      ["Transaction ID", "Account", "Category", "Fee Period", "Mode", "Amount (INR)", "Time", "Status", "Narration"],
       payments.map((p) => [
         p.id,
         p.name,
         p.cat,
+        resolvePaymentFeePeriod(p) ?? "",
         p.mode,
         p.amount,
         p.time,
@@ -5068,11 +5078,12 @@ function FinanceOverview({
       filename: "finance-transactions.pdf",
       title: "Finance Transactions",
       subtitle: `${schoolName} · ${academicYear}`,
-      headers: ["ID", "Account", "Category", "Mode", "Amount", "Time", "Status", "Narration"],
+      headers: ["ID", "Account", "Category", "Period", "Mode", "Amount", "Time", "Status", "Narration"],
       rows: payments.map((p) => [
         p.id,
         p.name,
         p.cat,
+        resolvePaymentFeePeriod(p) ?? "—",
         p.mode,
         p.amount.toLocaleString("en-IN"),
         p.time,
@@ -5143,6 +5154,9 @@ function FinanceOverview({
       `Receipt: ${payment.id}`,
       `Account: ${payment.name}`,
       `Category: ${payment.cat}`,
+      resolvePaymentFeePeriod(payment)
+        ? `${resolvePaymentFeePeriodKind(payment) === "term" ? "Fee term" : "Fee month"}: ${resolvePaymentFeePeriod(payment)}`
+        : "",
       `Mode: ${payment.mode}`,
       `Amount: ₹ ${payment.amount.toLocaleString("en-IN")}`,
       `Time: ${payment.time}`,
@@ -6014,6 +6028,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
     classes: classConfigs,
     transportRoutes,
     paymentCategories,
+    feeTerms,
     academicYear,
     schoolDetails,
   } = useTenantStore();
@@ -6032,6 +6047,8 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
   const [stu, setStu] = useState(studentsInClass[0]?.name ?? students[0]?.name ?? "");
   const [category, setCategory] = useState(paymentCategories[0]?.label ?? "Tuition Fee");
   const [amount, setAmount] = useState("");
+  const [feePeriodKind, setFeePeriodKind] = useState<FeePeriodKind>("month");
+  const [feePeriod, setFeePeriod] = useState(() => currentFeeMonth());
   const [mode, setMode] = useState("Bank");
   const [narration, setNarration] = useState("");
   const [attachments, setAttachments] = useState<PaymentAttachment[]>([]);
@@ -6046,12 +6063,31 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
     mode: "Bank",
     amount: "",
     time: "",
+    feePeriodKind: "month" as FeePeriodKind,
+    feePeriod: currentFeeMonth(),
     narration: "",
     payerType: "student" as "student" | "external",
   });
 
   const isExternal = payerSource === "external";
   const selected = !isExternal ? students.find((s) => s.name === stu) : undefined;
+  const termKindForCategory = categoryFeeTermKind(category);
+  const termsForCategory = useMemo(
+    () =>
+      termKindForCategory
+        ? feeTerms.filter((t) => t.kind === termKindForCategory)
+        : [],
+    [feeTerms, termKindForCategory],
+  );
+  const termOptions = useMemo(
+    () =>
+      termsForCategory.map((t) => ({
+        value: t.label,
+        label: t.coverage ? `${t.label} · ${t.coverage}` : t.label,
+      })),
+    [termsForCategory],
+  );
+  const termsAvailable = termsForCategory.length > 0;
 
   useEffect(() => {
     if (classes.length && !classes.includes(cls)) {
@@ -6072,6 +6108,23 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
       setCategory(paymentCategories[0].label);
     }
   }, [category, paymentCategories]);
+
+  useEffect(() => {
+    if (feePeriodKind === "term") {
+      if (!termsAvailable) {
+        setFeePeriodKind("month");
+        setFeePeriod(currentFeeMonth());
+        return;
+      }
+      if (!termsForCategory.some((t) => t.label === feePeriod)) {
+        setFeePeriod(termsForCategory[0].label);
+      }
+      return;
+    }
+    if (!(FEE_MONTHS as readonly string[]).includes(feePeriod)) {
+      setFeePeriod(currentFeeMonth());
+    }
+  }, [feePeriodKind, feePeriod, termsAvailable, termsForCategory]);
 
   const matchedRouteFee = useMemo(() => {
     if (!selected) return undefined;
@@ -6113,6 +6166,22 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
       setPayerSource("external");
     } else {
       setPayerSource("student");
+    }
+    const nextTermKind = categoryFeeTermKind(label);
+    if (feePeriodKind === "term" && !nextTermKind) {
+      setFeePeriodKind("month");
+      setFeePeriod(currentFeeMonth());
+    }
+  };
+
+  const setPeriodKind = (kind: FeePeriodKind) => {
+    setFeePeriodKind(kind);
+    if (kind === "month") {
+      setFeePeriod(currentFeeMonth());
+      return;
+    }
+    if (termsForCategory[0]) {
+      setFeePeriod(termsForCategory[0].label);
     }
   };
 
@@ -6207,11 +6276,14 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
   };
 
   const shareHistoryReceipt = (payment: Payment) => {
+    const period = resolvePaymentFeePeriod(payment);
+    const periodKind = resolvePaymentFeePeriodKind(payment);
     const text = [
       `${schoolName} · Fee Receipt`,
       `Receipt: ${payment.id}`,
       `Account: ${payment.name}`,
       `Category: ${payment.cat}`,
+      period ? `${periodKind === "term" ? "Fee term" : "Fee month"}: ${period}` : "",
       `Mode: ${payment.mode}`,
       `Amount: ₹ ${payment.amount.toLocaleString("en-IN")}`,
       `Time: ${payment.time}`,
@@ -6231,6 +6303,8 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
       mode: payment.mode,
       amount: String(payment.amount),
       time: payment.time,
+      feePeriodKind: resolvePaymentFeePeriodKind(payment),
+      feePeriod: resolvePaymentFeePeriod(payment) || currentFeeMonth(),
       narration: payment.narration ?? "",
       payerType: payment.payerType === "external" ? "external" : "student",
     });
@@ -6244,6 +6318,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
     const time = editForm.time.trim();
     const cat = editForm.cat.trim();
     const nextMode = editForm.mode.trim();
+    const nextFeePeriod = editForm.feePeriod.trim();
     if (!name) {
       toast.error("Account name is required");
       return;
@@ -6254,6 +6329,10 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
     }
     if (!nextMode) {
       toast.error("Payment mode is required");
+      return;
+    }
+    if (!nextFeePeriod) {
+      toast.error(editForm.feePeriodKind === "term" ? "Fee term is required" : "Fee month is required");
       return;
     }
     if (!Number.isFinite(nextAmount) || nextAmount <= 0) {
@@ -6273,6 +6352,9 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
       mode: nextMode,
       amount: nextAmount,
       time,
+      feePeriodKind: editForm.feePeriodKind,
+      feePeriod: nextFeePeriod,
+      feeMonth: nextFeePeriod,
       payerType: editForm.payerType,
       ...(note ? { narration: note } : { narration: undefined }),
     };
@@ -6304,11 +6386,22 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
       toast.error("Enter a valid amount");
       return;
     }
+    if (!feePeriod.trim()) {
+      toast.error(feePeriodKind === "term" ? "Select the fee term" : "Select the fee month");
+      return;
+    }
+    if (feePeriodKind === "term" && !termsAvailable) {
+      toast.error("No fee terms configured", {
+        description: "Add tuition or vehicle terms under Settings → Fees",
+      });
+      return;
+    }
 
     const now = new Date();
     const stamp = `Today · ${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
     const note = narration.trim();
     const receiptAttachments = attachments.length ? attachments : undefined;
+    const periodLabel = feePeriod.trim();
 
     if (isExternal) {
       const payer = externalPayer.trim();
@@ -6323,13 +6416,16 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
         mode,
         amount: value,
         time: stamp,
+        feePeriodKind,
+        feePeriod: periodLabel,
+        feeMonth: periodLabel,
         payerType: "external",
         ...(note ? { narration: note } : {}),
         ...(receiptAttachments ? { attachments: receiptAttachments } : {}),
       };
       setPayments((prev) => [newPayment, ...prev]);
       toast.success(`Receipt ${newPayment.id} · ₹ ${value.toLocaleString("en-IN")} captured`, {
-        description: `External · ${payer} · ${category}${
+        description: `External · ${payer} · ${category} · ${periodLabel}${
           receiptAttachments ? ` · ${receiptAttachments.length} file${receiptAttachments.length === 1 ? "" : "s"}` : ""
         }`,
       });
@@ -6351,6 +6447,9 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
       mode,
       amount: value,
       time: stamp,
+      feePeriodKind,
+      feePeriod: periodLabel,
+      feeMonth: periodLabel,
       payerType: "student",
       className: selected.cls,
       ...(note ? { narration: note } : {}),
@@ -6364,8 +6463,8 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
     toast.success(`Receipt ${newPayment.id} · ₹ ${value.toLocaleString("en-IN")} captured`, {
       description:
         remaining === 0
-          ? `${selected.name}'s balance is now Cleared`
-          : `${selected.name} · balance ₹ ${remaining.toLocaleString("en-IN")}`,
+          ? `${selected.name}'s balance is now Cleared · ${periodLabel}`
+          : `${selected.name} · ${periodLabel} · balance ₹ ${remaining.toLocaleString("en-IN")}`,
     });
     setAmount("");
     setNarration("");
@@ -6390,6 +6489,9 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
         p.cat,
         p.mode,
         p.time,
+        p.feePeriod ?? "",
+        p.feeMonth ?? "",
+        resolvePaymentFeePeriodKind(p),
         p.className ?? "",
         p.narration ?? "",
         p.payerType === "external" ? "external donor payer" : "student",
@@ -6406,7 +6508,10 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
   const summaryName = isExternal ? externalPayer.trim() || "External payer" : stu;
   const summaryContext = isExternal ? "External" : cls;
   const canRecord =
-    Number(amount) > 0 && (isExternal ? externalPayer.trim().length > 0 : Boolean(selected));
+    Number(amount) > 0 &&
+    feePeriod.trim().length > 0 &&
+    !(feePeriodKind === "term" && !termsAvailable) &&
+    (isExternal ? externalPayer.trim().length > 0 : Boolean(selected));
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -6476,7 +6581,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
           {isExternal ? (
             <div className="sm:col-span-2">
               <FieldLabel>Donor / Payer Name</FieldLabel>
@@ -6538,6 +6643,63 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
                 Prefilled ₹ {prefill.toLocaleString("en-IN")} from Settings · {category}
               </p>
             )}
+          </div>
+          <div>
+            <FieldLabel>Fee Period</FieldLabel>
+            <div className="mb-2 flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
+              {(
+                [
+                  { key: "month" as const, label: "Month" },
+                  { key: "term" as const, label: "Term" },
+                ] as const
+              ).map((option) => {
+                const active = feePeriodKind === option.key;
+                const termDisabled = option.key === "term" && !termKindForCategory;
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    disabled={termDisabled}
+                    title={
+                      termDisabled
+                        ? "Terms apply to Tuition Fee and Vehicle Fee"
+                        : undefined
+                    }
+                    onClick={() => setPeriodKind(option.key)}
+                    className={cn(
+                      "flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors",
+                      active ? "bg-black text-white" : "text-black/65 hover:text-black",
+                      termDisabled && "cursor-not-allowed opacity-40 hover:text-black/65",
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+            {feePeriodKind === "month" ? (
+              <FieldSelect
+                value={feePeriod}
+                onValueChange={setFeePeriod}
+                options={FEE_MONTHS.map((m) => ({ value: m, label: m }))}
+                placeholder="Select month"
+              />
+            ) : termsAvailable ? (
+              <FieldSelect
+                value={feePeriod}
+                onValueChange={setFeePeriod}
+                options={termOptions}
+                placeholder="Select term"
+              />
+            ) : (
+              <div className="rounded-lg border border-dashed border-[#E5E5E5] bg-[#FAFAFA] px-3 py-2.5 text-[12px] text-black/55">
+                No {termKindForCategory ? FEE_TERM_KIND_LABELS[termKindForCategory] : ""} terms yet ·
+                add them under Settings → Fees
+              </div>
+            )}
+            <p className="mt-1 text-[10.5px] text-black/45">
+              {feePeriodKind === "term" ? "Term" : "Month"} this receipt covers · {academicYear}
+            </p>
           </div>
           <div>
             <FieldLabel>Payment Mode</FieldLabel>
@@ -6671,7 +6833,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
           <div className="min-w-0 text-[13px] leading-relaxed text-black/65">
             <div>
               Receipt for <span className="font-semibold text-black">{summaryName}</span> · {summaryContext} ·{" "}
-              <span className="font-semibold text-black">{category}</span> · {mode}
+              <span className="font-semibold text-black">{category}</span> · {feePeriod} · {mode}
               {attachments.length > 0 && (
                 <span className="text-black/45">
                   {" "}
@@ -6775,6 +6937,12 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
                 <span className="inline-flex max-w-full truncate rounded-full bg-[#DBEAFE] px-2 py-0.5 text-[10px] font-semibold text-[#0F172A]">
                   {p.cat}
                 </span>
+                {resolvePaymentFeePeriod(p) && (
+                  <span className="inline-flex max-w-full truncate rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[10px] font-semibold text-[#92400E]">
+                    {resolvePaymentFeePeriodKind(p) === "term" ? "Term · " : ""}
+                    {resolvePaymentFeePeriod(p)}
+                  </span>
+                )}
                 <span className="inline-flex max-w-full truncate rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-medium text-black/70">
                   {p.mode}
                 </span>
@@ -6852,7 +7020,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
           <table className="w-full min-w-[760px] text-left text-[12.5px]">
             <thead>
               <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5]">
-                {["Account", "Category", "Mode", "Amount", "Time", "Actions"].map((header) => (
+                {["Account", "Category", "Period", "Mode", "Amount", "Time", "Actions"].map((header) => (
                   <th
                     key={header}
                     className={cn(
@@ -6868,7 +7036,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
             <tbody>
               {filteredPayments.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-[12px] text-black/55">
+                  <td colSpan={7} className="px-3 py-8 text-center text-[12px] text-black/55">
                     {payments.length === 0
                       ? "No receipts recorded yet"
                       : "No receipts match your search"}
@@ -6897,6 +7065,11 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
                     )}
                   </td>
                   <td className="px-3 py-3 text-black/70">{p.cat}</td>
+                  <td className="px-3 py-3 text-black/70">
+                    {resolvePaymentFeePeriod(p)
+                      ? `${resolvePaymentFeePeriodKind(p) === "term" ? "Term · " : ""}${resolvePaymentFeePeriod(p)}`
+                      : "—"}
+                  </td>
                   <td className="px-3 py-3 text-black/70">{p.mode}</td>
                   <td className="px-3 py-3 font-mono font-semibold text-black">
                     +₹ {p.amount.toLocaleString("en-IN")}
@@ -7012,6 +7185,12 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
               <div className="grid grid-cols-2 gap-3">
                 {[
                   ["Category", viewingPayment.cat],
+                  [
+                    resolvePaymentFeePeriodKind(viewingPayment) === "term"
+                      ? "Fee term"
+                      : "Fee month",
+                    resolvePaymentFeePeriod(viewingPayment) || "—",
+                  ],
                   ["Payment mode", viewingPayment.mode],
                   [
                     "Payer type",
@@ -7205,6 +7384,86 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Fee period
+                </Label>
+                <div className="mb-2 flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
+                  {(
+                    [
+                      { key: "month" as const, label: "Month" },
+                      { key: "term" as const, label: "Term" },
+                    ] as const
+                  ).map((option) => {
+                    const active = editForm.feePeriodKind === option.key;
+                    return (
+                      <button
+                        key={option.key}
+                        type="button"
+                        onClick={() =>
+                          setEditForm({
+                            ...editForm,
+                            feePeriodKind: option.key,
+                            feePeriod:
+                              option.key === "month"
+                                ? currentFeeMonth()
+                                : feeTerms.find(
+                                    (t) =>
+                                      t.kind ===
+                                      (categoryFeeTermKind(editForm.cat) ?? "tuition"),
+                                  )?.label ||
+                                  feeTerms[0]?.label ||
+                                  editForm.feePeriod,
+                          })
+                        }
+                        className={cn(
+                          "flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors",
+                          active ? "bg-black text-white" : "text-black/65 hover:text-black",
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <Select
+                  value={editForm.feePeriod}
+                  onValueChange={(nextPeriod) =>
+                    setEditForm({ ...editForm, feePeriod: nextPeriod })
+                  }
+                >
+                  <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
+                    <SelectValue
+                      placeholder={editForm.feePeriodKind === "term" ? "Term" : "Month"}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(editForm.feePeriodKind === "term"
+                      ? Array.from(
+                          new Set([
+                            ...feeTerms
+                              .filter(
+                                (t) =>
+                                  t.kind ===
+                                  (categoryFeeTermKind(editForm.cat) ?? t.kind),
+                              )
+                              .map((t) => t.label),
+                            editForm.feePeriod,
+                          ].filter(Boolean)),
+                        )
+                      : Array.from(
+                          new Set([...FEE_MONTHS, editForm.feePeriod].filter(Boolean)),
+                        )
+                    ).map((m) => (
+                      <SelectItem key={m} value={m}>
+                        {m}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
                   Payer type
                 </Label>
                 <Select
@@ -7225,17 +7484,17 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                Date / Time
-              </Label>
-              <Input
-                value={editForm.time}
-                onChange={(e) => setEditForm({ ...editForm, time: e.target.value })}
-                placeholder="e.g. Today · 10:22"
-                className="font-mono"
-              />
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Date / Time
+                </Label>
+                <Input
+                  value={editForm.time}
+                  onChange={(e) => setEditForm({ ...editForm, time: e.target.value })}
+                  placeholder="e.g. Today · 10:22"
+                  className="font-mono"
+                />
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
@@ -8394,6 +8653,8 @@ export function SchoolSettings() {
     setTransportVehicles,
     paymentCategories,
     setPaymentCategories,
+    feeTerms,
+    setFeeTerms,
     academicYears,
     setAcademicYears,
     academicYear,
@@ -8417,7 +8678,7 @@ export function SchoolSettings() {
       { id: "users", label: "Users" },
       { id: "vehicles", label: "Vehicles" },
       { id: "transport", label: "Transport" },
-      { id: "fees", label: "Fee Categories" },
+      { id: "fees", label: "Fees" },
       { id: "system", label: "System" },
     ],
     [],
@@ -8538,10 +8799,13 @@ export function SchoolSettings() {
       )}
 
       {activeTab === "fees" && (
-        <FeeCategoriesCard
-          paymentCategories={paymentCategories}
-          setPaymentCategories={setPaymentCategories}
-        />
+        <div className="space-y-4 sm:space-y-5">
+          <FeeCategoriesCard
+            paymentCategories={paymentCategories}
+            setPaymentCategories={setPaymentCategories}
+          />
+          <FeeTermsCard feeTerms={feeTerms} setFeeTerms={setFeeTerms} />
+        </div>
       )}
 
       {activeTab === "system" && (
@@ -11607,6 +11871,310 @@ function FeeCategoriesCard({
           pendingDelete
             ? `Are you sure you want to remove "${pendingDelete.label}" from fee categories? Existing receipts will keep this label.`
             : "Are you sure you want to delete this fee category?"
+        }
+        onConfirm={confirmDelete}
+      />
+    </OrganicCard>
+  );
+}
+
+function FeeTermsCard({
+  feeTerms,
+  setFeeTerms,
+}: {
+  feeTerms: FeeTerm[];
+  setFeeTerms: React.Dispatch<React.SetStateAction<FeeTerm[]>>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<FeeTerm | null>(null);
+  const [kind, setKind] = useState<FeeTermKind>("tuition");
+  const [label, setLabel] = useState("");
+  const [coverage, setCoverage] = useState("");
+  const [filterKind, setFilterKind] = useState<FeeTermKind | "all">("all");
+
+  const visibleTerms = useMemo(
+    () =>
+      (filterKind === "all" ? feeTerms : feeTerms.filter((t) => t.kind === filterKind)).slice().sort(
+        (a, b) => a.kind.localeCompare(b.kind) || a.label.localeCompare(b.label),
+      ),
+    [feeTerms, filterKind],
+  );
+
+  const tuitionCount = feeTerms.filter((t) => t.kind === "tuition").length;
+  const vehicleCount = feeTerms.filter((t) => t.kind === "vehicle").length;
+
+  const startCreate = () => {
+    setEditingId(null);
+    setKind(filterKind === "vehicle" ? "vehicle" : "tuition");
+    setLabel("");
+    setCoverage("");
+    setOpen(true);
+  };
+
+  const startEdit = (term: FeeTerm) => {
+    setEditingId(term.id);
+    setKind(term.kind);
+    setLabel(term.label);
+    setCoverage(term.coverage ?? "");
+    setOpen(true);
+  };
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const nextLabel = label.trim();
+    const nextCoverage = coverage.trim();
+    if (!nextLabel) {
+      toast.error("Term name is required");
+      return;
+    }
+    const duplicate = feeTerms.some(
+      (t) =>
+        t.kind === kind &&
+        t.label.toLowerCase() === nextLabel.toLowerCase() &&
+        t.id !== editingId,
+    );
+    if (duplicate) {
+      toast.error(`${nextLabel} already exists for ${FEE_TERM_KIND_LABELS[kind]}`);
+      return;
+    }
+
+    if (editingId) {
+      setFeeTerms((prev) =>
+        prev.map((t) =>
+          t.id === editingId
+            ? {
+                ...t,
+                kind,
+                label: nextLabel,
+                ...(nextCoverage ? { coverage: nextCoverage } : { coverage: undefined }),
+              }
+            : t,
+        ),
+      );
+      toast.success(`Fee term updated · ${nextLabel}`, {
+        description: FEE_TERM_KIND_LABELS[kind],
+      });
+    } else {
+      const maxNum = feeTerms.reduce((max, t) => {
+        const match = /^FT-(\d+)$/.exec(t.id);
+        return match ? Math.max(max, Number(match[1])) : max;
+      }, 0);
+      const nextId = `FT-${(maxNum + 1).toString().padStart(3, "0")}`;
+      setFeeTerms((prev) => [
+        ...prev,
+        {
+          id: nextId,
+          kind,
+          label: nextLabel,
+          ...(nextCoverage ? { coverage: nextCoverage } : {}),
+        },
+      ]);
+      toast.success(`Fee term added · ${nextLabel}`, {
+        description: `Selectable for ${FEE_TERM_KIND_LABELS[kind]} on Receive Payment`,
+      });
+    }
+    setOpen(false);
+  };
+
+  const confirmDelete = () => {
+    if (!pendingDelete) return;
+    setFeeTerms((prev) => prev.filter((t) => t.id !== pendingDelete.id));
+    toast.error(`${pendingDelete.label} removed`, {
+      description: "Existing receipts retain the term label",
+    });
+    setPendingDelete(null);
+  };
+
+  return (
+    <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
+      <CardHeader
+        title="Fee Terms"
+        subtitle={`${tuitionCount} tuition · ${vehicleCount} vehicle · used when capturing by term`}
+        actionLabel="Add Fee Term"
+        onAction={startCreate}
+      />
+
+      <div className="mt-4 flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1 sm:max-w-md">
+        {(
+          [
+            { key: "all" as const, label: "All" },
+            { key: "tuition" as const, label: "Tuition" },
+            { key: "vehicle" as const, label: "Vehicle" },
+          ] as const
+        ).map((option) => {
+          const active = filterKind === option.key;
+          return (
+            <button
+              key={option.key}
+              type="button"
+              onClick={() => setFilterKind(option.key)}
+              className={cn(
+                "flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors",
+                active ? "bg-black text-white" : "text-black/65 hover:text-black",
+              )}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 space-y-2">
+        {visibleTerms.length === 0 && (
+          <EmptyRow
+            label={
+              filterKind === "all"
+                ? "No fee terms yet"
+                : `No ${FEE_TERM_KIND_LABELS[filterKind]} terms yet`
+            }
+          />
+        )}
+        {visibleTerms.map((term) => (
+          <div
+            key={term.id}
+            className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5"
+          >
+            <div className="flex min-w-0 items-center gap-2.5">
+              <div
+                className={cn(
+                  "grid h-8 w-8 shrink-0 place-items-center rounded-xl text-[10.5px] font-semibold",
+                  term.kind === "tuition"
+                    ? "bg-[#DBEAFE] text-[#2563EB]"
+                    : "bg-[#FEF3C7] text-[#B45309]",
+                )}
+              >
+                {term.kind === "tuition" ? "TU" : "VE"}
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-[13px] font-semibold text-black">{term.label}</div>
+                <div className="truncate text-[11px] text-black/45">
+                  {FEE_TERM_KIND_LABELS[term.kind]}
+                  {term.coverage ? ` · ${term.coverage}` : ""}
+                  <span className="text-black/30"> · </span>
+                  <span className="font-mono text-[10.5px] uppercase tracking-wider">
+                    {term.id}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={() => startEdit(term)}
+                className="grid h-8 w-8 place-items-center rounded-full text-black/55 transition-colors hover:bg-black hover:text-white"
+                aria-label={`Edit ${term.label}`}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingDelete(term)}
+                className="grid h-8 w-8 place-items-center rounded-full text-black/55 transition-colors hover:bg-[#EF4444] hover:text-white"
+                aria-label={`Delete ${term.label}`}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) {
+            setEditingId(null);
+            setLabel("");
+            setCoverage("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6">
+          <DialogHeader>
+            <DialogTitle className="text-[22px] font-semibold text-black">
+              {editingId ? "Edit Fee Term" : "Add Fee Term"}
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
+              Terms appear on Inbound Fee Capture when period is set to Term for Tuition or Vehicle
+              fees.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={submit} className="mt-4 space-y-4">
+            <div>
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                Applies To
+              </Label>
+              <div className="mt-1.5 flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
+                {(
+                  [
+                    { key: "tuition" as const, label: "Tuition" },
+                    { key: "vehicle" as const, label: "Vehicle" },
+                  ] as const
+                ).map((option) => {
+                  const active = kind === option.key;
+                  return (
+                    <button
+                      key={option.key}
+                      type="button"
+                      onClick={() => setKind(option.key)}
+                      className={cn(
+                        "flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors",
+                        active ? "bg-black text-white" : "text-black/65 hover:text-black",
+                      )}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div>
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                Term Name
+              </Label>
+              <Input
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                placeholder="e.g. Term 1"
+                className="mt-1.5"
+                autoFocus
+              />
+            </div>
+            <div>
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                Coverage (optional)
+              </Label>
+              <Input
+                value={coverage}
+                onChange={(e) => setCoverage(e.target.value)}
+                placeholder="e.g. Apr – Jun"
+                className="mt-1.5"
+              />
+            </div>
+            <DialogFooter className="flex-row justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+                {editingId ? "Save Changes" : "Add Term"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <DeleteConfirmDialog
+        open={Boolean(pendingDelete)}
+        onOpenChange={(next) => {
+          if (!next) setPendingDelete(null);
+        }}
+        title="Delete Fee Term"
+        description={
+          pendingDelete
+            ? `Remove "${pendingDelete.label}" from ${FEE_TERM_KIND_LABELS[pendingDelete.kind]} terms? Existing receipts keep this label.`
+            : "Are you sure you want to delete this fee term?"
         }
         onConfirm={confirmDelete}
       />

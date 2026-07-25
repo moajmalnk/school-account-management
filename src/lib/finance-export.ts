@@ -2,6 +2,10 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
 import type { Payment } from "@/lib/tenant-store";
+import {
+  resolvePaymentFeePeriod,
+  resolvePaymentFeePeriodKind,
+} from "@/lib/tenant-store";
 
 function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -187,6 +191,14 @@ export function downloadReceiptPdf(
           : []),
       ["Fee Category", payment.cat],
       ["Payment Mode", payment.mode],
+      ...(resolvePaymentFeePeriod(payment)
+        ? [
+            [
+              resolvePaymentFeePeriodKind(payment) === "term" ? "Fee Term" : "Fee Month",
+              resolvePaymentFeePeriod(payment)!,
+            ],
+          ]
+        : []),
       ["Recorded On", payment.time],
       ["Amount Received", amountFormatted],
       ...(payment.narration ? [["Narration", payment.narration]] : []),
@@ -211,13 +223,14 @@ export function downloadReceiptPdf(
       1: { cellWidth: contentWidth - 54, fontStyle: "bold", halign: "left" },
     },
     didParseCell: (data) => {
-      if (data.section === "body" && data.row.index === 5) {
-        data.cell.styles.fillColor = [225, 242, 174];
-        data.cell.styles.fontSize = 11;
-        if (data.column.index === 1) {
-          data.cell.styles.halign = "right";
-          data.cell.styles.cellPadding = { top: 5, right: 8, bottom: 5, left: 6 };
-        }
+      if (data.section !== "body") return;
+      const isAmountRow = data.row.cells[0]?.text.join(" ") === "Amount Received";
+      if (!isAmountRow) return;
+      data.cell.styles.fillColor = [225, 242, 174];
+      data.cell.styles.fontSize = 11;
+      if (data.column.index === 1) {
+        data.cell.styles.halign = "right";
+        data.cell.styles.cellPadding = { top: 5, right: 8, bottom: 5, left: 6 };
       }
     },
   });

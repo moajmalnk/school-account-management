@@ -39,7 +39,7 @@ import {
   totalOperatingExpense,
 } from "@/lib/dashboard-finance";
 import { downloadCsv, downloadTablePdf } from "@/lib/finance-export";
-import { useTenantStore, type Payment, type Student } from "@/lib/tenant-store";
+import { useTenantStore, resolvePaymentFeePeriod, type Payment, type Student } from "@/lib/tenant-store";
 import { cn } from "@/lib/utils";
 
 export type LedgerRow = {
@@ -696,6 +696,7 @@ export function FeesReport() {
         p.name,
         p.resolvedClass,
         p.cat,
+        resolvePaymentFeePeriod(p) ?? "",
         p.mode,
         p.time,
         p.narration ?? "",
@@ -751,6 +752,7 @@ export function FeesReport() {
     p.name,
     p.resolvedClass,
     p.cat,
+    resolvePaymentFeePeriod(p) ?? "—",
     p.mode,
     inr(p.amount),
     p.time,
@@ -779,12 +781,13 @@ export function FeesReport() {
   const handleCsv = () => {
     downloadCsv(
       `fees-report-${academicYear.replace(/\s+/g, "-").toLowerCase()}.csv`,
-      ["Receipt", "Student", "Class", "Category", "Mode", "Amount", "Time"],
+      ["Receipt", "Student", "Class", "Category", "Fee Period", "Mode", "Amount", "Time"],
       filteredCollections.map((p) => [
         p.id,
         p.name,
         p.resolvedClass === "—" ? "" : p.resolvedClass,
         p.cat,
+        resolvePaymentFeePeriod(p) ?? "",
         p.mode,
         p.amount,
         p.time,
@@ -798,12 +801,13 @@ export function FeesReport() {
       filename: `fees-report-${academicYear.replace(/\s+/g, "-").toLowerCase()}.pdf`,
       title: "Fees Report",
       subtitle: `${schoolName} · ${academicYear}`,
-      headers: ["Receipt", "Student", "Class", "Category", "Mode", "Amount", "Time"],
+      headers: ["Receipt", "Student", "Class", "Category", "Period", "Mode", "Amount", "Time"],
       rows: filteredCollections.map((p) => [
         p.id,
         p.name,
         p.resolvedClass,
         p.cat,
+        resolvePaymentFeePeriod(p) ?? "—",
         p.mode,
         p.amount.toLocaleString("en-IN"),
         p.time,
@@ -893,7 +897,7 @@ export function FeesReport() {
           </div>
         ) : (
           <ReportTable
-            headers={["Receipt", "Student", "Class", "Category", "Mode", "Amount", "Time"]}
+            headers={["Receipt", "Student", "Class", "Category", "Period", "Mode", "Amount", "Time"]}
             rows={collectionRows}
           />
         )}

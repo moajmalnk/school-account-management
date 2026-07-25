@@ -513,11 +513,93 @@ export type Payment = {
   /** Student receipts reduce ledger due; external are school income only */
   payerType?: "student" | "external";
   className?: string;
+  /** Whether the period is a calendar month or a configured fee term */
+  feePeriodKind?: "month" | "term";
+  /** Month name or fee-term label this receipt covers */
+  feePeriod?: string;
+  /**
+   * @deprecated Prefer `feePeriod` — kept for older receipts
+   * Calendar month the fee covers (e.g. "July") within the active academic year
+   */
+  feeMonth?: string;
   /** Optional free-text note on the receipt */
   narration?: string;
   /** Supporting files · bank slips, UPI screenshots, vouchers */
   attachments?: PaymentAttachment[];
 };
+
+/** Academic-year fee months · April–March (Indian school / FY order) */
+export const FEE_MONTHS = [
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+  "January",
+  "February",
+  "March",
+] as const;
+
+export type FeePeriodKind = "month" | "term";
+export type FeeTermKind = "tuition" | "vehicle";
+
+export type FeeTerm = {
+  id: string;
+  kind: FeeTermKind;
+  label: string;
+  /** Optional coverage note · e.g. "Apr – Jun" */
+  coverage?: string;
+};
+
+export const FEE_TERM_KIND_LABELS: Record<FeeTermKind, string> = {
+  tuition: "Tuition Fee",
+  vehicle: "Vehicle Fee",
+};
+
+export function currentFeeMonth(date = new Date()): string {
+  return date.toLocaleString("en-IN", { month: "long" });
+}
+
+export function resolvePaymentFeePeriod(payment: Payment): string | undefined {
+  const next = payment.feePeriod?.trim() || payment.feeMonth?.trim();
+  return next || undefined;
+}
+
+export function resolvePaymentFeePeriodKind(payment: Payment): FeePeriodKind {
+  if (payment.feePeriodKind === "term" || payment.feePeriodKind === "month") {
+    return payment.feePeriodKind;
+  }
+  return "month";
+}
+
+/** Map a fee category label to the term group it uses (if any). */
+export function categoryFeeTermKind(categoryLabel: string): FeeTermKind | null {
+  const lower = categoryLabel.toLowerCase();
+  if (lower.includes("tuition")) return "tuition";
+  if (lower.includes("vehicle") || lower.includes("transport") || lower.includes("bus")) {
+    return "vehicle";
+  }
+  return null;
+}
+
+export function normalizeFeeTerm(
+  raw: Partial<FeeTerm> & Pick<FeeTerm, "id" | "label">,
+): FeeTerm | null {
+  const label = raw.label?.trim();
+  if (!label || !raw.id?.trim()) return null;
+  const kind: FeeTermKind = raw.kind === "vehicle" ? "vehicle" : "tuition";
+  const coverage = raw.coverage?.trim();
+  return {
+    id: raw.id.trim(),
+    kind,
+    label,
+    ...(coverage ? { coverage } : {}),
+  };
+}
 
 export type Department = {
   id: string;
@@ -1805,6 +1887,17 @@ export const SEED_PAYMENT_CATEGORIES: PaymentCategory[] = [
   { id: "PC-004", label: "Other" },
 ];
 
+export const SEED_FEE_TERMS: FeeTerm[] = [
+  { id: "FT-001", kind: "tuition", label: "Term 1", coverage: "Apr – Jun" },
+  { id: "FT-002", kind: "tuition", label: "Term 2", coverage: "Jul – Sep" },
+  { id: "FT-003", kind: "tuition", label: "Term 3", coverage: "Oct – Dec" },
+  { id: "FT-004", kind: "tuition", label: "Term 4", coverage: "Jan – Mar" },
+  { id: "FT-005", kind: "vehicle", label: "Term 1", coverage: "Apr – Jun" },
+  { id: "FT-006", kind: "vehicle", label: "Term 2", coverage: "Jul – Sep" },
+  { id: "FT-007", kind: "vehicle", label: "Term 3", coverage: "Oct – Dec" },
+  { id: "FT-008", kind: "vehicle", label: "Term 4", coverage: "Jan – Mar" },
+];
+
 export const SEED_ACADEMIC_YEARS = ["AY 2024-25", "AY 2025-26", "AY 2026-27"];
 /** @deprecated Prefer `academicYears` from the tenant store */
 export const ACADEMIC_YEAR_OPTIONS = SEED_ACADEMIC_YEARS;
@@ -1897,6 +1990,7 @@ type Snapshot = {
   transportRoutes: TransportRoute[];
   transportVehicles: TransportVehicle[];
   paymentCategories: PaymentCategory[];
+  feeTerms: FeeTerm[];
   academicYears: string[];
   academicYear: string;
   themeSettings: ThemeSettings;
@@ -1928,6 +2022,8 @@ type TenantStoreValue = {
   setTransportVehicles: Dispatch<SetStateAction<TransportVehicle[]>>;
   paymentCategories: PaymentCategory[];
   setPaymentCategories: Dispatch<SetStateAction<PaymentCategory[]>>;
+  feeTerms: FeeTerm[];
+  setFeeTerms: Dispatch<SetStateAction<FeeTerm[]>>;
   academicYears: string[];
   setAcademicYears: Dispatch<SetStateAction<string[]>>;
   academicYear: string;
@@ -2045,6 +2141,15 @@ function parseSnapshot(raw: string): Snapshot | null {
           .filter((v): v is TransportVehicle => v !== null)
       : [...SEED_VEHICLES],
     paymentCategories: parsed.paymentCategories,
+    feeTerms: Array.isArray((parsed as Partial<Snapshot>).feeTerms)
+      ? ((parsed as Partial<Snapshot>).feeTerms as Partial<FeeTerm>[])
+          .map((t) =>
+            normalizeFeeTerm(
+              t as Partial<FeeTerm> & Pick<FeeTerm, "id" | "label">,
+            ),
+          )
+          .filter((t): t is FeeTerm => t !== null)
+      : [...SEED_FEE_TERMS],
     academicYears: ensureAcademicYearInList(
       Array.isArray(parsed.academicYears)
         ? parsed.academicYears.filter((y): y is string => typeof y === "string")
@@ -2298,6 +2403,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
   const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>(SEED_VEHICLES);
   const [paymentCategories, setPaymentCategories] =
     useState<PaymentCategory[]>(SEED_PAYMENT_CATEGORIES);
+  const [feeTerms, setFeeTerms] = useState<FeeTerm[]>(SEED_FEE_TERMS);
   const [academicYears, setAcademicYears] = useState<string[]>([...SEED_ACADEMIC_YEARS]);
   const [academicYear, setAcademicYear] = useState<string>(SEED_ACADEMIC_YEAR);
   const [themeSettings, setThemeSettings] = useState<ThemeSettings>(SEED_THEME_SETTINGS);
@@ -2327,6 +2433,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
     setTransportRoutes(snap.transportRoutes);
     setTransportVehicles(snap.transportVehicles);
     setPaymentCategories(snap.paymentCategories);
+    setFeeTerms(Array.isArray(snap.feeTerms) ? snap.feeTerms : SEED_FEE_TERMS);
     setAcademicYears(snap.academicYears);
     setAcademicYear(snap.academicYear);
     setThemeSettings(snap.themeSettings);
@@ -2381,6 +2488,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       transportRoutes,
       transportVehicles,
       paymentCategories,
+      feeTerms,
       academicYears,
       academicYear,
       themeSettings,
@@ -2401,6 +2509,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
     transportRoutes,
     transportVehicles,
     paymentCategories,
+    feeTerms,
     academicYears,
     academicYear,
     themeSettings,
@@ -2422,6 +2531,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
     setTransportRoutes(SEED_TRANSPORT);
     setTransportVehicles(SEED_VEHICLES);
     setPaymentCategories(SEED_PAYMENT_CATEGORIES);
+    setFeeTerms(SEED_FEE_TERMS);
     setAcademicYears([...SEED_ACADEMIC_YEARS]);
     setAcademicYear(SEED_ACADEMIC_YEAR);
     setThemeSettings(SEED_THEME_SETTINGS);
@@ -2439,6 +2549,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       transportRoutes: SEED_TRANSPORT,
       transportVehicles: SEED_VEHICLES,
       paymentCategories: SEED_PAYMENT_CATEGORIES,
+      feeTerms: SEED_FEE_TERMS,
       academicYears: [...SEED_ACADEMIC_YEARS],
       academicYear: SEED_ACADEMIC_YEAR,
       themeSettings: SEED_THEME_SETTINGS,
@@ -2472,6 +2583,8 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       setTransportVehicles,
       paymentCategories,
       setPaymentCategories,
+      feeTerms,
+      setFeeTerms,
       academicYears,
       setAcademicYears,
       academicYear,
@@ -2499,6 +2612,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       transportRoutes,
       transportVehicles,
       paymentCategories,
+      feeTerms,
       academicYears,
       academicYear,
       themeSettings,
