@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -692,6 +693,10 @@ export type TransportRoute = {
   id: string;
   mapFrom: string;
   mapTo: string;
+  fromLat?: number;
+  fromLng?: number;
+  toLat?: number;
+  toLng?: number;
   morningFee: number;
   eveningFee: number;
   bothFee: number;
@@ -777,7 +782,24 @@ function normalizeTransportRoute(raw: unknown): TransportRoute | null {
         : 0;
   const bothFee =
     typeof r.bothFee === "number" ? r.bothFee : (legacyFee ?? morningFee + eveningFee);
-  return { id: r.id, mapFrom: r.mapFrom, mapTo: r.mapTo, morningFee, eveningFee, bothFee };
+  const coord = (v: unknown): number | undefined =>
+    typeof v === "number" && Number.isFinite(v) ? v : undefined;
+  const fromLat = coord(r.fromLat);
+  const fromLng = coord(r.fromLng);
+  const toLat = coord(r.toLat);
+  const toLng = coord(r.toLng);
+  return {
+    id: r.id,
+    mapFrom: r.mapFrom,
+    mapTo: r.mapTo,
+    ...(fromLat !== undefined ? { fromLat } : {}),
+    ...(fromLng !== undefined ? { fromLng } : {}),
+    ...(toLat !== undefined ? { toLat } : {}),
+    ...(toLng !== undefined ? { toLng } : {}),
+    morningFee,
+    eveningFee,
+    bothFee,
+  };
 }
 
 function normalizeVehicleDocumentFile(raw: unknown): VehicleDocumentFile | undefined {
@@ -1680,6 +1702,10 @@ export const SEED_TRANSPORT: TransportRoute[] = [
     id: "TR-001",
     mapFrom: "Lotus Greens Sector 21",
     mapTo: "Main Campus Drop-off",
+    fromLat: 28.5021,
+    fromLng: 77.4105,
+    toLat: 28.4595,
+    toLng: 77.0266,
     morningFee: 1000,
     eveningFee: 1000,
     bothFee: 1800,
@@ -1688,6 +1714,10 @@ export const SEED_TRANSPORT: TransportRoute[] = [
     id: "TR-002",
     mapFrom: "Marina Crest, MG Road",
     mapTo: "Main Campus Drop-off",
+    fromLat: 12.975,
+    fromLng: 77.6063,
+    toLat: 12.9716,
+    toLng: 77.5946,
     morningFee: 850,
     eveningFee: 850,
     bothFee: 1500,
@@ -1696,6 +1726,10 @@ export const SEED_TRANSPORT: TransportRoute[] = [
     id: "TR-003",
     mapFrom: "Hiranandani Gardens, Powai",
     mapTo: "Main Campus Drop-off",
+    fromLat: 19.1197,
+    fromLng: 72.9051,
+    toLat: 19.076,
+    toLng: 72.8777,
     morningFee: 1350,
     eveningFee: 1350,
     bothFee: 2400,
@@ -1704,6 +1738,10 @@ export const SEED_TRANSPORT: TransportRoute[] = [
     id: "TR-004",
     mapFrom: "Cumballa Heights, Peddar Road",
     mapTo: "Main Campus Drop-off",
+    fromLat: 18.9679,
+    fromLng: 72.8075,
+    toLat: 19.076,
+    toLng: 72.8777,
     morningFee: 1100,
     eveningFee: 1100,
     bothFee: 2000,
@@ -1712,6 +1750,10 @@ export const SEED_TRANSPORT: TransportRoute[] = [
     id: "TR-005",
     mapFrom: "Sasthamangalam, Thiruvananthapuram",
     mapTo: "Main Campus Drop-off",
+    fromLat: 8.5142,
+    fromLng: 76.957,
+    toLat: 8.5241,
+    toLng: 76.9366,
     morningFee: 1200,
     eveningFee: 1200,
     bothFee: 2200,
@@ -2224,6 +2266,12 @@ export function findTenantUserByStaffId(staffId: string): TenantUser | null {
   return snap.tenantUsers.find((u) => u.staffId === staffId) ?? null;
 }
 
+export function findTenantUserById(userId: string): TenantUser | null {
+  const snap = readSnapshot();
+  if (!snap) return null;
+  return snap.tenantUsers.find((u) => u.id === userId) ?? null;
+}
+
 /** Persist a student into localStorage immediately (so parent links work before React effects flush). */
 export function upsertStudentInSnapshot(student: Student) {
   const snap = readSnapshot();
@@ -2259,49 +2307,53 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<TenantNotification[]>([...SEED_NOTIFICATIONS]);
   const [hydrated, setHydrated] = useState(false);
 
-  useEffect(() => {
-    const snap = readSnapshot();
-    if (snap) {
-      setStudents(snap.students);
-      setStaff(snap.staff);
-      setPayments(snap.payments);
-      setDepartments(snap.departments);
-      setRoles(snap.roles);
-      setTenantUsers(snap.tenantUsers ?? SEED_TENANT_USERS);
-      setClasses(
-        Array.isArray(snap.classes)
-          ? snap.classes.map((c) =>
-              normalizeClassConfig(
-                c as Partial<ClassConfig> &
-                  Pick<ClassConfig, "id" | "tuitionFeeAmount" | "billingCycle">,
-              ),
-            )
-          : SEED_CLASSES,
-      );
-      setTransportRoutes(snap.transportRoutes);
-      setTransportVehicles(snap.transportVehicles);
-      setPaymentCategories(snap.paymentCategories);
-      setAcademicYears(snap.academicYears);
-      setAcademicYear(snap.academicYear);
-      setThemeSettings(snap.themeSettings);
-      setSchoolDetails(snap.schoolDetails);
-      setDashboardTodos(snap.dashboardTodos);
-      setDashboardNote(snap.dashboardNote);
-      setNotifications(snap.notifications);
-    }
-    setHydrated(true);
+  const applySnapshot = useCallback((snap: Snapshot) => {
+    setStudents(snap.students);
+    setStaff(snap.staff);
+    setPayments(snap.payments);
+    setDepartments(snap.departments);
+    setRoles(snap.roles);
+    setTenantUsers(snap.tenantUsers ?? SEED_TENANT_USERS);
+    setClasses(
+      Array.isArray(snap.classes)
+        ? snap.classes.map((c) =>
+            normalizeClassConfig(
+              c as Partial<ClassConfig> &
+                Pick<ClassConfig, "id" | "tuitionFeeAmount" | "billingCycle">,
+            ),
+          )
+        : SEED_CLASSES,
+    );
+    setTransportRoutes(snap.transportRoutes);
+    setTransportVehicles(snap.transportVehicles);
+    setPaymentCategories(snap.paymentCategories);
+    setAcademicYears(snap.academicYears);
+    setAcademicYear(snap.academicYear);
+    setThemeSettings(snap.themeSettings);
+    setSchoolDetails(snap.schoolDetails);
+    setDashboardTodos(snap.dashboardTodos);
+    setDashboardNote(snap.dashboardNote);
+    setNotifications(snap.notifications);
   }, []);
 
+  useEffect(() => {
+    const snap = readSnapshot();
+    if (snap) applySnapshot(snap);
+    setHydrated(true);
+  }, [applySnapshot]);
+
+  // Sync the full snapshot when another tab writes, so a stale tab never
+  // clobbers data created elsewhere (e.g. a user added in the admin tab).
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
       if (event.key !== STORAGE_KEY || !event.newValue) return;
       const snap = parseSnapshot(event.newValue);
       if (!snap) return;
-      setStudents(snap.students);
+      applySnapshot(snap);
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
-  }, []);
+  }, [applySnapshot]);
 
   useEffect(() => {
     if (!hydrated) return;

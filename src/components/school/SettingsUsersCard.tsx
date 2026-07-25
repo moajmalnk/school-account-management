@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { ExternalLink, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -229,6 +229,31 @@ export function SettingsUsersCard({
     setOpen(false);
   };
 
+  const impersonateUser = (user: TenantUser) => {
+    window.open(
+      `/impersonate?user=${encodeURIComponent(user.id)}`,
+      "_blank",
+      "noopener",
+    );
+    toast.success(`Opening workspace as ${user.displayName}`, {
+      description: "New tab · no credentials needed · your admin session stays here",
+    });
+  };
+
+  const testDriveForm = () => {
+    const permissions = form.allFunctions ? "*" : form.permissions.join(",");
+    if (!permissions) {
+      toast.error("Pick at least one permission to test");
+      return;
+    }
+    const name = form.displayName.trim() || "Permission preview";
+    window.open(
+      `/impersonate?perms=${encodeURIComponent(permissions)}&name=${encodeURIComponent(name)}`,
+      "_blank",
+      "noopener",
+    );
+  };
+
   const confirmDelete = () => {
     if (!pendingDelete) return;
     setTenantUsers((prev) => prev.filter((u) => u.id !== pendingDelete.id));
@@ -286,6 +311,18 @@ export function SettingsUsersCard({
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
+                  {user.active && (
+                    <button
+                      type="button"
+                      onClick={() => impersonateUser(user)}
+                      aria-label={`Login as ${user.displayName}`}
+                      title="Login as this user in a new tab (no credentials)"
+                      className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#BFDBFE] bg-[#EFF6FF] px-2.5 text-[11px] font-semibold text-[#1D4ED8] transition-colors hover:border-[#93C5FD] hover:bg-[#DBEAFE]"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      Login as
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => startEdit(user)}
@@ -454,13 +491,25 @@ export function SettingsUsersCard({
               Active (can sign in)
             </label>
 
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                Cancel
+            <DialogFooter className="gap-2 sm:justify-between">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={testDriveForm}
+                title="Preview these permissions in a new tab without saving a user"
+                className="gap-1.5"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Test without saving
               </Button>
-              <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
-                {editingId ? "Save changes" : "Create user"}
-              </Button>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+                  {editingId ? "Save changes" : "Create user"}
+                </Button>
+              </div>
             </DialogFooter>
           </form>
         </DialogContent>

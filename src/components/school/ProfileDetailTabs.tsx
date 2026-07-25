@@ -28,6 +28,9 @@ export const STAFF_PROFILE_TABS: ProfileDetailTab[] = [
   { id: "payments", label: "Payments", icon: Wallet },
 ];
 
+const TAB_SHELL =
+  "rounded-2xl border border-slate-200/70 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.06)]";
+
 export function ProfileDetailTabs({
   tabs,
   value,
@@ -47,8 +50,13 @@ export function ProfileDetailTabs({
       onValueChange={(next) => onValueChange(next as ProfileDetailTabId)}
       className={cn("w-full min-w-0", className)}
     >
-      <div className="sticky top-0 z-20 -mx-1 px-1 pb-1 backdrop-blur-md supports-[backdrop-filter]:bg-white/55">
-        <TabsList className="mobile-scrollbar-none flex h-auto w-full items-stretch justify-start gap-1 overflow-x-auto rounded-2xl border border-slate-100/80 bg-white/90 p-1.5 shadow-sm shadow-slate-200/40">
+      <div className={cn("sticky top-0 z-20", TAB_SHELL)}>
+        <TabsList
+          className={cn(
+            "mobile-scrollbar-none flex h-auto w-full items-stretch justify-start gap-0.5 overflow-x-auto",
+            "rounded-2xl border-0 bg-transparent p-1.5 shadow-none",
+          )}
+        >
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (
@@ -56,12 +64,18 @@ export function ProfileDetailTabs({
                 key={tab.id}
                 value={tab.id}
                 className={cn(
-                  "inline-flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-2.5 py-2 text-[11px] font-semibold text-slate-500 shadow-none",
-                  "data-[state=active]:bg-slate-950 data-[state=active]:text-white data-[state=active]:shadow-sm",
-                  "sm:flex-row sm:gap-2 sm:px-3 sm:text-[12.5px]",
+                  "group relative inline-flex min-h-11 min-w-0 flex-1 flex-row items-center justify-center gap-1.5",
+                  "rounded-xl border-0 bg-transparent px-2.5 py-2.5 text-[12px] font-medium tracking-tight",
+                  "text-slate-400 shadow-none transition-all",
+                  "hover:bg-slate-50 hover:text-slate-700",
+                  "focus-visible:ring-0 focus-visible:ring-offset-0",
+                  "data-[state=active]:bg-slate-50 data-[state=active]:text-slate-900 data-[state=active]:shadow-none",
+                  "data-[state=active]:after:absolute data-[state=active]:after:inset-x-3 data-[state=active]:after:bottom-1",
+                  "data-[state=active]:after:h-0.5 data-[state=active]:after:rounded-full data-[state=active]:after:bg-[#2563EB]",
+                  "sm:gap-2 sm:px-3 sm:text-[13px]",
                 )}
               >
-                <Icon className="h-3.5 w-3.5 shrink-0" />
+                <Icon className="h-3.5 w-3.5 shrink-0 opacity-55 transition-opacity group-data-[state=active]:opacity-100 group-data-[state=active]:text-[#2563EB]" />
                 <span className="truncate sm:hidden">{tab.shortLabel ?? tab.label}</span>
                 <span className="hidden truncate sm:inline">{tab.label}</span>
               </TabsTrigger>

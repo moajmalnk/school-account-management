@@ -71,6 +71,7 @@ function TenantShell() {
 
   return (
     <div className="tenant-canvas min-h-dvh text-slate-900">
+      <ImpersonationBanner />
       <TenantMobileHeader />
       <div
         className={cn(
@@ -106,6 +107,29 @@ function TenantShell() {
       )}
 
       <TenantMobileNav />
+    </div>
+  );
+}
+
+function ImpersonationBanner() {
+  const { session, logout } = useAuth();
+  if (!session?.impersonated) return null;
+  return (
+    <div className="sticky top-0 z-50 flex items-center justify-center gap-3 bg-[#1D4ED8] px-4 py-1.5 text-white">
+      <span className="text-[12px] font-medium">
+        Impersonating <strong>{session.displayName}</strong> · {session.email} — this
+        tab only, no changes to your admin login
+      </span>
+      <button
+        type="button"
+        onClick={() => {
+          logout();
+          window.location.replace("/tenant/settings?tab=users");
+        }}
+        className="rounded-full border border-white/40 bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold transition-colors hover:bg-white/20"
+      >
+        Exit
+      </button>
     </div>
   );
 }

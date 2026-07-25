@@ -318,12 +318,18 @@ function initials(name: string) {
 function StudentPhotoAvatar({
   student,
   onPhotoChange,
+  size = "md",
 }: {
   student: Student;
   onPhotoChange: (photoUrl: string | undefined) => void;
+  size?: "md" | "lg";
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const dim = size === "lg" ? "h-20 w-20 sm:h-24 sm:w-24" : "h-16 w-16";
+  const text = size === "lg" ? "text-2xl sm:text-3xl" : "text-lg";
+  const cam = size === "lg" ? "h-8 w-8" : "h-7 w-7";
+  const camIcon = size === "lg" ? "h-4 w-4" : "h-3.5 w-3.5";
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -348,15 +354,21 @@ function StudentPhotoAvatar({
 
   return (
     <>
-      <div className="relative h-16 w-16 shrink-0">
+      <div className={cn("relative shrink-0", dim)}>
         {student.photoUrl ? (
           <img
             src={student.photoUrl}
             alt={`${student.name} profile`}
-            className="h-16 w-16 rounded-lg object-cover"
+            className={cn(dim, "rounded-2xl object-cover ring-2 ring-white shadow-md")}
           />
         ) : (
-          <div className="grid h-16 w-16 place-items-center rounded-lg bg-black text-lg font-semibold text-white">
+          <div
+            className={cn(
+              dim,
+              "grid place-items-center rounded-2xl bg-gradient-to-br from-slate-900 to-slate-700 font-semibold text-white shadow-md ring-2 ring-white",
+              text,
+            )}
+          >
             {initials(student.name)}
           </div>
         )}
@@ -365,9 +377,12 @@ function StudentPhotoAvatar({
           onClick={() => fileInputRef.current?.click()}
           aria-label={`Change photo for ${student.name}`}
           title="Change photo"
-          className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#2563EB] text-white shadow-sm transition-colors hover:bg-black hover:text-[#2563EB]"
+          className={cn(
+            "absolute -bottom-1 -right-1 grid place-items-center rounded-full border-2 border-white bg-[#2563EB] text-white shadow-sm transition-colors hover:bg-slate-900",
+            cam,
+          )}
         >
-          <Camera className="h-3.5 w-3.5" />
+          <Camera className={camIcon} />
         </button>
         {student.photoUrl && (
           <button
@@ -679,7 +694,7 @@ export function StudentProfileDetail({
       <button
         type="button"
         onClick={onBack}
-        className="inline-flex w-fit items-center gap-1.5 text-[13px] font-semibold text-slate-500 transition-colors hover:text-slate-900"
+        className="inline-flex w-fit items-center gap-1 text-[12.5px] font-medium text-slate-400 transition-colors hover:text-slate-800"
       >
         <ChevronLeft className="h-4 w-4 shrink-0" />
         Back to Students
@@ -694,55 +709,63 @@ export function StudentProfileDetail({
         guardianName={student.guardian}
       />
 
-      <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
-        <div className="flex min-w-0 flex-col items-center gap-4 sm:flex-row sm:items-center">
-          <StudentPhotoAvatar student={student} onPhotoChange={updatePhoto} />
-          <div className="min-w-0">
-            <h1 className="truncate text-xl font-semibold text-black sm:text-2xl">
-              {student.name}
-            </h1>
-            <p className="mt-0.5 text-sm text-black/60">{student.cls}</p>
-            <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5 sm:justify-start">
-              <span className="inline-flex rounded-full bg-[#F4F4F5] px-2.5 py-0.5 font-mono text-[10.5px] font-medium text-black/65">
-                {student.id}
-              </span>
-              {student.gender && (
-                <span
-                  className={cn(
-                    "rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold",
-                    student.gender === "F" ? "bg-black text-[#2563EB]" : "bg-black text-white",
-                  )}
-                >
-                  {student.gender}
+      <section className="overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.06)]">
+        <div className="h-1 bg-gradient-to-r from-[#2563EB] via-[#4C69A4] to-[#93C5FD]" />
+        <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:p-6">
+          <div className="flex min-w-0 flex-col items-center gap-4 text-center sm:flex-row sm:items-center sm:text-left">
+            <StudentPhotoAvatar student={student} onPhotoChange={updatePhoto} size="lg" />
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                Student profile
+              </p>
+              <h1 className="mt-1 truncate text-[1.65rem] font-semibold tracking-tight text-slate-950 sm:text-[1.85rem]">
+                {student.name}
+              </h1>
+              <p className="mt-1 text-[14px] font-medium text-slate-500">{student.cls}</p>
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5 sm:justify-start">
+                <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-mono text-[11px] font-medium text-slate-600">
+                  {student.id}
                 </span>
-              )}
-              <EnrollmentStatusBadge active={isActive} />
+                {student.gender && (
+                  <span
+                    className={cn(
+                      "inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                      student.gender === "F"
+                        ? "bg-[#EFF6FF] text-[#1D4ED8]"
+                        : "bg-slate-900 text-white",
+                    )}
+                  >
+                    {student.gender === "F" ? "Female" : student.gender === "M" ? "Male" : student.gender}
+                  </span>
+                )}
+                <EnrollmentStatusBadge active={isActive} />
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="flex shrink-0 flex-wrap items-center justify-center gap-2">
-          <button
-            type="button"
-            onClick={openShare}
-            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#DBEAFE] bg-[#EFF6FF] px-4 text-sm font-semibold text-[#2563EB] transition-colors hover:bg-[#DBEAFE]"
-          >
-            <ClipboardList className="h-4 w-4" />
-            Collect
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              resetDraft();
-              setEditOpen(true);
-            }}
-            className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
-          >
-            <Pencil className="h-4 w-4" />
-            Edit Profile
-          </button>
+          <div className="flex shrink-0 flex-wrap items-center justify-center gap-2 sm:justify-end">
+            <button
+              type="button"
+              onClick={openShare}
+              className="inline-flex h-10 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 text-[13px] font-semibold text-slate-700 shadow-sm transition-colors hover:border-[#93C5FD] hover:bg-[#EFF6FF] hover:text-[#1D4ED8]"
+            >
+              <ClipboardList className="h-4 w-4" />
+              Collect
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                resetDraft();
+                setEditOpen(true);
+              }}
+              className="inline-flex h-10 items-center gap-1.5 rounded-full bg-slate-950 px-4 text-[13px] font-semibold text-white shadow-sm transition-colors hover:bg-slate-800"
+            >
+              <Pencil className="h-4 w-4" />
+              Edit Profile
+            </button>
+          </div>
         </div>
-      </div>
+      </section>
 
       <ProfileDetailTabs tabs={STUDENT_PROFILE_TABS} value={activeTab} onValueChange={setActiveTab}>
         <ProfileTabPanel value="profile">

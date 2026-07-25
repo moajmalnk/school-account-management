@@ -47,11 +47,15 @@ import {
   StickyNote,
   Settings,
   ChevronLeft,
+  ChevronRight,
   ImagePlus,
   FileImage,
   Paperclip,
   FileText,
   ExternalLink,
+  LogOut,
+  MapPin,
+  Route,
 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, XAxis, YAxis } from "recharts";
 import {
@@ -101,13 +105,6 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import {
-  Drawer,
-  DrawerContent,
-  DrawerDescription,
-  DrawerHeader,
-  DrawerTitle,
-} from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -179,6 +176,7 @@ import {
   DEFAULT_GENERAL_WHATSAPP_TEMPLATE,
 } from "@/lib/whatsapp-notify";
 import { FinanceBarCard, FinanceDonutCard } from "@/components/school/finance-charts";
+import { LocationPicker } from "@/components/school/LocationPicker";
 import {
   BalanceSheetReport,
   BankReconciliationReport,
@@ -8375,9 +8373,11 @@ function LedgerAnalytics() {
 export function SchoolSettings() {
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/settings" });
-  const { session } = useAuth();
-  const activeTab = (search.tab ?? "school") as SettingsTabId;
-  const [sectionSheetOpen, setSectionSheetOpen] = useState(false);
+  const { session, logout } = useAuth();
+  const tabParam = search.tab;
+  const activeTab = (tabParam ?? "school") as SettingsTabId;
+  /** Mobile: no ?tab → menu index. With ?tab → section page. Desktop always shows content. */
+  const showMobileMenu = !tabParam;
 
   const {
     departments,
@@ -8413,7 +8413,7 @@ export function SchoolSettings() {
       { id: "school", label: "School Details" },
       { id: "classes", label: "Class Tier" },
       { id: "departments", label: "Departments" },
-      { id: "roles", label: "Positions / Roles" },
+      { id: "roles", label: "Positions" },
       { id: "users", label: "Users" },
       { id: "vehicles", label: "Vehicles" },
       { id: "transport", label: "Transport" },
@@ -8434,15 +8434,12 @@ export function SchoolSettings() {
       navigate({ to: "/tenant/dashboard", replace: true });
       return;
     }
+    // On the mobile menu (no tab), skip tab-level redirects.
+    if (!tabParam) return;
     if (!sessionCanAccessSettingsTab(session, activeTab)) {
-      const fallback = settingsTabs[0]?.id ?? "school";
-      navigate({
-        to: "/tenant/settings",
-        search: fallback === "school" ? {} : { tab: fallback },
-        replace: true,
-      });
+      navigate({ to: "/tenant/settings", search: {}, replace: true });
     }
-  }, [session, activeTab, navigate, settingsTabs]);
+  }, [session, activeTab, navigate, tabParam]);
 
   const activeTabLabel =
     settingsTabs.find((tab) => tab.id === activeTab)?.label ??
@@ -8452,78 +8449,194 @@ export function SchoolSettings() {
   const setTab = (tab: SettingsTabId) => {
     navigate({
       to: "/tenant/settings",
-      search: tab === "school" ? {} : { tab },
-      replace: true,
+      search: { tab },
     });
-    setSectionSheetOpen(false);
   };
+
+  const backToMenu = () => {
+    navigate({ to: "/tenant/settings", search: {} });
+  };
+
+  const handleLogout = () => {
+    const name = session?.displayName ?? "Admin";
+    logout();
+    toast.success("Signed out · session cleared", { description: `Goodbye, ${name}` });
+    navigate({ to: "/login", replace: true });
+  };
+
+  const tenantName = schoolDetails.name || session?.tenantName || "School";
+  const initials = schoolInitials(tenantName);
+  const logoUrl = schoolDetails.logoUrl;
+
+  const renderSettingsContent = (listLayout: "cards" | "table") => (
+    <>
+      {activeTab === "school" && (
+        <SchoolDetailsCard
+          schoolDetails={schoolDetails}
+          setSchoolDetails={setSchoolDetails}
+          themeSettings={themeSettings}
+          setThemeSettings={setThemeSettings}
+        />
+      )}
+
+      {activeTab === "classes" && (
+        <ClassesCard
+          classes={classes}
+          setClasses={setClasses}
+          students={students}
+          setStudents={setStudents}
+          staff={staff}
+        />
+      )}
+
+      {activeTab === "departments" && (
+        <DepartmentsCard
+          departments={departments}
+          setDepartments={setDepartments}
+          staff={staff}
+          setStaff={setStaff}
+          roles={roles}
+        />
+      )}
+
+      {activeTab === "roles" && (
+        <RolesCard
+          roles={roles}
+          setRoles={setRoles}
+          departments={departments}
+          staff={staff}
+          setStaff={setStaff}
+        />
+      )}
+
+      {activeTab === "users" && (
+        <SettingsUsersCard
+          tenantUsers={tenantUsers}
+          setTenantUsers={setTenantUsers}
+          roles={roles}
+          staff={staff}
+        />
+      )}
+
+      {activeTab === "vehicles" && (
+        <VehicleCard
+          listLayout={listLayout}
+          transportVehicles={transportVehicles}
+          setTransportVehicles={setTransportVehicles}
+          transportRoutes={transportRoutes}
+        />
+      )}
+
+      {activeTab === "transport" && (
+        <TransportCard
+          listLayout={listLayout}
+          transportRoutes={transportRoutes}
+          setTransportRoutes={setTransportRoutes}
+          transportVehicles={transportVehicles}
+          setTransportVehicles={setTransportVehicles}
+        />
+      )}
+
+      {activeTab === "fees" && (
+        <FeeCategoriesCard
+          paymentCategories={paymentCategories}
+          setPaymentCategories={setPaymentCategories}
+        />
+      )}
+
+      {activeTab === "system" && (
+        <div className="grid grid-cols-12 gap-3 sm:gap-4 lg:gap-5">
+          <CategoriesCard
+            academicYears={academicYears}
+            setAcademicYears={setAcademicYears}
+            academicYear={academicYear}
+            setAcademicYear={setAcademicYear}
+            themeSettings={themeSettings}
+            setThemeSettings={setThemeSettings}
+          />
+        </div>
+      )}
+    </>
+  );
 
   return (
     <div className="grid w-full grid-cols-12 gap-3 sm:gap-4 lg:gap-5">
-      <div className="col-span-12 min-w-0">
-        {/* Mobile / tablet: section picker opens a bottom sheet */}
-        <div className="lg:hidden">
-          <button
-            type="button"
-            onClick={() => setSectionSheetOpen(true)}
-            className={cn(
-              glassCardClass,
-              "flex h-12 w-full items-center justify-between gap-3 px-4 text-left transition-colors hover:bg-white/80",
-            )}
-            aria-haspopup="dialog"
-            aria-expanded={sectionSheetOpen}
-          >
-            <div className="min-w-0">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                Settings section
-              </div>
-              <div className="truncate text-[14px] font-semibold text-slate-900">
-                {activeTabLabel}
-              </div>
+      {/* Mobile: settings index — one card with list rows → section pages */}
+      <div className={cn("col-span-12 min-w-0 lg:hidden", !showMobileMenu && "hidden")}>
+        <div
+          className={cn(
+            glassCardClass,
+            "overflow-hidden border border-white/70 bg-white/90 p-0 shadow-sm",
+          )}
+        >
+          <div className="flex items-center gap-3 px-4 py-4">
+            <div
+              className={cn(
+                "grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-full text-[13px] font-bold text-white",
+                !logoUrl && "bg-gradient-to-br from-[#2563EB] to-[#4C69A4]",
+              )}
+            >
+              {logoUrl ? (
+                <img src={logoUrl} alt={tenantName} className="h-full w-full object-cover" />
+              ) : (
+                initials
+              )}
             </div>
-            <ChevronDown className="h-4 w-4 shrink-0 text-slate-500" />
-          </button>
-
-          <Drawer open={sectionSheetOpen} onOpenChange={setSectionSheetOpen}>
-            <DrawerContent className="rounded-t-2xl border-[#E5E5E5] bg-white pb-[calc(1rem+env(safe-area-inset-bottom))]">
-              <DrawerHeader className="border-b border-slate-100 pb-3 text-left">
-                <DrawerTitle className="text-[17px] font-semibold text-slate-900">
-                  Settings
-                </DrawerTitle>
-                <DrawerDescription className="text-[13px] text-slate-500">
-                  Choose a section to manage
-                </DrawerDescription>
-              </DrawerHeader>
-              <div className="max-h-[min(70vh,28rem)] overflow-y-auto px-3 py-2">
-                <ul className="space-y-1">
-                  {settingsTabs.map((tab) => {
-                    const active = activeTab === tab.id;
-                    return (
-                      <li key={tab.id}>
-                        <button
-                          type="button"
-                          onClick={() => setTab(tab.id)}
-                          className={cn(
-                            "flex w-full items-center justify-between gap-3 rounded-xl px-3.5 py-3.5 text-left text-[14px] font-semibold transition-colors",
-                            active
-                              ? "bg-slate-900 text-white"
-                              : "text-slate-800 hover:bg-slate-50",
-                          )}
-                        >
-                          <span>{tab.label}</span>
-                          {active && <Check className="h-4 w-4 shrink-0" strokeWidth={2.5} />}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
+            <div className="min-w-0">
+              <div className="truncate text-[15px] font-semibold text-slate-900">
+                {session?.displayName ?? "Admin"}
               </div>
-            </DrawerContent>
-          </Drawer>
-        </div>
+              <div className="truncate text-[12px] text-slate-500">{session?.email}</div>
+            </div>
+          </div>
 
-        {/* Desktop: horizontal tabs */}
-        <div className="mobile-scrollbar-none hidden overflow-x-auto rounded-full border border-[#E5E5E5] bg-white/80 p-1 shadow-sm lg:block">
+          <ul className="border-t border-slate-100">
+            {settingsTabs.map((tab) => (
+              <li key={tab.id} className="border-b border-slate-100 last:border-b-0">
+                <button
+                  type="button"
+                  onClick={() => setTab(tab.id)}
+                  className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left transition-colors active:bg-slate-50"
+                >
+                  <span className="text-[15px] font-medium text-slate-900">{tab.label}</span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          <div className="p-3 pt-2">
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3.5 text-[14px] font-semibold text-white transition-colors active:bg-slate-800"
+            >
+              <LogOut className="h-4 w-4" />
+              Logout
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile: section page with back to menu */}
+      <div className={cn("col-span-12 min-w-0 space-y-3 lg:hidden", showMobileMenu && "hidden")}>
+        <button
+          type="button"
+          onClick={backToMenu}
+          className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-slate-600 transition-colors hover:text-slate-900"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Settings
+        </button>
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+          {activeTabLabel}
+        </div>
+        {renderSettingsContent("cards")}
+      </div>
+
+      {/* Desktop: horizontal tabs + content */}
+      <div className="col-span-12 hidden min-w-0 lg:block">
+        <div className="mobile-scrollbar-none overflow-x-auto rounded-full border border-[#E5E5E5] bg-white/80 p-1 shadow-sm">
           <div className="flex min-w-max gap-1 lg:min-w-0 lg:w-full">
             {settingsTabs.map((tab) => {
               const active = activeTab === tab.id;
@@ -8547,92 +8660,7 @@ export function SchoolSettings() {
         </div>
       </div>
 
-      <div className="col-span-12 min-w-0">
-        {activeTab === "school" && (
-          <SchoolDetailsCard
-            schoolDetails={schoolDetails}
-            setSchoolDetails={setSchoolDetails}
-            themeSettings={themeSettings}
-            setThemeSettings={setThemeSettings}
-          />
-        )}
-
-        {activeTab === "classes" && (
-          <ClassesCard
-            classes={classes}
-            setClasses={setClasses}
-            students={students}
-            setStudents={setStudents}
-            staff={staff}
-          />
-        )}
-
-        {activeTab === "departments" && (
-          <DepartmentsCard
-            departments={departments}
-            setDepartments={setDepartments}
-            staff={staff}
-            setStaff={setStaff}
-            roles={roles}
-          />
-        )}
-
-        {activeTab === "roles" && (
-          <RolesCard
-            roles={roles}
-            setRoles={setRoles}
-            departments={departments}
-            staff={staff}
-            setStaff={setStaff}
-          />
-        )}
-
-        {activeTab === "users" && (
-          <SettingsUsersCard
-            tenantUsers={tenantUsers}
-            setTenantUsers={setTenantUsers}
-            roles={roles}
-            staff={staff}
-          />
-        )}
-
-        {activeTab === "vehicles" && (
-          <VehicleCard
-            transportVehicles={transportVehicles}
-            setTransportVehicles={setTransportVehicles}
-            transportRoutes={transportRoutes}
-          />
-        )}
-
-        {activeTab === "transport" && (
-          <TransportCard
-            transportRoutes={transportRoutes}
-            setTransportRoutes={setTransportRoutes}
-            transportVehicles={transportVehicles}
-            setTransportVehicles={setTransportVehicles}
-          />
-        )}
-
-        {activeTab === "fees" && (
-          <FeeCategoriesCard
-            paymentCategories={paymentCategories}
-            setPaymentCategories={setPaymentCategories}
-          />
-        )}
-
-        {activeTab === "system" && (
-          <div className="grid grid-cols-12 gap-3 sm:gap-4 lg:gap-5">
-            <CategoriesCard
-              academicYears={academicYears}
-              setAcademicYears={setAcademicYears}
-              academicYear={academicYear}
-              setAcademicYear={setAcademicYear}
-              themeSettings={themeSettings}
-              setThemeSettings={setThemeSettings}
-            />
-          </div>
-        )}
-      </div>
+      <div className="col-span-12 hidden min-w-0 lg:block">{renderSettingsContent("table")}</div>
     </div>
   );
 }
@@ -8988,7 +9016,7 @@ function RolesCard({
   return (
     <OrganicCard tone="white" cornerSide="bl" padded className={workspacePanelClass}>
       <CardHeader
-        title="Positions / Roles"
+        title="Positions"
         subtitle={`${roles.length} position & role names · used in Recruit Staff and Users`}
         actionLabel="Add Position"
         onAction={startCreate}
@@ -9405,10 +9433,12 @@ function VehicleCard({
   transportVehicles,
   setTransportVehicles,
   transportRoutes,
+  listLayout = "table",
 }: {
   transportVehicles: TransportVehicle[];
   setTransportVehicles: React.Dispatch<React.SetStateAction<TransportVehicle[]>>;
   transportRoutes: TransportRoute[];
+  listLayout?: "cards" | "table";
 }) {
   const MAX_VEHICLE_DOC_BYTES = 1_500_000;
   const emptyDocs = (): VehicleDocument[] => createDefaultVehicleDocuments();
@@ -9897,6 +9927,98 @@ function VehicleCard({
         onAction={startCreate}
       />
 
+      {listLayout === "cards" ? (
+      <div className="mt-4 space-y-2.5">
+        {transportVehicles.length === 0 && <EmptyRow label="No vehicles in fleet yet" />}
+        {transportVehicles.map((v) => {
+          const alert = docAlert(v);
+          return (
+            <div
+              key={v.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => setDetailId(v.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setDetailId(v.id);
+                }
+              }}
+              aria-label={`Open details for ${v.name}`}
+              className="flex w-full cursor-pointer flex-col gap-2.5 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 text-left transition-colors active:bg-[#F4F4F5]"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-black text-white">
+                    <Bus className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate text-[14px] font-semibold text-black">{v.name}</span>
+                      {alert && (
+                        <AlertTriangle
+                          className={cn(
+                            "h-3.5 w-3.5 shrink-0",
+                            alert === "expired" ? "text-[#EF4444]" : "text-[#D97706]",
+                          )}
+                        />
+                      )}
+                    </div>
+                    <div className="mt-0.5 truncate text-[12px] text-black/50">
+                      {v.driverName ?? "No driver assigned"}
+                    </div>
+                  </div>
+                </div>
+                <span
+                  className={cn(
+                    "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider",
+                    v.active ? "bg-[#2563EB] text-white" : "bg-black/10 text-black/50",
+                  )}
+                >
+                  {v.active ? "Active" : "Idle"}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5 text-[11.5px] text-black/60">
+                <span className="font-mono font-medium text-black/75">{v.registrationNo}</span>
+                <span className="text-black/30">·</span>
+                <span>{v.capacity} seats</span>
+                <span className="text-black/30">·</span>
+                <span>{v.ownership === "rental" ? "Rental" : "Owned"}</span>
+              </div>
+              <div className="flex items-center justify-between gap-2 border-t border-[#EFEFEF] pt-2">
+                <span className="min-w-0 truncate text-[11px] text-black/45" title={routesLabel(v.routeIds)}>
+                  {v.routeIds.length === 0 ? "No routes" : routesLabel(v.routeIds)}
+                </span>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      startEdit(v);
+                    }}
+                    aria-label={`Edit vehicle ${v.name}`}
+                    className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPendingDelete(v);
+                    }}
+                    aria-label={`Delete vehicle ${v.name}`}
+                    className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444]"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      ) : (
       <div className="mt-4 overflow-x-auto rounded-lg border border-[#EFEFEF]">
         <table className="w-full min-w-[780px] table-fixed border-collapse text-left">
           <colgroup>
@@ -10032,6 +10154,7 @@ function VehicleCard({
           </tbody>
         </table>
       </div>
+      )}
     </OrganicCard>
       )}
 
@@ -10391,11 +10514,13 @@ function TransportCard({
   setTransportRoutes,
   transportVehicles,
   setTransportVehicles,
+  listLayout = "table",
 }: {
   transportRoutes: TransportRoute[];
   setTransportRoutes: React.Dispatch<React.SetStateAction<TransportRoute[]>>;
   transportVehicles: TransportVehicle[];
   setTransportVehicles: React.Dispatch<React.SetStateAction<TransportVehicle[]>>;
+  listLayout?: "cards" | "table";
 }) {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -10403,6 +10528,10 @@ function TransportCard({
   const [form, setForm] = useState({
     mapFrom: "",
     mapTo: "",
+    fromLat: null as number | null,
+    fromLng: null as number | null,
+    toLat: null as number | null,
+    toLng: null as number | null,
     morningFee: "",
     eveningFee: "",
     bothFee: "",
@@ -10413,7 +10542,17 @@ function TransportCard({
 
   const startCreate = () => {
     setEditingId(null);
-    setForm({ mapFrom: "", mapTo: "", morningFee: "", eveningFee: "", bothFee: "" });
+    setForm({
+      mapFrom: "",
+      mapTo: "",
+      fromLat: null,
+      fromLng: null,
+      toLat: null,
+      toLng: null,
+      morningFee: "",
+      eveningFee: "",
+      bothFee: "",
+    });
     setOpen(true);
   };
 
@@ -10422,6 +10561,10 @@ function TransportCard({
     setForm({
       mapFrom: r.mapFrom,
       mapTo: r.mapTo,
+      fromLat: r.fromLat ?? null,
+      fromLng: r.fromLng ?? null,
+      toLat: r.toLat ?? null,
+      toLng: r.toLng ?? null,
       morningFee: String(r.morningFee),
       eveningFee: String(r.eveningFee),
       bothFee: String(r.bothFee),
@@ -10444,10 +10587,29 @@ function TransportCard({
       toast.error("Morning, evening, and both-shift fees must be positive amounts");
       return;
     }
-    const payload = { mapFrom, mapTo, morningFee, eveningFee, bothFee };
+    const payload: Omit<TransportRoute, "id"> = {
+      mapFrom,
+      mapTo,
+      morningFee,
+      eveningFee,
+      bothFee,
+      ...(form.fromLat != null ? { fromLat: form.fromLat } : {}),
+      ...(form.fromLng != null ? { fromLng: form.fromLng } : {}),
+      ...(form.toLat != null ? { toLat: form.toLat } : {}),
+      ...(form.toLng != null ? { toLng: form.toLng } : {}),
+    };
     if (editingId) {
       setTransportRoutes((prev) =>
-        prev.map((r) => (r.id === editingId ? { ...r, ...payload } : r)),
+        prev.map((r) => {
+          if (r.id !== editingId) return r;
+          const next: TransportRoute = { id: r.id, ...payload };
+          // Drop stale coordinates when the pin was cleared
+          if (form.fromLat == null) delete next.fromLat;
+          if (form.fromLng == null) delete next.fromLng;
+          if (form.toLat == null) delete next.toLat;
+          if (form.toLng == null) delete next.toLng;
+          return next;
+        }),
       );
       toast.success(`Route updated · ${mapFrom} → ${mapTo}`);
     } else {
@@ -10486,6 +10648,127 @@ function TransportCard({
         onAction={startCreate}
       />
 
+      {listLayout === "cards" ? (
+      <div className="mt-4 space-y-2.5">
+        {transportRoutes.length === 0 && <EmptyRow label="No routes mapped yet" />}
+        {transportRoutes.map((r) => {
+          const vehicles = vehiclesForRoute(r.id);
+          const vehicleNames =
+            vehicles.length === 0 ? "No vehicles" : vehicles.map((v) => v.name).join(", ");
+          const fromPinned =
+            r.fromLat != null &&
+            r.fromLng != null &&
+            Number.isFinite(r.fromLat) &&
+            Number.isFinite(r.fromLng);
+          const toPinned =
+            r.toLat != null &&
+            r.toLng != null &&
+            Number.isFinite(r.toLat) &&
+            Number.isFinite(r.toLng);
+          const directionsUrl =
+            fromPinned && toPinned
+              ? `https://www.google.com/maps/dir/?api=1&origin=${r.fromLat},${r.fromLng}&destination=${r.toLat},${r.toLng}`
+              : null;
+          return (
+            <div
+              key={r.id}
+              className="rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex min-w-0 items-center gap-1">
+                    <div className="truncate text-[14px] font-semibold text-black">{r.mapFrom}</div>
+                    {fromPinned ? (
+                      <a
+                        href={`https://www.google.com/maps?q=${r.fromLat},${r.fromLng}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`Open ${r.mapFrom} in Google Maps`}
+                        className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-black/40"
+                      >
+                        <MapPin className="h-3.5 w-3.5" />
+                      </a>
+                    ) : null}
+                  </div>
+                  <div className="mt-0.5 flex min-w-0 items-center gap-1 text-[12px] text-black/50">
+                    <span className="truncate">→ {r.mapTo}</span>
+                    {toPinned ? (
+                      <a
+                        href={`https://www.google.com/maps?q=${r.toLat},${r.toLng}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`Open ${r.mapTo} in Google Maps`}
+                        className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-black/40"
+                      >
+                        <MapPin className="h-3.5 w-3.5" />
+                      </a>
+                    ) : null}
+                    {directionsUrl ? (
+                      <a
+                        href={directionsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`Directions from ${r.mapFrom} to ${r.mapTo}`}
+                        className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-black/40"
+                      >
+                        <Route className="h-3.5 w-3.5" />
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => startEdit(r)}
+                    aria-label={`Edit route ${r.mapFrom} to ${r.mapTo}`}
+                    className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPendingDelete(r)}
+                    aria-label={`Delete route ${r.mapFrom} to ${r.mapTo}`}
+                    className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444]"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+              <div className="mt-2.5 grid grid-cols-3 gap-2">
+                <div className="rounded-lg bg-white px-2.5 py-2">
+                  <div className="text-[9px] font-semibold uppercase tracking-wider text-black/40">
+                    Morning
+                  </div>
+                  <div className="mt-0.5 font-mono text-[12px] font-semibold text-black">
+                    {inr(r.morningFee)}
+                  </div>
+                </div>
+                <div className="rounded-lg bg-white px-2.5 py-2">
+                  <div className="text-[9px] font-semibold uppercase tracking-wider text-black/40">
+                    Evening
+                  </div>
+                  <div className="mt-0.5 font-mono text-[12px] font-semibold text-black">
+                    {inr(r.eveningFee)}
+                  </div>
+                </div>
+                <div className="rounded-lg bg-white px-2.5 py-2">
+                  <div className="text-[9px] font-semibold uppercase tracking-wider text-black/40">
+                    Both
+                  </div>
+                  <div className="mt-0.5 font-mono text-[12px] font-semibold text-black">
+                    {inr(r.bothFee)}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-2 truncate text-[11px] text-black/45" title={vehicleNames}>
+                {vehicleNames}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      ) : (
       <div className="mt-4 overflow-x-auto rounded-lg border border-[#EFEFEF]">
         <table className="w-full min-w-[760px] table-fixed border-collapse text-left">
           <colgroup>
@@ -10520,13 +10803,71 @@ function TransportCard({
                 const vehicles = vehiclesForRoute(r.id);
                 const vehicleNames =
                   vehicles.length === 0 ? "—" : vehicles.map((v) => v.name).join(", ");
+                const fromPinned =
+                  r.fromLat != null &&
+                  r.fromLng != null &&
+                  Number.isFinite(r.fromLat) &&
+                  Number.isFinite(r.fromLng);
+                const toPinned =
+                  r.toLat != null &&
+                  r.toLng != null &&
+                  Number.isFinite(r.toLat) &&
+                  Number.isFinite(r.toLng);
+                const directionsUrl =
+                  fromPinned && toPinned
+                    ? `https://www.google.com/maps/dir/?api=1&origin=${r.fromLat},${r.fromLng}&destination=${r.toLat},${r.toLng}`
+                    : null;
                 return (
                   <tr key={r.id} className="border-t border-[#EFEFEF] text-[12.5px]">
                     <td className="px-3.5 py-2.5 align-middle">
-                      <span className="block truncate text-black">{r.mapFrom}</span>
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <span className="block truncate text-black" title={r.mapFrom}>
+                          {r.mapFrom}
+                        </span>
+                        {fromPinned ? (
+                          <a
+                            href={`https://www.google.com/maps?q=${r.fromLat},${r.fromLng}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label={`Open ${r.mapFrom} in Google Maps`}
+                            className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-black/40 transition-colors hover:bg-[#F4F4F5] hover:text-black"
+                            title="Open in Google Maps"
+                          >
+                            <MapPin className="h-3.5 w-3.5" />
+                          </a>
+                        ) : null}
+                      </div>
                     </td>
                     <td className="px-3.5 py-2.5 align-middle">
-                      <span className="block truncate text-black/75">{r.mapTo}</span>
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <span className="block truncate text-black/75" title={r.mapTo}>
+                          {r.mapTo}
+                        </span>
+                        {toPinned ? (
+                          <a
+                            href={`https://www.google.com/maps?q=${r.toLat},${r.toLng}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label={`Open ${r.mapTo} in Google Maps`}
+                            className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-black/40 transition-colors hover:bg-[#F4F4F5] hover:text-black"
+                            title="Open in Google Maps"
+                          >
+                            <MapPin className="h-3.5 w-3.5" />
+                          </a>
+                        ) : null}
+                        {directionsUrl ? (
+                          <a
+                            href={directionsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label={`Directions from ${r.mapFrom} to ${r.mapTo}`}
+                            className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-black/40 transition-colors hover:bg-[#F4F4F5] hover:text-black"
+                            title="Directions in Google Maps"
+                          >
+                            <Route className="h-3.5 w-3.5" />
+                          </a>
+                        ) : null}
+                      </div>
                     </td>
                     <td className="px-3.5 py-2.5 text-right align-middle font-mono text-[11.5px] text-black">
                       {inr(r.morningFee)}
@@ -10569,6 +10910,7 @@ function TransportCard({
           </tbody>
         </table>
       </div>
+      )}
 
       <DeleteConfirmDialog
         open={Boolean(pendingDelete)}
@@ -10585,36 +10927,47 @@ function TransportCard({
       />
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{editingId ? "Edit Route" : "Add Transport Route"}</DialogTitle>
             <DialogDescription>
               Set pickup → drop pairs with separate morning, evening, and combined shift fees. The
-              both-shift fee prefills Vehicle Fee on Receive Payment.
+              both-shift fee prefills Vehicle Fee on Receive Payment. Search or pick each end on the
+              map to save coordinates.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={submit} className="space-y-3">
-            <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                Map From (Pickup Hub)
-              </Label>
-              <Input
-                value={form.mapFrom}
-                onChange={(e) => setForm({ ...form, mapFrom: e.target.value })}
-                placeholder="e.g. Lotus Greens Sector 21"
-                autoFocus
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                Map To (Destination Node)
-              </Label>
-              <Input
-                value={form.mapTo}
-                onChange={(e) => setForm({ ...form, mapTo: e.target.value })}
-                placeholder="e.g. Main Campus Drop-off"
-              />
-            </div>
+            <LocationPicker
+              label="Map From (Pickup Hub)"
+              value={form.mapFrom}
+              lat={form.fromLat}
+              lng={form.fromLng}
+              autoFocus
+              placeholder="Search pickup location…"
+              onChange={({ label, lat, lng }) =>
+                setForm((prev) => ({
+                  ...prev,
+                  mapFrom: label,
+                  fromLat: lat,
+                  fromLng: lng,
+                }))
+              }
+            />
+            <LocationPicker
+              label="Map To (Destination Node)"
+              value={form.mapTo}
+              lat={form.toLat}
+              lng={form.toLng}
+              placeholder="Search destination…"
+              onChange={({ label, lat, lng }) =>
+                setForm((prev) => ({
+                  ...prev,
+                  mapTo: label,
+                  toLat: lat,
+                  toLng: lng,
+                }))
+              }
+            />
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">

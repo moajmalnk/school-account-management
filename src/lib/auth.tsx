@@ -34,6 +34,8 @@ export type Session = {
   userId?: string;
   staffId?: string;
   permissions: PermissionSet;
+  /** True when an admin is previewing this user via impersonation (per-tab). */
+  impersonated?: boolean;
 };
 
 export type LoginResult =
@@ -53,6 +55,7 @@ type AuthState = {
 };
 
 const STORAGE_KEY = "school-accounts/session/v1";
+const IMPERSONATION_KEY = "school-accounts/impersonation/v1";
 
 export const MOCK_CREDENTIALS: Record<
   "super_admin" | "school_admin",
@@ -86,31 +89,59 @@ function isSessionRole(value: unknown): value is Role {
   return value === "super_admin" || value === "school_admin" || value === "tenant_user";
 }
 
+function parseSessionRaw(raw: string, impersonated: boolean): Session | null {
+  const parsed = JSON.parse(raw) as Partial<Session>;
+  if (!parsed || !isSessionRole(parsed.role) || !parsed.email) return null;
+  const permissions: PermissionSet =
+    parsed.role === "school_admin" || parsed.role === "super_admin"
+      ? ALL_PERMISSIONS
+      : Array.isArray(parsed.permissions) && parsed.permissions.length
+        ? ((parsed.permissions as string[]).includes("*")
+            ? ALL_PERMISSIONS
+            : (parsed.permissions as PermissionKey[]))
+        : [];
+  return {
+    role: parsed.role,
+    email: parsed.email,
+    displayName: parsed.displayName || parsed.email,
+    tenantName: parsed.tenantName,
+    issuedAt: typeof parsed.issuedAt === "number" ? parsed.issuedAt : Date.now(),
+    userId: parsed.userId,
+    staffId: parsed.staffId,
+    permissions,
+    ...(impersonated ? { impersonated: true } : {}),
+  };
+}
+
+/** Reads the per-tab impersonation session first, then the shared login session. */
 export function readSession(): Session | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const impersonationRaw = window.sessionStorage.getItem(IMPERSONATION_KEY);
+    if (impersonationRaw) {
+      const session = parseSessionRaw(impersonationRaw, true);
+      if (session) return session;
+      window.sessionStorage.removeItem(IMPERSONATION_KEY);
+    }
+  } catch {
+    // sessionStorage unavailable · fall through to localStorage
+  }
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return parseSessionRaw(raw, false);
+  } catch {
+    return null;
+  }
+}
+
+/** Reads only the shared (non-impersonated) login session. */
+export function readPersistentSession(): Session | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<Session>;
-    if (!parsed || !isSessionRole(parsed.role) || !parsed.email) return null;
-    const permissions: PermissionSet =
-      parsed.role === "school_admin" || parsed.role === "super_admin"
-        ? ALL_PERMISSIONS
-        : Array.isArray(parsed.permissions) && parsed.permissions.length
-          ? ((parsed.permissions as string[]).includes("*")
-              ? ALL_PERMISSIONS
-              : (parsed.permissions as PermissionKey[]))
-          : [];
-    return {
-      role: parsed.role,
-      email: parsed.email,
-      displayName: parsed.displayName || parsed.email,
-      tenantName: parsed.tenantName,
-      issuedAt: typeof parsed.issuedAt === "number" ? parsed.issuedAt : Date.now(),
-      userId: parsed.userId,
-      staffId: parsed.staffId,
-      permissions,
-    };
+    return parseSessionRaw(raw, false);
   } catch {
     return null;
   }
@@ -119,6 +150,10 @@ export function readSession(): Session | null {
 function writeSession(session: Session | null) {
   if (typeof window === "undefined") return;
   try {
+    if (session?.impersonated) {
+      window.sessionStorage.setItem(IMPERSONATION_KEY, JSON.stringify(session));
+      return;
+    }
     if (session) {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
     } else {
@@ -126,6 +161,24 @@ function writeSession(session: Session | null) {
     }
   } catch {
     // no-op: storage may be unavailable in private mode
+  }
+}
+
+/** Writes a per-tab impersonation session (does not touch the admin login). */
+export function writeImpersonationSession(session: Omit<Session, "impersonated">) {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(
+    IMPERSONATION_KEY,
+    JSON.stringify({ ...session, impersonated: true }),
+  );
+}
+
+export function clearImpersonationSession() {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(IMPERSONATION_KEY);
+  } catch {
+    // ignore
   }
 }
 
@@ -237,6 +290,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
+    // Exiting an impersonated tab restores the underlying admin login.
+    if (typeof window !== "undefined") {
+      try {
+        if (window.sessionStorage.getItem(IMPERSONATION_KEY)) {
+          window.sessionStorage.removeItem(IMPERSONATION_KEY);
+          setSession(readPersistentSession());
+          return;
+        }
+      } catch {
+        // ignore
+      }
+    }
     writeSession(null);
     setSession(null);
   }, []);
