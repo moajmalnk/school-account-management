@@ -6604,7 +6604,120 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
           )}
         </div>
 
-        <div className="mobile-scrollbar-none mt-4 overflow-x-auto rounded-lg border border-[#E5E5E5]">
+        <div className="mt-4 space-y-2.5 md:hidden">
+          {filteredPayments.length === 0 && (
+            <div className="rounded-xl border border-dashed border-[#E5E5E5] bg-white/60 px-4 py-8 text-center text-[12px] text-black/55">
+              {payments.length === 0
+                ? "No receipts recorded yet"
+                : "No receipts match your search"}
+            </div>
+          )}
+          {filteredPayments.map((p) => (
+            <div
+              key={p.id}
+              className="rounded-xl border border-[#E5E5E5] bg-white p-3.5 shadow-sm shadow-slate-200/40"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate text-[13.5px] font-semibold text-slate-900">{p.name}</div>
+                  <div className="mt-0.5 truncate text-[11px] text-black/45">
+                    {p.payerType === "external"
+                      ? "External payer"
+                      : p.className
+                        ? p.className
+                        : "Student"}
+                    <span className="text-black/30"> · </span>
+                    <span className="font-mono text-[10.5px]">{p.id}</span>
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="font-mono text-[14px] font-bold text-[#059669]">
+                    +₹ {p.amount.toLocaleString("en-IN")}
+                  </div>
+                  <span className="mt-1 inline-flex rounded-full bg-[#D1F2E1] px-2 py-0.5 text-[9.5px] font-semibold text-[#059669]">
+                    Complete
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                <span className="inline-flex max-w-full truncate rounded-full bg-[#DBEAFE] px-2 py-0.5 text-[10px] font-semibold text-[#0F172A]">
+                  {p.cat}
+                </span>
+                <span className="inline-flex max-w-full truncate rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-medium text-black/70">
+                  {p.mode}
+                </span>
+                {(p.attachments?.length ?? 0) > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-medium text-black/55">
+                    <Paperclip className="h-3 w-3" />
+                    {p.attachments!.length} file{p.attachments!.length === 1 ? "" : "s"}
+                  </span>
+                )}
+              </div>
+
+              {p.narration && (
+                <p className="mt-2 line-clamp-2 text-[11.5px] leading-snug text-black/55">
+                  {p.narration}
+                </p>
+              )}
+
+              <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-[#F0F0F0] pt-2.5">
+                <span className="min-w-0 truncate font-mono text-[10.5px] text-black/45">
+                  {p.time}
+                </span>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <button
+                    type="button"
+                    aria-label={`View receipt details ${p.id}`}
+                    onClick={() => setViewingPayment(p)}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-slate-950 px-2.5 text-[11px] font-semibold text-white transition-colors hover:bg-black"
+                  >
+                    <ClipboardList className="h-3.5 w-3.5" />
+                    Details
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Download receipt ${p.id}`}
+                    onClick={() => downloadHistoryReceipt(p)}
+                    className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Share receipt ${p.id}`}
+                    onClick={() => shareHistoryReceipt(p)}
+                    className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#DBEAFE] bg-[#EFF6FF] text-[#2563EB] transition-colors hover:bg-[#DBEAFE]"
+                  >
+                    <Share2 className="h-3.5 w-3.5" />
+                  </button>
+                  {isAdmin && (
+                    <>
+                      <button
+                        type="button"
+                        aria-label={`Edit receipt ${p.id}`}
+                        onClick={() => openEditHistoryPayment(p)}
+                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Delete receipt ${p.id}`}
+                        onClick={() => setPendingDeletePayment(p)}
+                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:bg-[#FEE2E2]"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mobile-scrollbar-none mt-4 hidden overflow-x-auto rounded-lg border border-[#E5E5E5] md:block">
           <table className="w-full min-w-[760px] text-left text-[12.5px]">
             <thead>
               <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5]">
