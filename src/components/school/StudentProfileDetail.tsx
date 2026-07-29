@@ -774,7 +774,7 @@ export function StudentProfileDetail({
             <section className={CARD_FRAME}>
               <h2 className="text-base font-semibold text-black">Personal Information</h2>
               <p className="mt-1 text-[12.5px] text-black/50">
-                Core identity and guardian contact for {student.name}.
+                Core identity, contact, and personal details for {student.name}.
               </p>
               <div className="mt-5 space-y-5">
                 <MetaRow label="Guardian">{student.guardian}</MetaRow>
@@ -829,6 +829,19 @@ export function StudentProfileDetail({
                     <span className="font-normal text-black/40">—</span>
                   )}
                 </MetaRow>
+
+                <MetaRow label="Nationality">
+                  {student.nationality || <span className="font-normal text-black/40">—</span>}
+                </MetaRow>
+                <MetaRow label="Religion">
+                  {student.religion || <span className="font-normal text-black/40">—</span>}
+                </MetaRow>
+                <MetaRow label="Place of Birth">
+                  {student.placeOfBirth || <span className="font-normal text-black/40">—</span>}
+                </MetaRow>
+                <MetaRow label="Blood Group">
+                  {student.bloodGroup || <span className="font-normal text-black/40">—</span>}
+                </MetaRow>
               </div>
             </section>
 
@@ -882,18 +895,6 @@ export function StudentProfileDetail({
                 </div>
                 <MetaRow label="Student Category">
                   {student.studentCategory || <span className="font-normal text-black/40">—</span>}
-                </MetaRow>
-                <MetaRow label="Nationality">
-                  {student.nationality || <span className="font-normal text-black/40">—</span>}
-                </MetaRow>
-                <MetaRow label="Religion">
-                  {student.religion || <span className="font-normal text-black/40">—</span>}
-                </MetaRow>
-                <MetaRow label="Place of Birth">
-                  {student.placeOfBirth || <span className="font-normal text-black/40">—</span>}
-                </MetaRow>
-                <MetaRow label="Blood Group">
-                  {student.bloodGroup || <span className="font-normal text-black/40">—</span>}
                 </MetaRow>
               </div>
             </section>

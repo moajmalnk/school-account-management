@@ -592,9 +592,9 @@ const DASH = {
   cash:
     "border-violet-300/40 bg-gradient-to-br from-[#EDE9FE]/90 via-[#F5F3FF] to-[#E9D5FF]/70 dark:border-violet-800/35 dark:from-zinc-900 dark:via-zinc-900 dark:to-violet-950/40",
   receive:
-    "border-emerald-300/40 bg-gradient-to-br from-[#A7F3D0]/80 via-[#D1FAE5] to-[#99F6E4]/70 dark:border-emerald-800/35 dark:from-zinc-900 dark:via-zinc-900 dark:to-emerald-950/40",
+    "border-emerald-400/50 bg-gradient-to-br from-[#6EE7B7] via-[#A7F3D0] to-[#D1FAE5] dark:border-emerald-600/40 dark:from-emerald-950/80 dark:via-zinc-900 dark:to-emerald-900/50",
   pay:
-    "border-teal-300/40 bg-gradient-to-br from-[#CCFBF1]/90 via-[#F0FDFA] to-[#99F6E4]/60 dark:border-teal-700/35 dark:from-zinc-900 dark:via-zinc-900 dark:to-[#0F766E]/20",
+    "border-rose-400/50 bg-gradient-to-br from-[#FDA4AF] via-[#FECDD3] to-[#FFE4E6] dark:border-rose-700/40 dark:from-rose-950/80 dark:via-zinc-900 dark:to-rose-900/45",
   todo:
     "border-teal-300/40 bg-gradient-to-br from-[#CCFBF1]/90 via-[#F0FDFA] to-[#ECFDF5]/80 dark:border-teal-700/30 dark:from-zinc-900 dark:via-zinc-900 dark:to-[#0F766E]/15",
   notes:
@@ -1081,12 +1081,16 @@ function PremiumDashboard({
                 "flex min-h-[96px] flex-col items-start gap-3 p-4 text-left transition-transform hover:-translate-y-0.5",
               )}
             >
-              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/70 shadow-sm">
-                <ArrowDownToLine className="h-5 w-5 text-[#059669]" />
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/80 shadow-sm dark:bg-white/10">
+                <ArrowDownToLine className="h-5 w-5 text-[#047857] dark:text-[#34D399]" />
               </span>
               <div className="min-w-0">
-                <div className="text-[13px] font-bold leading-snug text-slate-900">Receive payment</div>
-                <p className="mt-0.5 text-[11px] leading-snug text-slate-500">Capture inbound fee receipts</p>
+                <div className="text-[13px] font-bold leading-snug text-emerald-950 dark:text-emerald-50">
+                  Receive payment
+                </div>
+                <p className="mt-0.5 text-[11px] leading-snug text-emerald-900/65 dark:text-emerald-100/60">
+                  Capture inbound fee receipts
+                </p>
               </div>
             </button>
             <button
@@ -1098,12 +1102,16 @@ function PremiumDashboard({
                 "flex min-h-[96px] flex-col items-start gap-3 p-4 text-left transition-transform hover:-translate-y-0.5",
               )}
             >
-              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/70 shadow-sm">
-                <ArrowUpFromLine className="h-5 w-5 text-[#4F46E5]" />
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/80 shadow-sm dark:bg-white/10">
+                <ArrowUpFromLine className="h-5 w-5 text-[#BE123C] dark:text-[#FB7185]" />
               </span>
               <div className="min-w-0">
-                <div className="text-[13px] font-bold leading-snug text-slate-900">Make payment</div>
-                <p className="mt-0.5 text-[11px] leading-snug text-slate-500">Pay vendors and salaries</p>
+                <div className="text-[13px] font-bold leading-snug text-rose-950 dark:text-rose-50">
+                  Make payment
+                </div>
+                <p className="mt-0.5 text-[11px] leading-snug text-rose-900/65 dark:text-rose-100/60">
+                  Pay vendors and salaries
+                </p>
               </div>
             </button>
           </section>
@@ -1608,23 +1616,29 @@ function FinanceFloatingPaymentActions({
 }) {
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-40 px-3 md:hidden">
-      <div className="pointer-events-auto mx-auto flex max-w-lg gap-2">
+      <div
+        role="tablist"
+        aria-label="Payment actions"
+        className="pointer-events-auto mx-auto flex max-w-lg gap-1 rounded-2xl border border-white/70 bg-white/90 p-1.5 shadow-[0_16px_40px_-18px_rgba(15,23,42,0.35)] backdrop-blur-xl dark:border-white/10 dark:bg-[#171717]/92 dark:shadow-black/50"
+      >
         <button
           type="button"
+          role="tab"
           onClick={onReceive}
           aria-label="Receive payment"
-          className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full border border-[#A7F3D0] bg-[#D1F2E1] px-3 text-[12.5px] font-semibold text-[#065F46] shadow-lg shadow-emerald-900/10 transition-transform active:scale-[0.98]"
+          className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[#059669] px-3 text-[12.5px] font-semibold text-white shadow-sm shadow-emerald-900/20 transition-transform active:scale-[0.98] dark:bg-[#10B981] dark:text-zinc-950"
         >
-          <ArrowDownToLine className="h-4 w-4 shrink-0" />
+          <ArrowDownToLine className="h-4 w-4 shrink-0" strokeWidth={2.25} />
           <span className="truncate">Receive</span>
         </button>
         <button
           type="button"
+          role="tab"
           onClick={onMake}
           aria-label="Make payment"
-          className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full border border-[#99F6E4] bg-[#CCFBF1] px-3 text-[12.5px] font-semibold text-[#0F766E] shadow-lg shadow-teal-900/10 transition-transform active:scale-[0.98]"
+          className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[#DC2626] px-3 text-[12.5px] font-semibold text-white shadow-sm shadow-rose-900/20 transition-transform active:scale-[0.98] dark:bg-[#EF4444] dark:text-zinc-950"
         >
-          <ArrowUpFromLine className="h-4 w-4 shrink-0" />
+          <ArrowUpFromLine className="h-4 w-4 shrink-0" strokeWidth={2.25} />
           <span className="truncate">Make</span>
         </button>
       </div>
@@ -10108,14 +10122,12 @@ function ClassesCard({
     grade: string;
     section: string;
     tuitionFeeAmount: string;
-    vehicleFeeAmount: string;
     billingCycle: ClassBillingCycle;
     classTeacherId: string;
   }>({
     grade: "",
     section: "",
     tuitionFeeAmount: "",
-    vehicleFeeAmount: "",
     billingCycle: "Monthly",
     classTeacherId: "",
   });
@@ -10133,33 +10145,19 @@ function ClassesCard({
     id ? teacherOptions.find((m) => m.id === id)?.name ?? staff.find((m) => m.id === id)?.name : undefined;
 
   const tuitionTermCount = filterFeePeriods(feeTerms, "term", "tuition").length;
-  const vehicleTermCount = filterFeePeriods(feeTerms, "term", "vehicle").length;
   const tuitionMonthCount = filterFeePeriods(feeTerms, "month", "tuition").length;
-  const vehicleMonthCount = filterFeePeriods(feeTerms, "month", "vehicle").length;
   const tuitionPreview = Number(form.tuitionFeeAmount) || 0;
-  const vehiclePreview = Number(form.vehicleFeeAmount) || 0;
-  const combinedPreview = tuitionPreview + vehiclePreview;
   const splitPeriodCount =
     form.billingCycle === "Term"
       ? tuitionTermCount
       : form.billingCycle === "Monthly"
         ? tuitionMonthCount
         : 0;
-  const vehicleSplitPeriodCount =
-    form.billingCycle === "Term"
-      ? vehicleTermCount
-      : form.billingCycle === "Monthly"
-        ? vehicleMonthCount
-        : 0;
   const splitUnit =
     form.billingCycle === "Term" ? "term" : form.billingCycle === "Monthly" ? "month" : null;
   const tuitionPerPeriod =
     splitUnit && splitPeriodCount > 0 && tuitionPreview > 0
       ? splitAmountAcrossTerms(tuitionPreview, splitPeriodCount)[0]
-      : undefined;
-  const vehiclePerPeriod =
-    splitUnit && vehicleSplitPeriodCount > 0 && vehiclePreview > 0
-      ? splitAmountAcrossTerms(vehiclePreview, vehicleSplitPeriodCount)[0]
       : undefined;
   const cycleUnit =
     form.billingCycle === "Annually"
@@ -10172,7 +10170,6 @@ function ClassesCard({
     grade: "",
     section: "",
     tuitionFeeAmount: "",
-    vehicleFeeAmount: "",
     billingCycle: "Monthly" as ClassBillingCycle,
     classTeacherId: "",
   });
@@ -10189,8 +10186,6 @@ function ClassesCard({
       grade: normalized.grade,
       section: normalized.section,
       tuitionFeeAmount: String(normalized.tuitionFeeAmount),
-      vehicleFeeAmount:
-        normalized.vehicleFeeAmount > 0 ? String(normalized.vehicleFeeAmount) : "",
       billingCycle: normalized.billingCycle,
       classTeacherId: normalized.classTeacherId ?? "",
     });
@@ -10202,32 +10197,27 @@ function ClassesCard({
     const grade = form.grade.trim();
     const section = form.section.trim();
     const tuitionFeeAmount = Number(form.tuitionFeeAmount);
-    const vehicleRaw = form.vehicleFeeAmount.trim();
-    const vehicleFeeAmount = vehicleRaw ? Number(vehicleRaw) : 0;
     if (!grade) {
       toast.error("Class is required");
       return;
     }
     if (!section) {
-      toast.error("Grade / section is required");
+      toast.error("Division is required");
       return;
     }
     if (!tuitionFeeAmount || tuitionFeeAmount <= 0) {
       toast.error("Total tuition fee must be a positive amount");
       return;
     }
-    if (vehicleRaw && (!Number.isFinite(vehicleFeeAmount) || vehicleFeeAmount < 0)) {
-      toast.error("Vehicle fee must be zero or a positive amount");
-      return;
-    }
     const className = composeClassName(grade, section);
     const classTeacherId = form.classTeacherId || undefined;
+    const existing = editingId ? classes.find((c) => c.id === editingId) : undefined;
     const next: Omit<ClassConfig, "id"> = {
       className,
       grade,
       section,
       tuitionFeeAmount: Math.round(tuitionFeeAmount),
-      vehicleFeeAmount: Math.round(Math.max(0, vehicleFeeAmount)),
+      vehicleFeeAmount: existing?.vehicleFeeAmount ?? 0,
       billingCycle: form.billingCycle,
       classTeacherId,
     };
@@ -10242,15 +10232,7 @@ function ClassesCard({
         );
       }
       toast.success(`${className} updated`, {
-        description: [
-          `Tuition ₹ ${next.tuitionFeeAmount.toLocaleString("en-IN")}`,
-          next.vehicleFeeAmount > 0
-            ? `Vehicle ₹ ${next.vehicleFeeAmount.toLocaleString("en-IN")}`
-            : null,
-          next.billingCycle,
-        ]
-          .filter(Boolean)
-          .join(" · "),
+        description: `Tuition ₹ ${next.tuitionFeeAmount.toLocaleString("en-IN")} · ${next.billingCycle}`,
       });
     } else {
       const nextId = `CLS-${(classes.length + 1).toString().padStart(3, "0")}`;
@@ -10284,7 +10266,7 @@ function ClassesCard({
     <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
       <CardHeader
         title="Class Tier"
-        subtitle="Per-class tuition, vehicle fee & billing cycle for Receive Payment"
+        subtitle="Per-class tuition & billing cycle for Receive Payment"
         actionLabel="Add Class"
         onAction={startCreate}
       />
@@ -10365,7 +10347,7 @@ function ClassesCard({
         title="Delete Class Tier"
         description={
           pendingDelete
-            ? `Are you sure you want to delete ${pendingDelete.className}? Tuition and vehicle prefills for this class will stop working.`
+            ? `Are you sure you want to delete ${pendingDelete.className}? Tuition prefills for this class will stop working.`
             : "Are you sure you want to delete this class tier?"
         }
         onConfirm={confirmDelete}
@@ -10376,8 +10358,8 @@ function ClassesCard({
           <DialogHeader>
             <DialogTitle>{editingId ? "Edit Class Tier" : "Add Class Tier"}</DialogTitle>
             <DialogDescription>
-              Set the class, then enter total tuition and vehicle fees for the chosen billing
-              cycle. These amounts prefill Finance · Receive Payment.
+              Set the class and division, choose a billing cycle, then enter total tuition. This
+              amount prefills Finance · Receive Payment.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={submit} className="space-y-4">
@@ -10399,7 +10381,7 @@ function ClassesCard({
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                    Grade
+                    Division
                   </Label>
                   <Input
                     value={form.section}
@@ -10430,8 +10412,8 @@ function ClassesCard({
                   Fee schedule
                 </p>
                 <p className="mt-1 text-[12px] leading-snug text-black/50">
-                  Amounts below are the total charged for one {cycleUnit}. Choose the cycle first,
-                  then enter tuition and optional vehicle fees.
+                  Amount below is the total tuition charged for one {cycleUnit}. Choose the cycle
+                  first, then enter the fee.
                 </p>
               </div>
 
@@ -10439,22 +10421,31 @@ function ClassesCard({
                 <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                   Billing Cycle
                 </Label>
-                <div className="flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
+                <div
+                  role="tablist"
+                  aria-label="Billing cycle"
+                  className="flex border-b border-[#E8E8EA] dark:border-white/10"
+                >
                   {CLASS_BILLING_CYCLES.map((cycle) => {
                     const active = form.billingCycle === cycle;
                     return (
                       <button
                         key={cycle}
                         type="button"
+                        role="tab"
+                        aria-selected={active}
                         onClick={() => setForm({ ...form, billingCycle: cycle })}
                         className={cn(
-                          "flex-1 rounded-full px-2.5 py-1.5 text-[12px] font-medium transition-colors",
+                          "relative min-w-0 flex-1 px-2 py-2.5 text-center text-[12.5px] font-semibold tracking-tight transition-colors",
                           active
-                            ? "bg-[#0F766E] text-white"
-                            : "text-black/65 hover:text-black",
+                            ? "text-[#0F766E] dark:text-[#5EEAD4]"
+                            : "text-black/45 hover:text-black/70 dark:text-zinc-500 dark:hover:text-zinc-300",
                         )}
                       >
                         {cycle}
+                        {active && (
+                          <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-[#0F766E] dark:bg-[#2DD4BF]" />
+                        )}
                       </button>
                     );
                   })}
@@ -10464,88 +10455,44 @@ function ClassesCard({
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                    Total Tuition Fee (₹)
-                  </Label>
-                  <Input
-                    inputMode="numeric"
-                    value={form.tuitionFeeAmount}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        tuitionFeeAmount: e.target.value.replace(/[^0-9]/g, ""),
-                      })
-                    }
-                    placeholder="0"
-                    className="font-mono bg-white"
-                  />
-                  <p className="text-[10.5px] text-black/40">Required · Tuition Fee category</p>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                    Vehicle Fee (₹){" "}
-                    <span className="normal-case tracking-normal text-black/40">(optional)</span>
-                  </Label>
-                  <Input
-                    inputMode="numeric"
-                    value={form.vehicleFeeAmount}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        vehicleFeeAmount: e.target.value.replace(/[^0-9]/g, ""),
-                      })
-                    }
-                    placeholder="0"
-                    className="font-mono bg-white"
-                  />
-                  <p className="text-[10.5px] text-black/40">
-                    Leave blank if this class has no transport fee
-                  </p>
-                </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                  Total Tuition Fee (₹)
+                </Label>
+                <Input
+                  inputMode="numeric"
+                  value={form.tuitionFeeAmount}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      tuitionFeeAmount: e.target.value.replace(/[^0-9]/g, ""),
+                    })
+                  }
+                  placeholder="0"
+                  className="font-mono bg-white"
+                />
+                <p className="text-[10.5px] text-black/40">Required · Tuition Fee category</p>
               </div>
 
               {tuitionPreview > 0 && (
                 <div className="space-y-2 rounded-lg border border-[#D1FAE5] bg-white px-3 py-2.5">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="text-[12px] text-black/55 dark:text-zinc-400">
-                      {splitUnit ? "Annual total" : `Combined per ${cycleUnit}`}
-                      {vehiclePreview > 0 ? (
-                        <span className="mt-0.5 block text-[10.5px] text-black/40">
-                          Tuition ₹ {tuitionPreview.toLocaleString("en-IN")}
-                          {" + "}
-                          Vehicle ₹ {vehiclePreview.toLocaleString("en-IN")}
-                        </span>
-                      ) : null}
+                      {splitUnit ? "Annual total" : `Total per ${cycleUnit}`}
                     </div>
                     <div className="font-mono text-[14px] font-semibold text-[#0F766E]">
-                      ₹ {combinedPreview.toLocaleString("en-IN")}
+                      ₹ {tuitionPreview.toLocaleString("en-IN")}
                     </div>
                   </div>
-                  {splitUnit && (tuitionPerPeriod || vehiclePerPeriod) ? (
+                  {splitUnit && tuitionPerPeriod !== undefined ? (
                     <div className="border-t border-[#D1FAE5] pt-2 text-[11.5px] leading-snug text-black/55 dark:text-zinc-400">
                       Auto-split across fee {splitUnit}s
-                      <div className="mt-1 space-y-0.5 font-mono text-[12px] text-black">
-                        {tuitionPerPeriod !== undefined && splitPeriodCount > 0 && (
-                          <div>
-                            Tuition ₹ {tuitionPreview.toLocaleString("en-IN")} ÷ {splitPeriodCount} ={" "}
-                            <span className="font-semibold text-[#0F766E]">
-                              ₹ {tuitionPerPeriod.toLocaleString("en-IN")}
-                            </span>{" "}
-                            / {splitUnit}
-                          </div>
-                        )}
-                        {vehiclePerPeriod !== undefined && vehicleSplitPeriodCount > 0 && (
-                          <div>
-                            Vehicle ₹ {vehiclePreview.toLocaleString("en-IN")} ÷{" "}
-                            {vehicleSplitPeriodCount} ={" "}
-                            <span className="font-semibold text-[#0F766E]">
-                              ₹ {vehiclePerPeriod.toLocaleString("en-IN")}
-                            </span>{" "}
-                            / {splitUnit}
-                          </div>
-                        )}
+                      <div className="mt-1 font-mono text-[12px] text-black">
+                        Tuition ₹ {tuitionPreview.toLocaleString("en-IN")} ÷ {splitPeriodCount} ={" "}
+                        <span className="font-semibold text-[#0F766E]">
+                          ₹ {tuitionPerPeriod.toLocaleString("en-IN")}
+                        </span>{" "}
+                        / {splitUnit}
                       </div>
                       {splitPeriodCount === 0 && (
                         <p className="mt-1 text-[10.5px] text-amber-700">
