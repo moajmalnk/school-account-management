@@ -186,7 +186,7 @@ export function DatePicker({
           type="button"
           disabled={disabled}
           className={cn(
-            "inline-flex h-10 w-full items-center justify-between gap-2 border bg-white text-left text-[13px] font-medium text-black transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50",
+            "inline-flex h-10 w-full items-center justify-between gap-2 border bg-white text-left text-[13px] font-medium text-black transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E] focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50",
             variant === "pill"
               ? "rounded-lg border-black px-4 hover:bg-[#FAFAFA]"
               : "rounded-lg border-[#E5E5E5] px-3 hover:border-black/30 focus-visible:ring-black/15",
@@ -224,12 +224,12 @@ export function DatePicker({
               <SelectTrigger className="h-7 w-[4.5rem] rounded-md border-transparent bg-transparent px-2 text-[12px] font-semibold shadow-none focus:ring-0">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="z-[300] rounded-lg border border-[#E5E5E5] bg-white p-1">
+              <SelectContent className="z-[300] rounded-lg border border-[#E5E5E5] bg-white p-1 dark:border-white/10 dark:bg-zinc-900">
                 {MONTHS.map((m, i) => (
                   <SelectItem
                     key={m}
                     value={String(i)}
-                    className="rounded-md text-[12px] focus:bg-[#DBEAFE] data-[state=checked]:bg-[#2563EB] data-[state=checked]:text-white"
+                    className="rounded-md text-[12px] focus:bg-[#CCFBF1] focus:text-[#0F172A] data-[state=checked]:bg-[#0F766E] data-[state=checked]:text-white dark:focus:bg-[#0F766E]/40 dark:focus:text-white"
                   >
                     {m.slice(0, 3)}
                   </SelectItem>
@@ -243,12 +243,12 @@ export function DatePicker({
               <SelectTrigger className="h-7 w-[4.5rem] rounded-md border-transparent bg-transparent px-2 text-[12px] font-semibold shadow-none focus:ring-0">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="z-[300] max-h-56 rounded-lg border border-[#E5E5E5] bg-white p-1">
+              <SelectContent className="z-[300] max-h-56 rounded-lg border border-[#E5E5E5] bg-white p-1 dark:border-white/10 dark:bg-zinc-900">
                 {yearOptions.map((y) => (
                   <SelectItem
                     key={y}
                     value={String(y)}
-                    className="rounded-md font-mono text-[12px] focus:bg-[#DBEAFE] data-[state=checked]:bg-[#2563EB] data-[state=checked]:text-white"
+                    className="rounded-md font-mono text-[12px] focus:bg-[#CCFBF1] focus:text-[#0F172A] data-[state=checked]:bg-[#0F766E] data-[state=checked]:text-white dark:focus:bg-[#0F766E]/40 dark:focus:text-white"
                   >
                     {y}
                   </SelectItem>
@@ -294,7 +294,7 @@ export function DatePicker({
                     className={cn(
                       "grid h-7 w-7 place-items-center rounded-full font-mono text-[11.5px] leading-none transition",
                       isSel
-                        ? "bg-[#2563EB] font-semibold text-white shadow-[0_4px_10px_-6px_rgba(0,0,0,0.35)]"
+                        ? "bg-[#0F766E] font-semibold text-white shadow-[0_4px_10px_-6px_rgba(0,0,0,0.35)]"
                         : isToday
                           ? "ring-1 ring-inset ring-black/60 group-hover/cell:bg-black/5"
                           : "group-hover/cell:bg-[#F4F4F5]",
@@ -337,6 +337,203 @@ export function DatePicker({
             </button>
           </div>
         )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function parseMonthKey(v?: string): { year: number; month: number } | null {
+  if (!v) return null;
+  const match = /^(\d{4})-(\d{2})$/.exec(v.trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (!year || month < 1 || month > 12) return null;
+  return { year, month };
+}
+
+function toMonthKey(year: number, monthIndex: number) {
+  return `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
+}
+
+function formatMonthDisplay(year: number, monthIndex: number) {
+  return `${MONTHS[monthIndex]} ${year}`;
+}
+
+export type MonthPickerProps = {
+  id?: string;
+  value?: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  min?: string;
+  max?: string;
+  align?: "start" | "center" | "end";
+  className?: string;
+  disabled?: boolean;
+  allowClear?: boolean;
+};
+
+export function MonthPicker({
+  id,
+  value,
+  onChange,
+  placeholder = "Select month",
+  min,
+  max,
+  align = "start",
+  className,
+  disabled,
+  allowClear = true,
+}: MonthPickerProps) {
+  const selected = useMemo(() => parseMonthKey(value), [value]);
+  const minMonth = useMemo(() => parseMonthKey(min), [min]);
+  const maxMonth = useMemo(() => parseMonthKey(max), [max]);
+  const today = useMemo(() => {
+    const t = new Date();
+    return { year: t.getFullYear(), month: t.getMonth() + 1 };
+  }, []);
+
+  const [open, setOpen] = useState(false);
+  const [viewYear, setViewYear] = useState(() => selected?.year ?? today.year);
+  const initialised = useRef(false);
+
+  useEffect(() => {
+    if (open && !initialised.current) {
+      setViewYear(selected?.year ?? today.year);
+      initialised.current = true;
+    }
+    if (!open) initialised.current = false;
+  }, [open, selected, today.year]);
+
+  const yearBounds = useMemo(() => {
+    const start = minMonth?.year ?? today.year - 10;
+    const end = maxMonth?.year ?? today.year + 10;
+    return { start, end };
+  }, [minMonth, maxMonth, today.year]);
+
+  const isMonthDisabled = (year: number, monthIndex: number) => {
+    const key = monthIndex + 1;
+    if (minMonth && (year < minMonth.year || (year === minMonth.year && key < minMonth.month))) {
+      return true;
+    }
+    if (maxMonth && (year > maxMonth.year || (year === maxMonth.year && key > maxMonth.month))) {
+      return true;
+    }
+    return false;
+  };
+
+  const commit = (year: number, monthIndex: number) => {
+    if (isMonthDisabled(year, monthIndex)) return;
+    onChange(toMonthKey(year, monthIndex));
+    setOpen(false);
+  };
+
+  const displayText = selected
+    ? formatMonthDisplay(selected.year, selected.month - 1)
+    : null;
+
+  return (
+    <Popover open={open} onOpenChange={(o) => !disabled && setOpen(o)}>
+      <PopoverTrigger asChild>
+        <button
+          id={id}
+          type="button"
+          disabled={disabled}
+          className={cn(
+            "inline-flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-[#E5E5E5] bg-white px-3 text-left text-[13px] font-medium text-black transition hover:border-black/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E] focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:border-white/25",
+            !selected && "text-black/45 dark:text-zinc-500",
+            className,
+          )}
+        >
+          <span className="truncate tracking-tight">{displayText ?? placeholder}</span>
+          <CalendarIcon className="h-3.5 w-3.5 shrink-0 text-black/45 dark:text-zinc-500" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align={align}
+        sideOffset={6}
+        collisionPadding={12}
+        sticky="always"
+        className="z-[250] w-[min(260px,calc(100vw-1.5rem))] overflow-hidden rounded-lg border border-[#E5E5E5] bg-white p-0 shadow-[0_24px_60px_-24px_rgba(0,0,0,0.25)] dark:border-white/10 dark:bg-zinc-900"
+      >
+        <div className="flex items-center gap-1.5 border-b border-[#EEEEEE] px-2.5 py-2 dark:border-white/10">
+          <button
+            type="button"
+            onClick={() => setViewYear((y) => Math.max(yearBounds.start, y - 1))}
+            disabled={viewYear <= yearBounds.start}
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-black/55 transition hover:bg-[#F4F4F5] hover:text-black disabled:cursor-not-allowed disabled:opacity-30 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-zinc-50"
+            aria-label="Previous year"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </button>
+          <div className="flex-1 text-center text-[13px] font-semibold tracking-tight text-black dark:text-zinc-50">
+            {viewYear}
+          </div>
+          <button
+            type="button"
+            onClick={() => setViewYear((y) => Math.min(yearBounds.end, y + 1))}
+            disabled={viewYear >= yearBounds.end}
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-black/55 transition hover:bg-[#F4F4F5] hover:text-black disabled:cursor-not-allowed disabled:opacity-30 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-zinc-50"
+            aria-label="Next year"
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-3 gap-1 p-2.5">
+          {MONTH_ABBR.map((label, monthIndex) => {
+            const isSel =
+              !!selected && selected.year === viewYear && selected.month === monthIndex + 1;
+            const isCurrent = today.year === viewYear && today.month === monthIndex + 1;
+            const off = isMonthDisabled(viewYear, monthIndex);
+            return (
+              <button
+                key={label}
+                type="button"
+                disabled={off}
+                onClick={() => commit(viewYear, monthIndex)}
+                aria-pressed={isSel}
+                aria-label={`${MONTHS[monthIndex]} ${viewYear}`}
+                className={cn(
+                  "h-9 rounded-md text-[12px] font-medium transition",
+                  isSel
+                    ? "bg-[#0F766E] font-semibold text-white shadow-[0_4px_10px_-6px_rgba(0,0,0,0.35)]"
+                    : isCurrent
+                      ? "ring-1 ring-inset ring-black/50 hover:bg-black/5 dark:ring-zinc-400 dark:hover:bg-white/10"
+                      : "text-black/80 hover:bg-[#F4F4F5] dark:text-zinc-200 dark:hover:bg-white/10",
+                  off && "cursor-not-allowed text-black/20 hover:bg-transparent dark:text-zinc-600",
+                )}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center justify-between border-t border-[#EEEEEE] px-2.5 py-2 dark:border-white/10">
+          {allowClear ? (
+            <button
+              type="button"
+              onClick={() => {
+                onChange("");
+                setOpen(false);
+              }}
+              className="rounded-full px-2 py-1 text-[11px] font-semibold text-[#0F766E] transition hover:bg-[#CCFBF1]/50 dark:hover:bg-[#0F766E]/20"
+            >
+              Clear
+            </button>
+          ) : (
+            <span />
+          )}
+          <button
+            type="button"
+            onClick={() => commit(today.year, today.month - 1)}
+            disabled={isMonthDisabled(today.year, today.month - 1)}
+            className="rounded-full px-2 py-1 text-[11px] font-semibold text-[#0F766E] transition hover:bg-[#CCFBF1]/50 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-[#0F766E]/20"
+          >
+            This month
+          </button>
+        </div>
       </PopoverContent>
     </Popover>
   );

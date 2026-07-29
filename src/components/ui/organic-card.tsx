@@ -85,7 +85,7 @@ export function ArrowGlyph({
   };
 
   const inkClass = isOnHighlight
-    ? "bg-white text-[#2563EB] hover:bg-white/90"
+    ? "bg-white text-[#0F766E] hover:bg-white/90"
     : isOnBlack
       ? "bg-white text-[#0F172A] hover:bg-white/90"
       : "bg-white text-[#0F172A] border border-[#0F172A] hover:bg-[#0F172A] hover:text-white";

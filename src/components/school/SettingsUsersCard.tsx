@@ -55,12 +55,12 @@ function CardHeader({
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
         <div className="text-title">{title}</div>
-        <p className="mt-1 text-[11.5px] text-black/55">{subtitle}</p>
+        <p className="mt-1 text-[11.5px] text-black/55 dark:text-zinc-400">{subtitle}</p>
       </div>
       <button
         type="button"
         onClick={onAction}
-        className="inline-flex h-9 shrink-0 items-center justify-center rounded-full bg-black px-3.5 text-[12px] font-semibold text-white transition-colors hover:bg-black/85"
+        className="inline-flex h-9 shrink-0 items-center justify-center rounded-full bg-[#0F766E] px-3.5 text-[12px] font-semibold text-white transition-colors hover:bg-[#0D9488]"
       >
         {actionLabel}
       </button>
@@ -273,7 +273,7 @@ export function SettingsUsersCard({
 
         <div className="mt-4 space-y-2">
           {tenantUsers.length === 0 && (
-            <div className="rounded-lg border border-dashed border-black/15 bg-[#F4F4F5]/40 px-4 py-8 text-center text-[12px] text-black/55">
+            <div className="rounded-lg border border-dashed border-black/15 bg-[#F4F4F5]/40 px-4 py-8 text-center text-[12px] text-black/55 dark:text-zinc-400">
               No workspace users yet · create one to grant limited access
             </div>
           )}
@@ -294,14 +294,14 @@ export function SettingsUsersCard({
                       className={cn(
                         "rounded-full px-2 py-0.5 text-[10px] font-semibold",
                         user.active
-                          ? "bg-[#DBEAFE] text-[#1D4ED8]"
+                          ? "bg-[#CCFBF1] text-[#0F766E]"
                           : "bg-black/8 text-black/45",
                       )}
                     >
                       {user.active ? "Active" : "Inactive"}
                     </span>
                   </div>
-                  <div className="mt-0.5 truncate text-[11.5px] text-black/55">
+                  <div className="mt-0.5 truncate text-[11.5px] text-black/55 dark:text-zinc-400">
                     {user.email}
                     {roleTitle ? ` · ${roleTitle}` : ""}
                     {linkedStaff ? ` · Staff: ${linkedStaff.name}` : ""}
@@ -317,7 +317,7 @@ export function SettingsUsersCard({
                       onClick={() => impersonateUser(user)}
                       aria-label={`Login as ${user.displayName}`}
                       title="Login as this user in a new tab (no credentials)"
-                      className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#BFDBFE] bg-[#EFF6FF] px-2.5 text-[11px] font-semibold text-[#1D4ED8] transition-colors hover:border-[#93C5FD] hover:bg-[#DBEAFE]"
+                      className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#99F6E4] bg-[#F0FDFA] px-2.5 text-[11px] font-semibold text-[#0F766E] transition-colors hover:border-[#5EEAD4] hover:bg-[#CCFBF1]"
                     >
                       <ExternalLink className="h-3 w-3" />
                       Login as
@@ -327,7 +327,7 @@ export function SettingsUsersCard({
                     type="button"
                     onClick={() => startEdit(user)}
                     aria-label={`Edit ${user.displayName}`}
-                    className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
+                    className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 dark:text-zinc-400 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
@@ -467,7 +467,7 @@ export function SettingsUsersCard({
                       return (
                         <label
                           key={key}
-                          className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-[12.5px] text-black hover:bg-white"
+                          className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-[12.5px] text-black hover:bg-white dark:text-zinc-100 dark:hover:bg-white/5"
                         >
                           <Checkbox
                             checked={checked}
@@ -506,7 +506,7 @@ export function SettingsUsersCard({
                 <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                   Cancel
                 </Button>
-                <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+                <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
                   {editingId ? "Save changes" : "Create user"}
                 </Button>
               </div>
@@ -526,7 +526,7 @@ export function SettingsUsersCard({
             <DialogTitle className="text-[22px] font-semibold text-black">
               Delete User
             </DialogTitle>
-            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
+            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60 dark:text-zinc-400">
               {pendingDelete
                 ? `Remove login for ${pendingDelete.displayName} (${pendingDelete.email})?`
                 : "Remove this user?"}

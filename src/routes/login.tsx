@@ -111,7 +111,7 @@ function LoginPage() {
       <div className="w-full max-w-md">
         <div className="mb-5 flex flex-col items-center text-center sm:mb-8">
           <div className="flex items-center gap-3 rounded-xl border border-white/70 bg-white/80 px-3 py-2.5 shadow-[0_14px_44px_-32px_rgba(0,0,0,0.45)] backdrop-blur-xl">
-            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-black text-base font-bold text-white">
+            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-[#0F766E] text-base font-bold text-white">
               S
             </div>
             <div className="text-left leading-tight">
@@ -210,9 +210,9 @@ function LoginPage() {
             <button
               type="submit"
               disabled={submitting}
-              className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-black text-[13.5px] font-semibold text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)] transition-colors hover:bg-black/90 disabled:opacity-60"
+              className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#0F766E] text-[13.5px] font-semibold text-white shadow-[0_8px_24px_-12px_rgba(15,118,110,0.4)] transition-colors hover:bg-[#0D9488] disabled:opacity-60"
             >
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#2563EB]" />
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#0F766E]" />
               Authenticate · {tier === "super_admin" ? "Super Admin" : "Tenant Workspace"}
             </button>
           </form>
@@ -234,8 +234,8 @@ function LoginPage() {
                   type="button"
                   onClick={() => handleAutofill(t.key)}
                   aria-label={`Auto-fill ${t.label} credentials`}
-                  className={`group flex min-h-12 w-full items-center justify-between gap-3 rounded-2xl border px-3 py-2.5 text-left font-mono text-[10.5px] transition-all hover:-translate-y-px hover:border-black/30 hover:bg-[#DBEAFE] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 ${
-                    isActive ? "border-black/30 bg-[#DBEAFE]" : "border-[#E5E5E5] bg-[#F4F4F5]"
+                  className={`group flex min-h-12 w-full items-center justify-between gap-3 rounded-2xl border px-3 py-2.5 text-left font-mono text-[10.5px] transition-all hover:-translate-y-px hover:border-black/30 hover:bg-[#CCFBF1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 ${
+                    isActive ? "border-black/30 bg-[#CCFBF1]" : "border-[#E5E5E5] bg-[#F4F4F5]"
                   }`}
                 >
                   <span className="flex items-center gap-2">
@@ -246,7 +246,7 @@ function LoginPage() {
                     <span className="hidden sm:inline">{creds.email}</span>
                     <span className="hidden sm:inline">·</span>
                     <span>{creds.password}</span>
-                    <span className="rounded-full bg-black px-1.5 py-0.5 font-sans text-[9.5px] font-semibold uppercase tracking-wider text-white opacity-0 transition-opacity group-hover:opacity-100">
+                    <span className="rounded-full bg-[#0F766E] px-1.5 py-0.5 font-sans text-[9.5px] font-semibold uppercase tracking-wider text-white opacity-0 transition-opacity group-hover:opacity-100">
                       Fill
                     </span>
                   </span>

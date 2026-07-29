@@ -41,12 +41,12 @@ import type { Tone, CornerSide } from "@/lib/utils";
 
 const TIER_STYLE: Record<Tier, { bg: string; fg: string }> = {
   Basic: { bg: "#F4F4F5", fg: "#000000" },
-  Premium: { bg: "#DBEAFE", fg: "#000000" },
+  Premium: { bg: "#CCFBF1", fg: "#000000" },
   Enterprise: { bg: "#000000", fg: "#FFFFFF" },
 };
 const STATUS_STYLE: Record<Status, { bg: string; fg: string; dot: string }> = {
   Active: { bg: "#F4F4F5", fg: "#000000", dot: "#000000" },
-  Trial: { bg: "#DBEAFE", fg: "#000000", dot: "#000000" },
+  Trial: { bg: "#CCFBF1", fg: "#000000", dot: "#000000" },
   Overdue: { bg: "#000000", fg: "#EF4444", dot: "#EF4444" },
   Suspended: { bg: "#FEE2E2", fg: "#EF4444", dot: "#EF4444" },
 };
@@ -276,7 +276,7 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (name: string) 
                   {t.id} · {t.uuid}
                 </div>
                 <div
-                  className={`mt-0.5 font-mono text-[11px] ${isBlack ? "text-[#2563EB]" : "text-black/65"}`}
+                  className={`mt-0.5 font-mono text-[11px] ${isBlack ? "text-[#0F766E]" : "text-black/65"}`}
                 >
                   {t.subdomain}.schoolaccounts.in
                 </div>
@@ -322,11 +322,11 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (name: string) 
                       backgroundColor: isLime
                         ? "#000000"
                         : isBlack
-                          ? "#2563EB"
+                          ? "#0F766E"
                           : pct > 90
                             ? "#000000"
                             : pct > 70
-                              ? "#2563EB"
+                              ? "#0F766E"
                               : "#000000",
                     }}
                   />
@@ -362,7 +362,7 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (name: string) 
                   onClick={() => onImpersonate?.(t.name)}
                   className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[11.5px] font-semibold shadow-[0_6px_18px_-10px_rgba(0,0,0,0.5)] transition-colors ${
                     isBlack
-                      ? "bg-[#2563EB] text-white hover:bg-white"
+                      ? "bg-[#0F766E] text-white hover:bg-white"
                       : isLime
                         ? "bg-black text-white hover:bg-black/85"
                         : "bg-black text-white hover:bg-black/85"
@@ -610,7 +610,7 @@ function TenantFormDrawer({
                     onClick={() => setTier(tt)}
                     className={`rounded-full border px-3 py-2 text-[12px] font-semibold transition ${
                       sel
-                        ? "border-transparent bg-[#2563EB] text-white shadow-sm"
+                        ? "border-transparent bg-[#0F766E] text-white shadow-sm"
                         : "border-[#E5E5E5] bg-white text-black/65 hover:border-black/30"
                     }`}
                   >
@@ -752,7 +752,7 @@ function EditTenantDrawer({
                     onClick={() => setTier(tt)}
                     className={`rounded-full border px-3 py-2 text-[12px] font-semibold transition ${
                       sel
-                        ? "border-transparent bg-[#2563EB] text-white shadow-sm"
+                        ? "border-transparent bg-[#0F766E] text-white shadow-sm"
                         : "border-[#E5E5E5] bg-white text-black/65 hover:border-black/30"
                     }`}
                   >
@@ -889,7 +889,7 @@ function BillingRulesDrawer({
                     onClick={() => set("cycle", c)}
                     className={`rounded-full border px-3 py-2 text-[12px] font-semibold transition ${
                       sel
-                        ? "border-transparent bg-[#2563EB] text-white shadow-sm"
+                        ? "border-transparent bg-[#0F766E] text-white shadow-sm"
                         : "border-[#E5E5E5] bg-white text-black/65 hover:border-black/30"
                     }`}
                   >
@@ -1249,7 +1249,7 @@ function SeverityBadge({ severity }: { severity: AuditEvent["severity"] }) {
   > = {
     info: { bg: "bg-sky-100", fg: "text-sky-700", Icon: Info, label: "Info" },
     success: {
-      bg: "bg-[#DBEAFE]",
+      bg: "bg-[#CCFBF1]",
       fg: "text-[#10B981]",
       Icon: CheckCircle2,
       label: "OK",

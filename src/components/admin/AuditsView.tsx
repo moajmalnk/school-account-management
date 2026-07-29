@@ -62,7 +62,7 @@ export function AuditsView() {
         </div>
         <button
           onClick={simulate}
-          className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-full bg-[#0F172A] px-5 py-2.5 text-[12.5px] font-semibold text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)] transition hover:bg-[#2563EB] hover:text-white sm:w-auto"
+          className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-full bg-[#0F172A] px-5 py-2.5 text-[12.5px] font-semibold text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)] transition hover:bg-[#0F766E] hover:text-white sm:w-auto"
         >
           <Zap className="h-3.5 w-3.5" /> Simulate Live Webhook Payment Event
         </button>
@@ -169,7 +169,7 @@ export function AuditsView() {
         <OrganicCard tone="white" cornerSide="bl" arrow className="lg:col-span-2">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E5E5] px-4 py-4 sm:px-6 sm:py-5">
             <div className="flex items-center gap-2.5">
-              <div className="grid h-9 w-9 place-items-center rounded-2xl bg-[#2563EB] text-white">
+              <div className="grid h-9 w-9 place-items-center rounded-2xl bg-[#0F766E] text-white">
                 <Webhook className="h-4 w-4" />
               </div>
               <div>
@@ -179,7 +179,7 @@ export function AuditsView() {
                 </div>
               </div>
             </div>
-            <span className="relative inline-block h-2 w-2 rounded-full heartbeat-dot bg-[#2563EB]" />
+            <span className="relative inline-block h-2 w-2 rounded-full heartbeat-dot bg-[#0F766E]" />
           </div>
 
           <ol className="relative ml-5 border-l border-dashed border-black/15 px-5 py-4 sm:ml-6 sm:px-6 sm:py-5">

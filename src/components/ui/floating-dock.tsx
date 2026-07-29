@@ -87,7 +87,7 @@ const FloatingDockMobile = ({
                   aria-current={item.active ? "page" : undefined}
                   className={cn(
                     "flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-white/80 shadow-sm",
-                    item.active && "ring-2 ring-[#2563EB]/40",
+                    item.active && "ring-2 ring-[#0F766E]/40",
                   )}
                 >
                   <div className="h-4 w-4">{item.icon}</div>
@@ -127,6 +127,7 @@ const FloatingDockDesktop = ({
       className={cn(
         glassPanelClass,
         "mx-auto h-16 items-end gap-3 rounded-xl border border-white/70 bg-white/55 px-3 pb-2.5 shadow-[0_12px_40px_-16px_rgba(15,23,42,0.35)] backdrop-blur-2xl",
+        "dark:border-white/12 dark:bg-[#141416]/92 dark:shadow-[0_20px_50px_-18px_rgba(0,0,0,0.75),0_0_0_1px_rgba(45,212,191,0.08),inset_0_1px_0_rgba(255,255,255,0.1)]",
         alwaysVisible ? "flex" : "hidden md:flex",
         className,
       )}
@@ -200,9 +201,10 @@ function IconContainer({
       className={cn(
         "relative flex aspect-square items-center justify-center rounded-lg border shadow-[0_6px_18px_-10px_rgba(15,23,42,0.45)]",
         brand
-          ? "border-white/40 bg-gradient-to-br from-[#2563EB] to-[#4C69A4] text-white"
-          : "border-white/70 bg-gradient-to-br from-white/95 to-white/70",
-        active && "ring-2 ring-[#2563EB]/40",
+          ? "border-white/40 bg-gradient-to-br from-[#0F766E] to-[#115E59] text-white"
+          : "border-white/70 bg-gradient-to-br from-white/95 to-white/70 dark:border-white/12 dark:from-[#232328] dark:to-[#18181b] dark:text-zinc-200 dark:shadow-[0_8px_20px_-12px_rgba(0,0,0,0.8)]",
+        active &&
+          "ring-2 ring-[#0F766E]/40 dark:border-[#2DD4BF]/35 dark:from-[#0F766E]/35 dark:to-[#18181b] dark:ring-[#2DD4BF]/40 dark:shadow-[0_8px_24px_-12px_rgba(15,118,110,0.55)]",
       )}
     >
       <AnimatePresence>
@@ -211,7 +213,7 @@ function IconContainer({
             initial={{ opacity: 0, y: 8, x: "-50%" }}
             animate={{ opacity: 1, y: 0, x: "-50%" }}
             exit={{ opacity: 0, y: 2, x: "-50%" }}
-            className="absolute -top-9 left-1/2 z-50 w-fit rounded-md bg-slate-900 px-2 py-1 text-[11px] font-semibold whitespace-pre text-white shadow-lg"
+            className="absolute -top-9 left-1/2 z-50 w-fit rounded-md bg-slate-900 px-2 py-1 text-[11px] font-semibold whitespace-pre text-white shadow-lg dark:bg-zinc-100 dark:text-zinc-900"
           >
             {title}
           </motion.div>
@@ -225,7 +227,7 @@ function IconContainer({
       </motion.div>
       <span
         className={cn(
-          "absolute -bottom-1.5 h-1 w-1 rounded-full bg-slate-800 transition-opacity",
+          "absolute -bottom-1.5 h-1 w-1 rounded-full bg-slate-800 transition-opacity dark:bg-[#2DD4BF]",
           active ? "opacity-100" : "opacity-0",
         )}
       />

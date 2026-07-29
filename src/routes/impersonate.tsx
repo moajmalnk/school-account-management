@@ -97,7 +97,7 @@ function ImpersonatePage() {
           </>
         ) : (
           <div className="flex items-center justify-center gap-2 font-mono text-[11px] uppercase tracking-wider text-slate-500">
-            <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[#2563EB]/60" />
+            <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[#0F766E]/60" />
             Starting impersonation…
           </div>
         )}

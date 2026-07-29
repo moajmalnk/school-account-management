@@ -51,21 +51,25 @@ export function downloadTablePdf({
   footer,
 }: TablePdfOptions) {
   const doc = new jsPDF({ orientation: rows[0]?.length > 6 ? "landscape" : "portrait" });
+  doc.setFillColor(15, 118, 110);
+  doc.rect(0, 0, doc.internal.pageSize.getWidth(), 3, "F");
+  doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
-  doc.setTextColor(0, 0, 0);
+  doc.setTextColor(15, 118, 110);
   doc.text(title, 14, 18);
   if (subtitle) {
+    doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
-    doc.setTextColor(90, 90, 90);
+    doc.setTextColor(100, 116, 139);
     doc.text(subtitle, 14, 26);
   }
   autoTable(doc, {
     startY: subtitle ? 32 : 24,
     head: [headers],
     body: rows.map((row) => row.map(String)),
-    styles: { fontSize: 9, cellPadding: 3 },
-    headStyles: { fillColor: [0, 0, 0], textColor: [255, 255, 255] },
-    alternateRowStyles: { fillColor: [244, 244, 245] },
+    styles: { fontSize: 9, cellPadding: 3, textColor: [15, 23, 42] },
+    headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255] },
+    alternateRowStyles: { fillColor: [240, 253, 250] },
   });
   if (footer) {
     const finalY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
@@ -80,6 +84,19 @@ function formatInrPdf(amount: number) {
   return `Rs. ${amount.toLocaleString("en-IN")}`;
 }
 
+/** Brand palette for printable finance docs (teal theme). */
+const RECEIPT = {
+  teal: [15, 118, 110] as [number, number, number],
+  tealDeep: [13, 94, 88] as [number, number, number],
+  tealSoft: [240, 253, 250] as [number, number, number],
+  tealRow: [204, 251, 241] as [number, number, number],
+  ink: [15, 23, 42] as [number, number, number],
+  muted: [100, 116, 139] as [number, number, number],
+  line: [226, 232, 240] as [number, number, number],
+  fieldFill: [248, 250, 252] as [number, number, number],
+  white: [255, 255, 255] as [number, number, number],
+};
+
 export function downloadReceiptPdf(
   payment: Payment,
   schoolName: string,
@@ -93,7 +110,7 @@ export function downloadReceiptPdf(
 ) {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 14;
+  const margin = 16;
   const contentWidth = pageWidth - margin * 2;
   const generatedAt = new Date().toLocaleString("en-IN", {
     dateStyle: "medium",
@@ -102,82 +119,110 @@ export function downloadReceiptPdf(
   const amountFormatted = formatInrPdf(payment.amount);
   const summaryLabelWidth = 98;
   const summaryAmountWidth = contentWidth - summaryLabelWidth;
+  const hasLetterhead = Boolean(branding?.letterheadUrl);
 
-  let headerBottom = 34;
-  if (branding?.letterheadUrl) {
+  let contentTop = 44;
+  let usedBrandHeader = false;
+
+  if (hasLetterhead) {
     try {
-      const format = branding.letterheadUrl.includes("image/png")
+      const format = branding!.letterheadUrl!.includes("image/png")
         ? "PNG"
-        : branding.letterheadUrl.includes("image/webp")
+        : branding!.letterheadUrl!.includes("image/webp")
           ? "WEBP"
           : "JPEG";
-      doc.addImage(branding.letterheadUrl, format, margin, 8, contentWidth, 28);
-      headerBottom = 42;
+      doc.addImage(branding!.letterheadUrl!, format, margin, 10, contentWidth, 26);
+      doc.setFillColor(...RECEIPT.teal);
+      doc.rect(0, 40, pageWidth, 1.2, "F");
+      contentTop = 48;
     } catch {
-      doc.setFillColor(199, 243, 60);
-      doc.rect(0, 0, pageWidth, 34, "F");
+      drawReceiptBrandHeader(doc, pageWidth);
+      usedBrandHeader = true;
+      contentTop = 44;
     }
   } else {
-    doc.setFillColor(199, 243, 60);
-    doc.rect(0, 0, pageWidth, 34, "F");
+    drawReceiptBrandHeader(doc, pageWidth);
+    usedBrandHeader = true;
   }
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(20);
-  doc.setTextColor(0, 0, 0);
-  doc.text(schoolName, margin, branding?.letterheadUrl ? headerBottom + 8 : 15);
+  const headerTextY = usedBrandHeader ? 14 : contentTop;
+  const onTeal = usedBrandHeader;
+  const primaryInk = onTeal ? RECEIPT.white : RECEIPT.ink;
+  const secondaryInk = onTeal ? ([204, 251, 241] as [number, number, number]) : RECEIPT.muted;
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.text(
-    `Official Fee Receipt · ${academicYear}`,
-    margin,
-    branding?.letterheadUrl ? headerBottom + 16 : 23,
-  );
+  if (usedBrandHeader) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.setTextColor(...primaryInk);
+    doc.text(schoolName, margin, headerTextY);
 
-  const contactBits = [branding?.address, branding?.phone, branding?.email].filter(Boolean);
-  if (contactBits.length) {
-    doc.setFontSize(8);
-    doc.setTextColor(70, 70, 70);
-    doc.text(contactBits.join(" · "), margin, branding?.letterheadUrl ? headerBottom + 22 : 29, {
-      maxWidth: contentWidth * 0.62,
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.5);
+    doc.setTextColor(...secondaryInk);
+    doc.text(`Official Fee Receipt · ${academicYear}`, margin, headerTextY + 7);
+
+    const contactBits = [branding?.address, branding?.phone, branding?.email].filter(Boolean);
+    if (contactBits.length) {
+      doc.setFontSize(7.5);
+      doc.setTextColor(186, 230, 223);
+      doc.text(contactBits.join(" · "), margin, headerTextY + 13, {
+        maxWidth: contentWidth * 0.58,
+      });
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(...primaryInk);
+    doc.text(payment.id, pageWidth - margin, headerTextY, { align: "right" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(...secondaryInk);
+    doc.text(`Issued ${generatedAt}`, pageWidth - margin, headerTextY + 6.5, {
+      align: "right",
+    });
+  } else {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(...RECEIPT.teal);
+    doc.text(`Official Fee Receipt · ${academicYear}`, margin, contentTop);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(...RECEIPT.ink);
+    doc.text(payment.id, pageWidth - margin, contentTop, { align: "right" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(...RECEIPT.muted);
+    doc.text(`Issued ${generatedAt}`, pageWidth - margin, contentTop + 5.5, {
+      align: "right",
     });
   }
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(0, 0, 0);
-  doc.text(payment.id, pageWidth - margin, branding?.letterheadUrl ? headerBottom + 8 : 15, {
-    align: "right",
-  });
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(45, 45, 45);
-  doc.text(
-    `Issued ${generatedAt}`,
-    pageWidth - margin,
-    branding?.letterheadUrl ? headerBottom + 16 : 22,
-    { align: "right" },
-  );
+  const titleY = usedBrandHeader ? 50 : contentTop + 12;
 
-  const titleY = branding?.letterheadUrl ? headerBottom + 34 : 46;
-  doc.setFontSize(14);
-  doc.setTextColor(0, 0, 0);
+  doc.setFillColor(...RECEIPT.tealSoft);
+  doc.roundedRect(margin, titleY - 6, contentWidth, 16, 1.5, 1.5, "F");
+  doc.setDrawColor(...RECEIPT.teal);
+  doc.setLineWidth(0.4);
+  doc.line(margin, titleY - 6, margin, titleY + 10);
+
   doc.setFont("helvetica", "bold");
-  doc.text("Payment Receipt", margin, titleY);
+  doc.setFontSize(13);
+  doc.setTextColor(...RECEIPT.teal);
+  doc.text("Payment Receipt", margin + 4, titleY + 1);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(100, 100, 100);
+  doc.setFontSize(8.5);
+  doc.setTextColor(...RECEIPT.muted);
   doc.text(
     payment.payerType === "external"
       ? "Income acknowledgement · external payer"
       : "Fee collection acknowledgement · student account ledger",
-    margin,
-    titleY + 6,
+    margin + 4,
+    titleY + 7,
   );
 
   autoTable(doc, {
-    startY: titleY + 12,
+    startY: titleY + 16,
     margin: { left: margin, right: margin },
     tableWidth: contentWidth,
     head: [["Field", "Details"]],
@@ -205,29 +250,37 @@ export function downloadReceiptPdf(
     ],
     theme: "grid",
     styles: {
-      fontSize: 10,
-      cellPadding: { top: 5, right: 6, bottom: 5, left: 6 },
-      lineColor: [220, 220, 220],
-      lineWidth: 0.25,
-      textColor: [0, 0, 0],
+      fontSize: 9.5,
+      cellPadding: { top: 4.5, right: 6, bottom: 4.5, left: 6 },
+      lineColor: RECEIPT.line,
+      lineWidth: 0.2,
+      textColor: RECEIPT.ink,
       valign: "middle",
     },
     headStyles: {
-      fillColor: [0, 0, 0],
-      textColor: [255, 255, 255],
+      fillColor: RECEIPT.teal,
+      textColor: RECEIPT.white,
       fontStyle: "bold",
+      fontSize: 9,
       halign: "left",
     },
     columnStyles: {
-      0: { cellWidth: 54, fontStyle: "bold", textColor: [90, 90, 90], fillColor: [248, 248, 248] },
-      1: { cellWidth: contentWidth - 54, fontStyle: "bold", halign: "left" },
+      0: {
+        cellWidth: 52,
+        fontStyle: "normal",
+        textColor: RECEIPT.muted,
+        fillColor: RECEIPT.fieldFill,
+      },
+      1: { cellWidth: contentWidth - 52, fontStyle: "bold", halign: "left" },
     },
     didParseCell: (data) => {
       if (data.section !== "body") return;
       const isAmountRow = data.row.cells[0]?.text.join(" ") === "Amount Received";
       if (!isAmountRow) return;
-      data.cell.styles.fillColor = [225, 242, 174];
-      data.cell.styles.fontSize = 11;
+      data.cell.styles.fillColor = RECEIPT.tealRow;
+      data.cell.styles.fontSize = 10.5;
+      data.cell.styles.textColor = RECEIPT.tealDeep;
+      data.cell.styles.fontStyle = "bold";
       if (data.column.index === 1) {
         data.cell.styles.halign = "right";
         data.cell.styles.cellPadding = { top: 5, right: 8, bottom: 5, left: 6 };
@@ -238,30 +291,35 @@ export function downloadReceiptPdf(
   const detailsEnd = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
 
   autoTable(doc, {
-    startY: detailsEnd + 6,
+    startY: detailsEnd + 7,
     margin: { left: margin, right: margin },
     tableWidth: contentWidth,
     body: [
       [
-        { content: "Total Amount Paid", styles: { fontStyle: "bold", textColor: [60, 60, 60] } },
+        {
+          content: "Total Amount Paid",
+          styles: {
+            fontStyle: "bold",
+            textColor: RECEIPT.white,
+            fillColor: RECEIPT.teal,
+            cellPadding: { top: 8, right: 8, bottom: 8, left: 10 },
+          },
+        },
         {
           content: amountFormatted,
           styles: {
             fontStyle: "bold",
             fontSize: 14,
             halign: "right",
-            fillColor: [199, 243, 60],
-            textColor: [0, 0, 0],
+            fillColor: RECEIPT.tealDeep,
+            textColor: RECEIPT.white,
             cellPadding: { top: 8, right: 10, bottom: 8, left: 8 },
           },
         },
       ],
     ],
-    theme: "grid",
+    theme: "plain",
     styles: {
-      cellPadding: { top: 8, right: 8, bottom: 8, left: 8 },
-      lineColor: [0, 0, 0],
-      lineWidth: 0.35,
       valign: "middle",
       overflow: "linebreak",
     },
@@ -273,16 +331,33 @@ export function downloadReceiptPdf(
 
   const summaryEnd = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
 
-  doc.setDrawColor(229, 229, 229);
-  doc.setLineWidth(0.3);
-  doc.line(margin, summaryEnd, pageWidth - margin, summaryEnd);
+  doc.setDrawColor(...RECEIPT.teal);
+  doc.setLineWidth(0.5);
+  doc.line(margin, summaryEnd, margin + 28, summaryEnd);
+  doc.setDrawColor(...RECEIPT.line);
+  doc.setLineWidth(0.25);
+  doc.line(margin + 30, summaryEnd, pageWidth - margin, summaryEnd);
 
-  doc.setFontSize(8);
-  doc.setTextColor(115, 115, 115);
+  doc.setFontSize(7.5);
+  doc.setTextColor(...RECEIPT.muted);
   doc.setFont("helvetica", "normal");
-  doc.text("This is a computer-generated receipt. No physical signature is required.", margin, summaryEnd + 6);
+  doc.text(
+    "This is a computer-generated receipt. No physical signature is required.",
+    margin,
+    summaryEnd + 6,
+  );
   doc.text(`Document generated on ${generatedAt}`, margin, summaryEnd + 11);
   doc.text(`For billing queries, contact the ${schoolName} accounts office.`, margin, summaryEnd + 16);
 
+  doc.setFillColor(...RECEIPT.teal);
+  doc.rect(0, doc.internal.pageSize.getHeight() - 4, pageWidth, 4, "F");
+
   doc.save(`receipt-${payment.id}.pdf`);
+}
+
+function drawReceiptBrandHeader(doc: jsPDF, pageWidth: number) {
+  doc.setFillColor(...RECEIPT.teal);
+  doc.rect(0, 0, pageWidth, 38, "F");
+  doc.setFillColor(...RECEIPT.tealDeep);
+  doc.rect(0, 38, pageWidth, 2, "F");
 }

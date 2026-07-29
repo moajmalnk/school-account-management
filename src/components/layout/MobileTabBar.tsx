@@ -20,8 +20,9 @@ export function MobileTabBar({ items, pathname, className }: MobileTabBarProps) 
   return (
     <nav
       className={cn(
-        "fixed inset-x-0 bottom-0 z-40 rounded-t-xl border-t border-slate-100/80 bg-white lg:hidden",
-        "pb-[env(safe-area-inset-bottom)]",
+        "fixed inset-x-0 bottom-0 z-40 rounded-t-xl border-t border-slate-100/80 bg-white",
+        "dark:border-white/10 dark:bg-[#121214]/95 dark:shadow-[0_-12px_40px_-20px_rgba(0,0,0,0.65)] dark:backdrop-blur-xl",
+        "pb-[env(safe-area-inset-bottom)] lg:hidden",
         className,
       )}
       aria-label="Mobile navigation"
@@ -36,7 +37,9 @@ export function MobileTabBar({ items, pathname, className }: MobileTabBarProps) 
               to={item.to}
               className={cn(
                 "relative flex min-h-[54px] min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 text-[11px] font-semibold transition-colors duration-200",
-                active ? "font-bold text-black" : "font-medium text-slate-400",
+                active
+                  ? "font-bold text-black dark:text-[#5EEAD4]"
+                  : "font-medium text-slate-400 dark:text-zinc-400",
               )}
             >
               <Icon className="h-5 w-5 shrink-0" strokeWidth={active ? 2.5 : 2} />

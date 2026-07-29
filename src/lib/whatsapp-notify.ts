@@ -125,6 +125,7 @@ export function resolveStudentDueDate(
 ): string {
   const cls = classes?.find((c) => c.className === student.cls);
   if (cls?.billingCycle === "Annually") return academicYearEndLabel();
+  // Monthly and Term: due by end of the current month / period window
   return endOfMonthLabel();
 }
 

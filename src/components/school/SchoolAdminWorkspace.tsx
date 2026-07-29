@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, startTransition, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useNavigate, useSearch, Link } from "@tanstack/react-router";
 import {
@@ -57,7 +57,7 @@ import {
   MapPin,
   Route,
 } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, XAxis, YAxis } from "recharts";
 import {
   ChartContainer,
   ChartTooltip,
@@ -109,20 +109,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { DatePicker } from "@/components/ui/date-picker";
+import { DatePicker, MonthPicker } from "@/components/ui/date-picker";
 import { OrganicCard } from "@/components/ui/organic-card";
 import {
   normalizeAcademicYearLabel,
   composeClassName,
   normalizeClassConfig,
+  CLASS_BILLING_CYCLES,
+  CLASS_BILLING_CYCLE_HINTS,
   DEFAULT_STAFF_DOCUMENTS,
-  THEME_ACCENT_OPTIONS,
-  THEME_DENSITY_OPTIONS,
-  THEME_MODE_OPTIONS,
   THEME_NAV_PLACEMENT_OPTIONS,
   useTenantStore,
   createStudentShareToken,
   upsertStudentInSnapshot,
+  normalizeStudent,
   notifyNavPlacementChange,
   schoolInitials,
   createDefaultVehicleDocuments,
@@ -132,13 +132,28 @@ import {
   DEFAULT_VEHICLE_NOTIFY_DAYS,
   FEE_MONTHS,
   FEE_TERM_KIND_LABELS,
+  FEE_PERIOD_MODE_LABELS,
   currentFeeMonth,
   categoryFeeTermKind,
+  formatFeeTermCoverage,
+  classFeeAmountForTerm,
+  splitAmountAcrossTerms,
+  sortFeeTerms,
+  filterFeePeriods,
+  resolveFeePeriodMode,
   resolvePaymentFeePeriod,
   resolvePaymentFeePeriodKind,
+  currentPayrollMonth,
+  formatPayrollMonthLabel,
+  staffPayableSalary,
+  staffGrossSalary,
+  upsertStaffAttendanceMonth,
+  normalizeStaffAttendanceMonth,
+  type ClassBillingCycle,
   type ClassConfig,
   type Department,
   type FeePeriodKind,
+  type FeePeriodMode,
   type FeeTerm,
   type FeeTermKind,
   type Payment,
@@ -147,6 +162,7 @@ import {
   type Role,
   type SchoolDetails,
   type Staff,
+  type StaffAttendanceMonth,
   type Student,
   type ThemeSettings,
   type TransportRoute,
@@ -212,7 +228,7 @@ import {
   type CustomDateRange,
   type PaymentPeriod,
 } from "@/lib/payment-period";
-import { cn, glassCardClass, glassInsetClass, glassPanelClass, glassTableWrapClass, premiumCardClass, type CornerSide, type Tone } from "@/lib/utils";
+import { cn, dashCardClass, glassCardClass, glassInsetClass, glassPanelClass, glassTableWrapClass, premiumCardClass, type CornerSide, type Tone } from "@/lib/utils";
 
 const MADE_PAYMENTS = [
   {
@@ -330,11 +346,89 @@ const LEDGER_OUTFLOW_SEGMENTS = [
   { label: "Rent", value: 240_000 },
 ];
 
-const EXPENSE_CHART_COLORS = ["#2563EB", "#10B981", "#F59E0B", "#EF4444", "#64748B"];
+const EXPENSE_CHART_COLORS = ["#0F766E", "#10B981", "#F59E0B", "#EF4444", "#64748B"];
 
-function formatDisbursalTime() {
+function formatDisbursalTime(date = new Date()) {
+  const clock = date.toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const today = new Date();
+  const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const startThen = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const dayDiff = Math.round((startToday.getTime() - startThen.getTime()) / 86_400_000);
+  if (dayDiff === 0) return `Today · ${clock}`;
+  if (dayDiff === 1) return `Yesterday · ${clock}`;
+  const day = date.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  return `${day} · ${clock}`;
+}
+
+function toIsoDateLocal(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function toClockLocal(date: Date): string {
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+/** Parse stored disbursal time labels back into date + clock for the picker. */
+function parseDisbursalTimeParts(label: string): { date: string; clock: string } {
   const now = new Date();
-  return `Today · ${now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false })}`;
+  const trimmed = label.trim();
+  const clockMatch = trimmed.match(/(\d{1,2}):(\d{2})\s*(am|pm)?/i);
+  let hours = now.getHours();
+  let minutes = now.getMinutes();
+  if (clockMatch) {
+    hours = Number(clockMatch[1]);
+    minutes = Number(clockMatch[2]);
+    const meridiem = clockMatch[3]?.toLowerCase();
+    if (meridiem === "pm" && hours < 12) hours += 12;
+    if (meridiem === "am" && hours === 12) hours = 0;
+  }
+  const clock = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+
+  if (/^today\b/i.test(trimmed)) {
+    return { date: toIsoDateLocal(now), clock };
+  }
+  if (/^yesterday\b/i.test(trimmed)) {
+    const y = new Date(now);
+    y.setDate(y.getDate() - 1);
+    return { date: toIsoDateLocal(y), clock };
+  }
+
+  const parsed = Date.parse(trimmed.replace(/\s*·\s*.*$/, "").trim());
+  if (Number.isFinite(parsed)) {
+    return { date: toIsoDateLocal(new Date(parsed)), clock };
+  }
+
+  // e.g. "15 Mar 2025 · 10:22"
+  const soft = trimmed.match(
+    /^(\d{1,2})\s+([A-Za-z]{3,})\s+(\d{4})/,
+  );
+  if (soft) {
+    const tryParse = Date.parse(`${soft[1]} ${soft[2]} ${soft[3]}`);
+    if (Number.isFinite(tryParse)) {
+      return { date: toIsoDateLocal(new Date(tryParse)), clock };
+    }
+  }
+
+  return { date: toIsoDateLocal(now), clock };
+}
+
+function formatDisbursalTimeFromParts(dateIso: string, clock: string): string {
+  const [y, m, d] = dateIso.split("-").map(Number);
+  const [hh, mm] = (clock || "00:00").split(":").map(Number);
+  if (!y || !m || !d) return formatDisbursalTime();
+  const date = new Date(y, m - 1, d, hh || 0, mm || 0, 0, 0);
+  return formatDisbursalTime(date);
 }
 
 function DashboardPeriodFilter({
@@ -353,7 +447,7 @@ function DashboardPeriodFilter({
   return (
     <div className={cn("flex w-full flex-col gap-2", className)}>
       <Select value={period} onValueChange={(value) => onPeriodChange(value as PaymentPeriod)}>
-        <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
+        <SelectTrigger className="h-9 w-full rounded-full border-white/70 bg-white/80 text-[12px] font-semibold shadow-sm">
           <SelectValue placeholder="Select period" />
         </SelectTrigger>
         <SelectContent>
@@ -420,7 +514,7 @@ function MobileDashboardSectionTitle({
 const MobileSectionTitle = MobileDashboardSectionTitle;
 
 const mobileOutlineBtn =
-  "inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full border border-slate-200/80 bg-white px-4 text-[12.5px] font-semibold text-slate-900 shadow-sm transition-colors hover:bg-slate-50";
+  "inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full border border-slate-200/80 bg-white px-4 text-[12.5px] font-semibold text-slate-900 shadow-sm transition-colors hover:bg-slate-50 dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800";
 
 /** Equal-width outline actions for directory toolbars on small screens */
 const directoryToolbarBtn = cn(
@@ -429,7 +523,7 @@ const directoryToolbarBtn = cn(
 );
 
 const mobilePrimaryBtn =
-  "inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 px-4 text-[12.5px] font-semibold text-white shadow-md shadow-blue-200/40 transition-all duration-200 hover:opacity-95";
+  "inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-gradient-to-r from-teal-700 to-teal-800 px-4 text-[12.5px] font-semibold text-white shadow-md shadow-teal-200/40 transition-all duration-200 hover:opacity-95";
 
 const directoryToolbarRow =
   "flex w-full min-w-0 items-center gap-1.5 sm:w-auto sm:flex-wrap sm:justify-end sm:gap-2";
@@ -488,277 +582,73 @@ function MobileStatsOverview({
 
 const workspacePanelClass = cn(glassCardClass, "rounded-2xl");
 
-function MobileInsightSplit({
-  icon: Icon,
-  iconBg,
-  iconColor,
-  label,
-  value,
-  sublabel,
-}: {
-  icon: typeof GraduationCap;
-  iconBg: string;
-  iconColor: string;
-  label: string;
-  value: string;
-  sublabel: string;
-}) {
-  return (
-    <div className="flex min-w-0 flex-col items-center px-2 py-3 text-center">
-      <div
-        className={cn(
-          "grid h-14 w-14 shrink-0 place-items-center rounded-full",
-          iconBg,
-        )}
-      >
-        <Icon className={cn("h-7 w-7", iconColor)} strokeWidth={2} />
-      </div>
-      <div className="mt-3 w-full text-[12px] font-medium leading-snug text-slate-500">{label}</div>
-      <div className="mt-1 w-full text-[15px] font-bold leading-tight text-slate-900">
-        {value} {sublabel}
-      </div>
-    </div>
-  );
-}
+const DASH = {
+  overview:
+    "border-teal-300/40 bg-gradient-to-br from-[#CCFBF1]/90 via-[#F0FDFA] to-[#99F6E4]/70 dark:border-teal-700/35 dark:from-zinc-900 dark:via-zinc-900 dark:to-[#0F766E]/25",
+  finance:
+    "border-slate-200/50 bg-white/90 dark:border-white/10 dark:bg-zinc-900/90",
+  outstanding:
+    "border-orange-300/40 bg-gradient-to-br from-[#FFEDD5] via-[#FED7AA]/55 to-[#FECACA]/45 dark:border-orange-800/35 dark:from-zinc-900 dark:via-zinc-900 dark:to-orange-950/45",
+  cash:
+    "border-violet-300/40 bg-gradient-to-br from-[#EDE9FE]/90 via-[#F5F3FF] to-[#E9D5FF]/70 dark:border-violet-800/35 dark:from-zinc-900 dark:via-zinc-900 dark:to-violet-950/40",
+  receive:
+    "border-emerald-300/40 bg-gradient-to-br from-[#A7F3D0]/80 via-[#D1FAE5] to-[#99F6E4]/70 dark:border-emerald-800/35 dark:from-zinc-900 dark:via-zinc-900 dark:to-emerald-950/40",
+  pay:
+    "border-teal-300/40 bg-gradient-to-br from-[#CCFBF1]/90 via-[#F0FDFA] to-[#99F6E4]/60 dark:border-teal-700/35 dark:from-zinc-900 dark:via-zinc-900 dark:to-[#0F766E]/20",
+  todo:
+    "border-teal-300/40 bg-gradient-to-br from-[#CCFBF1]/90 via-[#F0FDFA] to-[#ECFDF5]/80 dark:border-teal-700/30 dark:from-zinc-900 dark:via-zinc-900 dark:to-[#0F766E]/15",
+  notes:
+    "border-violet-200/50 bg-gradient-to-br from-[#E9D5FF]/70 via-[#EDE9FE]/80 to-white/80 dark:border-violet-800/30 dark:from-zinc-900 dark:via-zinc-900 dark:to-violet-950/30",
+  admissions:
+    "border-emerald-200/50 bg-gradient-to-br from-[#BBF7D0]/50 via-[#ECFDF5] to-white/85 dark:border-emerald-800/30 dark:from-zinc-900 dark:via-zinc-900 dark:to-emerald-950/30",
+  incomeExpense:
+    "border-rose-200/50 bg-gradient-to-br from-[#FECDD3]/45 via-[#FFF1F2] to-white/85 dark:border-rose-900/30 dark:from-zinc-900 dark:via-zinc-900 dark:to-rose-950/30",
+  transactions:
+    "border-teal-800/20 bg-gradient-to-br from-[#0F766E] via-[#0D9488] to-[#115E59] text-white",
+} as const;
 
 const dashboardCountClass =
-  "min-w-0 max-w-full whitespace-normal break-words font-mono font-bold leading-none tracking-tight tabular-nums text-[clamp(1.5rem,3.6vw,2.5rem)]";
+  "min-w-0 max-w-full overflow-hidden font-mono font-bold leading-none tracking-tight tabular-nums text-[clamp(1.5rem,3.6vw,2.5rem)]";
 
-const dashboardAmountClass =
-  "min-w-0 max-w-full whitespace-normal break-words font-mono font-bold leading-[1.1] tracking-tight tabular-nums text-[clamp(1.05rem,2.4vw,1.75rem)]";
+function dashboardAmountSize(formatted: string, compact = false): string {
+  const len = formatted.replace(/\s/g, "").length;
+  if (compact) {
+    if (len > 12) return "text-[11px] sm:text-[12px] md:text-[13px]";
+    if (len > 10) return "text-[12px] sm:text-[13px] md:text-[14px]";
+    if (len > 8) return "text-[13px] sm:text-[14px] md:text-[15px]";
+    return "text-[14px] sm:text-[15px] md:text-[16px]";
+  }
+  if (len > 12) return "text-[12px] sm:text-[13px] md:text-[15px]";
+  if (len > 10) return "text-[14px] sm:text-[15px] md:text-[17px]";
+  if (len > 8) return "text-[15px] sm:text-[17px] md:text-[19px]";
+  return "text-[17px] sm:text-[19px] md:text-[21px]";
+}
 
-const dashboardAmountCompactClass =
-  "min-w-0 max-w-full whitespace-normal break-words font-mono font-bold leading-[1.1] tracking-tight tabular-nums text-[clamp(0.95rem,2.1vw,1.45rem)]";
-
-function MobileFinancialDetailTile({
-  title,
+function DashboardAmount({
   value,
-  icon: Icon,
-  iconBg,
-  iconColor,
+  className,
+  compact = false,
 }: {
-  title: string;
-  value: string;
-  icon: typeof HandCoins;
-  iconBg: string;
-  iconColor: string;
+  value: number;
+  className?: string;
+  compact?: boolean;
 }) {
+  const formatted = formatInr(value);
   return (
-    <div className="relative flex min-h-[104px] min-w-0 flex-col justify-end rounded-lg border border-slate-100/70 bg-white p-3.5 shadow-sm shadow-slate-200/35">
-      <div
-        className={cn(
-          "absolute right-3 top-3 grid h-8 w-8 shrink-0 place-items-center rounded-full",
-          iconBg,
-        )}
-      >
-        <Icon className={cn("h-4 w-4", iconColor)} strokeWidth={2.25} />
-      </div>
-      <div className="min-w-0 pr-10">
-        <div className="text-[12px] font-medium leading-snug text-slate-500">{title}</div>
-        <div className={cn(dashboardAmountCompactClass, "mt-1 text-slate-900")}>
-          {value}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-type MobileDashboardMetrics = {
-  studentCount: number;
-  staffCount: number;
-  periodIncome: number;
-  expenseTotal: number;
-  totalDue: number;
-  salaryOutstanding: number;
-  inHand: number;
-  inBank: number;
-  totalBalance: number;
-  unreadNotifications: number;
-  onReceivePayment: () => void;
-  onMakePayment: () => void;
-  onAdmitStudent: () => void;
-};
-
-function MobilePremiumDashboard({
-  studentCount,
-  staffCount,
-  periodIncome,
-  expenseTotal,
-  totalDue,
-  salaryOutstanding,
-  inHand,
-  inBank,
-  totalBalance,
-  unreadNotifications,
-  onReceivePayment,
-  onMakePayment,
-  onAdmitStudent,
-}: MobileDashboardMetrics) {
-  return (
-    <div className="w-full space-y-6 md:hidden">
-      <section className="w-full space-y-3">
-        <MobileDashboardSectionTitle>Key Insights</MobileDashboardSectionTitle>
-        <div className={cn(premiumCardClass, "w-full overflow-hidden p-0")}>
-          <div className="grid w-full grid-cols-2 divide-x divide-slate-100">
-            <MobileInsightSplit
-              icon={GraduationCap}
-              iconBg="bg-[#DBEAFE]"
-              iconColor="text-[#2563EB]"
-              label="Total Students"
-              value={studentCount.toLocaleString("en-IN")}
-              sublabel="Students"
-            />
-            <MobileInsightSplit
-              icon={Briefcase}
-              iconBg="bg-slate-100"
-              iconColor="text-slate-700"
-              label="Total Staff"
-              value={staffCount.toLocaleString("en-IN")}
-              sublabel="Staff"
-            />
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={onAdmitStudent}
-          className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#2563EB] px-3 py-2.5 text-[12.5px] font-semibold text-white shadow-sm transition-opacity hover:opacity-90 active:scale-[0.99]"
-        >
-          <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
-          New Admission
-        </button>
-      </section>
-
-      <section className="w-full space-y-3">
-        <MobileDashboardSectionTitle>Financial Overview</MobileDashboardSectionTitle>
-        <div className="grid w-full grid-cols-2 gap-3">
-          <div className="flex min-h-[112px] min-w-0 flex-col justify-between rounded-lg bg-[#D1F2E1] p-4">
-            <div className="text-[12px] font-medium text-slate-800">Total Income</div>
-            <div className={cn(dashboardAmountClass, "mt-3 text-slate-900")}>
-              {formatInr(periodIncome)}
-            </div>
-          </div>
-          <div className="relative flex min-h-[112px] min-w-0 flex-col justify-between overflow-hidden rounded-lg bg-[#3B5998] p-4 text-white">
-            <TriangleAlert
-              className="absolute right-3 top-3 h-4 w-4 text-amber-300"
-              strokeWidth={2.25}
-              aria-hidden
-            />
-            <div className="pr-6 text-[12px] font-medium text-white/90">Total Expense</div>
-            <div className={cn(dashboardAmountClass, "mt-3 text-white")}>
-              {formatInr(expenseTotal)}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className={cn(premiumCardClass, "w-full space-y-3 p-4")}>
-        <DashboardPanelHeading icon={HandCoins} title="Outstanding Payments" />
-        <div className="grid w-full grid-cols-2 gap-3">
-          <MobileFinancialDetailTile
-            title="Fees Outstanding"
-            value={formatInr(totalDue)}
-            icon={HandCoins}
-            iconBg="bg-[#DBEAFE]"
-            iconColor="text-[#2563EB]"
-          />
-          <MobileFinancialDetailTile
-            title="Salary Outstanding"
-            value={formatInr(salaryOutstanding)}
-            icon={Banknote}
-            iconBg="bg-amber-50"
-            iconColor="text-amber-600"
-          />
-        </div>
-      </section>
-
-      <section className={cn(premiumCardClass, "w-full space-y-3 p-4")}>
-        <DashboardPanelHeading icon={Landmark} title="Cash Position" />
-        <div className="grid w-full grid-cols-2 gap-3">
-          <MobileFinancialDetailTile
-            title="Cash In Hand"
-            value={formatInr(inHand)}
-            icon={Banknote}
-            iconBg="bg-emerald-50"
-            iconColor="text-[#10B981]"
-          />
-          <MobileFinancialDetailTile
-            title="Bank Balance"
-            value={formatInr(inBank)}
-            icon={Landmark}
-            iconBg="bg-violet-50"
-            iconColor="text-violet-600"
-          />
-          <div className="col-span-2">
-            <MobileFinancialDetailTile
-              title="Total Balance"
-              value={formatInr(totalBalance)}
-              icon={Wallet}
-              iconBg="bg-[#DBEAFE]"
-              iconColor="text-[#2563EB]"
-            />
-          </div>
-        </div>
-      </section>
-
-      {unreadNotifications > 0 && (
-        <Link
-          to="/tenant/notifications"
-          className={cn(
-            premiumCardClass,
-            "flex w-full items-center gap-3 p-4 transition-colors hover:border-slate-200",
-          )}
-        >
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#DBEAFE]">
-            <Bell className="h-4 w-4 text-[#2563EB]" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-[13px] font-semibold text-slate-900">
-              {unreadNotifications} unread alert{unreadNotifications === 1 ? "" : "s"}
-            </div>
-            <p className="mt-0.5 text-[12px] text-slate-500">Fee reminders & staff updates</p>
-          </div>
-        </Link>
+    <div
+      className={cn(
+        "min-w-0 max-w-full overflow-hidden font-mono font-bold leading-[1.15] tracking-tight tabular-nums",
+        dashboardAmountSize(formatted, compact),
+        className,
       )}
-
-      <div className="grid grid-cols-2 gap-2 sm:gap-3">
-        <button
-          type="button"
-          onClick={onReceivePayment}
-          className={cn(
-            premiumCardClass,
-            "flex min-h-[96px] flex-col items-start gap-2.5 p-3 text-left transition-colors hover:border-slate-200 sm:min-h-[88px] sm:flex-row sm:items-center sm:gap-3 sm:p-4",
-          )}
-        >
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#D1F2E1] sm:h-11 sm:w-11">
-            <ArrowDownToLine className="h-4 w-4 text-[#10B981] sm:h-5 sm:w-5" />
-          </span>
-          <div className="min-w-0">
-            <div className="text-[12px] font-bold leading-snug text-slate-900 sm:text-[14px]">Receive payment</div>
-            <p className="mt-0.5 text-[10px] leading-snug text-slate-500 sm:text-[12px]">Capture inbound fee receipts</p>
-          </div>
-        </button>
-        <button
-          type="button"
-          onClick={onMakePayment}
-          className={cn(
-            premiumCardClass,
-            "flex min-h-[96px] flex-col items-start gap-2.5 p-3 text-left transition-colors hover:border-slate-200 sm:min-h-[88px] sm:flex-row sm:items-center sm:gap-3 sm:p-4",
-          )}
-        >
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#DBEAFE] sm:h-11 sm:w-11">
-            <ArrowUpFromLine className="h-4 w-4 text-[#2563EB] sm:h-5 sm:w-5" />
-          </span>
-          <div className="min-w-0">
-            <div className="text-[12px] font-bold leading-snug text-slate-900 sm:text-[14px]">Make payment</div>
-            <p className="mt-0.5 text-[10px] leading-snug text-slate-500 sm:text-[12px]">Pay vendors and salaries</p>
-          </div>
-        </button>
-      </div>
+      title={formatted}
+    >
+      <span className="block truncate">{formatted}</span>
     </div>
   );
 }
 
-type GlassDesktopDashboardProps = {
+type PremiumDashboardProps = {
   students: Student[];
   staff: Staff[];
   periodIncome: number;
@@ -772,10 +662,6 @@ type GlassDesktopDashboardProps = {
   overdueStudents: Student[];
   recentReceipts: Payment[];
   unreadNotifications: number;
-  dashboardTodos: string[];
-  setDashboardTodos: React.Dispatch<React.SetStateAction<string[]>>;
-  dashboardNote: string;
-  setDashboardNote: (v: string) => void;
   period: PaymentPeriod;
   setPeriod: (p: PaymentPeriod) => void;
   customRange: CustomDateRange;
@@ -787,7 +673,168 @@ type GlassDesktopDashboardProps = {
   onViewStaff: () => void;
 };
 
-function GlassDesktopDashboard({
+/** Isolated from PremiumDashboard so typing todos/notes does not re-render charts. */
+function DashboardTodoNotesPanel() {
+  const { dashboardTodos, setDashboardTodos, dashboardNote, setDashboardNote } = useTenantStore();
+  const [todos, setTodos] = useState(() => [...dashboardTodos]);
+  const [note, setNote] = useState(dashboardNote);
+  const [moreTodosOpen, setMoreTodosOpen] = useState(false);
+  const todosRef = useRef(todos);
+  const noteRef = useRef(note);
+  todosRef.current = todos;
+  noteRef.current = note;
+
+  useEffect(() => {
+    return () => {
+      setDashboardTodos(todosRef.current);
+      setDashboardNote(noteRef.current);
+    };
+  }, [setDashboardTodos, setDashboardNote]);
+
+  const persistTodos = (next: string[]) => {
+    setTodos(next);
+    setDashboardTodos(next);
+  };
+
+  const updateTodo = (index: number, value: string) => {
+    setTodos((current) => {
+      const next = [...current];
+      next[index] = value;
+      return next;
+    });
+  };
+
+  const flushTodos = () => {
+    setDashboardTodos(todosRef.current);
+  };
+
+  const flushNote = () => {
+    setDashboardNote(noteRef.current);
+  };
+
+  const addTodo = () => {
+    if (todos.length >= 20) {
+      toast.error("Maximum 20 tasks reached");
+      return;
+    }
+    if (todos.length >= 4) setMoreTodosOpen(true);
+    persistTodos([...todos, ""]);
+  };
+
+  const removeTodo = (index: number) => {
+    const next =
+      todos.length <= 1 ? [""] : todos.filter((_, i) => i !== index);
+    persistTodos(next);
+  };
+
+  const visibleTodos = todos.slice(0, 4);
+  const overflowTodos = todos.slice(4);
+
+  return (
+    <section className={cn(dashCardClass, DASH.todo, "flex min-h-0 flex-1 flex-col p-4 sm:p-5")}>
+      <div className="flex items-center justify-between gap-2">
+        <DashboardPanelHeading icon={ListTodo} title="To Do List" />
+        <button
+          type="button"
+          onClick={addTodo}
+          className="inline-flex h-8 shrink-0 items-center gap-1 rounded-xl bg-gradient-to-r from-[#0D9488] to-[#0F766E] px-2.5 text-[11px] font-semibold text-white shadow-sm shadow-teal-700/25 transition-opacity hover:opacity-90"
+        >
+          <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+          Add
+        </button>
+      </div>
+      <div className="mt-4 space-y-2.5">
+        {visibleTodos.map((item, index) => (
+          <div key={index} className="flex items-center gap-2">
+            <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full border border-slate-300/80 bg-white/60">
+              <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
+            </span>
+            <Input
+              value={item}
+              onChange={(e) => updateTodo(index, e.target.value)}
+              onBlur={flushTodos}
+              placeholder={`Task ${index + 1}`}
+              className="h-9 flex-1 rounded-xl border-white/60 bg-white/70 shadow-sm"
+            />
+            <button
+              type="button"
+              onClick={() => removeTodo(index)}
+              aria-label={`Remove task ${index + 1}`}
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-xl text-slate-400 transition-colors hover:bg-[#FEE2E2] hover:text-[#EF4444]"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ))}
+
+        {overflowTodos.length > 0 && (
+          <div className="pt-1">
+            <button
+              type="button"
+              onClick={() => setMoreTodosOpen((open) => !open)}
+              aria-expanded={moreTodosOpen}
+              className="flex h-9 w-full items-center justify-between gap-2 rounded-xl bg-white/55 px-3 text-left text-[12px] font-semibold text-slate-700 transition-colors hover:bg-white/75 dark:bg-white/10 dark:text-zinc-200 dark:hover:bg-white/15"
+            >
+              <span>
+                {moreTodosOpen
+                  ? "Hide extra tasks"
+                  : `${overflowTodos.length} more task${overflowTodos.length === 1 ? "" : "s"}`}
+              </span>
+              <ChevronDown
+                className={cn(
+                  "h-4 w-4 shrink-0 text-slate-500 transition-transform dark:text-zinc-400",
+                  moreTodosOpen && "rotate-180",
+                )}
+              />
+            </button>
+            {moreTodosOpen && (
+              <div className="mt-2 space-y-2.5 rounded-xl bg-white/50 p-2.5 dark:bg-white/5 dark:ring-1 dark:ring-white/10">
+                {overflowTodos.map((item, overflowIndex) => {
+                  const index = overflowIndex + 4;
+                  return (
+                    <div key={index} className="flex items-center gap-2">
+                      <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full border border-slate-300/80 bg-white/60 dark:border-white/20 dark:bg-white/10">
+                        <span className="h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-zinc-500" />
+                      </span>
+                      <Input
+                        value={item}
+                        onChange={(e) => updateTodo(index, e.target.value)}
+                        onBlur={flushTodos}
+                        placeholder={`Task ${index + 1}`}
+                        className="h-9 flex-1 rounded-xl border-white/60 bg-white/70 dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-100"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeTodo(index)}
+                        aria-label={`Remove task ${index + 1}`}
+                        className="grid h-8 w-8 shrink-0 place-items-center rounded-xl text-slate-400 transition-colors hover:bg-[#FEE2E2] hover:text-[#EF4444] dark:text-zinc-500 dark:hover:bg-rose-950/50 dark:hover:text-rose-300"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className={cn(DASH.notes, "mt-5 flex min-h-0 flex-1 flex-col rounded-2xl border p-3.5 sm:p-4")}>
+        <DashboardPanelHeading icon={StickyNote} title="Notes" />
+        <Textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          onBlur={flushNote}
+          placeholder="Write a quick note for today..."
+          className="mt-3 min-h-[72px] w-full flex-1 resize-none rounded-xl border-white/60 bg-white/65"
+        />
+      </div>
+    </section>
+  );
+}
+
+function PremiumDashboard({
   students,
   staff,
   periodIncome,
@@ -801,10 +848,6 @@ function GlassDesktopDashboard({
   overdueStudents,
   recentReceipts,
   unreadNotifications,
-  dashboardTodos,
-  setDashboardTodos,
-  dashboardNote,
-  setDashboardNote,
   period,
   setPeriod,
   customRange,
@@ -814,46 +857,11 @@ function GlassDesktopDashboard({
   onViewStudents,
   onAdmitStudent,
   onViewStaff,
-}: GlassDesktopDashboardProps) {
-  const { session } = useAuth();
-  const { schoolDetails } = useTenantStore();
+}: PremiumDashboardProps) {
   const liveStudents = students.filter((s) => !isRecordDeleted(s.deletedAt));
   const liveStaff = staff.filter((s) => !isRecordDeleted(s.deletedAt));
   const paidCount = liveStudents.filter((s) => s.due === 0).length;
   const activeStaff = liveStaff.filter((s) => s.active).length;
-  const tenantName = schoolDetails.name || session?.tenantName || "Silver Hills Global";
-  const displayName = session?.displayName ?? "Tenant Admin";
-
-  const [moreTodosOpen, setMoreTodosOpen] = useState(false);
-
-  const updateTodo = (index: number, value: string) => {
-    setDashboardTodos((current) => {
-      const next = [...current];
-      next[index] = value;
-      return next;
-    });
-  };
-
-  const addTodo = () => {
-    if (dashboardTodos.length >= 20) {
-      toast.error("Maximum 20 tasks reached");
-      return;
-    }
-    if (dashboardTodos.length >= 4) setMoreTodosOpen(true);
-    setDashboardTodos((current) => [...current, ""]);
-  };
-
-  const removeTodo = (index: number) => {
-    setDashboardTodos((current) => {
-      if (current.length <= 1) {
-        return [""];
-      }
-      return current.filter((_, i) => i !== index);
-    });
-  };
-
-  const visibleTodos = dashboardTodos.slice(0, 4);
-  const overflowTodos = dashboardTodos.slice(4);
 
   const admissionWeeks = useMemo(() => {
     const base = Math.max(1, Math.round(liveStudents.length / 5));
@@ -873,23 +881,6 @@ function GlassDesktopDashboard({
 
   const newAdmissions = admissionWeeks.reduce((sum, week) => sum + week.value, 0);
 
-  const nowLabel = useMemo(() => {
-    const now = new Date();
-    return {
-      date: now.toLocaleDateString("en-IN", {
-        weekday: "long",
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      }),
-      time: now.toLocaleTimeString("en-IN", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-      }),
-    };
-  }, []);
-
   const admissionChartConfig = {
     value: { label: "Admissions", color: "#10B981" },
   } satisfies ChartConfig;
@@ -903,32 +894,49 @@ function GlassDesktopDashboard({
     PAYMENT_PERIOD_OPTIONS.find((option) => option.value === period)?.label ?? "This Month";
 
   return (
-    <div className="hidden space-y-5 md:block">
-      <div className="grid grid-cols-12 gap-5">
-        {/* Row 1–2 left/center + right stack */}
-        <div className="col-span-12 grid grid-cols-1 gap-5 xl:col-span-8 xl:grid-cols-2">
-          <section className={cn(glassCardClass, "flex flex-col p-5")}>
+    <div className="space-y-4 sm:space-y-5">
+      {unreadNotifications > 0 && (
+        <Link
+          to="/tenant/notifications"
+          className={cn(
+            dashCardClass,
+            "flex w-full items-center gap-3 bg-white/75 p-4 transition-colors hover:bg-white/90 md:hidden",
+          )}
+        >
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#CCFBF1]">
+            <Bell className="h-4 w-4 text-[#0F766E]" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] font-semibold text-slate-900">
+              {unreadNotifications} unread alert{unreadNotifications === 1 ? "" : "s"}
+            </div>
+            <p className="mt-0.5 text-[12px] text-slate-500">Fee reminders & staff updates</p>
+          </div>
+        </Link>
+      )}
+
+      <div className="grid min-w-0 grid-cols-1 gap-4 sm:gap-5 xl:grid-cols-12">
+        <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:col-span-8">
+          {/* School Overview */}
+          <section className={cn(dashCardClass, DASH.overview, "flex min-w-0 flex-col p-4 sm:p-5")}>
             <DashboardPanelHeading icon={Users} title="School Overview" />
-            <div className="mt-4 grid flex-1 grid-cols-2 gap-3">
+            <div className="mt-4 grid min-w-0 flex-1 grid-cols-2 gap-2 sm:gap-3">
               <button
                 type="button"
                 onClick={onViewStudents}
-                className={cn(
-                  glassInsetClass,
-                  "flex min-h-[128px] flex-col p-4 text-center transition-colors hover:bg-white/55",
-                )}
+                className="flex min-h-[120px] min-w-0 flex-col overflow-hidden rounded-2xl bg-white/55 p-3 text-center shadow-sm shadow-sky-200/40 transition-colors hover:bg-white/75 sm:min-h-[128px] sm:p-4"
               >
                 <div className="flex items-start justify-between gap-2 text-left">
-                  <span className="text-[12px] font-medium text-slate-600">Total Students</span>
-                  <span className="grid h-8 w-8 place-items-center rounded-lg bg-[#DBEAFE]">
-                    <GraduationCap className="h-4 w-4 text-[#2563EB]" />
+                  <span className="text-[12px] font-medium text-slate-600 dark:text-zinc-300">Total Students</span>
+                  <span className="grid h-8 w-8 place-items-center rounded-full bg-[#99F6E4]/80">
+                    <GraduationCap className="h-4 w-4 text-[#0F766E]" />
                   </span>
                 </div>
                 <div className="flex flex-1 flex-col items-center justify-center">
                   <div className={cn(dashboardCountClass, "text-slate-900")}>
                     {liveStudents.length}
                   </div>
-                  <div className="mt-1 text-[11px] font-medium text-[#10B981]">
+                  <div className="mt-1 text-[11px] font-medium text-[#059669] dark:text-emerald-400">
                     {paidCount} paid · {liveStudents.length - paidCount} overdue
                   </div>
                 </div>
@@ -936,14 +944,11 @@ function GlassDesktopDashboard({
               <button
                 type="button"
                 onClick={onViewStaff}
-                className={cn(
-                  glassInsetClass,
-                  "flex min-h-[128px] flex-col p-4 text-center transition-colors hover:bg-white/55",
-                )}
+                className="flex min-h-[120px] min-w-0 flex-col overflow-hidden rounded-2xl bg-white/55 p-3 text-center shadow-sm shadow-sky-200/40 transition-colors hover:bg-white/75 sm:min-h-[128px] sm:p-4"
               >
                 <div className="flex items-start justify-between gap-2 text-left">
                   <span className="text-[12px] font-medium text-slate-600">Total Staff</span>
-                  <span className="grid h-8 w-8 place-items-center rounded-lg bg-orange-50">
+                  <span className="grid h-8 w-8 place-items-center rounded-full bg-orange-100">
                     <Briefcase className="h-4 w-4 text-orange-500" />
                   </span>
                 </div>
@@ -960,17 +965,18 @@ function GlassDesktopDashboard({
             <button
               type="button"
               onClick={onAdmitStudent}
-              className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#2563EB] px-3 py-2.5 text-[12px] font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+              className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-r from-[#0D9488] to-[#0F766E] px-3 py-2.5 text-[12.5px] font-semibold text-white shadow-md shadow-teal-700/25 transition-opacity hover:opacity-90"
             >
               <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
               Admit a Student
             </button>
           </section>
 
-          <section className={cn(glassCardClass, "flex flex-col p-5")}>
-            <div className="flex items-start justify-between gap-3">
+          {/* Financial Summary */}
+          <section className={cn(dashCardClass, DASH.finance, "flex min-w-0 flex-col p-4 sm:p-5")}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
               <DashboardPanelHeading icon={Wallet} title="Financial Summary" />
-              <div className="w-[148px] shrink-0">
+              <div className="w-full max-w-[148px] shrink-0 sm:w-[148px]">
                 <DashboardPeriodFilter
                   period={period}
                   onPeriodChange={setPeriod}
@@ -979,120 +985,104 @@ function GlassDesktopDashboard({
                 />
               </div>
             </div>
-            <div className="mt-4 grid flex-1 grid-cols-2 gap-3">
-              <div
-                className={cn(
-                  glassInsetClass,
-                  "flex min-h-[112px] flex-col items-center justify-center px-3 py-4 text-center",
-                )}
-              >
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            <div className="mt-4 grid min-w-0 flex-1 grid-cols-2 gap-2 sm:gap-3">
+              <div className="flex min-h-[104px] min-w-0 flex-col items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-[#059669] to-[#047857] px-2.5 py-3.5 text-center text-white shadow-md shadow-emerald-600/20 dark:from-emerald-950 dark:to-emerald-900 dark:shadow-none dark:ring-1 dark:ring-emerald-700/40 sm:min-h-[112px] sm:px-3.5 sm:py-4">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-100 dark:text-emerald-300/80">
                   Total Income
                 </div>
-                <div className="mt-2 text-[18px] font-semibold tracking-tight text-emerald-700 tabular-nums sm:text-[20px]">
-                  {formatInr(periodIncome)}
-                </div>
+                <DashboardAmount value={periodIncome} className="mt-2 w-full text-center text-white" />
               </div>
-              <div
-                className={cn(
-                  glassInsetClass,
-                  "flex min-h-[112px] flex-col items-center justify-center px-3 py-4 text-center",
-                )}
-              >
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              <div className="flex min-h-[104px] min-w-0 flex-col items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-[#DC2626] to-[#B91C1C] px-2.5 py-3.5 text-center text-white shadow-md shadow-red-600/20 dark:from-rose-950 dark:to-rose-900 dark:shadow-none dark:ring-1 dark:ring-rose-700/40 sm:min-h-[112px] sm:px-3.5 sm:py-4">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-red-100 dark:text-rose-300/80">
                   Total Expense
                 </div>
-                <div className="mt-2 text-[18px] font-semibold tracking-tight text-rose-700 tabular-nums sm:text-[20px]">
-                  {formatInr(expenseTotal)}
-                </div>
+                <DashboardAmount value={expenseTotal} className="mt-2 w-full text-center text-white" />
               </div>
             </div>
           </section>
 
-          <section className={cn(glassCardClass, "flex flex-col p-5")}>
+          {/* Outstanding Payments */}
+          <section className={cn(dashCardClass, DASH.outstanding, "flex min-w-0 flex-col p-4 sm:p-5")}>
             <DashboardPanelHeading icon={HandCoins} title="Outstanding Payments" />
-            <div className="mt-4 grid flex-1 grid-cols-1 gap-3">
-              <div className={cn(glassInsetClass, "flex min-h-[100px] flex-col justify-between p-4")}>
+            <div className="mt-4 grid min-w-0 flex-1 grid-cols-1 gap-3">
+              <div className="flex min-h-[96px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl bg-white/55 p-3.5 shadow-sm shadow-orange-200/30 sm:min-h-[100px] sm:p-4">
                 <div className="flex items-start justify-between gap-2">
-                  <span className="text-[12px] font-medium text-slate-600">Fee Outstanding</span>
-                  <span className="grid h-8 w-8 place-items-center rounded-lg bg-[#DBEAFE]">
-                    <HandCoins className="h-4 w-4 text-[#2563EB]" />
+                  <span className="min-w-0 text-[12px] font-medium text-slate-600">Fee Outstanding</span>
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#FED7AA]/80">
+                    <HandCoins className="h-4 w-4 text-orange-600" />
                   </span>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <div className="text-[11px] font-medium text-slate-500">
                     {overdueStudents.length} students
                   </div>
-                  <div className={cn(dashboardAmountClass, "mt-1 whitespace-nowrap text-slate-900")}>
-                    {formatInr(totalDue)}
-                  </div>
+                  <DashboardAmount value={totalDue} className="mt-1 text-slate-900" />
                 </div>
               </div>
-              <div className={cn(glassInsetClass, "flex min-h-[100px] flex-col justify-between p-4")}>
+              <div className="flex min-h-[96px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl bg-white/55 p-3.5 shadow-sm shadow-orange-200/30 sm:min-h-[100px] sm:p-4">
                 <div className="flex items-start justify-between gap-2">
-                  <span className="text-[12px] font-medium text-slate-600">Salary Outstanding</span>
-                  <span className="grid h-8 w-8 place-items-center rounded-lg bg-amber-50">
+                  <span className="min-w-0 text-[12px] font-medium text-slate-600">Salary Outstanding</span>
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-amber-100">
                     <Banknote className="h-4 w-4 text-amber-600" />
                   </span>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <div className="text-[11px] font-medium text-slate-500">{activeStaff} staff</div>
-                  <div className={cn(dashboardAmountClass, "mt-1 whitespace-nowrap text-slate-900")}>
-                    {formatInr(salaryOutstanding)}
-                  </div>
+                  <DashboardAmount value={salaryOutstanding} className="mt-1 text-slate-900" />
                 </div>
               </div>
             </div>
           </section>
 
-          <section className={cn(glassCardClass, "flex flex-col p-5")}>
+          {/* Cash Position */}
+          <section className={cn(dashCardClass, DASH.cash, "flex min-w-0 flex-col p-4 sm:p-5")}>
             <DashboardPanelHeading icon={Landmark} title="Cash Position" />
-            <div className="mt-4 grid flex-1 grid-cols-2 gap-3">
-              <div className={cn(glassInsetClass, "flex min-h-[84px] flex-col justify-between p-3.5")}>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[12px] font-medium text-slate-600">Cash In Hand</span>
-                  <Banknote className="h-3.5 w-3.5 text-[#10B981]" />
+            <div className="mt-4 grid min-w-0 flex-1 grid-cols-2 gap-2 sm:gap-3">
+              <div className="flex min-h-[84px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl bg-white/55 p-2.5 shadow-sm shadow-violet-200/30 sm:p-3.5">
+                <div className="flex items-center justify-between gap-1.5">
+                  <span className="min-w-0 truncate text-[11px] font-medium text-slate-600 sm:text-[12px]">
+                    Cash In Hand
+                  </span>
+                  <Banknote className="h-3.5 w-3.5 shrink-0 text-[#10B981]" />
                 </div>
-                <div className={cn(dashboardAmountCompactClass, "text-slate-900")}>
-                  {formatInr(inHand)}
-                </div>
+                <DashboardAmount value={inHand} compact className="text-slate-900" />
               </div>
-              <div className={cn(glassInsetClass, "flex min-h-[84px] flex-col justify-between p-3.5")}>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[12px] font-medium text-slate-600">Bank Balance</span>
-                  <Landmark className="h-3.5 w-3.5 text-violet-600" />
+              <div className="flex min-h-[84px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl bg-white/55 p-2.5 shadow-sm shadow-violet-200/30 sm:p-3.5">
+                <div className="flex items-center justify-between gap-1.5">
+                  <span className="min-w-0 truncate text-[11px] font-medium text-slate-600 sm:text-[12px]">
+                    Bank Balance
+                  </span>
+                  <Landmark className="h-3.5 w-3.5 shrink-0 text-violet-600" />
                 </div>
-                <div className={cn(dashboardAmountCompactClass, "text-slate-900")}>
-                  {formatInr(inBank)}
-                </div>
+                <DashboardAmount value={inBank} compact className="text-slate-900" />
               </div>
-              <div className="col-span-2 flex min-h-[84px] flex-col justify-between rounded-lg bg-[#DBEAFE]/70 p-4">
+              <div className="col-span-2 flex min-h-[84px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-r from-[#6366F1]/20 via-[#A78BFA]/25 to-[#818CF8]/20 p-3.5 ring-1 ring-violet-200/40 dark:from-violet-950/50 dark:via-zinc-900 dark:to-indigo-950/40 dark:ring-violet-800/30 sm:p-4">
                 <div className="flex items-start justify-between gap-2">
-                  <span className="text-[12px] font-medium text-slate-700">Total Balance</span>
-                  <span className="grid h-8 w-8 place-items-center rounded-lg bg-white/80">
-                    <Wallet className="h-4 w-4 text-[#2563EB]" />
+                  <span className="text-[12px] font-semibold text-slate-700 dark:text-zinc-200">Total Balance</span>
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/80 dark:bg-white/10">
+                    <Wallet className="h-4 w-4 text-[#4F46E5] dark:text-violet-300" />
                   </span>
                 </div>
-                <div className={cn(dashboardAmountClass, "text-slate-900")}>
-                  {formatInr(totalBalance)}
-                </div>
+                <DashboardAmount value={totalBalance} className="text-slate-900 dark:text-zinc-50" />
               </div>
             </div>
           </section>
         </div>
 
-        <aside className="col-span-12 flex h-full min-h-0 flex-col gap-5 xl:col-span-4">
-          <section className="grid shrink-0 grid-cols-2 gap-3">
+        {/* Right column */}
+        <aside className="flex min-h-0 flex-col gap-4 sm:gap-5 xl:col-span-4">
+          <section className="grid shrink-0 grid-cols-2 gap-3 sm:gap-4">
             <button
               type="button"
               onClick={onReceivePayment}
               className={cn(
-                glassCardClass,
-                "flex min-h-[96px] flex-col items-start gap-3 p-4 text-left transition-colors hover:bg-white/70",
+                dashCardClass,
+                DASH.receive,
+                "flex min-h-[96px] flex-col items-start gap-3 p-4 text-left transition-transform hover:-translate-y-0.5",
               )}
             >
-              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-[#D1F2E1]">
-                <ArrowDownToLine className="h-5 w-5 text-[#10B981]" />
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/70 shadow-sm">
+                <ArrowDownToLine className="h-5 w-5 text-[#059669]" />
               </span>
               <div className="min-w-0">
                 <div className="text-[13px] font-bold leading-snug text-slate-900">Receive payment</div>
@@ -1103,12 +1093,13 @@ function GlassDesktopDashboard({
               type="button"
               onClick={onMakePayment}
               className={cn(
-                glassCardClass,
-                "flex min-h-[96px] flex-col items-start gap-3 p-4 text-left transition-colors hover:bg-white/70",
+                dashCardClass,
+                DASH.pay,
+                "flex min-h-[96px] flex-col items-start gap-3 p-4 text-left transition-transform hover:-translate-y-0.5",
               )}
             >
-              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-[#DBEAFE]">
-                <ArrowUpFromLine className="h-5 w-5 text-[#2563EB]" />
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/70 shadow-sm">
+                <ArrowUpFromLine className="h-5 w-5 text-[#4F46E5]" />
               </span>
               <div className="min-w-0">
                 <div className="text-[13px] font-bold leading-snug text-slate-900">Make payment</div>
@@ -1117,120 +1108,26 @@ function GlassDesktopDashboard({
             </button>
           </section>
 
-          <section className={cn(glassCardClass, "flex min-h-0 flex-1 flex-col p-5")}>
-            <div className="flex items-center justify-between gap-2">
-              <DashboardPanelHeading icon={ListTodo} title="To Do List" />
-              <button
-                type="button"
-                onClick={addTodo}
-                className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg bg-[#2563EB] px-2.5 text-[11px] font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
-              >
-                <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
-                Add
-              </button>
-            </div>
-            <div className="mt-4 space-y-2.5">
-              {visibleTodos.map((item, index) => (
-                <div key={index} className="flex items-center gap-2">
-                  <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full border border-slate-300">
-                    <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
-                  </span>
-                  <Input
-                    value={item}
-                    onChange={(e) => updateTodo(index, e.target.value)}
-                    placeholder={`Task ${index + 1}`}
-                    className={cn(glassInsetClass, "h-9 flex-1 border-white/50 bg-white/40")}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeTodo(index)}
-                    aria-label={`Remove task ${index + 1}`}
-                    className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-400 transition-colors hover:bg-[#FEE2E2] hover:text-[#EF4444]"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ))}
-
-              {overflowTodos.length > 0 && (
-                <div className="pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setMoreTodosOpen((open) => !open)}
-                    aria-expanded={moreTodosOpen}
-                    className={cn(
-                      glassInsetClass,
-                      "flex h-9 w-full items-center justify-between gap-2 px-3 text-left text-[12px] font-semibold text-slate-700 transition-colors hover:bg-white/60",
-                    )}
-                  >
-                    <span>
-                      {moreTodosOpen ? "Hide extra tasks" : `${overflowTodos.length} more task${overflowTodos.length === 1 ? "" : "s"}`}
-                    </span>
-                    <ChevronDown
-                      className={cn(
-                        "h-4 w-4 shrink-0 text-slate-500 transition-transform",
-                        moreTodosOpen && "rotate-180",
-                      )}
-                    />
-                  </button>
-                  {moreTodosOpen && (
-                    <div className={cn(glassInsetClass, "mt-2 space-y-2.5 p-2.5")}>
-                      {overflowTodos.map((item, overflowIndex) => {
-                        const index = overflowIndex + 4;
-                        return (
-                          <div key={index} className="flex items-center gap-2">
-                            <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full border border-slate-300">
-                              <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
-                            </span>
-                            <Input
-                              value={item}
-                              onChange={(e) => updateTodo(index, e.target.value)}
-                              placeholder={`Task ${index + 1}`}
-                              className="h-9 flex-1 rounded-xl border-white/50 bg-white/70"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => removeTodo(index)}
-                              aria-label={`Remove task ${index + 1}`}
-                              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-400 transition-colors hover:bg-[#FEE2E2] hover:text-[#EF4444]"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="mt-5 flex min-h-0 flex-1 flex-col border-t border-slate-200/60 pt-5">
-              <DashboardPanelHeading icon={StickyNote} title="Notes" />
-              <Textarea
-                value={dashboardNote}
-                onChange={(e) => setDashboardNote(e.target.value)}
-                placeholder="Write a quick note for today..."
-                className={cn(
-                  glassInsetClass,
-                  "mt-4 min-h-[72px] w-full flex-1 resize-none border-white/50 bg-white/40",
-                )}
-              />
-            </div>
-          </section>
+          <DashboardTodoNotesPanel />
         </aside>
 
         {/* Bottom row */}
-        <section className={cn(glassCardClass, "col-span-12 flex flex-col p-5 xl:col-span-4")}>
+        <section className={cn(dashCardClass, DASH.admissions, "flex flex-col p-4 sm:p-5 xl:col-span-4")}>
           <div className="flex items-center justify-between gap-3">
             <DashboardPanelHeading icon={GraduationCap} title="Student Admissions" />
-            <span className="rounded-full bg-white/60 px-2.5 py-1 text-[10px] font-semibold text-slate-600">
+            <span className="rounded-full bg-emerald-100/80 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
               {periodLabel}
             </span>
           </div>
           <ChartContainer config={admissionChartConfig} className="mt-4 h-[160px] w-full">
-            <LineChart data={admissionWeeks} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid vertical={false} strokeDasharray="4 4" stroke="rgba(15,23,42,0.08)" />
+            <AreaChart data={admissionWeeks} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="admissionFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#10B981" stopOpacity={0.35} />
+                  <stop offset="100%" stopColor="#10B981" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid vertical={false} strokeDasharray="4 4" stroke="rgba(15,23,42,0.06)" />
               <XAxis
                 dataKey="label"
                 tickLine={false}
@@ -1239,33 +1136,42 @@ function GlassDesktopDashboard({
               />
               <YAxis hide />
               <ChartTooltip content={<ChartTooltipContent />} />
-              <Line
+              <Area
                 type="monotone"
                 dataKey="value"
                 stroke="var(--color-value)"
                 strokeWidth={2.5}
-                dot={{ r: 3, fill: "#10B981" }}
+                fill="url(#admissionFill)"
+                dot={{ r: 3, fill: "#10B981", strokeWidth: 0 }}
               />
-            </LineChart>
+            </AreaChart>
           </ChartContainer>
-          <div className="mt-4 grid flex-1 grid-cols-1 gap-3">
-            <div className={cn(glassInsetClass, "flex flex-1 flex-col items-center justify-center p-4 text-center")}>
-              <div className="text-[13px] font-medium text-slate-500">New Admissions</div>
-              <div className={cn(dashboardCountClass, "mt-2 text-slate-900")}>{newAdmissions}</div>
-            </div>
+          <div className="mt-4 flex flex-1 flex-col items-center justify-center rounded-2xl bg-white/55 p-4 text-center shadow-sm">
+            <div className="text-[13px] font-medium text-slate-500">New Admissions</div>
+            <div className={cn(dashboardCountClass, "mt-2 text-slate-900")}>{newAdmissions}</div>
           </div>
         </section>
 
-        <section className={cn(glassCardClass, "col-span-12 flex flex-col p-5 xl:col-span-4")}>
+        <section className={cn(dashCardClass, DASH.incomeExpense, "flex flex-col p-4 sm:p-5 xl:col-span-4")}>
           <div className="flex items-center justify-between gap-3">
             <DashboardPanelHeading icon={TrendingUp} title="Income vs Expense" />
-            <span className="rounded-full bg-white/60 px-2.5 py-1 text-[10px] font-semibold text-slate-600">
+            <span className="rounded-full bg-rose-100/80 px-2.5 py-1 text-[10px] font-semibold text-rose-700">
               {periodLabel}
             </span>
           </div>
           <ChartContainer config={incomeExpenseChartConfig} className="mt-4 h-[160px] w-full">
-            <BarChart data={incomeExpenseWeeks} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid vertical={false} strokeDasharray="4 4" stroke="rgba(15,23,42,0.08)" />
+            <AreaChart data={incomeExpenseWeeks} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="expenseFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#EF4444" stopOpacity={0.35} />
+                  <stop offset="100%" stopColor="#EF4444" stopOpacity={0.02} />
+                </linearGradient>
+                <linearGradient id="incomeFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#10B981" stopOpacity={0.28} />
+                  <stop offset="100%" stopColor="#10B981" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid vertical={false} strokeDasharray="4 4" stroke="rgba(15,23,42,0.06)" />
               <XAxis
                 dataKey="label"
                 tickLine={false}
@@ -1283,113 +1189,81 @@ function GlassDesktopDashboard({
                   />
                 }
               />
-              <Bar dataKey="income" fill="var(--color-income)" radius={[4, 4, 0, 0]} maxBarSize={14} />
-              <Bar dataKey="expense" fill="var(--color-expense)" radius={[4, 4, 0, 0]} maxBarSize={14} />
-            </BarChart>
+              <Area
+                type="monotone"
+                dataKey="expense"
+                stroke="var(--color-expense)"
+                strokeWidth={2}
+                fill="url(#expenseFill)"
+              />
+              <Area
+                type="monotone"
+                dataKey="income"
+                stroke="var(--color-income)"
+                strokeWidth={2}
+                fill="url(#incomeFill)"
+              />
+            </AreaChart>
           </ChartContainer>
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <div
-              className={cn(
-                glassInsetClass,
-                "flex flex-col items-center justify-center px-3 py-3.5 text-center",
-              )}
-            >
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+          <div className="mt-4 grid min-w-0 grid-cols-2 gap-2 sm:gap-3">
+            <div className="flex min-w-0 flex-col items-center justify-center overflow-hidden rounded-2xl bg-[#D1FAE5]/70 px-2 py-3.5 text-center sm:px-3">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700/80">
                 Total Income
               </div>
-              <div className="mt-1.5 text-[15px] font-semibold tracking-tight text-emerald-700 tabular-nums">
-                {formatInr(periodIncome)}
-              </div>
+              <DashboardAmount value={periodIncome} compact className="mt-1.5 w-full text-center text-emerald-800" />
             </div>
-            <div
-              className={cn(
-                glassInsetClass,
-                "flex flex-col items-center justify-center px-3 py-3.5 text-center",
-              )}
-            >
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            <div className="flex min-w-0 flex-col items-center justify-center overflow-hidden rounded-2xl bg-[#FEE2E2]/70 px-2 py-3.5 text-center sm:px-3">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-rose-700/80">
                 Total Expense
               </div>
-              <div className="mt-1.5 text-[15px] font-semibold tracking-tight text-rose-700 tabular-nums">
-                {formatInr(expenseTotal)}
-              </div>
+              <DashboardAmount value={expenseTotal} compact className="mt-1.5 w-full text-center text-rose-800" />
             </div>
           </div>
         </section>
 
-        <section className={cn(glassCardClass, "col-span-12 flex flex-col p-5 xl:col-span-4")}>
+        <section className={cn(dashCardClass, DASH.transactions, "flex flex-col p-4 sm:p-5 xl:col-span-4")}>
           <div className="flex items-center justify-between gap-3">
-            <DashboardPanelHeading icon={ArrowDownToLine} title="Recent Transactions" />
+            <div className="flex items-center gap-2">
+              <span className="grid h-8 w-8 place-items-center rounded-xl bg-white/15">
+                <ArrowDownToLine className="h-4 w-4 text-teal-100" strokeWidth={2} />
+              </span>
+              <h3 className="text-[12px] font-bold uppercase tracking-wider text-white">
+                Recent Transactions
+              </h3>
+            </div>
             <Link
               to="/tenant/finance"
               search={{ tab: "receive" }}
-              className="text-[12px] font-semibold text-[#2563EB] hover:underline"
+              className="text-[12px] font-semibold text-teal-100 hover:text-white hover:underline"
             >
               View All
             </Link>
           </div>
-          <div className="mt-4 flex-1 divide-y divide-white/50">
+          <div className="mt-4 flex-1 divide-y divide-white/10">
             {recentReceipts.length === 0 && (
-              <div className="py-6 text-center text-[12px] text-slate-500">No receipts logged yet</div>
+              <div className="py-6 text-center text-[12px] text-teal-100/70">No receipts logged yet</div>
             )}
             {recentReceipts.map((payment) => (
               <div key={payment.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#D1F2E1]">
-                  <ArrowUpRight className="h-4 w-4 text-[#10B981]" />
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/15">
+                  <ArrowUpRight className="h-4 w-4 text-emerald-300" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13px] font-semibold text-slate-900">{payment.name}</div>
-                  <div className="mt-0.5 text-[11px] text-slate-500">
+                  <div className="truncate text-[13px] font-semibold text-white">{payment.name}</div>
+                  <div className="mt-0.5 text-[11px] text-teal-100/70">
                     {payment.cat} · {payment.mode}
                   </div>
                 </div>
                 <div className="shrink-0 text-right">
-                  <div className="font-mono text-[13px] font-semibold text-slate-900">
+                  <div className="font-mono text-[13px] font-semibold text-white">
                     {formatInr(payment.amount)}
                   </div>
-                  <div className="mt-0.5 text-[10px] text-slate-500">{payment.time}</div>
+                  <div className="mt-0.5 text-[10px] text-teal-100/60">{payment.time}</div>
                 </div>
               </div>
             ))}
           </div>
         </section>
-
-        <footer
-          className={cn(
-            glassPanelClass,
-            "col-span-12 flex flex-wrap items-center justify-between gap-4 rounded-lg px-5 py-3.5",
-          )}
-        >
-          <div className="min-w-0">
-            <div className="truncate text-[13px] font-bold uppercase tracking-wide text-slate-900">
-              {tenantName}
-            </div>
-            <div className="mt-0.5 text-[11px] text-slate-500">Tenant administration workspace</div>
-          </div>
-          <div className="flex flex-wrap items-center gap-4 text-[12px] text-slate-600">
-            <span className="inline-flex items-center gap-1.5">
-              <Calendar className="h-3.5 w-3.5 text-slate-500" />
-              {nowLabel.date}
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <Clock className="h-3.5 w-3.5 text-slate-500" />
-              {nowLabel.time}
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="text-right">
-              <div className="text-[13px] font-semibold text-slate-900">{displayName}</div>
-              <div className="text-[11px] text-slate-500">Administrator</div>
-            </div>
-            <Link
-              to="/tenant/settings"
-              aria-label="Settings"
-              className="glass-inset grid h-10 w-10 place-items-center rounded-xl text-slate-600 transition-colors hover:text-[#2563EB]"
-            >
-              <Settings className="h-[18px] w-[18px]" />
-            </Link>
-          </div>
-        </footer>
       </div>
     </div>
   );
@@ -1403,11 +1277,13 @@ function DashboardPanelHeading({
   title: string;
 }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className="grid h-8 w-8 place-items-center rounded-lg bg-white/60 shadow-sm">
-        <Icon className="h-4 w-4 text-slate-700" strokeWidth={2} />
+    <div className="flex items-center gap-2.5">
+      <span className="grid h-8 w-8 place-items-center rounded-xl bg-white/75 shadow-sm shadow-slate-200/50 dark:bg-white/10 dark:shadow-none">
+        <Icon className="h-4 w-4 text-slate-700 dark:text-zinc-200" strokeWidth={2} />
       </span>
-      <h3 className="text-[12px] font-bold uppercase tracking-wider text-slate-900">{title}</h3>
+      <h3 className="text-[12px] font-bold uppercase tracking-wider text-slate-900 dark:text-zinc-100">
+        {title}
+      </h3>
     </div>
   );
 }
@@ -1444,7 +1320,7 @@ function DashboardSectionHeading({
   return (
     <h2
       className={cn(
-        "text-[11px] font-semibold uppercase tracking-wider text-black/55 sm:text-[12px]",
+        "text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400 sm:text-[12px]",
         className,
       )}
     >
@@ -1510,13 +1386,10 @@ function DashboardStatCard({
 export function SchoolDashboard() {
   const navigate = useNavigate();
   const {
-    students,
+    activeStudents: students,
     staff,
-    payments,
-    dashboardTodos,
-    setDashboardTodos,
-    dashboardNote,
-    setDashboardNote,
+    activePayments: payments,
+    academicYear,
     notifications,
   } = useTenantStore();
 
@@ -1556,23 +1429,15 @@ export function SchoolDashboard() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <MobilePremiumDashboard
-        studentCount={liveStudents.length}
-        staffCount={liveStaff.length}
-        periodIncome={periodIncome}
-        expenseTotal={expenseTotal}
-        totalDue={totalDue}
-        salaryOutstanding={salaryOutstanding}
-        inHand={inHand}
-        inBank={inBank}
-        totalBalance={totalBalance}
-        unreadNotifications={unreadNotifications}
-        onReceivePayment={() => navigate({ to: "/tenant/finance", search: { tab: "receive" } })}
-        onMakePayment={() => navigate({ to: "/tenant/finance", search: { tab: "make" } })}
-        onAdmitStudent={() => navigate({ to: "/tenant/students/admit" })}
-      />
-
-      <GlassDesktopDashboard
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-teal-500/20 bg-teal-500/5 px-3.5 py-2.5 dark:border-teal-400/20 dark:bg-teal-400/10">
+        <p className="text-[12.5px] font-medium text-slate-700 dark:text-zinc-200">
+          Books open for <span className="font-semibold text-teal-800 dark:text-teal-300">{academicYear}</span>
+        </p>
+        <p className="font-mono text-[11px] text-slate-500 dark:text-zinc-400">
+          {liveStudents.length} enrolled · {payments.length} receipt{payments.length === 1 ? "" : "s"}
+        </p>
+      </div>
+      <PremiumDashboard
         students={students}
         staff={staff}
         periodIncome={periodIncome}
@@ -1586,10 +1451,6 @@ export function SchoolDashboard() {
         overdueStudents={overdueStudents}
         recentReceipts={recentReceipts}
         unreadNotifications={unreadNotifications}
-        dashboardTodos={dashboardTodos}
-        setDashboardTodos={setDashboardTodos}
-        dashboardNote={dashboardNote}
-        setDashboardNote={setDashboardNote}
         period={period}
         setPeriod={setPeriod}
         customRange={customRange}
@@ -1660,7 +1521,6 @@ type AdmitStudentForm = {
   name: string;
   cls: string;
   guardian: string;
-  due: string;
   phone: string;
 };
 
@@ -1669,7 +1529,6 @@ function emptyAdmitForm(cls: string): AdmitStudentForm {
     name: "",
     cls,
     guardian: "",
-    due: "",
     phone: "",
   };
 }
@@ -1694,7 +1553,7 @@ const directoryStatCardClass =
 const directoryStatLabelClass =
   "text-[8px] font-semibold uppercase leading-tight tracking-wider md:text-[10px]";
 const directoryStatValueClass =
-  "shrink-0 font-mono text-[18px] font-semibold leading-none tracking-tight text-black md:text-[32px]";
+  "shrink-0 font-mono text-[18px] font-semibold leading-none tracking-tight text-black dark:text-zinc-50 md:text-[32px]";
 
 function DirectoryPersonAvatar({ name, photoUrl }: { name: string; photoUrl?: string }) {
   if (photoUrl) {
@@ -1707,18 +1566,18 @@ function DirectoryPersonAvatar({ name, photoUrl }: { name: string; photoUrl?: st
     );
   }
   return (
-    <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-black text-[11px] font-semibold text-white sm:h-10 sm:w-10 sm:text-[12px]">
+    <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#0F766E] text-[11px] font-semibold text-white sm:h-10 sm:w-10 sm:text-[12px]">
       {personInitials(name)}
     </div>
   );
 }
 
 const directoryMobileListClass =
-  "mx-auto grid w-full max-w-[min(100%,20.5rem)] grid-cols-1 gap-2.5 sm:max-w-md md:max-w-3xl md:grid-cols-2 md:gap-3";
+  "grid w-full min-w-0 max-w-full grid-cols-1 gap-2.5 md:grid-cols-2 md:gap-3";
 
 const directoryMobileCardClass = cn(
   premiumCardClass,
-  "flex w-full min-w-0 flex-col gap-2.5 p-3 text-left transition-all active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-2 sm:gap-3 sm:p-3.5",
+  "flex w-full min-w-0 max-w-full flex-col gap-2.5 overflow-hidden p-3 text-left transition-all active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E] focus-visible:ring-offset-2 sm:gap-3 sm:p-3.5",
 );
 
 const directoryEmptyClass = cn(
@@ -1733,7 +1592,7 @@ function DirectoryFloatingAddButton({ label, onClick }: { label: string; onClick
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-4 z-40 grid h-14 w-14 place-items-center rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xl shadow-blue-900/30 transition-all duration-200 hover:opacity-95 active:scale-95 md:hidden"
+      className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-4 z-40 grid h-14 w-14 place-items-center rounded-full bg-gradient-to-r from-teal-700 to-teal-800 text-white shadow-xl shadow-teal-900/30 transition-all duration-200 hover:opacity-95 active:scale-95 md:hidden"
     >
       <Plus className="h-6 w-6" strokeWidth={2.5} />
     </button>
@@ -1763,7 +1622,7 @@ function FinanceFloatingPaymentActions({
           type="button"
           onClick={onMake}
           aria-label="Make payment"
-          className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full border border-[#BFDBFE] bg-[#DBEAFE] px-3 text-[12.5px] font-semibold text-[#1D4ED8] shadow-lg shadow-blue-900/10 transition-transform active:scale-[0.98]"
+          className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full border border-[#99F6E4] bg-[#CCFBF1] px-3 text-[12.5px] font-semibold text-[#0F766E] shadow-lg shadow-teal-900/10 transition-transform active:scale-[0.98]"
         >
           <ArrowUpFromLine className="h-4 w-4 shrink-0" />
           <span className="truncate">Make</span>
@@ -1820,7 +1679,7 @@ function DirectoryRecycleBinList({
               <button
                 type="button"
                 onClick={() => onRestore(item.id)}
-                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#BFDBFE] bg-[#EFF6FF] px-3 text-[12px] font-semibold text-[#1D4ED8] transition-colors hover:bg-[#DBEAFE]"
+                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#99F6E4] bg-[#F0FDFA] px-3 text-[12px] font-semibold text-[#0F766E] transition-colors hover:bg-[#CCFBF1]"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
                 Restore
@@ -1844,7 +1703,7 @@ function DirectoryRecycleBinList({
 function StudentFeesStatusBadge({ due }: { due: number }) {
   if (due === 0) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#DBEAFE] px-2.5 py-1 text-[10.5px] font-semibold text-[#10B981]">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#CCFBF1] px-2.5 py-1 text-[10.5px] font-semibold text-[#10B981]">
         <span className="h-1.5 w-1.5 rounded-full bg-[#10B981]" />
         Paid
       </span>
@@ -1873,7 +1732,7 @@ function DirectoryEnrollmentStatusControl({
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
           aria-label={`Change status · currently ${active ? "Active" : "Inactive"}`}
-          className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-1"
+          className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E] focus-visible:ring-offset-1"
         >
           <EnrollmentStatusBadge active={active} className="cursor-pointer hover:opacity-90" />
         </button>
@@ -1912,6 +1771,7 @@ function StudentsDirectoryTable({
   onViewProfile,
   onEditData,
   onChangeStatus,
+  bulkBar,
 }: {
   students: Student[];
   selectedIds: Set<string>;
@@ -1920,13 +1780,18 @@ function StudentsDirectoryTable({
   onViewProfile: (id: string) => void;
   onEditData: (id: string) => void;
   onChangeStatus: (id: string, nextActive: boolean) => void;
+  bulkBar?: ReactNode;
 }) {
   const allSelected = students.length > 0 && students.every((s) => selectedIds.has(s.id));
   const someSelected = students.some((s) => selectedIds.has(s.id));
 
   return (
     <>
-      <div className={cn(directoryMobileListClass, "lg:hidden")}>
+      <div className="space-y-3 lg:hidden">
+        {bulkBar ? (
+          <div className={cn(glassCardClass, "overflow-hidden p-0")}>{bulkBar}</div>
+        ) : null}
+      <div className={cn(directoryMobileListClass)}>
         {students.length > 0 && (
           <div className="flex items-center gap-2 px-0.5 md:col-span-2">
             <Checkbox
@@ -1941,7 +1806,7 @@ function StudentsDirectoryTable({
         )}
         {students.length === 0 && (
           <div className={cn(directoryEmptyClass, "md:col-span-2")}>
-            No students match the current filters.
+            No students enrolled for this academic year.
           </div>
         )}
         {students.map((student) => {
@@ -1966,11 +1831,11 @@ function StudentsDirectoryTable({
               className={cn(
                 directoryMobileCardClass,
                 "cursor-pointer",
-                isSelected && "ring-2 ring-[#2563EB]/35",
+                isSelected && "ring-2 ring-[#0F766E]/35",
               )}
             >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-2.5">
+              <div className="flex min-w-0 items-start justify-between gap-2">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
                   <div
                     onClick={(e) => e.stopPropagation()}
                     onKeyDown={(e) => e.stopPropagation()}
@@ -1983,7 +1848,7 @@ function StudentsDirectoryTable({
                     />
                   </div>
                   <DirectoryPersonAvatar name={student.name} photoUrl={student.photoUrl} />
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="truncate text-[13.5px] font-semibold leading-tight text-slate-900 sm:text-[14px]">
                       {student.name}
                     </div>
@@ -1992,11 +1857,13 @@ function StudentsDirectoryTable({
                     </div>
                   </div>
                 </div>
-                <StudentFeesStatusBadge due={student.due} />
+                <div className="shrink-0">
+                  <StudentFeesStatusBadge due={student.due} />
+                </div>
               </div>
 
               <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                <span className="inline-flex max-w-full truncate rounded-full bg-[#DBEAFE] px-2 py-0.5 text-[10px] font-semibold text-[#0F172A] sm:px-2.5 sm:py-1 sm:text-[10.5px]">
+                <span className="inline-flex max-w-full truncate rounded-full bg-[#CCFBF1] px-2 py-0.5 text-[10px] font-semibold text-[#0F172A] sm:px-2.5 sm:py-1 sm:text-[10.5px]">
                   {student.cls}
                 </span>
                 <DirectoryEnrollmentStatusControl
@@ -2040,9 +1907,11 @@ function StudentsDirectoryTable({
           );
         })}
       </div>
+      </div>
 
       <div className="mobile-scrollbar-none hidden w-full max-w-full overflow-x-auto lg:block">
         <div className={glassTableWrapClass}>
+          {bulkBar}
       <table className="w-full min-w-[900px] table-fixed border-collapse text-left">
         <colgroup>
           <col className="w-[44px]" />
@@ -2078,8 +1947,8 @@ function StudentsDirectoryTable({
         <tbody>
           {students.length === 0 && (
             <tr>
-              <td colSpan={6} className="px-4 py-10 text-center text-[13px] text-black/55 sm:px-6">
-                No students match the current filters.
+              <td colSpan={6} className="px-4 py-10 text-center text-[13px] text-black/55 dark:text-zinc-400 sm:px-6">
+                No students enrolled for this academic year.
               </td>
             </tr>
           )}
@@ -2103,8 +1972,8 @@ function StudentsDirectoryTable({
                 }}
                 aria-label={`Open profile for ${student.name}`}
                 className={cn(
-                  "cursor-pointer border-b border-slate-50 transition-colors last:border-0 hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2563EB]",
-                  isSelected && "bg-[#EFF6FF]/70 hover:bg-[#EFF6FF]",
+                  "cursor-pointer border-b border-slate-50 transition-colors last:border-0 hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0F766E] dark:border-white/5 dark:hover:bg-white/5 dark:focus-visible:bg-white/5",
+                  isSelected && "bg-[#F0FDFA]/70 hover:bg-[#F0FDFA] dark:bg-[#0F766E]/15 dark:hover:bg-[#0F766E]/25",
                 )}
               >
                 <td
@@ -2127,7 +1996,7 @@ function StudentsDirectoryTable({
                         className="h-10 w-10 shrink-0 rounded-xl object-cover"
                       />
                     ) : (
-                      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-black text-[12px] font-semibold text-white">
+                      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#0F766E] text-[12px] font-semibold text-white">
                         {personInitials(student.name)}
                       </div>
                     )}
@@ -2144,7 +2013,7 @@ function StudentsDirectoryTable({
                 <td className="min-w-0 px-3 py-3.5 align-middle sm:px-4 lg:px-6">
                   <span
                     title={student.cls}
-                    className="block w-fit max-w-full truncate rounded-full bg-[#DBEAFE] px-2.5 py-1 text-[11px] font-medium text-black"
+                    className="block w-fit max-w-full truncate rounded-full bg-[#CCFBF1] px-2.5 py-1 text-[11px] font-medium text-black"
                   >
                     {student.cls}
                   </span>
@@ -2226,7 +2095,7 @@ function StudentsDirectoryTable({
 }
 
 export function AdmitStudentPage() {
-  const { students, setStudents, classes } = useTenantStore();
+  const { students, classes, admitStudentToActiveYear } = useTenantStore();
   const navigate = useNavigate();
   const defaultClass = classes[0]?.className ?? "";
   const [form, setForm] = useState<AdmitStudentForm>(() => emptyAdmitForm(defaultClass));
@@ -2255,80 +2124,76 @@ export function AdmitStudentPage() {
     }
     const nextNum = 2847 + students.filter((s) => s.id.startsWith("STU-28")).length;
     const token = createStudentShareToken();
-    const newStu: Student = {
+    const draft = normalizeStudent({
       id: `STU-${nextNum}`,
+      admissionNumber: `ADM-${nextNum}`,
       name: form.name.trim(),
       cls: form.cls,
       guardian: form.guardian.trim(),
-      due: Number(form.due) || 0,
+      due: 0,
       phone: form.phone.trim() || undefined,
       shareToken: token,
       active: true,
-    };
-    setStudents((prev) => [newStu, ...prev]);
-    upsertStudentInSnapshot(newStu);
-    return newStu;
+    });
+    return admitStudentToActiveYear(draft, {
+      cls: draft.cls,
+      due: draft.due,
+      active: true,
+    });
   };
 
   const handleAdmit = (e: React.FormEvent) => {
     e.preventDefault();
     const newStu = createStudent();
     if (!newStu) return;
-    toast.success(`${newStu.name} admitted`, {
-      description: `${newStu.id} · ${newStu.cls} · send the collection link to complete the profile`,
+    startTransition(() => {
+      navigate({ to: "/tenant/students", search: { id: newStu.id } });
     });
-    navigate({ to: "/tenant/students", search: { id: newStu.id } });
+    // Toast after navigation frame so it doesn't fight the route swap / dock.
+    window.setTimeout(() => {
+      toast.success(`${newStu.name} admitted`, {
+        description: `${newStu.id} · ${newStu.cls} · send the collection link to complete the profile`,
+        position: "top-center",
+      });
+    }, 120);
   };
 
   const handleAdmitAndShare = (e: React.MouseEvent) => {
     e.preventDefault();
     const newStu = createStudent();
     if (!newStu?.shareToken) return;
-    toast.success(`${newStu.name} admitted`, {
-      description: `${newStu.id} · collection link ready for parents`,
-    });
     setAdmittedId(newStu.id);
     setShareToken(newStu.shareToken);
     setShareName(newStu.name);
     setSharePhone(newStu.phone ?? "");
     setShareGuardian(newStu.guardian);
     setShareOpen(true);
+    toast.success(`${newStu.name} admitted`, {
+      description: `${newStu.id} · collection link ready for parents`,
+      position: "top-center",
+    });
   };
 
   return (
     <div className="w-full space-y-4 sm:space-y-5">
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={backToStudents}
-          className={cn(
-            glassInsetClass,
-            "inline-flex h-10 items-center gap-1.5 px-3 text-[13px] font-semibold text-slate-700 transition-colors hover:text-[#2563EB]",
-          )}
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Students directory
-        </button>
-        <div className="min-w-0">
-          <MobileSectionTitle className="md:hidden">Admit New Student</MobileSectionTitle>
-          <div className="hidden md:block">
-            <div className="text-[15px] font-bold text-slate-900">Admit New Student</div>
-            <p className="text-[12px] text-slate-500">
+      <section className={cn(glassCardClass, "w-full p-5 md:p-6")}>
+        <form onSubmit={handleAdmit} className="space-y-4">
+          <div>
+            <div className="text-[17px] font-bold leading-tight tracking-tight text-slate-900 sm:text-title">
+              Admit New Student
+            </div>
+            <p className="mt-1 text-[12px] text-slate-500">
               Fill school details, then send a collection link so parents can complete the rest.
             </p>
           </div>
-        </div>
-      </div>
 
-      <section className={cn(glassCardClass, "w-full p-5 md:p-6")}>
-        <form onSubmit={handleAdmit} className="space-y-4">
-          <div className="rounded-lg border border-[#DBEAFE] bg-[#EFF6FF]/70 px-3.5 py-3 text-[12px] text-slate-600">
-            Administrators enter name, class, guardian, contact, and initial due. Parents complete
+          <div className="rounded-lg border border-[#CCFBF1] bg-[#F0FDFA]/70 px-3.5 py-3 text-[12px] text-slate-600">
+            Administrators enter name, class, guardian, and contact. Parents complete
             photo, gender, date of birth, email, and address via the collection link.
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
               Full Name
             </Label>
             <Input
@@ -2340,7 +2205,7 @@ export function AdmitStudentPage() {
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
               Class
             </Label>
             <FieldSelect
@@ -2354,7 +2219,7 @@ export function AdmitStudentPage() {
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                 Guardian Name
               </Label>
               <Input
@@ -2364,7 +2229,7 @@ export function AdmitStudentPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                 Contact Phone
               </Label>
               <Input
@@ -2376,34 +2241,29 @@ export function AdmitStudentPage() {
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-              Initial Due (₹)
-            </Label>
-            <Input
-              inputMode="numeric"
-              value={form.due}
-              onChange={(e) => setForm({ ...form, due: e.target.value.replace(/[^0-9]/g, "") })}
-              placeholder="0"
-              className="font-mono"
-            />
-          </div>
-
-          <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={backToStudents}>
+          <div className="flex flex-nowrap items-center gap-1.5 pt-2 sm:justify-end sm:gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={backToStudents}
+              className="h-9 shrink-0 px-2.5 text-[12px] sm:h-10 sm:px-4 sm:text-sm"
+            >
               Cancel
             </Button>
             <Button
               type="button"
               variant="outline"
               onClick={handleAdmitAndShare}
-              className="rounded-full"
+              className="h-9 min-w-0 flex-1 rounded-full px-2 text-[11px] sm:h-10 sm:flex-none sm:px-4 sm:text-sm"
             >
-              <ClipboardList className="mr-1.5 h-3.5 w-3.5" />
-              Admit & Collect
+              <ClipboardList className="mr-1 h-3.5 w-3.5 shrink-0 sm:mr-1.5" />
+              <span className="truncate">Admit & Collect</span>
             </Button>
-            <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
-              Admit Student
+            <Button
+              type="submit"
+              className="h-9 min-w-0 flex-1 rounded-full bg-[#0F766E] px-2 text-[11px] text-white hover:bg-[#0D9488] sm:h-10 sm:flex-none sm:px-4 sm:text-sm"
+            >
+              <span className="truncate">Admit Student</span>
             </Button>
           </div>
         </form>
@@ -2428,7 +2288,8 @@ export function AdmitStudentPage() {
 
 
 export function StudentsLedger() {
-  const { students, setStudents, classes, schoolDetails } = useTenantStore();
+  const { activeStudents: students, setStudents, classes, schoolDetails, enrollStudentInActiveYear, academicYear } =
+    useTenantStore();
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/students" }) as {
     id?: string;
@@ -2907,6 +2768,87 @@ export function StudentsLedger() {
     toast.success("Print preview opened", { description: "Save as PDF from your browser dialog" });
   };
 
+  const allShownSelected =
+    filtered.length > 0 && filtered.every((s) => selectedIds.has(s.id));
+
+  const studentsBulkBar =
+    selectedIds.size > 0 ? (
+      <div className="flex flex-col gap-3 border-b border-slate-100/80 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4 lg:border-b">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="rounded-full bg-[#F0FDFA] px-2.5 py-1 text-[12px] font-semibold text-[#0F766E]">
+            {selectedIds.size} selected
+          </span>
+          {!allShownSelected && (
+            <button
+              type="button"
+              onClick={() => toggleSelectAll(true)}
+              className="text-[12px] font-semibold text-slate-600 underline-offset-2 hover:text-slate-900 hover:underline"
+            >
+              Select all shown
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => selectByFeesStatus("overdue")}
+            className="text-[12px] font-semibold text-[#EF4444] underline-offset-2 hover:underline"
+          >
+            Select overdue
+          </button>
+          <button
+            type="button"
+            onClick={() => selectByFeesStatus("paid")}
+            className="text-[12px] font-semibold text-[#10B981] underline-offset-2 hover:underline"
+          >
+            Select paid
+          </button>
+          <button
+            type="button"
+            onClick={clearSelection}
+            className="text-[12px] font-semibold text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
+          >
+            Clear
+          </button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className={mobileOutlineBtn}>
+                Change Status
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              sideOffset={8}
+              collisionPadding={12}
+              className="z-[250] w-44 rounded-lg border-[#E5E5E5] bg-white p-1 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+            >
+              <DropdownMenuItem
+                className="cursor-pointer rounded-md text-[13px]"
+                onClick={() => bulkChangeStatus(true)}
+              >
+                Set Active
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer rounded-md text-[13px]"
+                onClick={() => bulkChangeStatus(false)}
+              >
+                Set Inactive
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <button
+            type="button"
+            onClick={openBulkWhatsApp}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#10B981] px-3 text-[13px] font-semibold text-white transition-colors hover:bg-[#059669]"
+          >
+            <MessageCircle className="h-3.5 w-3.5" />
+            Bulk WhatsApp
+          </button>
+        </div>
+      </div>
+    ) : undefined;
+
   if (activeStudent) {
     return (
       <StudentProfileDetail
@@ -2937,7 +2879,7 @@ export function StudentsLedger() {
             label: "Total",
             value: analytics.total,
             icon: Users,
-            iconClass: "text-[#2563EB]",
+            iconClass: "text-[#0F766E]",
           },
         ]}
       />
@@ -2959,7 +2901,7 @@ export function StudentsLedger() {
           <div className={directoryStatValueClass}>{analytics.overdue}</div>
         </div>
 
-        <div className={cn(glassCardClass, directoryStatCardClass, "bg-[#DBEAFE]/40")}>
+        <div className={cn(glassCardClass, directoryStatCardClass, "bg-[#CCFBF1]/40")}>
           <div className="flex min-w-0 flex-1 items-center justify-between gap-1 md:items-start md:gap-2">
             <div className={cn(directoryStatLabelClass, "text-slate-600")}>
               <span className="md:hidden">Total</span>
@@ -2977,7 +2919,7 @@ export function StudentsLedger() {
       </div>
 
       <div className="flex w-full min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between xl:gap-4">
-        <h1 className="shrink-0 text-[18px] font-bold leading-tight tracking-tight text-slate-900 md:text-[24px] md:font-semibold xl:min-w-0 xl:flex-1 xl:truncate xl:text-[28px]">
+        <h1 className="shrink-0 text-[18px] font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50 md:text-[24px] md:font-semibold xl:min-w-0 xl:flex-1 xl:truncate xl:text-[28px]">
           {showRecycleBin ? "Recycle Bin" : "Students Directory"}
         </h1>
         <div className={cn(directoryToolbarRow, "xl:max-w-full xl:shrink-0")}>
@@ -3123,7 +3065,7 @@ export function StudentsLedger() {
                 onClick={openAdmitPage}
                 className={cn(
                   mobilePrimaryBtn,
-                  "hidden md:inline-flex md:rounded-full md:bg-gradient-to-r md:from-[#2563EB] md:to-[#4C69A4] md:shadow-md md:shadow-blue-900/15 md:hover:opacity-95 md:hover:bg-gradient-to-r",
+                  "hidden md:inline-flex md:rounded-full md:bg-gradient-to-r md:from-[#0F766E] md:to-[#115E59] md:shadow-md md:shadow-teal-900/15 md:hover:opacity-95 md:hover:bg-gradient-to-r",
                 )}
               >
                 <Plus className="h-3.5 w-3.5" />
@@ -3249,7 +3191,7 @@ export function StudentsLedger() {
                     setDivisionFilter("all");
                     setSearchQuery("");
                   }}
-                  className="text-[11px] font-semibold text-black/55 underline-offset-2 hover:text-black hover:underline"
+                  className="text-[11px] font-semibold text-black/55 dark:text-zinc-400 underline-offset-2 hover:text-black hover:underline"
                 >
                   Clear filters
                 </button>
@@ -3267,86 +3209,6 @@ export function StudentsLedger() {
         onChange={handleImport}
       />
 
-      {selectedIds.size > 0 && (
-      <div
-        className={cn(
-          glassCardClass,
-          "flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4",
-        )}
-      >
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="rounded-full bg-[#EFF6FF] px-2.5 py-1 text-[12px] font-semibold text-[#1D4ED8]">
-            {selectedIds.size} selected
-          </span>
-          <button
-            type="button"
-            onClick={() => toggleSelectAll(true)}
-            className="text-[12px] font-semibold text-slate-600 underline-offset-2 hover:text-slate-900 hover:underline"
-          >
-            Select all shown
-          </button>
-          <button
-            type="button"
-            onClick={() => selectByFeesStatus("overdue")}
-            className="text-[12px] font-semibold text-[#EF4444] underline-offset-2 hover:underline"
-          >
-            Select overdue
-          </button>
-          <button
-            type="button"
-            onClick={() => selectByFeesStatus("paid")}
-            className="text-[12px] font-semibold text-[#10B981] underline-offset-2 hover:underline"
-          >
-            Select paid
-          </button>
-          <button
-            type="button"
-            onClick={clearSelection}
-            className="text-[12px] font-semibold text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
-          >
-            Clear
-          </button>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button type="button" className={mobileOutlineBtn}>
-                Change Status
-                <ChevronDown className="h-3.5 w-3.5" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              sideOffset={8}
-              collisionPadding={12}
-              className="z-[250] w-44 rounded-lg border-[#E5E5E5] bg-white p-1 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
-            >
-              <DropdownMenuItem
-                className="cursor-pointer rounded-md text-[13px]"
-                onClick={() => bulkChangeStatus(true)}
-              >
-                Set Active
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="cursor-pointer rounded-md text-[13px]"
-                onClick={() => bulkChangeStatus(false)}
-              >
-                Set Inactive
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <button
-            type="button"
-            onClick={openBulkWhatsApp}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#10B981] px-3 text-[13px] font-semibold text-white transition-colors hover:bg-[#059669]"
-          >
-            <MessageCircle className="h-3.5 w-3.5" />
-            Bulk WhatsApp
-          </button>
-        </div>
-      </div>
-      )}
-
       <StudentsDirectoryTable
         students={filtered}
         selectedIds={selectedIds}
@@ -3355,6 +3217,7 @@ export function StudentsLedger() {
         onViewProfile={openStudent}
         onEditData={openStudentEdit}
         onChangeStatus={changeStudentStatus}
+        bulkBar={studentsBulkBar}
       />
         </>
       )}
@@ -3381,7 +3244,7 @@ export function StudentsLedger() {
             <DialogTitle className="text-[20px] font-semibold text-black">
               Bulk WhatsApp
             </DialogTitle>
-            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
+            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60 dark:text-zinc-400">
               Sends via BugRicer Notify to {selectedWithPhone.length} guardian
               {selectedWithPhone.length === 1 ? "" : "s"}
               {selectedStudents.length > selectedWithPhone.length
@@ -3402,7 +3265,7 @@ export function StudentsLedger() {
                     key={v.key}
                     type="button"
                     onClick={() => insertTemplateVar(v.key)}
-                    className="rounded-full border border-[#E5E5E5] bg-[#F8FAFC] px-2 py-0.5 font-mono text-[10px] font-medium text-slate-600 transition-colors hover:border-[#2563EB]/40 hover:bg-[#EFF6FF] hover:text-[#1D4ED8]"
+                    className="rounded-full border border-[#E5E5E5] bg-[#F8FAFC] px-2 py-0.5 font-mono text-[10px] font-medium text-slate-600 transition-colors hover:border-[#0F766E]/40 hover:bg-[#F0FDFA] hover:text-[#0F766E]"
                     title={`Insert {{${v.key}}}`}
                   >
                     {`{{${v.key}}}`}
@@ -3419,8 +3282,8 @@ export function StudentsLedger() {
               />
             </div>
             {bulkWhatsAppPreview && (
-              <div className="rounded-lg border border-[#DBEAFE] bg-[#F8FBFF] px-3 py-2.5">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-[#2563EB]">
+              <div className="rounded-lg border border-[#CCFBF1] bg-[#F8FBFF] px-3 py-2.5">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-[#0F766E]">
                   Preview · {selectedWithPhone[0]?.student.name}
                 </div>
                 <pre className="mt-1.5 max-h-36 overflow-y-auto whitespace-pre-wrap font-sans text-[12px] leading-relaxed text-slate-700">
@@ -3479,7 +3342,7 @@ function ContactAction({
   const palette =
     accent === "emerald"
       ? "bg-[#10B981] text-white hover:bg-[#059669]"
-      : "bg-black text-white hover:bg-black/85";
+      : "bg-[#0F766E] text-white hover:bg-[#0D9488]";
   return (
     <button
       type="button"
@@ -3520,6 +3383,7 @@ export function StaffRoster() {
   const [open, setOpen] = useState(false);
   const [deptFilter, setDeptFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<StaffStatusFilter>("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [showRecycleBin, setShowRecycleBin] = useState(false);
   const [pendingPurgeId, setPendingPurgeId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
@@ -3538,6 +3402,7 @@ export function StaffRoster() {
   });
   const recruitPhotoRef = useRef<HTMLInputElement>(null);
   const staffImportRef = useRef<HTMLInputElement>(null);
+  const attendanceImportRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setForm((prev) => ({
@@ -3574,14 +3439,30 @@ export function StaffRoster() {
   }, [departments, liveStaff]);
 
   const filteredStaff = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
     return liveStaff.filter((member) => {
       const matchesDept = deptFilter === "all" || member.dept === deptFilter;
       const matchesStatus =
         statusFilter === "all" ||
         (statusFilter === "active" ? member.active : !member.active);
-      return matchesDept && matchesStatus;
+      if (!matchesDept || !matchesStatus) return false;
+      if (!q) return true;
+      const haystack = [
+        member.name,
+        member.id,
+        member.role,
+        member.dept,
+        member.phone ?? "",
+        member.altPhone ?? "",
+        member.guardianPhone ?? "",
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
     });
-  }, [liveStaff, deptFilter, statusFilter]);
+  }, [liveStaff, deptFilter, statusFilter, searchQuery]);
+
+  const staffFiltersActive = deptFilter !== "all" || statusFilter !== "all";
 
   useEffect(() => {
     setSelectedIds((prev) => {
@@ -3948,6 +3829,121 @@ export function StaffRoster() {
     reader.readAsText(file);
   };
 
+  const payrollMonth = currentPayrollMonth();
+
+  const downloadAttendanceDemo = () => {
+    const sampleStaff = liveStaff.filter((s) => s.active).slice(0, 4);
+    const rows =
+      sampleStaff.length > 0
+        ? sampleStaff.map((s, index) => [
+            s.id,
+            s.name,
+            payrollMonth,
+            String(22 - (index % 3)),
+            "24",
+          ])
+        : [
+            ["STF-018", "Anika Roy", payrollMonth, "22", "24"],
+            ["STF-019", "Sample Staff", payrollMonth, "20", "24"],
+          ];
+    downloadCsv(
+      `staff-attendance-demo-${payrollMonth}.csv`,
+      ["Staff ID", "Name", "Month", "Days Present", "Working Days"],
+      rows,
+    );
+    toast.success("Attendance demo downloaded", {
+      description: "Fill Days Present / Working Days, then Upload attendance CSV",
+    });
+  };
+
+  const handleAttendanceImportClick = () => attendanceImportRef.current?.click();
+
+  const handleAttendanceImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result ?? "");
+      const lines = text.trim().split(/\r?\n/).filter((line) => line.trim());
+      if (!lines.length) {
+        toast.error("Empty CSV file");
+        return;
+      }
+      const header = (lines[0] ?? "").toLowerCase();
+      const start = /staff\s*id|employee|days\s*present|working\s*days|month/i.test(header)
+        ? 1
+        : 0;
+      const byId = new Map(staff.map((s) => [s.id.toLowerCase(), s]));
+      const updates = new Map<string, StaffAttendanceMonth>();
+      let skipped = 0;
+
+      for (let i = start; i < lines.length; i++) {
+        const cells = lines[i].split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
+        if (cells.length < 4) {
+          skipped += 1;
+          continue;
+        }
+        const [staffId, , monthRaw, presentRaw, workingRaw] = cells;
+        const member = byId.get((staffId || "").toLowerCase());
+        if (!member) {
+          skipped += 1;
+          continue;
+        }
+        let month = (monthRaw || "").trim();
+        if (/^\d{4}-\d{1,2}$/.test(month)) {
+          const [y, m] = month.split("-");
+          month = `${y}-${m.padStart(2, "0")}`;
+        } else if (!/^\d{4}-\d{2}$/.test(month)) {
+          month = payrollMonth;
+        }
+        const daysPresent = Number(presentRaw);
+        const workingDays = Number(workingRaw || presentRaw);
+        const normalized = normalizeStaffAttendanceMonth({
+          month,
+          daysPresent,
+          workingDays,
+        });
+        if (!normalized) {
+          skipped += 1;
+          continue;
+        }
+        updates.set(member.id, normalized);
+      }
+
+      if (!updates.size) {
+        toast.error("No matching staff rows found", {
+          description: "Use Staff ID from the directory · download the demo CSV first",
+        });
+      } else {
+        setStaff((prev) =>
+          prev.map((member) => {
+            const row = updates.get(member.id);
+            if (!row) return member;
+            return {
+              ...member,
+              attendanceByMonth: upsertStaffAttendanceMonth(member.attendanceByMonth, row),
+            };
+          }),
+        );
+        const months = Array.from(
+          new Set(Array.from(updates.values()).map((row) => row.month)),
+        );
+        toast.success(`Attendance imported · ${updates.size} staff`, {
+          description: [
+            months.map((m) => formatPayrollMonthLabel(m)).join(", "),
+            skipped > 0 ? `${skipped} row${skipped === 1 ? "" : "s"} skipped` : null,
+            "Payroll now uses days present ÷ working days",
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        });
+      }
+      if (attendanceImportRef.current) attendanceImportRef.current.value = "";
+    };
+    reader.onerror = () => toast.error("Could not read the selected file");
+    reader.readAsText(file);
+  };
+
   if (activeStaff) {
     return (
       <StaffProfileDetail
@@ -3966,7 +3962,7 @@ export function StaffRoster() {
             label: "Teachers",
             value: analytics.teachers,
             icon: GraduationCap,
-            iconClass: "text-[#2563EB]",
+            iconClass: "text-[#0F766E]",
           },
           {
             label: "Admin",
@@ -3978,7 +3974,7 @@ export function StaffRoster() {
             label: "Total",
             value: analytics.total,
             icon: Users,
-            iconClass: "text-[#2563EB]",
+            iconClass: "text-[#0F766E]",
           },
         ]}
       />
@@ -4003,7 +3999,7 @@ export function StaffRoster() {
           <div className={directoryStatValueClass}>{analytics.nonTeaching}</div>
         </div>
 
-        <div className={cn(glassCardClass, directoryStatCardClass, "bg-[#DBEAFE]/40")}>
+        <div className={cn(glassCardClass, directoryStatCardClass, "bg-[#CCFBF1]/40")}>
           <div className="flex min-w-0 flex-1 items-center justify-between gap-1 md:items-start md:gap-2">
             <div className={cn(directoryStatLabelClass, "text-slate-600")}>
               <span className="md:hidden">Total</span>
@@ -4020,134 +4016,239 @@ export function StaffRoster() {
         </div>
       </div>
 
-      <div className="flex w-full min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between xl:gap-4">
-        <h1 className="shrink-0 text-[18px] font-bold leading-tight tracking-tight text-slate-900 md:text-[24px] md:font-semibold xl:min-w-0 xl:flex-1 xl:truncate xl:text-[28px]">
+      <div className="flex w-full min-w-0 flex-col gap-3 xl:flex-row xl:items-start xl:justify-between xl:gap-4">
+        <h1 className="shrink-0 text-[18px] font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50 md:text-[24px] md:font-semibold xl:min-w-0 xl:flex-1 xl:truncate xl:pt-1 xl:text-[28px]">
           {showRecycleBin ? "Recycle Bin" : "Staff Directory"}
         </h1>
-        <div className={cn(directoryToolbarRow, "xl:max-w-full xl:shrink-0")}>
-          <button
-            type="button"
-            onClick={() => setShowRecycleBin((v) => !v)}
-            className={cn(
-              directoryToolbarBtn,
-              showRecycleBin
-                ? "border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] hover:bg-[#FEE2E2]"
-                : "text-slate-900",
-              showRecycleBin && "sm:flex-none",
-            )}
-            aria-pressed={showRecycleBin}
-          >
-            <Recycle className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate sm:hidden">Bin</span>
-            <span className="hidden truncate sm:inline">Recycle</span>
-            {deletedStaff.length > 0 && (
-              <span
-                className={cn(
-                  "ml-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 font-mono text-[10px] font-bold",
-                  showRecycleBin ? "bg-[#EF4444] text-white" : "bg-slate-900 text-white",
-                )}
-              >
-                {deletedStaff.length}
-              </span>
-            )}
-          </button>
 
-          {!showRecycleBin && (
-            <>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button type="button" className={directoryToolbarBtn}>
-                    <Filter className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">Filter</span>
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  sideOffset={8}
-                  collisionPadding={12}
-                  className="z-[250] w-56 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
-                >
-                  <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                    Department
-                  </DropdownMenuLabel>
-                  <DropdownMenuRadioGroup value={deptFilter} onValueChange={setDeptFilter}>
-                    <DropdownMenuRadioItem value="all" className="rounded-xl text-[13px]">
-                      All departments
-                    </DropdownMenuRadioItem>
-                    {departmentOptions.map((dept) => (
-                      <DropdownMenuRadioItem key={dept} value={dept} className="rounded-xl text-[13px]">
-                        {dept}
-                      </DropdownMenuRadioItem>
-                    ))}
-                  </DropdownMenuRadioGroup>
-                  <DropdownMenuSeparator className="my-2" />
-                  <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                    Status
-                  </DropdownMenuLabel>
-                  <DropdownMenuRadioGroup
-                    value={statusFilter}
-                    onValueChange={(value) => setStatusFilter(value as StaffStatusFilter)}
-                  >
-                    <DropdownMenuRadioItem value="all" className="rounded-xl text-[13px]">
-                      All statuses
-                    </DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="active" className="rounded-xl text-[13px]">
-                      Active
-                    </DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="inactive" className="rounded-xl text-[13px]">
-                      Inactive
-                    </DropdownMenuRadioItem>
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              <button type="button" onClick={handleExport} className={directoryToolbarBtn}>
-                <Download className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">Export</span>
-              </button>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button type="button" className={directoryToolbarBtn}>
-                    <Upload className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate sm:hidden">Upload</span>
-                    <span className="hidden truncate sm:inline">Bulk Upload</span>
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  sideOffset={8}
-                  collisionPadding={12}
-                  className="z-[250] w-56 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
-                >
-                  <DropdownMenuItem
-                    onClick={downloadStaffTemplate}
-                    className="cursor-pointer gap-2 rounded-xl text-[13px]"
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                    Download template
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={handleStaffImportClick}
-                    className="cursor-pointer gap-2 rounded-xl text-[13px]"
-                  >
-                    <Upload className="h-3.5 w-3.5" />
-                    Upload CSV
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
+        <div className="flex w-full min-w-0 flex-col gap-2 xl:max-w-2xl xl:shrink-0">
+          {showRecycleBin ? (
+            <div className="flex justify-end">
               <button
                 type="button"
-                onClick={() => setOpen(true)}
+                onClick={() => setShowRecycleBin(false)}
                 className={cn(
-                  mobilePrimaryBtn,
-                  "hidden md:inline-flex md:rounded-full md:bg-gradient-to-r md:from-[#2563EB] md:to-[#4C69A4] md:shadow-md md:shadow-blue-900/15 md:hover:opacity-95 md:hover:bg-gradient-to-r",
+                  mobileOutlineBtn,
+                  "border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] hover:bg-[#FEE2E2]",
                 )}
+                aria-pressed
               >
-                <Plus className="h-3.5 w-3.5" />
-                Recruit Staff
+                <Recycle className="h-3.5 w-3.5 shrink-0" />
+                Exit bin
+                {deletedStaff.length > 0 && (
+                  <span className="ml-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#EF4444] px-1.5 font-mono text-[10px] font-bold text-white">
+                    {deletedStaff.length}
+                  </span>
+                )}
               </button>
+            </div>
+          ) : (
+            <>
+              {/* Row 1 · Search + Filter */}
+              <div className="flex items-center gap-2">
+                <div className="relative min-w-0 flex-1">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search name, ID, role, phone…"
+                    className="h-10 w-full rounded-full border-slate-200/80 bg-white pl-9 pr-9 shadow-sm dark:border-white/15 dark:bg-zinc-900"
+                    aria-label="Search staff"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery("")}
+                      aria-label="Clear search"
+                      className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className={cn(
+                        mobileOutlineBtn,
+                        "relative shrink-0 gap-1.5 px-3.5",
+                        staffFiltersActive &&
+                          "border-[#99F6E4] bg-[#F0FDFA] text-[#0F766E] hover:bg-[#CCFBF1]",
+                      )}
+                    >
+                      <Filter className="h-3.5 w-3.5 shrink-0" />
+                      <span className="text-[12.5px]">Filter</span>
+                      {staffFiltersActive && (
+                        <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[#0F766E] ring-2 ring-white dark:ring-zinc-950" />
+                      )}
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    sideOffset={8}
+                    collisionPadding={12}
+                    className="z-[250] w-56 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+                  >
+                    <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                      Department
+                    </DropdownMenuLabel>
+                    <DropdownMenuRadioGroup value={deptFilter} onValueChange={setDeptFilter}>
+                      <DropdownMenuRadioItem value="all" className="rounded-xl text-[13px]">
+                        All departments
+                      </DropdownMenuRadioItem>
+                      {departmentOptions.map((dept) => (
+                        <DropdownMenuRadioItem
+                          key={dept}
+                          value={dept}
+                          className="rounded-xl text-[13px]"
+                        >
+                          {dept}
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                    <DropdownMenuSeparator className="my-2" />
+                    <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                      Status
+                    </DropdownMenuLabel>
+                    <DropdownMenuRadioGroup
+                      value={statusFilter}
+                      onValueChange={(value) => setStatusFilter(value as StaffStatusFilter)}
+                    >
+                      <DropdownMenuRadioItem value="all" className="rounded-xl text-[13px]">
+                        All statuses
+                      </DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="active" className="rounded-xl text-[13px]">
+                        Active
+                      </DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="inactive" className="rounded-xl text-[13px]">
+                        Inactive
+                      </DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              {/* Row 2 · Attendance · Export · Upload · Bin (+ Recruit on md+) */}
+              <div className="grid grid-cols-4 gap-1.5 md:flex md:flex-wrap md:justify-end md:gap-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className={cn(
+                        mobileOutlineBtn,
+                        "min-w-0 gap-1 px-1.5 text-[11px] md:flex-none md:gap-1.5 md:px-4 md:text-[12.5px]",
+                      )}
+                    >
+                      <ClipboardList className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate md:hidden">Attend</span>
+                      <span className="hidden truncate md:inline">Attendance</span>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    sideOffset={8}
+                    collisionPadding={12}
+                    className="z-[250] w-64 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+                  >
+                    <DropdownMenuLabel className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                      Payroll · {formatPayrollMonthLabel(payrollMonth)}
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem
+                      onClick={downloadAttendanceDemo}
+                      className="cursor-pointer gap-2 rounded-xl text-[13px]"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Download demo CSV
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={handleAttendanceImportClick}
+                      className="cursor-pointer gap-2 rounded-xl text-[13px]"
+                    >
+                      <Upload className="h-3.5 w-3.5" />
+                      Upload attendance CSV
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                <button
+                  type="button"
+                  onClick={handleExport}
+                  className={cn(
+                    mobileOutlineBtn,
+                    "min-w-0 gap-1 px-1.5 text-[11px] md:flex-none md:gap-1.5 md:px-4 md:text-[12.5px]",
+                  )}
+                >
+                  <Download className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">Export</span>
+                </button>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className={cn(
+                        mobileOutlineBtn,
+                        "min-w-0 gap-1 px-1.5 text-[11px] md:flex-none md:gap-1.5 md:px-4 md:text-[12.5px]",
+                      )}
+                    >
+                      <Upload className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">Upload</span>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    sideOffset={8}
+                    collisionPadding={12}
+                    className="z-[250] w-56 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+                  >
+                    <DropdownMenuItem
+                      onClick={downloadStaffTemplate}
+                      className="cursor-pointer gap-2 rounded-xl text-[13px]"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Download template
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={handleStaffImportClick}
+                      className="cursor-pointer gap-2 rounded-xl text-[13px]"
+                    >
+                      <Upload className="h-3.5 w-3.5" />
+                      Upload CSV
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                <button
+                  type="button"
+                  onClick={() => setShowRecycleBin(true)}
+                  className={cn(
+                    mobileOutlineBtn,
+                    "min-w-0 gap-1 px-1.5 text-[11px] text-slate-900 md:flex-none md:gap-1.5 md:px-4 md:text-[12.5px]",
+                  )}
+                  aria-pressed={false}
+                >
+                  <Recycle className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">Bin</span>
+                  {deletedStaff.length > 0 && (
+                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-slate-900 px-1.5 font-mono text-[10px] font-bold text-white">
+                      {deletedStaff.length}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setOpen(true)}
+                  className={cn(
+                    mobilePrimaryBtn,
+                    "col-span-4 hidden md:inline-flex md:col-auto md:rounded-full md:bg-gradient-to-r md:from-[#0F766E] md:to-[#115E59] md:shadow-md md:shadow-teal-900/15 md:hover:opacity-95",
+                  )}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Recruit Staff
+                </button>
+              </div>
             </>
           )}
         </div>
@@ -4159,6 +4260,13 @@ export function StaffRoster() {
         accept=".csv,text/csv"
         className="hidden"
         onChange={handleStaffImport}
+      />
+      <input
+        ref={attendanceImportRef}
+        type="file"
+        accept=".csv,text/csv"
+        className="hidden"
+        onChange={handleAttendanceImport}
       />
 
       {showRecycleBin ? (
@@ -4180,83 +4288,82 @@ export function StaffRoster() {
       ) : (
         <>
       {selectedIds.size > 0 && (
-      <div
-        className={cn(
-          glassCardClass,
-          "flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4",
-        )}
-      >
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="rounded-full bg-[#EFF6FF] px-2.5 py-1 text-[12px] font-semibold text-[#1D4ED8]">
-            {selectedIds.size} selected
-          </span>
-          <button
-            type="button"
-            onClick={() => toggleStaffSelectAll(true)}
-            className="text-[12px] font-semibold text-slate-600 underline-offset-2 hover:text-slate-900 hover:underline"
-          >
-            Select all shown
-          </button>
-          <button
-            type="button"
-            onClick={() => selectStaffByStatus("active")}
-            className="text-[12px] font-semibold text-[#2563EB] underline-offset-2 hover:underline"
-          >
-            Select active
-          </button>
-          <button
-            type="button"
-            onClick={() => selectStaffByStatus("inactive")}
-            className="text-[12px] font-semibold text-slate-500 underline-offset-2 hover:underline"
-          >
-            Select inactive
-          </button>
-          <button
-            type="button"
-            onClick={clearStaffSelection}
-            className="text-[12px] font-semibold text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
-          >
-            Clear
-          </button>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button type="button" className={mobileOutlineBtn}>
-                Change Status
-                <ChevronDown className="h-3.5 w-3.5" />
+        <div className={cn(glassCardClass, "overflow-hidden p-0 lg:hidden")}>
+          <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <span className="rounded-full bg-[#F0FDFA] px-2.5 py-1 text-[12px] font-semibold text-[#0F766E]">
+                {selectedIds.size} selected
+              </span>
+              {!allStaffSelected && (
+                <button
+                  type="button"
+                  onClick={() => toggleStaffSelectAll(true)}
+                  className="text-[12px] font-semibold text-slate-600 underline-offset-2 hover:text-slate-900 hover:underline"
+                >
+                  Select all shown
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => selectStaffByStatus("active")}
+                className="text-[12px] font-semibold text-[#0F766E] underline-offset-2 hover:underline"
+              >
+                Select active
               </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              sideOffset={8}
-              collisionPadding={12}
-              className="z-[250] w-44 rounded-lg border-[#E5E5E5] bg-white p-1 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
-            >
-              <DropdownMenuItem
-                className="cursor-pointer rounded-md text-[13px]"
-                onClick={() => bulkChangeStaffStatus(true)}
+              <button
+                type="button"
+                onClick={() => selectStaffByStatus("inactive")}
+                className="text-[12px] font-semibold text-slate-500 underline-offset-2 hover:underline"
               >
-                Set Active
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="cursor-pointer rounded-md text-[13px]"
-                onClick={() => bulkChangeStaffStatus(false)}
+                Select inactive
+              </button>
+              <button
+                type="button"
+                onClick={clearStaffSelection}
+                className="text-[12px] font-semibold text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
               >
-                Set Inactive
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <button
-            type="button"
-            onClick={openStaffBulkWhatsApp}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#10B981] px-3 text-[13px] font-semibold text-white transition-colors hover:bg-[#059669]"
-          >
-            <MessageCircle className="h-3.5 w-3.5" />
-            Bulk WhatsApp
-          </button>
+                Clear
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" className={mobileOutlineBtn}>
+                    Change Status
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  sideOffset={8}
+                  collisionPadding={12}
+                  className="z-[250] w-44 rounded-lg border-[#E5E5E5] bg-white p-1 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+                >
+                  <DropdownMenuItem
+                    className="cursor-pointer rounded-md text-[13px]"
+                    onClick={() => bulkChangeStaffStatus(true)}
+                  >
+                    Set Active
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="cursor-pointer rounded-md text-[13px]"
+                    onClick={() => bulkChangeStaffStatus(false)}
+                  >
+                    Set Inactive
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <button
+                type="button"
+                onClick={openStaffBulkWhatsApp}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#10B981] px-3 text-[13px] font-semibold text-white transition-colors hover:bg-[#059669]"
+              >
+                <MessageCircle className="h-3.5 w-3.5" />
+                Bulk WhatsApp
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
       )}
 
       <div className={cn(directoryMobileListClass, "lg:hidden")}>
@@ -4301,11 +4408,11 @@ export function StaffRoster() {
               className={cn(
                 directoryMobileCardClass,
                 "cursor-pointer",
-                isSelected && "ring-2 ring-[#2563EB]/35",
+                isSelected && "ring-2 ring-[#0F766E]/35",
               )}
             >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-2.5">
+              <div className="flex min-w-0 items-start justify-between gap-2">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
                   <div
                     onClick={(e) => e.stopPropagation()}
                     onKeyDown={(e) => e.stopPropagation()}
@@ -4318,7 +4425,7 @@ export function StaffRoster() {
                     />
                   </div>
                   <DirectoryPersonAvatar name={member.name} photoUrl={member.photoUrl} />
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="truncate text-[13.5px] font-semibold leading-tight text-black sm:text-[14px]">
                       {member.name}
                     </div>
@@ -4327,11 +4434,13 @@ export function StaffRoster() {
                     </div>
                   </div>
                 </div>
-                <EnrollmentStatusBadge active={member.active} />
+                <div className="shrink-0">
+                  <EnrollmentStatusBadge active={member.active} />
+                </div>
               </div>
 
               <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                <span className="inline-flex max-w-full truncate rounded-full bg-[#DBEAFE] px-2 py-0.5 text-[10px] font-semibold text-[#0F172A] sm:px-2.5 sm:py-1 sm:text-[10.5px]">
+                <span className="inline-flex max-w-full truncate rounded-full bg-[#CCFBF1] px-2 py-0.5 text-[10px] font-semibold text-[#0F172A] sm:px-2.5 sm:py-1 sm:text-[10.5px]">
                   {member.role}
                 </span>
                 <span className="inline-flex max-w-full truncate rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-medium text-black/75 sm:px-2.5 sm:py-1 sm:text-[10.5px]">
@@ -4353,7 +4462,7 @@ export function StaffRoster() {
                     openStaffEdit(member.id);
                   }}
                   aria-label={`Edit profile for ${member.name}`}
-                  className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-[#E5E5E5] bg-[#F4F4F5] text-black/60 transition-colors hover:border-black/20 hover:bg-white hover:text-black sm:h-8 sm:w-8"
+                  className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-[#E5E5E5] bg-[#F4F4F5] text-black/60 dark:text-zinc-400 transition-colors hover:border-black/20 hover:bg-white hover:text-black sm:h-8 sm:w-8"
                 >
                   <Pencil className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                 </button>
@@ -4365,6 +4474,82 @@ export function StaffRoster() {
 
       <div className="mobile-scrollbar-none hidden w-full max-w-full overflow-x-auto lg:block">
         <div className={glassTableWrapClass}>
+          {selectedIds.size > 0 && (
+            <div className="flex flex-col gap-3 border-b border-slate-100/80 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="rounded-full bg-[#F0FDFA] px-2.5 py-1 text-[12px] font-semibold text-[#0F766E]">
+                  {selectedIds.size} selected
+                </span>
+                {!allStaffSelected && (
+                  <button
+                    type="button"
+                    onClick={() => toggleStaffSelectAll(true)}
+                    className="text-[12px] font-semibold text-slate-600 underline-offset-2 hover:text-slate-900 hover:underline"
+                  >
+                    Select all shown
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => selectStaffByStatus("active")}
+                  className="text-[12px] font-semibold text-[#0F766E] underline-offset-2 hover:underline"
+                >
+                  Select active
+                </button>
+                <button
+                  type="button"
+                  onClick={() => selectStaffByStatus("inactive")}
+                  className="text-[12px] font-semibold text-slate-500 underline-offset-2 hover:underline"
+                >
+                  Select inactive
+                </button>
+                <button
+                  type="button"
+                  onClick={clearStaffSelection}
+                  className="text-[12px] font-semibold text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
+                >
+                  Clear
+                </button>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button type="button" className={mobileOutlineBtn}>
+                      Change Status
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    sideOffset={8}
+                    collisionPadding={12}
+                    className="z-[250] w-44 rounded-lg border-[#E5E5E5] bg-white p-1 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+                  >
+                    <DropdownMenuItem
+                      className="cursor-pointer rounded-md text-[13px]"
+                      onClick={() => bulkChangeStaffStatus(true)}
+                    >
+                      Set Active
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="cursor-pointer rounded-md text-[13px]"
+                      onClick={() => bulkChangeStaffStatus(false)}
+                    >
+                      Set Inactive
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <button
+                  type="button"
+                  onClick={openStaffBulkWhatsApp}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#10B981] px-3 text-[13px] font-semibold text-white transition-colors hover:bg-[#059669]"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  Bulk WhatsApp
+                </button>
+              </div>
+            </div>
+          )}
           <table className="w-full min-w-[700px] table-fixed border-collapse text-left">
             <colgroup>
               <col className="w-[44px]" />
@@ -4386,7 +4571,7 @@ export function StaffRoster() {
                 {["Name", "Role", "Department", "Status"].map((header) => (
                   <th
                     key={header}
-                    className="border-b border-slate-100 px-4 pb-4 pt-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400 sm:px-6 sm:pt-5"
+                    className="border-b border-slate-100 px-4 pb-4 pt-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:border-white/10 dark:text-zinc-400 sm:px-6 sm:pt-5"
                   >
                     {header}
                   </th>
@@ -4398,7 +4583,7 @@ export function StaffRoster() {
                 <tr>
                   <td
                     colSpan={5}
-                    className="px-4 py-10 text-center text-[13px] text-black/55 sm:px-6"
+                    className="px-4 py-10 text-center text-[13px] text-black/55 dark:text-zinc-400 sm:px-6"
                   >
                     No staff records match the current filters.
                   </td>
@@ -4420,8 +4605,8 @@ export function StaffRoster() {
                   }}
                   aria-label={`Open profile for ${member.name}`}
                   className={cn(
-                    "cursor-pointer border-b border-slate-50 transition-colors last:border-0 hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2563EB]",
-                    isSelected && "bg-[#EFF6FF]/70 hover:bg-[#EFF6FF]",
+                    "cursor-pointer border-b border-slate-50 transition-colors last:border-0 hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0F766E] dark:border-white/5 dark:hover:bg-white/5 dark:focus-visible:bg-white/5",
+                    isSelected && "bg-[#F0FDFA]/70 hover:bg-[#F0FDFA] dark:bg-[#0F766E]/15 dark:hover:bg-[#0F766E]/25",
                   )}
                 >
                   <td
@@ -4444,7 +4629,7 @@ export function StaffRoster() {
                           className="h-10 w-10 shrink-0 rounded-xl object-cover"
                         />
                       ) : (
-                        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-black text-[12px] font-semibold text-white">
+                        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#0F766E] text-[12px] font-semibold text-white">
                           {personInitials(member.name)}
                         </div>
                       )}
@@ -4458,10 +4643,10 @@ export function StaffRoster() {
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3.5 align-middle text-[13px] text-black/75 sm:px-6">
+                  <td className="px-4 py-3.5 align-middle text-[13px] text-black/75 dark:text-zinc-300 sm:px-6">
                     <span className="block truncate">{member.role}</span>
                   </td>
-                  <td className="px-4 py-3.5 align-middle text-[13px] text-black/75 sm:px-6">
+                  <td className="px-4 py-3.5 align-middle text-[13px] text-black/75 dark:text-zinc-300 sm:px-6">
                     <span className="block truncate">{member.dept}</span>
                   </td>
                   <td className="px-4 py-3.5 align-middle sm:px-6">
@@ -4499,7 +4684,7 @@ export function StaffRoster() {
             <DialogTitle className="text-[20px] font-semibold text-black">
               Bulk WhatsApp
             </DialogTitle>
-            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
+            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60 dark:text-zinc-400">
               Sends via BugRicer Notify to {selectedStaffWithPhone.length} staff
               member{selectedStaffWithPhone.length === 1 ? "" : "s"}
               {selectedStaff.length > selectedStaffWithPhone.length
@@ -4571,7 +4756,7 @@ export function StaffRoster() {
                     className="h-14 w-14 rounded-lg object-cover"
                   />
                 ) : (
-                  <div className="grid h-14 w-14 place-items-center rounded-lg bg-black text-sm font-semibold text-white">
+                  <div className="grid h-14 w-14 place-items-center rounded-lg bg-[#0F766E] text-sm font-semibold text-white">
                     {form.name.trim() ? personInitials(form.name) : "?"}
                   </div>
                 )}
@@ -4579,12 +4764,12 @@ export function StaffRoster() {
                   type="button"
                   onClick={() => recruitPhotoRef.current?.click()}
                   aria-label="Upload profile photo"
-                  className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#2563EB] text-white shadow-sm"
+                  className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#0F766E] text-white shadow-sm"
                 >
                   <Camera className="h-3.5 w-3.5" />
                 </button>
               </div>
-              <div className="min-w-0 text-[12px] text-black/55">
+              <div className="min-w-0 text-[12px] text-black/55 dark:text-zinc-400">
                 <div className="font-medium text-black">Profile Photo</div>
                 <div className="mt-0.5">Optional · JPG, PNG or WebP up to 2 MB</div>
                 {form.photoUrl && (
@@ -4607,7 +4792,7 @@ export function StaffRoster() {
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                 Full Name
               </Label>
               <Input
@@ -4618,7 +4803,7 @@ export function StaffRoster() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                 Role
               </Label>
               <FieldSelect
@@ -4634,7 +4819,7 @@ export function StaffRoster() {
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                   Department
                 </Label>
                 <FieldSelect
@@ -4646,7 +4831,7 @@ export function StaffRoster() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                   Employee ID
                 </Label>
                 <Input
@@ -4658,7 +4843,7 @@ export function StaffRoster() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                 Phone
               </Label>
               <Input
@@ -4670,7 +4855,7 @@ export function StaffRoster() {
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                   Alternative Number
                   <span className="ml-1 font-medium normal-case tracking-normal text-black/40">
                     (optional)
@@ -4684,7 +4869,7 @@ export function StaffRoster() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                   Guardian Number
                 </Label>
                 <Input
@@ -4699,7 +4884,7 @@ export function StaffRoster() {
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+              <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
                 Recruit Staff
               </Button>
             </DialogFooter>
@@ -4732,13 +4917,7 @@ export function FinanceModule() {
   const [view, setView] = useState<FinanceView>(search.tab ?? "overview");
 
   useEffect(() => {
-    if (search.tab === "receive" || search.tab === "make") {
-      setView(search.tab);
-    } else if (!search.tab) {
-      setView((current) =>
-        current === "receive" || current === "make" ? "overview" : current,
-      );
-    }
+    setView(search.tab ?? "overview");
   }, [search.tab]);
 
   useEffect(() => {
@@ -4764,10 +4943,10 @@ export function FinanceModule() {
     }
     toast.error("You do not have access to this finance view");
     setView(next);
-    if (next === "receive" || next === "make") {
-      navigate({ to: "/tenant/finance", search: { tab: next }, replace: true });
-    } else {
+    if (next === "overview") {
       navigate({ to: "/tenant/finance", search: {}, replace: true });
+    } else {
+      navigate({ to: "/tenant/finance", search: { tab: next }, replace: true });
     }
   }, [session, view, navigate]);
 
@@ -4777,22 +4956,17 @@ export function FinanceModule() {
       return;
     }
     setView(next);
-    if (next === "receive" || next === "make") {
-      navigate({ to: "/tenant/finance", search: { tab: next }, replace: true });
+    if (next === "overview") {
+      navigate({ to: "/tenant/finance", search: {}, replace: true });
       return;
     }
-    navigate({ to: "/tenant/finance", search: {}, replace: true });
-  };
-
-  const backToOverview = () => {
-    setView("overview");
-    navigate({ to: "/tenant/finance", search: {}, replace: true });
+    navigate({ to: "/tenant/finance", search: { tab: next }, replace: true });
   };
 
   if (view === "receive") {
     return (
       <div className="w-full space-y-4 sm:space-y-5">
-        <ReceivePayment onBack={backToOverview} />
+        <ReceivePayment />
       </div>
     );
   }
@@ -4800,7 +4974,7 @@ export function FinanceModule() {
   if (view === "make") {
     return (
       <div className="w-full space-y-4 sm:space-y-5">
-        <MakePayment onBack={backToOverview} />
+        <MakePayment />
       </div>
     );
   }
@@ -4808,11 +4982,6 @@ export function FinanceModule() {
   if (view === "analytics") {
     return (
       <div className="w-full space-y-4 sm:space-y-5">
-        <FinanceFlowHeader
-          title="Ledger Analytics"
-          description="Income and outflow distribution"
-          onBack={backToOverview}
-        />
         <LedgerAnalytics />
       </div>
     );
@@ -4821,7 +4990,6 @@ export function FinanceModule() {
   if (view === "ledger") {
     return (
       <div className="w-full space-y-4 sm:space-y-5">
-        <FinanceFlowHeader title="Ledger" description="General ledger" onBack={backToOverview} />
         <GeneralLedgerReport />
       </div>
     );
@@ -4830,11 +4998,6 @@ export function FinanceModule() {
   if (view === "pl") {
     return (
       <div className="w-full space-y-4 sm:space-y-5">
-        <FinanceFlowHeader
-          title="Profit & Loss"
-          description="Income versus operating expense"
-          onBack={backToOverview}
-        />
         <ProfitLossReport />
       </div>
     );
@@ -4843,11 +5006,6 @@ export function FinanceModule() {
   if (view === "balance") {
     return (
       <div className="w-full space-y-4 sm:space-y-5">
-        <FinanceFlowHeader
-          title="Balance Sheet"
-          description="Position statement"
-          onBack={backToOverview}
-        />
         <BalanceSheetReport />
       </div>
     );
@@ -4856,11 +5014,6 @@ export function FinanceModule() {
   if (view === "fees") {
     return (
       <div className="w-full space-y-4 sm:space-y-5">
-        <FinanceFlowHeader
-          title="Fees Report"
-          description="Student fee collections and outstanding dues"
-          onBack={backToOverview}
-        />
         <FeesReport />
       </div>
     );
@@ -4869,11 +5022,6 @@ export function FinanceModule() {
   if (view === "salary") {
     return (
       <div className="w-full space-y-4 sm:space-y-5">
-        <FinanceFlowHeader
-          title="Salary Report"
-          description="Staff payroll register and salary obligations"
-          onBack={backToOverview}
-        />
         <SalaryReport />
       </div>
     );
@@ -4882,11 +5030,6 @@ export function FinanceModule() {
   if (view === "daybook") {
     return (
       <div className="w-full space-y-4 sm:space-y-5">
-        <FinanceFlowHeader
-          title="Day Book"
-          description="Chronological cash book of receipts and payments"
-          onBack={backToOverview}
-        />
         <DayBookReport />
       </div>
     );
@@ -4895,69 +5038,12 @@ export function FinanceModule() {
   if (view === "reconciliation") {
     return (
       <div className="w-full space-y-4 sm:space-y-5">
-        <FinanceFlowHeader
-          title="Bank Reconciliation"
-          description="Match bank & UPI receipts against the bank statement"
-          onBack={backToOverview}
-        />
         <BankReconciliationReport />
       </div>
     );
   }
 
   return <FinanceOverview onOpenView={openView} />;
-}
-
-function FinanceFlowHeader({
-  title,
-  description,
-  onBack,
-}: {
-  title: string;
-  description: string;
-  onBack: () => void;
-}) {
-  return (
-    <div className="flex min-w-0 items-start gap-2.5 sm:items-center sm:gap-3">
-      <button
-        type="button"
-        onClick={onBack}
-        aria-label="Back to finance overview"
-        className={cn(
-          glassInsetClass,
-          "inline-flex h-9 w-9 shrink-0 items-center justify-center text-slate-700 transition-colors hover:text-[#2563EB] sm:h-10 sm:w-auto sm:gap-1.5 sm:px-3",
-        )}
-      >
-        <ChevronLeft className="h-4 w-4 shrink-0" />
-        <span className="hidden text-[13px] font-semibold sm:inline">Back</span>
-      </button>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-[17px] font-bold leading-tight tracking-tight text-slate-900 sm:text-[20px] lg:text-title">
-          {title}
-        </div>
-        <p className="mt-0.5 text-[11.5px] leading-snug text-slate-500 sm:text-[12px]">
-          {description}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function FinancePageBackButton({ onBack }: { onBack: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onBack}
-      aria-label="Back to finance overview"
-      className={cn(
-        glassInsetClass,
-        "inline-flex h-9 w-9 shrink-0 items-center justify-center text-slate-700 transition-colors hover:text-[#2563EB] sm:h-10 sm:w-auto sm:gap-1.5 sm:px-3",
-      )}
-    >
-      <ChevronLeft className="h-4 w-4 shrink-0" />
-      <span className="hidden text-[13px] font-semibold sm:inline">Back</span>
-    </button>
-  );
 }
 
 function FinanceOverview({
@@ -4979,7 +5065,7 @@ function FinanceOverview({
 }) {
   const { session } = useAuth();
   const {
-    payments,
+    activePayments: payments,
     setPayments,
     setStudents,
     paymentCategories,
@@ -5282,145 +5368,148 @@ function FinanceOverview({
   return (
     <div className="w-full space-y-5 pb-24 md:pb-0">
 
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 xl:grid-cols-4">
-        {(
-          [
-            {
-              k: "fees" as const,
-              l: "Fees Report",
-              d: "Collections & dues",
-              icon: GraduationCap,
-              iconClass: "bg-[#DBEAFE] text-[#2563EB]",
-            },
-            {
-              k: "salary" as const,
-              l: "Salary Report",
-              d: "Payroll obligations",
-              icon: Users,
-              iconClass: "bg-[#F3E8FF] text-violet-600",
-            },
-            {
-              k: "daybook" as const,
-              l: "Day Book",
-              d: "Daily cash activity",
-              icon: BookOpen,
-              iconClass: "bg-[#FEF3C7] text-amber-700",
-            },
-            {
-              k: "analytics" as const,
-              l: "Analytics",
-              d: "Financial insights",
-              icon: ChartPie,
-              iconClass: "bg-[#D1F2E1] text-[#059669]",
-            },
-            {
-              k: "ledger" as const,
-              l: "Ledger",
-              d: "Account entries",
-              icon: ListTodo,
-              iconClass: "bg-[#E0E7FF] text-indigo-600",
-            },
-            {
-              k: "pl" as const,
-              l: "Profit & Loss",
-              d: "Income vs expense",
-              icon: TrendingUp,
-              iconClass: "bg-[#DCFCE7] text-emerald-700",
-            },
-            {
-              k: "balance" as const,
-              l: "Balance Sheet",
-              d: "Assets & liabilities",
-              icon: Scale,
-              iconClass: "bg-[#FCE7F3] text-pink-700",
-            },
-            {
-              k: "reconciliation" as const,
-              l: "Bank Reconciliation",
-              d: "Match statement & books",
-              icon: Landmark,
-              iconClass: "bg-[#CFFAFE] text-cyan-700",
-            },
-          ] as const
-        )
-          .filter((item) => sessionCanAccessFinanceView(session, item.k))
-          .map((item, index, items) => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.k}
-              type="button"
-              onClick={() => onOpenView(item.k)}
-              className={cn(
-                glassCardClass,
-                "group flex min-h-[116px] min-w-0 flex-col items-start justify-between gap-3 p-3.5 text-left transition-all hover:-translate-y-0.5 hover:border-white hover:bg-white/80 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] sm:min-h-[128px] sm:p-4",
-                items.length % 2 === 1 &&
-                  index === items.length - 1 &&
-                  "col-span-2 sm:col-span-1",
-              )}
-            >
-              <div className="flex w-full items-start justify-between gap-2">
-                <span
-                  className={cn(
-                    "grid h-9 w-9 shrink-0 place-items-center rounded-xl sm:h-10 sm:w-10",
-                    item.iconClass,
-                  )}
-                >
-                  <Icon className="h-4 w-4 sm:h-[18px] sm:w-[18px]" />
-                </span>
-                <ArrowUpRight className="h-4 w-4 shrink-0 text-slate-300 transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[#2563EB]" />
-              </div>
-              <div className="min-w-0">
-                <div className="text-[12.5px] font-bold leading-snug text-slate-900 sm:text-[14px]">
-                  {item.l}
-                </div>
-                <p className="mt-1 text-[10.5px] leading-snug text-slate-500 sm:text-[11.5px]">
-                  {item.d}
-                </p>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="hidden grid-cols-1 gap-4 sm:grid-cols-2 md:grid">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
         {sessionCanAccessFinanceView(session, "receive") && (
-        <button
-          type="button"
-          onClick={() => onOpenView("receive")}
-          className={cn(
-            glassCardClass,
-            "flex min-h-[96px] items-center gap-4 p-5 text-left transition-colors hover:bg-white/70",
-          )}
-        >
-          <span className="grid h-12 w-12 place-items-center rounded-lg bg-[#D1F2E1]">
-            <ArrowDownToLine className="h-5 w-5 text-[#10B981]" />
-          </span>
-          <div>
-            <div className="text-[15px] font-bold text-slate-900">Receive payment</div>
-            <p className="mt-0.5 text-[12px] text-slate-500">Capture inbound fee receipts</p>
-          </div>
-        </button>
+          <button
+            type="button"
+            onClick={() => onOpenView("receive")}
+            className={cn(
+              glassCardClass,
+              "flex min-h-[96px] items-center gap-4 p-4 text-left transition-colors hover:bg-white/70 sm:p-5",
+            )}
+          >
+            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#D1F2E1]">
+              <ArrowDownToLine className="h-5 w-5 text-[#10B981]" />
+            </span>
+            <div className="min-w-0">
+              <div className="text-[15px] font-bold text-slate-900">Receive payment</div>
+              <p className="mt-0.5 text-[12px] text-slate-500">Capture inbound fee receipts</p>
+            </div>
+          </button>
         )}
         {sessionCanAccessFinanceView(session, "make") && (
-        <button
-          type="button"
-          onClick={() => onOpenView("make")}
-          className={cn(
-            glassCardClass,
-            "flex min-h-[96px] items-center gap-4 p-5 text-left transition-colors hover:bg-white/70",
-          )}
-        >
-          <span className="grid h-12 w-12 place-items-center rounded-lg bg-[#DBEAFE]">
-            <ArrowUpFromLine className="h-5 w-5 text-[#2563EB]" />
-          </span>
-          <div>
-            <div className="text-[15px] font-bold text-slate-900">Make payment</div>
-            <p className="mt-0.5 text-[12px] text-slate-500">Pay vendors and salaries</p>
-          </div>
-        </button>
+          <button
+            type="button"
+            onClick={() => onOpenView("make")}
+            className={cn(
+              glassCardClass,
+              "flex min-h-[96px] items-center gap-4 p-4 text-left transition-colors hover:bg-white/70 sm:p-5",
+            )}
+          >
+            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#CCFBF1]">
+              <ArrowUpFromLine className="h-5 w-5 text-[#0F766E]" />
+            </span>
+            <div className="min-w-0">
+              <div className="text-[15px] font-bold text-slate-900">Make payment</div>
+              <p className="mt-0.5 text-[12px] text-slate-500">Pay vendors and salaries</p>
+            </div>
+          </button>
         )}
       </div>
+
+      <section className={cn(glassCardClass, "p-4 sm:p-5")}>
+        <h3 className="text-[15px] font-bold text-slate-900">Reports</h3>
+        <p className="mt-0.5 text-[12px] text-slate-500">Financial statements and analytics</p>
+        <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 xl:grid-cols-4">
+          {(
+            [
+              {
+                k: "fees" as const,
+                l: "Fees Report",
+                d: "Collections & dues",
+                icon: GraduationCap,
+                iconClass: "bg-[#CCFBF1] text-[#0F766E]",
+              },
+              {
+                k: "salary" as const,
+                l: "Salary Report",
+                d: "Payroll obligations",
+                icon: Users,
+                iconClass: "bg-[#F3E8FF] text-violet-600",
+              },
+              {
+                k: "daybook" as const,
+                l: "Day Book",
+                d: "Daily cash activity",
+                icon: BookOpen,
+                iconClass: "bg-[#FEF3C7] text-amber-700",
+              },
+              {
+                k: "analytics" as const,
+                l: "Analytics",
+                d: "Financial insights",
+                icon: ChartPie,
+                iconClass: "bg-[#D1F2E1] text-[#059669]",
+              },
+              {
+                k: "ledger" as const,
+                l: "Ledger",
+                d: "Account entries",
+                icon: ListTodo,
+                iconClass: "bg-[#E0E7FF] text-indigo-600",
+              },
+              {
+                k: "pl" as const,
+                l: "Profit & Loss",
+                d: "Income vs expense",
+                icon: TrendingUp,
+                iconClass: "bg-[#DCFCE7] text-emerald-700",
+              },
+              {
+                k: "balance" as const,
+                l: "Balance Sheet",
+                d: "Assets & liabilities",
+                icon: Scale,
+                iconClass: "bg-[#FCE7F3] text-pink-700",
+              },
+              {
+                k: "reconciliation" as const,
+                l: "Bank Reconciliation",
+                d: "Match statement & books",
+                icon: Landmark,
+                iconClass: "bg-[#CFFAFE] text-cyan-700",
+              },
+            ] as const
+          )
+            .filter((item) => sessionCanAccessFinanceView(session, item.k))
+            .map((item, index, items) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.k}
+                  type="button"
+                  onClick={() => onOpenView(item.k)}
+                  className={cn(
+                    "group flex min-h-[116px] min-w-0 flex-col items-start justify-between gap-3 rounded-2xl border border-white/70 bg-white/70 p-3.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-white hover:bg-white hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E] dark:border-white/10 dark:bg-zinc-900/70 dark:hover:border-white/20 dark:hover:bg-zinc-800 sm:min-h-[128px] sm:p-4",
+                    items.length % 2 === 1 &&
+                      index === items.length - 1 &&
+                      "col-span-2 sm:col-span-1",
+                  )}
+                >
+                  <div className="flex w-full items-start justify-between gap-2">
+                    <span
+                      className={cn(
+                        "grid h-9 w-9 shrink-0 place-items-center rounded-xl sm:h-10 sm:w-10",
+                        item.iconClass,
+                      )}
+                    >
+                      <Icon className="h-4 w-4 sm:h-[18px] sm:w-[18px]" />
+                    </span>
+                    <ArrowUpRight className="h-4 w-4 shrink-0 text-slate-300 transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[#0F766E]" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[12.5px] font-bold leading-snug text-slate-900 dark:text-zinc-100 sm:text-[14px]">
+                      {item.l}
+                    </div>
+                    <p className="mt-1 text-[10.5px] leading-snug text-slate-500 dark:text-zinc-400 sm:text-[11.5px]">
+                      {item.d}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+        </div>
+      </section>
 
       <div className="grid grid-cols-12 gap-5">
         <section className={cn(glassCardClass, "col-span-12 flex flex-col p-5 lg:col-span-4")}>
@@ -5449,7 +5538,7 @@ function FinanceOverview({
                   </div>
                   <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
                     <div
-                      className="h-full rounded-full bg-[#2563EB]"
+                      className="h-full rounded-full bg-[#0F766E]"
                       style={{ width: `${pct}%` }}
                     />
                   </div>
@@ -5537,7 +5626,7 @@ function FinanceOverview({
                   <button
                     type="button"
                     onClick={() => payOverdueBill(bill)}
-                    className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-full bg-slate-950 px-3 text-[11.5px] font-semibold text-white transition-colors hover:bg-slate-800"
+                    className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-full bg-[#0F766E] px-3 text-[11.5px] font-semibold text-white transition-colors hover:bg-[#0D9488]"
                   >
                     <HandCoins className="h-3.5 w-3.5" />
                     Pay
@@ -5614,7 +5703,7 @@ function FinanceOverview({
 
         <div className="mt-4 space-y-2.5 md:hidden">
           {payments.length === 0 && (
-            <div className="rounded-xl border border-dashed border-[#E5E5E5] bg-white/60 px-4 py-8 text-center text-[12px] text-black/55">
+            <div className="rounded-xl border border-dashed border-[#E5E5E5] bg-white/60 px-4 py-8 text-center text-[12px] text-black/55 dark:text-zinc-400">
               No transactions recorded yet
             </div>
           )}
@@ -5639,7 +5728,7 @@ function FinanceOverview({
               </div>
 
               <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                <span className="inline-flex max-w-full truncate rounded-full bg-[#DBEAFE] px-2 py-0.5 text-[10px] font-semibold text-[#0F172A]">
+                <span className="inline-flex max-w-full truncate rounded-full bg-[#CCFBF1] px-2 py-0.5 text-[10px] font-semibold text-[#0F172A]">
                   {p.cat}
                 </span>
                 <span className="inline-flex max-w-full truncate rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-medium text-black/70">
@@ -5653,7 +5742,7 @@ function FinanceOverview({
               </div>
 
               {p.narration && (
-                <p className="mt-2 line-clamp-2 text-[11.5px] leading-snug text-black/55">
+                <p className="mt-2 line-clamp-2 text-[11.5px] leading-snug text-black/55 dark:text-zinc-400">
                   {p.narration}
                 </p>
               )}
@@ -5685,7 +5774,7 @@ function FinanceOverview({
                         type="button"
                         aria-label={`Edit receipt ${p.id}`}
                         onClick={() => openEditPayment(p)}
-                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
@@ -5712,7 +5801,7 @@ function FinanceOverview({
                     type="button"
                     aria-label={`Share receipt ${p.id}`}
                     onClick={() => shareTransaction(p)}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#DBEAFE] bg-[#EFF6FF] px-2.5 text-[11px] font-semibold text-[#2563EB] transition-colors hover:bg-[#DBEAFE]"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#CCFBF1] bg-[#F0FDFA] px-2.5 text-[11px] font-semibold text-[#0F766E] transition-colors hover:bg-[#CCFBF1]"
                   >
                     <Share2 className="h-3.5 w-3.5" />
                     Share
@@ -5732,7 +5821,7 @@ function FinanceOverview({
                   <th
                     key={header}
                     className={cn(
-                      "px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/55",
+                      "px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400",
                       header === "Actions" && "text-right",
                     )}
                   >
@@ -5744,7 +5833,7 @@ function FinanceOverview({
             <tbody>
               {payments.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-[12px] text-black/55">
+                  <td colSpan={6} className="px-3 py-8 text-center text-[12px] text-black/55 dark:text-zinc-400">
                     No transactions recorded yet
                   </td>
                 </tr>
@@ -5763,7 +5852,7 @@ function FinanceOverview({
                         : ""}
                     </div>
                   </td>
-                  <td className="px-3 py-3 font-mono text-[11px] text-black/55">{p.time}</td>
+                  <td className="px-3 py-3 font-mono text-[11px] text-black/55 dark:text-zinc-400">{p.time}</td>
                   <td className="px-3 py-3 font-mono font-semibold text-black">
                     ₹ {p.amount.toLocaleString("en-IN")}
                   </td>
@@ -5781,7 +5870,7 @@ function FinanceOverview({
                             aria-label={`Edit receipt ${p.id}`}
                             title="Edit"
                             onClick={() => openEditPayment(p)}
-                            className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                            className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </button>
@@ -5801,7 +5890,7 @@ function FinanceOverview({
                         aria-label={`Download receipt ${p.id}`}
                         title="Download"
                         onClick={() => downloadTransaction(p)}
-                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
                       >
                         <Download className="h-3.5 w-3.5" />
                       </button>
@@ -5810,7 +5899,7 @@ function FinanceOverview({
                         aria-label={`Share receipt ${p.id}`}
                         title="Share"
                         onClick={() => shareTransaction(p)}
-                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-[#2563EB] hover:bg-[#DBEAFE] hover:text-[#2563EB]"
+                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-[#0F766E] hover:bg-[#CCFBF1] hover:text-[#0F766E]"
                       >
                         <Share2 className="h-3.5 w-3.5" />
                       </button>
@@ -5841,7 +5930,7 @@ function FinanceOverview({
               </DialogHeader>
               <form onSubmit={saveEditedPayment} className="space-y-3">
                 <div className="space-y-1.5">
-                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                     Account
                   </Label>
                   <Input
@@ -5853,7 +5942,7 @@ function FinanceOverview({
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                       Category
                     </Label>
                     <Select
@@ -5884,7 +5973,7 @@ function FinanceOverview({
                     </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                       Mode
                     </Label>
                     <Select
@@ -5908,7 +5997,7 @@ function FinanceOverview({
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                       Amount (₹)
                     </Label>
                     <Input
@@ -5920,7 +6009,7 @@ function FinanceOverview({
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                       Payer type
                     </Label>
                     <Select
@@ -5943,7 +6032,7 @@ function FinanceOverview({
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                     Date / Time
                   </Label>
                   <Input
@@ -5954,7 +6043,7 @@ function FinanceOverview({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                     Narration
                   </Label>
                   <Textarea
@@ -5968,7 +6057,7 @@ function FinanceOverview({
                   <Button type="button" variant="outline" onClick={() => setEditingPayment(null)}>
                     Cancel
                   </Button>
-                  <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+                  <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
                     Save changes
                   </Button>
                 </DialogFooter>
@@ -6000,9 +6089,20 @@ function FinanceOverview({
   );
 }
 
-function FieldLabel({ children }: { children: React.ReactNode }) {
+function FieldLabel({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-black/55">
+    <div
+      className={cn(
+        "mb-1 text-[10px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400",
+        className,
+      )}
+    >
       {children}
     </div>
   );
@@ -6018,17 +6118,17 @@ function categorySuggestsExternal(category: string) {
   );
 }
 
-function ReceivePayment({ onBack }: { onBack: () => void }) {
+function ReceivePayment() {
   const { session } = useAuth();
   const {
-    students,
+    activeStudents: students,
     setStudents,
-    payments,
+    activePayments: payments,
     setPayments,
     classes: classConfigs,
     transportRoutes,
     paymentCategories,
-    feeTerms,
+    activeFeeTerms: feeTerms,
     academicYear,
     schoolDetails,
   } = useTenantStore();
@@ -6075,7 +6175,14 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
   const termsForCategory = useMemo(
     () =>
       termKindForCategory
-        ? feeTerms.filter((t) => t.kind === termKindForCategory)
+        ? filterFeePeriods(feeTerms, "term", termKindForCategory)
+        : [],
+    [feeTerms, termKindForCategory],
+  );
+  const monthsForCategory = useMemo(
+    () =>
+      termKindForCategory
+        ? filterFeePeriods(feeTerms, "month", termKindForCategory)
         : [],
     [feeTerms, termKindForCategory],
   );
@@ -6083,11 +6190,45 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
     () =>
       termsForCategory.map((t) => ({
         value: t.label,
-        label: t.coverage ? `${t.label} · ${t.coverage}` : t.label,
+        label: [
+          t.label,
+          t.coverage || formatFeeTermCoverage(t.startDate, t.endDate),
+        ]
+          .filter(Boolean)
+          .join(" · "),
       })),
     [termsForCategory],
   );
+  const monthOptions = useMemo(() => {
+    if (monthsForCategory.length > 0) {
+      return monthsForCategory.map((t) => ({
+        value: t.label,
+        label: [
+          t.label,
+          t.coverage || formatFeeTermCoverage(t.startDate, t.endDate),
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      }));
+    }
+    return FEE_MONTHS.map((m) => ({ value: m, label: m }));
+  }, [monthsForCategory]);
   const termsAvailable = termsForCategory.length > 0;
+  const monthsAvailable = monthsForCategory.length > 0;
+  const selectedTerm = useMemo(
+    () =>
+      feePeriodKind === "term"
+        ? termsForCategory.find((t) => t.label === feePeriod)
+        : undefined,
+    [feePeriodKind, feePeriod, termsForCategory],
+  );
+  const selectedMonthPeriod = useMemo(
+    () =>
+      feePeriodKind === "month"
+        ? monthsForCategory.find((t) => t.label === feePeriod)
+        : undefined,
+    [feePeriodKind, feePeriod, monthsForCategory],
+  );
 
   useEffect(() => {
     if (classes.length && !classes.includes(cls)) {
@@ -6113,7 +6254,9 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
     if (feePeriodKind === "term") {
       if (!termsAvailable) {
         setFeePeriodKind("month");
-        setFeePeriod(currentFeeMonth());
+        setFeePeriod(
+          monthsForCategory[0]?.label ?? currentFeeMonth(),
+        );
         return;
       }
       if (!termsForCategory.some((t) => t.label === feePeriod)) {
@@ -6121,10 +6264,25 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
       }
       return;
     }
+    if (monthsAvailable) {
+      if (!monthsForCategory.some((t) => t.label === feePeriod)) {
+        setFeePeriod(monthsForCategory[0].label);
+      }
+      return;
+    }
     if (!(FEE_MONTHS as readonly string[]).includes(feePeriod)) {
       setFeePeriod(currentFeeMonth());
     }
-  }, [feePeriodKind, feePeriod, termsAvailable, termsForCategory]);
+    // Period lists are derived from feeTerms + termKindForCategory above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    feePeriodKind,
+    feePeriod,
+    termsAvailable,
+    monthsAvailable,
+    feeTerms,
+    termKindForCategory,
+  ]);
 
   const matchedRouteFee = useMemo(() => {
     if (!selected) return undefined;
@@ -6138,19 +6296,185 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
     return matched?.bothFee ?? transportRoutes[0]?.bothFee;
   }, [selected, transportRoutes]);
 
-  const tuitionFee = useMemo(
-    () => classConfigs.find((c) => c.className === selected?.cls)?.tuitionFeeAmount,
+  const matchedClass = useMemo(
+    () => classConfigs.find((c) => c.className === selected?.cls),
     [classConfigs, selected],
   );
+
+  const tuitionFee = matchedClass?.tuitionFeeAmount;
+
+  const vehicleFee = useMemo(() => {
+    if (matchedClass && matchedClass.vehicleFeeAmount > 0) {
+      return matchedClass.vehicleFeeAmount;
+    }
+    return matchedRouteFee;
+  }, [matchedClass, matchedRouteFee]);
 
   const prefill = useMemo(() => {
     if (isExternal) return undefined;
     const lower = category.toLowerCase();
-    if (lower.includes("tuition")) return tuitionFee;
+    const classTuition =
+      tuitionFee && tuitionFee > 0 ? tuitionFee : undefined;
+    const classVehicle =
+      matchedClass && matchedClass.vehicleFeeAmount > 0
+        ? matchedClass.vehicleFeeAmount
+        : undefined;
+    const useTermSplit = matchedClass?.billingCycle === "Term";
+    const useMonthSplit =
+      matchedClass?.billingCycle === "Monthly" && monthsForCategory.length > 0;
+
+    if (feePeriodKind === "term") {
+      // Term-billed classes: divide Class Tier total evenly across terms
+      if (useTermSplit && lower.includes("tuition") && classTuition) {
+        const split = classFeeAmountForTerm(
+          classTuition,
+          termsForCategory,
+          selectedTerm,
+        );
+        if (split && split > 0) return split;
+      }
+      if (
+        useTermSplit &&
+        (lower.includes("vehicle") ||
+          lower.includes("transport") ||
+          lower.includes("bus")) &&
+        (classVehicle || matchedRouteFee)
+      ) {
+        const split = classFeeAmountForTerm(
+          classVehicle ?? matchedRouteFee,
+          termsForCategory,
+          selectedTerm,
+        );
+        if (split && split > 0) return split;
+      }
+      if (selectedTerm?.feeAmount && selectedTerm.feeAmount > 0) {
+        return selectedTerm.feeAmount;
+      }
+      if (lower.includes("tuition")) return classTuition;
+      if (lower.includes("vehicle") || lower.includes("transport") || lower.includes("bus")) {
+        return classVehicle ?? matchedRouteFee;
+      }
+      return undefined;
+    }
+
+    // Month mode · Monthly-billed classes split across configured fee months
+    if (useMonthSplit && lower.includes("tuition") && classTuition) {
+      const split = classFeeAmountForTerm(
+        classTuition,
+        monthsForCategory,
+        selectedMonthPeriod,
+      );
+      if (split && split > 0) return split;
+    }
+    if (
+      useMonthSplit &&
+      (lower.includes("vehicle") ||
+        lower.includes("transport") ||
+        lower.includes("bus")) &&
+      (classVehicle || matchedRouteFee)
+    ) {
+      const split = classFeeAmountForTerm(
+        classVehicle ?? matchedRouteFee,
+        monthsForCategory,
+        selectedMonthPeriod,
+      );
+      if (split && split > 0) return split;
+    }
+    if (selectedMonthPeriod?.feeAmount && selectedMonthPeriod.feeAmount > 0) {
+      return selectedMonthPeriod.feeAmount;
+    }
+    if (lower.includes("tuition")) return classTuition;
     if (lower.includes("vehicle") || lower.includes("transport") || lower.includes("bus"))
-      return matchedRouteFee;
+      return vehicleFee;
     return undefined;
-  }, [category, tuitionFee, matchedRouteFee, isExternal]);
+  }, [
+    category,
+    tuitionFee,
+    vehicleFee,
+    matchedClass,
+    matchedRouteFee,
+    isExternal,
+    feePeriodKind,
+    selectedTerm,
+    selectedMonthPeriod,
+    termsForCategory,
+    monthsForCategory,
+  ]);
+
+  const prefillSource = useMemo(() => {
+    if (prefill === undefined || prefill <= 0) return null;
+    const termCount = termsForCategory.length;
+    const monthCount = monthsForCategory.length;
+    const useTermSplit = matchedClass?.billingCycle === "Term";
+    const useMonthSplit =
+      matchedClass?.billingCycle === "Monthly" && monthCount > 0;
+    if (
+      feePeriodKind === "term" &&
+      useTermSplit &&
+      matchedClass &&
+      termCount > 0 &&
+      category.toLowerCase().includes("tuition") &&
+      matchedClass.tuitionFeeAmount > 0
+    ) {
+      return `Class Tier · ₹ ${matchedClass.tuitionFeeAmount.toLocaleString("en-IN")} ÷ ${termCount} terms`;
+    }
+    if (
+      feePeriodKind === "term" &&
+      useTermSplit &&
+      matchedClass &&
+      termCount > 0 &&
+      (category.toLowerCase().includes("vehicle") ||
+        category.toLowerCase().includes("transport") ||
+        category.toLowerCase().includes("bus")) &&
+      matchedClass.vehicleFeeAmount > 0
+    ) {
+      return `Class Tier · ₹ ${matchedClass.vehicleFeeAmount.toLocaleString("en-IN")} ÷ ${termCount} terms`;
+    }
+    if (
+      feePeriodKind === "month" &&
+      useMonthSplit &&
+      matchedClass &&
+      category.toLowerCase().includes("tuition") &&
+      matchedClass.tuitionFeeAmount > 0
+    ) {
+      return `Class Tier · ₹ ${matchedClass.tuitionFeeAmount.toLocaleString("en-IN")} ÷ ${monthCount} months`;
+    }
+    if (
+      feePeriodKind === "month" &&
+      useMonthSplit &&
+      matchedClass &&
+      (category.toLowerCase().includes("vehicle") ||
+        category.toLowerCase().includes("transport") ||
+        category.toLowerCase().includes("bus")) &&
+      matchedClass.vehicleFeeAmount > 0
+    ) {
+      return `Class Tier · ₹ ${matchedClass.vehicleFeeAmount.toLocaleString("en-IN")} ÷ ${monthCount} months`;
+    }
+    if (feePeriodKind === "term" && selectedTerm?.feeAmount && selectedTerm.feeAmount > 0) {
+      return `Settings · ${selectedTerm.label} term fee`;
+    }
+    if (category.toLowerCase().includes("tuition") && matchedClass) {
+      return `Class Tier · ${matchedClass.className} tuition (${matchedClass.billingCycle})`;
+    }
+    if (
+      (category.toLowerCase().includes("vehicle") ||
+        category.toLowerCase().includes("transport") ||
+        category.toLowerCase().includes("bus")) &&
+      matchedClass &&
+      matchedClass.vehicleFeeAmount > 0
+    ) {
+      return `Class Tier · ${matchedClass.className} vehicle (${matchedClass.billingCycle})`;
+    }
+    return `Settings · ${category}`;
+  }, [
+    prefill,
+    feePeriodKind,
+    selectedTerm,
+    category,
+    matchedClass,
+    termsForCategory.length,
+    monthsForCategory.length,
+  ]);
 
   useEffect(() => {
     if (prefill !== undefined && prefill > 0) {
@@ -6159,6 +6483,45 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
       setAmount("");
     }
   }, [prefill, isExternal]);
+
+  // Align Receive Payment period with the class billing cycle when the student changes
+  useEffect(() => {
+    if (isExternal || !matchedClass) return;
+    const termKind = categoryFeeTermKind(category);
+    if (matchedClass.billingCycle === "Term" && termKind && termsAvailable) {
+      setFeePeriodKind("term");
+      setFeePeriod((prev) =>
+        termsForCategory.some((t) => t.label === prev)
+          ? prev
+          : (termsForCategory[0]?.label ?? prev),
+      );
+      return;
+    }
+    if (matchedClass.billingCycle === "Monthly" && termKind) {
+      setFeePeriodKind("month");
+      setFeePeriod((prev) => {
+        if (monthsForCategory.some((t) => t.label === prev)) return prev;
+        return monthsForCategory[0]?.label ?? currentFeeMonth();
+      });
+      return;
+    }
+    if (
+      matchedClass.billingCycle === "Annually" &&
+      feePeriodKind === "term"
+    ) {
+      setFeePeriodKind("month");
+      setFeePeriod(monthsForCategory[0]?.label ?? currentFeeMonth());
+    }
+    // Intentional: only re-sync when class / category / availability changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    matchedClass?.id,
+    matchedClass?.billingCycle,
+    category,
+    termsAvailable,
+    monthsAvailable,
+    isExternal,
+  ]);
 
   const selectCategory = (label: string) => {
     setCategory(label);
@@ -6170,14 +6533,16 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
     const nextTermKind = categoryFeeTermKind(label);
     if (feePeriodKind === "term" && !nextTermKind) {
       setFeePeriodKind("month");
-      setFeePeriod(currentFeeMonth());
+      setFeePeriod(
+        filterFeePeriods(feeTerms, "month", null)[0]?.label ?? currentFeeMonth(),
+      );
     }
   };
 
   const setPeriodKind = (kind: FeePeriodKind) => {
     setFeePeriodKind(kind);
     if (kind === "month") {
-      setFeePeriod(currentFeeMonth());
+      setFeePeriod(monthsForCategory[0]?.label ?? currentFeeMonth());
       return;
     }
     if (termsForCategory[0]) {
@@ -6416,6 +6781,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
         mode,
         amount: value,
         time: stamp,
+        academicYear,
         feePeriodKind,
         feePeriod: periodLabel,
         feeMonth: periodLabel,
@@ -6447,6 +6813,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
       mode,
       amount: value,
       time: stamp,
+      academicYear,
       feePeriodKind,
       feePeriod: periodLabel,
       feeMonth: periodLabel,
@@ -6517,24 +6884,21 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
     <div className="space-y-4 sm:space-y-5">
       <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex min-w-0 flex-1 items-start gap-2.5 sm:gap-3">
-            <FinancePageBackButton onBack={onBack} />
-            <div className="min-w-0 pt-0.5">
-              <div className="text-[17px] font-bold leading-tight tracking-tight text-black sm:text-title">
+          <div className="min-w-0 flex-1 pt-0.5">
+              <div className="text-[17px] font-bold leading-tight tracking-tight text-black dark:text-zinc-50 sm:text-title">
                 Inbound Fee Capture
               </div>
-              <p className="mt-1 text-[11.5px] text-black/55 sm:text-[12px]">
+              <p className="mt-1 text-[11.5px] text-black/55 dark:text-zinc-400 sm:text-[12px]">
                 {isExternal
                   ? `Record school income from external payers · ${academicYear}`
                   : `Post fee receipts to student ledgers · ${academicYear}`}
               </p>
-            </div>
           </div>
           {!isExternal && selected && (
             <span
               className={cn(
                 "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-semibold sm:px-3.5 sm:text-[11.5px]",
-                selected.due > 0 ? "bg-[#FEF3C7] text-black" : "bg-[#DBEAFE] text-black",
+                selected.due > 0 ? "bg-[#FEF3C7] text-black" : "bg-[#CCFBF1] text-black",
               )}
             >
               {selected.due > 0 ? (
@@ -6548,292 +6912,336 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
             </span>
           )}
           {isExternal && (
-            <span className="inline-flex items-center gap-2 rounded-full bg-[#DBEAFE] px-3 py-1.5 text-[11px] font-semibold text-black sm:px-3.5 sm:text-[11.5px]">
+            <span className="inline-flex items-center gap-2 rounded-full bg-[#CCFBF1] px-3 py-1.5 text-[11px] font-semibold text-black sm:px-3.5 sm:text-[11.5px]">
               External income
             </span>
           )}
         </div>
 
-        <div className="mt-5">
-          <FieldLabel>Received From</FieldLabel>
-          <div className="flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1 sm:max-w-md">
-            {(
-              [
-                { key: "student" as const, label: "Student" },
-                { key: "external" as const, label: "External payer" },
-              ] as const
-            ).map((option) => {
-              const active = payerSource === option.key;
-              return (
-                <button
-                  key={option.key}
-                  type="button"
-                  onClick={() => setPayerSource(option.key)}
-                  className={cn(
-                    "flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors",
-                    active ? "bg-black text-white" : "text-black/65 hover:text-black",
-                  )}
-                >
-                  {option.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          {isExternal ? (
-            <div className="sm:col-span-2">
-              <FieldLabel>Donor / Payer Name</FieldLabel>
-              <Input
-                value={externalPayer}
-                onChange={(e) => setExternalPayer(e.target.value)}
-                placeholder="e.g. Parent Association · Ravi Kumar"
-                className="h-10"
-              />
-              <p className="mt-1 text-[10.5px] text-black/45">
-                Not linked to a student ledger · counted as school income only
-              </p>
-            </div>
-          ) : (
-            <>
-              <div>
-                <FieldLabel>Class</FieldLabel>
-                <FieldSelect
-                  value={cls}
-                  onValueChange={(next) => {
-                    setCls(next);
-                    const first = students.find((s) => s.cls === next);
-                    if (first) setStu(first.name);
-                  }}
-                  options={classes.map((c) => ({ value: c, label: c }))}
-                  placeholder="Select class"
-                  disabled={classes.length === 0}
-                  searchable
-                  searchPlaceholder="Search class..."
-                />
-              </div>
-              <div>
-                <FieldLabel>Student</FieldLabel>
-                <FieldSelect
-                  value={stu}
-                  onValueChange={setStu}
-                  options={(studentsInClass.length ? studentsInClass : students).map((s) => ({
-                    value: s.name,
-                    label: s.name,
-                  }))}
-                  placeholder="Select student"
-                  searchable
-                  searchPlaceholder="Search student..."
-                />
-              </div>
-            </>
-          )}
-          <div>
-            <FieldLabel>Amount (₹)</FieldLabel>
-            <input
-              value={amount}
-              onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ""))}
-              inputMode="numeric"
-              placeholder="0"
-              className="h-10 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 font-mono text-[13px]"
-            />
-            {prefill !== undefined && prefill > 0 && (
-              <p className="mt-1 text-[10.5px] text-black/45">
-                Prefilled ₹ {prefill.toLocaleString("en-IN")} from Settings · {category}
-              </p>
-            )}
-          </div>
-          <div>
-            <FieldLabel>Fee Period</FieldLabel>
-            <div className="mb-2 flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
-              {(
-                [
-                  { key: "month" as const, label: "Month" },
-                  { key: "term" as const, label: "Term" },
-                ] as const
-              ).map((option) => {
-                const active = feePeriodKind === option.key;
-                const termDisabled = option.key === "term" && !termKindForCategory;
-                return (
-                  <button
-                    key={option.key}
-                    type="button"
-                    disabled={termDisabled}
-                    title={
-                      termDisabled
-                        ? "Terms apply to Tuition Fee and Vehicle Fee"
-                        : undefined
-                    }
-                    onClick={() => setPeriodKind(option.key)}
-                    className={cn(
-                      "flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors",
-                      active ? "bg-black text-white" : "text-black/65 hover:text-black",
-                      termDisabled && "cursor-not-allowed opacity-40 hover:text-black/65",
-                    )}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-            {feePeriodKind === "month" ? (
-              <FieldSelect
-                value={feePeriod}
-                onValueChange={setFeePeriod}
-                options={FEE_MONTHS.map((m) => ({ value: m, label: m }))}
-                placeholder="Select month"
-              />
-            ) : termsAvailable ? (
-              <FieldSelect
-                value={feePeriod}
-                onValueChange={setFeePeriod}
-                options={termOptions}
-                placeholder="Select term"
-              />
-            ) : (
-              <div className="rounded-lg border border-dashed border-[#E5E5E5] bg-[#FAFAFA] px-3 py-2.5 text-[12px] text-black/55">
-                No {termKindForCategory ? FEE_TERM_KIND_LABELS[termKindForCategory] : ""} terms yet ·
-                add them under Settings → Fees
-              </div>
-            )}
-            <p className="mt-1 text-[10.5px] text-black/45">
-              {feePeriodKind === "term" ? "Term" : "Month"} this receipt covers · {academicYear}
-            </p>
-          </div>
-          <div>
-            <FieldLabel>Payment Mode</FieldLabel>
-            <div className="flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
-              {["Bank", "UPI", "Cash"].map((m) => {
-                const active = mode === m;
-                return (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setMode(m)}
-                    className={`flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors ${
-                      active ? "bg-black text-white" : "text-black/65 hover:text-black"
-                    }`}
-                  >
-                    {m}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-4">
-          <FieldLabel>Fee Categories</FieldLabel>
-          <div className="flex flex-wrap gap-2">
-            {paymentCategories.length === 0 && (
-              <span className="text-[12px] text-black/55">
-                No categories configured · add them under Settings
-              </span>
-            )}
-            {paymentCategories.map((c) => {
-              const active = category === c.label;
-              return (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => selectCategory(c.label)}
-                  className={`rounded-full border px-3.5 py-1.5 text-[12px] font-medium transition-colors ${
-                    active
-                      ? "border-transparent bg-[#2563EB] text-white"
-                      : "border-[#E5E5E5] text-black/65 hover:bg-[#F4F4F5]"
-                  }`}
-                >
-                  {c.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="mt-4">
-          <FieldLabel>Narration</FieldLabel>
-          <Textarea
-            value={narration}
-            onChange={(e) => setNarration(e.target.value)}
-            placeholder="Optional note · purpose, reference, or remarks"
-            className="min-h-[72px] w-full resize-none rounded-lg border border-[#E5E5E5] bg-white px-3 py-2 text-[13px]"
-          />
-        </div>
-
-        <div className="mt-4">
-          <div className="flex items-center justify-between gap-2">
-            <FieldLabel>Attachments</FieldLabel>
-            <span className="text-[10.5px] font-medium text-black/45">
-              {attachments.length} / {MAX_PAYMENT_ATTACHMENTS} · max 5 MB each
-            </span>
-          </div>
-          <div className="rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] p-3">
-            {attachments.length > 0 ? (
-              <ul className="mb-3 space-y-2">
-                {attachments.map((file) => (
-                  <li
-                    key={file.id}
-                    className="flex items-center gap-2 rounded-lg border border-[#EFEFEF] bg-white px-2.5 py-2"
-                  >
-                    <FileText className="h-3.5 w-3.5 shrink-0 text-black/40" />
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-[12px] font-medium text-black">{file.name}</div>
-                      <div className="font-mono text-[10px] text-black/45">
-                        {formatAttachmentSize(file.size)}
-                      </div>
-                    </div>
-                    <a
-                      href={file.dataUrl}
-                      download={file.name}
-                      className="inline-flex h-7 items-center rounded-lg border border-slate-200 px-2 text-[10.5px] font-semibold text-black/60 transition-colors hover:bg-slate-50"
-                    >
-                      Open
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => removeAttachment(file.id)}
-                      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-red-200 text-red-600 transition-colors hover:bg-red-50"
-                      aria-label={`Remove ${file.name}`}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="mb-3 text-[12px] text-black/45">
-                Attach bank slips, UPI screenshots, cheques, or supporting documents.
-              </p>
-            )}
-            <input
-              ref={attachmentInputRef}
-              type="file"
-              multiple
-              accept="image/*,.pdf,.jpg,.jpeg,.png,.webp"
-              className="hidden"
-              onChange={(e) => {
-                void addAttachments(e.target.files);
-                e.target.value = "";
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => attachmentInputRef.current?.click()}
-              disabled={attachments.length >= MAX_PAYMENT_ATTACHMENTS}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3.5 text-[12px] font-semibold text-black transition-colors hover:border-black/20 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Paperclip className="h-3.5 w-3.5" />
-              Add files
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-5 flex flex-col gap-4 rounded-xl border border-[#E8E8EA] bg-[#F8F8F9] p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:p-5">
-          <div className="min-w-0 text-[13px] leading-relaxed text-black/65">
+        <div className="mt-5 space-y-5 sm:space-y-6">
+          {/* 1 · Who */}
+          <section className="space-y-3 border-b border-[#EFEFEF] pb-5 dark:border-white/10 sm:pb-6">
             <div>
-              Receipt for <span className="font-semibold text-black">{summaryName}</span> · {summaryContext} ·{" "}
-              <span className="font-semibold text-black">{category}</span> · {feePeriod} · {mode}
+              <FieldLabel>Received From</FieldLabel>
+              <div className="flex w-full gap-1 rounded-full border border-[#E5E5E5] bg-white p-1 dark:border-white/10 dark:bg-zinc-900 sm:max-w-sm">
+                {(
+                  [
+                    { key: "student" as const, label: "Student" },
+                    { key: "external" as const, label: "External payer" },
+                  ] as const
+                ).map((option) => {
+                  const active = payerSource === option.key;
+                  return (
+                    <button
+                      key={option.key}
+                      type="button"
+                      onClick={() => setPayerSource(option.key)}
+                      className={cn(
+                        "flex-1 rounded-full px-3 py-2.5 text-[12px] font-medium transition-colors sm:py-1.5",
+                        active
+                          ? "bg-[#0F766E] text-white"
+                          : "text-black/65 hover:text-black dark:text-zinc-300 dark:hover:text-zinc-50",
+                      )}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {isExternal ? (
+              <div className="min-w-0">
+                <FieldLabel>Donor / Payer Name</FieldLabel>
+                <Input
+                  value={externalPayer}
+                  onChange={(e) => setExternalPayer(e.target.value)}
+                  placeholder="e.g. Parent Association · Ravi Kumar"
+                  className="h-11 sm:h-10"
+                />
+                <p className="mt-1.5 text-[10.5px] leading-snug text-black/45">
+                  Not linked to a student ledger · counted as school income only
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="min-w-0">
+                  <FieldLabel>Class</FieldLabel>
+                  <FieldSelect
+                    value={cls}
+                    onValueChange={(next) => {
+                      setCls(next);
+                      const first = students.find((s) => s.cls === next);
+                      if (first) setStu(first.name);
+                    }}
+                    options={classes.map((c) => ({ value: c, label: c }))}
+                    placeholder="Select class"
+                    disabled={classes.length === 0}
+                    searchable
+                    searchPlaceholder="Search class..."
+                  />
+                </div>
+                <div className="min-w-0">
+                  <FieldLabel>Student</FieldLabel>
+                  <FieldSelect
+                    value={stu}
+                    onValueChange={setStu}
+                    options={(studentsInClass.length ? studentsInClass : students).map((s) => ({
+                      value: s.name,
+                      label: s.name,
+                    }))}
+                    placeholder="Select student"
+                    searchable
+                    searchPlaceholder="Search student..."
+                  />
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* 2 · Category & period */}
+          <section className="grid grid-cols-1 gap-4 border-b border-[#EFEFEF] pb-5 dark:border-white/10 sm:grid-cols-2 sm:gap-5 sm:pb-6">
+            <div className="min-w-0">
+              <FieldLabel>Fee Category</FieldLabel>
+              <div className="flex flex-wrap gap-2">
+                {paymentCategories.length === 0 && (
+                  <span className="text-[12px] text-black/55 dark:text-zinc-400">
+                    No categories configured · add them under Settings
+                  </span>
+                )}
+                {paymentCategories.map((c) => {
+                  const active = category === c.label;
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => selectCategory(c.label)}
+                      className={cn(
+                        "rounded-full border px-3.5 py-2 text-[12px] font-medium transition-colors sm:py-1.5",
+                        active
+                          ? "border-transparent bg-[#0F766E] text-white"
+                          : "border-[#E5E5E5] text-black/65 hover:bg-[#F4F4F5] dark:border-white/15 dark:text-zinc-300 dark:hover:bg-white/5",
+                      )}
+                    >
+                      {c.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="min-w-0">
+              <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                <FieldLabel className="mb-0">Fee Period</FieldLabel>
+                <div className="flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-0.5 dark:border-white/10 dark:bg-zinc-900">
+                  {(
+                    [
+                      { key: "month" as const, label: "Month" },
+                      { key: "term" as const, label: "Term" },
+                    ] as const
+                  ).map((option) => {
+                    const active = feePeriodKind === option.key;
+                    const termDisabled = option.key === "term" && !termKindForCategory;
+                    return (
+                      <button
+                        key={option.key}
+                        type="button"
+                        disabled={termDisabled}
+                        title={
+                          termDisabled
+                            ? "Terms apply to Tuition Fee and Vehicle Fee"
+                            : undefined
+                        }
+                        onClick={() => setPeriodKind(option.key)}
+                        className={cn(
+                          "rounded-full px-3.5 py-1.5 text-[11px] font-medium transition-colors",
+                          active
+                            ? "bg-[#0F766E] text-white"
+                            : "text-black/65 hover:text-black dark:text-zinc-300 dark:hover:text-zinc-50",
+                          termDisabled &&
+                            "cursor-not-allowed opacity-40 hover:text-black/65 dark:hover:text-zinc-300",
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              {feePeriodKind === "month" ? (
+                <FieldSelect
+                  value={feePeriod}
+                  onValueChange={setFeePeriod}
+                  options={monthOptions}
+                  placeholder="Select month"
+                />
+              ) : termsAvailable ? (
+                <FieldSelect
+                  value={feePeriod}
+                  onValueChange={setFeePeriod}
+                  options={termOptions}
+                  placeholder="Select term"
+                />
+              ) : (
+                <div className="flex min-h-11 items-center rounded-lg border border-dashed border-[#E5E5E5] bg-[#FAFAFA] px-3 text-[12px] text-black/55 dark:text-zinc-400 sm:min-h-10">
+                  No {termKindForCategory ? FEE_TERM_KIND_LABELS[termKindForCategory] : ""} terms
+                  yet · Settings → Fees
+                </div>
+              )}
+              <p className="mt-1.5 text-[10.5px] leading-snug text-black/45 dark:text-zinc-400">
+                {feePeriodKind === "term" && selectedTerm
+                  ? [
+                      selectedTerm.coverage ||
+                        formatFeeTermCoverage(selectedTerm.startDate, selectedTerm.endDate),
+                      academicYear,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")
+                  : feePeriodKind === "month" && selectedMonthPeriod
+                    ? [
+                        selectedMonthPeriod.coverage ||
+                          formatFeeTermCoverage(
+                            selectedMonthPeriod.startDate,
+                            selectedMonthPeriod.endDate,
+                          ),
+                        academicYear,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")
+                    : `${feePeriodKind === "term" ? "Term" : "Month"} this receipt covers · ${academicYear}`}
+              </p>
+            </div>
+          </section>
+
+          {/* 4 · Amount & mode */}
+          <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="min-w-0">
+              <FieldLabel>Amount (₹)</FieldLabel>
+              <input
+                value={amount}
+                onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ""))}
+                inputMode="numeric"
+                placeholder="0"
+                className="h-11 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 font-mono text-[15px] font-semibold dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 sm:h-10 sm:text-[13px] sm:font-normal"
+              />
+              <p className="mt-1.5 min-h-[1.125rem] text-[10.5px] leading-snug text-black/45 dark:text-zinc-400">
+                {prefill !== undefined && prefill > 0 && prefillSource
+                  ? `Prefilled ₹ ${prefill.toLocaleString("en-IN")} from ${prefillSource}`
+                  : "\u00A0"}
+              </p>
+            </div>
+            <div className="min-w-0">
+              <FieldLabel>Payment Mode</FieldLabel>
+              <div className="flex h-11 gap-1 rounded-full border border-[#E5E5E5] bg-white p-1 dark:border-white/10 dark:bg-zinc-900 sm:h-10">
+                {["Bank", "UPI", "Cash"].map((m) => {
+                  const active = mode === m;
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setMode(m)}
+                      className={cn(
+                        "flex-1 rounded-full px-2 text-[12px] font-medium transition-colors sm:px-3",
+                        active
+                          ? "bg-[#0F766E] text-white"
+                          : "text-black/65 hover:text-black dark:text-zinc-300 dark:hover:text-zinc-50",
+                      )}
+                    >
+                      {m}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+
+          {/* 5 · Notes & files */}
+          <section className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
+            <div className="min-w-0">
+              <FieldLabel>Narration</FieldLabel>
+              <Textarea
+                value={narration}
+                onChange={(e) => setNarration(e.target.value)}
+                placeholder="Optional note · purpose, reference, or remarks"
+                className="min-h-[96px] w-full resize-none rounded-lg border border-[#E5E5E5] bg-white px-3 py-2.5 text-[13px] lg:min-h-[120px]"
+              />
+            </div>
+
+            <div className="min-w-0">
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <FieldLabel className="mb-0">Attachments</FieldLabel>
+                <span className="text-[10.5px] font-medium text-black/45">
+                  {attachments.length} / {MAX_PAYMENT_ATTACHMENTS} · max 5 MB each
+                </span>
+              </div>
+              <div className="rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] p-3 dark:border-white/10 dark:bg-zinc-900/50">
+                {attachments.length > 0 ? (
+                  <ul className="mb-3 max-h-36 space-y-2 overflow-y-auto">
+                    {attachments.map((file) => (
+                      <li
+                        key={file.id}
+                        className="flex items-center gap-2 rounded-lg border border-[#EFEFEF] bg-white px-2.5 py-2 dark:border-white/10 dark:bg-zinc-900"
+                      >
+                        <FileText className="h-3.5 w-3.5 shrink-0 text-black/40" />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[12px] font-medium text-black">{file.name}</div>
+                          <div className="font-mono text-[10px] text-black/45">
+                            {formatAttachmentSize(file.size)}
+                          </div>
+                        </div>
+                        <a
+                          href={file.dataUrl}
+                          download={file.name}
+                          className="inline-flex h-7 items-center rounded-lg border border-slate-200 px-2 text-[10.5px] font-semibold text-black/60 transition-colors hover:bg-slate-50 dark:text-zinc-400"
+                        >
+                          Open
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => removeAttachment(file.id)}
+                          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-red-200 text-red-600 transition-colors hover:bg-red-50"
+                          aria-label={`Remove ${file.name}`}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mb-3 text-[12px] leading-snug text-black/45">
+                    Attach bank slips, UPI screenshots, cheques, or supporting documents.
+                  </p>
+                )}
+                <input
+                  ref={attachmentInputRef}
+                  type="file"
+                  multiple
+                  accept="image/*,.pdf,.jpg,.jpeg,.png,.webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    void addAttachments(e.target.files);
+                    e.target.value = "";
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => attachmentInputRef.current?.click()}
+                  disabled={attachments.length >= MAX_PAYMENT_ATTACHMENTS}
+                  className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3.5 text-[12px] font-semibold text-black transition-colors hover:border-black/20 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                >
+                  <Paperclip className="h-3.5 w-3.5" />
+                  Add files
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div className="mt-5 flex flex-col gap-3 rounded-xl border border-[#E8E8EA] bg-[#F8F8F9] p-4 dark:border-white/10 dark:bg-zinc-900/80 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:p-5">
+          <div className="min-w-0 text-[13px] leading-relaxed text-black/65 dark:text-zinc-300">
+            <div className="font-semibold text-black dark:text-zinc-50">{summaryName}</div>
+            <div className="mt-0.5 break-words text-[12px]">
+              {summaryContext} · {category} · {feePeriod} · {mode}
               {attachments.length > 0 && (
                 <span className="text-black/45">
                   {" "}
@@ -6842,14 +7250,16 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
               )}
             </div>
             {narration.trim() && (
-              <div className="mt-1 truncate text-[12px] text-black/45">“{narration.trim()}”</div>
+              <div className="mt-1 line-clamp-2 text-[12px] text-black/45">
+                “{narration.trim()}”
+              </div>
             )}
           </div>
           <button
             type="button"
             onClick={handleRecord}
             disabled={!canRecord}
-            className="inline-flex h-12 w-full shrink-0 items-center justify-center rounded-full bg-black px-8 text-[14px] font-semibold tracking-tight text-white shadow-[0_8px_24px_-10px_rgba(0,0,0,0.45)] transition-all hover:bg-[#0F172A] hover:shadow-[0_10px_28px_-10px_rgba(15,23,42,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none sm:h-12 sm:min-w-[200px] sm:w-auto"
+            className="inline-flex h-12 w-full shrink-0 items-center justify-center rounded-full bg-[#0F766E] px-8 text-[14px] font-semibold tracking-tight text-white shadow-[0_8px_24px_-10px_rgba(15,118,110,0.45)] transition-all hover:bg-[#0D9488] hover:shadow-[0_10px_28px_-10px_rgba(15,118,110,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none sm:min-w-[200px] sm:w-auto"
           >
             Record ₹ {(Number(amount) || 0).toLocaleString("en-IN")}
           </button>
@@ -6859,30 +7269,30 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
       <OrganicCard tone="white" cornerSide="bl" padded className={workspacePanelClass}>
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <div className="text-title">Payment History</div>
-            <p className="mt-1 text-[11.5px] text-black/55">
+            <div className="text-title text-slate-900 dark:text-zinc-50">Payment History</div>
+            <p className="mt-1 text-[11.5px] text-black/55 dark:text-zinc-400">
               {historyQuery.trim()
                 ? `${filteredPayments.length} of ${payments.length} receipts`
                 : `${payments.length} receipts · most recent first`}
             </p>
           </div>
-          <div className="rounded-lg bg-[#F4F4F5] px-3.5 py-2 text-right">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+          <div className="rounded-lg bg-[#F4F4F5] px-3.5 py-2 text-right dark:bg-zinc-800 dark:ring-1 dark:ring-white/10">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
               Today&apos;s intake
             </div>
-            <div className="font-mono text-[16px] font-semibold text-black">
+            <div className="font-mono text-[16px] font-semibold text-black dark:text-zinc-50">
               ₹ {todayTotal.toLocaleString("en-IN")}
             </div>
           </div>
         </div>
 
         <div className="relative mt-4">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-black/40" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-black/40 dark:text-zinc-500" />
           <Input
             value={historyQuery}
             onChange={(e) => setHistoryQuery(e.target.value)}
             placeholder="Search by payer, student, category, narration, amount…"
-            className="h-10 rounded-xl border-[#E5E5E5] bg-white pl-9 pr-9"
+            className="h-10 rounded-xl border-[#E5E5E5] bg-white pl-9 pr-9 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100"
             aria-label="Search payment history"
           />
           {historyQuery && (
@@ -6899,7 +7309,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
 
         <div className="mt-4 space-y-2.5 md:hidden">
           {filteredPayments.length === 0 && (
-            <div className="rounded-xl border border-dashed border-[#E5E5E5] bg-white/60 px-4 py-8 text-center text-[12px] text-black/55">
+            <div className="rounded-xl border border-dashed border-[#E5E5E5] bg-white/60 px-4 py-8 text-center text-[12px] text-black/55 dark:text-zinc-400">
               {payments.length === 0
                 ? "No receipts recorded yet"
                 : "No receipts match your search"}
@@ -6934,7 +7344,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
               </div>
 
               <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                <span className="inline-flex max-w-full truncate rounded-full bg-[#DBEAFE] px-2 py-0.5 text-[10px] font-semibold text-[#0F172A]">
+                <span className="inline-flex max-w-full truncate rounded-full bg-[#CCFBF1] px-2 py-0.5 text-[10px] font-semibold text-[#0F172A]">
                   {p.cat}
                 </span>
                 {resolvePaymentFeePeriod(p) && (
@@ -6947,7 +7357,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
                   {p.mode}
                 </span>
                 {(p.attachments?.length ?? 0) > 0 && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-medium text-black/55">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-medium text-black/55 dark:text-zinc-400">
                     <Paperclip className="h-3 w-3" />
                     {p.attachments!.length} file{p.attachments!.length === 1 ? "" : "s"}
                   </span>
@@ -6955,7 +7365,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
               </div>
 
               {p.narration && (
-                <p className="mt-2 line-clamp-2 text-[11.5px] leading-snug text-black/55">
+                <p className="mt-2 line-clamp-2 text-[11.5px] leading-snug text-black/55 dark:text-zinc-400">
                   {p.narration}
                 </p>
               )}
@@ -6969,7 +7379,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
                     type="button"
                     aria-label={`View receipt details ${p.id}`}
                     onClick={() => setViewingPayment(p)}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-slate-950 px-2.5 text-[11px] font-semibold text-white transition-colors hover:bg-black"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#99F6E4] bg-[#0F766E] px-2.5 text-[11px] font-semibold text-white transition-colors hover:bg-[#0D9488]"
                   >
                     <ClipboardList className="h-3.5 w-3.5" />
                     Details
@@ -6978,7 +7388,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
                     type="button"
                     aria-label={`Download receipt ${p.id}`}
                     onClick={() => downloadHistoryReceipt(p)}
-                    className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                    className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
                   >
                     <Download className="h-3.5 w-3.5" />
                   </button>
@@ -6986,7 +7396,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
                     type="button"
                     aria-label={`Share receipt ${p.id}`}
                     onClick={() => shareHistoryReceipt(p)}
-                    className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#DBEAFE] bg-[#EFF6FF] text-[#2563EB] transition-colors hover:bg-[#DBEAFE]"
+                    className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#CCFBF1] bg-[#F0FDFA] text-[#0F766E] transition-colors hover:bg-[#CCFBF1]"
                   >
                     <Share2 className="h-3.5 w-3.5" />
                   </button>
@@ -6996,7 +7406,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
                         type="button"
                         aria-label={`Edit receipt ${p.id}`}
                         onClick={() => openEditHistoryPayment(p)}
-                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
@@ -7004,7 +7414,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
                         type="button"
                         aria-label={`Delete receipt ${p.id}`}
                         onClick={() => setPendingDeletePayment(p)}
-                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:bg-[#FEE2E2]"
+                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:bg-[#FEE2E2] dark:border-rose-500/40 dark:bg-rose-950/50 dark:text-rose-300 dark:hover:bg-rose-950/80"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -7016,15 +7426,15 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
           ))}
         </div>
 
-        <div className="mobile-scrollbar-none mt-4 hidden overflow-x-auto rounded-lg border border-[#E5E5E5] md:block">
+        <div className="mobile-scrollbar-none mt-4 hidden overflow-x-auto rounded-lg border border-[#E5E5E5] dark:border-white/10 md:block">
           <table className="w-full min-w-[760px] text-left text-[12.5px]">
             <thead>
-              <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5]">
+              <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5] dark:border-white/10 dark:bg-zinc-800/80">
                 {["Account", "Category", "Period", "Mode", "Amount", "Time", "Actions"].map((header) => (
                   <th
                     key={header}
                     className={cn(
-                      "px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/55",
+                      "px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400",
                       header === "Actions" && "text-right",
                     )}
                   >
@@ -7036,7 +7446,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
             <tbody>
               {filteredPayments.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-[12px] text-black/55">
+                  <td colSpan={7} className="px-3 py-8 text-center text-[12px] text-black/55 dark:text-zinc-400">
                     {payments.length === 0
                       ? "No receipts recorded yet"
                       : "No receipts match your search"}
@@ -7058,23 +7468,23 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
                       <div className="mt-0.5 line-clamp-1 text-[11px] text-black/40">{p.narration}</div>
                     )}
                     {(p.attachments?.length ?? 0) > 0 && (
-                      <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-medium text-black/55">
+                      <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-medium text-black/55 dark:text-zinc-400">
                         <Paperclip className="h-3 w-3" />
                         {p.attachments!.length} file{p.attachments!.length === 1 ? "" : "s"}
                       </div>
                     )}
                   </td>
-                  <td className="px-3 py-3 text-black/70">{p.cat}</td>
-                  <td className="px-3 py-3 text-black/70">
+                  <td className="px-3 py-3 text-black/70 dark:text-zinc-300">{p.cat}</td>
+                  <td className="px-3 py-3 text-black/70 dark:text-zinc-300">
                     {resolvePaymentFeePeriod(p)
                       ? `${resolvePaymentFeePeriodKind(p) === "term" ? "Term · " : ""}${resolvePaymentFeePeriod(p)}`
                       : "—"}
                   </td>
-                  <td className="px-3 py-3 text-black/70">{p.mode}</td>
+                  <td className="px-3 py-3 text-black/70 dark:text-zinc-300">{p.mode}</td>
                   <td className="px-3 py-3 font-mono font-semibold text-black">
                     +₹ {p.amount.toLocaleString("en-IN")}
                   </td>
-                  <td className="px-3 py-3 font-mono text-[11px] text-black/55">{p.time}</td>
+                  <td className="px-3 py-3 font-mono text-[11px] text-black/55 dark:text-zinc-400">{p.time}</td>
                   <td className="px-3 py-3 text-right">
                     <div className="inline-flex items-center justify-end gap-1.5">
                       <button
@@ -7082,7 +7492,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
                         aria-label={`View receipt details ${p.id}`}
                         title="View details"
                         onClick={() => setViewingPayment(p)}
-                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
                       >
                         <ClipboardList className="h-3.5 w-3.5" />
                       </button>
@@ -7091,7 +7501,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
                         aria-label={`Download receipt ${p.id}`}
                         title="Download"
                         onClick={() => downloadHistoryReceipt(p)}
-                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
                       >
                         <Download className="h-3.5 w-3.5" />
                       </button>
@@ -7100,7 +7510,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
                         aria-label={`Edit receipt ${p.id}`}
                         title="Edit"
                         onClick={() => openEditHistoryPayment(p)}
-                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
@@ -7109,7 +7519,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
                         aria-label={`Share receipt ${p.id}`}
                         title="Share"
                         onClick={() => shareHistoryReceipt(p)}
-                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-[#2563EB] hover:bg-[#DBEAFE] hover:text-[#2563EB]"
+                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-[#0F766E] hover:bg-[#CCFBF1] hover:text-[#0F766E]"
                       >
                         <Share2 className="h-3.5 w-3.5" />
                       </button>
@@ -7119,7 +7529,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
                           aria-label={`Delete receipt ${p.id}`}
                           title="Delete"
                           onClick={() => setPendingDeletePayment(p)}
-                          className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] text-[#EF4444] transition-colors hover:bg-[#FEF2F2]"
+                          className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] text-[#EF4444] transition-colors hover:bg-[#FEF2F2] dark:border-rose-500/40 dark:text-rose-300 dark:hover:bg-rose-950/60"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -7220,7 +7630,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
 
               <div>
                 <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                     <Paperclip className="h-3.5 w-3.5" />
                     Attachments
                   </div>
@@ -7278,7 +7688,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
                 <Button
                   type="button"
                   onClick={() => downloadHistoryReceipt(viewingPayment)}
-                  className="rounded-full bg-black text-white hover:bg-black/85"
+                  className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
                 >
                   <Download className="mr-1.5 h-3.5 w-3.5" />
                   Download receipt
@@ -7305,7 +7715,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
           </DialogHeader>
           <form onSubmit={saveEditedHistoryPayment} className="space-y-3">
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                 Account
               </Label>
               <Input
@@ -7317,7 +7727,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                   Category
                 </Label>
                 <Select
@@ -7347,7 +7757,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                   Mode
                 </Label>
                 <Select
@@ -7371,7 +7781,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                   Amount (₹)
                 </Label>
                 <Input
@@ -7383,7 +7793,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                   Fee period
                 </Label>
                 <div className="mb-2 flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
@@ -7404,19 +7814,23 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
                             feePeriodKind: option.key,
                             feePeriod:
                               option.key === "month"
-                                ? currentFeeMonth()
-                                : feeTerms.find(
-                                    (t) =>
-                                      t.kind ===
-                                      (categoryFeeTermKind(editForm.cat) ?? "tuition"),
-                                  )?.label ||
-                                  feeTerms[0]?.label ||
+                                ? filterFeePeriods(
+                                    feeTerms,
+                                    "month",
+                                    categoryFeeTermKind(editForm.cat),
+                                  )[0]?.label ||
+                                  currentFeeMonth()
+                                : filterFeePeriods(
+                                    feeTerms,
+                                    "term",
+                                    categoryFeeTermKind(editForm.cat) ?? "tuition",
+                                  )[0]?.label ||
                                   editForm.feePeriod,
                           })
                         }
                         className={cn(
                           "flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors",
-                          active ? "bg-black text-white" : "text-black/65 hover:text-black",
+                          active ? "bg-[#0F766E] text-white" : "text-black/65 hover:text-black",
                         )}
                       >
                         {option.label}
@@ -7439,18 +7853,29 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
                     {(editForm.feePeriodKind === "term"
                       ? Array.from(
                           new Set([
-                            ...feeTerms
-                              .filter(
-                                (t) =>
-                                  t.kind ===
-                                  (categoryFeeTermKind(editForm.cat) ?? t.kind),
-                              )
-                              .map((t) => t.label),
+                            ...filterFeePeriods(
+                              feeTerms,
+                              "term",
+                              categoryFeeTermKind(editForm.cat),
+                            ).map((t) => t.label),
                             editForm.feePeriod,
                           ].filter(Boolean)),
                         )
                       : Array.from(
-                          new Set([...FEE_MONTHS, editForm.feePeriod].filter(Boolean)),
+                          new Set([
+                            ...(filterFeePeriods(
+                              feeTerms,
+                              "month",
+                              categoryFeeTermKind(editForm.cat),
+                            ).map((t) => t.label).length
+                              ? filterFeePeriods(
+                                  feeTerms,
+                                  "month",
+                                  categoryFeeTermKind(editForm.cat),
+                                ).map((t) => t.label)
+                              : [...FEE_MONTHS]),
+                            editForm.feePeriod,
+                          ].filter(Boolean)),
                         )
                     ).map((m) => (
                       <SelectItem key={m} value={m}>
@@ -7463,7 +7888,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                   Payer type
                 </Label>
                 <Select
@@ -7485,7 +7910,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                   Date / Time
                 </Label>
                 <Input
@@ -7497,7 +7922,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                 Narration
               </Label>
               <Textarea
@@ -7511,7 +7936,7 @@ function ReceivePayment({ onBack }: { onBack: () => void }) {
               <Button type="button" variant="outline" onClick={() => setEditingPayment(null)}>
                 Cancel
               </Button>
-              <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+              <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
                 Save changes
               </Button>
             </DialogFooter>
@@ -7648,24 +8073,36 @@ function StaffSearchSelect({
   );
 }
 
-function MakePayment({ onBack }: { onBack: () => void }) {
+function MakePayment() {
   const { staff, setStaff } = useTenantStore();
+  const navigate = useNavigate();
+  const search = useSearch({ from: "/tenant/finance" });
   const initialObligation = PENDING_OBLIGATIONS[0];
   const [obligations, setObligations] = useState<PendingObligation[]>(PENDING_OBLIGATIONS);
   const [madePayments, setMadePayments] = useState<MadePayment[]>(MADE_PAYMENTS);
   const [selectedObligationId, setSelectedObligationId] = useState<string | null>(
-    initialObligation?.id ?? null,
+    search.staffId ? null : (initialObligation?.id ?? null),
   );
   const [payeeType, setPayeeType] = useState<"Salary" | "Vendor">(
-    initialObligation?.payeeType ?? "Salary",
+    search.staffId ? "Salary" : (initialObligation?.payeeType ?? "Salary"),
   );
-  const [selectedStaffId, setSelectedStaffId] = useState<string>("");
-  const [beneficiary, setBeneficiary] = useState(initialObligation?.payee ?? "");
-  const [description, setDescription] = useState(initialObligation?.desc ?? "");
+  const [selectedStaffId, setSelectedStaffId] = useState<string>(search.staffId ?? "");
+  const [salaryMonth, setSalaryMonth] = useState(
+    () => search.month ?? currentPayrollMonth(),
+  );
+  const [daysPresent, setDaysPresent] = useState("");
+  const [workingDays, setWorkingDays] = useState("");
+  const [beneficiary, setBeneficiary] = useState(
+    search.staffId ? "" : (initialObligation?.payee ?? ""),
+  );
+  const [description, setDescription] = useState(
+    search.staffId ? "" : (initialObligation?.desc ?? ""),
+  );
   const [amount, setAmount] = useState(
-    initialObligation ? String(initialObligation.amount) : "",
+    search.amount ??
+      (search.staffId ? "" : initialObligation ? String(initialObligation.amount) : ""),
   );
-  const [mode, setMode] = useState("UPI Business");
+  const [mode, setMode] = useState("Bank");
   const [attachments, setAttachments] = useState<PaymentAttachment[]>([]);
   const [pendingAuthorisation, setPendingAuthorisation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -7679,8 +8116,10 @@ function MakePayment({ onBack }: { onBack: () => void }) {
     mode: "UPI Business",
     payeeType: "Vendor" as "Salary" | "Vendor",
     status: "Queued" as "Queued" | "Cleared",
-    time: "",
+    date: toIsoDateLocal(new Date()),
+    clock: toClockLocal(new Date()),
   });
+  const prefillAppliedRef = useRef(false);
 
   const activeStaff = useMemo(
     () =>
@@ -7701,20 +8140,116 @@ function MakePayment({ onBack }: { onBack: () => void }) {
   const matchStaffByName = (name: string) =>
     activeStaff.find((member) => member.name.toLowerCase() === name.trim().toLowerCase());
 
-  const applyStaff = (memberId: string) => {
+  const applyStaff = (
+    memberId: string,
+    opts?: {
+      month?: string;
+      amount?: number;
+      skipToast?: boolean;
+      daysPresent?: number;
+      workingDays?: number;
+    },
+  ) => {
     const member = activeStaff.find((s) => s.id === memberId);
     if (!member) {
       setSelectedStaffId("");
       return;
     }
+    const month = opts?.month ?? salaryMonth;
     setSelectedStaffId(member.id);
     setBeneficiary(member.name);
-    const salaryTotal = (member.basicSalary || 0) + (member.additionalAllowances || 0);
-    if (salaryTotal > 0) {
-      setAmount(String(salaryTotal));
+    setSalaryMonth(month);
+    const { payable, gross, attendance } = staffPayableSalary(member, month);
+    const present =
+      opts?.daysPresent ??
+      attendance?.daysPresent ??
+      0;
+    const working =
+      opts?.workingDays ??
+      attendance?.workingDays ??
+      26;
+    setDaysPresent(String(present));
+    setWorkingDays(String(working));
+    const computed =
+      working > 0
+        ? Math.round(gross * (Math.max(0, Math.min(present, working)) / working))
+        : gross;
+    const nextAmount = opts?.amount ?? computed;
+    if (nextAmount > 0) {
+      setAmount(String(nextAmount));
     }
+    const attendanceNote =
+      working > 0
+        ? ` · ${Math.max(0, Math.min(present, working))}/${working} days · ${formatPayrollMonthLabel(month)}`
+        : ` · ${formatPayrollMonthLabel(month)}`;
+    if (!description.trim() || /salary|payroll|staff|bus diesel/i.test(description)) {
+      setDescription(
+        `Salary · ${member.role}${member.dept ? ` · ${member.dept}` : ""}${attendanceNote}`,
+      );
+    }
+    if (
+      !opts?.skipToast &&
+      opts?.amount === undefined &&
+      working > 0 &&
+      computed !== gross
+    ) {
+      toast.message("Payroll adjusted for attendance", {
+        description: `Gross ₹ ${gross.toLocaleString("en-IN")} → payable ₹ ${computed.toLocaleString("en-IN")}`,
+      });
+    }
+  };
+
+  const recalcSalaryFromAttendance = (
+    presentRaw: string,
+    workingRaw: string,
+    memberId = selectedStaffId,
+  ) => {
+    const member = activeStaff.find((s) => s.id === memberId);
+    if (!member || payeeType !== "Salary") return;
+    const gross = staffGrossSalary(member);
+    const working = Number(workingRaw);
+    const present = Number(presentRaw);
+    if (!Number.isFinite(working) || working <= 0) {
+      setAmount(String(gross));
+      return;
+    }
+    const safePresent = Math.max(0, Math.min(Number.isFinite(present) ? present : 0, working));
+    setAmount(String(Math.round(gross * (safePresent / working))));
     if (!description.trim() || /salary|payroll|staff/i.test(description)) {
-      setDescription(`Salary · ${member.role}${member.dept ? ` · ${member.dept}` : ""}`);
+      setDescription(
+        `Salary · ${member.role}${member.dept ? ` · ${member.dept}` : ""} · ${safePresent}/${working} days · ${formatPayrollMonthLabel(salaryMonth)}`,
+      );
+    }
+  };
+
+  useEffect(() => {
+    if (prefillAppliedRef.current) return;
+    if (!search.staffId || activeStaff.length === 0) return;
+    const member = activeStaff.find((s) => s.id === search.staffId);
+    if (!member) return;
+    prefillAppliedRef.current = true;
+    const month = search.month ?? currentPayrollMonth();
+    const parsedAmount = search.amount ? Number(search.amount) : undefined;
+    applyStaff(member.id, {
+      month,
+      amount: parsedAmount && parsedAmount > 0 ? parsedAmount : undefined,
+      skipToast: true,
+    });
+    setPayeeType("Salary");
+    setMode("Bank");
+    navigate({
+      to: "/tenant/finance",
+      search: { tab: "make" },
+      replace: true,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeStaff, search.staffId, search.month, search.amount]);
+
+  const applySalaryMonth = (month: string) => {
+    const next = month || currentPayrollMonth();
+    setSalaryMonth(next);
+    if (payeeType === "Salary" && selectedStaffId) {
+      applyStaff(selectedStaffId, { month: next, skipToast: true });
     }
   };
 
@@ -7728,6 +8263,13 @@ function MakePayment({ onBack }: { onBack: () => void }) {
     if (obligation.payeeType === "Salary") {
       const matched = matchStaffByName(obligation.payee);
       setSelectedStaffId(matched?.id ?? "");
+      if (matched) {
+        applyStaff(matched.id, {
+          month: salaryMonth,
+          amount: obligation.amount,
+          skipToast: true,
+        });
+      }
     } else {
       setSelectedStaffId("");
     }
@@ -7737,10 +8279,13 @@ function MakePayment({ onBack }: { onBack: () => void }) {
     setSelectedObligationId(null);
     setPayeeType("Salary");
     setSelectedStaffId("");
+    setSalaryMonth(currentPayrollMonth());
+    setDaysPresent("");
+    setWorkingDays("");
     setBeneficiary("");
     setDescription("");
     setAmount("");
-    setMode("Bank Transfer · NEFT");
+    setMode("Bank");
     setAttachments([]);
   };
 
@@ -7812,6 +8357,22 @@ function MakePayment({ onBack }: { onBack: () => void }) {
       toast.error("Choose a staff member");
       return;
     }
+    if (payeeType === "Salary" && !salaryMonth) {
+      toast.error("Select the salary month");
+      return;
+    }
+    if (payeeType === "Salary") {
+      const working = Number(workingDays);
+      const present = Number(daysPresent);
+      if (!Number.isFinite(working) || working <= 0) {
+        toast.error("Enter working days for this salary month");
+        return;
+      }
+      if (!Number.isFinite(present) || present < 0) {
+        toast.error("Enter days present for this salary month");
+        return;
+      }
+    }
     if (!beneficiary.trim()) {
       toast.error(payeeType === "Salary" ? "Choose a staff member" : "Beneficiary name is required");
       return;
@@ -7823,6 +8384,15 @@ function MakePayment({ onBack }: { onBack: () => void }) {
     if (!value || value <= 0) {
       toast.error("Enter a valid amount");
       return;
+    }
+    // Ensure salary month is reflected on the disbursal line
+    if (
+      payeeType === "Salary" &&
+      salaryMonth &&
+      !description.toLowerCase().includes(formatPayrollMonthLabel(salaryMonth).toLowerCase()) &&
+      !description.includes(salaryMonth)
+    ) {
+      setDescription((prev) => `${prev.trim()} · ${formatPayrollMonthLabel(salaryMonth)}`);
     }
     setPendingAuthorisation(true);
   };
@@ -7858,11 +8428,25 @@ function MakePayment({ onBack }: { onBack: () => void }) {
 
     if (payeeType === "Salary" && selectedStaffId) {
       const paidAt = new Date().toISOString().slice(0, 10);
+      const working = Math.max(0, Math.round(Number(workingDays) || 0));
+      const present = Math.max(
+        0,
+        Math.min(Math.round(Number(daysPresent) || 0), working || Number.MAX_SAFE_INTEGER),
+      );
       setStaff((prev) =>
         prev.map((member) =>
           member.id === selectedStaffId
             ? {
                 ...member,
+                ...(working > 0
+                  ? {
+                      attendanceByMonth: upsertStaffAttendanceMonth(member.attendanceByMonth, {
+                        month: salaryMonth,
+                        daysPresent: present,
+                        workingDays: working,
+                      }),
+                    }
+                  : {}),
                 salaryHistory: [
                   {
                     id: `SAL-${member.id}-${Date.now().toString().slice(-5)}`,
@@ -7977,6 +8561,7 @@ function MakePayment({ onBack }: { onBack: () => void }) {
 
   const openEditDisbursal = (payment: MadePayment) => {
     setEditingDisbursal(payment);
+    const parts = parseDisbursalTimeParts(payment.time);
     setDisbursalEditForm({
       payee: payment.payee,
       desc: payment.desc,
@@ -7984,7 +8569,8 @@ function MakePayment({ onBack }: { onBack: () => void }) {
       mode: payment.mode,
       payeeType: payment.payeeType,
       status: payment.status,
-      time: payment.time,
+      date: parts.date,
+      clock: parts.clock,
     });
   };
 
@@ -7995,7 +8581,10 @@ function MakePayment({ onBack }: { onBack: () => void }) {
     const desc = disbursalEditForm.desc.trim();
     const nextAmount = Number(disbursalEditForm.amount);
     const modeValue = disbursalEditForm.mode.trim();
-    const time = disbursalEditForm.time.trim();
+    const time = formatDisbursalTimeFromParts(
+      disbursalEditForm.date,
+      disbursalEditForm.clock,
+    );
     if (!payee) {
       toast.error("Payee is required");
       return;
@@ -8012,8 +8601,8 @@ function MakePayment({ onBack }: { onBack: () => void }) {
       toast.error("Payment mode is required");
       return;
     }
-    if (!time) {
-      toast.error("Time is required");
+    if (!disbursalEditForm.date || !disbursalEditForm.clock) {
+      toast.error("Date and time are required");
       return;
     }
 
@@ -8047,11 +8636,8 @@ function MakePayment({ onBack }: { onBack: () => void }) {
   return (
     <div className="grid grid-cols-12 gap-4 sm:gap-5">
       <OrganicCard tone="white" cornerSide="tr" padded className={cn(workspacePanelClass, "col-span-12 lg:col-span-8")}>
-        <div className="flex min-w-0 items-start gap-2.5 sm:items-center sm:gap-3">
-          <FinancePageBackButton onBack={onBack} />
-          <div className="min-w-0 flex-1">
-            <DashboardPanelHeading icon={ArrowUpFromLine} title="Make Payment" />
-          </div>
+        <div className="min-w-0">
+          <DashboardPanelHeading icon={ArrowUpFromLine} title="Make Payment" />
         </div>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
@@ -8065,7 +8651,7 @@ function MakePayment({ onBack }: { onBack: () => void }) {
                     type="button"
                     onClick={() => setPayeeTypeAndClear(p)}
                     className={`flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium ${
-                      active ? "bg-black text-white" : "text-black/65"
+                      active ? "bg-[#0F766E] text-white" : "text-black/65"
                     }`}
                   >
                     {p}
@@ -8092,11 +8678,57 @@ function MakePayment({ onBack }: { onBack: () => void }) {
             )}
             {payeeType === "Salary" && selectedStaffId && (
               <p className="mt-1.5 text-[11px] text-black/45">
-                Amount prefilled from staff salary settings when available
+                Amount prefilled from attendance-adjusted salary for the selected month
               </p>
             )}
           </div>
-          <div className="sm:col-span-2">
+          {payeeType === "Salary" && (
+            <div className="grid grid-cols-1 gap-4 sm:col-span-2 sm:grid-cols-3">
+              <div className="min-w-0">
+                <FieldLabel>Salary month</FieldLabel>
+                <MonthPicker
+                  value={salaryMonth}
+                  onChange={applySalaryMonth}
+                  allowClear={false}
+                  placeholder="Select payroll month"
+                />
+                <p className="mt-1.5 text-[11px] text-black/45">
+                  Which month this salary payment covers
+                </p>
+              </div>
+              <div className="min-w-0">
+                <FieldLabel>Days Present</FieldLabel>
+                <Input
+                  inputMode="numeric"
+                  value={daysPresent}
+                  onChange={(e) => {
+                    const next = e.target.value.replace(/[^0-9]/g, "");
+                    setDaysPresent(next);
+                    recalcSalaryFromAttendance(next, workingDays);
+                  }}
+                  placeholder="0"
+                  className="font-mono"
+                  disabled={!selectedStaffId}
+                />
+              </div>
+              <div className="min-w-0">
+                <FieldLabel>Working Days</FieldLabel>
+                <Input
+                  inputMode="numeric"
+                  value={workingDays}
+                  onChange={(e) => {
+                    const next = e.target.value.replace(/[^0-9]/g, "");
+                    setWorkingDays(next);
+                    recalcSalaryFromAttendance(daysPresent, next);
+                  }}
+                  placeholder="26"
+                  className="font-mono"
+                  disabled={!selectedStaffId}
+                />
+              </div>
+            </div>
+          )}
+          <div className={payeeType === "Salary" ? "sm:col-span-2" : "sm:col-span-2"}>
             <FieldLabel>Description / Line Items</FieldLabel>
             <textarea
               value={description}
@@ -8129,8 +8761,8 @@ function MakePayment({ onBack }: { onBack: () => void }) {
                       className={cn(
                         "h-11 w-full rounded-lg px-2 text-center text-[12px] font-medium leading-tight whitespace-nowrap transition-colors sm:px-3",
                         active
-                          ? "bg-[#2563EB] text-white shadow-sm"
-                          : "bg-[#DBEAFE]/50 text-slate-700 hover:bg-[#DBEAFE]",
+                          ? "bg-[#0F766E] text-white shadow-sm"
+                          : "bg-[#CCFBF1]/50 text-slate-700 hover:bg-[#CCFBF1] dark:bg-white/10 dark:text-zinc-200 dark:hover:bg-white/15",
                       )}
                       title={m}
                     >
@@ -8167,7 +8799,7 @@ function MakePayment({ onBack }: { onBack: () => void }) {
                       <a
                         href={file.dataUrl}
                         download={file.name}
-                        className="inline-flex h-7 items-center rounded-lg border border-slate-200 px-2 text-[10.5px] font-semibold text-black/60 transition-colors hover:bg-slate-50"
+                        className="inline-flex h-7 items-center rounded-lg border border-slate-200 px-2 text-[10.5px] font-semibold text-black/60 dark:text-zinc-400 transition-colors hover:bg-slate-50"
                       >
                         Open
                       </a>
@@ -8214,7 +8846,7 @@ function MakePayment({ onBack }: { onBack: () => void }) {
             type="button"
             onClick={requestAuthorisation}
             disabled={isSubmitting}
-            className="inline-flex h-12 w-full items-center justify-center rounded-full bg-black px-8 text-[14px] font-semibold tracking-tight text-white shadow-[0_8px_24px_-10px_rgba(0,0,0,0.45)] transition-all hover:bg-[#0F172A] hover:shadow-[0_10px_28px_-10px_rgba(15,23,42,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none sm:w-auto sm:min-w-[200px]"
+            className="inline-flex h-12 w-full items-center justify-center rounded-full bg-[#0F766E] px-8 text-[14px] font-semibold tracking-tight text-white shadow-[0_8px_24px_-10px_rgba(15,118,110,0.45)] transition-all hover:bg-[#0D9488] hover:shadow-[0_10px_28px_-10px_rgba(15,118,110,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none sm:w-auto sm:min-w-[200px]"
           >
             Confirm Payment
           </button>
@@ -8225,7 +8857,7 @@ function MakePayment({ onBack }: { onBack: () => void }) {
         <DashboardPanelHeading icon={AlertTriangle} title="Top Pending Obligations" />
         <div className="mt-3 space-y-3">
           {obligations.length === 0 && (
-            <div className="rounded-lg border border-dashed border-black/15 bg-[#F4F4F5]/40 px-4 py-6 text-center text-[12px] text-black/55">
+            <div className="rounded-lg border border-dashed border-black/15 bg-[#F4F4F5]/40 px-4 py-6 text-center text-[12px] text-black/55 dark:text-zinc-400">
               No pending obligations in the queue
             </div>
           )}
@@ -8239,7 +8871,7 @@ function MakePayment({ onBack }: { onBack: () => void }) {
                 className={`w-full rounded-lg p-3 text-left transition-colors ${
                   isSelected
                     ? "bg-[#FEE2E2] text-[#7F1D1D] ring-2 ring-[#FECACA]"
-                    : "bg-[#DBEAFE] text-[#0F172A] hover:bg-[#BFDBFE]"
+                    : "bg-[#CCFBF1] text-[#0F172A] hover:bg-[#99F6E4] dark:hover:bg-[#5EEAD4]"
                 }`}
               >
                 <div className="flex items-center justify-between text-[12.5px]">
@@ -8248,7 +8880,7 @@ function MakePayment({ onBack }: { onBack: () => void }) {
                 </div>
                 <div
                   className={`mt-0.5 flex items-center justify-between text-[10.5px] ${
-                    isSelected ? "text-[#991B1B]/75" : "text-black/55"
+                    isSelected ? "text-[#991B1B]/75" : "text-black/55 dark:text-zinc-400"
                   }`}
                 >
                   <span>{p.desc}</span>
@@ -8270,7 +8902,7 @@ function MakePayment({ onBack }: { onBack: () => void }) {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <DashboardPanelHeading icon={CheckCircle2} title="Made Payment Details" />
-            <div className="mt-1 text-[11.5px] text-black/55">
+            <div className="mt-1 text-[11.5px] text-black/55 dark:text-zinc-400">
               {madePayments.length} disbursals · most recent
             </div>
           </div>
@@ -8285,7 +8917,7 @@ function MakePayment({ onBack }: { onBack: () => void }) {
         </div>
         <div className="mobile-scrollbar-none mt-3 max-h-[420px] divide-y divide-[#F0F0F0] overflow-y-auto">
           {madePayments.length === 0 && (
-            <div className="py-6 text-center text-[12px] text-black/55">
+            <div className="py-6 text-center text-[12px] text-black/55 dark:text-zinc-400">
               No outbound payments recorded yet
             </div>
           )}
@@ -8294,7 +8926,7 @@ function MakePayment({ onBack }: { onBack: () => void }) {
               <div className="flex items-start justify-between gap-2 text-[12.5px]">
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium text-black">{payment.payee}</div>
-                  <div className="mt-0.5 truncate text-[10.5px] text-black/55">
+                  <div className="mt-0.5 truncate text-[10.5px] text-black/55 dark:text-zinc-400">
                     {payment.payeeType} · {payment.desc} · {payment.mode}
                     {(payment.attachments?.length ?? 0) > 0 && (
                       <>
@@ -8316,8 +8948,8 @@ function MakePayment({ onBack }: { onBack: () => void }) {
                       className={cn(
                         "rounded-full px-2 py-0.5 text-[10px] font-semibold",
                         payment.status === "Cleared"
-                          ? "bg-[#DBEAFE] text-black"
-                          : "bg-black text-[#2563EB]",
+                          ? "bg-[#CCFBF1] text-[#0F766E]"
+                          : "bg-black/8 text-black/55 dark:text-zinc-400",
                       )}
                     >
                       {payment.status}
@@ -8329,7 +8961,7 @@ function MakePayment({ onBack }: { onBack: () => void }) {
                       aria-label={`Download payment ${payment.id}`}
                       title="Download"
                       onClick={() => downloadDisbursal(payment)}
-                      className="inline-grid h-7 w-7 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                      className="inline-grid h-7 w-7 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
                     >
                       <Download className="h-3.5 w-3.5" />
                     </button>
@@ -8338,7 +8970,7 @@ function MakePayment({ onBack }: { onBack: () => void }) {
                       aria-label={`Edit payment ${payment.id}`}
                       title="Edit"
                       onClick={() => openEditDisbursal(payment)}
-                      className="inline-grid h-7 w-7 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                      className="inline-grid h-7 w-7 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
@@ -8347,7 +8979,7 @@ function MakePayment({ onBack }: { onBack: () => void }) {
                       aria-label={`Share payment ${payment.id}`}
                       title="Share"
                       onClick={() => shareDisbursal(payment)}
-                      className="inline-grid h-7 w-7 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-[#2563EB] hover:bg-[#DBEAFE] hover:text-[#2563EB]"
+                      className="inline-grid h-7 w-7 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-[#0F766E] hover:bg-[#CCFBF1] hover:text-[#0F766E]"
                     >
                       <Share2 className="h-3.5 w-3.5" />
                     </button>
@@ -8361,7 +8993,7 @@ function MakePayment({ onBack }: { onBack: () => void }) {
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
-                  <span className="font-mono text-[10.5px] text-black/55">{payment.time}</span>
+                  <span className="font-mono text-[10.5px] text-black/55 dark:text-zinc-400">{payment.time}</span>
                 </div>
               </div>
               {(payment.attachments?.length ?? 0) > 0 && (
@@ -8400,7 +9032,7 @@ function MakePayment({ onBack }: { onBack: () => void }) {
           </DialogHeader>
           <form onSubmit={saveEditedDisbursal} className="space-y-3">
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                 Payee
               </Label>
               <Input
@@ -8412,7 +9044,7 @@ function MakePayment({ onBack }: { onBack: () => void }) {
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                 Description
               </Label>
               <Textarea
@@ -8425,7 +9057,7 @@ function MakePayment({ onBack }: { onBack: () => void }) {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                   Type
                 </Label>
                 <Select
@@ -8447,7 +9079,7 @@ function MakePayment({ onBack }: { onBack: () => void }) {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                   Status
                 </Label>
                 <Select
@@ -8471,7 +9103,7 @@ function MakePayment({ onBack }: { onBack: () => void }) {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                   Amount (₹)
                 </Label>
                 <Input
@@ -8485,7 +9117,7 @@ function MakePayment({ onBack }: { onBack: () => void }) {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                   Mode
                 </Label>
                 <Select
@@ -8517,23 +9149,62 @@ function MakePayment({ onBack }: { onBack: () => void }) {
                 </Select>
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                Time
-              </Label>
-              <Input
-                value={disbursalEditForm.time}
-                onChange={(e) =>
-                  setDisbursalEditForm({ ...disbursalEditForm, time: e.target.value })
-                }
-                className="font-mono"
-              />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                  Date
+                </Label>
+                <DatePicker
+                  value={disbursalEditForm.date}
+                  onChange={(date) =>
+                    setDisbursalEditForm({
+                      ...disbursalEditForm,
+                      date: date || toIsoDateLocal(new Date()),
+                    })
+                  }
+                  valueFormat="iso"
+                  placeholder="Select date"
+                  quickPicks={[
+                    { label: "Today", getDate: (t) => t },
+                    {
+                      label: "Yesterday",
+                      getDate: (t) =>
+                        new Date(t.getFullYear(), t.getMonth(), t.getDate() - 1),
+                    },
+                  ]}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                  Time
+                </Label>
+                <Input
+                  type="time"
+                  value={disbursalEditForm.clock}
+                  onChange={(e) =>
+                    setDisbursalEditForm({
+                      ...disbursalEditForm,
+                      clock: e.target.value || toClockLocal(new Date()),
+                    })
+                  }
+                  className="h-10 font-mono"
+                />
+              </div>
             </div>
+            <p className="text-[11px] text-black/45">
+              Saves as{" "}
+              <span className="font-mono text-black/70">
+                {formatDisbursalTimeFromParts(
+                  disbursalEditForm.date,
+                  disbursalEditForm.clock,
+                )}
+              </span>
+            </p>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditingDisbursal(null)}>
                 Cancel
               </Button>
-              <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+              <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
                 Save changes
               </Button>
             </DialogFooter>
@@ -8566,7 +9237,7 @@ function MakePayment({ onBack }: { onBack: () => void }) {
             <DialogTitle className="text-[22px] font-semibold text-black">
               Confirm Payment
             </DialogTitle>
-            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
+            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60 dark:text-zinc-400">
               Pay ₹ {Number(amount || 0).toLocaleString("en-IN")} to {beneficiary.trim()} via {mode}
               {attachments.length
                 ? ` with ${attachments.length} attachment${attachments.length === 1 ? "" : "s"}`
@@ -8582,7 +9253,7 @@ function MakePayment({ onBack }: { onBack: () => void }) {
               type="button"
               onClick={confirmAuthorisation}
               disabled={isSubmitting}
-              className="h-11 rounded-full bg-black px-6 text-[13px] font-semibold text-white hover:bg-black/85"
+              className="h-11 rounded-full bg-[#0F766E] px-6 text-[13px] font-semibold text-white hover:bg-[#0D9488]"
             >
               Confirm Payment
             </Button>
@@ -8621,7 +9292,7 @@ function LedgerAnalytics() {
         <FinanceBarCard
           title="Outflow by Category"
           cornerSide="bl"
-          fill="#2563EB"
+          fill="#0F766E"
           segments={LEDGER_OUTFLOW_SEGMENTS}
         />
       </div>
@@ -8637,6 +9308,7 @@ export function SchoolSettings() {
   const activeTab = (tabParam ?? "school") as SettingsTabId;
   /** Mobile: no ?tab → menu index. With ?tab → section page. Desktop always shows content. */
   const showMobileMenu = !tabParam;
+  const [viewingFeePeriod, setViewingFeePeriod] = useState(false);
 
   const {
     departments,
@@ -8653,21 +9325,41 @@ export function SchoolSettings() {
     setTransportVehicles,
     paymentCategories,
     setPaymentCategories,
-    feeTerms,
+    feeTerms: _allFeeTerms,
     setFeeTerms,
+    activeFeeTerms,
     academicYears,
-    setAcademicYears,
     academicYear,
-    setAcademicYear,
+    openAcademicYear,
+    addAcademicYear,
+    canDeleteAcademicYear,
+    deleteAcademicYear,
     themeSettings,
     setThemeSettings,
     schoolDetails,
     setSchoolDetails,
     staff,
     setStaff,
-    students,
+    activeStudents: students,
     setStudents,
   } = useTenantStore();
+
+  const setActiveFeeTerms = useCallback<React.Dispatch<React.SetStateAction<FeeTerm[]>>>(
+    (action) => {
+      setFeeTerms((all) => {
+        const current = all.filter((t) => (t.academicYear ?? "") === academicYear);
+        const others = all.filter((t) => (t.academicYear ?? "") !== academicYear);
+        const next = typeof action === "function" ? action(current) : action;
+        return [
+          ...others,
+          ...next.map((t) => ({ ...t, academicYear: t.academicYear ?? academicYear })),
+        ];
+      });
+    },
+    [academicYear, setFeeTerms],
+  );
+
+  const feeTerms = activeFeeTerms;
 
   const allSettingsTabs: { id: SettingsTabId; label: string }[] = useMemo(
     () => [
@@ -8735,8 +9427,6 @@ export function SchoolSettings() {
         <SchoolDetailsCard
           schoolDetails={schoolDetails}
           setSchoolDetails={setSchoolDetails}
-          themeSettings={themeSettings}
-          setThemeSettings={setThemeSettings}
         />
       )}
 
@@ -8747,6 +9437,7 @@ export function SchoolSettings() {
           students={students}
           setStudents={setStudents}
           staff={staff}
+          feeTerms={feeTerms}
         />
       )}
 
@@ -8800,11 +9491,19 @@ export function SchoolSettings() {
 
       {activeTab === "fees" && (
         <div className="space-y-4 sm:space-y-5">
-          <FeeCategoriesCard
-            paymentCategories={paymentCategories}
-            setPaymentCategories={setPaymentCategories}
+          {!viewingFeePeriod && (
+            <FeeCategoriesCard
+              paymentCategories={paymentCategories}
+              setPaymentCategories={setPaymentCategories}
+            />
+          )}
+          <FeeTermsCard
+            feeTerms={feeTerms}
+            setFeeTerms={setActiveFeeTerms}
+            academicYear={academicYear}
+            classes={classes}
+            onViewingChange={setViewingFeePeriod}
           />
-          <FeeTermsCard feeTerms={feeTerms} setFeeTerms={setFeeTerms} />
         </div>
       )}
 
@@ -8812,9 +9511,11 @@ export function SchoolSettings() {
         <div className="grid grid-cols-12 gap-3 sm:gap-4 lg:gap-5">
           <CategoriesCard
             academicYears={academicYears}
-            setAcademicYears={setAcademicYears}
             academicYear={academicYear}
-            setAcademicYear={setAcademicYear}
+            openAcademicYear={openAcademicYear}
+            addAcademicYear={addAcademicYear}
+            canDeleteAcademicYear={canDeleteAcademicYear}
+            deleteAcademicYear={deleteAcademicYear}
             themeSettings={themeSettings}
             setThemeSettings={setThemeSettings}
           />
@@ -8830,14 +9531,14 @@ export function SchoolSettings() {
         <div
           className={cn(
             glassCardClass,
-            "overflow-hidden border border-white/70 bg-white/90 p-0 shadow-sm",
+            "overflow-hidden border border-white/70 bg-white/90 p-0 shadow-sm dark:border-white/10 dark:bg-zinc-900/90",
           )}
         >
           <div className="flex items-center gap-3 px-4 py-4">
             <div
               className={cn(
                 "grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-full text-[13px] font-bold text-white",
-                !logoUrl && "bg-gradient-to-br from-[#2563EB] to-[#4C69A4]",
+                !logoUrl && "bg-gradient-to-br from-[#0F766E] to-[#115E59]",
               )}
             >
               {logoUrl ? (
@@ -8847,23 +9548,23 @@ export function SchoolSettings() {
               )}
             </div>
             <div className="min-w-0">
-              <div className="truncate text-[15px] font-semibold text-slate-900">
+              <div className="truncate text-[15px] font-semibold text-slate-900 dark:text-zinc-50">
                 {session?.displayName ?? "Admin"}
               </div>
-              <div className="truncate text-[12px] text-slate-500">{session?.email}</div>
+              <div className="truncate text-[12px] text-slate-500 dark:text-zinc-400">{session?.email}</div>
             </div>
           </div>
 
-          <ul className="border-t border-slate-100">
+          <ul className="border-t border-slate-100 dark:border-white/10">
             {settingsTabs.map((tab) => (
-              <li key={tab.id} className="border-b border-slate-100 last:border-b-0">
+              <li key={tab.id} className="border-b border-slate-100 last:border-b-0 dark:border-white/10">
                 <button
                   type="button"
                   onClick={() => setTab(tab.id)}
-                  className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left transition-colors active:bg-slate-50"
+                  className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left transition-colors active:bg-slate-50 dark:active:bg-white/5"
                 >
-                  <span className="text-[15px] font-medium text-slate-900">{tab.label}</span>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
+                  <span className="text-[15px] font-medium text-slate-900 dark:text-zinc-100">{tab.label}</span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 dark:text-zinc-500" />
                 </button>
               </li>
             ))}
@@ -8873,7 +9574,7 @@ export function SchoolSettings() {
             <button
               type="button"
               onClick={handleLogout}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3.5 text-[14px] font-semibold text-white transition-colors active:bg-slate-800"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3.5 text-[14px] font-semibold text-white transition-colors active:bg-slate-800 dark:bg-zinc-100 dark:text-zinc-900 dark:active:bg-white"
             >
               <LogOut className="h-4 w-4" />
               Logout
@@ -8887,12 +9588,12 @@ export function SchoolSettings() {
         <button
           type="button"
           onClick={backToMenu}
-          className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-slate-600 transition-colors hover:text-slate-900"
+          className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-slate-600 transition-colors hover:text-slate-900 dark:text-zinc-300 dark:hover:text-zinc-50"
         >
           <ChevronLeft className="h-4 w-4" />
           Settings
         </button>
-        <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-zinc-500">
           {activeTabLabel}
         </div>
         {renderSettingsContent("cards")}
@@ -8900,7 +9601,7 @@ export function SchoolSettings() {
 
       {/* Desktop: horizontal tabs + content */}
       <div className="col-span-12 hidden min-w-0 lg:block">
-        <div className="mobile-scrollbar-none overflow-x-auto rounded-full border border-[#E5E5E5] bg-white/80 p-1 shadow-sm">
+        <div className="mobile-scrollbar-none overflow-x-auto rounded-full border border-[#E5E5E5] bg-white/80 p-1 shadow-sm dark:border-white/10 dark:bg-zinc-900/80">
           <div className="flex min-w-max gap-1 lg:min-w-0 lg:w-full">
             {settingsTabs.map((tab) => {
               const active = activeTab === tab.id;
@@ -8912,8 +9613,8 @@ export function SchoolSettings() {
                   className={cn(
                     "shrink-0 rounded-full px-3.5 py-2 text-[12px] font-semibold transition-colors lg:min-w-0 lg:flex-1",
                     active
-                      ? "bg-black text-white shadow-sm"
-                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+                      ? "bg-[#0F766E] text-white shadow-sm"
+                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-zinc-100",
                   )}
                 >
                   <span className="block truncate text-center">{tab.label}</span>
@@ -8943,14 +9644,14 @@ function CardHeader({
   return (
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[18px] font-bold leading-tight tracking-tight text-slate-900 lg:text-black">
+        <div className="truncate text-[18px] font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50 lg:text-black dark:lg:text-zinc-50">
           {title}
         </div>
-        <p className="mt-1 text-[12px] text-slate-500 lg:text-black/55">{subtitle}</p>
+        <p className="mt-1 text-[12px] text-slate-500 lg:text-black/55 dark:text-zinc-400">{subtitle}</p>
       </div>
       <button
         onClick={onAction}
-        className="inline-flex shrink-0 items-center gap-1 rounded-full bg-gradient-to-r from-[#2563EB] to-[#4C69A4] px-3 py-2 text-[11.5px] font-semibold text-white shadow-md shadow-blue-900/15 transition-all hover:opacity-95"
+        className="inline-flex shrink-0 items-center gap-1 rounded-full bg-gradient-to-r from-[#0F766E] to-[#115E59] px-3 py-2 text-[11.5px] font-semibold text-white shadow-md shadow-teal-900/15 transition-all hover:opacity-95"
         aria-label={actionLabel}
       >
         <Plus className="h-3.5 w-3.5" /> Add
@@ -8961,7 +9662,7 @@ function CardHeader({
 
 function EmptyRow({ label }: { label: string }) {
   return (
-    <div className="rounded-lg border border-dashed border-black/15 bg-[#F4F4F5]/40 px-4 py-6 text-center text-[12px] text-black/55">
+    <div className="rounded-lg border border-dashed border-black/15 bg-[#F4F4F5]/40 px-4 py-6 text-center text-[12px] text-black/55 dark:border-white/15 dark:bg-zinc-900/50 dark:text-zinc-400">
       {label}
     </div>
   );
@@ -8985,7 +9686,7 @@ function DeleteConfirmDialog({
       <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6">
         <DialogHeader>
           <DialogTitle className="text-[22px] font-semibold text-black">{title}</DialogTitle>
-          <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
+          <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60 dark:text-zinc-400">
             {description}
           </DialogDescription>
         </DialogHeader>
@@ -9097,21 +9798,23 @@ function DepartmentsCard({
           return (
             <div
               key={d.id}
-              className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5"
+              className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5 dark:border-white/10 dark:bg-zinc-900/70"
             >
               <div className="flex min-w-0 items-center gap-2.5">
-                <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-black text-[10.5px] font-semibold text-white">
+                <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[#0F766E] text-[10.5px] font-semibold text-white">
                   {d.code.slice(0, 3)}
                 </div>
                 <div className="min-w-0">
-                  <div className="truncate text-[13px] font-semibold text-black">{d.name}</div>
-                  <div className="font-mono text-[10.5px] uppercase tracking-wider text-black/45">
+                  <div className="truncate text-[13px] font-semibold text-black dark:text-zinc-100">
+                    {d.name}
+                  </div>
+                  <div className="font-mono text-[10.5px] uppercase tracking-wider text-black/45 dark:text-zinc-400">
                     {d.code}
                   </div>
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-                <span className="rounded-full bg-[#DBEAFE] px-2 py-0.5 font-mono text-[10px] font-semibold text-black sm:px-2.5 sm:text-[11px]">
+                <span className="rounded-full bg-[#CCFBF1] px-2 py-0.5 font-mono text-[10px] font-semibold text-black dark:bg-[#0F766E]/35 dark:text-[#5EEAD4] sm:px-2.5 sm:text-[11px]">
                   <span className="sm:hidden">{count}</span>
                   <span className="hidden sm:inline">{count} staff</span>
                 </span>
@@ -9119,7 +9822,7 @@ function DepartmentsCard({
                   type="button"
                   onClick={() => startEdit(d)}
                   aria-label={`Rename ${d.name}`}
-                  className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
+                  className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black dark:border-white/15 dark:bg-zinc-950 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-zinc-100"
                 >
                   <Pencil className="h-3.5 w-3.5" />
                 </button>
@@ -9127,7 +9830,7 @@ function DepartmentsCard({
                   type="button"
                   onClick={() => setPendingDelete(d)}
                   aria-label={`Delete ${d.name}`}
-                  className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                  className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2] dark:border-rose-500/40 dark:bg-rose-950/50 dark:text-rose-300 dark:hover:bg-rose-950/80"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -9161,7 +9864,7 @@ function DepartmentsCard({
           </DialogHeader>
           <form onSubmit={submit} className="space-y-3">
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                 Department Name
               </Label>
               <Input
@@ -9172,7 +9875,7 @@ function DepartmentsCard({
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                 Department Code
               </Label>
               <Input
@@ -9186,7 +9889,7 @@ function DepartmentsCard({
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+              <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
                 {editingId ? "Save" : "Add Department"}
               </Button>
             </DialogFooter>
@@ -9293,18 +9996,18 @@ function RolesCard({
           return (
             <div
               key={r.id}
-              className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5"
+              className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5 dark:border-white/10 dark:bg-zinc-900/70"
             >
               <div className="min-w-0">
-                <div className="truncate text-[13px] font-semibold text-black">{r.title}</div>
-                <div className="text-[11.5px] text-black/55">{dept?.name ?? "Unassigned"}</div>
+                <div className="truncate text-[13px] font-semibold text-black dark:text-zinc-100">{r.title}</div>
+                <div className="text-[11.5px] text-black/55 dark:text-zinc-400">{dept?.name ?? "Unassigned"}</div>
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => startEdit(r)}
                   aria-label={`Rename ${r.title}`}
-                  className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
+                  className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black dark:border-white/15 dark:bg-zinc-950 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-zinc-100"
                 >
                   <Pencil className="h-3.5 w-3.5" />
                 </button>
@@ -9312,7 +10015,7 @@ function RolesCard({
                   type="button"
                   onClick={() => setPendingDelete(r)}
                   aria-label={`Delete ${r.title}`}
-                  className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                  className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2] dark:border-rose-500/40 dark:bg-rose-950/50 dark:text-rose-300 dark:hover:bg-rose-950/80"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -9346,7 +10049,7 @@ function RolesCard({
           </DialogHeader>
           <form onSubmit={submit} className="space-y-3">
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                 Position / Role name
               </Label>
               <Input
@@ -9357,7 +10060,7 @@ function RolesCard({
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                 Parent Department
               </Label>
               <FieldSelect
@@ -9372,7 +10075,7 @@ function RolesCard({
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+              <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
                 {editingId ? "Save" : "Add Role"}
               </Button>
             </DialogFooter>
@@ -9389,12 +10092,14 @@ function ClassesCard({
   students,
   setStudents,
   staff,
+  feeTerms,
 }: {
   classes: ClassConfig[];
   setClasses: React.Dispatch<React.SetStateAction<ClassConfig[]>>;
   students: Student[];
   setStudents: React.Dispatch<React.SetStateAction<Student[]>>;
   staff: Staff[];
+  feeTerms: FeeTerm[];
 }) {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -9403,12 +10108,14 @@ function ClassesCard({
     grade: string;
     section: string;
     tuitionFeeAmount: string;
-    billingCycle: ClassConfig["billingCycle"];
+    vehicleFeeAmount: string;
+    billingCycle: ClassBillingCycle;
     classTeacherId: string;
   }>({
     grade: "",
     section: "",
     tuitionFeeAmount: "",
+    vehicleFeeAmount: "",
     billingCycle: "Monthly",
     classTeacherId: "",
   });
@@ -9425,15 +10132,54 @@ function ClassesCard({
   const teacherName = (id?: string) =>
     id ? teacherOptions.find((m) => m.id === id)?.name ?? staff.find((m) => m.id === id)?.name : undefined;
 
+  const tuitionTermCount = filterFeePeriods(feeTerms, "term", "tuition").length;
+  const vehicleTermCount = filterFeePeriods(feeTerms, "term", "vehicle").length;
+  const tuitionMonthCount = filterFeePeriods(feeTerms, "month", "tuition").length;
+  const vehicleMonthCount = filterFeePeriods(feeTerms, "month", "vehicle").length;
+  const tuitionPreview = Number(form.tuitionFeeAmount) || 0;
+  const vehiclePreview = Number(form.vehicleFeeAmount) || 0;
+  const combinedPreview = tuitionPreview + vehiclePreview;
+  const splitPeriodCount =
+    form.billingCycle === "Term"
+      ? tuitionTermCount
+      : form.billingCycle === "Monthly"
+        ? tuitionMonthCount
+        : 0;
+  const vehicleSplitPeriodCount =
+    form.billingCycle === "Term"
+      ? vehicleTermCount
+      : form.billingCycle === "Monthly"
+        ? vehicleMonthCount
+        : 0;
+  const splitUnit =
+    form.billingCycle === "Term" ? "term" : form.billingCycle === "Monthly" ? "month" : null;
+  const tuitionPerPeriod =
+    splitUnit && splitPeriodCount > 0 && tuitionPreview > 0
+      ? splitAmountAcrossTerms(tuitionPreview, splitPeriodCount)[0]
+      : undefined;
+  const vehiclePerPeriod =
+    splitUnit && vehicleSplitPeriodCount > 0 && vehiclePreview > 0
+      ? splitAmountAcrossTerms(vehiclePreview, vehicleSplitPeriodCount)[0]
+      : undefined;
+  const cycleUnit =
+    form.billingCycle === "Annually"
+      ? "year"
+      : form.billingCycle === "Term"
+        ? "term"
+        : "month";
+
+  const emptyForm = () => ({
+    grade: "",
+    section: "",
+    tuitionFeeAmount: "",
+    vehicleFeeAmount: "",
+    billingCycle: "Monthly" as ClassBillingCycle,
+    classTeacherId: "",
+  });
+
   const startCreate = () => {
     setEditingId(null);
-    setForm({
-      grade: "",
-      section: "",
-      tuitionFeeAmount: "",
-      billingCycle: "Monthly",
-      classTeacherId: "",
-    });
+    setForm(emptyForm());
     setOpen(true);
   };
   const startEdit = (c: ClassConfig) => {
@@ -9443,6 +10189,8 @@ function ClassesCard({
       grade: normalized.grade,
       section: normalized.section,
       tuitionFeeAmount: String(normalized.tuitionFeeAmount),
+      vehicleFeeAmount:
+        normalized.vehicleFeeAmount > 0 ? String(normalized.vehicleFeeAmount) : "",
       billingCycle: normalized.billingCycle,
       classTeacherId: normalized.classTeacherId ?? "",
     });
@@ -9454,6 +10202,8 @@ function ClassesCard({
     const grade = form.grade.trim();
     const section = form.section.trim();
     const tuitionFeeAmount = Number(form.tuitionFeeAmount);
+    const vehicleRaw = form.vehicleFeeAmount.trim();
+    const vehicleFeeAmount = vehicleRaw ? Number(vehicleRaw) : 0;
     if (!grade) {
       toast.error("Class is required");
       return;
@@ -9463,27 +10213,28 @@ function ClassesCard({
       return;
     }
     if (!tuitionFeeAmount || tuitionFeeAmount <= 0) {
-      toast.error("Tuition fee must be a positive amount");
+      toast.error("Total tuition fee must be a positive amount");
+      return;
+    }
+    if (vehicleRaw && (!Number.isFinite(vehicleFeeAmount) || vehicleFeeAmount < 0)) {
+      toast.error("Vehicle fee must be zero or a positive amount");
       return;
     }
     const className = composeClassName(grade, section);
     const classTeacherId = form.classTeacherId || undefined;
+    const next: Omit<ClassConfig, "id"> = {
+      className,
+      grade,
+      section,
+      tuitionFeeAmount: Math.round(tuitionFeeAmount),
+      vehicleFeeAmount: Math.round(Math.max(0, vehicleFeeAmount)),
+      billingCycle: form.billingCycle,
+      classTeacherId,
+    };
     if (editingId) {
       const previous = classes.find((c) => c.id === editingId);
       setClasses((prev) =>
-        prev.map((c) =>
-          c.id === editingId
-            ? {
-                ...c,
-                className,
-                grade,
-                section,
-                tuitionFeeAmount,
-                billingCycle: form.billingCycle,
-                classTeacherId,
-              }
-            : c,
-        ),
+        prev.map((c) => (c.id === editingId ? { ...c, ...next } : c)),
       );
       if (previous && previous.className !== className) {
         setStudents((prev) =>
@@ -9491,23 +10242,22 @@ function ClassesCard({
         );
       }
       toast.success(`${className} updated`, {
-        description: `Receipts will prefill ₹ ${tuitionFeeAmount.toLocaleString("en-IN")}`,
+        description: [
+          `Tuition ₹ ${next.tuitionFeeAmount.toLocaleString("en-IN")}`,
+          next.vehicleFeeAmount > 0
+            ? `Vehicle ₹ ${next.vehicleFeeAmount.toLocaleString("en-IN")}`
+            : null,
+          next.billingCycle,
+        ]
+          .filter(Boolean)
+          .join(" · "),
       });
     } else {
       const nextId = `CLS-${(classes.length + 1).toString().padStart(3, "0")}`;
-      setClasses((prev) => [
-        ...prev,
-        {
-          id: nextId,
-          className,
-          grade,
-          section,
-          tuitionFeeAmount,
-          billingCycle: form.billingCycle,
-          classTeacherId,
-        },
-      ]);
-      toast.success(`${className} added`);
+      setClasses((prev) => [...prev, { id: nextId, ...next }]);
+      toast.success(`${className} added`, {
+        description: `Billed ${next.billingCycle.toLowerCase()} · prefills Receive Payment`,
+      });
     }
     setOpen(false);
   };
@@ -9534,7 +10284,7 @@ function ClassesCard({
     <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
       <CardHeader
         title="Class Tier"
-        subtitle="Receipt amounts prefill from this matrix"
+        subtitle="Per-class tuition, vehicle fee & billing cycle for Receive Payment"
         actionLabel="Add Class"
         onAction={startCreate}
       />
@@ -9542,20 +10292,42 @@ function ClassesCard({
       <div className="mt-4 space-y-2">
         {classes.length === 0 && <EmptyRow label="No class tiers configured" />}
         {classes.map((c) => {
-          const teacher = teacherName(c.classTeacherId);
+          const normalized = normalizeClassConfig(c);
+          const teacher = teacherName(normalized.classTeacherId);
           return (
             <div
               key={c.id}
               className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5"
             >
               <div className="min-w-0">
-                <div className="truncate text-[13px] font-semibold text-black">{c.className}</div>
-                <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11.5px] text-black/55">
+                <div className="truncate text-[13px] font-semibold text-black">
+                  {normalized.className}
+                </div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-black/55 dark:text-zinc-400">
                   <span className="font-mono text-black">
-                    ₹ {c.tuitionFeeAmount.toLocaleString("en-IN")}
+                    Tuition ₹ {normalized.tuitionFeeAmount.toLocaleString("en-IN")}
+                    {normalized.billingCycle === "Term" &&
+                    filterFeePeriods(feeTerms, "term", "tuition").length > 0
+                      ? ` · ₹ ${splitAmountAcrossTerms(normalized.tuitionFeeAmount, filterFeePeriods(feeTerms, "term", "tuition").length)[0]?.toLocaleString("en-IN")}/term`
+                      : normalized.billingCycle === "Monthly" &&
+                          filterFeePeriods(feeTerms, "month", "tuition").length > 0
+                        ? ` · ₹ ${splitAmountAcrossTerms(normalized.tuitionFeeAmount, filterFeePeriods(feeTerms, "month", "tuition").length)[0]?.toLocaleString("en-IN")}/mo`
+                        : ""}
                   </span>
-                  <span className="rounded-full bg-[#DBEAFE] px-2 py-0.5 text-[10.5px] font-semibold text-black">
-                    {c.billingCycle}
+                  {normalized.vehicleFeeAmount > 0 && (
+                    <span className="font-mono text-black/70">
+                      Vehicle ₹ {normalized.vehicleFeeAmount.toLocaleString("en-IN")}
+                      {normalized.billingCycle === "Term" &&
+                      filterFeePeriods(feeTerms, "term", "vehicle").length > 0
+                        ? ` · ₹ ${splitAmountAcrossTerms(normalized.vehicleFeeAmount, filterFeePeriods(feeTerms, "term", "vehicle").length)[0]?.toLocaleString("en-IN")}/term`
+                        : normalized.billingCycle === "Monthly" &&
+                            filterFeePeriods(feeTerms, "month", "vehicle").length > 0
+                          ? ` · ₹ ${splitAmountAcrossTerms(normalized.vehicleFeeAmount, filterFeePeriods(feeTerms, "month", "vehicle").length)[0]?.toLocaleString("en-IN")}/mo`
+                          : ""}
+                    </span>
+                  )}
+                  <span className="rounded-full bg-[#CCFBF1] px-2 py-0.5 text-[10.5px] font-semibold text-black">
+                    {normalized.billingCycle}
                   </span>
                   {teacher && (
                     <span className="truncate text-[11px] text-black/50">Teacher · {teacher}</span>
@@ -9566,15 +10338,15 @@ function ClassesCard({
                 <button
                   type="button"
                   onClick={() => startEdit(c)}
-                  aria-label={`Edit ${c.className}`}
-                  className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
+                  aria-label={`Edit ${normalized.className}`}
+                  className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 dark:text-zinc-400 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
                 >
                   <Pencil className="h-3.5 w-3.5" />
                 </button>
                 <button
                   type="button"
                   onClick={() => setPendingDelete(c)}
-                  aria-label={`Delete ${c.className}`}
+                  aria-label={`Delete ${normalized.className}`}
                   className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -9593,97 +10365,205 @@ function ClassesCard({
         title="Delete Class Tier"
         description={
           pendingDelete
-            ? `Are you sure you want to delete ${pendingDelete.className}? Tuition prefill for this class will stop working.`
+            ? `Are you sure you want to delete ${pendingDelete.className}? Tuition and vehicle prefills for this class will stop working.`
             : "Are you sure you want to delete this class tier?"
         }
         onConfirm={confirmDelete}
       />
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingId ? "Edit Class Tier" : "Add Class Tier"}</DialogTitle>
             <DialogDescription>
-              Tuition fees set here drive the prefill amount inside Finance · Receive Payment.
+              Set the class, then enter total tuition and vehicle fees for the chosen billing
+              cycle. These amounts prefill Finance · Receive Payment.
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={submit} className="space-y-3">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                  Class
-                </Label>
-                <Input
-                  value={form.grade}
-                  onChange={(e) => setForm({ ...form, grade: e.target.value })}
-                  placeholder="e.g. Grade 8"
-                  autoFocus
-                />
+          <form onSubmit={submit} className="space-y-4">
+            <div className="space-y-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                Class identity
+              </p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                    Class
+                  </Label>
+                  <Input
+                    value={form.grade}
+                    onChange={(e) => setForm({ ...form, grade: e.target.value })}
+                    placeholder="e.g. Grade 8"
+                    autoFocus
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                    Grade
+                  </Label>
+                  <Input
+                    value={form.section}
+                    onChange={(e) => setForm({ ...form, section: e.target.value })}
+                    placeholder="e.g. B"
+                  />
+                </div>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                  Grade
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                  Class Teacher{" "}
+                  <span className="normal-case tracking-normal text-black/40">(optional)</span>
                 </Label>
-                <Input
-                  value={form.section}
-                  onChange={(e) => setForm({ ...form, section: e.target.value })}
-                  placeholder="e.g. B"
+                <StaffSearchSelect
+                  staff={teacherOptions}
+                  value={form.classTeacherId}
+                  onChange={(id) => setForm({ ...form, classTeacherId: id })}
+                  placeholder="Choose staff member"
+                  allowNone
+                  noneLabel="No class teacher"
                 />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                Class Teacher <span className="normal-case tracking-normal text-black/40">(optional)</span>
-              </Label>
-              <StaffSearchSelect
-                staff={teacherOptions}
-                value={form.classTeacherId}
-                onChange={(id) => setForm({ ...form, classTeacherId: id })}
-                placeholder="Choose staff member"
-                allowNone
-                noneLabel="No class teacher"
-              />
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                  Tuition Fee (₹)
-                </Label>
-                <Input
-                  inputMode="numeric"
-                  value={form.tuitionFeeAmount}
-                  onChange={(e) =>
-                    setForm({ ...form, tuitionFeeAmount: e.target.value.replace(/[^0-9]/g, "") })
-                  }
-                  placeholder="0"
-                  className="font-mono"
-                />
+
+            <div className="space-y-3 rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] p-3.5">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                  Fee schedule
+                </p>
+                <p className="mt-1 text-[12px] leading-snug text-black/50">
+                  Amounts below are the total charged for one {cycleUnit}. Choose the cycle first,
+                  then enter tuition and optional vehicle fees.
+                </p>
               </div>
+
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                   Billing Cycle
                 </Label>
-                <FieldSelect
-                  value={form.billingCycle}
-                  onValueChange={(billingCycle) =>
-                    setForm({
-                      ...form,
-                      billingCycle: billingCycle as ClassConfig["billingCycle"],
-                    })
-                  }
-                  options={[
-                    { value: "Monthly", label: "Monthly" },
-                    { value: "Annually", label: "Annually" },
-                  ]}
-                />
+                <div className="flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
+                  {CLASS_BILLING_CYCLES.map((cycle) => {
+                    const active = form.billingCycle === cycle;
+                    return (
+                      <button
+                        key={cycle}
+                        type="button"
+                        onClick={() => setForm({ ...form, billingCycle: cycle })}
+                        className={cn(
+                          "flex-1 rounded-full px-2.5 py-1.5 text-[12px] font-medium transition-colors",
+                          active
+                            ? "bg-[#0F766E] text-white"
+                            : "text-black/65 hover:text-black",
+                        )}
+                      >
+                        {cycle}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[11px] leading-snug text-black/45">
+                  {CLASS_BILLING_CYCLE_HINTS[form.billingCycle]}
+                </p>
               </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                    Total Tuition Fee (₹)
+                  </Label>
+                  <Input
+                    inputMode="numeric"
+                    value={form.tuitionFeeAmount}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        tuitionFeeAmount: e.target.value.replace(/[^0-9]/g, ""),
+                      })
+                    }
+                    placeholder="0"
+                    className="font-mono bg-white"
+                  />
+                  <p className="text-[10.5px] text-black/40">Required · Tuition Fee category</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                    Vehicle Fee (₹){" "}
+                    <span className="normal-case tracking-normal text-black/40">(optional)</span>
+                  </Label>
+                  <Input
+                    inputMode="numeric"
+                    value={form.vehicleFeeAmount}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        vehicleFeeAmount: e.target.value.replace(/[^0-9]/g, ""),
+                      })
+                    }
+                    placeholder="0"
+                    className="font-mono bg-white"
+                  />
+                  <p className="text-[10.5px] text-black/40">
+                    Leave blank if this class has no transport fee
+                  </p>
+                </div>
+              </div>
+
+              {tuitionPreview > 0 && (
+                <div className="space-y-2 rounded-lg border border-[#D1FAE5] bg-white px-3 py-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-[12px] text-black/55 dark:text-zinc-400">
+                      {splitUnit ? "Annual total" : `Combined per ${cycleUnit}`}
+                      {vehiclePreview > 0 ? (
+                        <span className="mt-0.5 block text-[10.5px] text-black/40">
+                          Tuition ₹ {tuitionPreview.toLocaleString("en-IN")}
+                          {" + "}
+                          Vehicle ₹ {vehiclePreview.toLocaleString("en-IN")}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="font-mono text-[14px] font-semibold text-[#0F766E]">
+                      ₹ {combinedPreview.toLocaleString("en-IN")}
+                    </div>
+                  </div>
+                  {splitUnit && (tuitionPerPeriod || vehiclePerPeriod) ? (
+                    <div className="border-t border-[#D1FAE5] pt-2 text-[11.5px] leading-snug text-black/55 dark:text-zinc-400">
+                      Auto-split across fee {splitUnit}s
+                      <div className="mt-1 space-y-0.5 font-mono text-[12px] text-black">
+                        {tuitionPerPeriod !== undefined && splitPeriodCount > 0 && (
+                          <div>
+                            Tuition ₹ {tuitionPreview.toLocaleString("en-IN")} ÷ {splitPeriodCount} ={" "}
+                            <span className="font-semibold text-[#0F766E]">
+                              ₹ {tuitionPerPeriod.toLocaleString("en-IN")}
+                            </span>{" "}
+                            / {splitUnit}
+                          </div>
+                        )}
+                        {vehiclePerPeriod !== undefined && vehicleSplitPeriodCount > 0 && (
+                          <div>
+                            Vehicle ₹ {vehiclePreview.toLocaleString("en-IN")} ÷{" "}
+                            {vehicleSplitPeriodCount} ={" "}
+                            <span className="font-semibold text-[#0F766E]">
+                              ₹ {vehiclePerPeriod.toLocaleString("en-IN")}
+                            </span>{" "}
+                            / {splitUnit}
+                          </div>
+                        )}
+                      </div>
+                      {splitPeriodCount === 0 && (
+                        <p className="mt-1 text-[10.5px] text-amber-700">
+                          Add fee {splitUnit}s in Settings · Fees to enable the split.
+                        </p>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </div>
+
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
-                {editingId ? "Save" : "Add Class"}
+              <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
+                {editingId ? "Save Changes" : "Add Class"}
               </Button>
             </DialogFooter>
           </form>
@@ -9955,7 +10835,7 @@ function VehicleCard({
               aria-label="Back to vehicle list"
               className={cn(
                 glassInsetClass,
-                "inline-flex h-9 w-9 shrink-0 items-center justify-center text-slate-700 transition-colors hover:text-[#2563EB] sm:h-10 sm:w-auto sm:gap-1.5 sm:px-3",
+                "inline-flex h-9 w-9 shrink-0 items-center justify-center text-slate-700 transition-colors hover:text-[#0F766E] sm:h-10 sm:w-auto sm:gap-1.5 sm:px-3",
               )}
             >
               <ChevronLeft className="h-4 w-4 shrink-0" />
@@ -9963,7 +10843,7 @@ function VehicleCard({
             </button>
             <div className="min-w-0 pt-0.5">
               <div className="flex flex-wrap items-center gap-2">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-black text-white">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#0F766E] text-white">
                   <Bus className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
@@ -9991,12 +10871,12 @@ function VehicleCard({
             <span
               className={cn(
                 "inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider",
-                detailMeta.v.active ? "bg-[#2563EB] text-white" : "bg-black/10 text-black/50",
+                detailMeta.v.active ? "bg-[#0F766E] text-white" : "bg-black/10 text-black/50",
               )}
             >
               {detailMeta.v.active ? "Active" : "Idle"}
             </span>
-            <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-black/60">
+            <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-black/60 dark:text-zinc-400">
               {detailMeta.v.ownership === "rental" ? "Rental" : "Owned"}
             </span>
             <button
@@ -10028,7 +10908,7 @@ function VehicleCard({
                 <span className="font-normal text-black/40">Not assigned</span>
               )}
             </div>
-            <div className="mt-1 font-mono text-[12px] text-black/55">
+            <div className="mt-1 font-mono text-[12px] text-black/55 dark:text-zinc-400">
               {detailMeta.v.driverPhone || "No phone on file"}
             </div>
           </div>
@@ -10213,7 +11093,7 @@ function VehicleCard({
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2.5">
-                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-black text-white">
+                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#0F766E] text-white">
                     <Bus className="h-5 w-5" />
                   </div>
                   <div className="min-w-0">
@@ -10236,13 +11116,13 @@ function VehicleCard({
                 <span
                   className={cn(
                     "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider",
-                    v.active ? "bg-[#2563EB] text-white" : "bg-black/10 text-black/50",
+                    v.active ? "bg-[#0F766E] text-white" : "bg-black/10 text-black/50",
                   )}
                 >
                   {v.active ? "Active" : "Idle"}
                 </span>
               </div>
-              <div className="flex flex-wrap items-center gap-1.5 text-[11.5px] text-black/60">
+              <div className="flex flex-wrap items-center gap-1.5 text-[11.5px] text-black/60 dark:text-zinc-400">
                 <span className="font-mono font-medium text-black/75">{v.registrationNo}</span>
                 <span className="text-black/30">·</span>
                 <span>{v.capacity} seats</span>
@@ -10261,7 +11141,7 @@ function VehicleCard({
                       startEdit(v);
                     }}
                     aria-label={`Edit vehicle ${v.name}`}
-                    className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55"
+                    className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 dark:text-zinc-400"
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
@@ -10295,7 +11175,7 @@ function VehicleCard({
             <col className="w-[10%]" />
           </colgroup>
           <thead>
-            <tr className="bg-[#F4F4F5] text-[10px] font-semibold uppercase tracking-wider text-black/55">
+            <tr className="bg-[#F4F4F5] text-[10px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
               <th className="px-3.5 py-2 font-semibold">Vehicle</th>
               <th className="px-3.5 py-2 font-semibold">Registration</th>
               <th className="px-3.5 py-2 text-right font-semibold">Seats</th>
@@ -10308,7 +11188,7 @@ function VehicleCard({
           <tbody>
             {transportVehicles.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-3.5 py-6 text-center text-[12px] text-black/55">
+                <td colSpan={7} className="px-3.5 py-6 text-center text-[12px] text-black/55 dark:text-zinc-400">
                   No vehicles in fleet yet
                 </td>
               </tr>
@@ -10328,7 +11208,7 @@ function VehicleCard({
                       }
                     }}
                     aria-label={`Open details for ${v.name}`}
-                    className="cursor-pointer border-t border-[#EFEFEF] text-[12.5px] transition-colors hover:bg-[#F8F8F9] focus-visible:bg-[#F8F8F9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2563EB]"
+                    className="cursor-pointer border-t border-[#EFEFEF] text-[12.5px] transition-colors hover:bg-[#F8F8F9] focus-visible:bg-[#F8F8F9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0F766E]"
                   >
                     <td className="px-3.5 py-2.5 align-middle">
                       <div className="min-w-0">
@@ -10363,7 +11243,7 @@ function VehicleCard({
                       {v.capacity}
                     </td>
                     <td className="px-3.5 py-2.5 align-middle">
-                      <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-black/60">
+                      <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-black/60 dark:bg-white/10 dark:text-zinc-200">
                         {v.ownership === "rental" ? "Rental" : "Owned"}
                       </span>
                     </td>
@@ -10379,7 +11259,7 @@ function VehicleCard({
                       <span
                         className={cn(
                           "inline-flex rounded-full px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider",
-                          v.active ? "bg-[#2563EB] text-white" : "bg-black/10 text-black/50",
+                          v.active ? "bg-[#0F766E] text-white" : "bg-black/10 text-black/50",
                         )}
                       >
                         {v.active ? "Active" : "Idle"}
@@ -10394,7 +11274,7 @@ function VehicleCard({
                             startEdit(v);
                           }}
                           aria-label={`Edit vehicle ${v.name}`}
-                          className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
+                          className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 dark:text-zinc-400 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
@@ -10447,7 +11327,7 @@ function VehicleCard({
           </DialogHeader>
           <form onSubmit={submit} className="space-y-3">
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                 Vehicle or Rental?
               </Label>
               <div className="inline-flex w-full rounded-full border border-[#E5E5E5] bg-[#F4F4F5] p-1">
@@ -10464,8 +11344,8 @@ function VehicleCard({
                     className={cn(
                       "flex-1 rounded-full px-3 py-2 text-[12px] font-semibold transition-colors",
                       form.ownership === option.id
-                        ? "bg-black text-white"
-                        : "text-black/55 hover:text-black",
+                        ? "bg-[#0F766E] text-white"
+                        : "text-black/55 dark:text-zinc-400 hover:text-black",
                     )}
                   >
                     {option.label}
@@ -10476,7 +11356,7 @@ function VehicleCard({
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                   Vehicle Name
                 </Label>
                 <Input
@@ -10487,7 +11367,7 @@ function VehicleCard({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                   Registration No.
                 </Label>
                 <Input
@@ -10500,7 +11380,7 @@ function VehicleCard({
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                   Seat Capacity
                 </Label>
                 <Input
@@ -10514,7 +11394,7 @@ function VehicleCard({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                   Driver Name
                 </Label>
                 <Input
@@ -10525,7 +11405,7 @@ function VehicleCard({
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                 Assigned Routes
               </Label>
               {transportRoutes.length === 0 ? (
@@ -10556,16 +11436,18 @@ function VehicleCard({
                             key={r.id}
                             className={cn(
                               "flex cursor-pointer items-start gap-2.5 rounded-xl px-2.5 py-2 transition-colors",
-                              checked ? "bg-[#DBEAFE]" : "hover:bg-white",
+                              checked
+                                ? "bg-[#CCFBF1] dark:bg-[#0F766E]/40"
+                                : "hover:bg-white dark:hover:bg-white/5",
                             )}
                           >
                             <input
                               type="checkbox"
                               checked={checked}
                               onChange={() => toggleRoute(r.id)}
-                              className="mt-0.5 h-4 w-4 shrink-0 rounded border-black/20 accent-black"
+                              className="mt-0.5 h-4 w-4 shrink-0 rounded border-black/20 accent-[#0F766E]"
                             />
-                            <span className="min-w-0 text-[12px] leading-snug text-black">
+                            <span className="min-w-0 text-[12px] leading-snug text-black dark:text-zinc-100">
                               {r.mapFrom} → {r.mapTo}
                             </span>
                           </label>
@@ -10585,7 +11467,7 @@ function VehicleCard({
               </p>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                 Driver Phone
               </Label>
               <Input
@@ -10598,7 +11480,7 @@ function VehicleCard({
 
             <div className="space-y-2 rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] p-3">
               <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                   <Paperclip className="h-3.5 w-3.5" />
                   Documents & validity
                 </div>
@@ -10708,7 +11590,7 @@ function VehicleCard({
                               download={doc.file.name}
                               target="_blank"
                               rel="noreferrer noopener"
-                              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-black/60 hover:bg-white"
+                              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-black/60 dark:text-zinc-400 hover:bg-white"
                               aria-label={`Open ${doc.file.name}`}
                             >
                               <ExternalLink className="h-3.5 w-3.5" />
@@ -10761,7 +11643,7 @@ function VehicleCard({
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+              <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
                 {editingId ? "Save" : "Add Vehicle"}
               </Button>
             </DialogFooter>
@@ -10985,7 +11867,7 @@ function TransportCard({
                     type="button"
                     onClick={() => startEdit(r)}
                     aria-label={`Edit route ${r.mapFrom} to ${r.mapTo}`}
-                    className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55"
+                    className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 dark:text-zinc-400"
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
@@ -11025,7 +11907,7 @@ function TransportCard({
                   </div>
                 </div>
               </div>
-              <div className="mt-2 truncate text-[11px] text-black/45" title={vehicleNames}>
+              <div className="mt-2 truncate text-[11px] text-black/45 dark:text-zinc-400" title={vehicleNames}>
                 {vehicleNames}
               </div>
             </div>
@@ -11045,7 +11927,7 @@ function TransportCard({
             <col className="w-[12%]" />
           </colgroup>
           <thead>
-            <tr className="bg-[#F4F4F5] text-[10px] font-semibold uppercase tracking-wider text-black/55">
+            <tr className="bg-[#F4F4F5] text-[10px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
               <th className="px-3.5 py-2 font-semibold">From</th>
               <th className="px-3.5 py-2 font-semibold">To</th>
               <th className="px-3.5 py-2 text-right font-semibold">Morning</th>
@@ -11058,7 +11940,7 @@ function TransportCard({
           <tbody>
             {transportRoutes.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-3.5 py-6 text-center text-[12px] text-black/55">
+                <td colSpan={7} className="px-3.5 py-6 text-center text-[12px] text-black/55 dark:text-zinc-400">
                   No routes mapped yet
                 </td>
               </tr>
@@ -11143,7 +12025,7 @@ function TransportCard({
                       {inr(r.bothFee)}
                     </td>
                     <td className="px-3.5 py-2.5 align-middle">
-                      <span className="block truncate text-[11px] text-black/60" title={vehicleNames}>
+                      <span className="block truncate text-[11px] text-black/60 dark:text-zinc-300" title={vehicleNames}>
                         {vehicleNames}
                       </span>
                     </td>
@@ -11153,7 +12035,7 @@ function TransportCard({
                           type="button"
                           onClick={() => startEdit(r)}
                           aria-label={`Edit route ${r.mapFrom} to ${r.mapTo}`}
-                          className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
+                          className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 dark:text-zinc-400 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
@@ -11234,7 +12116,7 @@ function TransportCard({
             />
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                   Morning Fee (₹)
                 </Label>
                 <Input
@@ -11248,7 +12130,7 @@ function TransportCard({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                   Evening Fee (₹)
                 </Label>
                 <Input
@@ -11262,7 +12144,7 @@ function TransportCard({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                   Both Shifts (₹)
                 </Label>
                 <Input
@@ -11280,7 +12162,7 @@ function TransportCard({
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+              <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
                 {editingId ? "Save" : "Add Route"}
               </Button>
             </DialogFooter>
@@ -11326,20 +12208,12 @@ function readImageAsDataUrl(
 function SchoolDetailsCard({
   schoolDetails,
   setSchoolDetails,
-  themeSettings,
-  setThemeSettings,
 }: {
   schoolDetails: SchoolDetails;
   setSchoolDetails: React.Dispatch<React.SetStateAction<SchoolDetails>>;
-  themeSettings: ThemeSettings;
-  setThemeSettings: React.Dispatch<React.SetStateAction<ThemeSettings>>;
 }) {
   const { updateSession } = useAuth();
   const [draft, setDraft] = useState<SchoolDetails>(schoolDetails);
-  const [themeDraft, setThemeDraft] = useState<Pick<ThemeSettings, "mode" | "accent">>({
-    mode: themeSettings.mode,
-    accent: themeSettings.accent,
-  });
   const logoInputRef = useRef<HTMLInputElement>(null);
   const letterheadInputRef = useRef<HTMLInputElement>(null);
 
@@ -11347,14 +12221,7 @@ function SchoolDetailsCard({
     setDraft(schoolDetails);
   }, [schoolDetails]);
 
-  useEffect(() => {
-    setThemeDraft({ mode: themeSettings.mode, accent: themeSettings.accent });
-  }, [themeSettings.mode, themeSettings.accent]);
-
-  const detailsDirty = JSON.stringify(draft) !== JSON.stringify(schoolDetails);
-  const themeDirty =
-    themeDraft.mode !== themeSettings.mode || themeDraft.accent !== themeSettings.accent;
-  const dirty = detailsDirty || themeDirty;
+  const dirty = JSON.stringify(draft) !== JSON.stringify(schoolDetails);
   const initials = schoolInitials(draft.name || "School");
 
   const patch = <K extends keyof SchoolDetails>(key: K, value: SchoolDetails[K]) => {
@@ -11382,16 +12249,9 @@ function SchoolDetailsCard({
       establishedYear: draft.establishedYear.trim(),
     };
     setSchoolDetails(next);
-    if (themeDirty) {
-      setThemeSettings((prev) => ({
-        ...prev,
-        mode: themeDraft.mode,
-        accent: themeDraft.accent,
-      }));
-    }
     updateSession({ tenantName: next.name });
     toast.success("School details saved", {
-      description: `${next.name} · ${themeDraft.mode} · ${themeDraft.accent}`,
+      description: next.name,
     });
   };
 
@@ -11434,8 +12294,8 @@ function SchoolDetailsCard({
           <div className="text-[18px] font-bold leading-tight tracking-tight text-black">
             School Details
           </div>
-          <p className="mt-1 text-[12px] text-black/55">
-            Logo, letterhead, identity, theme, and accent used across the workspace
+          <p className="mt-1 text-[12px] text-black/55 dark:text-zinc-400">
+            Logo, letterhead, and school identity used across the workspace
           </p>
         </div>
         {dirty && (
@@ -11447,7 +12307,7 @@ function SchoolDetailsCard({
 
       <form onSubmit={save} className="mt-4 space-y-5">
         <div className="grid grid-cols-12 gap-3">
-          <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3 sm:col-span-6 lg:col-span-4">
+          <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3 sm:col-span-6 lg:col-span-6">
             <div className="flex items-center justify-between gap-2">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
                 Logo
@@ -11466,7 +12326,7 @@ function SchoolDetailsCard({
                 <button
                   type="button"
                   onClick={() => logoInputRef.current?.click()}
-                  className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px] font-semibold text-black shadow-sm ring-1 ring-black/10 hover:bg-black hover:text-white"
+                  className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px] font-semibold text-black shadow-sm ring-1 ring-black/10 hover:bg-[#0F766E] hover:text-white"
                 >
                   <ImagePlus className="h-3.5 w-3.5" />
                   Upload
@@ -11481,7 +12341,7 @@ function SchoolDetailsCard({
                   className="h-14 w-14 rounded-lg object-cover ring-1 ring-black/10"
                 />
               ) : (
-                <div className="grid h-14 w-14 place-items-center rounded-lg bg-gradient-to-br from-[#2563EB] to-[#4C69A4] text-[13px] font-bold text-white">
+                <div className="grid h-14 w-14 place-items-center rounded-lg bg-gradient-to-br from-[#0F766E] to-[#115E59] text-[13px] font-bold text-white">
                   {initials}
                 </div>
               )}
@@ -11498,7 +12358,7 @@ function SchoolDetailsCard({
             />
           </div>
 
-          <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3 sm:col-span-6 lg:col-span-4">
+          <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3 sm:col-span-6 lg:col-span-6">
             <div className="flex items-center justify-between gap-2">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
                 Letterhead
@@ -11517,7 +12377,7 @@ function SchoolDetailsCard({
                 <button
                   type="button"
                   onClick={() => letterheadInputRef.current?.click()}
-                  className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px] font-semibold text-black shadow-sm ring-1 ring-black/10 hover:bg-black hover:text-white"
+                  className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px] font-semibold text-black shadow-sm ring-1 ring-black/10 hover:bg-[#0F766E] hover:text-white"
                 >
                   <FileImage className="h-3.5 w-3.5" />
                   Upload
@@ -11545,29 +12405,11 @@ function SchoolDetailsCard({
               onChange={onLetterhead}
             />
           </div>
-
-          <div className="col-span-12 grid grid-cols-1 gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3 sm:grid-cols-2 lg:col-span-4">
-            <ThemeSelect
-              label="Theme"
-              value={themeDraft.mode}
-              options={THEME_MODE_OPTIONS}
-              onChange={(mode) => setThemeDraft((prev) => ({ ...prev, mode }))}
-            />
-            <ThemeSelect
-              label="Accent Color"
-              value={themeDraft.accent}
-              options={THEME_ACCENT_OPTIONS}
-              onChange={(accent) => setThemeDraft((prev) => ({ ...prev, accent }))}
-            />
-            <p className="text-[11px] leading-relaxed text-black/50 sm:col-span-2">
-              Theme mode and accent color apply across the tenant workspace.
-            </p>
-          </div>
         </div>
 
         <div className="grid grid-cols-12 gap-3">
           <div className="col-span-12 lg:col-span-4">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
               School Name
             </Label>
             <Input
@@ -11578,7 +12420,7 @@ function SchoolDetailsCard({
             />
           </div>
           <div className="col-span-12 sm:col-span-6 lg:col-span-4">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
               Tagline
             </Label>
             <Input
@@ -11589,7 +12431,7 @@ function SchoolDetailsCard({
             />
           </div>
           <div className="col-span-12 sm:col-span-6 lg:col-span-4">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
               Website
             </Label>
             <Input
@@ -11601,7 +12443,7 @@ function SchoolDetailsCard({
           </div>
 
           <div className="col-span-12">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
               Address
             </Label>
             <Textarea
@@ -11613,7 +12455,7 @@ function SchoolDetailsCard({
           </div>
 
           <div className="col-span-12 sm:col-span-6 lg:col-span-3">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
               Phone
             </Label>
             <Input
@@ -11624,7 +12466,7 @@ function SchoolDetailsCard({
             />
           </div>
           <div className="col-span-12 sm:col-span-6 lg:col-span-3">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
               Email
             </Label>
             <Input
@@ -11636,7 +12478,7 @@ function SchoolDetailsCard({
             />
           </div>
           <div className="col-span-12 sm:col-span-6 lg:col-span-3">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
               Registration No.
             </Label>
             <Input
@@ -11646,7 +12488,7 @@ function SchoolDetailsCard({
             />
           </div>
           <div className="col-span-12 sm:col-span-6 lg:col-span-3">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
               Affiliation No.
             </Label>
             <Input
@@ -11657,7 +12499,7 @@ function SchoolDetailsCard({
           </div>
 
           <div className="col-span-12 sm:col-span-6 lg:col-span-6">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
               Principal
             </Label>
             <Input
@@ -11667,7 +12509,7 @@ function SchoolDetailsCard({
             />
           </div>
           <div className="col-span-12 sm:col-span-6 lg:col-span-6">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
               Established
             </Label>
             <Input
@@ -11683,7 +12525,7 @@ function SchoolDetailsCard({
           <Button
             type="submit"
             disabled={!dirty}
-            className="w-full rounded-full bg-black text-white hover:bg-black/85 disabled:opacity-40 sm:w-auto"
+            className="w-full rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488] disabled:opacity-40 sm:w-auto"
           >
             Save Changes
           </Button>
@@ -11785,7 +12627,7 @@ function FeeCategoriesCard({
             className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5"
           >
             <div className="flex min-w-0 items-center gap-2.5">
-              <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[#DBEAFE] text-[10.5px] font-semibold text-[#2563EB]">
+              <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[#CCFBF1] text-[10.5px] font-semibold text-[#0F766E]">
                 {category.label.slice(0, 2).toUpperCase()}
               </div>
               <div className="min-w-0">
@@ -11799,7 +12641,7 @@ function FeeCategoriesCard({
               <button
                 type="button"
                 onClick={() => startEdit(category)}
-                className="grid h-8 w-8 place-items-center rounded-full text-black/55 transition-colors hover:bg-black hover:text-white"
+                className="grid h-8 w-8 place-items-center rounded-full text-black/55 dark:text-zinc-400 transition-colors hover:bg-[#0F766E] hover:text-white"
                 aria-label={`Edit ${category.label}`}
               >
                 <Pencil className="h-3.5 w-3.5" />
@@ -11807,7 +12649,7 @@ function FeeCategoriesCard({
               <button
                 type="button"
                 onClick={() => setPendingDelete(category)}
-                className="grid h-8 w-8 place-items-center rounded-full text-black/55 transition-colors hover:bg-[#EF4444] hover:text-white"
+                className="grid h-8 w-8 place-items-center rounded-full text-black/55 dark:text-zinc-400 transition-colors hover:bg-[#EF4444] hover:text-white"
                 aria-label={`Delete ${category.label}`}
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -11832,13 +12674,13 @@ function FeeCategoriesCard({
             <DialogTitle className="text-[22px] font-semibold text-black">
               {editingId ? "Edit Fee Category" : "Add Fee Category"}
             </DialogTitle>
-            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
+            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60 dark:text-zinc-400">
               Categories appear as chips on Receive Payment · Fee Categories.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={submit} className="mt-4 space-y-4">
             <div>
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                 Category Name
               </Label>
               <Input
@@ -11853,7 +12695,7 @@ function FeeCategoriesCard({
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+              <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
                 {editingId ? "Save Changes" : "Add Category"}
               </Button>
             </DialogFooter>
@@ -11881,79 +12723,243 @@ function FeeCategoriesCard({
 function FeeTermsCard({
   feeTerms,
   setFeeTerms,
+  academicYear,
+  classes,
+  onViewingChange,
 }: {
   feeTerms: FeeTerm[];
   setFeeTerms: React.Dispatch<React.SetStateAction<FeeTerm[]>>;
+  academicYear: string;
+  classes: ClassConfig[];
+  onViewingChange?: (viewing: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<FeeTerm | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [periodMode, setPeriodMode] = useState<FeePeriodMode>("term");
   const [kind, setKind] = useState<FeeTermKind>("tuition");
   const [label, setLabel] = useState("");
-  const [coverage, setCoverage] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [filterMode, setFilterMode] = useState<FeePeriodMode | "all">("all");
   const [filterKind, setFilterKind] = useState<FeeTermKind | "all">("all");
 
-  const visibleTerms = useMemo(
-    () =>
-      (filterKind === "all" ? feeTerms : feeTerms.filter((t) => t.kind === filterKind)).slice().sort(
-        (a, b) => a.kind.localeCompare(b.kind) || a.label.localeCompare(b.label),
-      ),
-    [feeTerms, filterKind],
+  const coveragePreview = formatFeeTermCoverage(startDate || undefined, endDate || undefined);
+
+  const visibleTerms = useMemo(() => {
+    return feeTerms
+      .filter((t) => (filterMode === "all" ? true : resolveFeePeriodMode(t.periodMode) === filterMode))
+      .filter((t) => (filterKind === "all" ? true : t.kind === filterKind))
+      .slice()
+      .sort((a, b) => {
+        const modeA = resolveFeePeriodMode(a.periodMode);
+        const modeB = resolveFeePeriodMode(b.periodMode);
+        if (modeA !== modeB) return modeA.localeCompare(modeB);
+        if (a.kind !== b.kind) return a.kind.localeCompare(b.kind);
+        const aStart = a.startDate ?? "";
+        const bStart = b.startDate ?? "";
+        if (aStart !== bStart) return aStart.localeCompare(bStart);
+        return a.label.localeCompare(b.label);
+      });
+  }, [feeTerms, filterMode, filterKind]);
+
+  const termTuitionCount = filterFeePeriods(feeTerms, "term", "tuition").length;
+  const termVehicleCount = filterFeePeriods(feeTerms, "term", "vehicle").length;
+  const monthTuitionCount = filterFeePeriods(feeTerms, "month", "tuition").length;
+  const monthVehicleCount = filterFeePeriods(feeTerms, "month", "vehicle").length;
+  const termCount = termTuitionCount + termVehicleCount;
+  const monthCount = monthTuitionCount + monthVehicleCount;
+
+  const detailTerm = useMemo(
+    () => (detailId ? (feeTerms.find((t) => t.id === detailId) ?? null) : null),
+    [detailId, feeTerms],
   );
 
-  const tuitionCount = feeTerms.filter((t) => t.kind === "tuition").length;
-  const vehicleCount = feeTerms.filter((t) => t.kind === "vehicle").length;
+  useEffect(() => {
+    if (detailId && !feeTerms.some((t) => t.id === detailId)) {
+      setDetailId(null);
+    }
+  }, [detailId, feeTerms]);
+
+  useEffect(() => {
+    onViewingChange?.(Boolean(detailId));
+    return () => onViewingChange?.(false);
+  }, [detailId, onViewingChange]);
+
+  useEffect(() => {
+    if (!detailId) return;
+    const id = window.setTimeout(() => {
+      document.getElementById("fee-period-detail")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 50);
+    return () => window.clearTimeout(id);
+  }, [detailId]);
+
+  const splitExample = useMemo(() => {
+    const mode: FeePeriodMode = filterMode === "month" ? "month" : "term";
+    const cycle = mode === "month" ? "Monthly" : "Term";
+    const sample = classes
+      .map((c) => normalizeClassConfig(c))
+      .find((c) => c.billingCycle === cycle && c.tuitionFeeAmount > 0);
+    const tuitionPeriods = filterFeePeriods(feeTerms, mode, "tuition").length;
+    const vehiclePeriods = filterFeePeriods(feeTerms, mode, "vehicle").length;
+    if (!sample || tuitionPeriods <= 0) return null;
+    const perPeriod = splitAmountAcrossTerms(sample.tuitionFeeAmount, tuitionPeriods)[0];
+    if (!perPeriod) return null;
+    return {
+      mode,
+      unit: mode === "month" ? "month" : "term",
+      className: sample.className,
+      total: sample.tuitionFeeAmount,
+      periodCount: tuitionPeriods,
+      perPeriod,
+      vehicleTotal: sample.vehicleFeeAmount,
+      vehiclePerPeriod:
+        sample.vehicleFeeAmount > 0 && vehiclePeriods > 0
+          ? splitAmountAcrossTerms(sample.vehicleFeeAmount, vehiclePeriods)[0]
+          : undefined,
+      vehiclePeriodCount: vehiclePeriods,
+    };
+  }, [classes, feeTerms, filterMode]);
+
+  const detailMeta = useMemo(() => {
+    if (!detailTerm) return null;
+    const mode = resolveFeePeriodMode(detailTerm.periodMode);
+    const orderedSameKind = filterFeePeriods(feeTerms, mode, detailTerm.kind);
+    const kindCount = orderedSameKind.length;
+    const termIndex = orderedSameKind.findIndex((t) => t.id === detailTerm.id);
+    const coverage =
+      detailTerm.coverage ||
+      formatFeeTermCoverage(detailTerm.startDate, detailTerm.endDate);
+    const cycle = mode === "month" ? "Monthly" : "Term";
+    const termClasses = classes
+      .map((c) => normalizeClassConfig(c))
+      .filter((c) => c.billingCycle === cycle)
+      .filter((c) =>
+        detailTerm.kind === "tuition" ? c.tuitionFeeAmount > 0 : c.vehicleFeeAmount > 0,
+      )
+      .map((c) => {
+        const total =
+          detailTerm.kind === "tuition" ? c.tuitionFeeAmount : c.vehicleFeeAmount;
+        const perTerm = classFeeAmountForTerm(total, orderedSameKind, detailTerm);
+        return {
+          id: c.id,
+          className: c.className,
+          total,
+          perTerm: perTerm ?? 0,
+        };
+      });
+    return {
+      term: detailTerm,
+      mode,
+      unit: mode === "month" ? "month" : "term",
+      unitPlural: mode === "month" ? "months" : "terms",
+      kindCount,
+      termIndex,
+      coverage,
+      orderedSameKind,
+      termClasses,
+      cycle,
+    };
+  }, [detailTerm, feeTerms, classes]);
+
+  const resetForm = () => {
+    setEditingId(null);
+    setLabel("");
+    setStartDate("");
+    setEndDate("");
+  };
 
   const startCreate = () => {
-    setEditingId(null);
+    resetForm();
+    setPeriodMode(filterMode === "month" ? "month" : "term");
     setKind(filterKind === "vehicle" ? "vehicle" : "tuition");
-    setLabel("");
-    setCoverage("");
     setOpen(true);
   };
 
   const startEdit = (term: FeeTerm) => {
     setEditingId(term.id);
+    setPeriodMode(resolveFeePeriodMode(term.periodMode));
     setKind(term.kind);
     setLabel(term.label);
-    setCoverage(term.coverage ?? "");
+    setStartDate(term.startDate ?? "");
+    setEndDate(term.endDate ?? "");
     setOpen(true);
   };
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     const nextLabel = label.trim();
-    const nextCoverage = coverage.trim();
     if (!nextLabel) {
-      toast.error("Term name is required");
+      toast.error(`${FEE_PERIOD_MODE_LABELS[periodMode]} name is required`);
+      return;
+    }
+    if (startDate && endDate && startDate > endDate) {
+      toast.error("Coverage end must be on or after the start date");
       return;
     }
     const duplicate = feeTerms.some(
       (t) =>
+        resolveFeePeriodMode(t.periodMode) === periodMode &&
         t.kind === kind &&
         t.label.toLowerCase() === nextLabel.toLowerCase() &&
         t.id !== editingId,
     );
     if (duplicate) {
-      toast.error(`${nextLabel} already exists for ${FEE_TERM_KIND_LABELS[kind]}`);
+      toast.error(
+        `${nextLabel} already exists for ${FEE_TERM_KIND_LABELS[kind]} ${FEE_PERIOD_MODE_LABELS[periodMode].toLowerCase()}s`,
+      );
       return;
     }
+
+    const coverage = formatFeeTermCoverage(startDate || undefined, endDate || undefined);
+    const nextTerm: Omit<FeeTerm, "id"> = {
+      kind,
+      periodMode,
+      label: nextLabel,
+      academicYear,
+      ...(startDate ? { startDate } : {}),
+      ...(endDate ? { endDate } : {}),
+      ...(coverage ? { coverage } : {}),
+    };
+
+    const kindCountAfter =
+      feeTerms.filter(
+        (t) =>
+          resolveFeePeriodMode(t.periodMode) === periodMode &&
+          t.kind === kind &&
+          t.id !== editingId,
+      ).length + 1;
+    const unit = periodMode === "month" ? "months" : "terms";
 
     if (editingId) {
       setFeeTerms((prev) =>
         prev.map((t) =>
           t.id === editingId
             ? {
-                ...t,
-                kind,
-                label: nextLabel,
-                ...(nextCoverage ? { coverage: nextCoverage } : { coverage: undefined }),
+                id: editingId,
+                kind: nextTerm.kind,
+                periodMode: nextTerm.periodMode,
+                label: nextTerm.label,
+                academicYear,
+                ...(nextTerm.startDate ? { startDate: nextTerm.startDate } : {}),
+                ...(nextTerm.endDate ? { endDate: nextTerm.endDate } : {}),
+                ...(nextTerm.coverage ? { coverage: nextTerm.coverage } : {}),
               }
             : t,
         ),
       );
-      toast.success(`Fee term updated · ${nextLabel}`, {
-        description: FEE_TERM_KIND_LABELS[kind],
+      toast.success(`${FEE_PERIOD_MODE_LABELS[periodMode]} updated · ${nextLabel}`, {
+        description: [
+          FEE_TERM_KIND_LABELS[kind],
+          coverage,
+          `Class totals split ÷ ${kindCountAfter} ${unit}`,
+        ]
+          .filter(Boolean)
+          .join(" · "),
       });
     } else {
       const maxNum = feeTerms.reduce((max, t) => {
@@ -11961,270 +12967,682 @@ function FeeTermsCard({
         return match ? Math.max(max, Number(match[1])) : max;
       }, 0);
       const nextId = `FT-${(maxNum + 1).toString().padStart(3, "0")}`;
-      setFeeTerms((prev) => [
-        ...prev,
-        {
-          id: nextId,
-          kind,
-          label: nextLabel,
-          ...(nextCoverage ? { coverage: nextCoverage } : {}),
-        },
-      ]);
-      toast.success(`Fee term added · ${nextLabel}`, {
-        description: `Selectable for ${FEE_TERM_KIND_LABELS[kind]} on Receive Payment`,
+      setFeeTerms((prev) => [...prev, { id: nextId, ...nextTerm }]);
+      toast.success(`${FEE_PERIOD_MODE_LABELS[periodMode]} added · ${nextLabel}`, {
+        description: `Class Tier totals now split across ${kindCountAfter} ${FEE_TERM_KIND_LABELS[kind].toLowerCase()} ${unit}`,
       });
     }
     setOpen(false);
+    resetForm();
   };
 
   const confirmDelete = () => {
     if (!pendingDelete) return;
-    setFeeTerms((prev) => prev.filter((t) => t.id !== pendingDelete.id));
+    const deletedId = pendingDelete.id;
+    setFeeTerms((prev) => prev.filter((t) => t.id !== deletedId));
     toast.error(`${pendingDelete.label} removed`, {
-      description: "Existing receipts retain the term label",
+      description: "Existing receipts retain the label · splits recalculate",
     });
     setPendingDelete(null);
+    if (detailId === deletedId) setDetailId(null);
   };
+
+  const formKindCount =
+    feeTerms.filter(
+      (t) =>
+        resolveFeePeriodMode(t.periodMode) === periodMode &&
+        t.kind === kind &&
+        t.id !== editingId,
+    ).length + 1;
+
+  const editDialog = (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) resetForm();
+      }}
+    >
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md rounded-xl border border-[#E5E5E5] bg-white p-6">
+        <DialogHeader>
+          <DialogTitle className="text-[22px] font-semibold text-black">
+            {editingId
+              ? `Edit Fee ${FEE_PERIOD_MODE_LABELS[periodMode]}`
+              : `Add Fee ${FEE_PERIOD_MODE_LABELS[periodMode]}`}
+          </DialogTitle>
+          <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
+            Define the billing window. Class Tier totals auto-split evenly across all{" "}
+            {periodMode === "month" ? "months" : "terms"} of this fee type.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={submit} className="mt-4 space-y-4">
+          <div>
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              Period Type
+            </Label>
+            <div className="mt-1.5 flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
+              {(["term", "month"] as const).map((mode) => {
+                const active = periodMode === mode;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setPeriodMode(mode)}
+                    className={cn(
+                      "flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors",
+                      active ? "bg-[#0F766E] text-white" : "text-black/65 hover:text-black",
+                    )}
+                  >
+                    {FEE_PERIOD_MODE_LABELS[mode]}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              Applies To
+            </Label>
+            <div className="mt-1.5 flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
+              {(
+                [
+                  { key: "tuition" as const, label: "Tuition" },
+                  { key: "vehicle" as const, label: "Vehicle" },
+                ] as const
+              ).map((option) => {
+                const active = kind === option.key;
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    onClick={() => setKind(option.key)}
+                    className={cn(
+                      "flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors",
+                      active ? "bg-[#0F766E] text-white" : "text-black/65 hover:text-black",
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              {periodMode === "month" ? "Month Name" : "Term Name"}
+            </Label>
+            <Input
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder={periodMode === "month" ? "e.g. April" : "e.g. Term 1"}
+              className="mt-1.5 h-10"
+              autoFocus
+            />
+          </div>
+          <div>
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+              Coverage
+            </Label>
+            <div className="mt-1.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <DatePicker
+                value={startDate}
+                onChange={setStartDate}
+                placeholder="From date"
+                valueFormat="iso"
+                max={endDate || undefined}
+                quickPicks={[{ label: "Today", getDate: (t) => t }]}
+                className="h-10 w-full"
+              />
+              <DatePicker
+                value={endDate}
+                onChange={setEndDate}
+                placeholder="To date"
+                valueFormat="iso"
+                min={startDate || undefined}
+                quickPicks={[{ label: "Today", getDate: (t) => t }]}
+                className="h-10 w-full"
+              />
+            </div>
+            <p className="mt-1.5 text-[10.5px] text-black/45">
+              {coveragePreview
+                ? `Covers ${coveragePreview}`
+                : `Pick start and end dates for this ${periodMode}`}
+            </p>
+          </div>
+          <div className="rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] px-3.5 py-3 text-[12px] text-black/60">
+            <p className="font-semibold text-black/80">No per-{periodMode} amount needed</p>
+            <p className="mt-1 font-mono text-[11.5px] text-black">
+              Will split across {formKindCount} {periodMode}
+              {formKindCount === 1 ? "" : "s"}
+              {splitExample &&
+              splitExample.mode === periodMode &&
+              kind === "tuition"
+                ? ` · e.g. ₹ ${splitExample.total.toLocaleString("en-IN")} → ₹ ${splitAmountAcrossTerms(splitExample.total, formKindCount)[0]?.toLocaleString("en-IN") ?? "—"} each`
+                : ""}
+            </p>
+          </div>
+          <DialogFooter className="flex-row justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
+              {editingId ? "Save Changes" : `Add ${FEE_PERIOD_MODE_LABELS[periodMode]}`}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+
+  const deleteDialog = (
+    <DeleteConfirmDialog
+      open={Boolean(pendingDelete)}
+      onOpenChange={(next) => {
+        if (!next) setPendingDelete(null);
+      }}
+      title={`Delete Fee ${pendingDelete ? FEE_PERIOD_MODE_LABELS[resolveFeePeriodMode(pendingDelete.periodMode)] : "Period"}`}
+      description={
+        pendingDelete
+          ? `Remove "${pendingDelete.label}"? Class Tier splits will recalculate across the remaining ${resolveFeePeriodMode(pendingDelete.periodMode) === "month" ? "months" : "terms"}.`
+          : "Are you sure you want to delete this fee period?"
+      }
+      onConfirm={confirmDelete}
+    />
+  );
+
+  if (detailMeta) {
+    const { term, mode, unit, unitPlural, kindCount, termIndex, coverage, orderedSameKind, termClasses, cycle } =
+      detailMeta;
+    return (
+      <>
+        <OrganicCard
+          tone="white"
+          cornerSide="tr"
+          padded
+          className={cn(workspacePanelClass, "col-span-12")}
+        >
+          <div id="fee-period-detail" className="scroll-mt-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex min-w-0 items-start gap-2.5 sm:gap-3">
+              <button
+                type="button"
+                onClick={() => setDetailId(null)}
+                aria-label="Back to fee periods"
+                className={cn(
+                  glassInsetClass,
+                  "inline-flex h-9 w-9 shrink-0 items-center justify-center text-slate-700 transition-colors hover:text-[#0F766E] dark:text-zinc-300 dark:hover:text-[#2DD4BF] sm:h-10 sm:w-auto sm:gap-1.5 sm:px-3",
+                )}
+              >
+                <ChevronLeft className="h-4 w-4 shrink-0" />
+                <span className="hidden text-[13px] font-semibold sm:inline">Back</span>
+              </button>
+              <div className="min-w-0 pt-0.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div
+                    className={cn(
+                      "grid h-10 w-10 shrink-0 place-items-center rounded-xl text-[12px] font-bold",
+                      term.kind === "tuition"
+                        ? "bg-[#CCFBF1] text-[#0F766E] dark:bg-[#0F766E]/30 dark:text-[#5EEAD4]"
+                        : "bg-[#FEF3C7] text-[#B45309] dark:bg-amber-950/50 dark:text-amber-200",
+                    )}
+                  >
+                    {mode === "month" ? "MO" : term.kind === "tuition" ? "TU" : "VE"}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="truncate text-[18px] font-bold leading-tight tracking-tight text-black dark:text-zinc-50 sm:text-[20px]">
+                        {term.label}
+                      </h2>
+                      <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-black/60 dark:bg-white/10 dark:text-zinc-300">
+                        {FEE_PERIOD_MODE_LABELS[mode]}
+                      </span>
+                      <span className="rounded-full bg-[#ECFDF5] px-2.5 py-0.5 text-[10px] font-semibold text-[#0F766E] dark:bg-[#0F766E]/25 dark:text-[#5EEAD4]">
+                        {termIndex >= 0 ? termIndex + 1 : "—"}/{kindCount || 1} of class total
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-[12px] text-black/50 dark:text-zinc-400">
+                      {FEE_TERM_KIND_LABELS[term.kind]}
+                      <span className="text-black/30 dark:text-zinc-600"> · </span>
+                      <span className="font-mono uppercase tracking-wider">{term.id}</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+              <button
+                type="button"
+                onClick={() => startEdit(term)}
+                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 text-[12px] font-semibold text-black/70 transition-colors hover:bg-[#F4F4F5] hover:text-black dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-zinc-50"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Edit
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingDelete(term)}
+                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#FECACA] bg-[#FEF2F2] px-3 text-[12px] font-semibold text-[#EF4444] transition-colors hover:bg-[#FEE2E2] dark:border-rose-500/40 dark:bg-rose-950/50 dark:text-rose-300 dark:hover:bg-rose-950/80"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-5 grid grid-cols-12 gap-3">
+            <div className="col-span-6 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4 dark:border-white/10 dark:bg-zinc-800/80 lg:col-span-3">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
+                Applies To
+              </div>
+              <div className="mt-1.5 text-[14px] font-semibold text-black dark:text-zinc-50">
+                {FEE_TERM_KIND_LABELS[term.kind]}
+              </div>
+            </div>
+            <div className="col-span-6 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4 dark:border-white/10 dark:bg-zinc-800/80 lg:col-span-3">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
+                Split Share
+              </div>
+              <div className="mt-1.5 font-mono text-[18px] font-bold text-[#0F766E] dark:text-[#2DD4BF]">
+                1/{kindCount || 1}
+              </div>
+            </div>
+            <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4 dark:border-white/10 dark:bg-zinc-800/80 sm:col-span-6 lg:col-span-6">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
+                Coverage
+              </div>
+              <div className="mt-1.5 text-[14px] font-medium text-black dark:text-zinc-100">
+                {coverage || <span className="font-normal text-black/40 dark:text-zinc-500">No dates set</span>}
+              </div>
+            </div>
+
+            <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4 dark:border-white/10 dark:bg-zinc-800/80">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
+                    Class Tier amounts for this {unit}
+                  </div>
+                  <p className="mt-1 text-[12px] text-black/50 dark:text-zinc-400">
+                    {cycle}-billed classes · total ÷ {kindCount || 1} {unitPlural}
+                  </p>
+                </div>
+                <span className="font-mono text-[10.5px] text-black/45 dark:text-zinc-500">
+                  {termClasses.length} class{termClasses.length === 1 ? "" : "es"}
+                </span>
+              </div>
+              {termClasses.length === 0 ? (
+                <p className="mt-3 text-[13px] text-black/45 dark:text-zinc-400">
+                  No {cycle}-billed class tiers with a{" "}
+                  {term.kind === "tuition" ? "tuition" : "vehicle"} fee yet.
+                </p>
+              ) : (
+                <ul className="mt-3 space-y-2">
+                  {termClasses.map((row) => (
+                    <li
+                      key={row.id}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-[#E8E8EA] bg-white px-3.5 py-2.5 dark:border-white/10 dark:bg-zinc-900/80"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-[13px] font-semibold text-black dark:text-zinc-50">
+                          {row.className}
+                        </div>
+                        <div className="mt-0.5 font-mono text-[11px] text-black/45 dark:text-zinc-400">
+                          Total ₹ {row.total.toLocaleString("en-IN")} ÷ {kindCount || 1}
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="font-mono text-[15px] font-bold text-[#0F766E] dark:text-[#2DD4BF]">
+                          ₹ {row.perTerm.toLocaleString("en-IN")}
+                        </div>
+                        <div className="text-[10px] font-medium uppercase tracking-wider text-black/40 dark:text-zinc-500">
+                          This {unit}
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4 dark:border-white/10 dark:bg-zinc-800/80">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
+                  {FEE_TERM_KIND_LABELS[term.kind]} {unitPlural}
+                </div>
+                <span className="font-mono text-[10.5px] text-black/45 dark:text-zinc-500">
+                  {orderedSameKind.length} total
+                </span>
+              </div>
+              <ul className="mt-3 space-y-1.5">
+                {orderedSameKind.map((sibling, index) => {
+                  const active = sibling.id === term.id;
+                  const siblingCoverage =
+                    sibling.coverage ||
+                    formatFeeTermCoverage(sibling.startDate, sibling.endDate);
+                  return (
+                    <li key={sibling.id}>
+                      <button
+                        type="button"
+                        onClick={() => setDetailId(sibling.id)}
+                        className={cn(
+                          "flex w-full items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5 text-left transition-colors",
+                          active
+                            ? "border-[#0F766E]/30 bg-[#F0FDFA] dark:border-[#2DD4BF]/35 dark:bg-[#0F766E]/30"
+                            : "border-[#E8E8EA] bg-white hover:border-[#0F766E]/25 hover:bg-[#FAFAFA] dark:border-white/10 dark:bg-zinc-900/70 dark:hover:border-[#2DD4BF]/25 dark:hover:bg-white/5",
+                        )}
+                      >
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[13px] font-semibold text-black dark:text-zinc-50">
+                              {sibling.label}
+                            </span>
+                            <span className="font-mono text-[10px] text-black/40 dark:text-zinc-500">
+                              {index + 1}/{orderedSameKind.length}
+                            </span>
+                            {active && (
+                              <span className="rounded-full bg-[#0F766E] px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-white">
+                                Viewing
+                              </span>
+                            )}
+                          </div>
+                          {siblingCoverage && (
+                            <div className="mt-0.5 truncate text-[11px] text-black/45 dark:text-zinc-400">
+                              {siblingCoverage}
+                            </div>
+                          )}
+                        </div>
+                        <ChevronLeft
+                          className={cn(
+                            "h-4 w-4 shrink-0 rotate-180 text-black/30 dark:text-zinc-600",
+                            active && "text-[#0F766E] dark:text-[#2DD4BF]",
+                          )}
+                        />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </div>
+          </div>
+        </OrganicCard>
+        {editDialog}
+        {deleteDialog}
+      </>
+    );
+  }
 
   return (
     <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
       <CardHeader
-        title="Fee Terms"
-        subtitle={`${tuitionCount} tuition · ${vehicleCount} vehicle · used when capturing by term`}
-        actionLabel="Add Fee Term"
+        title="Fee Periods"
+        subtitle={`${termCount} terms · ${monthCount} months · Class Tier totals auto-split`}
+        actionLabel="Add Period"
         onAction={startCreate}
       />
 
-      <div className="mt-4 flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1 sm:max-w-md">
-        {(
-          [
-            { key: "all" as const, label: "All" },
-            { key: "tuition" as const, label: "Tuition" },
-            { key: "vehicle" as const, label: "Vehicle" },
-          ] as const
-        ).map((option) => {
-          const active = filterKind === option.key;
-          return (
-            <button
-              key={option.key}
-              type="button"
-              onClick={() => setFilterKind(option.key)}
-              className={cn(
-                "flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors",
-                active ? "bg-black text-white" : "text-black/65 hover:text-black",
-              )}
-            >
-              {option.label}
-            </button>
-          );
-        })}
+      <div className="mt-3 rounded-xl border border-[#D1FAE5] bg-[#F0FDFA] px-3.5 py-3 text-[12px] leading-snug text-black/65 dark:border-[#0F766E]/35 dark:bg-[#0F766E]/20 dark:text-zinc-200">
+        <p className="font-semibold text-[#0F766E] dark:text-[#5EEAD4]">Auto-split from Class Tier</p>
+        <p className="mt-1">
+          Terms split Term-billed classes · Months split Monthly-billed classes. Example: ₹ 20,000
+          ÷ 4 terms = ₹ 5,000 each · ₹ 24,000 ÷ 12 months = ₹ 2,000 each.
+        </p>
+        {splitExample ? (
+          <p className="mt-2 font-mono text-[11.5px] text-black dark:text-zinc-100">
+            {splitExample.className}: ₹ {splitExample.total.toLocaleString("en-IN")} ÷{" "}
+            {splitExample.periodCount} ={" "}
+            <span className="font-semibold text-[#0F766E] dark:text-[#2DD4BF]">
+              ₹ {splitExample.perPeriod.toLocaleString("en-IN")}
+            </span>
+            /{splitExample.unit}
+            {splitExample.vehiclePerPeriod
+              ? ` · Vehicle ₹ ${splitExample.vehicleTotal.toLocaleString("en-IN")} ÷ ${splitExample.vehiclePeriodCount} = ₹ ${splitExample.vehiclePerPeriod.toLocaleString("en-IN")}/${splitExample.unit}`
+              : ""}
+          </p>
+        ) : null}
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 sm:gap-4">
+        <div className="min-w-0">
+          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-500">
+            Period
+          </div>
+          <div
+            role="tablist"
+            aria-label="Period type"
+            className="flex border-b border-[#E8E8EA] dark:border-white/10"
+          >
+            {(
+              [
+                { key: "all" as const, label: "All" },
+                { key: "term" as const, label: "Terms" },
+                { key: "month" as const, label: "Months" },
+              ] as const
+            ).map((option) => {
+              const active = filterMode === option.key;
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setFilterMode(option.key)}
+                  className={cn(
+                    "relative min-w-0 flex-1 px-2 py-2.5 text-center text-[12.5px] font-semibold tracking-tight transition-colors",
+                    active
+                      ? "text-[#0F766E] dark:text-[#5EEAD4]"
+                      : "text-black/45 hover:text-black/70 dark:text-zinc-500 dark:hover:text-zinc-300",
+                  )}
+                >
+                  {option.label}
+                  {active && (
+                    <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-[#0F766E] dark:bg-[#2DD4BF]" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="min-w-0">
+          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-500">
+            Fee type
+          </div>
+          <div
+            role="tablist"
+            aria-label="Fee type"
+            className="flex border-b border-[#E8E8EA] dark:border-white/10"
+          >
+            {(
+              [
+                { key: "all" as const, label: "All" },
+                { key: "tuition" as const, label: "Tuition" },
+                { key: "vehicle" as const, label: "Vehicle" },
+              ] as const
+            ).map((option) => {
+              const active = filterKind === option.key;
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setFilterKind(option.key)}
+                  className={cn(
+                    "relative min-w-0 flex-1 px-2 py-2.5 text-center text-[12.5px] font-semibold tracking-tight transition-colors",
+                    active
+                      ? "text-[#0F766E] dark:text-[#5EEAD4]"
+                      : "text-black/45 hover:text-black/70 dark:text-zinc-500 dark:hover:text-zinc-300",
+                  )}
+                >
+                  {option.label}
+                  {active && (
+                    <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-[#0F766E] dark:bg-[#2DD4BF]" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       <div className="mt-4 space-y-2">
         {visibleTerms.length === 0 && (
           <EmptyRow
             label={
-              filterKind === "all"
-                ? "No fee terms yet"
-                : `No ${FEE_TERM_KIND_LABELS[filterKind]} terms yet`
+              filterMode === "month"
+                ? "No fee months yet · Add April–March coverage"
+                : filterMode === "term"
+                  ? "No fee terms yet"
+                  : "No fee periods yet"
             }
           />
         )}
-        {visibleTerms.map((term) => (
-          <div
-            key={term.id}
-            className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5"
-          >
-            <div className="flex min-w-0 items-center gap-2.5">
-              <div
-                className={cn(
-                  "grid h-8 w-8 shrink-0 place-items-center rounded-xl text-[10.5px] font-semibold",
-                  term.kind === "tuition"
-                    ? "bg-[#DBEAFE] text-[#2563EB]"
-                    : "bg-[#FEF3C7] text-[#B45309]",
-                )}
-              >
-                {term.kind === "tuition" ? "TU" : "VE"}
-              </div>
-              <div className="min-w-0">
-                <div className="truncate text-[13px] font-semibold text-black">{term.label}</div>
-                <div className="truncate text-[11px] text-black/45">
-                  {FEE_TERM_KIND_LABELS[term.kind]}
-                  {term.coverage ? ` · ${term.coverage}` : ""}
-                  <span className="text-black/30"> · </span>
-                  <span className="font-mono text-[10.5px] uppercase tracking-wider">
-                    {term.id}
-                  </span>
+        {visibleTerms.map((term) => {
+          const mode = resolveFeePeriodMode(term.periodMode);
+          const coverage =
+            term.coverage || formatFeeTermCoverage(term.startDate, term.endDate);
+          const kindCount = filterFeePeriods(feeTerms, mode, term.kind).length;
+          return (
+            <div
+              key={term.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => setDetailId(term.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setDetailId(term.id);
+                }
+              }}
+              aria-label={`Open details for ${term.label}`}
+              className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5 text-left transition-colors hover:border-[#0F766E]/30 hover:bg-white active:bg-[#F4F4F5] dark:border-white/10 dark:bg-zinc-800/70 dark:hover:border-[#2DD4BF]/30 dark:hover:bg-zinc-800 dark:active:bg-zinc-700/80"
+            >
+              <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                <div
+                  className={cn(
+                    "grid h-8 w-8 shrink-0 place-items-center rounded-xl text-[10.5px] font-semibold",
+                    mode === "month"
+                      ? "bg-[#E0E7FF] text-[#3730A3] dark:bg-indigo-950/50 dark:text-indigo-200"
+                      : term.kind === "tuition"
+                        ? "bg-[#CCFBF1] text-[#0F766E] dark:bg-[#0F766E]/30 dark:text-[#5EEAD4]"
+                        : "bg-[#FEF3C7] text-[#B45309] dark:bg-amber-950/50 dark:text-amber-200",
+                  )}
+                >
+                  {mode === "month" ? "MO" : term.kind === "tuition" ? "TU" : "VE"}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <div className="truncate text-[13px] font-semibold text-black dark:text-zinc-50">
+                      {term.label}
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-black/55 dark:bg-white/10 dark:text-zinc-300">
+                      {FEE_PERIOD_MODE_LABELS[mode]}
+                    </span>
+                    <span className="rounded-full bg-[#ECFDF5] px-2 py-0.5 text-[10px] font-semibold text-[#0F766E] dark:bg-[#0F766E]/25 dark:text-[#5EEAD4]">
+                      1/{kindCount || 1} of class total
+                    </span>
+                  </div>
+                  <div className="truncate text-[11px] text-black/45 dark:text-zinc-400">
+                    {FEE_TERM_KIND_LABELS[term.kind]}
+                    {coverage ? ` · ${coverage}` : ""}
+                    <span className="text-black/30 dark:text-zinc-600"> · </span>
+                    <span className="font-mono text-[10.5px] uppercase tracking-wider">
+                      {term.id}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="flex shrink-0 items-center gap-1">
-              <button
-                type="button"
-                onClick={() => startEdit(term)}
-                className="grid h-8 w-8 place-items-center rounded-full text-black/55 transition-colors hover:bg-black hover:text-white"
-                aria-label={`Edit ${term.label}`}
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setPendingDelete(term)}
-                className="grid h-8 w-8 place-items-center rounded-full text-black/55 transition-colors hover:bg-[#EF4444] hover:text-white"
-                aria-label={`Delete ${term.label}`}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <Dialog
-        open={open}
-        onOpenChange={(next) => {
-          setOpen(next);
-          if (!next) {
-            setEditingId(null);
-            setLabel("");
-            setCoverage("");
-          }
-        }}
-      >
-        <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6">
-          <DialogHeader>
-            <DialogTitle className="text-[22px] font-semibold text-black">
-              {editingId ? "Edit Fee Term" : "Add Fee Term"}
-            </DialogTitle>
-            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
-              Terms appear on Inbound Fee Capture when period is set to Term for Tuition or Vehicle
-              fees.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={submit} className="mt-4 space-y-4">
-            <div>
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                Applies To
-              </Label>
-              <div className="mt-1.5 flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
-                {(
-                  [
-                    { key: "tuition" as const, label: "Tuition" },
-                    { key: "vehicle" as const, label: "Vehicle" },
-                  ] as const
-                ).map((option) => {
-                  const active = kind === option.key;
-                  return (
-                    <button
-                      key={option.key}
-                      type="button"
-                      onClick={() => setKind(option.key)}
-                      className={cn(
-                        "flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors",
-                        active ? "bg-black text-white" : "text-black/65 hover:text-black",
-                      )}
-                    >
-                      {option.label}
-                    </button>
-                  );
-                })}
+              <div className="flex shrink-0 items-center gap-1">
+                <span
+                  className="mr-0.5 hidden text-[11px] font-medium text-[#0F766E] dark:text-[#2DD4BF] sm:inline"
+                  aria-hidden
+                >
+                  View
+                </span>
+                <ChevronLeft
+                  className="h-4 w-4 shrink-0 rotate-180 text-[#0F766E]/70 dark:text-[#2DD4BF]/80"
+                  aria-hidden
+                />
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    startEdit(term);
+                  }}
+                  className="grid h-8 w-8 place-items-center rounded-full text-black/55 transition-colors hover:bg-[#0F766E] hover:text-white dark:text-zinc-400"
+                  aria-label={`Edit ${term.label}`}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPendingDelete(term);
+                  }}
+                  className="grid h-8 w-8 place-items-center rounded-full text-black/55 transition-colors hover:bg-[#EF4444] hover:text-white dark:text-zinc-400"
+                  aria-label={`Delete ${term.label}`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
               </div>
             </div>
-            <div>
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                Term Name
-              </Label>
-              <Input
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
-                placeholder="e.g. Term 1"
-                className="mt-1.5"
-                autoFocus
-              />
-            </div>
-            <div>
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                Coverage (optional)
-              </Label>
-              <Input
-                value={coverage}
-                onChange={(e) => setCoverage(e.target.value)}
-                placeholder="e.g. Apr – Jun"
-                className="mt-1.5"
-              />
-            </div>
-            <DialogFooter className="flex-row justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
-                {editingId ? "Save Changes" : "Add Term"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+          );
+        })}
+      </div>
 
-      <DeleteConfirmDialog
-        open={Boolean(pendingDelete)}
-        onOpenChange={(next) => {
-          if (!next) setPendingDelete(null);
-        }}
-        title="Delete Fee Term"
-        description={
-          pendingDelete
-            ? `Remove "${pendingDelete.label}" from ${FEE_TERM_KIND_LABELS[pendingDelete.kind]} terms? Existing receipts keep this label.`
-            : "Are you sure you want to delete this fee term?"
-        }
-        onConfirm={confirmDelete}
-      />
+      {editDialog}
+      {deleteDialog}
     </OrganicCard>
   );
 }
 
 function CategoriesCard({
   academicYears,
-  setAcademicYears,
   academicYear,
-  setAcademicYear,
+  openAcademicYear,
+  addAcademicYear,
+  canDeleteAcademicYear,
+  deleteAcademicYear,
   themeSettings,
   setThemeSettings,
 }: {
   academicYears: string[];
-  setAcademicYears: React.Dispatch<React.SetStateAction<string[]>>;
   academicYear: string;
-  setAcademicYear: React.Dispatch<React.SetStateAction<string>>;
+  openAcademicYear: (year: string) => { receipts: number; enrolled: number };
+  addAcademicYear: (year: string) => boolean;
+  canDeleteAcademicYear: (year: string) => { ok: boolean; reason?: string };
+  deleteAcademicYear: (year: string) => boolean;
   themeSettings: ThemeSettings;
   setThemeSettings: React.Dispatch<React.SetStateAction<ThemeSettings>>;
 }) {
   const [yearDraft, setYearDraft] = useState("");
   const [pendingYearDelete, setPendingYearDelete] = useState<string | null>(null);
 
-  const addAcademicYear = (e: React.FormEvent) => {
+  const submitAcademicYear = (e: React.FormEvent) => {
     e.preventDefault();
     const nextLabel = normalizeAcademicYearLabel(yearDraft);
     if (!nextLabel) return;
-    if (academicYears.some((y) => y.toLowerCase() === nextLabel.toLowerCase())) {
+    const added = addAcademicYear(nextLabel);
+    if (!added) {
       toast.error(`${nextLabel} already exists`);
       return;
     }
-    setAcademicYears((prev) => [...prev, nextLabel]);
-    setAcademicYear(nextLabel);
-    toast.success(`Academic year added · ${nextLabel}`, {
-      description: "Set as the active academic year",
+    toast.success(`Opened books for ${nextLabel}`, {
+      description: "Fee periods cloned from the previous year · ready to enroll students",
     });
     setYearDraft("");
   };
 
   const removeAcademicYear = (year: string) => {
-    if (academicYears.length <= 1) {
-      toast.error("At least one academic year is required");
+    const check = canDeleteAcademicYear(year);
+    if (!check.ok) {
+      toast.error(check.reason ?? "Cannot delete this academic year");
       return;
     }
-    const next = academicYears.filter((y) => y !== year);
-    setAcademicYears(next);
-    if (academicYear === year) {
-      setAcademicYear(next[0] ?? year);
+    if (!deleteAcademicYear(year)) {
+      toast.error("Could not delete academic year");
+      return;
     }
     toast.error(`${year} removed`);
   };
@@ -12245,14 +13663,14 @@ function CategoriesCard({
       <div className="text-[18px] font-bold leading-tight tracking-tight text-black">
         System Constants
       </div>
-      <p className="mt-1 text-[12px] text-black/55">
-        Academic year, workspace density, and navigation dock placement
+      <p className="mt-1 text-[12px] text-black/55 dark:text-zinc-400">
+        Academic year books and navigation dock placement
       </p>
 
       <div className="mt-4 grid grid-cols-12 gap-3">
         <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-8">
           <div className="flex items-center justify-between">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
               Academic Year
             </Label>
             <span className="font-mono text-[10.5px] text-black/45">
@@ -12262,8 +13680,10 @@ function CategoriesCard({
           <FieldSelect
             value={academicYear}
             onValueChange={(y) => {
-              setAcademicYear(y);
-              toast.success(`Academic year set to ${y}`);
+              const stats = openAcademicYear(y);
+              toast.success(`Opened books for ${y}`, {
+                description: `${stats.receipts} receipt${stats.receipts === 1 ? "" : "s"} · ${stats.enrolled} student${stats.enrolled === 1 ? "" : "s"} enrolled`,
+              });
             }}
             options={academicYears.map((y) => ({ value: y, label: y }))}
             className="mt-1.5 font-medium"
@@ -12284,7 +13704,7 @@ function CategoriesCard({
                 <button
                   type="button"
                   onClick={() => setPendingYearDelete(y)}
-                  className="grid h-4 w-4 place-items-center rounded-full text-black/55 hover:bg-black hover:text-white disabled:pointer-events-none disabled:opacity-40"
+                  className="grid h-4 w-4 place-items-center rounded-full text-black/55 dark:text-zinc-400 hover:bg-[#0F766E] hover:text-white disabled:pointer-events-none disabled:opacity-40"
                   aria-label={`Remove ${y}`}
                   disabled={academicYears.length <= 1}
                 >
@@ -12294,7 +13714,7 @@ function CategoriesCard({
             ))}
           </div>
 
-          <form onSubmit={addAcademicYear} className="mt-3 flex gap-2">
+          <form onSubmit={submitAcademicYear} className="mt-3 flex gap-2">
             <Input
               value={yearDraft}
               onChange={(e) => setYearDraft(e.target.value)}
@@ -12303,39 +13723,26 @@ function CategoriesCard({
             />
             <Button
               type="submit"
-              className="shrink-0 rounded-full bg-black text-white hover:bg-black/85"
+              className="shrink-0 rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
             >
               <Plus className="mr-1 h-3.5 w-3.5" /> Add
             </Button>
           </form>
         </div>
 
-        <div className="col-span-12 grid grid-cols-12 gap-3 sm:col-span-12 lg:col-span-4">
-          <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-12">
-            <ThemeSelect
-              label="Density"
-              value={themeSettings.density}
-              options={THEME_DENSITY_OPTIONS}
-              onChange={(density) => {
-                setThemeSettings((prev) => ({ ...prev, density }));
-                toast.success(`Workspace density set to ${density}`);
-              }}
-            />
-          </div>
-          <div className="col-span-12 hidden rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-12 lg:block">
-            <ThemeSelect
-              label="Navigation"
-              value={themeSettings.navPlacement ?? "Left"}
-              options={THEME_NAV_PLACEMENT_OPTIONS}
-              onChange={(navPlacement) => {
-                setThemeSettings((prev) => ({ ...prev, navPlacement }));
-                notifyNavPlacementChange(navPlacement);
-                window.setTimeout(() => {
-                  toast.success(`Navigation dock moved to ${navPlacement}`);
-                }, 0);
-              }}
-            />
-          </div>
+        <div className="col-span-12 hidden rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-4 lg:block">
+          <ThemeSelect
+            label="Navigation"
+            value={themeSettings.navPlacement ?? "Left"}
+            options={THEME_NAV_PLACEMENT_OPTIONS}
+            onChange={(navPlacement) => {
+              setThemeSettings((prev) => ({ ...prev, navPlacement }));
+              notifyNavPlacementChange(navPlacement);
+              window.setTimeout(() => {
+                toast.success(`Navigation dock moved to ${navPlacement}`);
+              }, 0);
+            }}
+          />
         </div>
       </div>
 
@@ -12417,7 +13824,7 @@ function FieldSelect({
         <Select value={resolvedValue} onValueChange={onValueChange} disabled={disabled}>
           <SelectTrigger
             className={cn(
-              "h-10 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 text-[13px] font-normal text-black shadow-none focus:ring-2 focus:ring-[#2563EB] focus:ring-offset-0",
+              "h-10 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 text-[13px] font-normal text-black shadow-none focus:ring-2 focus:ring-[#0F766E] focus:ring-offset-0 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100",
               triggerClassName,
             )}
           >
@@ -12425,13 +13832,13 @@ function FieldSelect({
           </SelectTrigger>
           <SelectContent
             position="popper"
-            className="z-[250] rounded-lg border border-[#E5E5E5] bg-white p-1.5 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+            className="z-[250] rounded-lg border border-[#E5E5E5] bg-white p-1.5 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)] dark:border-white/10 dark:bg-zinc-900"
           >
             {options.map((opt) => (
               <SelectItem
                 key={opt.value}
                 value={opt.value}
-                className="cursor-pointer rounded-md py-2 pl-3 pr-8 text-[13px] text-black focus:bg-[#DBEAFE] focus:text-black data-[highlighted]:bg-[#DBEAFE] data-[highlighted]:text-black data-[state=checked]:bg-[#2563EB] data-[state=checked]:font-semibold data-[state=checked]:text-white"
+                className="cursor-pointer rounded-md py-2 pl-3 pr-8 text-[13px] text-black focus:bg-[#CCFBF1] focus:text-[#0F172A] data-[highlighted]:bg-[#CCFBF1] data-[highlighted]:text-[#0F172A] data-[state=checked]:bg-[#0F766E] data-[state=checked]:font-semibold data-[state=checked]:text-white dark:text-zinc-100 dark:focus:bg-[#0F766E]/40 dark:focus:text-white dark:data-[highlighted]:bg-[#0F766E]/40 dark:data-[highlighted]:text-white"
               >
                 {opt.label}
               </SelectItem>
@@ -12450,11 +13857,11 @@ function FieldSelect({
             type="button"
             disabled={disabled}
             className={cn(
-              "flex h-10 w-full items-center justify-between rounded-lg border border-[#E5E5E5] bg-white px-3 text-left text-[13px] font-normal text-black shadow-none transition-colors hover:bg-[#FAFAFA] focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50",
+              "flex h-10 w-full items-center justify-between rounded-lg border border-[#E5E5E5] bg-white px-3 text-left text-[13px] font-normal text-black shadow-none transition-colors hover:bg-[#FAFAFA] focus:outline-none focus:ring-2 focus:ring-[#0F766E] focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800",
               triggerClassName,
             )}
           >
-            <span className={cn("truncate", !selectedLabel && "text-black/45")}>
+            <span className={cn("truncate", !selectedLabel && "text-black/45 dark:text-zinc-500")}>
               {selectedLabel ?? placeholder}
             </span>
             <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
@@ -12462,12 +13869,12 @@ function FieldSelect({
         </PopoverTrigger>
         <PopoverContent
           align="start"
-          className="z-[250] w-[var(--radix-popover-trigger-width)] rounded-lg border border-[#E5E5E5] bg-white p-0 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+          className="z-[250] w-[var(--radix-popover-trigger-width)] rounded-lg border border-[#E5E5E5] bg-white p-0 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)] dark:border-white/10 dark:bg-zinc-900"
         >
-          <Command className="rounded-lg bg-white">
-            <CommandInput placeholder={searchPlaceholder} className="h-10 text-[13px]" />
+          <Command className="rounded-lg bg-white dark:bg-zinc-900 dark:text-zinc-100">
+            <CommandInput placeholder={searchPlaceholder} className="h-10 text-[13px] dark:text-zinc-100" />
             <CommandList className="max-h-56">
-              <CommandEmpty className="py-4 text-center text-[12px] text-slate-500">
+              <CommandEmpty className="py-4 text-center text-[12px] text-slate-500 dark:text-zinc-400">
                 No matches found
               </CommandEmpty>
               <CommandGroup className="p-1.5">
@@ -12484,8 +13891,8 @@ function FieldSelect({
                       className={cn(
                         "cursor-pointer rounded-md px-3 py-2 text-[13px]",
                         active
-                          ? "bg-[#2563EB] font-semibold text-white data-[selected=true]:bg-[#2563EB] data-[selected=true]:text-white"
-                          : "text-black data-[selected=true]:bg-[#DBEAFE] data-[selected=true]:text-black",
+                          ? "bg-[#0F766E] font-semibold text-white data-[selected=true]:bg-[#0F766E] data-[selected=true]:text-white"
+                          : "text-black data-[selected=true]:bg-[#CCFBF1] data-[selected=true]:text-[#0F172A] dark:text-zinc-100 dark:data-[selected=true]:bg-[#0F766E]/40 dark:data-[selected=true]:text-white",
                       )}
                     >
                       <span className="min-w-0 flex-1 truncate">{opt.label}</span>

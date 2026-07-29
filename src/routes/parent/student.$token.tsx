@@ -175,7 +175,7 @@ function ParentStudentPage() {
           </p>
           <Link
             to="/login"
-            className="mt-5 inline-flex h-10 items-center justify-center rounded-full bg-black px-5 text-[13px] font-semibold text-white"
+            className="mt-5 inline-flex h-10 items-center justify-center rounded-full bg-[#0F766E] px-5 text-[13px] font-semibold text-white"
           >
             School login
           </Link>
@@ -211,7 +211,7 @@ function ParentStudentPage() {
             <LockedField
               label="Class"
               value={locked.cls}
-              icon={<GraduationCap className="h-3.5 w-3.5 text-[#2563EB]" />}
+              icon={<GraduationCap className="h-3.5 w-3.5 text-[#0F766E]" />}
             />
           </div>
         </section>
@@ -231,7 +231,7 @@ function ParentStudentPage() {
                     className="h-14 w-14 rounded-2xl object-cover"
                   />
                 ) : (
-                  <div className="grid h-14 w-14 place-items-center rounded-2xl bg-black text-sm font-semibold text-white">
+                  <div className="grid h-14 w-14 place-items-center rounded-2xl bg-[#0F766E] text-sm font-semibold text-white">
                     {personInitials(locked.name)}
                   </div>
                 )}
@@ -239,7 +239,7 @@ function ParentStudentPage() {
                   type="button"
                   onClick={() => photoRef.current?.click()}
                   aria-label="Upload profile photo"
-                  className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#2563EB] text-white shadow-sm"
+                  className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#0F766E] text-white shadow-sm"
                 >
                   <Camera className="h-3.5 w-3.5" />
                 </button>
@@ -284,7 +284,7 @@ function ParentStudentPage() {
                     className={cn(
                       "min-h-9 flex-1 rounded-full text-[12px] font-semibold transition-colors",
                       form.gender === g.key
-                        ? "bg-[#2563EB] text-white"
+                        ? "bg-[#0F766E] text-white"
                         : "text-black/55 hover:bg-black/5",
                     )}
                   >
@@ -324,7 +324,7 @@ function ParentStudentPage() {
                     className={cn(
                       "min-h-9 flex-1 rounded-full text-[12px] font-semibold transition-colors",
                       form.guardianRelation === relation
-                        ? "bg-[#2563EB] text-white"
+                        ? "bg-[#0F766E] text-white"
                         : "text-black/55 hover:bg-black/5",
                     )}
                   >
@@ -524,7 +524,7 @@ function ParentStudentPage() {
               <Button
                 type="submit"
                 disabled={saving}
-                className="rounded-full bg-black text-white hover:bg-black/85"
+                className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
               >
                 {saving ? "Saving…" : "Save profile"}
               </Button>
@@ -565,7 +565,7 @@ function FormSelect({
   const resolved = value && options.includes(value) ? value : allowNone && !value ? "__none__" : undefined;
   return (
     <Select value={resolved} onValueChange={onValueChange}>
-      <SelectTrigger className="h-10 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 text-[13px] shadow-none focus:ring-2 focus:ring-[#2563EB] focus:ring-offset-0">
+      <SelectTrigger className="h-10 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 text-[13px] shadow-none focus:ring-2 focus:ring-[#0F766E] focus:ring-offset-0">
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent className="rounded-lg border border-[#E5E5E5] bg-white p-1.5 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]">

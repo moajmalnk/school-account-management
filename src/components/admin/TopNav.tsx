@@ -105,7 +105,7 @@ export function TopNav() {
             aria-label="Notifications"
           >
             <Bell className="h-4 w-4" />
-            <span className="absolute right-2.5 top-2.5 h-1.5 w-1.5 rounded-full bg-[#2563EB]" />
+            <span className="absolute right-2.5 top-2.5 h-1.5 w-1.5 rounded-full bg-[#0F766E]" />
           </button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

@@ -13,6 +13,34 @@ import {
   normalizePermissionSet,
   type PermissionSet,
 } from "@/lib/permissions";
+import {
+  academicYearBookStats,
+  applyLedgerToStudent,
+  buildLedgerFromStudents,
+  cloneFeeTermsForYear,
+  ensureYearLedger,
+  filterByAcademicYear,
+  getYearLedger,
+  parseAcademicYearBounds,
+  studentsForAcademicYear,
+  syncLedgerFromActiveStudents,
+  upsertStudentYearFields,
+  yearHasBookData,
+  type StudentYearFields,
+  type StudentYearLedger,
+} from "@/lib/academic-year";
+
+export type { StudentYearFields, StudentYearLedger };
+export {
+  academicYearBookStats,
+  cloneFeeTermsForYear,
+  filterByAcademicYear,
+  getYearLedger,
+  parseAcademicYearBounds,
+  studentsForAcademicYear,
+  upsertStudentYearFields,
+  yearHasBookData,
+};
 
 export type GuardianRelation = "Father" | "Mother" | "Others";
 
@@ -61,6 +89,8 @@ export type Student = {
   address?: string;
   photoUrl?: string;
   aadhaar?: string;
+  /** School admission / register number (distinct from internal id) */
+  admissionNumber?: string;
   placeOfBirth?: string;
   nationality?: string;
   religion?: string;
@@ -177,6 +207,14 @@ export type StaffSalaryHistoryEntry = {
   status: "Paid" | "Queued" | "Cleared";
 };
 
+/** One month of attendance used for pro-rata payroll */
+export type StaffAttendanceMonth = {
+  /** Calendar month key · YYYY-MM */
+  month: string;
+  daysPresent: number;
+  workingDays: number;
+};
+
 export type StaffStatusEvent = {
   id: string;
   type: "joined" | "deactivated" | "reactivated";
@@ -200,12 +238,109 @@ export type Staff = {
   photoUrl?: string;
   basicSalary: number;
   additionalAllowances: number;
+  /** Monthly attendance rows · drives pro-rata salary when present */
+  attendanceByMonth?: StaffAttendanceMonth[];
   documents: StaffDocument[];
   salaryHistory: StaffSalaryHistoryEntry[];
   statusHistory: StaffStatusEvent[];
   /** ISO timestamp when moved to recycle bin; absent means live on roster */
   deletedAt?: string;
 };
+
+/** Current payroll month key · YYYY-MM */
+export function currentPayrollMonth(date = new Date()): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+export function formatPayrollMonthLabel(month: string): string {
+  const match = /^(\d{4})-(\d{2})$/.exec(month.trim());
+  if (!match) return month;
+  const y = Number(match[1]);
+  const m = Number(match[2]);
+  if (!y || m < 1 || m > 12) return month;
+  return new Date(y, m - 1, 1).toLocaleString("en-IN", {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+export function staffGrossSalary(staff: Pick<Staff, "basicSalary" | "additionalAllowances">): number {
+  return Math.max(0, Math.round((staff.basicSalary || 0) + (staff.additionalAllowances || 0)));
+}
+
+export function getStaffAttendanceForMonth(
+  staff: Pick<Staff, "attendanceByMonth">,
+  month: string,
+): StaffAttendanceMonth | undefined {
+  const key = month.trim();
+  if (!key) return undefined;
+  return (staff.attendanceByMonth ?? []).find((row) => row.month === key);
+}
+
+/**
+ * Payable salary for a month.
+ * With attendance: gross × (daysPresent / workingDays).
+ * Without attendance: full gross (unchanged behaviour).
+ */
+export function staffPayableSalary(
+  staff: Pick<Staff, "basicSalary" | "additionalAllowances" | "attendanceByMonth">,
+  month: string = currentPayrollMonth(),
+): {
+  gross: number;
+  payable: number;
+  ratio: number;
+  attendance?: StaffAttendanceMonth;
+} {
+  const gross = staffGrossSalary(staff);
+  const attendance = getStaffAttendanceForMonth(staff, month);
+  if (
+    !attendance ||
+    !Number.isFinite(attendance.workingDays) ||
+    attendance.workingDays <= 0
+  ) {
+    return { gross, payable: gross, ratio: 1 };
+  }
+  const present = Math.max(0, Math.min(attendance.daysPresent, attendance.workingDays));
+  const ratio = present / attendance.workingDays;
+  const payable = Math.round(gross * ratio);
+  return { gross, payable, ratio, attendance };
+}
+
+export function normalizeStaffAttendanceMonth(
+  raw: Partial<StaffAttendanceMonth> | null | undefined,
+): StaffAttendanceMonth | null {
+  if (!raw || typeof raw !== "object") return null;
+  const month =
+    typeof raw.month === "string" && /^\d{4}-\d{2}$/.test(raw.month.trim())
+      ? raw.month.trim()
+      : null;
+  if (!month) return null;
+  const daysPresent =
+    typeof raw.daysPresent === "number" && Number.isFinite(raw.daysPresent)
+      ? Math.max(0, Math.round(raw.daysPresent))
+      : 0;
+  const workingDays =
+    typeof raw.workingDays === "number" && Number.isFinite(raw.workingDays)
+      ? Math.max(0, Math.round(raw.workingDays))
+      : 0;
+  if (workingDays <= 0) return null;
+  return {
+    month,
+    daysPresent: Math.min(daysPresent, workingDays),
+    workingDays,
+  };
+}
+
+export function upsertStaffAttendanceMonth(
+  existing: StaffAttendanceMonth[] | undefined,
+  next: StaffAttendanceMonth,
+): StaffAttendanceMonth[] {
+  const list = [...(existing ?? [])];
+  const idx = list.findIndex((row) => row.month === next.month);
+  if (idx >= 0) list[idx] = next;
+  else list.push(next);
+  return list.sort((a, b) => b.month.localeCompare(a.month));
+}
 
 function normalizeAttachment(raw: unknown): StaffDocumentAttachment | null {
   if (!raw || typeof raw !== "object") return null;
@@ -442,6 +577,9 @@ export function normalizeStudent(
     address: optionalTrimmedString(raw.address),
     photoUrl: optionalTrimmedString(raw.photoUrl),
     aadhaar: optionalTrimmedString(raw.aadhaar),
+    admissionNumber:
+      optionalTrimmedString(raw.admissionNumber) ??
+      (raw.id.startsWith("STU-") ? `ADM-${raw.id.slice(4)}` : undefined),
     placeOfBirth: optionalTrimmedString(raw.placeOfBirth),
     nationality: optionalTrimmedString(raw.nationality),
     religion: optionalTrimmedString(raw.religion),
@@ -467,6 +605,12 @@ export function normalizeStudent(
 
 export function normalizeStaff(raw: Partial<Staff> & Pick<Staff, "id" | "name" | "role" | "dept" | "active">): Staff {
   const joinedAt = typeof raw.joinedAt === "string" && raw.joinedAt ? raw.joinedAt : "2025-01-01";
+  const attendanceByMonth = Array.isArray(raw.attendanceByMonth)
+    ? raw.attendanceByMonth
+        .map((row) => normalizeStaffAttendanceMonth(row))
+        .filter((row): row is StaffAttendanceMonth => row !== null)
+        .sort((a, b) => b.month.localeCompare(a.month))
+    : undefined;
   return {
     id: raw.id,
     name: raw.name,
@@ -487,6 +631,9 @@ export function normalizeStaff(raw: Partial<Staff> & Pick<Staff, "id" | "name" |
       typeof raw.additionalAllowances === "number" && Number.isFinite(raw.additionalAllowances)
         ? raw.additionalAllowances
         : 0,
+    ...(attendanceByMonth && attendanceByMonth.length
+      ? { attendanceByMonth }
+      : {}),
     documents: normalizeStaffDocuments(raw.documents),
     salaryHistory: normalizeSalaryHistory(raw.salaryHistory),
     statusHistory: normalizeStatusHistory(raw.statusHistory, joinedAt, raw.id),
@@ -510,6 +657,8 @@ export type Payment = {
   mode: string;
   amount: number;
   time: string;
+  /** Academic year books this receipt belongs to · e.g. "AY 2025-26" */
+  academicYear?: string;
   /** Student receipts reduce ledger due; external are school income only */
   payerType?: "student" | "external";
   className?: string;
@@ -546,12 +695,24 @@ export const FEE_MONTHS = [
 
 export type FeePeriodKind = "month" | "term";
 export type FeeTermKind = "tuition" | "vehicle";
+/** Whether this period is a multi-month term or a single calendar month */
+export type FeePeriodMode = "term" | "month";
 
 export type FeeTerm = {
   id: string;
   kind: FeeTermKind;
+  /** term = Term 1/2/… · month = April/May/… */
+  periodMode: FeePeriodMode;
   label: string;
-  /** Optional coverage note · e.g. "Apr – Jun" */
+  /** Academic year these periods belong to · e.g. "AY 2025-26" */
+  academicYear?: string;
+  /** Coverage start · ISO YYYY-MM-DD */
+  startDate?: string;
+  /** Coverage end · ISO YYYY-MM-DD */
+  endDate?: string;
+  /** Optional school-wide override · normally unused — Class Tier totals auto-split across periods */
+  feeAmount?: number;
+  /** Display coverage · auto-built from dates when present */
   coverage?: string;
 };
 
@@ -560,8 +721,105 @@ export const FEE_TERM_KIND_LABELS: Record<FeeTermKind, string> = {
   vehicle: "Vehicle Fee",
 };
 
+export const FEE_PERIOD_MODE_LABELS: Record<FeePeriodMode, string> = {
+  term: "Term",
+  month: "Month",
+};
+
+/**
+ * Split a class-tier total evenly across N periods (terms or months).
+ * Remainder rupees go to the earliest periods so the parts always sum to `total`.
+ * e.g. 20000 / 4 → [5000, 5000, 5000, 5000]; 20001 / 4 → [5001, 5000, 5000, 5000]
+ */
+export function splitAmountAcrossTerms(total: number, termCount: number): number[] {
+  if (!Number.isFinite(total) || total <= 0 || !Number.isFinite(termCount) || termCount <= 0) {
+    return [];
+  }
+  const safeTotal = Math.round(total);
+  const count = Math.floor(termCount);
+  const base = Math.floor(safeTotal / count);
+  const rem = safeTotal % count;
+  return Array.from({ length: count }, (_, i) => base + (i < rem ? 1 : 0));
+}
+
+export function resolveFeePeriodMode(value: unknown): FeePeriodMode {
+  return value === "month" ? "month" : "term";
+}
+
+/** Stable order for fee periods of one kind · by start date, then label. */
+export function sortFeeTerms(terms: FeeTerm[]): FeeTerm[] {
+  return terms.slice().sort((a, b) => {
+    const aStart = a.startDate ?? "";
+    const bStart = b.startDate ?? "";
+    if (aStart !== bStart) return aStart.localeCompare(bStart);
+    return a.label.localeCompare(b.label);
+  });
+}
+
+export function filterFeePeriods(
+  terms: FeeTerm[],
+  periodMode: FeePeriodMode,
+  kind?: FeeTermKind | null,
+): FeeTerm[] {
+  return sortFeeTerms(
+    terms.filter(
+      (t) =>
+        resolveFeePeriodMode(t.periodMode) === periodMode &&
+        (kind ? t.kind === kind : true),
+    ),
+  );
+}
+
+/**
+ * Per-period amount for a class tier total given the periods of that kind.
+ * Returns undefined when total or periods are missing.
+ */
+export function classFeeAmountForTerm(
+  totalAmount: number | undefined,
+  termsOfKind: FeeTerm[],
+  selectedTerm: Pick<FeeTerm, "id" | "label"> | undefined,
+): number | undefined {
+  if (!totalAmount || totalAmount <= 0 || !selectedTerm || termsOfKind.length === 0) {
+    return undefined;
+  }
+  const ordered = sortFeeTerms(termsOfKind);
+  const index = ordered.findIndex(
+    (t) => t.id === selectedTerm.id || t.label === selectedTerm.label,
+  );
+  if (index < 0) return undefined;
+  return splitAmountAcrossTerms(totalAmount, ordered.length)[index];
+}
+
 export function currentFeeMonth(date = new Date()): string {
   return date.toLocaleString("en-IN", { month: "long" });
+}
+
+function parseIsoDateParts(iso?: string): { y: number; m: number; d: number } | null {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return null;
+  return { y, m, d };
+}
+
+/** Short coverage label from ISO dates · e.g. "1 Apr 2025 – 30 Jun 2025" */
+export function formatFeeTermCoverage(
+  startDate?: string,
+  endDate?: string,
+  fallback?: string,
+): string | undefined {
+  const start = parseIsoDateParts(startDate);
+  const end = parseIsoDateParts(endDate);
+  if (start && end) {
+    const fmt = (p: { y: number; m: number; d: number }) =>
+      new Date(p.y, p.m - 1, p.d).toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+    return `${fmt(start)} – ${fmt(end)}`;
+  }
+  const note = fallback?.trim();
+  return note || undefined;
 }
 
 export function resolvePaymentFeePeriod(payment: Payment): string | undefined {
@@ -588,15 +846,38 @@ export function categoryFeeTermKind(categoryLabel: string): FeeTermKind | null {
 
 export function normalizeFeeTerm(
   raw: Partial<FeeTerm> & Pick<FeeTerm, "id" | "label">,
+  fallbackAcademicYear = "AY 2025-26",
 ): FeeTerm | null {
   const label = raw.label?.trim();
   if (!label || !raw.id?.trim()) return null;
   const kind: FeeTermKind = raw.kind === "vehicle" ? "vehicle" : "tuition";
-  const coverage = raw.coverage?.trim();
+  const periodMode = resolveFeePeriodMode(raw.periodMode);
+  const startDate =
+    typeof raw.startDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw.startDate.trim())
+      ? raw.startDate.trim()
+      : undefined;
+  const endDate =
+    typeof raw.endDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw.endDate.trim())
+      ? raw.endDate.trim()
+      : undefined;
+  const feeAmount =
+    typeof raw.feeAmount === "number" && Number.isFinite(raw.feeAmount) && raw.feeAmount > 0
+      ? Math.round(raw.feeAmount)
+      : undefined;
+  const coverage = formatFeeTermCoverage(startDate, endDate, raw.coverage);
+  const academicYear =
+    typeof raw.academicYear === "string" && raw.academicYear.trim()
+      ? raw.academicYear.trim()
+      : fallbackAcademicYear;
   return {
     id: raw.id.trim(),
     kind,
+    periodMode,
     label,
+    academicYear,
+    ...(startDate ? { startDate } : {}),
+    ...(endDate ? { endDate } : {}),
+    ...(feeAmount !== undefined ? { feeAmount } : {}),
     ...(coverage ? { coverage } : {}),
   };
 }
@@ -645,6 +926,20 @@ export function normalizeTenantUser(raw: Partial<TenantUser> & Pick<TenantUser, 
 
 export const SEED_TENANT_USERS: TenantUser[] = [];
 
+export type ClassBillingCycle = "Monthly" | "Term" | "Annually";
+
+export const CLASS_BILLING_CYCLES: ClassBillingCycle[] = [
+  "Monthly",
+  "Term",
+  "Annually",
+];
+
+export const CLASS_BILLING_CYCLE_HINTS: Record<ClassBillingCycle, string> = {
+  Monthly: "Total is split evenly across Fee Months (e.g. ₹24,000 ÷ 12 months = ₹2,000 each)",
+  Term: "Total is split evenly across Fee Terms (e.g. ₹20,000 ÷ 4 terms = ₹5,000 each)",
+  Annually: "Amount charged once per academic year",
+};
+
 export type ClassConfig = {
   id: string;
   /** Combined display / student match key · e.g. "Grade 8 - B" */
@@ -653,8 +948,12 @@ export type ClassConfig = {
   grade: string;
   /** Section / division · e.g. "A", "B" */
   section: string;
+  /** Total tuition for one billing cycle */
   tuitionFeeAmount: number;
-  billingCycle: "Monthly" | "Annually";
+  /** Transport / vehicle fee for one billing cycle · 0 when not applicable */
+  vehicleFeeAmount: number;
+  /** How often tuition + vehicle amounts are billed */
+  billingCycle: ClassBillingCycle;
   /** Optional class teacher from staff roster */
   classTeacherId?: string;
 };
@@ -677,8 +976,15 @@ export function splitClassName(className: string): { grade: string; section: str
   };
 }
 
+export function normalizeClassBillingCycle(
+  value: unknown,
+): ClassBillingCycle {
+  if (value === "Annually" || value === "Term" || value === "Monthly") return value;
+  return "Monthly";
+}
+
 export function normalizeClassConfig(
-  raw: Partial<ClassConfig> & Pick<ClassConfig, "id" | "tuitionFeeAmount" | "billingCycle"> & {
+  raw: Partial<ClassConfig> & Pick<ClassConfig, "id" | "tuitionFeeAmount"> & {
     className?: string;
   },
 ): ClassConfig {
@@ -695,16 +1001,22 @@ export function normalizeClassConfig(
     typeof raw.className === "string" && raw.className.trim()
       ? raw.className.trim()
       : composeClassName(grade, section);
+  const tuitionFeeAmount =
+    typeof raw.tuitionFeeAmount === "number" && Number.isFinite(raw.tuitionFeeAmount)
+      ? Math.max(0, Math.round(raw.tuitionFeeAmount))
+      : 0;
+  const vehicleFeeAmount =
+    typeof raw.vehicleFeeAmount === "number" && Number.isFinite(raw.vehicleFeeAmount)
+      ? Math.max(0, Math.round(raw.vehicleFeeAmount))
+      : 0;
   return {
     id: raw.id,
     className,
     grade: grade || splitClassName(className).grade,
     section: section || splitClassName(className).section,
-    tuitionFeeAmount:
-      typeof raw.tuitionFeeAmount === "number" && Number.isFinite(raw.tuitionFeeAmount)
-        ? raw.tuitionFeeAmount
-        : 0,
-    billingCycle: raw.billingCycle === "Annually" ? "Annually" : "Monthly",
+    tuitionFeeAmount,
+    vehicleFeeAmount,
+    billingCycle: normalizeClassBillingCycle(raw.billingCycle),
     classTeacherId:
       typeof raw.classTeacherId === "string" && raw.classTeacherId.trim()
         ? raw.classTeacherId.trim()
@@ -790,7 +1102,8 @@ export type PaymentCategory = {
 };
 
 export type ThemeSettings = {
-  mode: "System" | "Light" | "High Contrast";
+  mode: "Light" | "Dark";
+  /** Legacy field — workspace accent is fixed to brand teal */
   accent: "Neon Lime" | "Pale Lime" | "Ink";
   density: "Comfortable" | "Compact";
   navPlacement: "Left" | "Right" | "Top" | "Bottom";
@@ -822,8 +1135,9 @@ export type TenantNotification = {
   href?: string;
 };
 
-const STORAGE_KEY = "school-accounts/tenant-store/v10";
+const STORAGE_KEY = "school-accounts/tenant-store/v11";
 const LEGACY_STORAGE_KEYS = [
+  "school-accounts/tenant-store/v10",
   "school-accounts/tenant-store/v9",
   "school-accounts/tenant-store/v8",
   "school-accounts/tenant-store/v7",
@@ -1139,6 +1453,7 @@ function normalizeNotifications(raw: unknown): TenantNotification[] {
 export const SEED_STUDENTS: Student[] = [
   {
     id: "STU-2847",
+    admissionNumber: "ADM-2847",
     name: "Muhammed",
     cls: "LKG",
     guardian: "Hira Abbas",
@@ -1151,6 +1466,7 @@ export const SEED_STUDENTS: Student[] = [
   },
   {
     id: "STU-2848",
+    admissionNumber: "ADM-2848",
     name: "Fathima",
     cls: "LKG",
     guardian: "Ibrahim",
@@ -1163,6 +1479,7 @@ export const SEED_STUDENTS: Student[] = [
   },
   {
     id: "STU-2841",
+    admissionNumber: "ADM-2841",
     name: "Aarav Sharma",
     cls: "Grade 8 - B",
     guardian: "Vinod Sharma",
@@ -1175,6 +1492,7 @@ export const SEED_STUDENTS: Student[] = [
   },
   {
     id: "STU-2842",
+    admissionNumber: "ADM-2842",
     name: "Hira Abbas",
     cls: "LKG - M",
     guardian: "Iqbal Abbas",
@@ -1187,6 +1505,7 @@ export const SEED_STUDENTS: Student[] = [
   },
   {
     id: "STU-2843",
+    admissionNumber: "ADM-2843",
     name: "Meera Iyer",
     cls: "Grade 10 - A",
     guardian: "Devanand Iyer",
@@ -1199,6 +1518,7 @@ export const SEED_STUDENTS: Student[] = [
   },
   {
     id: "STU-2844",
+    admissionNumber: "ADM-2844",
     name: "Kabir Khanna",
     cls: "Grade 6 - C",
     guardian: "Anjali Khanna",
@@ -1211,6 +1531,7 @@ export const SEED_STUDENTS: Student[] = [
   },
   {
     id: "STU-2845",
+    admissionNumber: "ADM-2845",
     name: "Tara Mehta",
     cls: "Grade 4 - B",
     guardian: "Rohan Mehta",
@@ -1223,6 +1544,7 @@ export const SEED_STUDENTS: Student[] = [
   },
   {
     id: "STU-2846",
+    admissionNumber: "ADM-2846",
     name: "Yash Pillai",
     cls: "Grade 12 - A",
     guardian: "Latha Pillai",
@@ -1671,6 +1993,47 @@ export const SEED_STAFF: Staff[] = [
 ];
 
 export const SEED_PAYMENTS: Payment[] = [
+  // AY 2024-25 · closed books
+  {
+    id: "RC-9701",
+    name: "Aarav Sharma",
+    cat: "Tuition Fee",
+    mode: "Bank",
+    amount: 18000,
+    time: "12 Mar 2025",
+    academicYear: "AY 2024-25",
+    payerType: "student",
+    className: "Grade 7 - B",
+    feePeriodKind: "term",
+    feePeriod: "Term 4",
+  },
+  {
+    id: "RC-9702",
+    name: "Meera Iyer",
+    cat: "Tuition Fee",
+    mode: "UPI",
+    amount: 16000,
+    time: "05 Mar 2025",
+    academicYear: "AY 2024-25",
+    payerType: "student",
+    className: "Grade 9 - A",
+    feePeriodKind: "term",
+    feePeriod: "Term 4",
+  },
+  {
+    id: "RC-9703",
+    name: "Kabir Khanna",
+    cat: "Vehicle Fee",
+    mode: "Cash",
+    amount: 4500,
+    time: "28 Feb 2025",
+    academicYear: "AY 2024-25",
+    payerType: "student",
+    className: "Grade 5 - C",
+    feePeriodKind: "term",
+    feePeriod: "Term 4",
+  },
+  // AY 2025-26 · current books
   {
     id: "RC-9821",
     name: "Aarav Sharma",
@@ -1678,6 +2041,11 @@ export const SEED_PAYMENTS: Payment[] = [
     mode: "UPI",
     amount: 4500,
     time: "Today · 10:22",
+    academicYear: "AY 2025-26",
+    payerType: "student",
+    className: "Grade 8 - B",
+    feePeriodKind: "month",
+    feePeriod: "July",
   },
   {
     id: "RC-9820",
@@ -1686,6 +2054,11 @@ export const SEED_PAYMENTS: Payment[] = [
     mode: "Bank",
     amount: 1800,
     time: "Today · 09:51",
+    academicYear: "AY 2025-26",
+    payerType: "student",
+    className: "Grade 10 - A",
+    feePeriodKind: "month",
+    feePeriod: "July",
   },
   {
     id: "RC-9819",
@@ -1694,6 +2067,11 @@ export const SEED_PAYMENTS: Payment[] = [
     mode: "Cash",
     amount: 2200,
     time: "Yesterday",
+    academicYear: "AY 2025-26",
+    payerType: "student",
+    className: "Grade 6 - C",
+    feePeriodKind: "month",
+    feePeriod: "July",
   },
   {
     id: "RC-9818",
@@ -1702,6 +2080,8 @@ export const SEED_PAYMENTS: Payment[] = [
     mode: "UPI",
     amount: 1000,
     time: "Yesterday",
+    academicYear: "AY 2025-26",
+    payerType: "external",
   },
   {
     id: "RC-9817",
@@ -1710,6 +2090,11 @@ export const SEED_PAYMENTS: Payment[] = [
     mode: "Bank",
     amount: 3200,
     time: "2d ago",
+    academicYear: "AY 2025-26",
+    payerType: "student",
+    className: "Grade 4 - B",
+    feePeriodKind: "month",
+    feePeriod: "June",
   },
 ];
 
@@ -1735,6 +2120,7 @@ export const SEED_CLASSES: ClassConfig[] = [
     grade: "LKG",
     section: "M",
     tuitionFeeAmount: 3273,
+    vehicleFeeAmount: 1500,
     billingCycle: "Monthly",
   },
   {
@@ -1743,6 +2129,7 @@ export const SEED_CLASSES: ClassConfig[] = [
     grade: "Grade 4",
     section: "B",
     tuitionFeeAmount: 4000,
+    vehicleFeeAmount: 1600,
     billingCycle: "Monthly",
   },
   {
@@ -1751,6 +2138,7 @@ export const SEED_CLASSES: ClassConfig[] = [
     grade: "Grade 6",
     section: "C",
     tuitionFeeAmount: 4500,
+    vehicleFeeAmount: 1700,
     billingCycle: "Monthly",
   },
   {
@@ -1759,7 +2147,8 @@ export const SEED_CLASSES: ClassConfig[] = [
     grade: "Grade 8",
     section: "B",
     tuitionFeeAmount: 5200,
-    billingCycle: "Monthly",
+    vehicleFeeAmount: 1800,
+    billingCycle: "Term",
   },
   {
     id: "CLS-005",
@@ -1767,7 +2156,8 @@ export const SEED_CLASSES: ClassConfig[] = [
     grade: "Grade 10",
     section: "A",
     tuitionFeeAmount: 6800,
-    billingCycle: "Monthly",
+    vehicleFeeAmount: 2000,
+    billingCycle: "Term",
   },
   {
     id: "CLS-006",
@@ -1775,7 +2165,8 @@ export const SEED_CLASSES: ClassConfig[] = [
     grade: "Grade 12",
     section: "A",
     tuitionFeeAmount: 8400,
-    billingCycle: "Monthly",
+    vehicleFeeAmount: 2200,
+    billingCycle: "Annually",
   },
 ];
 
@@ -1887,21 +2278,181 @@ export const SEED_PAYMENT_CATEGORIES: PaymentCategory[] = [
   { id: "PC-004", label: "Other" },
 ];
 
+function buildSeedAcademicFeeMonths(
+  startYear: number,
+  academicYear: string,
+  idStart: number,
+): FeeTerm[] {
+  /** Indian academic / FY order · April → March */
+  const months: { label: string; y: number; m: number }[] = [
+    { label: "April", y: startYear, m: 4 },
+    { label: "May", y: startYear, m: 5 },
+    { label: "June", y: startYear, m: 6 },
+    { label: "July", y: startYear, m: 7 },
+    { label: "August", y: startYear, m: 8 },
+    { label: "September", y: startYear, m: 9 },
+    { label: "October", y: startYear, m: 10 },
+    { label: "November", y: startYear, m: 11 },
+    { label: "December", y: startYear, m: 12 },
+    { label: "January", y: startYear + 1, m: 1 },
+    { label: "February", y: startYear + 1, m: 2 },
+    { label: "March", y: startYear + 1, m: 3 },
+  ];
+  const out: FeeTerm[] = [];
+  let n = idStart;
+  for (const kind of ["tuition", "vehicle"] as const) {
+    for (const mo of months) {
+      const lastDay = new Date(mo.y, mo.m, 0).getDate();
+      const startDate = `${mo.y}-${String(mo.m).padStart(2, "0")}-01`;
+      const endDate = `${mo.y}-${String(mo.m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+      out.push({
+        id: `FT-${String(n++).padStart(3, "0")}`,
+        kind,
+        periodMode: "month",
+        label: mo.label,
+        academicYear,
+        startDate,
+        endDate,
+        coverage: formatFeeTermCoverage(startDate, endDate),
+      });
+    }
+  }
+  return out;
+}
+
+function buildSeedFeeTermsForYear(
+  academicYear: string,
+  startYear: number,
+  idOffset: number,
+): FeeTerm[] {
+  const terms: FeeTerm[] = [
+    {
+      id: `FT-${String(idOffset + 1).padStart(3, "0")}`,
+      kind: "tuition",
+      periodMode: "term",
+      label: "Term 1",
+      academicYear,
+      startDate: `${startYear}-04-01`,
+      endDate: `${startYear}-06-30`,
+      coverage: formatFeeTermCoverage(`${startYear}-04-01`, `${startYear}-06-30`),
+    },
+    {
+      id: `FT-${String(idOffset + 2).padStart(3, "0")}`,
+      kind: "tuition",
+      periodMode: "term",
+      label: "Term 2",
+      academicYear,
+      startDate: `${startYear}-07-01`,
+      endDate: `${startYear}-09-30`,
+      coverage: formatFeeTermCoverage(`${startYear}-07-01`, `${startYear}-09-30`),
+    },
+    {
+      id: `FT-${String(idOffset + 3).padStart(3, "0")}`,
+      kind: "tuition",
+      periodMode: "term",
+      label: "Term 3",
+      academicYear,
+      startDate: `${startYear}-10-01`,
+      endDate: `${startYear}-12-31`,
+      coverage: formatFeeTermCoverage(`${startYear}-10-01`, `${startYear}-12-31`),
+    },
+    {
+      id: `FT-${String(idOffset + 4).padStart(3, "0")}`,
+      kind: "tuition",
+      periodMode: "term",
+      label: "Term 4",
+      academicYear,
+      startDate: `${startYear + 1}-01-01`,
+      endDate: `${startYear + 1}-03-31`,
+      coverage: formatFeeTermCoverage(`${startYear + 1}-01-01`, `${startYear + 1}-03-31`),
+    },
+    {
+      id: `FT-${String(idOffset + 5).padStart(3, "0")}`,
+      kind: "vehicle",
+      periodMode: "term",
+      label: "Term 1",
+      academicYear,
+      startDate: `${startYear}-04-01`,
+      endDate: `${startYear}-06-30`,
+      coverage: formatFeeTermCoverage(`${startYear}-04-01`, `${startYear}-06-30`),
+    },
+    {
+      id: `FT-${String(idOffset + 6).padStart(3, "0")}`,
+      kind: "vehicle",
+      periodMode: "term",
+      label: "Term 2",
+      academicYear,
+      startDate: `${startYear}-07-01`,
+      endDate: `${startYear}-09-30`,
+      coverage: formatFeeTermCoverage(`${startYear}-07-01`, `${startYear}-09-30`),
+    },
+    {
+      id: `FT-${String(idOffset + 7).padStart(3, "0")}`,
+      kind: "vehicle",
+      periodMode: "term",
+      label: "Term 3",
+      academicYear,
+      startDate: `${startYear}-10-01`,
+      endDate: `${startYear}-12-31`,
+      coverage: formatFeeTermCoverage(`${startYear}-10-01`, `${startYear}-12-31`),
+    },
+    {
+      id: `FT-${String(idOffset + 8).padStart(3, "0")}`,
+      kind: "vehicle",
+      periodMode: "term",
+      label: "Term 4",
+      academicYear,
+      startDate: `${startYear + 1}-01-01`,
+      endDate: `${startYear + 1}-03-31`,
+      coverage: formatFeeTermCoverage(`${startYear + 1}-01-01`, `${startYear + 1}-03-31`),
+    },
+    ...buildSeedAcademicFeeMonths(startYear, academicYear, idOffset + 9),
+  ];
+  return terms;
+}
+
 export const SEED_FEE_TERMS: FeeTerm[] = [
-  { id: "FT-001", kind: "tuition", label: "Term 1", coverage: "Apr – Jun" },
-  { id: "FT-002", kind: "tuition", label: "Term 2", coverage: "Jul – Sep" },
-  { id: "FT-003", kind: "tuition", label: "Term 3", coverage: "Oct – Dec" },
-  { id: "FT-004", kind: "tuition", label: "Term 4", coverage: "Jan – Mar" },
-  { id: "FT-005", kind: "vehicle", label: "Term 1", coverage: "Apr – Jun" },
-  { id: "FT-006", kind: "vehicle", label: "Term 2", coverage: "Jul – Sep" },
-  { id: "FT-007", kind: "vehicle", label: "Term 3", coverage: "Oct – Dec" },
-  { id: "FT-008", kind: "vehicle", label: "Term 4", coverage: "Jan – Mar" },
+  ...buildSeedFeeTermsForYear("AY 2024-25", 2024, 100),
+  ...buildSeedFeeTermsForYear("AY 2025-26", 2025, 0),
+  ...buildSeedFeeTermsForYear("AY 2026-27", 2026, 200),
 ];
 
 export const SEED_ACADEMIC_YEARS = ["AY 2024-25", "AY 2025-26", "AY 2026-27"];
 /** @deprecated Prefer `academicYears` from the tenant store */
 export const ACADEMIC_YEAR_OPTIONS = SEED_ACADEMIC_YEARS;
 export const SEED_ACADEMIC_YEAR = "AY 2025-26";
+
+/** Year-scoped enrollment / dues. AY 2026-27 starts empty (future books). */
+export const SEED_STUDENT_YEAR_LEDGERS: StudentYearLedger[] = [
+  {
+    academicYear: "AY 2024-25",
+    byStudentId: {
+      "STU-2841": { cls: "Grade 7 - B", due: 0, active: true },
+      "STU-2842": { cls: "LKG - M", due: 0, active: true },
+      "STU-2843": { cls: "Grade 9 - A", due: 0, active: true },
+      "STU-2844": { cls: "Grade 5 - C", due: 0, active: true },
+      "STU-2845": { cls: "Grade 3 - B", due: 0, active: true },
+      "STU-2846": { cls: "Grade 11 - A", due: 0, active: true },
+    },
+  },
+  {
+    academicYear: "AY 2025-26",
+    byStudentId: Object.fromEntries(
+      SEED_STUDENTS.filter((s) => !s.deletedAt).map((s) => [
+        s.id,
+        {
+          cls: s.cls,
+          due: s.due,
+          active: s.active !== false,
+        },
+      ]),
+    ),
+  },
+  {
+    academicYear: "AY 2026-27",
+    byStudentId: {},
+  },
+];
 
 /** Normalize free-text into `AY YYYY-YY` when possible. */
 export function normalizeAcademicYearLabel(input: string): string | null {
@@ -1929,7 +2480,7 @@ function ensureAcademicYearInList(years: string[], active: string): string[] {
   return cleaned.length > 0 ? cleaned : [...SEED_ACADEMIC_YEARS];
 }
 
-export const THEME_MODE_OPTIONS: ThemeSettings["mode"][] = ["System", "Light", "High Contrast"];
+export const THEME_MODE_OPTIONS: ThemeSettings["mode"][] = ["Light", "Dark"];
 export const THEME_ACCENT_OPTIONS: ThemeSettings["accent"][] = ["Neon Lime", "Pale Lime", "Ink"];
 export const THEME_DENSITY_OPTIONS: ThemeSettings["density"][] = ["Comfortable", "Compact"];
 export const THEME_NAV_PLACEMENT_OPTIONS: ThemeSettings["navPlacement"][] = [
@@ -1938,6 +2489,30 @@ export const THEME_NAV_PLACEMENT_OPTIONS: ThemeSettings["navPlacement"][] = [
   "Top",
   "Bottom",
 ];
+
+export function applyWorkspaceThemeMode(mode: ThemeSettings["mode"]) {
+  if (typeof document === "undefined") return;
+  const root = document.documentElement;
+  const dark = mode === "Dark";
+  root.classList.toggle("dark", dark);
+  root.style.colorScheme = dark ? "dark" : "light";
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", dark ? "#0a0a0a" : "#EAEAEA");
+}
+
+export function peekStoredThemeMode(): ThemeSettings["mode"] {
+  if (typeof window === "undefined") return "Light";
+  try {
+    const raw =
+      window.localStorage.getItem(STORAGE_KEY) ??
+      LEGACY_STORAGE_KEYS.map((key) => window.localStorage.getItem(key)).find(Boolean);
+    if (!raw) return "Light";
+    const parsed = JSON.parse(raw) as { themeSettings?: { mode?: unknown } };
+    return normalizeThemeMode(parsed.themeSettings?.mode);
+  } catch {
+    return "Light";
+  }
+}
 
 export function getStoredNavPlacement(): ThemeSettings["navPlacement"] {
   if (typeof window === "undefined") return "Left";
@@ -1961,7 +2536,7 @@ export function getStoredNavPlacement(): ThemeSettings["navPlacement"] {
 }
 
 export const SEED_THEME_SETTINGS: ThemeSettings = {
-  mode: "System",
+  mode: "Light",
   accent: "Neon Lime",
   density: "Comfortable",
   navPlacement: "Left",
@@ -1991,6 +2566,7 @@ type Snapshot = {
   transportVehicles: TransportVehicle[];
   paymentCategories: PaymentCategory[];
   feeTerms: FeeTerm[];
+  studentYearLedgers: StudentYearLedger[];
   academicYears: string[];
   academicYear: string;
   themeSettings: ThemeSettings;
@@ -2004,10 +2580,14 @@ type Snapshot = {
 type TenantStoreValue = {
   students: Student[];
   setStudents: Dispatch<SetStateAction<Student[]>>;
+  /** Students enrolled in the active academic year (dues/class from year ledger). */
+  activeStudents: Student[];
   staff: Staff[];
   setStaff: Dispatch<SetStateAction<Staff[]>>;
   payments: Payment[];
   setPayments: Dispatch<SetStateAction<Payment[]>>;
+  /** Receipts stamped for the active academic year. */
+  activePayments: Payment[];
   departments: Department[];
   setDepartments: Dispatch<SetStateAction<Department[]>>;
   roles: Role[];
@@ -2024,10 +2604,27 @@ type TenantStoreValue = {
   setPaymentCategories: Dispatch<SetStateAction<PaymentCategory[]>>;
   feeTerms: FeeTerm[];
   setFeeTerms: Dispatch<SetStateAction<FeeTerm[]>>;
+  /** Fee periods for the active academic year. */
+  activeFeeTerms: FeeTerm[];
+  studentYearLedgers: StudentYearLedger[];
+  setStudentYearLedgers: Dispatch<SetStateAction<StudentYearLedger[]>>;
   academicYears: string[];
   setAcademicYears: Dispatch<SetStateAction<string[]>>;
   academicYear: string;
   setAcademicYear: Dispatch<SetStateAction<string>>;
+  /** Open another year’s books (updates active year + syncs student overlays). */
+  openAcademicYear: (year: string) => { receipts: number; enrolled: number };
+  /** Add a year, cloning fee terms from the nearest existing year. */
+  addAcademicYear: (year: string) => boolean;
+  /** Whether a year can be deleted (no payments / enrollments / sole year). */
+  canDeleteAcademicYear: (year: string) => { ok: boolean; reason?: string };
+  deleteAcademicYear: (year: string) => boolean;
+  enrollStudentInActiveYear: (
+    studentId: string,
+    fields: StudentYearFields,
+  ) => void;
+  /** Atomically add a new student and enroll them in the active academic year. */
+  admitStudentToActiveYear: (student: Student, fields: StudentYearFields) => Student;
   themeSettings: ThemeSettings;
   setThemeSettings: Dispatch<SetStateAction<ThemeSettings>>;
   schoolDetails: SchoolDetails;
@@ -2041,14 +2638,27 @@ type TenantStoreValue = {
   resetTenant: () => void;
 };
 
-function isThemeSettings(value: unknown): value is Omit<ThemeSettings, "navPlacement"> & {
+function normalizeThemeMode(value: unknown): ThemeSettings["mode"] {
+  if (value === "Dark") return "Dark";
+  return "Light";
+}
+
+function normalizeThemeAccent(value: unknown): ThemeSettings["accent"] {
+  if (THEME_ACCENT_OPTIONS.includes(value as ThemeSettings["accent"])) {
+    return value as ThemeSettings["accent"];
+  }
+  return SEED_THEME_SETTINGS.accent;
+}
+
+function isThemeSettings(value: unknown): value is Omit<ThemeSettings, "navPlacement" | "mode" | "accent"> & {
+  mode?: unknown;
+  accent?: unknown;
   navPlacement?: ThemeSettings["navPlacement"];
 } {
   const candidate = value as Partial<ThemeSettings> | null;
   return (
     !!candidate &&
-    THEME_MODE_OPTIONS.includes(candidate.mode as ThemeSettings["mode"]) &&
-    THEME_ACCENT_OPTIONS.includes(candidate.accent as ThemeSettings["accent"]) &&
+    typeof candidate === "object" &&
     THEME_DENSITY_OPTIONS.includes(candidate.density as ThemeSettings["density"])
   );
 }
@@ -2057,9 +2667,9 @@ function normalizeThemeSettings(value: unknown): ThemeSettings {
   if (!isThemeSettings(value)) return SEED_THEME_SETTINGS;
   const placement = value.navPlacement;
   return {
-    mode: value.mode,
-    accent: value.accent,
-    density: value.density,
+    mode: normalizeThemeMode(value.mode),
+    accent: normalizeThemeAccent(value.accent),
+    density: value.density as ThemeSettings["density"],
     navPlacement: THEME_NAV_PLACEMENT_OPTIONS.includes(placement as ThemeSettings["navPlacement"])
       ? (placement as ThemeSettings["navPlacement"])
       : "Left",
@@ -2105,6 +2715,57 @@ export function schoolInitials(name: string): string {
     .toUpperCase();
 }
 
+function normalizePayment(
+  raw: Partial<Payment> & Pick<Payment, "id" | "name" | "cat" | "mode" | "amount" | "time">,
+  fallbackYear: string,
+): Payment {
+  return {
+    ...raw,
+    academicYear:
+      typeof raw.academicYear === "string" && raw.academicYear.trim()
+        ? raw.academicYear.trim()
+        : fallbackYear,
+  };
+}
+
+function normalizeStudentYearLedgers(
+  raw: unknown,
+  students: Student[],
+  fallbackYear: string,
+): StudentYearLedger[] {
+  if (Array.isArray(raw) && raw.length > 0) {
+    const parsed: StudentYearLedger[] = [];
+    for (const entry of raw) {
+      if (!entry || typeof entry !== "object") continue;
+      const year =
+        typeof (entry as StudentYearLedger).academicYear === "string"
+          ? (entry as StudentYearLedger).academicYear.trim()
+          : "";
+      if (!year) continue;
+      const byRaw = (entry as StudentYearLedger).byStudentId;
+      const byStudentId: Record<string, StudentYearFields> = {};
+      if (byRaw && typeof byRaw === "object") {
+        for (const [id, fields] of Object.entries(byRaw)) {
+          if (!fields || typeof fields !== "object") continue;
+          byStudentId[id] = {
+            cls: typeof fields.cls === "string" ? fields.cls : "",
+            due:
+              typeof fields.due === "number" && Number.isFinite(fields.due)
+                ? Math.max(0, Math.round(fields.due))
+                : 0,
+            active: fields.active !== false,
+          };
+        }
+      }
+      parsed.push({ academicYear: year, byStudentId });
+    }
+    if (parsed.length > 0) {
+      return ensureYearLedger(parsed, fallbackYear);
+    }
+  }
+  return [buildLedgerFromStudents(students, fallbackYear)];
+}
+
 function parseSnapshot(raw: string): Snapshot | null {
   const parsed = JSON.parse(raw) as Partial<Snapshot> | null;
   if (
@@ -2121,15 +2782,74 @@ function parseSnapshot(raw: string): Snapshot | null {
   ) {
     return null;
   }
+  const academicYear = parsed.academicYear;
+  const students = parsed.students.map((s) => normalizeStudent(s as Student));
+  const hadLedgers =
+    Array.isArray((parsed as Partial<Snapshot>).studentYearLedgers) &&
+    ((parsed as Partial<Snapshot>).studentYearLedgers as unknown[]).length > 0;
+  const rawPayments = parsed.payments.map((p) =>
+    normalizePayment(
+      p as Partial<Payment> & Pick<Payment, "id" | "name" | "cat" | "mode" | "amount" | "time">,
+      academicYear,
+    ),
+  );
+  // Fresh partition upgrade: fold in demo books for other years when ledgers were absent.
+  const payments = hadLedgers
+    ? rawPayments
+    : [
+        ...SEED_PAYMENTS.filter((p) => (p.academicYear ?? "") !== academicYear),
+        ...rawPayments.map((p) => ({
+          ...p,
+          academicYear: p.academicYear ?? academicYear,
+        })),
+      ];
+  const feeTerms = Array.isArray((parsed as Partial<Snapshot>).feeTerms)
+    ? ((parsed as Partial<Snapshot>).feeTerms as Partial<FeeTerm>[])
+        .map((t) =>
+          normalizeFeeTerm(
+            t as Partial<FeeTerm> & Pick<FeeTerm, "id" | "label">,
+            academicYear,
+          ),
+        )
+        .filter((t): t is FeeTerm => t !== null)
+    : [...SEED_FEE_TERMS];
+  const migratedFeeTerms = hadLedgers
+    ? feeTerms
+    : (() => {
+        const stamped = feeTerms.map((t) => ({
+          ...t,
+          academicYear: t.academicYear ?? academicYear,
+        }));
+        const yearsPresent = new Set(stamped.map((t) => t.academicYear ?? academicYear));
+        const extras = SEED_FEE_TERMS.filter(
+          (t) => !yearsPresent.has(t.academicYear ?? ""),
+        );
+        return [...stamped, ...extras];
+      })();
+  const studentYearLedgers = hadLedgers
+    ? normalizeStudentYearLedgers(
+        (parsed as Partial<Snapshot>).studentYearLedgers,
+        students,
+        academicYear,
+      )
+    : (() => {
+        const current = buildLedgerFromStudents(students, academicYear);
+        const others = SEED_STUDENT_YEAR_LEDGERS.filter((l) => l.academicYear !== academicYear);
+        return [current, ...others];
+      })();
+  const ledger = getYearLedger(studentYearLedgers, academicYear);
+  const studentsWithYear = students.map((s) =>
+    applyLedgerToStudent(s, ledger.byStudentId[s.id]),
+  );
   return {
-    students: parsed.students.map((s) => normalizeStudent(s as Student)),
+    students: studentsWithYear,
     staff: parsed.staff.map((s) => normalizeStaff(s as Staff)),
-    payments: parsed.payments,
+    payments,
     departments: parsed.departments,
     roles: parsed.roles,
     classes: Array.isArray(parsed.classes)
       ? parsed.classes.map((c) =>
-          normalizeClassConfig(c as Partial<ClassConfig> & Pick<ClassConfig, "id" | "tuitionFeeAmount" | "billingCycle">),
+          normalizeClassConfig(c as Partial<ClassConfig> & Pick<ClassConfig, "id" | "tuitionFeeAmount">),
         )
       : [...SEED_CLASSES],
     transportRoutes: (parsed.transportRoutes ?? [])
@@ -2141,15 +2861,8 @@ function parseSnapshot(raw: string): Snapshot | null {
           .filter((v): v is TransportVehicle => v !== null)
       : [...SEED_VEHICLES],
     paymentCategories: parsed.paymentCategories,
-    feeTerms: Array.isArray((parsed as Partial<Snapshot>).feeTerms)
-      ? ((parsed as Partial<Snapshot>).feeTerms as Partial<FeeTerm>[])
-          .map((t) =>
-            normalizeFeeTerm(
-              t as Partial<FeeTerm> & Pick<FeeTerm, "id" | "label">,
-            ),
-          )
-          .filter((t): t is FeeTerm => t !== null)
-      : [...SEED_FEE_TERMS],
+    feeTerms: migratedFeeTerms,
+    studentYearLedgers,
     academicYears: ensureAcademicYearInList(
       Array.isArray(parsed.academicYears)
         ? parsed.academicYears.filter((y): y is string => typeof y === "string")
@@ -2404,8 +3117,11 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
   const [paymentCategories, setPaymentCategories] =
     useState<PaymentCategory[]>(SEED_PAYMENT_CATEGORIES);
   const [feeTerms, setFeeTerms] = useState<FeeTerm[]>(SEED_FEE_TERMS);
+  const [studentYearLedgers, setStudentYearLedgers] = useState<StudentYearLedger[]>(
+    SEED_STUDENT_YEAR_LEDGERS,
+  );
   const [academicYears, setAcademicYears] = useState<string[]>([...SEED_ACADEMIC_YEARS]);
-  const [academicYear, setAcademicYear] = useState<string>(SEED_ACADEMIC_YEAR);
+  const [academicYear, setAcademicYearState] = useState<string>(SEED_ACADEMIC_YEAR);
   const [themeSettings, setThemeSettings] = useState<ThemeSettings>(SEED_THEME_SETTINGS);
   const [schoolDetails, setSchoolDetails] = useState<SchoolDetails>(SEED_SCHOOL_DETAILS);
   const [dashboardTodos, setDashboardTodos] = useState<string[]>([...DEFAULT_DASHBOARD_TODOS]);
@@ -2425,7 +3141,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
         ? snap.classes.map((c) =>
             normalizeClassConfig(
               c as Partial<ClassConfig> &
-                Pick<ClassConfig, "id" | "tuitionFeeAmount" | "billingCycle">,
+                Pick<ClassConfig, "id" | "tuitionFeeAmount">,
             ),
           )
         : SEED_CLASSES,
@@ -2433,9 +3149,22 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
     setTransportRoutes(snap.transportRoutes);
     setTransportVehicles(snap.transportVehicles);
     setPaymentCategories(snap.paymentCategories);
-    setFeeTerms(Array.isArray(snap.feeTerms) ? snap.feeTerms : SEED_FEE_TERMS);
+    setFeeTerms(
+      Array.isArray(snap.feeTerms)
+        ? snap.feeTerms
+            .map((t) =>
+              normalizeFeeTerm(t as Partial<FeeTerm> & Pick<FeeTerm, "id" | "label">),
+            )
+            .filter((t): t is FeeTerm => t !== null)
+        : SEED_FEE_TERMS,
+    );
+    setStudentYearLedgers(
+      snap.studentYearLedgers?.length
+        ? snap.studentYearLedgers
+        : SEED_STUDENT_YEAR_LEDGERS,
+    );
     setAcademicYears(snap.academicYears);
-    setAcademicYear(snap.academicYear);
+    setAcademicYearState(snap.academicYear);
     setThemeSettings(snap.themeSettings);
     setSchoolDetails(snap.schoolDetails);
     setDashboardTodos(snap.dashboardTodos);
@@ -2449,8 +3178,10 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
     setHydrated(true);
   }, [applySnapshot]);
 
-  // Sync the full snapshot when another tab writes, so a stale tab never
-  // clobbers data created elsewhere (e.g. a user added in the admin tab).
+  useEffect(() => {
+    applyWorkspaceThemeMode(themeSettings.mode);
+  }, [themeSettings.mode]);
+
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
       if (event.key !== STORAGE_KEY || !event.newValue) return;
@@ -2476,6 +3207,21 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
     });
   }, [hydrated, transportVehicles]);
 
+  // Keep active-year ledger in sync when student due/cls/active change for enrolled IDs.
+  useEffect(() => {
+    if (!hydrated) return;
+    setStudentYearLedgers((prev) => {
+      const ledger = getYearLedger(prev, academicYear);
+      const enrolledIds = new Set(Object.keys(ledger.byStudentId));
+      if (enrolledIds.size === 0) return prev;
+      const activeSlice = students.filter((s) => enrolledIds.has(s.id) && !s.deletedAt);
+      const next = syncLedgerFromActiveStudents(prev, academicYear, activeSlice);
+      const prevFp = JSON.stringify(ledger.byStudentId);
+      const nextFp = JSON.stringify(getYearLedger(next, academicYear).byStudentId);
+      return prevFp === nextFp ? prev : next;
+    });
+  }, [hydrated, students, academicYear]);
+
   useEffect(() => {
     if (!hydrated) return;
     writeSnapshot({
@@ -2489,6 +3235,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       transportVehicles,
       paymentCategories,
       feeTerms,
+      studentYearLedgers,
       academicYears,
       academicYear,
       themeSettings,
@@ -2510,6 +3257,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
     transportVehicles,
     paymentCategories,
     feeTerms,
+    studentYearLedgers,
     academicYears,
     academicYear,
     themeSettings,
@@ -2519,6 +3267,142 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
     notifications,
     tenantUsers,
   ]);
+
+  const activePayments = useMemo(
+    () => filterByAcademicYear(payments, academicYear),
+    [payments, academicYear],
+  );
+  const activeFeeTerms = useMemo(
+    () => filterByAcademicYear(feeTerms, academicYear),
+    [feeTerms, academicYear],
+  );
+  const activeStudents = useMemo(
+    () => studentsForAcademicYear(students, studentYearLedgers, academicYear),
+    [students, studentYearLedgers, academicYear],
+  );
+
+  const setAcademicYear = useCallback<Dispatch<SetStateAction<string>>>(
+    (action) => {
+      setAcademicYearState((prev) => {
+        const next = typeof action === "function" ? action(prev) : action;
+        if (next === prev) return prev;
+        setStudentYearLedgers((ledgers) => {
+          const ensured = ensureYearLedger(ledgers, next);
+          const ledger = getYearLedger(ensured, next);
+          setStudents((current) =>
+            current.map((s) => applyLedgerToStudent(s, ledger.byStudentId[s.id])),
+          );
+          return ensured;
+        });
+        return next;
+      });
+    },
+    [],
+  );
+
+  const openAcademicYear = useCallback(
+    (year: string) => {
+      setAcademicYear(year);
+      return academicYearBookStats({
+        payments,
+        ledgers: studentYearLedgers,
+        year,
+      });
+    },
+    [payments, setAcademicYear, studentYearLedgers],
+  );
+
+  const addAcademicYear = useCallback(
+    (year: string) => {
+      if (academicYears.some((y) => y.toLowerCase() === year.toLowerCase())) {
+        return false;
+      }
+      const sourceYear =
+        academicYears.find((y) => y === academicYear) ??
+        academicYears[academicYears.length - 1] ??
+        SEED_ACADEMIC_YEAR;
+      const cloned = cloneFeeTermsForYear(
+        feeTerms,
+        sourceYear,
+        year,
+        `FT-${year.replace(/\s+/g, "")}`,
+      );
+      setFeeTerms((prev) => [...prev, ...cloned]);
+      setStudentYearLedgers((prev) => ensureYearLedger(prev, year));
+      setAcademicYears((prev) => [...prev, year]);
+      setAcademicYear(year);
+      return true;
+    },
+    [academicYear, academicYears, feeTerms, setAcademicYear],
+  );
+
+  const canDeleteAcademicYear = useCallback(
+    (year: string) => {
+      if (academicYears.length <= 1) {
+        return { ok: false, reason: "Keep at least one academic year" };
+      }
+      if (filterByAcademicYear(payments, year).length > 0) {
+        return { ok: false, reason: "This year still has receipts recorded" };
+      }
+      const enrolled = Object.keys(getYearLedger(studentYearLedgers, year).byStudentId)
+        .length;
+      if (enrolled > 0) {
+        return { ok: false, reason: "This year still has student enrollments" };
+      }
+      return { ok: true };
+    },
+    [academicYears.length, payments, studentYearLedgers],
+  );
+
+  const deleteAcademicYear = useCallback(
+    (year: string) => {
+      const check = canDeleteAcademicYear(year);
+      if (!check.ok) return false;
+      setAcademicYears((prev) => prev.filter((y) => y !== year));
+      setFeeTerms((prev) => prev.filter((t) => t.academicYear !== year));
+      setStudentYearLedgers((prev) => prev.filter((l) => l.academicYear !== year));
+      setPayments((prev) => prev.filter((p) => p.academicYear !== year));
+      if (academicYear === year) {
+        const next = academicYears.find((y) => y !== year);
+        if (next) setAcademicYear(next);
+      }
+      return true;
+    },
+    [academicYear, academicYears, canDeleteAcademicYear, setAcademicYear],
+  );
+
+  const enrollStudentInActiveYear = useCallback(
+    (studentId: string, fields: StudentYearFields) => {
+      setStudentYearLedgers((prev) =>
+        upsertStudentYearFields(prev, academicYear, studentId, fields),
+      );
+      setStudents((prev) =>
+        prev.map((s) =>
+          s.id === studentId
+            ? applyLedgerToStudent(s, {
+                cls: fields.cls,
+                due: fields.due,
+                active: fields.active,
+              })
+            : s,
+        ),
+      );
+    },
+    [academicYear],
+  );
+
+  const admitStudentToActiveYear = useCallback(
+    (student: Student, fields: StudentYearFields) => {
+      const enrolled = applyLedgerToStudent(normalizeStudent(student), fields);
+      setStudentYearLedgers((prev) =>
+        upsertStudentYearFields(prev, academicYear, enrolled.id, fields),
+      );
+      setStudents((prev) => [enrolled, ...prev.filter((s) => s.id !== enrolled.id)]);
+      upsertStudentInSnapshot(enrolled);
+      return enrolled;
+    },
+    [academicYear],
+  );
 
   const resetTenant = () => {
     setStudents(SEED_STUDENTS);
@@ -2532,8 +3416,9 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
     setTransportVehicles(SEED_VEHICLES);
     setPaymentCategories(SEED_PAYMENT_CATEGORIES);
     setFeeTerms(SEED_FEE_TERMS);
+    setStudentYearLedgers(SEED_STUDENT_YEAR_LEDGERS);
     setAcademicYears([...SEED_ACADEMIC_YEARS]);
-    setAcademicYear(SEED_ACADEMIC_YEAR);
+    setAcademicYearState(SEED_ACADEMIC_YEAR);
     setThemeSettings(SEED_THEME_SETTINGS);
     setSchoolDetails(SEED_SCHOOL_DETAILS);
     setDashboardTodos([...DEFAULT_DASHBOARD_TODOS]);
@@ -2550,6 +3435,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       transportVehicles: SEED_VEHICLES,
       paymentCategories: SEED_PAYMENT_CATEGORIES,
       feeTerms: SEED_FEE_TERMS,
+      studentYearLedgers: SEED_STUDENT_YEAR_LEDGERS,
       academicYears: [...SEED_ACADEMIC_YEARS],
       academicYear: SEED_ACADEMIC_YEAR,
       themeSettings: SEED_THEME_SETTINGS,
@@ -2565,10 +3451,12 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
     () => ({
       students,
       setStudents,
+      activeStudents,
       staff,
       setStaff,
       payments,
       setPayments,
+      activePayments,
       departments,
       setDepartments,
       roles,
@@ -2585,10 +3473,19 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       setPaymentCategories,
       feeTerms,
       setFeeTerms,
+      activeFeeTerms,
+      studentYearLedgers,
+      setStudentYearLedgers,
       academicYears,
       setAcademicYears,
       academicYear,
       setAcademicYear,
+      openAcademicYear,
+      addAcademicYear,
+      canDeleteAcademicYear,
+      deleteAcademicYear,
+      enrollStudentInActiveYear,
+      admitStudentToActiveYear,
       themeSettings,
       setThemeSettings,
       schoolDetails,
@@ -2603,8 +3500,10 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
     }),
     [
       students,
+      activeStudents,
       staff,
       payments,
+      activePayments,
       departments,
       roles,
       tenantUsers,
@@ -2613,8 +3512,17 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
       transportVehicles,
       paymentCategories,
       feeTerms,
+      activeFeeTerms,
+      studentYearLedgers,
       academicYears,
       academicYear,
+      setAcademicYear,
+      openAcademicYear,
+      addAcademicYear,
+      canDeleteAcademicYear,
+      deleteAcademicYear,
+      enrollStudentInActiveYear,
+      admitStudentToActiveYear,
       themeSettings,
       schoolDetails,
       dashboardTodos,

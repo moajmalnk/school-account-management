@@ -39,7 +39,7 @@ import {
   totalOperatingExpense,
 } from "@/lib/dashboard-finance";
 import { downloadCsv, downloadTablePdf } from "@/lib/finance-export";
-import { useTenantStore, resolvePaymentFeePeriod, type Payment, type Student } from "@/lib/tenant-store";
+import { useTenantStore, resolvePaymentFeePeriod, currentPayrollMonth, formatPayrollMonthLabel, staffPayableSalary, type Payment, type Student } from "@/lib/tenant-store";
 import { cn } from "@/lib/utils";
 
 export type LedgerRow = {
@@ -117,20 +117,20 @@ function ExportBar({
     <>
       <div className="grid grid-cols-12 items-start gap-3 lg:items-center">
         <div className="col-span-12 lg:col-span-7">
-          <div className="text-title">{title}</div>
+          <div className="text-title text-slate-900 dark:text-zinc-50">{title}</div>
         </div>
         <div className="col-span-12 grid grid-cols-2 gap-2 lg:col-span-5">
           <button
             type="button"
             onClick={() => setPendingExport("csv")}
-            className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 py-1.5 text-[11.5px] font-medium text-black transition-colors hover:bg-[#F4F4F5] sm:text-[12px]"
+            className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 py-1.5 text-[11.5px] font-medium text-black transition-colors hover:bg-[#F4F4F5] dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 sm:text-[12px]"
           >
             <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" /> Export CSV
           </button>
           <button
             type="button"
             onClick={() => setPendingExport("pdf")}
-            className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full bg-black px-3 py-1.5 text-[11.5px] font-semibold text-white transition-colors hover:bg-black/85 sm:text-[12px]"
+            className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full bg-[#0F766E] px-3 py-1.5 text-[11.5px] font-semibold text-white transition-colors hover:bg-[#0D9488] sm:text-[12px]"
           >
             <Download className="h-3.5 w-3.5 shrink-0" /> Export PDF
           </button>
@@ -148,7 +148,7 @@ function ExportBar({
             <DialogTitle className="text-[22px] font-semibold text-black">
               {pendingExport ? exportCopy[pendingExport].title : "Confirm Export"}
             </DialogTitle>
-            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
+            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60 dark:text-zinc-400">
               {pendingExport
                 ? exportCopy[pendingExport].description
                 : "Are you sure you want to export this report?"}
@@ -161,7 +161,7 @@ function ExportBar({
             <Button
               type="button"
               onClick={confirmExport}
-              className="rounded-full bg-black text-white hover:bg-black/85"
+              className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
             >
               {pendingExport ? exportCopy[pendingExport].confirm : "Export"}
             </Button>
@@ -184,7 +184,7 @@ function ReportTable({
   compact?: boolean;
 }) {
   return (
-    <div className="mobile-scrollbar-none mt-4 overflow-x-auto rounded-lg border border-[#E5E5E5]">
+    <div className="mobile-scrollbar-none mt-4 overflow-x-auto rounded-lg border border-[#E5E5E5] dark:border-white/10">
       <table
         className={cn(
           "w-full text-left text-[12.5px]",
@@ -192,11 +192,11 @@ function ReportTable({
         )}
       >
         <thead>
-          <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5]">
+          <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5] dark:border-white/10 dark:bg-zinc-800/80">
             {headers.map((h) => (
               <th
                 key={h}
-                className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/55"
+                className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400"
               >
                 {h}
               </th>
@@ -205,13 +205,13 @@ function ReportTable({
         </thead>
         <tbody>
           {rows.map((row, i) => (
-            <tr key={i} className="border-b border-[#F0F0F0] last:border-0">
+            <tr key={i} className="border-b border-[#F0F0F0] last:border-0 dark:border-white/5">
               {row.map((cell, j) => (
                 <td
                   key={j}
                   className={cn(
-                    "px-3 py-2.5 text-black/80",
-                    j >= row.length - 3 && "font-mono text-black",
+                    "px-3 py-2.5 text-black/80 dark:text-zinc-200",
+                    j >= row.length - 3 && "font-mono text-black dark:text-zinc-100",
                   )}
                 >
                   {cell}
@@ -233,14 +233,21 @@ function SummaryStrip({ items }: { items: { label: string; value: string; accent
         <div
           key={item.label}
           className={cn(
-            "rounded-lg p-4",
-            item.accent ? "bg-[#2563EB] text-white" : "bg-[#F4F4F5] text-black",
+            "rounded-2xl p-4",
+            item.accent
+              ? "bg-gradient-to-br from-[#0F766E] to-[#115E59] text-white shadow-sm shadow-teal-900/15"
+              : "bg-slate-50 text-slate-900 ring-1 ring-slate-200/70 dark:bg-zinc-800 dark:text-zinc-50 dark:ring-white/10",
           )}
         >
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-black/55">
+          <div
+            className={cn(
+              "text-[10px] font-semibold uppercase tracking-wider",
+              item.accent ? "text-teal-100/75" : "text-slate-500 dark:text-zinc-400",
+            )}
+          >
             {item.label}
           </div>
-          <div className="mt-1 font-mono text-[18px] font-semibold">{item.value}</div>
+          <div className="mt-1 font-mono text-[18px] font-semibold tracking-tight">{item.value}</div>
         </div>
       ))}
     </div>
@@ -248,7 +255,7 @@ function SummaryStrip({ items }: { items: { label: string; value: string; accent
 }
 
 export function GeneralLedgerReport() {
-  const { payments, academicYear, schoolDetails } = useTenantStore();
+  const { activePayments: payments, academicYear, schoolDetails } = useTenantStore();
   const schoolName = schoolDetails.name || "Silver Hills Global";
 
   const rows = useMemo(() => buildLedgerRows(payments), [payments]);
@@ -310,7 +317,7 @@ export function GeneralLedgerReport() {
 }
 
 export function ProfitLossReport() {
-  const { payments, academicYear, schoolDetails } = useTenantStore();
+  const { activePayments: payments, academicYear, schoolDetails } = useTenantStore();
   const schoolName = schoolDetails.name || "Silver Hills Global";
 
   const incomeByCategory = useMemo(() => {
@@ -373,24 +380,24 @@ export function ProfitLossReport() {
           Statement Summary
         </div>
         <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-3 lg:grid-cols-1">
-          <div className="min-w-0 rounded-xl bg-white/60 px-3 py-2.5 sm:rounded-lg sm:p-3">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/55">
+          <div className="min-w-0 rounded-xl bg-white/15 px-3 py-2.5 ring-1 ring-white/20 sm:rounded-2xl sm:p-3">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-teal-100/75">
               Gross Income
             </div>
-            <div className="mt-1 truncate font-mono text-[18px] font-semibold sm:text-[20px]">
+            <div className="mt-1 truncate font-mono text-[18px] font-semibold text-white sm:text-[20px]">
               {inr(totalIncome)}
             </div>
           </div>
-          <div className="min-w-0 rounded-xl bg-white/60 px-3 py-2.5 sm:rounded-lg sm:p-3">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/55">
+          <div className="min-w-0 rounded-xl bg-white/15 px-3 py-2.5 ring-1 ring-white/20 sm:rounded-2xl sm:p-3">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-teal-100/75">
               Operating Expense
             </div>
-            <div className="mt-1 truncate font-mono text-[18px] font-semibold sm:text-[20px]">
+            <div className="mt-1 truncate font-mono text-[18px] font-semibold text-white sm:text-[20px]">
               {inr(totalExpense)}
             </div>
           </div>
-          <div className="min-w-0 rounded-xl bg-black px-3 py-2.5 text-white sm:rounded-lg sm:p-3">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-white/65">
+          <div className="min-w-0 rounded-xl bg-slate-950/45 px-3 py-2.5 text-white ring-1 ring-white/10 sm:rounded-2xl sm:p-3">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60">
               Net Surplus
             </div>
             <div className="mt-1 truncate font-mono text-[18px] font-semibold sm:text-[22px]">
@@ -414,7 +421,7 @@ export function ProfitLossReport() {
         <FinanceBarCard
           title="Expense Breakdown"
           cornerSide="bl"
-          fill="#2563EB"
+          fill="#0F766E"
           segments={OPERATING_EXPENSES.map((item) => ({
             label: item.account.replace(" & ", " · "),
             value: item.amount,
@@ -426,7 +433,8 @@ export function ProfitLossReport() {
 }
 
 export function BalanceSheetReport() {
-  const { payments, students, academicYear, schoolDetails } = useTenantStore();
+  const { activePayments: payments, activeStudents: students, academicYear, schoolDetails } =
+    useTenantStore();
   const schoolName = schoolDetails.name || "Silver Hills Global";
 
   const cashOnHand = useMemo(
@@ -513,7 +521,7 @@ export function BalanceSheetReport() {
       </OrganicCard>
 
       <OrganicCard tone="white" cornerSide="bl" padded className="col-span-12 lg:col-span-6">
-        <div className="text-title">Outstanding Payables</div>
+        <div className="text-title text-slate-900 dark:text-zinc-50">Outstanding Payables</div>
         <p className="mt-1 text-[12px] text-black/55">{ACCOUNTS_PAYABLE.length} open obligations</p>
         <div className="mt-4 space-y-2">
           {ACCOUNTS_PAYABLE.map((p) => (
@@ -584,7 +592,7 @@ function ReportSearchInput({
 }) {
   return (
     <div className="relative min-w-0 flex-1">
-      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-black/40" />
+      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-black/40 dark:text-zinc-500" />
       <Input
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -641,7 +649,8 @@ function resolvePaymentClass(payment: Payment, students: Student[]) {
 }
 
 export function FeesReport() {
-  const { payments, students, academicYear, schoolDetails } = useTenantStore();
+  const { activePayments: payments, activeStudents: students, academicYear, schoolDetails } =
+    useTenantStore();
   const schoolName = schoolDetails.name || "Silver Hills Global";
 
   const [collectionQuery, setCollectionQuery] = useState("");
@@ -840,7 +849,7 @@ export function FeesReport() {
       <OrganicCard tone="white" cornerSide="bl" padded className="col-span-12 lg:col-span-7">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="text-title">Fee Collections</div>
+            <div className="text-title text-slate-900 dark:text-zinc-50">Fee Collections</div>
             <p className="mt-1 text-[12px] text-black/55">
               {filteredCollections.length} of {feeReceipts.length} receipt
               {feeReceipts.length === 1 ? "" : "s"}
@@ -853,7 +862,7 @@ export function FeesReport() {
             <button
               type="button"
               onClick={clearCollectionFilters}
-              className="text-[11px] font-semibold text-[#2563EB] hover:underline"
+              className="text-[11px] font-semibold text-[#0F766E] hover:underline"
             >
               Clear filters
             </button>
@@ -907,7 +916,7 @@ export function FeesReport() {
         <OrganicCard tone="white" cornerSide="tr" padded>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="text-title">Outstanding Dues</div>
+              <div className="text-title text-slate-900 dark:text-zinc-50">Outstanding Dues</div>
               <p className="mt-1 text-[12px] text-black/55">
                 {filteredDues.length} of {overdueStudents.length} student
                 {overdueStudents.length === 1 ? "" : "s"} with open balance
@@ -917,7 +926,7 @@ export function FeesReport() {
               <button
                 type="button"
                 onClick={clearDuesFilters}
-                className="text-[11px] font-semibold text-[#2563EB] hover:underline"
+                className="text-[11px] font-semibold text-[#0F766E] hover:underline"
               >
                 Clear filters
               </button>
@@ -969,6 +978,7 @@ export function FeesReport() {
 export function SalaryReport() {
   const { staff, academicYear, schoolDetails } = useTenantStore();
   const schoolName = schoolDetails.name || "Silver Hills Global";
+  const payrollMonth = currentPayrollMonth();
 
   const [query, setQuery] = useState("");
   const [department, setDepartment] = useState("all");
@@ -995,7 +1005,7 @@ export function SalaryReport() {
         if (department !== "all" && s.dept !== department) return false;
         if (role !== "all" && s.role !== role) return false;
         if (!q) return true;
-        const gross = s.basicSalary + s.additionalAllowances;
+        const pay = staffPayableSalary(s, payrollMonth);
         const haystack = [
           s.id,
           s.name,
@@ -1003,22 +1013,31 @@ export function SalaryReport() {
           s.dept,
           String(s.basicSalary),
           String(s.additionalAllowances),
-          String(gross),
+          String(pay.gross),
+          String(pay.payable),
         ]
           .join(" ")
           .toLowerCase();
         return haystack.includes(q);
       })
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [staff, query, department, role, status]);
+  }, [staff, query, department, role, status, payrollMonth]);
 
   const payrollRows = useMemo(
     () =>
-      filteredStaff.map((s) => ({
-        staff: s,
-        gross: s.basicSalary + s.additionalAllowances,
-      })),
-    [filteredStaff],
+      filteredStaff.map((s) => {
+        const pay = staffPayableSalary(s, payrollMonth);
+        return {
+          staff: s,
+          gross: pay.gross,
+          payable: pay.payable,
+          attendance: pay.attendance,
+          attendanceLabel: pay.attendance
+            ? `${pay.attendance.daysPresent}/${pay.attendance.workingDays}`
+            : "—",
+        };
+      }),
+    [filteredStaff, payrollMonth],
   );
 
   const totalBasic = payrollRows.reduce((sum, row) => sum + row.staff.basicSalary, 0);
@@ -1027,6 +1046,8 @@ export function SalaryReport() {
     0,
   );
   const totalGross = payrollRows.reduce((sum, row) => sum + row.gross, 0);
+  const totalPayable = payrollRows.reduce((sum, row) => sum + row.payable, 0);
+  const attendanceCount = payrollRows.filter((row) => row.attendance).length;
 
   const salaryPayables = useMemo(
     () => ACCOUNTS_PAYABLE.filter((item) => /payroll|salary/i.test(item.payee)),
@@ -1046,14 +1067,16 @@ export function SalaryReport() {
 
   const salaryPayableAmount = filteredPayables.reduce((sum, item) => sum + item.amount, 0);
 
-  const tableRows = payrollRows.map(({ staff: s, gross }) => [
+  const tableRows = payrollRows.map(({ staff: s, gross, payable, attendanceLabel }) => [
     s.id,
     s.name,
     s.role,
     s.dept,
+    attendanceLabel,
     inr(s.basicSalary),
     inr(s.additionalAllowances),
     inr(gross),
+    inr(payable),
   ]);
 
   const payableRows = filteredPayables.map((item) => [item.payee, inr(item.amount)]);
@@ -1062,7 +1085,7 @@ export function SalaryReport() {
     () =>
       Array.from(
         payrollRows.reduce((map, row) => {
-          map.set(row.staff.dept, (map.get(row.staff.dept) ?? 0) + row.gross);
+          map.set(row.staff.dept, (map.get(row.staff.dept) ?? 0) + row.payable);
           return map;
         }, new Map<string, number>()),
       ).map(([label, value]) => ({ label, value })),
@@ -1079,15 +1102,29 @@ export function SalaryReport() {
   const handleCsv = () => {
     downloadCsv(
       `salary-report-${academicYear.replace(/\s+/g, "-").toLowerCase()}.csv`,
-      ["Staff ID", "Name", "Role", "Department", "Basic", "Allowances", "Gross"],
-      payrollRows.map(({ staff: s, gross }) => [
+      [
+        "Staff ID",
+        "Name",
+        "Role",
+        "Department",
+        "Attendance",
+        "Basic",
+        "Allowances",
+        "Gross",
+        "Payable",
+        "Month",
+      ],
+      payrollRows.map(({ staff: s, gross, payable, attendanceLabel }) => [
         s.id,
         s.name,
         s.role,
         s.dept,
+        attendanceLabel,
         s.basicSalary,
         s.additionalAllowances,
         gross,
+        payable,
+        payrollMonth,
       ]),
     );
     toast.success("Salary report exported", { description: "CSV download started" });
@@ -1097,34 +1134,46 @@ export function SalaryReport() {
     downloadTablePdf({
       filename: `salary-report-${academicYear.replace(/\s+/g, "-").toLowerCase()}.pdf`,
       title: "Salary Report",
-      subtitle: `${schoolName} · ${academicYear}`,
-      headers: ["ID", "Name", "Role", "Dept", "Basic", "Allowances", "Gross"],
-      rows: payrollRows.map(({ staff: s, gross }) => [
+      subtitle: `${schoolName} · ${academicYear} · ${formatPayrollMonthLabel(payrollMonth)}`,
+      headers: ["ID", "Name", "Role", "Dept", "Attn", "Basic", "Allow.", "Gross", "Payable"],
+      rows: payrollRows.map(({ staff: s, gross, payable, attendanceLabel }) => [
         s.id,
         s.name,
         s.role,
         s.dept,
+        attendanceLabel,
         s.basicSalary.toLocaleString("en-IN"),
         s.additionalAllowances.toLocaleString("en-IN"),
         gross.toLocaleString("en-IN"),
+        payable.toLocaleString("en-IN"),
       ]),
-      footer: `Gross payroll ${inr(totalGross)} · Payable ${inr(salaryPayableAmount)}`,
+      footer: `Gross ${inr(totalGross)} · Attendance payable ${inr(totalPayable)} · Ledger payable ${inr(salaryPayableAmount)}`,
     });
     toast.success("Salary report PDF downloaded");
   };
+
 
   return (
     <div className="grid grid-cols-12 gap-4 sm:gap-5">
       <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12">
         <ExportBar title="Salary Report" onCsv={handleCsv} onPdf={handlePdf} />
         <p className="mt-1 text-[12px] text-black/55">
-          Staff payroll register and open salary obligations · {academicYear}
+          Payroll for {formatPayrollMonthLabel(payrollMonth)} · attendance adjusts payable ·{" "}
+          {academicYear}
         </p>
         <SummaryStrip
           items={[
             { label: "Staff Shown", value: String(filteredStaff.length) },
             { label: "Gross Payroll", value: inr(totalGross) },
-            { label: "Salary Payable", value: inr(salaryPayableAmount), accent: true },
+            {
+              label: "Attendance Payable",
+              value: inr(totalPayable),
+              accent: true,
+            },
+            {
+              label: "With Attendance",
+              value: `${attendanceCount}/${filteredStaff.length}`,
+            },
           ]}
         />
       </OrganicCard>
@@ -1132,16 +1181,17 @@ export function SalaryReport() {
       <OrganicCard tone="white" cornerSide="bl" padded className="col-span-12 lg:col-span-8">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="text-title">Payroll Register</div>
+            <div className="text-title text-slate-900 dark:text-zinc-50">Payroll Register</div>
             <p className="mt-1 text-[12px] text-black/55">
-              {filteredStaff.length} of {staff.length} staff · basic + allowances
+              {filteredStaff.length} of {staff.length} staff · payable = gross × (days present ÷
+              working days)
             </p>
           </div>
           {(query || department !== "all" || role !== "all" || status !== "active") && (
             <button
               type="button"
               onClick={clearPayrollFilters}
-              className="text-[11px] font-semibold text-[#2563EB] hover:underline"
+              className="text-[11px] font-semibold text-[#0F766E] hover:underline"
             >
               Clear filters
             </button>
@@ -1188,12 +1238,22 @@ export function SalaryReport() {
           </div>
         ) : (
           <ReportTable
-            headers={["ID", "Name", "Role", "Dept", "Basic", "Allowances", "Gross"]}
+            headers={[
+              "ID",
+              "Name",
+              "Role",
+              "Dept",
+              "Attn",
+              "Basic",
+              "Allowances",
+              "Gross",
+              "Payable",
+            ]}
             rows={tableRows}
             footer={
               <div className="border-t border-[#E5E5E5] bg-[#FAFAFA] px-3 py-3 text-[12px] font-semibold text-black">
                 Totals · Basic {inr(totalBasic)} · Allowances {inr(totalAllowances)} · Gross{" "}
-                {inr(totalGross)}
+                {inr(totalGross)} · Payable {inr(totalPayable)}
               </div>
             }
           />
@@ -1204,7 +1264,7 @@ export function SalaryReport() {
         <OrganicCard tone="white" cornerSide="tr" padded>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="text-title">Open Salary Obligations</div>
+              <div className="text-title text-slate-900 dark:text-zinc-50">Open Salary Obligations</div>
               <p className="mt-1 text-[12px] text-black/55">
                 {filteredPayables.length} of {salaryPayables.length} payroll payable
                 {salaryPayables.length === 1 ? "" : "s"}
@@ -1214,7 +1274,7 @@ export function SalaryReport() {
               <button
                 type="button"
                 onClick={() => setPayableQuery("")}
-                className="text-[11px] font-semibold text-[#2563EB] hover:underline"
+                className="text-[11px] font-semibold text-[#0F766E] hover:underline"
               >
                 Clear
               </button>
@@ -1242,9 +1302,9 @@ export function SalaryReport() {
 
         {deptSegments.length > 0 && (
           <FinanceBarCard
-            title="Gross by Department"
+            title="Payable by Department"
             cornerSide="bl"
-            fill="#2563EB"
+            fill="#0F766E"
             segments={deptSegments}
           />
         )}
@@ -1265,7 +1325,7 @@ type DayBookEntry = {
 };
 
 export function DayBookReport() {
-  const { payments, academicYear, schoolDetails } = useTenantStore();
+  const { activePayments: payments, academicYear, schoolDetails } = useTenantStore();
   const schoolName = schoolDetails.name || "Silver Hills Global";
 
   const [query, setQuery] = useState("");
@@ -1410,7 +1470,7 @@ export function DayBookReport() {
       <OrganicCard tone="white" cornerSide="bl" padded className="col-span-12">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="text-title">Day Book Entries</div>
+            <div className="text-title text-slate-900 dark:text-zinc-50">Day Book Entries</div>
             <p className="mt-1 text-[12px] text-black/55">
               {filtered.length} of {entries.length} entr{entries.length === 1 ? "y" : "ies"}
             </p>
@@ -1419,7 +1479,7 @@ export function DayBookReport() {
             <button
               type="button"
               onClick={clearFilters}
-              className="text-[11px] font-semibold text-[#2563EB] hover:underline"
+              className="text-[11px] font-semibold text-[#0F766E] hover:underline"
             >
               Clear filters
             </button>
@@ -1498,7 +1558,7 @@ type BankReconTxn = {
 };
 
 export function BankReconciliationReport() {
-  const { payments, academicYear, schoolDetails } = useTenantStore();
+  const { activePayments: payments, academicYear, schoolDetails } = useTenantStore();
   const schoolName = schoolDetails.name || "Silver Hills Global";
 
   const bankTxns = useMemo<BankReconTxn[]>(
@@ -1654,14 +1714,16 @@ export function BankReconciliationReport() {
               className={cn(
                 "flex w-full items-center gap-3 rounded-xl border p-3.5",
                 reconciled
-                  ? "border-[#BBF7D0] bg-[#F0FDF4]"
-                  : "border-[#FED7AA] bg-[#FFF7ED]",
+                  ? "border-[#BBF7D0] bg-[#F0FDF4] dark:border-emerald-500/35 dark:bg-emerald-950/45"
+                  : "border-[#FED7AA] bg-[#FFF7ED] dark:border-amber-500/35 dark:bg-amber-950/40",
               )}
             >
               <span
                 className={cn(
                   "grid h-10 w-10 shrink-0 place-items-center rounded-full",
-                  reconciled ? "bg-[#DCFCE7] text-[#059669]" : "bg-[#FFEDD5] text-[#C2410C]",
+                  reconciled
+                    ? "bg-[#DCFCE7] text-[#059669] dark:bg-emerald-500/25 dark:text-emerald-300"
+                    : "bg-[#FFEDD5] text-[#C2410C] dark:bg-amber-500/25 dark:text-amber-300",
                 )}
               >
                 {reconciled ? (
@@ -1671,10 +1733,10 @@ export function BankReconciliationReport() {
                 )}
               </span>
               <div className="min-w-0">
-                <div className="text-[13px] font-bold text-black">
+                <div className="text-[13px] font-bold text-black dark:text-zinc-50">
                   {reconciled ? "Reconciled" : "Out of balance"}
                 </div>
-                <div className="truncate text-[11.5px] text-black/60">
+                <div className="truncate text-[11.5px] text-black/60 dark:text-zinc-400">
                   {reconciled
                     ? "Statement matches cleared items"
                     : `Difference of ${inr(Math.abs(difference))}`}
@@ -1688,7 +1750,7 @@ export function BankReconciliationReport() {
       <OrganicCard tone="white" cornerSide="bl" padded className="col-span-12 lg:col-span-5">
         <div className="flex items-center gap-2">
           <Landmark className="h-4 w-4 text-black/45" />
-          <div className="text-title">Reconciliation Statement</div>
+          <div className="text-title text-slate-900 dark:text-zinc-50">Reconciliation Statement</div>
         </div>
         <p className="mt-1 text-[12px] text-black/55">Bank statement to book balance</p>
         <div className="mt-4 overflow-hidden rounded-lg border border-[#E5E5E5]">
@@ -1700,18 +1762,29 @@ export function BankReconciliationReport() {
                 key={i}
                 className={cn(
                   "flex items-center justify-between gap-3 px-3.5 py-2.5 text-[12.5px]",
-                  i !== reconStatementRows.length - 1 && "border-b border-[#F0F0F0]",
-                  isTotal && "bg-[#F4F4F5] font-semibold",
-                  isDiff && (reconciled ? "bg-[#F0FDF4]" : "bg-[#FFF7ED]"),
+                  i !== reconStatementRows.length - 1 && "border-b border-[#F0F0F0] dark:border-white/10",
+                  isTotal && "bg-[#F4F4F5] font-semibold dark:bg-white/10",
+                  isDiff &&
+                    (reconciled
+                      ? "bg-[#F0FDF4] dark:bg-emerald-950/45"
+                      : "bg-[#FFF7ED] dark:bg-amber-950/40"),
                 )}
               >
-                <span className={cn("min-w-0 flex-1 text-black/70", (isTotal || isDiff) && "text-black")}>
+                <span
+                  className={cn(
+                    "min-w-0 flex-1 text-black/70 dark:text-zinc-300",
+                    (isTotal || isDiff) && "text-black dark:text-zinc-50",
+                  )}
+                >
                   {label}
                 </span>
                 <span
                   className={cn(
-                    "shrink-0 font-mono text-black",
-                    isDiff && (reconciled ? "text-[#059669]" : "text-[#C2410C]"),
+                    "shrink-0 font-mono text-black dark:text-zinc-100",
+                    isDiff &&
+                      (reconciled
+                        ? "text-[#059669] dark:text-emerald-300"
+                        : "text-[#C2410C] dark:text-amber-300"),
                   )}
                 >
                   {value}
@@ -1725,7 +1798,7 @@ export function BankReconciliationReport() {
       <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="text-title">Bank &amp; UPI Transactions</div>
+            <div className="text-title text-slate-900 dark:text-zinc-50">Bank &amp; UPI Transactions</div>
             <p className="mt-1 text-[12px] text-black/55">
               {filtered.length} of {bankTxns.length} · {unclearedCount} marked uncleared
             </p>
@@ -1735,7 +1808,7 @@ export function BankReconciliationReport() {
               <button
                 type="button"
                 onClick={markAllCleared}
-                className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#2563EB] hover:underline"
+                className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#0F766E] hover:underline"
               >
                 <CheckCircle2 className="h-3.5 w-3.5" />
                 Clear all

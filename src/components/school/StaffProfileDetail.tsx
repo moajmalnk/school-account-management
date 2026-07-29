@@ -4,13 +4,14 @@ import { toast } from "sonner";
 import {
   Pencil,
   Camera,
-  ChevronLeft,
   X,
   FileText,
   Paperclip,
   Upload,
   ExternalLink,
   Wallet,
+  CalendarDays,
+  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { MonthPicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -35,6 +37,12 @@ import {
   DEFAULT_STAFF_DOCUMENTS,
   normalizeTenantUser,
   useTenantStore,
+  currentPayrollMonth,
+  formatPayrollMonthLabel,
+  staffPayableSalary,
+  staffGrossSalary,
+  upsertStaffAttendanceMonth,
+  normalizeStaffAttendanceMonth,
 } from "@/lib/tenant-store";
 import { sessionHasPermission, useAuth } from "@/lib/auth";
 import {
@@ -57,8 +65,10 @@ import {
 } from "@/components/school/ProfileDetailTabs";
 import { cn } from "@/lib/utils";
 
-const META_LABEL = "text-black/45 font-semibold tracking-wider text-[11px] uppercase";
-const CARD_FRAME = "rounded-xl bg-white border border-slate-100 shadow-sm p-6";
+const CARD_FRAME =
+  "rounded-xl border border-slate-100 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#171717] dark:text-zinc-100 dark:shadow-black/40";
+const META_LABEL =
+  "text-[11px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400";
 const MAX_FILE_BYTES = 1_500_000;
 const MAX_FILES_PER_DOC = 8;
 
@@ -135,7 +145,7 @@ function StaffPhotoAvatar({
           aria-label={`Change photo for ${staff.name}`}
           title="Change photo"
           className={cn(
-            "absolute -bottom-1 -right-1 grid place-items-center rounded-full border-2 border-white bg-[#2563EB] text-white shadow-sm transition-colors hover:bg-slate-900",
+            "absolute -bottom-1 -right-1 grid place-items-center rounded-full border-2 border-white bg-[#0F766E] text-white shadow-sm transition-colors hover:bg-slate-900",
             cam,
           )}
         >
@@ -165,7 +175,7 @@ function StaffPhotoAvatar({
         <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6">
           <DialogHeader>
             <DialogTitle className="text-[22px] font-semibold text-black">Remove photo</DialogTitle>
-            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
+            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60 dark:text-zinc-400">
               Remove {staff.name}&apos;s profile photo? You can upload a new one anytime.
             </DialogDescription>
           </DialogHeader>
@@ -263,6 +273,7 @@ export function StaffProfileDetail({
     [tenantUsers, staff.id],
   );
   const [loginOpen, setLoginOpen] = useState(false);
+  const [pendingRemoveLogin, setPendingRemoveLogin] = useState(false);
   const [loginForm, setLoginForm] = useState({
     email: "",
     password: "",
@@ -364,6 +375,7 @@ export function StaffProfileDetail({
     if (!linkedUser) return;
     setTenantUsers((prev) => prev.filter((u) => u.id !== linkedUser.id));
     toast.error("Workspace login removed", { description: staff.name });
+    setPendingRemoveLogin(false);
   };
   const [editOpen, setEditOpen] = useState(initialEdit);
   const [activeTab, setActiveTab] = useState<ProfileDetailTabId>("profile");
@@ -505,6 +517,80 @@ export function StaffProfileDetail({
     () => staff.basicSalary + staff.additionalAllowances,
     [staff.basicSalary, staff.additionalAllowances],
   );
+  const payrollMonth = currentPayrollMonth();
+  const attendancePay = useMemo(
+    () => staffPayableSalary(staff, payrollMonth),
+    [staff, payrollMonth],
+  );
+  const attendanceHistory = useMemo(
+    () =>
+      [...(staff.attendanceByMonth ?? [])].sort((a, b) => b.month.localeCompare(a.month)),
+    [staff.attendanceByMonth],
+  );
+  const [attendanceForm, setAttendanceForm] = useState({
+    month: payrollMonth,
+    daysPresent: "",
+    workingDays: "24",
+  });
+  const [pendingDeleteMonth, setPendingDeleteMonth] = useState<string | null>(null);
+
+  useEffect(() => {
+    const existing = (staff.attendanceByMonth ?? []).find(
+      (row) => row.month === attendanceForm.month,
+    );
+    setAttendanceForm((prev) => ({
+      ...prev,
+      daysPresent: existing ? String(existing.daysPresent) : "",
+      workingDays: existing ? String(existing.workingDays) : prev.workingDays || "24",
+    }));
+    // Sync fields when month or staff changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attendanceForm.month, staff.id, staff.attendanceByMonth]);
+
+  const saveAttendanceMonth = (e: React.FormEvent) => {
+    e.preventDefault();
+    const normalized = normalizeStaffAttendanceMonth({
+      month: attendanceForm.month,
+      daysPresent: Number(attendanceForm.daysPresent),
+      workingDays: Number(attendanceForm.workingDays),
+    });
+    if (!normalized) {
+      toast.error("Enter a valid month and working days");
+      return;
+    }
+    if (normalized.daysPresent > normalized.workingDays) {
+      toast.error("Days present cannot exceed working days");
+      return;
+    }
+    setStaff((prev) =>
+      prev.map((s) =>
+        s.id === staff.id
+          ? {
+              ...s,
+              attendanceByMonth: upsertStaffAttendanceMonth(s.attendanceByMonth, normalized),
+            }
+          : s,
+      ),
+    );
+    toast.success(`Attendance saved · ${formatPayrollMonthLabel(normalized.month)}`, {
+      description: `${normalized.daysPresent}/${normalized.workingDays} days · payroll payable updates automatically`,
+    });
+  };
+
+  const removeAttendanceMonth = (month: string) => {
+    setStaff((prev) =>
+      prev.map((s) =>
+        s.id === staff.id
+          ? {
+              ...s,
+              attendanceByMonth: (s.attendanceByMonth ?? []).filter((row) => row.month !== month),
+            }
+          : s,
+      ),
+    );
+    setPendingDeleteMonth(null);
+    toast.error(`Attendance removed · ${formatPayrollMonthLabel(month)}`);
+  };
 
   const documentsOnFile = useMemo(() => documents.filter(isDocumentComplete).length, [documents]);
 
@@ -705,17 +791,8 @@ export function StaffProfileDetail({
 
   return (
     <div className="flex flex-col gap-4 pb-[calc(5.75rem+env(safe-area-inset-bottom))] sm:gap-6 md:pb-0">
-      <button
-        type="button"
-        onClick={onBack}
-        className="inline-flex w-fit items-center gap-1 text-[12.5px] font-medium text-slate-400 transition-colors hover:text-slate-800"
-      >
-        <ChevronLeft className="h-4 w-4 shrink-0" />
-        Back to Staff
-      </button>
-
-      <section className="overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.06)]">
-        <div className="h-1 bg-gradient-to-r from-[#2563EB] via-[#4C69A4] to-[#93C5FD]" />
+      <section className="overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.06)] dark:border-white/10 dark:bg-[#171717] dark:shadow-black/40">
+        <div className="h-1 bg-gradient-to-r from-[#0F766E] via-[#115E59] to-[#99F6E4]" />
         <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:p-6">
           <div className="flex min-w-0 flex-col items-center gap-4 text-center sm:flex-row sm:items-center sm:text-left">
             <StaffPhotoAvatar staff={staff} onPhotoChange={updatePhoto} size="lg" />
@@ -723,7 +800,7 @@ export function StaffProfileDetail({
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
                 Staff profile
               </p>
-              <h1 className="mt-1 truncate text-[1.65rem] font-semibold tracking-tight text-slate-950 sm:text-[1.85rem]">
+              <h1 className="mt-1 truncate text-[1.65rem] font-semibold tracking-tight text-slate-950 dark:text-zinc-50 sm:text-[1.85rem]">
                 {staff.name}
               </h1>
               <p className="mt-1 text-[14px] font-medium text-slate-500">{staff.role}</p>
@@ -731,13 +808,13 @@ export function StaffProfileDetail({
                 <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-mono text-[11px] font-medium text-slate-600">
                   {staff.id}
                 </span>
-                <span className="inline-flex rounded-full border border-[#BFDBFE] bg-[#EFF6FF] px-2.5 py-1 text-[11px] font-medium text-[#1D4ED8]">
+                <span className="inline-flex rounded-full border border-[#99F6E4] bg-[#F0FDFA] px-2.5 py-1 text-[11px] font-medium text-[#0F766E]">
                   {staff.dept}
                 </span>
                 <span
                   className={cn(
                     "inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold",
-                    isActive ? "bg-[#2563EB] text-white" : "bg-black/10 text-black/55",
+                    isActive ? "bg-[#0F766E] text-white" : "bg-black/10 text-black/55",
                   )}
                 >
                   {isActive ? "Active" : "Inactive"}
@@ -749,7 +826,7 @@ export function StaffProfileDetail({
           <button
             type="button"
             onClick={toggleEdit}
-            className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-slate-950 px-4 text-[13px] font-semibold text-white shadow-sm transition-colors hover:bg-slate-800"
+            className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-[#0F766E] px-4 text-[13px] font-semibold text-white shadow-sm transition-colors hover:bg-[#0D9488]"
           >
             <Pencil className="h-4 w-4" />
             Edit Profile
@@ -792,13 +869,13 @@ export function StaffProfileDetail({
                     Joined, deactivated, and reactivated events.
                   </p>
                 </div>
-                <span className="inline-flex w-fit rounded-full bg-slate-50 px-3 py-1.5 font-mono text-[11px] font-semibold text-black/60">
+                <span className="inline-flex w-fit rounded-full bg-slate-50 px-3 py-1.5 font-mono text-[11px] font-semibold text-black/60 dark:bg-white/10 dark:text-zinc-400">
                   {statusHistory.length} event{statusHistory.length === 1 ? "" : "s"}
                 </span>
               </div>
 
               {statusHistory.length === 0 ? (
-                <div className="mt-5 rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center text-[13px] text-black/50">
+                <div className="mt-5 rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center text-[13px] text-black/50 dark:border-white/15 dark:bg-zinc-900/60 dark:text-zinc-400">
                   No account events recorded yet.
                 </div>
               ) : (
@@ -806,14 +883,14 @@ export function StaffProfileDetail({
                   {statusHistory.map((event) => {
                     const tone =
                       event.type === "joined"
-                        ? "bg-[#DBEAFE] text-[#1D4ED8]"
+                        ? "bg-[#CCFBF1] text-[#0F766E] dark:bg-[#0F766E]/30 dark:text-[#5EEAD4]"
                         : event.type === "deactivated"
-                          ? "bg-[#FEE2E2] text-[#B91C1C]"
-                          : "bg-[#D1F2E1] text-[#047857]";
+                          ? "bg-[#FEE2E2] text-[#B91C1C] dark:bg-rose-950/50 dark:text-rose-300"
+                          : "bg-[#D1F2E1] text-[#047857] dark:bg-emerald-950/45 dark:text-emerald-300";
                     return (
                       <li
                         key={event.id}
-                        className="flex flex-col gap-2 rounded-lg border border-slate-100 bg-slate-50/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                        className="flex flex-col gap-2 rounded-lg border border-slate-100 bg-slate-50/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between dark:border-white/10 dark:bg-zinc-900/70"
                       >
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
@@ -825,12 +902,12 @@ export function StaffProfileDetail({
                             >
                               {statusEventLabel(event.type)}
                             </span>
-                            <span className="font-mono text-[12px] font-medium text-black">
+                            <span className="font-mono text-[12px] font-medium text-black dark:text-zinc-200">
                               {formatStatusDateTime(event.at)}
                             </span>
                           </div>
                           {event.note && (
-                            <p className="mt-1 text-[12px] text-black/55">{event.note}</p>
+                            <p className="mt-1 text-[12px] text-black/55 dark:text-zinc-400">{event.note}</p>
                           )}
                         </div>
                       </li>
@@ -897,8 +974,8 @@ export function StaffProfileDetail({
                   />
                 </div>
 
-                <div className="min-w-0 rounded-lg bg-slate-50 p-4 sm:p-5">
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                <div className="min-w-0 rounded-lg bg-slate-50 p-4 sm:p-5 dark:bg-zinc-900/70">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
                     Total Salary
                   </div>
                   <div className="mt-2 flex min-w-0 items-baseline gap-1.5">
@@ -914,7 +991,296 @@ export function StaffProfileDetail({
                       {totalSalary.toLocaleString("en-IN")}
                     </span>
                   </div>
+                  <p className="mt-2 text-[11px] text-black/45">
+                    Pro-rata payable is calculated on the Attendance tab from days present.
+                  </p>
                 </div>
+              </div>
+            </section>
+          </div>
+        </ProfileTabPanel>
+
+        <ProfileTabPanel value="attendance">
+          <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-12">
+            <section className={cn(CARD_FRAME, "lg:col-span-4")}>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-semibold text-black">This Month</h2>
+                  <p className="mt-1 text-[12.5px] text-black/50">
+                    {formatPayrollMonthLabel(payrollMonth)} · used for salary payable
+                  </p>
+                </div>
+                <div className="grid h-10 w-10 place-items-center rounded-xl bg-[#CCFBF1] text-[#0F766E]">
+                  <CalendarDays className="h-5 w-5" />
+                </div>
+              </div>
+
+              {attendancePay.attendance ? (
+                <div className="mt-5 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-3">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                        Present
+                      </div>
+                      <div className="mt-1 font-mono text-[22px] font-bold text-black">
+                        {attendancePay.attendance.daysPresent}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-3">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                        Working
+                      </div>
+                      <div className="mt-1 font-mono text-[22px] font-bold text-black">
+                        {attendancePay.attendance.workingDays}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-[#D1FAE5] bg-[#F0FDFA] px-3.5 py-3">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-[#0F766E]">
+                      Payable Salary
+                    </div>
+                    <div className="mt-1 font-mono text-[20px] font-bold text-[#0F766E]">
+                      ₹ {attendancePay.payable.toLocaleString("en-IN")}
+                    </div>
+                    <p className="mt-1 text-[11px] text-black/50">
+                      Gross ₹ {staffGrossSalary(staff).toLocaleString("en-IN")} ×{" "}
+                      {Math.round(attendancePay.ratio * 100)}% attendance
+                    </p>
+                    <Button
+                      type="button"
+                      className="mt-3 h-9 w-full rounded-full bg-[#0F766E] text-[12.5px] font-semibold text-white hover:bg-[#0D9488]"
+                      onClick={() =>
+                        navigate({
+                          to: "/tenant/finance",
+                          search: {
+                            tab: "make",
+                            staffId: staff.id,
+                            amount: String(attendancePay.payable),
+                            month: payrollMonth,
+                          },
+                        })
+                      }
+                    >
+                      <Wallet className="mr-1.5 h-3.5 w-3.5" />
+                      Pay ₹ {attendancePay.payable.toLocaleString("en-IN")}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-5 rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 py-6 text-center dark:border-white/15 dark:bg-zinc-900/60">
+                  <p className="text-[13px] font-medium text-black/70">No attendance for this month</p>
+                  <p className="mt-1 text-[12px] text-black/45">
+                    Add a month below, or upload a CSV from Staff Directory → Attendance.
+                  </p>
+                  <p className="mt-3 font-mono text-[12px] text-black/55">
+                    Full gross ₹ {staffGrossSalary(staff).toLocaleString("en-IN")} applies
+                  </p>
+                </div>
+              )}
+            </section>
+
+            <section className={cn(CARD_FRAME, "lg:col-span-8")}>
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h2 className="text-base font-semibold text-black">Record Attendance</h2>
+                  <p className="mt-1 text-[12.5px] text-black/50">
+                    Save days present for any month. Payroll uses present ÷ working days.
+                  </p>
+                </div>
+              </div>
+
+              <form
+                onSubmit={saveAttendanceMonth}
+                className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-4 sm:items-end"
+              >
+                <div className="space-y-1.5 sm:col-span-1">
+                  <Label className={META_LABEL} htmlFor="attendance-month">
+                    Month
+                  </Label>
+                  <MonthPicker
+                    id="attendance-month"
+                    value={attendanceForm.month}
+                    onChange={(month) =>
+                      setAttendanceForm((prev) => ({
+                        ...prev,
+                        month: month || currentPayrollMonth(),
+                      }))
+                    }
+                    allowClear={false}
+                    placeholder="Select month"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className={META_LABEL} htmlFor="days-present">
+                    Days Present
+                  </Label>
+                  <Input
+                    id="days-present"
+                    inputMode="numeric"
+                    value={attendanceForm.daysPresent}
+                    onChange={(e) =>
+                      setAttendanceForm((prev) => ({
+                        ...prev,
+                        daysPresent: e.target.value.replace(/[^0-9]/g, ""),
+                      }))
+                    }
+                    placeholder="22"
+                    className="h-10 font-mono"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className={META_LABEL} htmlFor="working-days">
+                    Working Days
+                  </Label>
+                  <Input
+                    id="working-days"
+                    inputMode="numeric"
+                    value={attendanceForm.workingDays}
+                    onChange={(e) =>
+                      setAttendanceForm((prev) => ({
+                        ...prev,
+                        workingDays: e.target.value.replace(/[^0-9]/g, ""),
+                      }))
+                    }
+                    placeholder="24"
+                    className="h-10 font-mono"
+                    required
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  className="h-10 rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+                >
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  Save Month
+                </Button>
+              </form>
+
+              <div className="mt-6">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                    Attendance History
+                  </h3>
+                  <span className="font-mono text-[11px] text-black/40">
+                    {attendanceHistory.length} month{attendanceHistory.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+
+                {attendanceHistory.length === 0 ? (
+                  <div className="mt-3 rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center text-[13px] text-black/50 dark:border-white/15 dark:bg-zinc-900/60 dark:text-zinc-400">
+                    No monthly attendance yet for {staff.name}.
+                  </div>
+                ) : (
+                  <div className="mt-3 overflow-x-auto rounded-lg border border-slate-100 dark:border-white/10">
+                    <table className="w-full min-w-[520px] text-left text-[12.5px]">
+                      <thead>
+                        <tr className="border-b border-slate-100 bg-slate-50 dark:border-white/10 dark:bg-zinc-900/70">
+                          {["Month", "Present", "Working", "Rate", "Payable", ""].map((header) => (
+                            <th
+                              key={header || "actions"}
+                              className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/50 dark:text-zinc-400"
+                            >
+                              {header}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {attendanceHistory.map((row) => {
+                          const pay = staffPayableSalary(
+                            {
+                              basicSalary: staff.basicSalary,
+                              additionalAllowances: staff.additionalAllowances,
+                              attendanceByMonth: [row],
+                            },
+                            row.month,
+                          );
+                          const isCurrent = row.month === payrollMonth;
+                          return (
+                            <tr
+                              key={row.month}
+                              className={cn(
+                                "border-b border-slate-50 last:border-0",
+                                isCurrent && "bg-[#F0FDFA]/70",
+                              )}
+                            >
+                              <td className="px-3 py-3">
+                                <div className="font-medium text-black">
+                                  {formatPayrollMonthLabel(row.month)}
+                                </div>
+                                <div className="font-mono text-[10.5px] text-black/40">
+                                  {row.month}
+                                  {isCurrent ? " · current" : ""}
+                                </div>
+                              </td>
+                              <td className="px-3 py-3 font-mono font-semibold text-black">
+                                {row.daysPresent}
+                              </td>
+                              <td className="px-3 py-3 font-mono text-black/70">
+                                {row.workingDays}
+                              </td>
+                              <td className="px-3 py-3 font-mono text-black/70">
+                                {Math.round(pay.ratio * 100)}%
+                              </td>
+                              <td className="px-3 py-3">
+                                <div className="font-mono font-semibold text-[#0F766E]">
+                                  ₹ {pay.payable.toLocaleString("en-IN")}
+                                </div>
+                                {pay.payable > 0 && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    className="mt-1.5 h-7 rounded-full bg-[#0F766E] px-2.5 text-[11px] font-semibold text-white hover:bg-[#0D9488]"
+                                    onClick={() =>
+                                      navigate({
+                                        to: "/tenant/finance",
+                                        search: {
+                                          tab: "make",
+                                          staffId: staff.id,
+                                          amount: String(pay.payable),
+                                          month: row.month,
+                                        },
+                                      })
+                                    }
+                                  >
+                                    Pay
+                                  </Button>
+                                )}
+                              </td>
+                              <td className="px-3 py-3 text-right">
+                                <div className="inline-flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setAttendanceForm({
+                                        month: row.month,
+                                        daysPresent: String(row.daysPresent),
+                                        workingDays: String(row.workingDays),
+                                      })
+                                    }
+                                    className="grid h-8 w-8 place-items-center rounded-full text-black/45 transition-colors hover:bg-[#0F766E] hover:text-white"
+                                    aria-label={`Edit ${row.month}`}
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPendingDeleteMonth(row.month)}
+                                    className="grid h-8 w-8 place-items-center rounded-full text-black/45 transition-colors hover:bg-[#EF4444] hover:text-white"
+                                    aria-label={`Remove ${row.month}`}
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </section>
           </div>
@@ -929,7 +1295,7 @@ export function StaffProfileDetail({
                   Aadhaar, PAN Card, and any other attachments (certificates, contracts, etc.).
                 </p>
               </div>
-              <div className="flex shrink-0 items-center gap-2 rounded-lg bg-slate-50 px-4 py-3">
+              <div className="flex shrink-0 items-center gap-2 rounded-lg bg-slate-50 px-4 py-3 dark:bg-zinc-900/70">
                 <FileText className="h-4 w-4 text-black/45" />
                 <div className="text-right">
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
@@ -968,7 +1334,7 @@ export function StaffProfileDetail({
                   Past salary payments for {staff.name}.
                 </p>
               </div>
-              <div className="flex shrink-0 items-center gap-2 rounded-lg bg-slate-50 px-4 py-3">
+              <div className="flex shrink-0 items-center gap-2 rounded-lg bg-slate-50 px-4 py-3 dark:bg-zinc-900/70">
                 <Wallet className="h-4 w-4 text-black/45" />
                 <div className="text-right">
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
@@ -982,53 +1348,95 @@ export function StaffProfileDetail({
             </div>
 
             {salaryHistory.length === 0 ? (
-              <div className="mt-5 rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center text-[13px] text-black/50">
+              <div className="mt-5 rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center text-[13px] text-black/50 dark:border-white/15 dark:bg-zinc-900/60 dark:text-zinc-400">
                 No salary payments recorded yet. Confirm a salary payment from Finance → Make
                 Payment to see it here.
               </div>
             ) : (
-              <div className="mt-5 overflow-x-auto rounded-lg border border-slate-100">
-                <table className="w-full min-w-[560px] text-left text-[12.5px]">
-                  <thead>
-                    <tr className="border-b border-slate-100 bg-slate-50">
-                      {["Date", "Description", "Mode", "Amount", "Status"].map((header) => (
-                        <th
-                          key={header}
-                          className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/50"
+              <>
+                {/* Mobile · cards */}
+                <div className="mt-5 space-y-2.5 sm:hidden">
+                  {salaryHistory.map((row) => (
+                    <article
+                      key={row.id}
+                      className="rounded-xl border border-slate-100 bg-slate-50/70 p-3.5 dark:border-white/10 dark:bg-zinc-900/60"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-mono text-[11px] text-black/50 dark:text-zinc-400">
+                            {row.paidAt}
+                          </div>
+                          <p className="mt-1 text-[13px] font-medium leading-snug text-black dark:text-zinc-100">
+                            {row.description}
+                          </p>
+                        </div>
+                        <span
+                          className={cn(
+                            "shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold",
+                            row.status === "Cleared" || row.status === "Paid"
+                              ? "bg-[#D1F2E1] text-[#059669]"
+                              : "bg-[#FEF3C7] text-[#B45309]",
+                          )}
                         >
-                          {header}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {salaryHistory.map((row) => (
-                      <tr key={row.id} className="border-b border-slate-50 last:border-0">
-                        <td className="px-3 py-3 font-mono text-[11px] text-black/60">
-                          {row.paidAt}
-                        </td>
-                        <td className="px-3 py-3 font-medium text-black">{row.description}</td>
-                        <td className="px-3 py-3 text-black/65">{row.mode}</td>
-                        <td className="px-3 py-3 font-mono font-semibold text-black">
+                          {row.status}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-200/70 pt-3 dark:border-white/10">
+                        <span className="text-[12px] text-black/55 dark:text-zinc-400">
+                          {row.mode}
+                        </span>
+                        <span className="font-mono text-[14px] font-semibold text-[#0F766E] dark:text-[#5EEAD4]">
                           ₹ {row.amount.toLocaleString("en-IN")}
-                        </td>
-                        <td className="px-3 py-3">
-                          <span
-                            className={cn(
-                              "inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold",
-                              row.status === "Cleared" || row.status === "Paid"
-                                ? "bg-[#D1F2E1] text-[#059669]"
-                                : "bg-[#FEF3C7] text-[#B45309]",
-                            )}
+                        </span>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+
+                {/* Desktop · table */}
+                <div className="mt-5 hidden overflow-x-auto rounded-lg border border-slate-100 dark:border-white/10 sm:block">
+                  <table className="w-full min-w-[560px] text-left text-[12.5px]">
+                    <thead>
+                      <tr className="border-b border-slate-100 bg-slate-50 dark:border-white/10 dark:bg-zinc-900/70">
+                        {["Date", "Description", "Mode", "Amount", "Status"].map((header) => (
+                          <th
+                            key={header}
+                            className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/50 dark:text-zinc-400"
                           >
-                            {row.status}
-                          </span>
-                        </td>
+                            {header}
+                          </th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {salaryHistory.map((row) => (
+                        <tr key={row.id} className="border-b border-slate-50 last:border-0">
+                          <td className="px-3 py-3 font-mono text-[11px] text-black/60 dark:text-zinc-400">
+                            {row.paidAt}
+                          </td>
+                          <td className="px-3 py-3 font-medium text-black">{row.description}</td>
+                          <td className="px-3 py-3 text-black/65">{row.mode}</td>
+                          <td className="px-3 py-3 font-mono font-semibold text-black">
+                            ₹ {row.amount.toLocaleString("en-IN")}
+                          </td>
+                          <td className="px-3 py-3">
+                            <span
+                              className={cn(
+                                "inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold",
+                                row.status === "Cleared" || row.status === "Paid"
+                                  ? "bg-[#D1F2E1] text-[#059669]"
+                                  : "bg-[#FEF3C7] text-[#B45309]",
+                              )}
+                            >
+                              {row.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </section>
         </ProfileTabPanel>
@@ -1043,7 +1451,7 @@ export function StaffProfileDetail({
                 Allow this staff member to sign in with limited module permissions.
               </p>
               {linkedUser ? (
-                <div className="mt-2 text-[12px] text-black/60">
+                <div className="mt-2 text-[12px] text-black/60 dark:text-zinc-400">
                   <div className="font-medium text-black">{linkedUser.email}</div>
                   <div className="mt-0.5">
                     {linkedUser.active ? "Active" : "Inactive"} ·{" "}
@@ -1058,7 +1466,7 @@ export function StaffProfileDetail({
               <Button
                 type="button"
                 variant="outline"
-                className="rounded-full"
+                className="rounded-full dark:border-white/20 dark:bg-transparent dark:text-zinc-100 dark:hover:bg-white/10"
                 onClick={openLoginDialog}
               >
                 {linkedUser ? "Edit login" : "Enable login"}
@@ -1068,7 +1476,7 @@ export function StaffProfileDetail({
                   <Button
                     type="button"
                     variant="outline"
-                    className="rounded-full"
+                    className="rounded-full dark:border-white/20 dark:bg-transparent dark:text-zinc-100 dark:hover:bg-white/10"
                     onClick={() =>
                       navigate({ to: "/tenant/settings", search: { tab: "users" } })
                     }
@@ -1078,8 +1486,8 @@ export function StaffProfileDetail({
                   <Button
                     type="button"
                     variant="outline"
-                    className="rounded-full border-[#FECACA] text-[#EF4444] hover:bg-[#FEF2F2]"
-                    onClick={removeStaffLogin}
+                    className="rounded-full border-[#FECACA] text-[#EF4444] hover:bg-[#FEF2F2] hover:text-[#EF4444] dark:border-rose-400/45 dark:bg-transparent dark:text-rose-300 dark:hover:bg-rose-950/55 dark:hover:text-rose-200"
+                    onClick={() => setPendingRemoveLogin(true)}
                   >
                     Remove login
                   </Button>
@@ -1098,6 +1506,40 @@ export function StaffProfileDetail({
         onToggleActive={toggleActive}
         onDelete={deleteStaff}
       />
+
+      <Dialog
+        open={pendingDeleteMonth !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDeleteMonth(null);
+        }}
+      >
+        <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6">
+          <DialogHeader>
+            <DialogTitle className="text-[22px] font-semibold text-black">
+              Remove attendance
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60 dark:text-zinc-400">
+              Remove {pendingDeleteMonth ? formatPayrollMonthLabel(pendingDeleteMonth) : "this month"}
+              &apos;s attendance for {staff.name}? Payroll will use full gross until a new record is
+              saved.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-5 flex-row justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setPendingDeleteMonth(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="rounded-full bg-[#EF4444] text-white hover:bg-[#DC2626]"
+              onClick={() => {
+                if (pendingDeleteMonth) removeAttendanceMonth(pendingDeleteMonth);
+              }}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={loginOpen} onOpenChange={setLoginOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
@@ -1207,11 +1649,43 @@ export function StaffProfileDetail({
               <Button type="button" variant="outline" onClick={() => setLoginOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+              <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
                 Save login
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={pendingRemoveLogin}
+        onOpenChange={(next) => {
+          if (!next) setPendingRemoveLogin(false);
+        }}
+      >
+        <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6 dark:border-white/10 dark:bg-zinc-900">
+          <DialogHeader>
+            <DialogTitle className="text-[22px] font-semibold text-black dark:text-zinc-100">
+              Remove workspace login
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60 dark:text-zinc-400">
+              {linkedUser
+                ? `Remove login for ${staff.name} (${linkedUser.email})? They will no longer be able to sign in.`
+                : `Remove workspace login for ${staff.name}?`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-5 flex-row justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setPendingRemoveLogin(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="rounded-full bg-[#EF4444] text-white hover:bg-[#DC2626]"
+              onClick={removeStaffLogin}
+            >
+              Remove login
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1233,7 +1707,7 @@ export function StaffProfileDetail({
                 {draft.photoUrl ? (
                   <img src={draft.photoUrl} alt="" className="h-14 w-14 rounded-lg object-cover" />
                 ) : (
-                  <div className="grid h-14 w-14 place-items-center rounded-lg bg-black text-sm font-semibold text-white">
+                  <div className="grid h-14 w-14 place-items-center rounded-lg bg-[#0F766E] text-sm font-semibold text-white">
                     {draft.name.trim() ? initials(draft.name) : "?"}
                   </div>
                 )}
@@ -1241,7 +1715,7 @@ export function StaffProfileDetail({
                   type="button"
                   onClick={() => editPhotoRef.current?.click()}
                   aria-label="Upload profile photo"
-                  className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#2563EB] text-white shadow-sm"
+                  className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#0F766E] text-white shadow-sm"
                 >
                   <Camera className="h-3.5 w-3.5" />
                 </button>
@@ -1289,7 +1763,7 @@ export function StaffProfileDetail({
                 onValueChange={(role) => setDraft({ ...draft, role })}
                 disabled={roles.length === 0}
               >
-                <SelectTrigger className="h-10 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 text-[13px] font-normal text-black shadow-none focus:ring-2 focus:ring-[#2563EB]">
+                <SelectTrigger className="h-10 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 text-[13px] font-normal text-black shadow-none focus:ring-2 focus:ring-[#0F766E]">
                   <SelectValue placeholder="No roles configured" />
                 </SelectTrigger>
                 <SelectContent className="z-[250] rounded-lg border border-[#E5E5E5] bg-white p-1.5">
@@ -1315,7 +1789,7 @@ export function StaffProfileDetail({
                   onValueChange={(dept) => setDraft({ ...draft, dept })}
                   disabled={departments.length === 0}
                 >
-                  <SelectTrigger className="h-10 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 text-[13px] font-normal text-black shadow-none focus:ring-2 focus:ring-[#2563EB]">
+                  <SelectTrigger className="h-10 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 text-[13px] font-normal text-black shadow-none focus:ring-2 focus:ring-[#0F766E]">
                     <SelectValue placeholder="No departments configured" />
                   </SelectTrigger>
                   <SelectContent className="z-[250] rounded-lg border border-[#E5E5E5] bg-white p-1.5">
@@ -1384,7 +1858,7 @@ export function StaffProfileDetail({
               <Button type="button" variant="outline" onClick={() => setEditOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+              <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
                 Save Profile
               </Button>
             </DialogFooter>
@@ -1440,13 +1914,15 @@ function DocumentCard({
         : "Optional reference";
 
   return (
-    <div className="min-w-0 rounded-lg border border-slate-100 bg-slate-50/50 p-4">
+    <div className="min-w-0 rounded-lg border border-slate-100 bg-slate-50/50 p-4 dark:border-white/10 dark:bg-zinc-900/70">
       <div className="flex items-start justify-between gap-2">
         <div className={META_LABEL}>{doc.label}</div>
         <span
           className={cn(
             "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
-            complete ? "bg-[#DBEAFE] text-black" : "bg-slate-200/80 font-medium text-black/50",
+            complete
+              ? "bg-[#CCFBF1] text-black dark:bg-[#0F766E]/35 dark:text-[#5EEAD4]"
+              : "bg-slate-200/80 font-medium text-black/50 dark:bg-white/10 dark:text-zinc-400",
           )}
         >
           {complete ? "On file" : "Not provided"}
@@ -1458,23 +1934,23 @@ function DocumentCard({
           value={doc.number}
           onChange={(e) => onNumberChange(e.target.value)}
           placeholder={numberPlaceholder}
-          className="mt-1.5 h-10 border-slate-200 bg-white font-mono text-[13px]"
+          className="mt-1.5 h-10 border-slate-200 bg-white font-mono text-[13px] dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-100"
         />
       )}
 
       {isOther && (
-        <p className="mt-1.5 text-[12px] leading-snug text-black/50">
+        <p className="mt-1.5 text-[12px] leading-snug text-black/50 dark:text-zinc-400">
           Certificates, contracts, offer letters, or any other staff files.
         </p>
       )}
 
-      <div className={cn("border-t border-slate-200/80 pt-4", isOther ? "mt-3" : "mt-4")}>
+      <div className={cn("border-t border-slate-200/80 pt-4 dark:border-white/10", isOther ? "mt-3" : "mt-4")}>
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-black/45">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
             <Paperclip className="h-3.5 w-3.5" />
             {showLevelTabs ? "Attachments" : "Files"}
           </div>
-          <span className="font-mono text-[10px] text-black/45">
+          <span className="font-mono text-[10px] text-black/45 dark:text-zinc-500">
             {doc.attachments.length} / {MAX_FILES_PER_DOC}
           </span>
         </div>
@@ -1492,15 +1968,15 @@ function DocumentCard({
                   className={cn(
                     "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors",
                     active
-                      ? "bg-black text-white"
-                      : "bg-white text-black/65 ring-1 ring-slate-200 hover:bg-slate-100",
+                      ? "bg-[#0F766E] text-white dark:bg-[#14B8A6]"
+                      : "bg-white text-black/65 ring-1 ring-slate-200 hover:bg-slate-100 dark:bg-zinc-950 dark:text-zinc-300 dark:ring-white/15 dark:hover:bg-white/10",
                   )}
                 >
                   {level.label}
                   <span
                     className={cn(
                       "font-mono text-[10px]",
-                      active ? "text-white/70" : "text-black/40",
+                      active ? "text-white/70" : "text-black/40 dark:text-zinc-500",
                     )}
                   >
                     {count}
@@ -1511,9 +1987,9 @@ function DocumentCard({
           </div>
         )}
 
-        <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
+        <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-zinc-950/80">
           {showLevelTabs && (
-            <div className="mb-2 text-[11px] font-semibold text-black/55">
+            <div className="mb-2 text-[11px] font-semibold text-black/55 dark:text-zinc-400">
               {activeLevel?.label ?? "Side"} scan
             </div>
           )}
@@ -1522,12 +1998,12 @@ function DocumentCard({
               {levelFiles.map((file) => (
                 <li
                   key={file.id}
-                  className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/80 px-2.5 py-2"
+                  className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/80 px-2.5 py-2 dark:border-white/10 dark:bg-zinc-900/80"
                 >
-                  <FileText className="h-3.5 w-3.5 shrink-0 text-black/40" />
+                  <FileText className="h-3.5 w-3.5 shrink-0 text-black/40 dark:text-zinc-500" />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[12px] font-medium text-black">{file.name}</div>
-                    <div className="font-mono text-[10px] text-black/45">
+                    <div className="truncate text-[12px] font-medium text-black dark:text-zinc-100">{file.name}</div>
+                    <div className="font-mono text-[10px] text-black/45 dark:text-zinc-500">
                       {formatFileSize(file.size)}
                     </div>
                   </div>
@@ -1536,7 +2012,7 @@ function DocumentCard({
                     download={file.name}
                     target="_blank"
                     rel="noreferrer noopener"
-                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-black/60 transition-colors hover:bg-white"
+                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-black/60 transition-colors hover:bg-white dark:border-white/15 dark:text-zinc-400 dark:hover:bg-white/10"
                     aria-label={`Open ${file.name}`}
                   >
                     <ExternalLink className="h-3.5 w-3.5" />
@@ -1544,7 +2020,7 @@ function DocumentCard({
                   <button
                     type="button"
                     onClick={() => onRemoveAttachment(file.id)}
-                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-red-200 text-red-600 transition-colors hover:bg-red-50"
+                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-red-200 text-red-600 transition-colors hover:bg-red-50 dark:border-rose-500/40 dark:text-rose-300 dark:hover:bg-rose-950/50"
                     aria-label={`Remove ${file.name}`}
                   >
                     <X className="h-3.5 w-3.5" />
@@ -1553,7 +2029,7 @@ function DocumentCard({
               ))}
             </ul>
           ) : (
-            <p className="text-[12px] text-black/45">
+            <p className="text-[12px] text-black/45 dark:text-zinc-500">
               {showLevelTabs
                 ? `No ${activeLevel?.label?.toLowerCase() ?? ""} file yet.`
                 : "No files attached yet."}
@@ -1575,14 +2051,14 @@ function DocumentCard({
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={doc.attachments.length >= MAX_FILES_PER_DOC}
-            className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-slate-300 bg-white text-[12px] font-medium text-black/70 transition-colors hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
+            className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-slate-300 bg-white text-[12px] font-medium text-black/70 transition-colors hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45 dark:border-white/20 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-white/35 dark:hover:bg-white/5"
           >
             <Upload className="h-3.5 w-3.5" />
             {showLevelTabs ? `Attach ${activeLevel?.label ?? "file"}` : "Add files"}
           </button>
         </div>
 
-        <p className="mt-1.5 text-[10px] text-black/40">
+        <p className="mt-1.5 text-[10px] text-black/40 dark:text-zinc-500">
           PDF or images · up to {formatFileSize(MAX_FILE_BYTES)} each
           {showLevelTabs ? " · Front and Back" : ""}
         </p>

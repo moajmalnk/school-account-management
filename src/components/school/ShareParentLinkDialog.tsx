@@ -100,7 +100,7 @@ export function ShareParentLinkDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <ClipboardList className="h-4 w-4 text-[#2563EB]" />
+            <ClipboardList className="h-4 w-4 text-[#0F766E]" />
             Collect profile data
           </DialogTitle>
           <DialogDescription>

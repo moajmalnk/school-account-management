@@ -1,10 +1,13 @@
 import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Bell, LayoutDashboard, Settings, UserCog, Users, Wallet } from "lucide-react";
+import { Bell, ChevronLeft, LayoutDashboard, Settings, UserCog, Users, Wallet } from "lucide-react";
 import { useEffect } from "react";
 
 import {
+  AcademicYearBooksFade,
   TenantDesktopTopBar,
   TenantMacDock,
+  ThemeModeToggle,
+  useWorkspaceSubViewBack,
 } from "@/components/layout/TenantGlassShell";
 import {
   MobileTabBar,
@@ -19,7 +22,7 @@ import {
   sessionHasPermission,
 } from "@/lib/auth";
 import { TenantStoreProvider, schoolInitials, useTenantStore } from "@/lib/tenant-store";
-import { cn } from "@/lib/utils";
+import { cn, glassInsetClass } from "@/lib/utils";
 
 export const Route = createFileRoute("/tenant")({
   component: TenantLayout,
@@ -48,7 +51,7 @@ function TenantLayout() {
     return (
       <div className="tenant-canvas flex min-h-screen items-center justify-center">
         <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-slate-500">
-          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[#2563EB]/60" />
+          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[#0F766E]/60" />
           Validating tenant session…
         </div>
       </div>
@@ -70,7 +73,7 @@ function TenantShell() {
   const isTop = placement === "Top";
 
   return (
-    <div className="tenant-canvas min-h-dvh text-slate-900">
+    <div className="tenant-canvas min-h-dvh text-slate-900 dark:text-zinc-100">
       <ImpersonationBanner />
       <TenantMobileHeader />
       <div
@@ -94,7 +97,9 @@ function TenantShell() {
               isBottom ? "md:pb-8" : "md:pb-6",
             )}
           >
-            <Outlet />
+            <AcademicYearBooksFade>
+              <Outlet />
+            </AcademicYearBooksFade>
           </main>
         </div>
       </div>
@@ -115,7 +120,7 @@ function ImpersonationBanner() {
   const { session, logout } = useAuth();
   if (!session?.impersonated) return null;
   return (
-    <div className="sticky top-0 z-50 flex items-center justify-center gap-3 bg-[#1D4ED8] px-4 py-1.5 text-white">
+    <div className="sticky top-0 z-50 flex items-center justify-center gap-3 bg-[#0F766E] px-4 py-1.5 text-white">
       <span className="text-[12px] font-medium">
         Impersonating <strong>{session.displayName}</strong> · {session.email} — this
         tab only, no changes to your admin login
@@ -139,6 +144,7 @@ function TenantMobileHeader() {
   const navigate = useNavigate();
   const { notifications, schoolDetails } = useTenantStore();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const { showBack, goBack, backLabel } = useWorkspaceSubViewBack();
   const onNotifications = pathname.startsWith("/tenant/notifications");
   const NAV_LABELS: Record<string, string> = {
     "/tenant/dashboard": "DASHBOARD",
@@ -156,34 +162,49 @@ function TenantMobileHeader() {
   const initials = schoolInitials(tenantName);
 
   return (
-    <header className="sticky top-0 z-30 bg-gradient-to-b from-white/80 to-transparent px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl md:hidden">
+    <header className="sticky top-0 z-30 bg-gradient-to-b from-white/80 to-transparent px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl dark:from-[#0a0a0a]/95 dark:via-[#0a0a0a]/65 dark:to-transparent md:hidden">
       <div className="flex w-full items-center gap-3">
-        <div
-          className={cn(
-            "grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl text-[11px] font-bold text-white",
-            !logoUrl && "bg-gradient-to-br from-[#2563EB] to-[#4C69A4]",
-          )}
-        >
-          {logoUrl ? (
-            <img src={logoUrl} alt={tenantName} className="h-full w-full object-cover" />
-          ) : (
-            initials
-          )}
-        </div>
+        {showBack ? (
+          <button
+            type="button"
+            onClick={goBack}
+            aria-label={backLabel}
+            className={cn(
+              glassInsetClass,
+              "grid h-10 w-10 shrink-0 place-items-center text-slate-700 transition-colors hover:text-[#0F766E] dark:text-zinc-200 dark:hover:text-[#2DD4BF]",
+            )}
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+        ) : (
+          <div
+            className={cn(
+              "grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl text-[11px] font-bold text-white",
+              !logoUrl && "bg-gradient-to-br from-[#0F766E] to-[#115E59]",
+            )}
+          >
+            {logoUrl ? (
+              <img src={logoUrl} alt={tenantName} className="h-full w-full object-cover" />
+            ) : (
+              initials
+            )}
+          </div>
+        )}
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[11px] font-bold uppercase leading-tight tracking-[0.04em] text-slate-900">
+          <div className="truncate text-[11px] font-bold uppercase leading-tight tracking-[0.04em] text-slate-900 dark:text-zinc-100">
             {tenantLabel} - {sectionLabel}
           </div>
         </div>
+        <ThemeModeToggle className="rounded-full border border-white/80 bg-white/70 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-200" />
         <button
           type="button"
           onClick={() => navigate({ to: "/tenant/notifications" })}
           aria-label="Notifications"
-          className="relative grid h-11 w-11 shrink-0 place-items-center rounded-full border border-white/80 bg-white/70 text-slate-600 shadow-sm backdrop-blur-md"
+          className="relative grid h-11 w-11 shrink-0 place-items-center rounded-full border border-white/80 bg-white/70 text-slate-600 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-300"
         >
           <Bell className="h-[18px] w-[18px]" />
           {unreadCount > 0 && (
-            <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full border-2 border-white bg-[#2563EB]" />
+            <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full border-2 border-white bg-[#0F766E] dark:border-zinc-900" />
           )}
         </button>
       </div>

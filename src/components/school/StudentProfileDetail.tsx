@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, startTransition, type FormEvent, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
   Camera,
-  ChevronLeft,
   Download,
   ExternalLink,
   FileText,
@@ -84,6 +83,7 @@ type StudentDraft = {
   guardianRelation: "" | GuardianRelation;
   guardianOccupation: string;
   aadhaar: string;
+  admissionNumber: string;
   placeOfBirth: string;
   nationality: string;
   religion: string;
@@ -109,6 +109,7 @@ function draftFromStudent(student: Student): StudentDraft {
     guardianRelation: student.guardianRelation ?? "",
     guardianOccupation: student.guardianOccupation ?? "",
     aadhaar: student.aadhaar ?? "",
+    admissionNumber: student.admissionNumber ?? "",
     placeOfBirth: student.placeOfBirth ?? "",
     nationality: student.nationality ?? "",
     religion: student.religion ?? "",
@@ -142,8 +143,10 @@ type Receipt = {
   mode: string;
 };
 
-const META_LABEL = "text-black/45 font-semibold tracking-wider text-[11px] uppercase";
-const CARD_FRAME = "rounded-xl bg-white border border-slate-100 shadow-sm p-6";
+const META_LABEL =
+  "text-[11px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400";
+const CARD_FRAME =
+  "rounded-xl border border-slate-100 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#171717] dark:text-zinc-100 dark:shadow-black/40";
 const profileBottomPad = "pb-[calc(5.75rem+env(safe-area-inset-bottom))] md:pb-0";
 const MAX_FILES_PER_DOC = 8;
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
@@ -378,7 +381,7 @@ function StudentPhotoAvatar({
           aria-label={`Change photo for ${student.name}`}
           title="Change photo"
           className={cn(
-            "absolute -bottom-1 -right-1 grid place-items-center rounded-full border-2 border-white bg-[#2563EB] text-white shadow-sm transition-colors hover:bg-slate-900",
+            "absolute -bottom-1 -right-1 grid place-items-center rounded-full border-2 border-white bg-[#0F766E] text-white shadow-sm transition-colors hover:bg-slate-900",
             cam,
           )}
         >
@@ -408,7 +411,7 @@ function StudentPhotoAvatar({
         <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6">
           <DialogHeader>
             <DialogTitle className="text-[22px] font-semibold text-black">Remove photo</DialogTitle>
-            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
+            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60 dark:text-zinc-400">
               Remove {student.name}&apos;s profile photo? You can upload a new one anytime.
             </DialogDescription>
           </DialogHeader>
@@ -498,16 +501,22 @@ export function StudentProfileDetail({
   const ledger = useMemo(() => deriveLedger(student.due), [student.due]);
   const receipts = useMemo(() => deriveReceipts(student.due), [student.due]);
   const documents = useMemo(() => ensureStudentDocuments(student), [student]);
+  const docsNormalizedForId = useRef<string | null>(null);
 
   useEffect(() => {
+    if (docsNormalizedForId.current === student.id) return;
     const needsNormalize =
       !Array.isArray(student.documents) ||
       student.documents.length === 0 ||
       DEFAULT_STUDENT_DOCUMENTS.some((def) => !student.documents?.some((d) => d.id === def.id));
+    docsNormalizedForId.current = student.id;
     if (!needsNormalize) return;
     const next = { ...student, documents: ensureStudentDocuments(student) };
-    setStudents((prev) => prev.map((s) => (s.id === student.id ? next : s)));
-    upsertStudentInSnapshot(next);
+    // Defer so the profile can paint once before store rewrite.
+    startTransition(() => {
+      setStudents((prev) => prev.map((s) => (s.id === student.id ? next : s)));
+      upsertStudentInSnapshot(next);
+    });
   }, [student, setStudents]);
 
   const persistDocuments = (nextDocs: StaffDocument[], aadhaarOverride?: string) => {
@@ -645,6 +654,7 @@ export function StudentProfileDetail({
       guardianRelation: draft.guardianRelation || undefined,
       guardianOccupation: emptyToUndefined(draft.guardianOccupation),
       aadhaar: emptyToUndefined(draft.aadhaar),
+      admissionNumber: emptyToUndefined(draft.admissionNumber),
       placeOfBirth: emptyToUndefined(draft.placeOfBirth),
       nationality: emptyToUndefined(draft.nationality),
       religion: emptyToUndefined(draft.religion),
@@ -691,15 +701,6 @@ export function StudentProfileDetail({
 
   return (
     <div className={cn("flex flex-col gap-4 sm:gap-6", profileBottomPad)}>
-      <button
-        type="button"
-        onClick={onBack}
-        className="inline-flex w-fit items-center gap-1 text-[12.5px] font-medium text-slate-400 transition-colors hover:text-slate-800"
-      >
-        <ChevronLeft className="h-4 w-4 shrink-0" />
-        Back to Students
-      </button>
-
       <ShareParentLinkDialog
         open={shareOpen}
         onOpenChange={setShareOpen}
@@ -709,8 +710,8 @@ export function StudentProfileDetail({
         guardianName={student.guardian}
       />
 
-      <section className="overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.06)]">
-        <div className="h-1 bg-gradient-to-r from-[#2563EB] via-[#4C69A4] to-[#93C5FD]" />
+      <section className="overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.06)] dark:border-white/10 dark:bg-[#171717] dark:shadow-black/40">
+        <div className="h-1 bg-gradient-to-r from-[#0F766E] via-[#115E59] to-[#99F6E4]" />
         <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:p-6">
           <div className="flex min-w-0 flex-col items-center gap-4 text-center sm:flex-row sm:items-center sm:text-left">
             <StudentPhotoAvatar student={student} onPhotoChange={updatePhoto} size="lg" />
@@ -718,7 +719,7 @@ export function StudentProfileDetail({
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
                 Student profile
               </p>
-              <h1 className="mt-1 truncate text-[1.65rem] font-semibold tracking-tight text-slate-950 sm:text-[1.85rem]">
+              <h1 className="mt-1 truncate text-[1.65rem] font-semibold tracking-tight text-slate-950 dark:text-zinc-50 sm:text-[1.85rem]">
                 {student.name}
               </h1>
               <p className="mt-1 text-[14px] font-medium text-slate-500">{student.cls}</p>
@@ -731,7 +732,7 @@ export function StudentProfileDetail({
                     className={cn(
                       "inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold",
                       student.gender === "F"
-                        ? "bg-[#EFF6FF] text-[#1D4ED8]"
+                        ? "bg-[#F0FDFA] text-[#0F766E]"
                         : "bg-slate-900 text-white",
                     )}
                   >
@@ -747,7 +748,7 @@ export function StudentProfileDetail({
             <button
               type="button"
               onClick={openShare}
-              className="inline-flex h-10 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 text-[13px] font-semibold text-slate-700 shadow-sm transition-colors hover:border-[#93C5FD] hover:bg-[#EFF6FF] hover:text-[#1D4ED8]"
+              className="inline-flex h-10 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 text-[13px] font-semibold text-slate-700 shadow-sm transition-colors hover:border-[#99F6E4] hover:bg-[#F0FDFA] hover:text-[#0F766E]"
             >
               <ClipboardList className="h-4 w-4" />
               Collect
@@ -758,7 +759,7 @@ export function StudentProfileDetail({
                 resetDraft();
                 setEditOpen(true);
               }}
-              className="inline-flex h-10 items-center gap-1.5 rounded-full bg-slate-950 px-4 text-[13px] font-semibold text-white shadow-sm transition-colors hover:bg-slate-800"
+              className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#0F766E] px-4 text-[13px] font-semibold text-white shadow-sm transition-colors hover:bg-[#0D9488]"
             >
               <Pencil className="h-4 w-4" />
               Edit Profile
@@ -792,7 +793,7 @@ export function StudentProfileDetail({
                       <div className="flex shrink-0 items-center gap-1.5">
                         <a
                           href={`tel:${phoneDigits}`}
-                          className="inline-flex items-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow-sm transition-colors hover:border-[#2563EB]/40 hover:bg-[#DBEAFE] hover:text-[#2563EB]"
+                          className="inline-flex items-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow-sm transition-colors hover:border-[#0F766E]/40 hover:bg-[#CCFBF1] hover:text-[#0F766E]"
                         >
                           <Phone className="h-3 w-3" /> Call
                         </a>
@@ -864,10 +865,17 @@ export function StudentProfileDetail({
                 Class assignment and school category details.
               </p>
               <div className="mt-5 space-y-5">
+                <MetaRow label="Admission Number">
+                  {student.admissionNumber ? (
+                    <span className="font-mono">{student.admissionNumber}</span>
+                  ) : (
+                    <span className="font-normal text-black/40">—</span>
+                  )}
+                </MetaRow>
                 <div>
                   <div className={META_LABEL}>Class</div>
                   <div className="mt-1.5">
-                    <span className="inline-flex rounded-full bg-[#DBEAFE] px-3 py-1.5 text-[12px] font-semibold text-black">
+                    <span className="inline-flex rounded-full bg-[#CCFBF1] px-3 py-1.5 text-[12px] font-semibold text-black">
                       {student.cls}
                     </span>
                   </div>
@@ -909,7 +917,7 @@ export function StudentProfileDetail({
                     </MetaRow>
                   </div>
                 ) : (
-                  <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 py-6 text-center text-[13px] text-black/50">
+                  <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 py-6 text-center text-[13px] text-black/50 dark:border-white/15 dark:bg-zinc-900/60 dark:text-zinc-400">
                     No transport route assigned for this student.
                   </div>
                 )}
@@ -928,7 +936,7 @@ export function StudentProfileDetail({
                   scans directly here.
                 </p>
               </div>
-              <div className="flex shrink-0 items-center gap-2 rounded-lg bg-slate-50 px-4 py-3">
+              <div className="flex shrink-0 items-center gap-2 rounded-lg bg-slate-50 px-4 py-3 dark:bg-zinc-900/70">
                 <FileText className="h-4 w-4 text-black/45" />
                 <div className="text-right">
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
@@ -1039,8 +1047,8 @@ export function StudentProfileDetail({
                         "min-h-8 rounded-full px-3 text-[11px] font-semibold transition-colors",
                         draft.gender === g
                           ? g === "F"
-                            ? "bg-black text-[#2563EB]"
-                            : "bg-black text-white"
+                            ? "bg-black text-[#0F766E]"
+                            : "bg-[#0F766E] text-white"
                           : "text-black/55 hover:bg-black/5",
                       )}
                     >
@@ -1103,6 +1111,14 @@ export function StudentProfileDetail({
                   </Select>
                 </div>
               </div>
+              <MetaField
+                label="Admission Number"
+                value={draft.admissionNumber}
+                editing
+                onChange={(v) => patchDraft("admissionNumber", v)}
+                placeholder="e.g. ADM-2841"
+                mono
+              />
               <div className="sm:col-span-2">
                 <MetaField
                   label="Residential Mailing Address"
@@ -1138,7 +1154,7 @@ export function StudentProfileDetail({
                       className={cn(
                         "min-h-8 flex-1 cursor-pointer rounded-full px-1 text-[11px] font-semibold transition-colors",
                         draft.guardianRelation === relation
-                          ? "bg-[#2563EB] text-white"
+                          ? "bg-[#0F766E] text-white"
                           : "text-black/55 hover:bg-black/5",
                       )}
                     >
@@ -1233,7 +1249,7 @@ export function StudentProfileDetail({
               <Button type="button" variant="outline" onClick={() => setEditOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+              <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
                 Save Changes
               </Button>
             </DialogFooter>
@@ -1254,11 +1270,11 @@ function FeeStatBox({
   valueClassName?: string;
 }) {
   return (
-    <div className="rounded-lg bg-slate-50 p-4">
+    <div className="rounded-lg bg-slate-50 p-4 dark:bg-zinc-900/70">
       <div className={META_LABEL}>{label}</div>
       <div
         className={cn(
-          "mt-2 font-mono text-xl font-semibold tracking-tight text-black",
+          "mt-2 font-mono text-xl font-semibold tracking-tight text-black dark:text-zinc-100",
           valueClassName,
         )}
       >
@@ -1270,11 +1286,16 @@ function FeeStatBox({
 
 function FeeBalanceBox({ balance, overdue }: { balance: number; overdue: boolean }) {
   return (
-    <div className={cn("rounded-lg p-4", overdue ? "bg-[#2563EB]" : "bg-slate-50")}>
+    <div
+      className={cn(
+        "rounded-lg p-4",
+        overdue ? "bg-[#0F766E]" : "bg-slate-50 dark:bg-zinc-900/70",
+      )}
+    >
       <div
         className={cn(
           "flex items-start justify-between",
-          overdue ? "text-white/75" : "text-black/55",
+          overdue ? "text-white/75" : "text-black/55 dark:text-zinc-400",
         )}
       >
         <div className="text-[11px] font-semibold uppercase tracking-wider">Current Balance</div>
@@ -1409,10 +1430,10 @@ function MetaField({
             className={cn(
               "text-[14px] font-medium",
               mono && "font-mono",
-              multiline ? "whitespace-pre-line leading-snug text-black/85" : "text-black",
+              multiline ? "whitespace-pre-line leading-snug text-black/85 dark:text-zinc-200" : "text-black dark:text-zinc-100",
             )}
           >
-            {value || <span className="font-normal text-black/40">—</span>}
+            {value || <span className="font-normal text-black/40 dark:text-zinc-500">—</span>}
           </div>
         )}
       </div>
@@ -1553,7 +1574,7 @@ function FeesTable({
               type="button"
               onClick={() => setSelectedRow(r)}
               aria-label={`View details for ${r.desc}`}
-              className="w-full rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 text-left transition-colors hover:border-black/15 hover:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]"
+              className="w-full rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 text-left transition-colors hover:border-black/15 hover:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
@@ -1646,7 +1667,7 @@ function FeesTable({
                     }
                   }}
                   aria-label={`View details for ${r.desc}`}
-                  className="cursor-pointer border-b border-[#F0F0F0] transition-colors last:border-b-0 hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2563EB]"
+                  className="cursor-pointer border-b border-[#F0F0F0] transition-colors last:border-b-0 hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0F766E]"
                 >
                   <td className="py-4 pl-1 pr-4 font-mono text-[13px] text-black/55">{r.date}</td>
                   <td className="px-4 py-4 text-[13px] font-medium text-black">{r.desc}</td>
@@ -1721,7 +1742,7 @@ function FeesTable({
                 </div>
                 <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#F4F4F5]">
                   <div
-                    className="h-full rounded-full bg-[#2563EB] transition-all"
+                    className="h-full rounded-full bg-[#0F766E] transition-all"
                     style={{ width: `${paidPct}%` }}
                   />
                 </div>
@@ -1850,7 +1871,7 @@ function ReceiptsList({
             {receipts.length} historical digital receipts
           </div>
         </div>
-        <span className="inline-flex items-center gap-1 rounded-full bg-[#2563EB] px-2.5 py-1 text-[10.5px] font-semibold text-white">
+        <span className="inline-flex items-center gap-1 rounded-full bg-[#0F766E] px-2.5 py-1 text-[10.5px] font-semibold text-white">
           <span className="h-1.5 w-1.5 rounded-full bg-black" />
           Reconciled
         </span>
@@ -1896,7 +1917,7 @@ function ReceiptsList({
                   onClick={() => handleDownload(r)}
                   aria-label={`Download receipt ${r.id}`}
                   title="Download receipt"
-                  className="grid h-10 w-10 place-items-center rounded-lg border border-[#E5E5E5] bg-white text-black/55 shadow-sm transition-colors hover:bg-black hover:text-white"
+                  className="grid h-10 w-10 place-items-center rounded-lg border border-[#E5E5E5] bg-white text-black/55 shadow-sm transition-colors hover:bg-[#0F766E] hover:text-white"
                 >
                   <Download className="h-3.5 w-3.5" />
                 </button>
@@ -1915,11 +1936,11 @@ const STATUS_STYLE: Record<LedgerStatus, { wrap: string; dot: string }> = {
     dot: "bg-black",
   },
   "Partially Paid": {
-    wrap: "bg-[#DBEAFE] text-black",
+    wrap: "bg-[#CCFBF1] text-black",
     dot: "bg-black",
   },
   Overdue: {
-    wrap: "bg-[#2563EB] text-white",
+    wrap: "bg-[#0F766E] text-white",
     dot: "bg-black",
   },
 };
@@ -1974,13 +1995,15 @@ function StudentDocumentCard({
   const attachLevelId = showLevelTabs ? activeLevelId : (levels[0]?.id ?? "files");
 
   return (
-    <div className="min-w-0 rounded-xl border border-slate-100 bg-slate-50/50 p-4">
+    <div className="min-w-0 rounded-xl border border-slate-100 bg-slate-50/50 p-4 dark:border-white/10 dark:bg-zinc-900/70">
       <div className="flex items-start justify-between gap-2">
         <div className={META_LABEL}>{doc.label}</div>
         <span
           className={cn(
             "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
-            complete ? "bg-[#DBEAFE] text-black" : "bg-slate-200/80 font-medium text-black/50",
+            complete
+              ? "bg-[#CCFBF1] text-black dark:bg-[#0F766E]/35 dark:text-[#5EEAD4]"
+              : "bg-slate-200/80 font-medium text-black/50 dark:bg-white/10 dark:text-zinc-400",
           )}
         >
           {complete ? "On file" : "Not provided"}
@@ -1992,23 +2015,23 @@ function StudentDocumentCard({
           value={doc.number}
           onChange={(e) => onNumberChange(e.target.value)}
           placeholder="XXXX XXXX XXXX"
-          className="mt-1.5 h-10 border-slate-200 bg-white font-mono text-[13px]"
+          className="mt-1.5 h-10 border-slate-200 bg-white font-mono text-[13px] dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-100"
         />
       )}
 
       {isOther && (
-        <p className="mt-1.5 text-[12px] leading-snug text-black/50">
+        <p className="mt-1.5 text-[12px] leading-snug text-black/50 dark:text-zinc-400">
           Birth certificate, transfer certificate, photos, or other supporting files.
         </p>
       )}
 
-      <div className={cn("border-t border-slate-200/80 pt-4", isOther ? "mt-3" : "mt-4")}>
+      <div className={cn("border-t border-slate-200/80 pt-4 dark:border-white/10", isOther ? "mt-3" : "mt-4")}>
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-black/45">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
             <Paperclip className="h-3.5 w-3.5" />
             {showLevelTabs ? "Attachments" : "Files"}
           </div>
-          <span className="font-mono text-[10px] text-black/45">
+          <span className="font-mono text-[10px] text-black/45 dark:text-zinc-500">
             {doc.attachments.length} / {MAX_FILES_PER_DOC}
           </span>
         </div>
@@ -2026,15 +2049,15 @@ function StudentDocumentCard({
                   className={cn(
                     "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors",
                     active
-                      ? "bg-black text-white"
-                      : "bg-white text-black/65 ring-1 ring-slate-200 hover:bg-slate-100",
+                      ? "bg-[#0F766E] text-white dark:bg-[#14B8A6]"
+                      : "bg-white text-black/65 ring-1 ring-slate-200 hover:bg-slate-100 dark:bg-zinc-950 dark:text-zinc-300 dark:ring-white/15 dark:hover:bg-white/10",
                   )}
                 >
                   {level.label}
                   <span
                     className={cn(
                       "font-mono text-[10px]",
-                      active ? "text-white/70" : "text-black/40",
+                      active ? "text-white/70" : "text-black/40 dark:text-zinc-500",
                     )}
                   >
                     {count}
@@ -2045,9 +2068,9 @@ function StudentDocumentCard({
           </div>
         )}
 
-        <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
+        <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-zinc-950/80">
           {showLevelTabs && (
-            <div className="mb-2 text-[11px] font-semibold text-black/55">
+            <div className="mb-2 text-[11px] font-semibold text-black/55 dark:text-zinc-400">
               {activeLevel?.label ?? "Side"} scan
             </div>
           )}
@@ -2056,12 +2079,12 @@ function StudentDocumentCard({
               {levelFiles.map((file) => (
                 <li
                   key={file.id}
-                  className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/80 px-2.5 py-2"
+                  className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/80 px-2.5 py-2 dark:border-white/10 dark:bg-zinc-900/80"
                 >
-                  <FileText className="h-3.5 w-3.5 shrink-0 text-black/40" />
+                  <FileText className="h-3.5 w-3.5 shrink-0 text-black/40 dark:text-zinc-500" />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[12px] font-medium text-black">{file.name}</div>
-                    <div className="font-mono text-[10px] text-black/45">
+                    <div className="truncate text-[12px] font-medium text-black dark:text-zinc-100">{file.name}</div>
+                    <div className="font-mono text-[10px] text-black/45 dark:text-zinc-500">
                       {formatFileSize(file.size)}
                     </div>
                   </div>
@@ -2070,7 +2093,7 @@ function StudentDocumentCard({
                     download={file.name}
                     target="_blank"
                     rel="noreferrer noopener"
-                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-black/60 transition-colors hover:bg-white"
+                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-black/60 transition-colors hover:bg-white dark:border-white/15 dark:text-zinc-400 dark:hover:bg-white/10"
                     aria-label={`Open ${file.name}`}
                   >
                     <ExternalLink className="h-3.5 w-3.5" />
@@ -2078,7 +2101,7 @@ function StudentDocumentCard({
                   <button
                     type="button"
                     onClick={() => onRemoveAttachment(file.id)}
-                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-red-200 text-red-600 transition-colors hover:bg-red-50"
+                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-red-200 text-red-600 transition-colors hover:bg-red-50 dark:border-rose-500/40 dark:text-rose-300 dark:hover:bg-rose-950/50"
                     aria-label={`Remove ${file.name}`}
                   >
                     <X className="h-3.5 w-3.5" />
@@ -2087,7 +2110,7 @@ function StudentDocumentCard({
               ))}
             </ul>
           ) : (
-            <p className="text-[12px] text-black/45">
+            <p className="text-[12px] text-black/45 dark:text-zinc-500">
               {showLevelTabs
                 ? `No ${activeLevel?.label?.toLowerCase() ?? ""} file yet.`
                 : "No files attached yet."}
@@ -2109,14 +2132,14 @@ function StudentDocumentCard({
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={doc.attachments.length >= MAX_FILES_PER_DOC}
-            className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-slate-300 bg-white text-[12px] font-medium text-black/70 transition-colors hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
+            className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-slate-300 bg-white text-[12px] font-medium text-black/70 transition-colors hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45 dark:border-white/20 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-white/35 dark:hover:bg-white/5"
           >
             <Upload className="h-3.5 w-3.5" />
             {showLevelTabs ? `Attach ${activeLevel?.label ?? "file"}` : "Add files"}
           </button>
         </div>
 
-        <p className="mt-1.5 text-[10px] text-black/40">
+        <p className="mt-1.5 text-[10px] text-black/40 dark:text-zinc-500">
           PDF or images · up to {formatFileSize(MAX_FILE_BYTES)} each
           {showLevelTabs ? " · Front and Back" : ""}
         </p>

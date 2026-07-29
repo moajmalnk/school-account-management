@@ -1,18 +1,22 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Bell,
+  CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   LayoutDashboard,
   LogOut,
+  Moon,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
   Settings,
+  Sun,
   UserCog,
   Users,
   Wallet,
 } from "lucide-react";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -48,7 +52,101 @@ import {
   useTenantStore,
   type ThemeSettings,
 } from "@/lib/tenant-store";
-import { cn, glassPanelClass } from "@/lib/utils";
+import { isFinanceTab } from "@/lib/finance-tabs";
+import { cn, glassInsetClass, glassPanelClass } from "@/lib/utils";
+
+/** Soft fade when academic year books switch. */
+export function AcademicYearBooksFade({ children }: { children: ReactNode }) {
+  const { academicYear } = useTenantStore();
+  const [visible, setVisible] = useState(true);
+  const [displayYear, setDisplayYear] = useState(academicYear);
+
+  useEffect(() => {
+    if (academicYear === displayYear) return;
+    setVisible(false);
+    const t = window.setTimeout(() => {
+      setDisplayYear(academicYear);
+      setVisible(true);
+    }, 140);
+    return () => window.clearTimeout(t);
+  }, [academicYear, displayYear]);
+
+  return (
+    <div
+      key={displayYear}
+      className={cn(
+        "min-w-0 transition-opacity duration-200 ease-out",
+        visible ? "opacity-100" : "opacity-0",
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function ThemeModeToggle({ className }: { className?: string }) {
+  const { themeSettings, setThemeSettings } = useTenantStore();
+  const isDark = themeSettings.mode === "Dark";
+
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        setThemeSettings((prev) => ({
+          ...prev,
+          mode: prev.mode === "Dark" ? "Light" : "Dark",
+        }))
+      }
+      aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+      title={isDark ? "Light mode" : "Dark mode"}
+      className={cn(
+        glassInsetClass,
+        "grid h-10 w-10 place-items-center text-slate-600 transition-colors hover:text-[#0F766E] dark:text-zinc-300 dark:hover:text-[#2DD4BF]",
+        className,
+      )}
+    >
+      {isDark ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
+    </button>
+  );
+}
+
+export function useWorkspaceSubViewBack() {
+  const navigate = useNavigate();
+  const { pathname, search } = useRouterState({
+    select: (s) => ({
+      pathname: s.location.pathname,
+      search: s.location.search as Record<string, unknown>,
+    }),
+  });
+
+  const detailId = typeof search.id === "string" && search.id ? search.id : null;
+  const financeTab = isFinanceTab(search.tab) ? search.tab : null;
+  const onFinanceSubView = pathname.startsWith("/tenant/finance") && Boolean(financeTab);
+  const onAdmitStudent = pathname.startsWith("/tenant/students/admit");
+  const onStudentProfile = pathname === "/tenant/students" && Boolean(detailId);
+  const onStaffDetail = pathname === "/tenant/staff" && Boolean(detailId);
+  const showBack = onFinanceSubView || onAdmitStudent || onStudentProfile || onStaffDetail;
+
+  const goBack = () => {
+    if (onAdmitStudent || onStudentProfile) {
+      navigate({ to: "/tenant/students", search: {}, replace: true });
+      return;
+    }
+    if (onStaffDetail) {
+      navigate({ to: "/tenant/staff", search: {}, replace: true });
+      return;
+    }
+    navigate({ to: "/tenant/finance", search: {}, replace: true });
+  };
+
+  const backLabel = onStaffDetail
+    ? "Back to staff directory"
+    : onAdmitStudent || onStudentProfile
+      ? "Back to students directory"
+      : "Back to finance overview";
+
+  return { showBack, goBack, backLabel };
+}
 
 type NavEntry = {
   to: string;
@@ -134,7 +232,12 @@ export function TenantMacDock({
           active,
           icon: (
             <Icon
-              className={cn("h-full w-full", active ? "text-[#2563EB]" : "text-slate-700")}
+              className={cn(
+                "h-full w-full",
+                active
+                  ? "text-[#0F766E] dark:text-[#5EEAD4]"
+                  : "text-slate-700 dark:text-zinc-300",
+              )}
               strokeWidth={active ? 2.35 : 2}
             />
           ),
@@ -180,9 +283,9 @@ export function TenantMacDock({
       >
         <div
           className={cn(
-            "mb-2 grid shrink-0 place-items-center overflow-hidden rounded-lg font-bold text-white shadow-md shadow-blue-900/20",
+            "mb-2 grid shrink-0 place-items-center overflow-hidden rounded-lg font-bold text-white shadow-md shadow-teal-900/20",
             expanded ? "mx-auto h-11 w-11 text-[11px]" : "h-10 w-10 text-[11px]",
-            !logoUrl && "bg-gradient-to-br from-[#2563EB] to-[#4C69A4]",
+            !logoUrl && "bg-gradient-to-br from-[#0F766E] to-[#115E59]",
           )}
           title={tenantName}
         >
@@ -225,14 +328,16 @@ export function TenantMacDock({
                   className={cn(
                     "flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 transition-colors",
                     active
-                      ? "bg-[#2563EB]/12 text-[#0F172A] ring-1 ring-[#2563EB]/25"
-                      : "text-slate-600 hover:bg-white/70 hover:text-slate-900",
+                      ? "bg-[#0F766E]/12 text-[#0F172A] ring-1 ring-[#0F766E]/25 dark:bg-[#0F766E]/30 dark:text-[#99F6E4] dark:ring-[#2DD4BF]/35"
+                      : "text-slate-600 hover:bg-white/70 hover:text-slate-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-zinc-100",
                   )}
                 >
                   <span
                     className={cn(
-                      "grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-white/70",
-                      active ? "bg-white text-[#2563EB]" : "bg-white/70 text-slate-700",
+                      "grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-white/70 dark:border-white/10",
+                      active
+                        ? "bg-white text-[#0F766E] dark:bg-[#0F766E] dark:text-white"
+                        : "bg-white/70 text-slate-700 dark:bg-white/5 dark:text-zinc-300",
                     )}
                   >
                     <Icon className="h-[18px] w-[18px]" strokeWidth={active ? 2.35 : 2} />
@@ -273,11 +378,11 @@ export function TenantMacDock({
                   <span
                     className={cn(
                       "grid h-11 w-11 place-items-center rounded-lg border border-white/70 bg-gradient-to-br from-white/95 to-white/70 shadow-[0_6px_18px_-10px_rgba(15,23,42,0.45)]",
-                      active && "ring-2 ring-[#2563EB]/40",
+                      active && "ring-2 ring-[#0F766E]/40",
                     )}
                   >
                     <Icon
-                      className={cn("h-5 w-5", active ? "text-[#2563EB]" : "text-slate-700")}
+                      className={cn("h-5 w-5", active ? "text-[#0F766E]" : "text-slate-700")}
                       strokeWidth={active ? 2.35 : 2}
                     />
                   </span>
@@ -305,7 +410,7 @@ export function TenantMacDock({
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             className={cn(
-              "mt-auto flex shrink-0 items-center justify-center gap-2 rounded-xl text-slate-500 transition-colors hover:bg-white/70 hover:text-[#2563EB]",
+              "mt-auto flex shrink-0 items-center justify-center gap-2 rounded-xl text-slate-500 transition-colors hover:bg-white/70 hover:text-[#0F766E]",
               expanded ? "mx-1 h-10 w-auto px-3" : "h-10 w-10",
             )}
           >
@@ -332,8 +437,15 @@ export function TenantGlassSidebar(props: { className?: string }) {
 export function TenantDesktopTopBar() {
   const navigate = useNavigate();
   const { session, logout } = useAuth();
-  const { academicYear, setAcademicYear, academicYears, setAcademicYears, notifications, schoolDetails } =
-    useTenantStore();
+  const {
+    academicYear,
+    academicYears,
+    openAcademicYear,
+    addAcademicYear,
+    notifications,
+    schoolDetails,
+  } = useTenantStore();
+  const { showBack, goBack, backLabel } = useWorkspaceSubViewBack();
   const [pendingLogout, setPendingLogout] = useState(false);
   const [addYearOpen, setAddYearOpen] = useState(false);
   const [yearDraft, setYearDraft] = useState("");
@@ -352,14 +464,13 @@ export function TenantDesktopTopBar() {
     e.preventDefault();
     const label = normalizeAcademicYearLabel(yearDraft);
     if (!label) return;
-    if (academicYears.some((y) => y.toLowerCase() === label.toLowerCase())) {
+    const added = addAcademicYear(label);
+    if (!added) {
       toast.error(`${label} already exists`);
       return;
     }
-    setAcademicYears((prev) => [...prev, label]);
-    setAcademicYear(label);
-    toast.success(`Academic year added · ${label}`, {
-      description: "Set as the active academic year",
+    toast.success(`Opened books for ${label}`, {
+      description: "Fee periods cloned from the previous year · ready to enroll students",
     });
     setYearDraft("");
     setAddYearOpen(false);
@@ -370,39 +481,55 @@ export function TenantDesktopTopBar() {
       <header
         className={cn(
           glassPanelClass,
-          "mb-5 hidden items-center justify-between gap-3 rounded-lg px-4 py-3.5 md:flex md:gap-4 md:px-5",
+          "mb-5 hidden items-center justify-between gap-2 rounded-2xl px-3 py-3 md:flex md:gap-3 md:px-5 md:py-3.5",
         )}
       >
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate text-[15px] font-bold uppercase tracking-wide text-slate-900 xl:text-[16px]">
-            {tenantName}
-          </h1>
-          <p className="mt-0.5 truncate text-[11px] text-slate-500">Tenant administration workspace</p>
+        <div className="flex min-w-0 flex-1 basis-0 items-center gap-2.5 sm:gap-3">
+          {showBack && (
+            <button
+              type="button"
+              onClick={goBack}
+              aria-label={backLabel}
+              className={cn(
+                glassInsetClass,
+                "inline-flex h-9 w-9 shrink-0 items-center justify-center text-slate-700 transition-colors hover:text-[#0F766E] dark:text-zinc-300 dark:hover:text-[#2DD4BF] sm:h-10 sm:w-auto sm:gap-1.5 sm:px-3",
+              )}
+            >
+              <ChevronLeft className="h-4 w-4 shrink-0" />
+              <span className="hidden text-[13px] font-semibold sm:inline">Back</span>
+            </button>
+          )}
+          <div className="min-w-0">
+            <h1 className="line-clamp-2 text-[13px] font-bold uppercase tracking-wide text-slate-900 sm:text-[14px] xl:line-clamp-1 xl:text-[16px] dark:text-zinc-100">
+              {tenantName}
+            </h1>
+            <p className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-zinc-400">Tenant administration workspace</p>
+          </div>
         </div>
 
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="glass-inset flex max-w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[12px] font-semibold text-slate-800 transition-colors hover:bg-white/50 sm:px-3"
+                className="inline-flex max-w-[11rem] items-center gap-1 rounded-full bg-[#10B981] px-2.5 py-2 text-[11px] font-semibold text-white shadow-sm shadow-emerald-500/25 transition-opacity hover:opacity-90 sm:max-w-none sm:gap-1.5 sm:px-3.5 sm:text-[12px]"
               >
-                <span className="truncate">{academicYear}</span>
-                <span className="hidden rounded-full bg-[#10B981]/15 px-2 py-0.5 text-[10px] font-bold text-[#10B981] sm:inline">
-                  Active
-                </span>
-                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                <CheckCircle2 className="hidden h-3.5 w-3.5 shrink-0 sm:block" strokeWidth={2.5} />
+                <span className="truncate">{academicYear} Active</span>
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-80" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
-              className="min-w-[11rem] rounded-lg border-white/60 bg-white/90 backdrop-blur-xl"
+              className="min-w-[11rem] rounded-lg border-white/60 bg-white/90 backdrop-blur-xl dark:border-white/10 dark:bg-zinc-900"
             >
               <DropdownMenuRadioGroup
                 value={academicYear}
                 onValueChange={(y) => {
-                  setAcademicYear(y);
-                  toast.success(`Academic year set to ${y}`);
+                  const stats = openAcademicYear(y);
+                  toast.success(`Opened books for ${y}`, {
+                    description: `${stats.receipts} receipt${stats.receipts === 1 ? "" : "s"} · ${stats.enrolled} student${stats.enrolled === 1 ? "" : "s"} enrolled`,
+                  });
                 }}
               >
                 {academicYears.map((y) => (
@@ -425,11 +552,13 @@ export function TenantDesktopTopBar() {
             </DropdownMenuContent>
           </DropdownMenu>
 
+          <ThemeModeToggle />
+
           <button
             type="button"
             onClick={() => navigate({ to: "/tenant/settings" })}
             aria-label="Settings"
-            className="glass-inset grid h-10 w-10 place-items-center rounded-xl text-slate-600 transition-colors hover:text-[#2563EB]"
+            className="glass-inset grid h-10 w-10 place-items-center rounded-xl text-slate-600 transition-colors hover:text-[#0F766E] dark:text-zinc-300 dark:hover:text-[#2DD4BF]"
           >
             <Settings className="h-[18px] w-[18px]" />
           </button>
@@ -438,11 +567,11 @@ export function TenantDesktopTopBar() {
             type="button"
             onClick={() => navigate({ to: "/tenant/notifications" })}
             aria-label="Notifications"
-            className="glass-inset relative grid h-10 w-10 place-items-center rounded-xl text-slate-600 transition-colors hover:text-[#2563EB]"
+            className="glass-inset relative grid h-10 w-10 place-items-center rounded-xl text-slate-600 transition-colors hover:text-[#0F766E]"
           >
             <Bell className="h-[18px] w-[18px]" />
             {unreadCount > 0 && (
-              <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full border-2 border-white bg-[#2563EB]" />
+              <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full border-2 border-white bg-[#0F766E]" />
             )}
           </button>
 
@@ -490,7 +619,7 @@ export function TenantDesktopTopBar() {
               <Button type="button" variant="outline" onClick={() => setAddYearOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" className="rounded-full bg-black text-white hover:bg-black/85">
+              <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
                 <Plus className="mr-1 h-3.5 w-3.5" /> Add
               </Button>
             </DialogFooter>

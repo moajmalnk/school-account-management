@@ -35,8 +35,8 @@ function MetricCard({
 }) {
   const isLime = tone === "lime";
   const isBlack = tone === "black";
-  const accentBg = isLime ? "bg-white" : isBlack ? "bg-[#2563EB]" : "bg-[#0F172A]";
-  const accentFg = isLime ? "text-[#2563EB]" : isBlack ? "text-white" : "text-white";
+  const accentBg = isLime ? "bg-white" : isBlack ? "bg-[#0F766E]" : "bg-[#0F172A]";
+  const accentFg = isLime ? "text-[#0F766E]" : isBlack ? "text-white" : "text-white";
 
   return (
     <OrganicCard tone={tone} cornerSide={cornerSide} arrow padded>
@@ -60,7 +60,7 @@ function MetricCard({
           {heartbeat && (
             <span
               className="relative ml-1 inline-block h-2 w-2 rounded-full heartbeat-dot"
-              style={{ backgroundColor: isLime ? "#FFFFFF" : "#2563EB" }}
+              style={{ backgroundColor: isLime ? "#FFFFFF" : "#0F766E" }}
             />
           )}
         </div>
@@ -84,7 +84,7 @@ function MetricCard({
                 style={{
                   background: isLime
                     ? "linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.25))"
-                    : "linear-gradient(180deg, rgba(37,99,235,0.65), #2563EB)",
+                    : "linear-gradient(180deg, rgba(15,118,110,0.65), #0F766E)",
                 }}
               />
             </div>
@@ -179,13 +179,13 @@ export function OverviewView() {
                       className="absolute inset-0 rounded-t-xl"
                       style={{
                         background: isPeak
-                          ? "linear-gradient(180deg,#2563EB 0%, #DBEAFE 100%)"
+                          ? "linear-gradient(180deg,#0F766E 0%, #CCFBF1 100%)"
                           : "linear-gradient(180deg,#000000 0%, #1F1F1F 100%)",
                       }}
                     />
                     {isPeak && (
                       <div
-                        className="absolute -top-1 left-1/2 h-2.5 w-2.5 -translate-x-1/2 rounded-full ring-4 ring-[#2563EB]/30"
+                        className="absolute -top-1 left-1/2 h-2.5 w-2.5 -translate-x-1/2 rounded-full ring-4 ring-[#0F766E]/30"
                         style={{ backgroundColor: "#000000" }}
                       />
                     )}
@@ -205,14 +205,14 @@ export function OverviewView() {
           <div className="mt-1 text-[13px] text-black/55">Across 142 tenants</div>
           <div className="mt-5 flex h-3 overflow-hidden rounded-full bg-[#F4F4F5]">
             <div className="h-full" style={{ width: "30%", backgroundColor: "#000000" }} />
-            <div className="h-full" style={{ width: "55%", backgroundColor: "#2563EB" }} />
-            <div className="h-full" style={{ width: "15%", backgroundColor: "#DBEAFE" }} />
+            <div className="h-full" style={{ width: "55%", backgroundColor: "#0F766E" }} />
+            <div className="h-full" style={{ width: "15%", backgroundColor: "#CCFBF1" }} />
           </div>
           <div className="mt-5 space-y-3">
             {[
               { label: "Basic", pct: 30, count: 43, color: "#000000" },
-              { label: "Premium", pct: 55, count: 78, color: "#2563EB" },
-              { label: "Enterprise", pct: 15, count: 21, color: "#DBEAFE" },
+              { label: "Premium", pct: 55, count: 78, color: "#0F766E" },
+              { label: "Enterprise", pct: 15, count: 21, color: "#CCFBF1" },
             ].map((p) => (
               <div key={p.label} className="flex items-center justify-between">
                 <div className="flex items-center gap-2">

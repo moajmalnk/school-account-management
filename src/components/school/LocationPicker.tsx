@@ -332,7 +332,7 @@ export function LocationPicker({
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-2">
-        <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+        <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
           {label}
         </Label>
         <button
@@ -341,7 +341,7 @@ export function LocationPicker({
           className={cn(
             "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider transition-colors",
             mapOpen
-              ? "bg-black text-white"
+              ? "bg-[#0F766E] text-white"
               : "bg-[#F4F4F5] text-black/60 hover:bg-[#E8E8EA] hover:text-black",
           )}
         >

@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/chart";
 import type { CornerSide } from "@/lib/utils";
 
-const CHART_COLORS = ["#000000", "#2563EB", "#DBEAFE", "#9CA3AF", "#525252"];
+const CHART_COLORS = ["#0F172A", "#0F766E", "#99F6E4", "#94A3B8", "#64748B"];
 
 type Segment = { label: string; value: number };
 
@@ -111,7 +111,7 @@ export function FinanceBarCard({
   title,
   segments,
   cornerSide = "bl",
-  fill = "#111111",
+  fill = "#0F766E",
 }: {
   title: string;
   segments: Segment[];
@@ -132,7 +132,7 @@ export function FinanceBarCard({
       <div className="text-[15px] font-semibold leading-tight text-black sm:text-title">{title}</div>
       <ChartContainer config={chartConfig} className="mt-3 aspect-auto h-[180px] w-full sm:mt-4 sm:h-[220px]">
         <BarChart data={segments} layout="vertical" margin={{ top: 4, right: 8, left: 4, bottom: 4 }}>
-          <CartesianGrid horizontal={false} strokeDasharray="4 4" stroke="#E5E5E5" />
+          <CartesianGrid horizontal={false} strokeDasharray="4 4" stroke="#E5E5E5" className="dark:stroke-white/15" />
           <XAxis type="number" hide />
           <YAxis
             type="category"
@@ -140,7 +140,7 @@ export function FinanceBarCard({
             tickLine={false}
             axisLine={false}
             width={72}
-            tick={{ fontSize: 9, fill: "#525252" }}
+            tick={{ fontSize: 9, fill: "#737373" }}
           />
           <ChartTooltip
             content={

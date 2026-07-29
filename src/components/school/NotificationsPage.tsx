@@ -22,9 +22,9 @@ const categoryMeta: Record<
   { label: string; icon: typeof Bell; tone: string }
 > = {
   fees: { label: "Fees", icon: Wallet, tone: "bg-[#FEE2E2] text-[#EF4444]" },
-  admissions: { label: "Admissions", icon: GraduationCap, tone: "bg-[#DBEAFE] text-black" },
+  admissions: { label: "Admissions", icon: GraduationCap, tone: "bg-[#CCFBF1] text-black" },
   staff: { label: "Staff", icon: UserCog, tone: "bg-[#F4F4F5] text-black" },
-  system: { label: "System", icon: Bell, tone: "bg-black text-white" },
+  system: { label: "System", icon: Bell, tone: "bg-[#0F766E] text-white" },
   transport: { label: "Transport", icon: Bus, tone: "bg-[#FEF3C7] text-[#B45309]" },
 };
 
@@ -101,7 +101,7 @@ export function NotificationsPage() {
                 onClick={() => setFilter(tab.key)}
                 className={cn(
                   "rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition-colors",
-                  active ? "bg-[#2563EB] text-white" : "text-black/55 hover:bg-black/5",
+                  active ? "bg-[#0F766E] text-white" : "text-black/55 hover:bg-black/5",
                 )}
               >
                 {tab.label}
@@ -165,10 +165,10 @@ export function NotificationsPage() {
                             {notification.title}
                           </span>
                           {!notification.read && (
-                            <span className="h-2 w-2 shrink-0 rounded-full bg-[#2563EB]" />
+                            <span className="h-2 w-2 shrink-0 rounded-full bg-[#0F766E]" />
                           )}
                         </div>
-                        <p className="mt-1 text-[12.5px] leading-relaxed text-black/60">
+                        <p className="mt-1 text-[12.5px] leading-relaxed text-black/60 dark:text-zinc-400">
                           {notification.body}
                         </p>
                       </div>
