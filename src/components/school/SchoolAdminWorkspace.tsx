@@ -4030,239 +4030,183 @@ export function StaffRoster() {
         </div>
       </div>
 
-      <div className="flex w-full min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
-        <h1 className="shrink-0 text-[18px] font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50 md:text-[24px] md:font-semibold lg:min-w-0 lg:flex-1 lg:truncate lg:text-[28px]">
+      <div className="flex w-full min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between xl:gap-4">
+        <h1 className="shrink-0 text-[18px] font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50 md:text-[24px] md:font-semibold xl:min-w-0 xl:flex-1 xl:truncate xl:text-[28px]">
           {showRecycleBin ? "Recycle Bin" : "Staff Directory"}
         </h1>
+        <div className={cn(directoryToolbarRow, "xl:max-w-full xl:shrink-0")}>
+          <button
+            type="button"
+            onClick={() => setShowRecycleBin((v) => !v)}
+            className={cn(
+              directoryToolbarBtn,
+              showRecycleBin
+                ? "border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] hover:bg-[#FEE2E2]"
+                : "text-slate-900",
+              showRecycleBin && "sm:flex-none",
+            )}
+            aria-pressed={showRecycleBin}
+          >
+            <Recycle className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate sm:hidden">Bin</span>
+            <span className="hidden truncate sm:inline">Recycle</span>
+            {deletedStaff.length > 0 && (
+              <span
+                className={cn(
+                  "ml-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 font-mono text-[10px] font-bold",
+                  showRecycleBin ? "bg-[#EF4444] text-white" : "bg-slate-900 text-white",
+                )}
+              >
+                {deletedStaff.length}
+              </span>
+            )}
+          </button>
 
-        <div className="flex w-full min-w-0 flex-col gap-2 lg:w-auto lg:max-w-none lg:flex-1 lg:items-end lg:shrink-0">
-          {showRecycleBin ? (
-            <div className="flex justify-end">
+          {!showRecycleBin && (
+            <>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className={cn(
+                      directoryToolbarBtn,
+                      "relative",
+                      staffFiltersActive &&
+                        "border-[#99F6E4] bg-[#F0FDFA] text-[#0F766E] hover:bg-[#CCFBF1]",
+                    )}
+                  >
+                    <Filter className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">Filter</span>
+                    {staffFiltersActive && (
+                      <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[#0F766E] ring-2 ring-white dark:ring-zinc-950" />
+                    )}
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  sideOffset={8}
+                  collisionPadding={12}
+                  className="z-[250] w-56 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+                >
+                  <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    Department
+                  </DropdownMenuLabel>
+                  <DropdownMenuRadioGroup value={deptFilter} onValueChange={setDeptFilter}>
+                    <DropdownMenuRadioItem value="all" className="rounded-xl text-[13px]">
+                      All departments
+                    </DropdownMenuRadioItem>
+                    {departmentOptions.map((dept) => (
+                      <DropdownMenuRadioItem
+                        key={dept}
+                        value={dept}
+                        className="rounded-xl text-[13px]"
+                      >
+                        {dept}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                  <DropdownMenuSeparator className="my-2" />
+                  <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    Status
+                  </DropdownMenuLabel>
+                  <DropdownMenuRadioGroup
+                    value={statusFilter}
+                    onValueChange={(value) => setStatusFilter(value as StaffStatusFilter)}
+                  >
+                    <DropdownMenuRadioItem value="all" className="rounded-xl text-[13px]">
+                      All statuses
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="active" className="rounded-xl text-[13px]">
+                      Active
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="inactive" className="rounded-xl text-[13px]">
+                      Inactive
+                    </DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <button type="button" onClick={handleExport} className={directoryToolbarBtn}>
+                <Download className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">Export</span>
+              </button>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" className={directoryToolbarBtn}>
+                    <Upload className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate sm:hidden">Upload</span>
+                    <span className="hidden truncate sm:inline">Bulk Upload</span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  sideOffset={8}
+                  collisionPadding={12}
+                  className="z-[250] w-56 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+                >
+                  <DropdownMenuItem
+                    onClick={downloadStaffTemplate}
+                    className="cursor-pointer gap-2 rounded-xl text-[13px]"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Download template
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={handleStaffImportClick}
+                    className="cursor-pointer gap-2 rounded-xl text-[13px]"
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    Upload CSV
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" className={directoryToolbarBtn}>
+                    <ClipboardList className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate sm:hidden">Attend.</span>
+                    <span className="hidden truncate sm:inline">Attendance</span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  sideOffset={8}
+                  collisionPadding={12}
+                  className="z-[250] w-64 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+                >
+                  <DropdownMenuLabel className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    Payroll · {formatPayrollMonthLabel(payrollMonth)}
+                  </DropdownMenuLabel>
+                  <DropdownMenuItem
+                    onClick={downloadAttendanceDemo}
+                    className="cursor-pointer gap-2 rounded-xl text-[13px]"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Download demo CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={handleAttendanceImportClick}
+                    className="cursor-pointer gap-2 rounded-xl text-[13px]"
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    Upload attendance CSV
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
               <button
                 type="button"
-                onClick={() => setShowRecycleBin(false)}
+                onClick={() => setOpen(true)}
                 className={cn(
-                  mobileOutlineBtn,
-                  "border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] hover:bg-[#FEE2E2]",
+                  mobilePrimaryBtn,
+                  "hidden md:inline-flex md:rounded-full md:bg-gradient-to-r md:from-[#0F766E] md:to-[#115E59] md:shadow-md md:shadow-teal-900/15 md:hover:opacity-95 md:hover:bg-gradient-to-r",
                 )}
-                aria-pressed
               >
-                <Recycle className="h-3.5 w-3.5 shrink-0" />
-                Exit bin
-                {deletedStaff.length > 0 && (
-                  <span className="ml-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#EF4444] px-1.5 font-mono text-[10px] font-bold text-white">
-                    {deletedStaff.length}
-                  </span>
-                )}
+                <Plus className="h-3.5 w-3.5" />
+                Recruit Staff
               </button>
-            </div>
-          ) : (
-            <>
-              {/* Row 1 · Search + Filter */}
-              <div className="flex items-center gap-2 lg:w-full lg:max-w-[34rem]">
-                <div className="relative min-w-0 flex-1">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <Input
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search name, ID, role, phone…"
-                    className="h-10 w-full rounded-full border-slate-200/80 bg-white pl-9 pr-9 shadow-sm dark:border-white/15 dark:bg-zinc-900"
-                    aria-label="Search staff"
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => setSearchQuery("")}
-                      aria-label="Clear search"
-                      className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className={cn(
-                        mobileOutlineBtn,
-                        "relative shrink-0 gap-1.5 px-3.5",
-                        staffFiltersActive &&
-                          "border-[#99F6E4] bg-[#F0FDFA] text-[#0F766E] hover:bg-[#CCFBF1]",
-                      )}
-                    >
-                      <Filter className="h-3.5 w-3.5 shrink-0" />
-                      <span className="text-[12.5px]">Filter</span>
-                      {staffFiltersActive && (
-                        <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[#0F766E] ring-2 ring-white dark:ring-zinc-950" />
-                      )}
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="end"
-                    sideOffset={8}
-                    collisionPadding={12}
-                    className="z-[250] w-56 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
-                  >
-                    <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                      Department
-                    </DropdownMenuLabel>
-                    <DropdownMenuRadioGroup value={deptFilter} onValueChange={setDeptFilter}>
-                      <DropdownMenuRadioItem value="all" className="rounded-xl text-[13px]">
-                        All departments
-                      </DropdownMenuRadioItem>
-                      {departmentOptions.map((dept) => (
-                        <DropdownMenuRadioItem
-                          key={dept}
-                          value={dept}
-                          className="rounded-xl text-[13px]"
-                        >
-                          {dept}
-                        </DropdownMenuRadioItem>
-                      ))}
-                    </DropdownMenuRadioGroup>
-                    <DropdownMenuSeparator className="my-2" />
-                    <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                      Status
-                    </DropdownMenuLabel>
-                    <DropdownMenuRadioGroup
-                      value={statusFilter}
-                      onValueChange={(value) => setStatusFilter(value as StaffStatusFilter)}
-                    >
-                      <DropdownMenuRadioItem value="all" className="rounded-xl text-[13px]">
-                        All statuses
-                      </DropdownMenuRadioItem>
-                      <DropdownMenuRadioItem value="active" className="rounded-xl text-[13px]">
-                        Active
-                      </DropdownMenuRadioItem>
-                      <DropdownMenuRadioItem value="inactive" className="rounded-xl text-[13px]">
-                        Inactive
-                      </DropdownMenuRadioItem>
-                    </DropdownMenuRadioGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-
-              {/* Row 2 · Attendance · Export · Upload · Bin (+ Recruit on md+) */}
-              <div className="grid grid-cols-4 gap-1.5 lg:flex lg:flex-wrap lg:justify-end lg:gap-2">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className={cn(
-                        mobileOutlineBtn,
-                        "min-w-0 gap-1 px-1.5 text-[11px] lg:flex-none lg:gap-1.5 lg:px-4 lg:text-[12.5px]",
-                      )}
-                    >
-                      <ClipboardList className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate lg:hidden">Attend</span>
-                      <span className="hidden truncate lg:inline">Attendance</span>
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="end"
-                    sideOffset={8}
-                    collisionPadding={12}
-                    className="z-[250] w-64 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
-                  >
-                    <DropdownMenuLabel className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                      Payroll · {formatPayrollMonthLabel(payrollMonth)}
-                    </DropdownMenuLabel>
-                    <DropdownMenuItem
-                      onClick={downloadAttendanceDemo}
-                      className="cursor-pointer gap-2 rounded-xl text-[13px]"
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                      Download demo CSV
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={handleAttendanceImportClick}
-                      className="cursor-pointer gap-2 rounded-xl text-[13px]"
-                    >
-                      <Upload className="h-3.5 w-3.5" />
-                      Upload attendance CSV
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-
-                <button
-                  type="button"
-                  onClick={handleExport}
-                  className={cn(
-                    mobileOutlineBtn,
-                    "min-w-0 gap-1 px-1.5 text-[11px] lg:flex-none lg:gap-1.5 lg:px-4 lg:text-[12.5px]",
-                  )}
-                >
-                  <Download className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">Export</span>
-                </button>
-
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className={cn(
-                        mobileOutlineBtn,
-                        "min-w-0 gap-1 px-1.5 text-[11px] lg:flex-none lg:gap-1.5 lg:px-4 lg:text-[12.5px]",
-                      )}
-                    >
-                      <Upload className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">Upload</span>
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="end"
-                    sideOffset={8}
-                    collisionPadding={12}
-                    className="z-[250] w-56 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
-                  >
-                    <DropdownMenuItem
-                      onClick={downloadStaffTemplate}
-                      className="cursor-pointer gap-2 rounded-xl text-[13px]"
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                      Download template
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={handleStaffImportClick}
-                      className="cursor-pointer gap-2 rounded-xl text-[13px]"
-                    >
-                      <Upload className="h-3.5 w-3.5" />
-                      Upload CSV
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-
-                <button
-                  type="button"
-                  onClick={() => setShowRecycleBin(true)}
-                  className={cn(
-                    mobileOutlineBtn,
-                    "min-w-0 gap-1 px-1.5 text-[11px] text-slate-900 lg:flex-none lg:gap-1.5 lg:px-4 lg:text-[12.5px]",
-                  )}
-                  aria-pressed={false}
-                >
-                  <Recycle className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">Bin</span>
-                  {deletedStaff.length > 0 && (
-                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-slate-900 px-1.5 font-mono text-[10px] font-bold text-white">
-                      {deletedStaff.length}
-                    </span>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setOpen(true)}
-                  className={cn(
-                    mobilePrimaryBtn,
-                    "col-span-4 hidden lg:inline-flex lg:col-auto lg:rounded-full lg:bg-gradient-to-r lg:from-[#0F766E] lg:to-[#115E59] lg:shadow-md lg:shadow-teal-900/15 lg:hover:opacity-95",
-                  )}
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Recruit Staff
-                </button>
-              </div>
             </>
           )}
         </div>
@@ -4301,6 +4245,113 @@ export function StaffRoster() {
         </div>
       ) : (
         <>
+      <div className={cn(glassCardClass, "min-w-0 p-4 md:p-5")}>
+        <div className="flex flex-col gap-3">
+          <div className="min-w-0">
+            <div className="mb-1.5 text-[12px] font-medium text-slate-500 md:text-[10px] md:font-semibold md:uppercase md:tracking-wider">
+              Search
+            </div>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search name, ID, role, phone…"
+                className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white pl-9 pr-9"
+                aria-label="Search staff"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  aria-label="Clear search"
+                  className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between lg:gap-4">
+            <div className="grid min-w-0 w-full flex-1 grid-cols-2 gap-2 md:gap-4">
+              <div className="min-w-0">
+                <div className="mb-1.5 text-[12px] font-medium text-slate-500 md:text-[10px] md:font-semibold md:uppercase md:tracking-wider">
+                  Department
+                </div>
+                <Select value={deptFilter} onValueChange={setDeptFilter}>
+                  <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
+                    <SelectValue placeholder="All departments" />
+                  </SelectTrigger>
+                  <SelectContent
+                    position="popper"
+                    sideOffset={4}
+                    className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
+                  >
+                    <SelectItem value="all" className="rounded-md">
+                      All departments
+                    </SelectItem>
+                    {departmentOptions.map((dept) => (
+                      <SelectItem key={dept} value={dept} className="rounded-md">
+                        {dept}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="min-w-0">
+                <div className="mb-1.5 text-[12px] font-medium text-slate-500 md:text-[10px] md:font-semibold md:uppercase md:tracking-wider">
+                  Status
+                </div>
+                <Select
+                  value={statusFilter}
+                  onValueChange={(value) => setStatusFilter(value as StaffStatusFilter)}
+                >
+                  <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
+                    <SelectValue placeholder="All statuses" />
+                  </SelectTrigger>
+                  <SelectContent
+                    position="popper"
+                    sideOffset={4}
+                    className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
+                  >
+                    <SelectItem value="all" className="rounded-md">
+                      All statuses
+                    </SelectItem>
+                    <SelectItem value="active" className="rounded-md">
+                      Active
+                    </SelectItem>
+                    <SelectItem value="inactive" className="rounded-md">
+                      Inactive
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end lg:flex-col lg:items-end lg:justify-end">
+              <span className="font-mono text-[11px] text-black/45">
+                {filteredStaff.length} shown
+              </span>
+              {(deptFilter !== "all" || statusFilter !== "all" || searchQuery.trim()) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeptFilter("all");
+                    setStatusFilter("all");
+                    setSearchQuery("");
+                  }}
+                  className="text-[12px] font-semibold text-[#0F766E] underline-offset-2 hover:underline"
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {selectedIds.size > 0 && (
         <div className={cn(glassCardClass, "overflow-hidden p-0 lg:hidden")}>
           <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
