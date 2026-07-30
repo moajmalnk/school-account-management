@@ -4030,12 +4030,12 @@ export function StaffRoster() {
         </div>
       </div>
 
-      <div className="flex w-full min-w-0 flex-col gap-3 xl:flex-row xl:items-start xl:justify-between xl:gap-4">
-        <h1 className="shrink-0 text-[18px] font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50 md:text-[24px] md:font-semibold xl:min-w-0 xl:flex-1 xl:truncate xl:pt-1 xl:text-[28px]">
+      <div className="flex w-full min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
+        <h1 className="shrink-0 text-[18px] font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50 md:text-[24px] md:font-semibold lg:min-w-0 lg:flex-1 lg:truncate lg:text-[28px]">
           {showRecycleBin ? "Recycle Bin" : "Staff Directory"}
         </h1>
 
-        <div className="flex w-full min-w-0 flex-col gap-2 xl:max-w-2xl xl:shrink-0">
+        <div className="flex w-full min-w-0 flex-col gap-2 lg:w-auto lg:max-w-none lg:flex-1 lg:items-end lg:shrink-0">
           {showRecycleBin ? (
             <div className="flex justify-end">
               <button
@@ -4059,7 +4059,7 @@ export function StaffRoster() {
           ) : (
             <>
               {/* Row 1 · Search + Filter */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 lg:w-full lg:max-w-[34rem]">
                 <div className="relative min-w-0 flex-1">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <Input
@@ -4144,19 +4144,19 @@ export function StaffRoster() {
               </div>
 
               {/* Row 2 · Attendance · Export · Upload · Bin (+ Recruit on md+) */}
-              <div className="grid grid-cols-4 gap-1.5 md:flex md:flex-wrap md:justify-end md:gap-2">
+              <div className="grid grid-cols-4 gap-1.5 lg:flex lg:flex-wrap lg:justify-end lg:gap-2">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
                       className={cn(
                         mobileOutlineBtn,
-                        "min-w-0 gap-1 px-1.5 text-[11px] md:flex-none md:gap-1.5 md:px-4 md:text-[12.5px]",
+                        "min-w-0 gap-1 px-1.5 text-[11px] lg:flex-none lg:gap-1.5 lg:px-4 lg:text-[12.5px]",
                       )}
                     >
                       <ClipboardList className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate md:hidden">Attend</span>
-                      <span className="hidden truncate md:inline">Attendance</span>
+                      <span className="truncate lg:hidden">Attend</span>
+                      <span className="hidden truncate lg:inline">Attendance</span>
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent
@@ -4190,7 +4190,7 @@ export function StaffRoster() {
                   onClick={handleExport}
                   className={cn(
                     mobileOutlineBtn,
-                    "min-w-0 gap-1 px-1.5 text-[11px] md:flex-none md:gap-1.5 md:px-4 md:text-[12.5px]",
+                    "min-w-0 gap-1 px-1.5 text-[11px] lg:flex-none lg:gap-1.5 lg:px-4 lg:text-[12.5px]",
                   )}
                 >
                   <Download className="h-3.5 w-3.5 shrink-0" />
@@ -4203,7 +4203,7 @@ export function StaffRoster() {
                       type="button"
                       className={cn(
                         mobileOutlineBtn,
-                        "min-w-0 gap-1 px-1.5 text-[11px] md:flex-none md:gap-1.5 md:px-4 md:text-[12.5px]",
+                        "min-w-0 gap-1 px-1.5 text-[11px] lg:flex-none lg:gap-1.5 lg:px-4 lg:text-[12.5px]",
                       )}
                     >
                       <Upload className="h-3.5 w-3.5 shrink-0" />
@@ -4238,7 +4238,7 @@ export function StaffRoster() {
                   onClick={() => setShowRecycleBin(true)}
                   className={cn(
                     mobileOutlineBtn,
-                    "min-w-0 gap-1 px-1.5 text-[11px] text-slate-900 md:flex-none md:gap-1.5 md:px-4 md:text-[12.5px]",
+                    "min-w-0 gap-1 px-1.5 text-[11px] text-slate-900 lg:flex-none lg:gap-1.5 lg:px-4 lg:text-[12.5px]",
                   )}
                   aria-pressed={false}
                 >
@@ -4256,7 +4256,7 @@ export function StaffRoster() {
                   onClick={() => setOpen(true)}
                   className={cn(
                     mobilePrimaryBtn,
-                    "col-span-4 hidden md:inline-flex md:col-auto md:rounded-full md:bg-gradient-to-r md:from-[#0F766E] md:to-[#115E59] md:shadow-md md:shadow-teal-900/15 md:hover:opacity-95",
+                    "col-span-4 hidden lg:inline-flex lg:col-auto lg:rounded-full lg:bg-gradient-to-r lg:from-[#0F766E] lg:to-[#115E59] lg:shadow-md lg:shadow-teal-900/15 lg:hover:opacity-95",
                   )}
                 >
                   <Plus className="h-3.5 w-3.5" />
