@@ -1,0 +1,2 @@
+# Deny direct access to uploads listing; allow files
+Options -Indexes
