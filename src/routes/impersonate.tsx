@@ -60,6 +60,7 @@ function ImpersonatePage() {
         userId: user.id,
         staffId: user.staffId,
         permissions: user.permissions,
+        impersonationSource: "school_admin",
       });
       // Full reload so AuthProvider hydrates with the impersonated session.
       window.location.replace(firstAllowedTenantPath(user.permissions));
@@ -79,6 +80,7 @@ function ImpersonatePage() {
         tenantName: adminSession.tenantName,
         issuedAt: Date.now(),
         permissions,
+        impersonationSource: "school_admin",
       });
       window.location.replace(firstAllowedTenantPath(permissions));
       return;

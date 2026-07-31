@@ -9,7 +9,12 @@ import {
 } from "react";
 
 import { apiLogin } from "@/lib/api/auth";
-import { ApiError, setApiToken } from "@/lib/api/client";
+import {
+  ApiError,
+  clearApiTokenBackup,
+  restoreApiTokenBackup,
+  setApiToken,
+} from "@/lib/api/client";
 import {
   ALL_PERMISSIONS,
   firstAllowedTenantPath,
@@ -36,8 +41,11 @@ export type Session = {
   userId?: string;
   staffId?: string;
   permissions: PermissionSet;
-  /** True when an admin is previewing this user via impersonation (per-tab). */
+  /** True when an admin is previewing this workspace via impersonation (per-tab). */
   impersonated?: boolean;
+  /** Who started impersonation — controls Exit destination. */
+  impersonationSource?: "super_admin" | "school_admin";
+  impersonationTicket?: string;
 };
 
 export type LoginResult =
@@ -111,7 +119,16 @@ function parseSessionRaw(raw: string, impersonated: boolean): Session | null {
     userId: parsed.userId,
     staffId: parsed.staffId,
     permissions,
-    ...(impersonated ? { impersonated: true } : {}),
+    ...(impersonated || parsed.impersonated
+      ? { impersonated: true as const }
+      : {}),
+    ...(parsed.impersonationSource === "super_admin" ||
+    parsed.impersonationSource === "school_admin"
+      ? { impersonationSource: parsed.impersonationSource }
+      : {}),
+    ...(typeof parsed.impersonationTicket === "string"
+      ? { impersonationTicket: parsed.impersonationTicket }
+      : {}),
   };
 }
 
@@ -167,7 +184,12 @@ function writeSession(session: Session | null) {
 }
 
 /** Writes a per-tab impersonation session (does not touch the admin login). */
-export function writeImpersonationSession(session: Omit<Session, "impersonated">) {
+export function writeImpersonationSession(
+  session: Omit<Session, "impersonated"> & {
+    impersonationSource?: Session["impersonationSource"];
+    impersonationTicket?: string;
+  },
+) {
   if (typeof window === "undefined") return;
   window.sessionStorage.setItem(
     IMPERSONATION_KEY,
@@ -182,6 +204,17 @@ export function clearImpersonationSession() {
   } catch {
     // ignore
   }
+}
+
+/**
+ * End impersonation: clear tab session, restore admin JWT + session.
+ * Returns redirect path for the caller.
+ */
+export function endImpersonation(): string {
+  const source = readSession()?.impersonationSource;
+  clearImpersonationSession();
+  restoreApiTokenBackup();
+  return source === "super_admin" ? "/super-admin/tenants" : "/tenant/settings?tab=users";
 }
 
 export function sessionHasPermission(
@@ -243,28 +276,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback<AuthState["login"]>(async (role, email, password) => {
     const normalizedEmail = email.trim().toLowerCase();
 
-    // Super-admin stays local/mock until SaaS APIs ship.
+    // Super admin → production API (JWT required for /api/super-admin/*)
     if (role === "super_admin") {
-      const expected = MOCK_CREDENTIALS.super_admin;
-      if (
-        expected &&
-        normalizedEmail === expected.email.toLowerCase() &&
-        password === expected.password
-      ) {
-        setApiToken(null);
+      try {
+        const data = await apiLogin(normalizedEmail, password);
+        if (data.session.role !== "super_admin") {
+          setApiToken(null);
+          return {
+            ok: false,
+            error: "This account is not a platform super admin",
+          };
+        }
         const next: Session = {
-          role,
-          email: expected.email,
-          displayName: expected.displayName,
-          tenantName: expected.tenantName,
+          role: "super_admin",
+          email: data.session.email,
+          displayName: data.session.displayName,
           issuedAt: Date.now(),
+          userId: data.session.userId,
           permissions: ALL_PERMISSIONS,
         };
         writeSession(next);
         setSession(next);
-        return { ok: true, redirect: expected.redirect, session: next };
+        return { ok: true, redirect: "/super-admin/overview", session: next };
+      } catch (err) {
+        // Offline fallback to mock credentials (no API token — tenants won't persist)
+        const expected = MOCK_CREDENTIALS.super_admin;
+        if (
+          expected &&
+          normalizedEmail === expected.email.toLowerCase() &&
+          password === expected.password
+        ) {
+          setApiToken(null);
+          const next: Session = {
+            role,
+            email: expected.email,
+            displayName: expected.displayName,
+            tenantName: expected.tenantName,
+            issuedAt: Date.now(),
+            permissions: ALL_PERMISSIONS,
+          };
+          writeSession(next);
+          setSession(next);
+          return { ok: true, redirect: expected.redirect, session: next };
+        }
+        const message =
+          err instanceof ApiError ? err.message : INVALID_CREDENTIALS_MESSAGE;
+        return { ok: false, error: message || INVALID_CREDENTIALS_MESSAGE };
       }
-      return { ok: false, error: INVALID_CREDENTIALS_MESSAGE };
     }
 
     // School admin + tenant users → production API
@@ -339,6 +397,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         if (window.sessionStorage.getItem(IMPERSONATION_KEY)) {
           window.sessionStorage.removeItem(IMPERSONATION_KEY);
+          restoreApiTokenBackup();
           setSession(readPersistentSession());
           return;
         }
@@ -346,6 +405,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // ignore
       }
     }
+    clearApiTokenBackup();
     setApiToken(null);
     writeSession(null);
     setSession(null);

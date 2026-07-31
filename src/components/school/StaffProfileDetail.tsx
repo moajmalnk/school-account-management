@@ -33,6 +33,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Staff, StaffDocument, StaffDocumentAttachment, TenantUser } from "@/lib/tenant-store";
+import { apiDeleteStaff, apiUpsertStaff } from "@/lib/api/records";
 import {
   DEFAULT_STAFF_DOCUMENTS,
   normalizeTenantUser,
@@ -265,9 +266,23 @@ export function StaffProfileDetail({
 }) {
   const navigate = useNavigate();
   const { session } = useAuth();
-  const { setStaff, staff: allStaff, departments, roles, tenantUsers, setTenantUsers } =
+  const { setStaff, departments, roles, tenantUsers, setTenantUsers } =
     useTenantStore();
-  const canManageUsers = sessionHasPermission(session, "settings.users");
+
+  const syncStaff = (updated: Staff) => {
+    setStaff((prev) => prev.map((s) => (s.id === staff.id ? updated : s)));
+    void apiUpsertStaff(updated)
+      .then((saved) => {
+        setStaff((prev) =>
+          prev.map((s) => (s.id === staff.id || s.id === saved.id ? { ...updated, ...saved } : s)),
+        );
+      })
+      .catch((err) =>
+        toast.error("Could not save staff to server", {
+          description: err instanceof Error ? err.message : "Save failed",
+        }),
+      );
+  };  const canManageUsers = sessionHasPermission(session, "settings.users");
   const linkedUser = useMemo(
     () => tenantUsers.find((u) => u.staffId === staff.id) ?? null,
     [tenantUsers, staff.id],
@@ -562,32 +577,22 @@ export function StaffProfileDetail({
       toast.error("Days present cannot exceed working days");
       return;
     }
-    setStaff((prev) =>
-      prev.map((s) =>
-        s.id === staff.id
-          ? {
-              ...s,
-              attendanceByMonth: upsertStaffAttendanceMonth(s.attendanceByMonth, normalized),
-            }
-          : s,
-      ),
-    );
+    const updated: Staff = {
+      ...staff,
+      attendanceByMonth: upsertStaffAttendanceMonth(staff.attendanceByMonth, normalized),
+    };
+    syncStaff(updated);
     toast.success(`Attendance saved · ${formatPayrollMonthLabel(normalized.month)}`, {
       description: `${normalized.daysPresent}/${normalized.workingDays} days · payroll payable updates automatically`,
     });
   };
 
   const removeAttendanceMonth = (month: string) => {
-    setStaff((prev) =>
-      prev.map((s) =>
-        s.id === staff.id
-          ? {
-              ...s,
-              attendanceByMonth: (s.attendanceByMonth ?? []).filter((row) => row.month !== month),
-            }
-          : s,
-      ),
-    );
+    const updated: Staff = {
+      ...staff,
+      attendanceByMonth: (staff.attendanceByMonth ?? []).filter((row) => row.month !== month),
+    };
+    syncStaff(updated);
     setPendingDeleteMonth(null);
     toast.error(`Attendance removed · ${formatPayrollMonthLabel(month)}`);
   };
@@ -600,37 +605,27 @@ export function StaffProfileDetail({
   );
 
   const updatePayroll = (patch: Partial<Pick<Staff, "basicSalary" | "additionalAllowances">>) => {
-    setStaff((prev) => prev.map((s) => (s.id === staff.id ? { ...s, ...patch } : s)));
+    syncStaff({ ...staff, ...patch });
   };
 
   const updateDocument = (docId: string, number: string) => {
-    setStaff((prev) =>
-      prev.map((s) =>
-        s.id === staff.id
-          ? {
-              ...s,
-              documents: (s.documents ?? DEFAULT_STAFF_DOCUMENTS).map((d) =>
-                d.id === docId ? { ...d, number } : d,
-              ),
-            }
-          : s,
+    const updated: Staff = {
+      ...staff,
+      documents: (staff.documents ?? DEFAULT_STAFF_DOCUMENTS).map((d) =>
+        d.id === docId ? { ...d, number } : d,
       ),
-    );
+    };
+    syncStaff(updated);
   };
 
   const updateDocumentAttachments = (docId: string, attachments: StaffDocumentAttachment[]) => {
-    setStaff((prev) =>
-      prev.map((s) =>
-        s.id === staff.id
-          ? {
-              ...s,
-              documents: (s.documents ?? DEFAULT_STAFF_DOCUMENTS).map((d) =>
-                d.id === docId ? { ...d, attachments } : d,
-              ),
-            }
-          : s,
+    const updated: Staff = {
+      ...staff,
+      documents: (staff.documents ?? DEFAULT_STAFF_DOCUMENTS).map((d) =>
+        d.id === docId ? { ...d, attachments } : d,
       ),
-    );
+    };
+    syncStaff(updated);
   };
 
   const addAttachments = async (docId: string, levelId: string, files: FileList | null) => {
@@ -718,39 +713,33 @@ export function StaffProfileDetail({
       toast.error("Name and role are required");
       return;
     }
-    const nextId = draft.id.trim() || staff.id;
-    if (nextId !== staff.id && allStaff.some((s) => s.id === nextId)) {
-      toast.error("Employee ID already in use");
-      return;
+    // Keep public id stable for API sync (rename not supported server-side).
+    const nextId = staff.id;
+    if (draft.id.trim() && draft.id.trim() !== staff.id) {
+      toast.error("Employee ID cannot be changed after sync", {
+        description: "Contact support if you need the ID remapped.",
+      });
     }
-    setStaff((prev) =>
-      prev.map((s) =>
-        s.id === staff.id
-          ? {
-              ...s,
-              id: nextId,
-              name: draft.name.trim(),
-              role: draft.role.trim(),
-              dept: draft.dept,
-              phone: draft.phone.trim() || undefined,
-              altPhone: draft.altPhone.trim() || undefined,
-              guardianPhone: draft.guardianPhone.trim() || undefined,
-              photoUrl: draft.photoUrl || undefined,
-            }
-          : s,
-      ),
-    );
+    const updated: Staff = {
+      ...staff,
+      id: nextId,
+      name: draft.name.trim(),
+      role: draft.role.trim(),
+      dept: draft.dept,
+      phone: draft.phone.trim() || undefined,
+      altPhone: draft.altPhone.trim() || undefined,
+      guardianPhone: draft.guardianPhone.trim() || undefined,
+      photoUrl: draft.photoUrl || undefined,
+    };
+    syncStaff(updated);
     toast.success(`${draft.name.trim()} updated`, {
       description: `${nextId} · ${draft.dept}`,
     });
-    if (nextId !== staff.id) {
-      navigate({ to: "/tenant/staff", search: { id: nextId }, replace: true });
-    }
     setEditOpen(false);
   };
 
   const updatePhoto = (photoUrl: string | undefined) => {
-    setStaff((prev) => prev.map((s) => (s.id === staff.id ? { ...s, photoUrl } : s)));
+    syncStaff({ ...staff, photoUrl });
     toast.success(photoUrl ? `${staff.name}'s photo updated` : `${staff.name}'s photo removed`);
   };
 
@@ -765,17 +754,12 @@ export function StaffProfileDetail({
       at,
       note: nextActive ? "Account reactivated from archive" : "Account deactivated and archived",
     };
-    setStaff((prev) =>
-      prev.map((s) =>
-        s.id === staff.id
-          ? {
-              ...s,
-              active: nextActive,
-              statusHistory: [event, ...(s.statusHistory ?? [])],
-            }
-          : s,
-      ),
-    );
+    const updated: Staff = {
+      ...staff,
+      active: nextActive,
+      statusHistory: [event, ...(staff.statusHistory ?? [])],
+    };
+    syncStaff(updated);
     toast.success(nextActive ? `${staff.name} reactivated` : `${staff.name} deactivated`, {
       description: `${staff.id} · ${formatStatusDateTime(at)}`,
     });
@@ -784,6 +768,11 @@ export function StaffProfileDetail({
   const deleteStaff = () => {
     setStaff((prev) =>
       prev.map((s) => (s.id === staff.id ? { ...s, deletedAt: new Date().toISOString() } : s)),
+    );
+    void apiDeleteStaff(staff.id).catch((err) =>
+      toast.error("Could not move staff to recycle bin on server", {
+        description: err instanceof Error ? err.message : "Delete failed",
+      }),
     );
     toast.error(`${staff.name} moved to recycle bin`, { description: staff.id });
     onBack();

@@ -10,6 +10,7 @@ export function isApiConfigured(): boolean {
 }
 
 const TOKEN_KEY = "school-accounts/api-token/v1";
+const TOKEN_BACKUP_KEY = "school-accounts/api-token-backup/v1";
 
 export function getApiToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -25,6 +26,42 @@ export function setApiToken(token: string | null) {
   try {
     if (token) window.localStorage.setItem(TOKEN_KEY, token);
     else window.localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+/** Stash current JWT before swapping in an impersonation token. */
+export function backupApiToken(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const current = window.localStorage.getItem(TOKEN_KEY);
+    if (current) window.sessionStorage.setItem(TOKEN_BACKUP_KEY, current);
+  } catch {
+    // ignore
+  }
+}
+
+/** Restore the stashed JWT after exiting impersonation. */
+export function restoreApiTokenBackup(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const backup = window.sessionStorage.getItem(TOKEN_BACKUP_KEY);
+    window.sessionStorage.removeItem(TOKEN_BACKUP_KEY);
+    if (backup) {
+      window.localStorage.setItem(TOKEN_KEY, backup);
+      return true;
+    }
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
+export function clearApiTokenBackup(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(TOKEN_BACKUP_KEY);
   } catch {
     // ignore
   }
@@ -76,16 +113,21 @@ export async function apiRequest<T>(
     signal,
   });
 
+  const raw = await res.text();
   let payload: ApiEnvelope<T> | null = null;
   try {
-    payload = (await res.json()) as ApiEnvelope<T>;
+    payload = raw ? (JSON.parse(raw) as ApiEnvelope<T>) : null;
   } catch {
     payload = null;
   }
 
   if (!res.ok || !payload?.success) {
+    const snippet = raw.replace(/\s+/g, " ").slice(0, 180);
     throw new ApiError(
-      payload?.error || `Request failed (${res.status})`,
+      payload?.error ||
+        (snippet
+          ? `Request failed (${res.status}): ${snippet}`
+          : `Request failed (${res.status})`),
       res.status,
     );
   }

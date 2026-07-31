@@ -53,6 +53,7 @@ import {
 import { ShareParentLinkDialog } from "@/components/school/ShareParentLinkDialog";
 import { downloadReceiptPdf } from "@/lib/finance-export";
 import { sendWhatsAppNotify, toNotifyWhatsAppNumber } from "@/lib/whatsapp-notify";
+import { apiDeleteStudent, apiUpsertStudent } from "@/lib/api/records";
 import { useAuth } from "@/lib/auth";
 import {
   EnrollmentStatusBadge,
@@ -519,6 +520,22 @@ export function StudentProfileDetail({
     });
   }, [student, setStudents]);
 
+  const syncStudent = (updated: Student) => {
+    setStudents((prev) => prev.map((s) => (s.id === student.id ? updated : s)));
+    upsertStudentInSnapshot(updated);
+    void apiUpsertStudent(updated)
+      .then((saved) => {
+        const merged = { ...updated, ...saved };
+        setStudents((prev) => prev.map((s) => (s.id === student.id ? merged : s)));
+        upsertStudentInSnapshot(merged);
+      })
+      .catch((err) =>
+        toast.error("Could not save student to server", {
+          description: err instanceof Error ? err.message : "Save failed",
+        }),
+      );
+  };
+
   const persistDocuments = (nextDocs: StaffDocument[], aadhaarOverride?: string) => {
     const aadhaarDoc = nextDocs.find((d) => d.id === "doc-aadhaar");
     const nextAadhaar =
@@ -530,8 +547,7 @@ export function StudentProfileDetail({
       aadhaar: nextAadhaar,
       documents: nextDocs,
     };
-    setStudents((prev) => prev.map((s) => (s.id === student.id ? updated : s)));
-    upsertStudentInSnapshot(updated);
+    syncStudent(updated);
   };
 
   const updateDocumentNumber = (docId: string, number: string) => {
@@ -615,8 +631,7 @@ export function StudentProfileDetail({
     if (!token) {
       token = createStudentShareToken();
       const next = { ...student, shareToken: token };
-      setStudents((prev) => prev.map((s) => (s.id === student.id ? next : s)));
-      upsertStudentInSnapshot(next);
+      syncStudent(next);
     }
     setShareToken(token);
     setShareOpen(true);
@@ -665,8 +680,7 @@ export function StudentProfileDetail({
       busPoint2: draft.needsBus ? emptyToUndefined(draft.busPoint2) : undefined,
       documents: nextDocs,
     };
-    setStudents((prev) => prev.map((s) => (s.id === student.id ? updated : s)));
-    upsertStudentInSnapshot(updated);
+    syncStudent(updated);
     toast.success(`${updated.name}'s profile updated`, {
       description: `${updated.id} · all profile fields saved`,
     });
@@ -675,25 +689,27 @@ export function StudentProfileDetail({
 
   const updatePhoto = (photoUrl: string | undefined) => {
     const updated = { ...student, photoUrl };
-    setStudents((prev) => prev.map((s) => (s.id === student.id ? updated : s)));
-    upsertStudentInSnapshot(updated);
+    syncStudent(updated);
     toast.success(photoUrl ? `${student.name}'s photo updated` : `${student.name}'s photo removed`);
   };
 
   const isActive = isRecordActive(student.active);
 
   const toggleActive = (nextActive: boolean) => {
-    setStudents((prev) =>
-      prev.map((s) => (s.id === student.id ? { ...s, active: nextActive } : s)),
-    );
+    const updated = { ...student, active: nextActive };
+    syncStudent(updated);
     toast.success(nextActive ? `${student.name} reactivated` : `${student.name} deactivated`, {
       description: student.id,
     });
   };
 
   const deleteStudent = () => {
-    setStudents((prev) =>
-      prev.map((s) => (s.id === student.id ? { ...s, deletedAt: new Date().toISOString() } : s)),
+    const updated = { ...student, deletedAt: new Date().toISOString() };
+    setStudents((prev) => prev.map((s) => (s.id === student.id ? updated : s)));
+    void apiDeleteStudent(student.id).catch((err) =>
+      toast.error("Could not move student to recycle bin on server", {
+        description: err instanceof Error ? err.message : "Delete failed",
+      }),
     );
     toast.error(`${student.name} moved to recycle bin`, { description: student.id });
     onBack();

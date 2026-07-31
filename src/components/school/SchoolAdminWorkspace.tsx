@@ -223,7 +223,8 @@ import {
   apiUpsertPaymentCategory,
   apiUpsertTransportRoute,
 } from "@/lib/api/settings";
-import { apiCreatePayment, apiUpsertStaff, apiUpsertStudent } from "@/lib/api/records";
+import { apiCreateDisbursement, apiCreatePayment, apiDeleteDisbursement, apiDeletePayment, apiDeleteStaff, apiDeleteStudent, apiListDisbursements, apiUpdateDisbursement, apiUpdatePayment, apiUpsertStaff, apiUpsertStudent } from "@/lib/api/records";
+import { apiSaveDashboardTodos } from "@/lib/api/dashboard";
 import { apiUploadDataUrl } from "@/lib/api/settings";
 import { getApiToken } from "@/lib/api/client";
 import {
@@ -693,37 +694,110 @@ function DashboardTodoNotesPanel() {
   const [todos, setTodos] = useState(() => [...dashboardTodos]);
   const [note, setNote] = useState(dashboardNote);
   const [moreTodosOpen, setMoreTodosOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [savedFlash, setSavedFlash] = useState(false);
   const todosRef = useRef(todos);
   const noteRef = useRef(note);
+  const dirtyRef = useRef(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   todosRef.current = todos;
   noteRef.current = note;
 
+  // Hydrate from store only when we are not mid-edit (avoids wiping typed text).
+  useEffect(() => {
+    if (dirtyRef.current) return;
+    setTodos([...dashboardTodos]);
+    todosRef.current = [...dashboardTodos];
+  }, [dashboardTodos]);
+
+  useEffect(() => {
+    if (dirtyRef.current) return;
+    setNote(dashboardNote);
+    noteRef.current = dashboardNote;
+  }, [dashboardNote]);
+
+  const pushToApi = useCallback(
+    (nextTodos: string[], nextNote: string, immediate = false) => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      const run = async () => {
+        setSaving(true);
+        try {
+          const saved = await apiSaveDashboardTodos(nextTodos, nextNote);
+          dirtyRef.current = false;
+          setDashboardTodos(saved.dashboardTodos);
+          setDashboardNote(saved.dashboardNote);
+          setTodos([...saved.dashboardTodos]);
+          todosRef.current = [...saved.dashboardTodos];
+          setNote(saved.dashboardNote);
+          noteRef.current = saved.dashboardNote;
+          setSavedFlash(true);
+          if (flashTimer.current) clearTimeout(flashTimer.current);
+          flashTimer.current = setTimeout(() => setSavedFlash(false), 1500);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Save failed";
+          toast.error("Could not save tasks / notes", { description: msg });
+        } finally {
+          setSaving(false);
+        }
+      };
+      if (immediate) {
+        void run();
+        return;
+      }
+      saveTimer.current = setTimeout(() => {
+        void run();
+      }, 500);
+    },
+    [setDashboardTodos, setDashboardNote],
+  );
+
   useEffect(() => {
     return () => {
-      setDashboardTodos(todosRef.current);
-      setDashboardNote(noteRef.current);
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (flashTimer.current) clearTimeout(flashTimer.current);
+      if (dirtyRef.current) {
+        void apiSaveDashboardTodos(todosRef.current, noteRef.current).catch(() => {});
+      }
     };
-  }, [setDashboardTodos, setDashboardNote]);
+  }, []);
 
   const persistTodos = (next: string[]) => {
+    dirtyRef.current = true;
     setTodos(next);
+    todosRef.current = next;
     setDashboardTodos(next);
+    pushToApi(next, noteRef.current);
   };
 
   const updateTodo = (index: number, value: string) => {
-    setTodos((current) => {
-      const next = [...current];
-      next[index] = value;
-      return next;
-    });
+    dirtyRef.current = true;
+    const next = [...todosRef.current];
+    next[index] = value;
+    todosRef.current = next;
+    setTodos(next);
+    pushToApi(next, noteRef.current);
   };
 
   const flushTodos = () => {
-    setDashboardTodos(todosRef.current);
+    dirtyRef.current = true;
+    const next = todosRef.current;
+    setDashboardTodos(next);
+    pushToApi(next, noteRef.current, true);
+  };
+
+  const onNoteChange = (value: string) => {
+    dirtyRef.current = true;
+    setNote(value);
+    noteRef.current = value;
+    pushToApi(todosRef.current, value);
   };
 
   const flushNote = () => {
-    setDashboardNote(noteRef.current);
+    dirtyRef.current = true;
+    const nextNote = noteRef.current;
+    setDashboardNote(nextNote);
+    pushToApi(todosRef.current, nextNote, true);
   };
 
   const addTodo = () => {
@@ -748,14 +822,25 @@ function DashboardTodoNotesPanel() {
     <section className={cn(dashCardClass, DASH.todo, "flex min-h-0 flex-1 flex-col p-4 sm:p-5")}>
       <div className="flex items-center justify-between gap-2">
         <DashboardPanelHeading icon={ListTodo} title="To Do List" />
-        <button
-          type="button"
-          onClick={addTodo}
-          className="inline-flex h-8 shrink-0 items-center gap-1 rounded-xl bg-gradient-to-r from-[#0D9488] to-[#0F766E] px-2.5 text-[11px] font-semibold text-white shadow-sm shadow-teal-700/25 transition-opacity hover:opacity-90"
-        >
-          <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
-          Add
-        </button>
+        <div className="flex items-center gap-2">
+          {saving ? (
+            <span className="text-[10px] font-medium uppercase tracking-wider text-slate-400">
+              Saving…
+            </span>
+          ) : savedFlash ? (
+            <span className="text-[10px] font-medium uppercase tracking-wider text-[#0F766E]">
+              Saved
+            </span>
+          ) : null}
+          <button
+            type="button"
+            onClick={addTodo}
+            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-xl bg-gradient-to-r from-[#0D9488] to-[#0F766E] px-2.5 text-[11px] font-semibold text-white shadow-sm shadow-teal-700/25 transition-opacity hover:opacity-90"
+          >
+            <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+            Add
+          </button>
+        </div>
       </div>
       <div className="mt-4 space-y-2.5">
         {visibleTodos.map((item, index) => (
@@ -838,7 +923,7 @@ function DashboardTodoNotesPanel() {
         <DashboardPanelHeading icon={StickyNote} title="Notes" />
         <Textarea
           value={note}
-          onChange={(e) => setNote(e.target.value)}
+          onChange={(e) => onNoteChange(e.target.value)}
           onBlur={flushNote}
           placeholder="Write a quick note for today..."
           className="mt-3 min-h-[72px] w-full flex-1 resize-none rounded-xl border-white/60 bg-white/65"
@@ -2501,7 +2586,13 @@ export function StudentsLedger() {
   const changeStudentStatus = (id: string, nextActive: boolean) => {
     const target = liveStudents.find((s) => s.id === id);
     if (!target || isRecordActive(target.active) === nextActive) return;
-    setStudents((prev) => prev.map((s) => (s.id === id ? { ...s, active: nextActive } : s)));
+    const updated = { ...target, active: nextActive };
+    setStudents((prev) => prev.map((s) => (s.id === id ? updated : s)));
+    void apiUpsertStudent(updated).catch((err) =>
+      toast.error("Could not update student status on server", {
+        description: err instanceof Error ? err.message : "Save failed",
+      }),
+    );
     toast.success(nextActive ? `${target.name} reactivated` : `${target.name} deactivated`, {
       description: target.id,
     });
@@ -2513,6 +2604,11 @@ export function StudentsLedger() {
     setStudents((prev) =>
       prev.map((s) => (s.id === id ? { ...s, deletedAt: undefined } : s)),
     );
+    void apiDeleteStudent(id, { restore: true }).catch((err) =>
+      toast.error("Could not restore student on server", {
+        description: err instanceof Error ? err.message : "Restore failed",
+      }),
+    );
     toast.success(`${target.name} restored to directory`, { description: target.id });
   };
 
@@ -2521,6 +2617,11 @@ export function StudentsLedger() {
     if (!target) return;
     setStudents((prev) => prev.filter((s) => s.id !== id));
     setPendingPurgeId(null);
+    void apiDeleteStudent(id, { hard: true }).catch((err) =>
+      toast.error("Could not permanently delete student on server", {
+        description: err instanceof Error ? err.message : "Delete failed",
+      }),
+    );
     toast.error(`${target.name} permanently deleted`, { description: target.id });
   };
 
@@ -2533,6 +2634,11 @@ export function StudentsLedger() {
     setStudents((prev) =>
       prev.map((s) => (ids.has(s.id) ? { ...s, active: nextActive } : s)),
     );
+    for (const id of ids) {
+      const target = liveStudents.find((s) => s.id === id);
+      if (!target) continue;
+      void apiUpsertStudent({ ...target, active: nextActive }).catch(() => {});
+    }
     toast.success(
       nextActive
         ? `${ids.size} student${ids.size === 1 ? "" : "s"} set to Active`
@@ -3578,6 +3684,11 @@ export function StaffRoster() {
     setStaff((prev) =>
       prev.map((s) => (ids.has(s.id) ? { ...s, active: nextActive } : s)),
     );
+    for (const id of ids) {
+      const target = liveStaff.find((s) => s.id === id);
+      if (!target) continue;
+      void apiUpsertStaff({ ...target, active: nextActive }).catch(() => {});
+    }
     toast.success(
       nextActive
         ? `${ids.size} staff set to Active`
@@ -3667,6 +3778,11 @@ export function StaffRoster() {
     setStaff((prev) =>
       prev.map((s) => (s.id === id ? { ...s, deletedAt: undefined } : s)),
     );
+    void apiDeleteStaff(id, { restore: true }).catch((err) =>
+      toast.error("Could not restore staff on server", {
+        description: err instanceof Error ? err.message : "Restore failed",
+      }),
+    );
     toast.success(`${target.name} restored to roster`, { description: target.id });
   };
 
@@ -3675,6 +3791,11 @@ export function StaffRoster() {
     if (!target) return;
     setStaff((prev) => prev.filter((s) => s.id !== id));
     setPendingPurgeId(null);
+    void apiDeleteStaff(id, { hard: true }).catch((err) =>
+      toast.error("Could not permanently delete staff on server", {
+        description: err instanceof Error ? err.message : "Delete failed",
+      }),
+    );
     toast.error(`${target.name} permanently deleted`, { description: target.id });
   };
 
@@ -5434,6 +5555,11 @@ function FinanceOverview({
     }
 
     setPayments((prev) => prev.map((p) => (p.id === editingPayment.id ? nextPayment : p)));
+    void apiUpdatePayment(nextPayment).catch((err) =>
+      toast.error("Could not update receipt on server", {
+        description: err instanceof Error ? err.message : "Save failed",
+      }),
+    );
     toast.success(`Receipt ${editingPayment.id} updated`);
     setEditingPayment(null);
   };
@@ -5442,6 +5568,11 @@ function FinanceOverview({
     if (!isAdmin || !pendingDeletePayment) return;
     adjustStudentDue(pendingDeletePayment, pendingDeletePayment.amount);
     setPayments((prev) => prev.filter((p) => p.id !== pendingDeletePayment.id));
+    void apiDeletePayment(pendingDeletePayment.id).catch((err) =>
+      toast.error("Could not delete receipt on server", {
+        description: err instanceof Error ? err.message : "Delete failed",
+      }),
+    );
     toast.error(`Receipt ${pendingDeletePayment.id} deleted`);
     setPendingDeletePayment(null);
   };
@@ -6835,6 +6966,11 @@ function ReceivePayment() {
     }
 
     setPayments((prev) => prev.map((p) => (p.id === editingPayment.id ? nextPayment : p)));
+    void apiUpdatePayment(nextPayment).catch((err) =>
+      toast.error("Could not update receipt on server", {
+        description: err instanceof Error ? err.message : "Save failed",
+      }),
+    );
     toast.success(`Receipt ${editingPayment.id} updated`);
     setEditingPayment(null);
   };
@@ -6843,6 +6979,11 @@ function ReceivePayment() {
     if (!pendingDeletePayment) return;
     adjustStudentDue(pendingDeletePayment, pendingDeletePayment.amount);
     setPayments((prev) => prev.filter((p) => p.id !== pendingDeletePayment.id));
+    void apiDeletePayment(pendingDeletePayment.id).catch((err) =>
+      toast.error("Could not delete receipt on server", {
+        description: err instanceof Error ? err.message : "Delete failed",
+      }),
+    );
     toast.error(`Receipt ${pendingDeletePayment.id} deleted`);
     setPendingDeletePayment(null);
   };
@@ -8232,6 +8373,35 @@ function MakePayment() {
   });
   const prefillAppliedRef = useRef(false);
 
+  useEffect(() => {
+    let cancelled = false;
+    void apiListDisbursements()
+      .then((rows) => {
+        if (cancelled || !Array.isArray(rows) || rows.length === 0) return;
+        setMadePayments(
+          rows.map((row) => ({
+            id: row.id || `DISB-${Date.now()}`,
+            payee: row.payee,
+            desc: row.desc,
+            amount: row.amount,
+            mode: row.mode,
+            payeeType: (row.payeeType === "Salary" ? "Salary" : "Vendor") as "Salary" | "Vendor",
+            time: row.time || formatDisbursalTime(),
+            status: (row.status === "Queued" ? "Queued" : "Cleared") as "Queued" | "Cleared",
+            attachments: Array.isArray(row.attachments)
+              ? (row.attachments as PaymentAttachment[])
+              : undefined,
+          })),
+        );
+      })
+      .catch(() => {
+        // keep seed list if API unavailable
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const activeStaff = useMemo(
     () =>
       staff
@@ -8537,6 +8707,43 @@ function MakePayment() {
     };
     setMadePayments((prev) => [disbursal, ...prev]);
 
+    void apiCreateDisbursement({
+      ...disbursal,
+      staffId: payeeType === "Salary" ? selectedStaffId || undefined : undefined,
+    })
+      .then((saved) => {
+        const savedId = saved?.id;
+        if (!savedId || savedId === disbursal.id) return;
+        setMadePayments((prev) =>
+          prev.map((p) =>
+            p.id === disbursal.id
+              ? {
+                  ...disbursal,
+                  id: savedId,
+                  payee: saved.payee || disbursal.payee,
+                  desc: saved.desc || disbursal.desc,
+                  amount: saved.amount || disbursal.amount,
+                  mode: saved.mode || disbursal.mode,
+                  payeeType:
+                    saved.payeeType === "Salary" || saved.payeeType === "Vendor"
+                      ? saved.payeeType
+                      : disbursal.payeeType,
+                  time: saved.time || disbursal.time,
+                  status:
+                    saved.status === "Queued" || saved.status === "Cleared"
+                      ? saved.status
+                      : disbursal.status,
+                }
+              : p,
+          ),
+        );
+      })
+      .catch((err) =>
+        toast.error("Could not save disbursement on server", {
+          description: err instanceof Error ? err.message : "Save failed",
+        }),
+      );
+
     if (payeeType === "Salary" && selectedStaffId) {
       const paidAt = new Date().toISOString().slice(0, 10);
       const working = Math.max(0, Math.round(Number(workingDays) || 0));
@@ -8573,6 +8780,22 @@ function MakePayment() {
             : member,
         ),
       );
+      const member = staff.find((s) => s.id === selectedStaffId);
+      if (member) {
+        const nextMember = {
+          ...member,
+          ...(working > 0
+            ? {
+                attendanceByMonth: upsertStaffAttendanceMonth(member.attendanceByMonth, {
+                  month: salaryMonth,
+                  daysPresent: present,
+                  workingDays: working,
+                }),
+              }
+            : {}),
+        };
+        void apiUpsertStaff(nextMember).catch(() => {});
+      }
     }
 
     toast.success("Payment confirmed", {
@@ -8717,21 +8940,23 @@ function MakePayment() {
       return;
     }
 
+    const nextDisbursal: MadePayment = {
+      ...editingDisbursal,
+      payee,
+      desc,
+      amount: nextAmount,
+      mode: modeValue,
+      payeeType: disbursalEditForm.payeeType,
+      status: disbursalEditForm.status,
+      time,
+    };
     setMadePayments((prev) =>
-      prev.map((p) =>
-        p.id === editingDisbursal.id
-          ? {
-              ...p,
-              payee,
-              desc,
-              amount: nextAmount,
-              mode: modeValue,
-              payeeType: disbursalEditForm.payeeType,
-              status: disbursalEditForm.status,
-              time,
-            }
-          : p,
-      ),
+      prev.map((p) => (p.id === editingDisbursal.id ? nextDisbursal : p)),
+    );
+    void apiUpdateDisbursement(nextDisbursal).catch((err) =>
+      toast.error("Could not update disbursement on server", {
+        description: err instanceof Error ? err.message : "Save failed",
+      }),
     );
     toast.success(`Payment ${editingDisbursal.id} updated`);
     setEditingDisbursal(null);
@@ -8740,6 +8965,11 @@ function MakePayment() {
   const confirmDeleteDisbursal = () => {
     if (!pendingDeleteDisbursal) return;
     setMadePayments((prev) => prev.filter((p) => p.id !== pendingDeleteDisbursal.id));
+    void apiDeleteDisbursement(pendingDeleteDisbursal.id).catch((err) =>
+      toast.error("Could not delete disbursement on server", {
+        description: err instanceof Error ? err.message : "Delete failed",
+      }),
+    );
     toast.error(`Payment ${pendingDeleteDisbursal.id} deleted`);
     setPendingDeleteDisbursal(null);
   };

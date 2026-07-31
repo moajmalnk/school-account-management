@@ -53,104 +53,126 @@ export type RemoteTenantBundle = {
 };
 
 async function getSafe<T>(path: string, fallback: T): Promise<T> {
-  try {
-    return await apiRequest<T>(path);
-  } catch (err) {
-    console.warn(`[api] ${path} failed — using fallback`, err);
-    return fallback;
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await apiRequest<T>(path);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const retryable =
+        /2002|Operation not permitted|Connection refused|Too many connections/i.test(
+          msg,
+        );
+      if (retryable && attempt < maxAttempts) {
+        await new Promise((r) => setTimeout(r, 250 * attempt));
+        continue;
+      }
+      console.warn(`[api] ${path} failed — using fallback`, err);
+      return fallback;
+    }
   }
+  return fallback;
 }
 
 function nonEmpty<T>(remote: T[], seed: T[]): T[] {
   return remote.length > 0 ? remote : seed;
 }
 
-/** Load tenant workspace data from production API when a JWT is present. */
+/** Dedupe concurrent hydrates (React Strict Mode mounts twice in dev). */
+let inflightBundle: Promise<RemoteTenantBundle | null> | null = null;
+
+/**
+ * Load tenant workspace data from production API when a JWT is present.
+ * Requests run one-at-a-time — Hostinger shared MySQL drops sockets under storms
+ * (SQLSTATE[HY000] [2002] Operation not permitted).
+ */
 export async function fetchRemoteTenantBundle(
   signal?: AbortSignal,
 ): Promise<RemoteTenantBundle | null> {
   if (!getApiToken()) return null;
-  void signal;
+  if (inflightBundle) return inflightBundle;
 
-  const [
-    students,
-    staff,
-    payments,
-    departments,
-    roles,
-    classes,
-    feeTerms,
-    paymentCategories,
-    routes,
-    vehicles,
-    users,
-    notifications,
-    school,
-    todos,
-  ] = await Promise.all([
-    getSafe<Student[]>("/api/students/list.php", []),
-    getSafe<Staff[]>("/api/staff/list.php", []),
-    getSafe<Payment[]>("/api/finance/payments.php", []),
-    getSafe<Department[]>("/api/settings/departments.php", []),
-    getSafe<Role[]>("/api/settings/roles.php", []),
-    getSafe<ClassConfig[]>("/api/settings/classes.php", []),
-    getSafe<FeeTerm[]>("/api/settings/fees.php", []),
-    getSafe<PaymentCategory[]>(
+  inflightBundle = (async (): Promise<RemoteTenantBundle | null> => {
+    void signal;
+
+    // Sequential on purpose — do not Promise.all these on shared hosting.
+    const students = await getSafe<Student[]>(
+      "/api/students/list.php?includeDeleted=1",
+      [],
+    );
+    const staff = await getSafe<Staff[]>("/api/staff/list.php?includeDeleted=1", []);
+    const payments = await getSafe<Payment[]>("/api/finance/payments.php", []);
+    const departments = await getSafe<Department[]>(
+      "/api/settings/departments.php",
+      [],
+    );
+    const roles = await getSafe<Role[]>("/api/settings/roles.php", []);
+    const classes = await getSafe<ClassConfig[]>(
+      "/api/settings/classes.php",
+      [],
+    );
+    const feeTerms = await getSafe<FeeTerm[]>("/api/settings/fees.php", []);
+    const paymentCategories = await getSafe<PaymentCategory[]>(
       "/api/settings/fees.php?resource=categories",
       [],
-    ),
-    getSafe<TransportRoute[]>("/api/settings/transport.php", []),
-    getSafe<TransportVehicle[]>(
+    );
+    const routes = await getSafe<TransportRoute[]>(
+      "/api/settings/transport.php",
+      [],
+    );
+    const vehicles = await getSafe<TransportVehicle[]>(
       "/api/settings/transport.php?type=vehicles",
       [],
-    ),
-    getSafe<TenantUser[]>("/api/settings/users.php", []),
-    getSafe<TenantNotification[]>("/api/notifications/list.php", []),
-    getSafe<{
+    );
+    const users = await getSafe<TenantUser[]>("/api/settings/users.php", []);
+    const notifications = await getSafe<TenantNotification[]>(
+      "/api/notifications/list.php",
+      [],
+    );
+    const school = await getSafe<{
       schoolDetails: SchoolDetails;
       themeSettings: ThemeSettings;
       academicYear: string;
       academicYears: string[];
-    } | null>("/api/settings/school.php", null),
-    getSafe<{ dashboardTodos: string[]; dashboardNote: string } | null>(
-      "/api/dashboard/todos.php",
-      null,
-    ),
-  ]);
+    } | null>("/api/settings/school.php", null);
+    const todos = await getSafe<{
+      dashboardTodos: string[];
+      dashboardNote: string;
+    } | null>("/api/dashboard/todos.php", null);
 
-  const academicYear = school?.academicYear ?? "AY 2025-26";
-  const academicYears = school?.academicYears?.length
-    ? school.academicYears
-    : ["AY 2024-25", "AY 2025-26", "AY 2026-27"];
+    const academicYear = school?.academicYear ?? "AY 2025-26";
+    const academicYears = school?.academicYears?.length
+      ? school.academicYears
+      : ["AY 2024-25", "AY 2025-26", "AY 2026-27"];
 
-  const nextStudents = nonEmpty(students, SEED_STUDENTS);
-  return {
-    students: nextStudents,
-    staff: nonEmpty(staff, SEED_STAFF),
-    payments: nonEmpty(payments, SEED_PAYMENTS),
-    departments: nonEmpty(departments, SEED_DEPARTMENTS),
-    roles: nonEmpty(roles, SEED_ROLES),
-    classes: nonEmpty(classes, SEED_CLASSES),
-    transportRoutes: nonEmpty(routes, SEED_TRANSPORT),
-    transportVehicles: nonEmpty(vehicles, SEED_VEHICLES),
-    paymentCategories: nonEmpty(paymentCategories, SEED_PAYMENT_CATEGORIES),
-    feeTerms: nonEmpty(feeTerms, SEED_FEE_TERMS),
-    tenantUsers: users,
-    notifications: nonEmpty(notifications, [...SEED_NOTIFICATIONS]),
-    schoolDetails: school?.schoolDetails ?? { ...SEED_SCHOOL_DETAILS },
-    themeSettings: school?.themeSettings ?? { ...SEED_THEME_SETTINGS },
-    academicYear,
-    academicYears,
-    dashboardTodos: todos?.dashboardTodos ?? [
-      "Follow up overdue fees",
-      "Confirm May payroll",
-      "",
-      "",
-      "",
-    ],
-    dashboardNote:
-      todos?.dashboardNote ??
-      "Focus: close Term 1 fee collections before mid-May.",
-    studentYearLedgers: [buildLedgerFromStudents(nextStudents, academicYear)],
-  };
+    const nextStudents = nonEmpty(students, SEED_STUDENTS);
+    return {
+      students: nextStudents,
+      staff: nonEmpty(staff, SEED_STAFF),
+      payments: nonEmpty(payments, SEED_PAYMENTS),
+      departments: nonEmpty(departments, SEED_DEPARTMENTS),
+      roles: nonEmpty(roles, SEED_ROLES),
+      classes: nonEmpty(classes, SEED_CLASSES),
+      transportRoutes: nonEmpty(routes, SEED_TRANSPORT),
+      transportVehicles: nonEmpty(vehicles, SEED_VEHICLES),
+      paymentCategories: nonEmpty(paymentCategories, SEED_PAYMENT_CATEGORIES),
+      feeTerms: nonEmpty(feeTerms, SEED_FEE_TERMS),
+      tenantUsers: users,
+      notifications: nonEmpty(notifications, [...SEED_NOTIFICATIONS]),
+      schoolDetails: school?.schoolDetails ?? { ...SEED_SCHOOL_DETAILS },
+      themeSettings: school?.themeSettings ?? { ...SEED_THEME_SETTINGS },
+      academicYear,
+      academicYears,
+      // Prefer live API payload (including empty strings) — do not replace with seed copy.
+      dashboardTodos: Array.isArray(todos?.dashboardTodos)
+        ? todos.dashboardTodos
+        : ["", "", "", "", ""],
+      dashboardNote: typeof todos?.dashboardNote === "string" ? todos.dashboardNote : "",
+      studentYearLedgers: [buildLedgerFromStudents(nextStudents, academicYear)],
+    };
+  })().finally(() => {
+    inflightBundle = null;
+  });
+
+  return inflightBundle;
 }

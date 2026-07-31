@@ -15,9 +15,16 @@ import {
   CheckCircle2,
   CircleAlert,
   Info,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { seedTenants, type Tenant, type Tier, type Status } from "./data";
+import {
+  fetchSuperAdminTenants,
+  provisionSuperAdminTenant,
+  updateSuperAdminTenant,
+} from "@/lib/api/super-admin";
+import { ApiError, getApiToken } from "@/lib/api/client";
 import { OrganicCard } from "@/components/ui/organic-card";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
@@ -163,16 +170,47 @@ function buildAuditLog(t: Tenant, count = 18): AuditEvent[] {
   return events.sort((a, b) => (a.ts < b.ts ? 1 : -1));
 }
 
-export function TenantsView({ onImpersonate }: { onImpersonate?: (name: string) => void } = {}) {
+export function TenantsView({
+  onImpersonate,
+}: { onImpersonate?: (tenant: Tenant) => void } = {}) {
   const [query, setQuery] = useState("");
   const [tier, setTier] = useState<string>("all");
   const [status, setStatus] = useState<string>("all");
   const [open, setOpen] = useState(false);
-  const [tenants, setTenants] = useState<Tenant[]>(seedTenants);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [loading, setLoading] = useState(true);
   const [billingMap, setBillingMap] = useState<Record<string, BillingRule>>({});
   const [editTarget, setEditTarget] = useState<Tenant | null>(null);
   const [billingTarget, setBillingTarget] = useState<Tenant | null>(null);
   const [auditTarget, setAuditTarget] = useState<Tenant | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        if (!getApiToken()) {
+          throw new ApiError("Not authenticated to API — log in again", 401);
+        }
+        const list = await fetchSuperAdminTenants();
+        if (!cancelled) setTenants(list);
+      } catch (err) {
+        if (!cancelled) {
+          setTenants(seedTenants);
+          const msg =
+            err instanceof ApiError ? err.message : "Failed to load tenants";
+          toast.error("Showing local seed tenants", {
+            description: `${msg}. Log out and sign in again as super admin so provisions persist.`,
+          });
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filtered = useMemo(() => {
     return tenants.filter((t) => {
@@ -198,8 +236,9 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (name: string) 
         <div>
           <h1 className="text-heading">School Tenants Registry</h1>
           <p className="mt-2 text-[14px] text-black/55">
-            {filtered.length} of {tenants.length} tenants · isolated routing keys, provisioning
-            &amp; billing
+            {loading
+              ? "Loading tenants from API…"
+              : `${filtered.length} of ${tenants.length} tenants · isolated routing keys, provisioning & billing`}
           </p>
         </div>
         <button
@@ -359,7 +398,7 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (name: string) 
                   />
                 </div>
                 <button
-                  onClick={() => onImpersonate?.(t.name)}
+                  onClick={() => onImpersonate?.(t)}
                   className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[11.5px] font-semibold shadow-[0_6px_18px_-10px_rgba(0,0,0,0.5)] transition-colors ${
                     isBlack
                       ? "bg-[#0F766E] text-white hover:bg-white"
@@ -392,12 +431,8 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (name: string) 
       <EditTenantDrawer
         tenant={editTarget}
         onClose={() => setEditTarget(null)}
-        onSave={(patch) => {
-          if (!editTarget) return;
-          updateTenant(editTarget.id, patch);
-          toast.success("Tenant meta updated", {
-            description: `${patch.name ?? editTarget.name} · ${patch.subdomain ?? editTarget.subdomain}.schoolaccounts.in`,
-          });
+        onSave={(updated) => {
+          updateTenant(updated.id, updated);
           setEditTarget(null);
         }}
       />
@@ -474,6 +509,7 @@ function TenantFormDrawer({
   const [tier, setTier] = useState<Tier>("Premium");
   const [customDomain, setCustomDomain] = useState(false);
   const [apex, setApex] = useState("");
+  const [busy, setBusy] = useState(false);
 
   const reset = () => {
     setLegalName("");
@@ -489,25 +525,38 @@ function TenantFormDrawer({
     setApex("");
   };
 
-  const submit = () => {
-    if (!legalName || !slug) return;
-    onCreate({
-      id: `T-${Math.floor(1100 + Math.random() * 800)}`,
-      uuid:
-        Math.random().toString(16).slice(2, 6) +
-        "-" +
-        Math.random().toString(16).slice(2, 6) +
-        "-4f00-aaaa",
-      name: legalName,
-      subdomain: slug,
-      tier,
-      status: "Trial",
-      students: 0,
-      capacity: students,
-      createdAt: new Date().toISOString().slice(0, 10),
-    });
-    reset();
-    onOpenChange(false);
+  const submit = async () => {
+    if (!legalName || !slug) {
+      toast.error("Legal name and subdomain are required");
+      return;
+    }
+    if (!adminEmail.trim()) {
+      toast.error("Administrator email is required");
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await provisionSuperAdminTenant({
+        name: legalName,
+        subdomain: slug,
+        tier,
+        capacity: students,
+        adminName: adminName || "School Admin",
+        adminEmail: adminEmail.trim(),
+        password: "school2026",
+      });
+      onCreate(result.tenant);
+      toast.success("Tenant provisioned", {
+        description: `${result.tenant.id} · ${result.admin.email} / ${result.admin.temporaryPassword}`,
+      });
+      reset();
+      onOpenChange(false);
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Provision failed";
+      toast.error("Could not provision tenant", { description: msg });
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -650,10 +699,12 @@ function TenantFormDrawer({
             <X className="h-3.5 w-3.5" /> Cancel
           </button>
           <button
-            onClick={submit}
-            className="rounded-full bg-black px-5 py-2 text-[12px] font-semibold text-white shadow-sm hover:bg-black/85"
+            onClick={() => void submit()}
+            disabled={busy}
+            className="inline-flex items-center gap-1.5 rounded-full bg-black px-5 py-2 text-[12px] font-semibold text-white shadow-sm hover:bg-black/85 disabled:opacity-60"
           >
-            Provision Tenant
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+            {busy ? "Provisioning…" : "Provision Tenant"}
           </button>
         </div>
       </SheetContent>
@@ -668,13 +719,14 @@ function EditTenantDrawer({
 }: {
   tenant: Tenant | null;
   onClose: () => void;
-  onSave: (patch: Partial<Tenant>) => void;
+  onSave: (tenant: Tenant) => void;
 }) {
   const [name, setName] = useState("");
   const [subdomain, setSubdomain] = useState("");
   const [tier, setTier] = useState<Tier>("Basic");
   const [status, setStatus] = useState<Status>("Active");
   const [capacity, setCapacity] = useState(0);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!tenant) return;
@@ -693,7 +745,7 @@ function EditTenantDrawer({
     status !== tenant.status ||
     capacity !== tenant.capacity;
 
-  const submit = () => {
+  const submit = async () => {
     if (!name.trim()) {
       toast.error("Legal name is required");
       return;
@@ -708,7 +760,26 @@ function EditTenantDrawer({
       });
       return;
     }
-    onSave({ name: name.trim(), subdomain: subdomain.trim(), tier, status, capacity });
+    setBusy(true);
+    try {
+      const updated = await updateSuperAdminTenant({
+        id: tenant.id,
+        name: name.trim(),
+        subdomain: subdomain.trim(),
+        tier,
+        status,
+        capacity,
+      });
+      onSave(updated);
+      toast.success("Tenant meta updated", {
+        description: `${updated.name} · ${updated.subdomain}.schoolaccounts.in`,
+      });
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Update failed";
+      toast.error("Could not update tenant", { description: msg });
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -812,11 +883,16 @@ function EditTenantDrawer({
           </button>
           <button
             type="button"
-            onClick={submit}
-            disabled={!dirty}
+            onClick={() => void submit()}
+            disabled={!dirty || busy}
             className="inline-flex items-center gap-1.5 rounded-full bg-black px-5 py-2 text-[12px] font-semibold text-white shadow-sm transition hover:bg-black/85 disabled:cursor-not-allowed disabled:bg-black/30"
           >
-            <Save className="h-3.5 w-3.5" /> Save Changes
+            {busy ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Save className="h-3.5 w-3.5" />
+            )}
+            {busy ? "Saving…" : "Save Changes"}
           </button>
         </div>
       </SheetContent>

@@ -16,6 +16,7 @@ import {
 } from "@/components/layout/MobileTabBar";
 import {
   useAuth,
+  endImpersonation,
   isTenantWorkspaceSession,
   sessionCanAccessSettings,
   sessionHasAnyFinance,
@@ -23,6 +24,7 @@ import {
 } from "@/lib/auth";
 import { TenantStoreProvider, schoolInitials, useTenantStore } from "@/lib/tenant-store";
 import { cn, glassInsetClass } from "@/lib/utils";
+import { KeyRound, X } from "lucide-react";
 
 export const Route = createFileRoute("/tenant")({
   component: TenantLayout,
@@ -117,24 +119,66 @@ function TenantShell() {
 }
 
 function ImpersonationBanner() {
-  const { session, logout } = useAuth();
+  const { session } = useAuth();
+  const { schoolDetails } = useTenantStore();
   if (!session?.impersonated) return null;
+
+  const workspace =
+    schoolDetails.name || session.tenantName || session.displayName || "tenant";
+  const fromSuper = session.impersonationSource === "super_admin";
+  const ticket = session.impersonationTicket;
+
   return (
-    <div className="sticky top-0 z-50 flex items-center justify-center gap-3 bg-[#0F766E] px-4 py-1.5 text-white">
-      <span className="text-[12px] font-medium">
-        Impersonating <strong>{session.displayName}</strong> · {session.email} — this
-        tab only, no changes to your admin login
-      </span>
-      <button
-        type="button"
-        onClick={() => {
-          logout();
-          window.location.replace("/tenant/settings?tab=users");
-        }}
-        className="rounded-full border border-white/40 bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold transition-colors hover:bg-white/20"
-      >
-        Exit
-      </button>
+    <div
+      role="status"
+      className="sticky top-0 z-[60] overflow-hidden border-b border-black/20 text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.45)]"
+      style={{
+        background:
+          "repeating-linear-gradient(-45deg, #0F766E, #0F766E 12px, #0d6a63 12px, #0d6a63 24px)",
+      }}
+    >
+      <div className="relative flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5">
+        <div className="pointer-events-none absolute inset-y-0 left-0 w-1.5 bg-[#CCFBF1]" />
+        <div className="flex min-w-0 items-start gap-2.5 sm:items-center">
+          <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-black/25 ring-1 ring-white/25 sm:mt-0">
+            <KeyRound className="h-3.5 w-3.5" />
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-black/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em]">
+                Impersonate mode
+              </span>
+              {ticket ? (
+                <span className="font-mono text-[10px] text-white/80">{ticket}</span>
+              ) : null}
+            </div>
+            <p className="mt-0.5 truncate text-[12.5px] font-medium leading-snug">
+              Viewing <strong>{workspace}</strong>
+              <span className="text-white/80">
+                {" "}
+                as {session.displayName}
+                {session.email ? ` · ${session.email}` : ""}
+              </span>
+            </p>
+            <p className="text-[11px] text-white/70">
+              {fromSuper
+                ? "Super Admin session paused — Exit returns to the control plane."
+                : "This tab only — Exit restores your admin login."}
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            const redirect = endImpersonation();
+            window.location.replace(redirect);
+          }}
+          className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-full border border-white/40 bg-white px-4 py-1.5 text-[12px] font-semibold text-[#0F766E] shadow-sm transition hover:bg-[#CCFBF1]"
+        >
+          <X className="h-3.5 w-3.5" />
+          Exit impersonation
+        </button>
+      </div>
     </div>
   );
 }
