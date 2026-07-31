@@ -551,6 +551,8 @@ INSERT INTO departments (tenant_id, public_id, name, code) VALUES
   (1, 'DEP-005', 'Support', 'SUP')
 ON DUPLICATE KEY UPDATE name = VALUES(name);
 
+DELETE FROM org_roles WHERE tenant_id = 1 AND public_id IN ('ROL-001','ROL-002','ROL-003','ROL-004');
+
 INSERT INTO org_roles (tenant_id, public_id, title, department_id)
 SELECT 1, 'ROL-001', 'Mathematics · HOD', d.id FROM departments d WHERE d.tenant_id = 1 AND d.public_id = 'DEP-001'
 UNION ALL
