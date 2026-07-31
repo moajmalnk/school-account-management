@@ -1,8 +1,8 @@
 <?php
 /**
  * CORS middleware — include at the top of every API entrypoint.
- * When opened directly in the browser, returns a health JSON payload
- * (useful if health.php has not been uploaded yet).
+ * Reflects the request Origin so local Vite (localhost / LAN IP) works.
+ * When opened directly, returns health JSON.
  */
 $configFile = __DIR__ . '/config.php';
 if (!is_file($configFile)) {
@@ -13,15 +13,30 @@ $config = require $configFile;
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 $allowed = $config['cors']['allowed_origins'] ?? [];
 
-if ($origin !== '' && in_array($origin, $allowed, true)) {
-    header('Access-Control-Allow-Origin: ' . $origin);
-    header('Vary: Origin');
-} elseif ($origin === '' || in_array('*', $allowed, true)) {
-    header('Access-Control-Allow-Origin: *');
+$originAllowed = false;
+if ($origin !== '') {
+    if (in_array($origin, $allowed, true) || in_array('*', $allowed, true)) {
+        $originAllowed = true;
+    } elseif (preg_match('#^https?://(localhost|127\.0\.0\.1)(:\d+)?$#i', $origin)) {
+        $originAllowed = true;
+    } elseif (preg_match('#^https?://(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?$#', $origin)) {
+        // Local network Vite / preview hosts
+        $originAllowed = true;
+    } elseif (preg_match('#^https?://([a-z0-9-]+\.)?macadz\.com$#i', $origin)) {
+        $originAllowed = true;
+    } elseif (preg_match('#^https?://.*\.vercel\.app$#i', $origin)) {
+        $originAllowed = true;
+    }
 }
 
-if (!empty($config['cors']['allow_credentials']) && $origin !== '' && in_array($origin, $allowed, true)) {
-    header('Access-Control-Allow-Credentials: true');
+if ($originAllowed) {
+    header('Access-Control-Allow-Origin: ' . $origin);
+    header('Vary: Origin');
+    if (!empty($config['cors']['allow_credentials'])) {
+        header('Access-Control-Allow-Credentials: true');
+    }
+} elseif ($origin === '') {
+    header('Access-Control-Allow-Origin: *');
 }
 
 header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
@@ -33,7 +48,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
     exit;
 }
 
-// Direct hit on /cors.php → health check (no separate health.php required)
+// Direct hit on /cors.php → health check
 $script = realpath($_SERVER['SCRIPT_FILENAME'] ?? '') ?: '';
 $self = realpath(__FILE__) ?: '';
 if ($script !== '' && $self !== '' && $script === $self) {
@@ -66,7 +81,6 @@ if ($script !== '' && $self !== '' && $script === $self) {
             'database' => $dbOk ? 'ok' : 'error',
             'databaseError' => $dbError,
             'time' => date('c'),
-            'hint' => 'Upload health.php + config.php into /public_html/spi for the dedicated health endpoint',
         ],
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;

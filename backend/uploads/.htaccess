@@ -1,2 +1,11 @@
-# Deny direct access to uploads listing; allow files
+# Allow uploaded files to be served; block directory listing
 Options -Indexes
+
+<FilesMatch "\.(php|phtml|php3|php4|php5|phar)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Deny from all
+  </IfModule>
+</FilesMatch>

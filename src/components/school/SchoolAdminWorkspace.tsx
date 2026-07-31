@@ -213,6 +213,20 @@ import {
 } from "@/components/school/FinanceReports";
 import { downloadCsv, downloadReceiptPdf, downloadTablePdf } from "@/lib/finance-export";
 import {
+  apiDeleteClass,
+  apiDeleteDepartment,
+  apiDeletePaymentCategory,
+  apiDeleteTransportRoute,
+  apiSaveSchoolDetails,
+  apiUpsertClass,
+  apiUpsertDepartment,
+  apiUpsertPaymentCategory,
+  apiUpsertTransportRoute,
+} from "@/lib/api/settings";
+import { apiCreatePayment, apiUpsertStaff, apiUpsertStudent } from "@/lib/api/records";
+import { apiUploadDataUrl } from "@/lib/api/settings";
+import { getApiToken } from "@/lib/api/client";
+import {
   ACCOUNTS_PAYABLE,
   OPERATING_EXPENSES,
   bankBalance,
@@ -2156,10 +2170,17 @@ export function AdmitStudentPage() {
     });
   };
 
+  const persistAdmitted = (student: Student) => {
+    void apiUpsertStudent(student).catch((err) =>
+      toast.error(err instanceof Error ? err.message : "Could not sync student to server"),
+    );
+  };
+
   const handleAdmit = (e: React.FormEvent) => {
     e.preventDefault();
     const newStu = createStudent();
     if (!newStu) return;
+    persistAdmitted(newStu);
     startTransition(() => {
       navigate({ to: "/tenant/students", search: { id: newStu.id } });
     });
@@ -2176,6 +2197,7 @@ export function AdmitStudentPage() {
     e.preventDefault();
     const newStu = createStudent();
     if (!newStu?.shareToken) return;
+    persistAdmitted(newStu);
     setAdmittedId(newStu.id);
     setShareToken(newStu.shareToken);
     setShareName(newStu.name);
@@ -3709,6 +3731,21 @@ export function StaffRoster() {
       ],
     };
     setStaff((prev) => [newStaff, ...prev]);
+    void (async () => {
+      try {
+        let payload = newStaff;
+        if (payload.photoUrl?.startsWith("data:")) {
+          const url = await apiUploadDataUrl(payload.photoUrl, "photo", "staff-photo.png");
+          payload = { ...payload, photoUrl: url };
+          setStaff((prev) =>
+            prev.map((s) => (s.id === payload.id ? { ...s, photoUrl: url } : s)),
+          );
+        }
+        await apiUpsertStaff(payload);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Could not sync staff to server");
+      }
+    })();
     toast.success(`${newStaff.name} recruited`, {
       description: `${newStaff.id} · ${newStaff.dept}`,
     });
@@ -6855,6 +6892,9 @@ function ReceivePayment() {
         ...(receiptAttachments ? { attachments: receiptAttachments } : {}),
       };
       setPayments((prev) => [newPayment, ...prev]);
+      void apiCreatePayment(newPayment).catch((err) =>
+        toast.error(err instanceof Error ? err.message : "Could not sync receipt"),
+      );
       toast.success(`Receipt ${newPayment.id} · ₹ ${value.toLocaleString("en-IN")} captured`, {
         description: `External · ${payer} · ${category} · ${periodLabel}${
           receiptAttachments ? ` · ${receiptAttachments.length} file${receiptAttachments.length === 1 ? "" : "s"}` : ""
@@ -6890,6 +6930,12 @@ function ReceivePayment() {
     setPayments((prev) => [newPayment, ...prev]);
     setStudents((prev) =>
       prev.map((s) => (s.id === selected.id ? { ...s, due: Math.max(0, s.due - value) } : s)),
+    );
+    void apiCreatePayment(newPayment, {
+      reduceDue: true,
+      studentId: selected.id,
+    }).catch((err) =>
+      toast.error(err instanceof Error ? err.message : "Could not sync receipt"),
     );
     const remaining = Math.max(0, selected.due - value);
     toast.success(`Receipt ${newPayment.id} · ₹ ${value.toLocaleString("en-IN")} captured`, {
@@ -9811,14 +9857,22 @@ function DepartmentsCard({
     }
     if (editingId) {
       const previous = departments.find((d) => d.id === editingId);
-      setDepartments((prev) => prev.map((d) => (d.id === editingId ? { ...d, name, code } : d)));
+      const updated = { id: editingId, name, code };
+      setDepartments((prev) => prev.map((d) => (d.id === editingId ? updated : d)));
       if (previous && previous.name !== name) {
         setStaff((prev) => prev.map((s) => (s.dept === previous.name ? { ...s, dept: name } : s)));
       }
+      void apiUpsertDepartment(updated).catch((err) =>
+        toast.error(err instanceof Error ? err.message : "Could not sync department"),
+      );
       toast.success(`Department updated · ${name}`);
     } else {
       const nextId = `DEP-${(departments.length + 1).toString().padStart(3, "0")}`;
-      setDepartments((prev) => [...prev, { id: nextId, name, code }]);
+      const created = { id: nextId, name, code };
+      setDepartments((prev) => [...prev, created]);
+      void apiUpsertDepartment(created).catch((err) =>
+        toast.error(err instanceof Error ? err.message : "Could not sync department"),
+      );
       toast.success(`Department added · ${name}`);
     }
     setOpen(false);
@@ -9836,6 +9890,9 @@ function DepartmentsCard({
       return;
     }
     setDepartments((prev) => prev.filter((x) => x.id !== d.id));
+    void apiDeleteDepartment(d.id).catch((err) =>
+      toast.error(err instanceof Error ? err.message : "Could not delete department"),
+    );
     toast.error(`${d.name} removed`);
   };
 
@@ -10274,6 +10331,7 @@ function ClassesCard({
     };
     if (editingId) {
       const previous = classes.find((c) => c.id === editingId);
+      const updated = { ...next, id: editingId };
       setClasses((prev) =>
         prev.map((c) => (c.id === editingId ? { ...c, ...next } : c)),
       );
@@ -10282,12 +10340,19 @@ function ClassesCard({
           prev.map((s) => (s.cls === previous.className ? { ...s, cls: className } : s)),
         );
       }
+      void apiUpsertClass(updated).catch((err) =>
+        toast.error(err instanceof Error ? err.message : "Could not sync class"),
+      );
       toast.success(`${className} updated`, {
         description: `Tuition ₹ ${next.tuitionFeeAmount.toLocaleString("en-IN")} · ${next.billingCycle}`,
       });
     } else {
       const nextId = `CLS-${(classes.length + 1).toString().padStart(3, "0")}`;
-      setClasses((prev) => [...prev, { id: nextId, ...next }]);
+      const created = { id: nextId, ...next };
+      setClasses((prev) => [...prev, created]);
+      void apiUpsertClass(created).catch((err) =>
+        toast.error(err instanceof Error ? err.message : "Could not sync class"),
+      );
       toast.success(`${className} added`, {
         description: `Billed ${next.billingCycle.toLowerCase()} · prefills Receive Payment`,
       });
@@ -10304,6 +10369,9 @@ function ClassesCard({
       return;
     }
     setClasses((prev) => prev.filter((x) => x.id !== c.id));
+    void apiDeleteClass(c.id).catch((err) =>
+      toast.error(err instanceof Error ? err.message : "Could not delete class"),
+    );
     toast.error(`${c.className} removed`);
   };
 
@@ -11743,22 +11811,25 @@ function TransportCard({
       ...(form.toLng != null ? { toLng: form.toLng } : {}),
     };
     if (editingId) {
+      const updated: TransportRoute = { id: editingId, ...payload };
+      if (form.fromLat == null) delete updated.fromLat;
+      if (form.fromLng == null) delete updated.fromLng;
+      if (form.toLat == null) delete updated.toLat;
+      if (form.toLng == null) delete updated.toLng;
       setTransportRoutes((prev) =>
-        prev.map((r) => {
-          if (r.id !== editingId) return r;
-          const next: TransportRoute = { id: r.id, ...payload };
-          // Drop stale coordinates when the pin was cleared
-          if (form.fromLat == null) delete next.fromLat;
-          if (form.fromLng == null) delete next.fromLng;
-          if (form.toLat == null) delete next.toLat;
-          if (form.toLng == null) delete next.toLng;
-          return next;
-        }),
+        prev.map((r) => (r.id !== editingId ? r : updated)),
+      );
+      void apiUpsertTransportRoute(updated).catch((err) =>
+        toast.error(err instanceof Error ? err.message : "Could not sync route"),
       );
       toast.success(`Route updated · ${mapFrom} → ${mapTo}`);
     } else {
       const nextId = `TR-${(transportRoutes.length + 1).toString().padStart(3, "0")}`;
-      setTransportRoutes((prev) => [...prev, { id: nextId, ...payload }]);
+      const created = { id: nextId, ...payload };
+      setTransportRoutes((prev) => [...prev, created]);
+      void apiUpsertTransportRoute(created).catch((err) =>
+        toast.error(err instanceof Error ? err.message : "Could not sync route"),
+      );
       toast.success(`Route added · ${mapFrom} → ${mapTo}`);
     }
     setOpen(false);
@@ -11771,6 +11842,9 @@ function TransportCard({
         ...v,
         routeIds: v.routeIds.filter((id) => id !== r.id),
       })),
+    );
+    void apiDeleteTransportRoute(r.id).catch((err) =>
+      toast.error(err instanceof Error ? err.message : "Could not delete route"),
     );
     toast.error(`${r.mapFrom} → ${r.mapTo} removed`);
   };
@@ -12226,7 +12300,7 @@ function SchoolDetailsCard({
     setDraft((prev) => ({ ...prev, [key]: value }));
   };
 
-  const save = (e: React.FormEvent) => {
+  const save = async (e: React.FormEvent) => {
     e.preventDefault();
     const name = draft.name.trim();
     if (!name) {
@@ -12246,11 +12320,23 @@ function SchoolDetailsCard({
       principalName: draft.principalName.trim(),
       establishedYear: draft.establishedYear.trim(),
     };
-    setSchoolDetails(next);
-    updateSession({ tenantName: next.name });
-    toast.success("School details saved", {
-      description: next.name,
-    });
+    try {
+      const saved = getApiToken()
+        ? await apiSaveSchoolDetails(next)
+        : next;
+      setSchoolDetails(saved);
+      setDraft(saved);
+      updateSession({ tenantName: saved.name });
+      toast.success("School details saved", {
+        description: getApiToken()
+          ? `${saved.name} · synced to spi.macadz.com`
+          : saved.name,
+      });
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not save school details",
+      );
+    }
   };
 
   const onLogo = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -12575,8 +12661,12 @@ function FeeCategoriesCard({
     }
 
     if (editingId) {
+      const updated = { id: editingId, label: nextLabel };
       setPaymentCategories((prev) =>
-        prev.map((c) => (c.id === editingId ? { ...c, label: nextLabel } : c)),
+        prev.map((c) => (c.id === editingId ? updated : c)),
+      );
+      void apiUpsertPaymentCategory(updated).catch((err) =>
+        toast.error(err instanceof Error ? err.message : "Could not sync fee category"),
       );
       toast.success(`Fee category updated · ${nextLabel}`, {
         description: "Shown on Receive Payment selectors",
@@ -12587,7 +12677,11 @@ function FeeCategoriesCard({
         return match ? Math.max(max, Number(match[1])) : max;
       }, 0);
       const nextId = `PC-${(maxNum + 1).toString().padStart(3, "0")}`;
-      setPaymentCategories((prev) => [...prev, { id: nextId, label: nextLabel }]);
+      const created = { id: nextId, label: nextLabel };
+      setPaymentCategories((prev) => [...prev, created]);
+      void apiUpsertPaymentCategory(created).catch((err) =>
+        toast.error(err instanceof Error ? err.message : "Could not sync fee category"),
+      );
       toast.success(`Fee category added · ${nextLabel}`, {
         description: "Now selectable on Receive Payment",
       });
@@ -12597,6 +12691,9 @@ function FeeCategoriesCard({
 
   const remove = (category: PaymentCategory) => {
     setPaymentCategories((prev) => prev.filter((c) => c.id !== category.id));
+    void apiDeletePaymentCategory(category.id).catch((err) =>
+      toast.error(err instanceof Error ? err.message : "Could not delete fee category"),
+    );
     toast.error(`${category.label} removed`, {
       description: "Existing receipts retain the label",
     });

@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OrganicCard } from "@/components/ui/organic-card";
+import { apiDeleteTenantUser, apiUpsertTenantUser } from "@/lib/api/settings";
 import {
   Select,
   SelectContent,
@@ -189,39 +190,43 @@ export function SettingsUsersCard({
     }
 
     if (editingId) {
+      const updated = normalizeTenantUser({
+        id: editingId,
+        displayName,
+        email,
+        password,
+        roleId: form.roleId || undefined,
+        staffId: form.staffId || undefined,
+        permissions,
+        active: form.active,
+        createdAt:
+          tenantUsers.find((u) => u.id === editingId)?.createdAt ??
+          new Date().toISOString(),
+      });
       setTenantUsers((prev) =>
-        prev.map((u) =>
-          u.id === editingId
-            ? normalizeTenantUser({
-                ...u,
-                displayName,
-                email,
-                password,
-                roleId: form.roleId || undefined,
-                staffId: form.staffId || undefined,
-                permissions,
-                active: form.active,
-              })
-            : u,
-        ),
+        prev.map((u) => (u.id === editingId ? updated : u)),
+      );
+      void apiUpsertTenantUser(updated).catch((err) =>
+        toast.error(err instanceof Error ? err.message : "Could not sync user"),
       );
       toast.success(`User updated · ${displayName}`);
     } else {
       const nextId = `USR-${Date.now().toString().slice(-6)}`;
-      setTenantUsers((prev) => [
-        normalizeTenantUser({
-          id: nextId,
-          displayName,
-          email,
-          password,
-          roleId: form.roleId || undefined,
-          staffId: form.staffId || undefined,
-          permissions,
-          active: form.active,
-          createdAt: new Date().toISOString(),
-        }),
-        ...prev,
-      ]);
+      const created = normalizeTenantUser({
+        id: nextId,
+        displayName,
+        email,
+        password,
+        roleId: form.roleId || undefined,
+        staffId: form.staffId || undefined,
+        permissions,
+        active: form.active,
+        createdAt: new Date().toISOString(),
+      });
+      setTenantUsers((prev) => [created, ...prev]);
+      void apiUpsertTenantUser(created).catch((err) =>
+        toast.error(err instanceof Error ? err.message : "Could not sync user"),
+      );
       toast.success(`User created · ${displayName}`, {
         description: "They can sign in under School Admin with this email & password",
       });
@@ -256,8 +261,13 @@ export function SettingsUsersCard({
 
   const confirmDelete = () => {
     if (!pendingDelete) return;
-    setTenantUsers((prev) => prev.filter((u) => u.id !== pendingDelete.id));
-    toast.error(`${pendingDelete.displayName} removed`);
+    const id = pendingDelete.id;
+    const name = pendingDelete.displayName;
+    setTenantUsers((prev) => prev.filter((u) => u.id !== id));
+    void apiDeleteTenantUser(id).catch((err) =>
+      toast.error(err instanceof Error ? err.message : "Could not delete user"),
+    );
+    toast.error(`${name} removed`);
     setPendingDelete(null);
   };
 

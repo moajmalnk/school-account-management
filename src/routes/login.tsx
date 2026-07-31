@@ -37,7 +37,7 @@ const TIERS: TierMeta[] = [
 function LoginPage() {
   const navigate = useNavigate();
   const { session, hydrated, login } = useAuth();
-  const [tier, setTier] = useState<keyof typeof MOCK_CREDENTIALS>("super_admin");
+  const [tier, setTier] = useState<keyof typeof MOCK_CREDENTIALS>("school_admin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -78,7 +78,7 @@ function LoginPage() {
     });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const errs: typeof fieldErrors = {};
     if (!email.trim()) errs.email = "Email is required";
@@ -90,18 +90,21 @@ function LoginPage() {
     }
 
     setSubmitting(true);
-    const result = login(tier, email, password);
+    const result = await login(tier, email, password);
     setSubmitting(false);
 
     if (!result.ok) {
       setBannerError(true);
-      toast.error(INVALID_CREDENTIALS_MESSAGE);
+      toast.error(result.error || INVALID_CREDENTIALS_MESSAGE);
       return;
     }
 
     setBannerError(false);
     toast.success(`Welcome, ${result.session.displayName}`, {
-      description: "Session initialised · secure handshake complete",
+      description:
+        result.session.role === "super_admin"
+          ? "Session initialised · secure handshake complete"
+          : "Connected to production API · spi.macadz.com",
     });
     navigate({ to: result.redirect });
   };

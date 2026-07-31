@@ -9,6 +9,8 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
+import { fetchRemoteTenantBundle } from "@/lib/api/tenant-sync";
+import { getApiToken } from "@/lib/api/client";
 import {
   normalizePermissionSet,
   type PermissionSet,
@@ -1135,8 +1137,9 @@ export type TenantNotification = {
   href?: string;
 };
 
-const STORAGE_KEY = "school-accounts/tenant-store/v11";
+const STORAGE_KEY = "school-accounts/tenant-store/v12";
 const LEGACY_STORAGE_KEYS = [
+  "school-accounts/tenant-store/v11",
   "school-accounts/tenant-store/v10",
   "school-accounts/tenant-store/v9",
   "school-accounts/tenant-store/v8",
@@ -3173,9 +3176,52 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const snap = readSnapshot();
-    if (snap) applySnapshot(snap);
-    setHydrated(true);
+    let cancelled = false;
+    const hydrate = async () => {
+      // Prefer live API data when a JWT exists (school admin / tenant user).
+      if (getApiToken()) {
+        try {
+          const remote = await fetchRemoteTenantBundle();
+          if (!cancelled && remote) {
+            applySnapshot({
+              students: remote.students,
+              staff: remote.staff,
+              payments: remote.payments,
+              departments: remote.departments,
+              roles: remote.roles,
+              classes: remote.classes,
+              transportRoutes: remote.transportRoutes,
+              transportVehicles: remote.transportVehicles,
+              paymentCategories: remote.paymentCategories,
+              feeTerms: remote.feeTerms,
+              studentYearLedgers: remote.studentYearLedgers,
+              academicYears: remote.academicYears,
+              academicYear: remote.academicYear,
+              themeSettings: remote.themeSettings,
+              schoolDetails: remote.schoolDetails,
+              dashboardTodos: remote.dashboardTodos,
+              dashboardNote: remote.dashboardNote,
+              notifications: remote.notifications,
+              tenantUsers: remote.tenantUsers,
+            });
+            setHydrated(true);
+            return;
+          }
+        } catch {
+          // fall through to localStorage / seeds
+        }
+      }
+
+      if (cancelled) return;
+      const snap = readSnapshot();
+      if (snap) applySnapshot(snap);
+      setHydrated(true);
+    };
+
+    void hydrate();
+    return () => {
+      cancelled = true;
+    };
   }, [applySnapshot]);
 
   useEffect(() => {

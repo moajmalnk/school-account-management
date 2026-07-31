@@ -8,6 +8,8 @@ import {
   type ReactNode,
 } from "react";
 
+import { apiLogin } from "@/lib/api/auth";
+import { ApiError, setApiToken } from "@/lib/api/client";
 import {
   ALL_PERMISSIONS,
   firstAllowedTenantPath,
@@ -45,7 +47,7 @@ export type LoginResult =
 type AuthState = {
   session: Session | null;
   hydrated: boolean;
-  login: (role: Role, email: string, password: string) => LoginResult;
+  login: (role: Role, email: string, password: string) => Promise<LoginResult>;
   logout: () => void;
   updateSession: (
     patch: Partial<
@@ -238,16 +240,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setHydrated(true);
   }, []);
 
-  const login = useCallback<AuthState["login"]>((role, email, password) => {
+  const login = useCallback<AuthState["login"]>(async (role, email, password) => {
     const normalizedEmail = email.trim().toLowerCase();
 
-    if (role === "super_admin" || role === "school_admin") {
-      const expected = MOCK_CREDENTIALS[role];
+    // Super-admin stays local/mock until SaaS APIs ship.
+    if (role === "super_admin") {
+      const expected = MOCK_CREDENTIALS.super_admin;
       if (
         expected &&
         normalizedEmail === expected.email.toLowerCase() &&
         password === expected.password
       ) {
+        setApiToken(null);
         const next: Session = {
           role,
           email: expected.email,
@@ -260,29 +264,69 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(next);
         return { ok: true, redirect: expected.redirect, session: next };
       }
+      return { ok: false, error: INVALID_CREDENTIALS_MESSAGE };
     }
 
-    // School Admin tier (or tenant_user) can also authenticate workspace users
+    // School admin + tenant users → production API
     if (role === "school_admin" || role === "tenant_user") {
-      const user = findActiveTenantUserByCredentials(normalizedEmail, password);
-      if (user) {
+      try {
+        const data = await apiLogin(normalizedEmail, password);
+        const apiRole: Role =
+          data.session.role === "school_admin" ? "school_admin" : "tenant_user";
+        const rawPerms = data.session.permissions;
+        const permissions: PermissionSet =
+          apiRole === "school_admin" ||
+          (Array.isArray(rawPerms) && (rawPerms as string[]).includes("*"))
+            ? ALL_PERMISSIONS
+            : Array.isArray(rawPerms)
+              ? (rawPerms as PermissionKey[])
+              : [];
         const next: Session = {
-          role: "tenant_user",
-          email: user.email,
-          displayName: user.displayName,
-          tenantName: MOCK_CREDENTIALS.school_admin.tenantName,
+          role: apiRole,
+          email: data.session.email,
+          displayName: data.session.displayName,
+          tenantName: data.session.tenantName,
           issuedAt: Date.now(),
-          userId: user.id,
-          staffId: user.staffId,
-          permissions: user.permissions,
+          userId: data.session.userId,
+          staffId: data.session.staffId || undefined,
+          permissions,
         };
         writeSession(next);
         setSession(next);
         return {
           ok: true,
-          redirect: firstAllowedTenantPath(user.permissions),
+          redirect:
+            apiRole === "school_admin"
+              ? "/tenant/dashboard"
+              : firstAllowedTenantPath(permissions),
           session: next,
         };
+      } catch (err) {
+        // Offline / API down: fall back to local tenant-user credentials
+        const user = findActiveTenantUserByCredentials(normalizedEmail, password);
+        if (user) {
+          setApiToken(null);
+          const next: Session = {
+            role: "tenant_user",
+            email: user.email,
+            displayName: user.displayName,
+            tenantName: MOCK_CREDENTIALS.school_admin.tenantName,
+            issuedAt: Date.now(),
+            userId: user.id,
+            staffId: user.staffId,
+            permissions: user.permissions,
+          };
+          writeSession(next);
+          setSession(next);
+          return {
+            ok: true,
+            redirect: firstAllowedTenantPath(user.permissions),
+            session: next,
+          };
+        }
+        const message =
+          err instanceof ApiError ? err.message : INVALID_CREDENTIALS_MESSAGE;
+        return { ok: false, error: message || INVALID_CREDENTIALS_MESSAGE };
       }
     }
 
@@ -302,6 +346,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // ignore
       }
     }
+    setApiToken(null);
     writeSession(null);
     setSession(null);
   }, []);
