@@ -1,7 +1,6 @@
 <?php
 /**
- * Copy to config.php on the server (or keep both in sync).
- * Do not commit production secrets to public repos.
+ * Same credentials as config.php — used as fallback when config.php is not uploaded.
  */
 return [
     'db' => [
@@ -13,7 +12,7 @@ return [
     ],
     'jwt' => [
         'secret' => 'spi-silver-hills-change-me-in-production-2026',
-        'ttl_seconds' => 60 * 60 * 24 * 7, // 7 days
+        'ttl_seconds' => 60 * 60 * 24 * 7,
         'issuer' => 'spi.macadz.com',
     ],
     'cors' => [

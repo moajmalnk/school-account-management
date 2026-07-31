@@ -1,9 +1,12 @@
 <?php
 /**
- * Production PDO / JWT configuration for spi.macadz.com
+ * Active config for spi.macadz.com.
+ * If this file is missing on the server, lib/db.php falls back to config.example.php.
  */
 return [
     'db' => [
+        // Hostinger shared hosting usually uses localhost from PHP on the same account.
+        // If DB connect fails, try: 'auth-db845.hstgr.io'
         'host' => 'localhost',
         'name' => 'u455934768_spi',
         'user' => 'u455934768_spi',

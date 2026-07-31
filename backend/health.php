@@ -1,10 +1,11 @@
 <?php
 /**
- * Health check — verifies PHP + optional DB connectivity.
+ * Health check — verifies PHP + DB connectivity.
+ * URL: https://spi.macadz.com/health.php
  */
-require_once dirname(__DIR__) . '/cors.php';
-require_once dirname(__DIR__) . '/lib/db.php';
-require_once dirname(__DIR__) . '/lib/response.php';
+require_once __DIR__ . '/cors.php';
+require_once __DIR__ . '/lib/db.php';
+require_once __DIR__ . '/lib/response.php';
 
 $dbOk = false;
 $dbError = null;

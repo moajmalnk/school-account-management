@@ -11,11 +11,25 @@ Upload the contents of this `backend/` folder to:
 
 ## Deploy checklist
 
-1. Upload all files in this folder to the `spi` document root (FTP / File Manager).
-2. In phpMyAdmin (or MySQL CLI), select database `u455934768_spi` and import [`schema.sql`](schema.sql).
-3. Confirm [`config.php`](config.php) credentials match the host (already set for Hostinger).
-4. Hit health check: `GET https://spi.macadz.com/health.php`
+1. Upload **all** files in this folder to the `spi` document root (FTP / File Manager).  
+   Do **not** skip root PHP files — the live server previously 404’d because these were missing:
+   - `health.php`
+   - `index.php`
+   - `config.php` (or rely on `config.example.php` fallback)
+   - `cors.php`
+2. In phpMyAdmin, select database `u455934768_spi` and import [`schema.sql`](schema.sql) (already done if tables exist).
+3. Confirm Document Root for subdomain `spi.macadz.com` points at `/public_html/spi`.
+4. Hit health check: `GET https://spi.macadz.com/health.php` — expect JSON `database: "ok"`.
 5. Log in: `POST https://spi.macadz.com/api/auth/login.php`
+
+### Quick re-upload (missing files only)
+
+If the File Manager already has `api/`, `lib/`, `cors.php` but health still 404s, upload these into `/public_html/spi/`:
+
+- `health.php`
+- `index.php`
+- `config.php`
+- `README.md` (optional)
 
 ### Seed credentials
 
