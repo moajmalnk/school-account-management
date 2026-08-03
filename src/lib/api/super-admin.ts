@@ -149,6 +149,15 @@ export async function updateSuperAdminTenant(
   });
 }
 
+export async function deleteSuperAdminTenant(
+  tenantId: string,
+): Promise<{ id: string; name: string; subdomain: string; deleted: boolean }> {
+  return apiRequest("/api/super-admin/tenants/delete.php", {
+    method: "POST",
+    body: { id: tenantId },
+  });
+}
+
 export async function impersonateSuperAdminTenant(
   tenantId: string,
   ticket?: string,

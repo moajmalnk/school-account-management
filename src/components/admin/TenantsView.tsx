@@ -6,6 +6,7 @@ import {
   FileText,
   ScrollText,
   Pencil,
+  Trash2,
   X,
   Save,
   RotateCw,
@@ -20,6 +21,7 @@ import {
 import { toast } from "sonner";
 import { seedTenants, type Tenant, type Tier, type Status } from "./data";
 import {
+  deleteSuperAdminTenant,
   fetchSuperAdminTenants,
   provisionSuperAdminTenant,
   updateSuperAdminTenant,
@@ -41,6 +43,15 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -183,6 +194,8 @@ export function TenantsView({
   const [editTarget, setEditTarget] = useState<Tenant | null>(null);
   const [billingTarget, setBillingTarget] = useState<Tenant | null>(null);
   const [auditTarget, setAuditTarget] = useState<Tenant | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Tenant | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -229,6 +242,33 @@ export function TenantsView({
     setBillingMap((prev) => ({ ...prev, [id]: rule }));
   };
   const getBilling = (t: Tenant) => billingMap[t.id] ?? defaultBilling(t);
+
+  const confirmDeleteTenant = async () => {
+    if (!pendingDelete || deleting) return;
+    const target = pendingDelete;
+    setDeleting(true);
+    try {
+      if (!getApiToken()) {
+        throw new ApiError("Not authenticated to API — log in again", 401);
+      }
+      await deleteSuperAdminTenant(target.id);
+      setTenants((prev) => prev.filter((t) => t.id !== target.id));
+      setBillingMap((prev) => {
+        const next = { ...prev };
+        delete next[target.id];
+        return next;
+      });
+      toast.error(`${target.name} deleted`, {
+        description: `${target.id} · ${target.subdomain}.schoolaccounts.in · all school data removed`,
+      });
+      setPendingDelete(null);
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Delete failed";
+      toast.error("Could not delete tenant", { description: msg });
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -396,6 +436,12 @@ export function TenantsView({
                     tone={tone}
                     onClick={() => setAuditTarget(t)}
                   />
+                  <TenantAction
+                    icon={Trash2}
+                    label="Delete Tenant"
+                    tone={tone}
+                    onClick={() => setPendingDelete(t)}
+                  />
                 </div>
                 <button
                   onClick={() => onImpersonate?.(t)}
@@ -452,6 +498,51 @@ export function TenantsView({
       />
 
       <AuditLogsDrawer tenant={auditTarget} onClose={() => setAuditTarget(null)} />
+
+      <Dialog
+        open={Boolean(pendingDelete)}
+        onOpenChange={(next) => {
+          if (!next && !deleting) setPendingDelete(null);
+        }}
+      >
+        <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6">
+          <DialogHeader>
+            <DialogTitle className="text-[22px] font-semibold text-black">
+              Delete Tenant
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
+              {pendingDelete
+                ? `Permanently delete ${pendingDelete.name} (${pendingDelete.id})? Students, staff, finance, and settings for this school will be removed. This cannot be undone.`
+                : "Permanently delete this tenant?"}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-5 flex-row justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={deleting}
+              onClick={() => setPendingDelete(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={deleting}
+              onClick={() => void confirmDeleteTenant()}
+              className="rounded-full bg-[#EF4444] text-white hover:bg-[#DC2626]"
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  Deleting…
+                </>
+              ) : (
+                "Delete permanently"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
