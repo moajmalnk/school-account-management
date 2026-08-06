@@ -246,86 +246,23 @@ import {
 } from "@/lib/payment-period";
 import { cn, dashCardClass, glassCardClass, glassInsetClass, glassPanelClass, glassTableWrapClass, premiumCardClass, type CornerSide, type Tone } from "@/lib/utils";
 
-const MADE_PAYMENTS = [
-  {
-    id: "DISB-2401",
-    payee: "Faculty Payroll · April",
-    desc: "34 staff · net payable",
-    amount: 598_400,
-    mode: "Bank Transfer · NEFT",
-    payeeType: "Salary" as const,
-    time: "Yesterday",
-    status: "Cleared" as const,
-  },
-  {
-    id: "DISB-2402",
-    payee: "BrightBus Logistics",
-    desc: "Bus diesel + maintenance",
-    amount: 46_800,
-    mode: "UPI Business",
-    payeeType: "Vendor" as const,
-    time: "Mon · 11:20",
-    status: "Cleared" as const,
-  },
-  {
-    id: "DISB-2403",
-    payee: "Adani Electricity",
-    desc: "Campus utility bill · Apr",
-    amount: 17_920,
-    mode: "Bank Transfer · NEFT",
-    payeeType: "Vendor" as const,
-    time: "28 Apr · 16:45",
-    status: "Cleared" as const,
-  },
-  {
-    id: "DISB-2404",
-    payee: "Office Stationery Co.",
-    desc: "Term-end print supplies",
-    amount: 5_950,
-    mode: "Cheque",
-    payeeType: "Vendor" as const,
-    time: "24 Apr · 10:12",
-    status: "Cleared" as const,
-  },
-];
+type PendingObligation = {
+  id: string;
+  payee: string;
+  desc: string;
+  amount: number;
+  due: string;
+  payeeType: "Salary" | "Vendor";
+};
 
-const PENDING_OBLIGATIONS = [
-  {
-    id: "OBL-001",
-    payee: "BrightBus Logistics",
-    desc: "Bus diesel + maintenance",
-    amount: 48200,
-    due: "Jun 02",
-    payeeType: "Vendor" as const,
-  },
-  {
-    id: "OBL-002",
-    payee: "Faculty Payroll · May",
-    desc: "35 staff · net payable",
-    amount: 612000,
-    due: "May 31",
-    payeeType: "Salary" as const,
-  },
-  {
-    id: "OBL-003",
-    payee: "Adani Electricity",
-    desc: "Campus utility bill",
-    amount: 18450,
-    due: "Jun 05",
-    payeeType: "Vendor" as const,
-  },
-  {
-    id: "OBL-004",
-    payee: "Office Stationery Co.",
-    desc: "Exam print supplies",
-    amount: 6800,
-    due: "Jun 08",
-    payeeType: "Vendor" as const,
-  },
-];
-
-type PendingObligation = (typeof PENDING_OBLIGATIONS)[number];
-type MadePayment = Omit<(typeof MADE_PAYMENTS)[number], "status"> & {
+type MadePayment = {
+  id: string;
+  payee: string;
+  desc: string;
+  amount: number;
+  mode: string;
+  payeeType: "Salary" | "Vendor";
+  time: string;
   status: "Queued" | "Cleared";
   attachments?: PaymentAttachment[];
 };
@@ -950,14 +887,24 @@ function PremiumDashboard({
   const activeStaff = liveStaff.filter((s) => s.active).length;
 
   const admissionWeeks = useMemo(() => {
-    const base = Math.max(1, Math.round(liveStudents.length / 5));
-    return [
-      { label: "W1", value: Math.max(1, base - 1) },
-      { label: "W2", value: base },
-      { label: "W3", value: base + 1 },
-      { label: "W4", value: Math.max(1, base - 1) },
-      { label: "W5", value: base + 2 },
-    ];
+    const count = liveStudents.length;
+    // Never invent admissions — empty school must show 0 across the chart.
+    if (count === 0) {
+      return [
+        { label: "W1", value: 0 },
+        { label: "W2", value: 0 },
+        { label: "W3", value: 0 },
+        { label: "W4", value: 0 },
+        { label: "W5", value: 0 },
+      ];
+    }
+    // Spread the real enrolment count across weeks (no fake inflation).
+    const base = Math.floor(count / 5);
+    const rem = count % 5;
+    return [0, 1, 2, 3, 4].map((i) => ({
+      label: `W${i + 1}`,
+      value: base + (i < rem ? 1 : 0),
+    }));
   }, [liveStudents.length]);
 
   const incomeExpenseWeeks = useMemo(
@@ -965,7 +912,7 @@ function PremiumDashboard({
     [periodPayments, expenseTotal, period, customRange],
   );
 
-  const newAdmissions = admissionWeeks.reduce((sum, week) => sum + week.value, 0);
+  const newAdmissions = liveStudents.length;
 
   const admissionChartConfig = {
     value: { label: "Admissions", color: "#10B981" },
@@ -5752,7 +5699,12 @@ function FinanceOverview({
             </div>
           </div>
           <div className="mt-4 space-y-3">
-            {incomeSegments.map((segment) => {
+            {incomeSegments.length === 0 ? (
+              <div className={cn(glassInsetClass, "px-3 py-6 text-center text-[12px] text-slate-500")}>
+                No income recorded for this period
+              </div>
+            ) : (
+              incomeSegments.map((segment) => {
               const pct = incomeTotal > 0 ? Math.round((segment.value / incomeTotal) * 100) : 0;
               return (
                 <div key={segment.label}>
@@ -5768,7 +5720,8 @@ function FinanceOverview({
                   </div>
                 </div>
               );
-            })}
+              })
+            )}
           </div>
         </section>
 
