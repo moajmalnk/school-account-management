@@ -137,6 +137,7 @@ function parseSessionRaw(raw: string, impersonated: boolean): Session | null {
     email: parsed.email,
     displayName: parsed.displayName || parsed.email,
     tenantName: parsed.tenantName,
+    tenantId: typeof parsed.tenantId === "string" ? parsed.tenantId : undefined,
     issuedAt: typeof parsed.issuedAt === "number" ? parsed.issuedAt : Date.now(),
     userId: parsed.userId,
     staffId: parsed.staffId,
@@ -281,7 +282,9 @@ export function sessionCanAccessFinanceView(
   return canAccessFinanceViewPerm(session.permissions, view);
 }
 
-export function isTenantWorkspaceSession(session: Session | null | undefined): boolean {
+export function isTenantWorkspaceSession(
+  session: Session | null | undefined,
+): session is Session & { role: "school_admin" | "tenant_user" } {
   return session?.role === "school_admin" || session?.role === "tenant_user";
 }
 
@@ -365,6 +368,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: data.session.email,
           displayName: data.session.displayName,
           tenantName: data.session.tenantName,
+          tenantId: data.session.tenantId,
           issuedAt: Date.now(),
           userId: data.session.userId,
           staffId: data.session.staffId || undefined,

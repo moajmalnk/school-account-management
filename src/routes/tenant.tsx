@@ -61,7 +61,10 @@ function TenantLayout() {
   }
 
   return (
-    <TenantStoreProvider>
+    <TenantStoreProvider
+      tenantId={session.tenantId}
+      tenantName={session.tenantName}
+    >
       <TenantShell />
     </TenantStoreProvider>
   );

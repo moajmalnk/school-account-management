@@ -76,6 +76,7 @@ function ImpersonatePage() {
             email: data.session.email,
             displayName: data.session.displayName,
             tenantName: data.session.tenantName || tenantId,
+            tenantId: data.session.tenantId || tenantId,
             issuedAt: Date.now(),
             userId: data.session.userId,
             staffId: data.session.staffId || undefined,

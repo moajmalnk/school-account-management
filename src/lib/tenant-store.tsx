@@ -1150,6 +1150,27 @@ const LEGACY_STORAGE_KEYS = [
   "school-accounts/tenant-store/v3",
 ] as const;
 
+/** Active workspace cache key — set by TenantStoreProvider so snapshots don't bleed across schools. */
+let activeStoreKey = STORAGE_KEY;
+
+function storeKeyForTenant(tenantId?: string | null): string {
+  const id = typeof tenantId === "string" ? tenantId.trim() : "";
+  return id ? `${STORAGE_KEY}/${id}` : STORAGE_KEY;
+}
+
+export const EMPTY_SCHOOL_DETAILS: SchoolDetails = {
+  name: "",
+  tagline: "",
+  address: "",
+  phone: "",
+  email: "",
+  website: "",
+  registrationNo: "",
+  affiliationNo: "",
+  principalName: "",
+  establishedYear: "",
+};
+
 /** Fired when navigation dock placement changes so the toast host can reposition. */
 export const NAV_PLACEMENT_CHANGE_EVENT = "school-accounts:nav-placement";
 
@@ -2892,12 +2913,14 @@ function parseSnapshot(raw: string): Snapshot | null {
   };
 }
 
-function readSnapshot(): Snapshot | null {
+function readSnapshot(storeKey: string = activeStoreKey): Snapshot | null {
   if (typeof window === "undefined") return null;
   try {
     const raw =
-      window.localStorage.getItem(STORAGE_KEY) ??
-      LEGACY_STORAGE_KEYS.map((key) => window.localStorage.getItem(key)).find(Boolean);
+      window.localStorage.getItem(storeKey) ??
+      (storeKey === STORAGE_KEY
+        ? LEGACY_STORAGE_KEYS.map((key) => window.localStorage.getItem(key)).find(Boolean)
+        : undefined);
     if (!raw) return null;
     return parseSnapshot(raw);
   } catch {
@@ -2905,10 +2928,10 @@ function readSnapshot(): Snapshot | null {
   }
 }
 
-function writeSnapshot(snapshot: Snapshot) {
+function writeSnapshot(snapshot: Snapshot, storeKey: string = activeStoreKey) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+    window.localStorage.setItem(storeKey, JSON.stringify(snapshot));
   } catch {
     // ignore quota / private mode errors
   }
@@ -3107,29 +3130,70 @@ export function upsertStudentInSnapshot(student: Student) {
 
 const TenantStoreContext = createContext<TenantStoreValue | null>(null);
 
-export function TenantStoreProvider({ children }: { children: ReactNode }) {
-  const [students, setStudents] = useState<Student[]>(SEED_STUDENTS);
-  const [staff, setStaff] = useState<Staff[]>(SEED_STAFF);
-  const [payments, setPayments] = useState<Payment[]>(SEED_PAYMENTS);
-  const [departments, setDepartments] = useState<Department[]>(SEED_DEPARTMENTS);
-  const [roles, setRoles] = useState<Role[]>(SEED_ROLES);
-  const [tenantUsers, setTenantUsers] = useState<TenantUser[]>(SEED_TENANT_USERS);
-  const [classes, setClasses] = useState<ClassConfig[]>(SEED_CLASSES);
-  const [transportRoutes, setTransportRoutes] = useState<TransportRoute[]>(SEED_TRANSPORT);
-  const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>(SEED_VEHICLES);
-  const [paymentCategories, setPaymentCategories] =
-    useState<PaymentCategory[]>(SEED_PAYMENT_CATEGORIES);
-  const [feeTerms, setFeeTerms] = useState<FeeTerm[]>(SEED_FEE_TERMS);
+export function TenantStoreProvider({
+  children,
+  tenantId,
+  tenantName,
+}: {
+  children: ReactNode;
+  tenantId?: string;
+  tenantName?: string;
+}) {
+  const liveApi = typeof window !== "undefined" && Boolean(getApiToken());
+  const storeKey = storeKeyForTenant(tenantId);
+  activeStoreKey = storeKey;
+
+  const blankSchool = useMemo<SchoolDetails>(
+    () => ({
+      ...EMPTY_SCHOOL_DETAILS,
+      name: tenantName?.trim() || "",
+    }),
+    [tenantName],
+  );
+
+  const [students, setStudents] = useState<Student[]>(() =>
+    liveApi ? [] : SEED_STUDENTS,
+  );
+  const [staff, setStaff] = useState<Staff[]>(() => (liveApi ? [] : SEED_STAFF));
+  const [payments, setPayments] = useState<Payment[]>(() =>
+    liveApi ? [] : SEED_PAYMENTS,
+  );
+  const [departments, setDepartments] = useState<Department[]>(() =>
+    liveApi ? [] : SEED_DEPARTMENTS,
+  );
+  const [roles, setRoles] = useState<Role[]>(() => (liveApi ? [] : SEED_ROLES));
+  const [tenantUsers, setTenantUsers] = useState<TenantUser[]>(() =>
+    liveApi ? [] : SEED_TENANT_USERS,
+  );
+  const [classes, setClasses] = useState<ClassConfig[]>(() =>
+    liveApi ? [] : SEED_CLASSES,
+  );
+  const [transportRoutes, setTransportRoutes] = useState<TransportRoute[]>(() =>
+    liveApi ? [] : SEED_TRANSPORT,
+  );
+  const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>(
+    () => (liveApi ? [] : SEED_VEHICLES),
+  );
+  const [paymentCategories, setPaymentCategories] = useState<PaymentCategory[]>(
+    () => (liveApi ? [] : SEED_PAYMENT_CATEGORIES),
+  );
+  const [feeTerms, setFeeTerms] = useState<FeeTerm[]>(() =>
+    liveApi ? [] : SEED_FEE_TERMS,
+  );
   const [studentYearLedgers, setStudentYearLedgers] = useState<StudentYearLedger[]>(
-    SEED_STUDENT_YEAR_LEDGERS,
+    () => (liveApi ? [] : SEED_STUDENT_YEAR_LEDGERS),
   );
   const [academicYears, setAcademicYears] = useState<string[]>([...SEED_ACADEMIC_YEARS]);
   const [academicYear, setAcademicYearState] = useState<string>(SEED_ACADEMIC_YEAR);
   const [themeSettings, setThemeSettings] = useState<ThemeSettings>(SEED_THEME_SETTINGS);
-  const [schoolDetails, setSchoolDetails] = useState<SchoolDetails>(SEED_SCHOOL_DETAILS);
+  const [schoolDetails, setSchoolDetails] = useState<SchoolDetails>(() =>
+    liveApi ? blankSchool : SEED_SCHOOL_DETAILS,
+  );
   const [dashboardTodos, setDashboardTodos] = useState<string[]>([...DEFAULT_DASHBOARD_TODOS]);
   const [dashboardNote, setDashboardNote] = useState("");
-  const [notifications, setNotifications] = useState<TenantNotification[]>([...SEED_NOTIFICATIONS]);
+  const [notifications, setNotifications] = useState<TenantNotification[]>(() =>
+    liveApi ? [] : [...SEED_NOTIFICATIONS],
+  );
   const [hydrated, setHydrated] = useState(false);
 
   const applySnapshot = useCallback((snap: Snapshot) => {
@@ -3138,7 +3202,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
     setPayments(snap.payments);
     setDepartments(snap.departments);
     setRoles(snap.roles);
-    setTenantUsers(snap.tenantUsers ?? SEED_TENANT_USERS);
+    setTenantUsers(snap.tenantUsers ?? (liveApi ? [] : SEED_TENANT_USERS));
     setClasses(
       Array.isArray(snap.classes)
         ? snap.classes.map((c) =>
@@ -3147,7 +3211,9 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
                 Pick<ClassConfig, "id" | "tuitionFeeAmount">,
             ),
           )
-        : SEED_CLASSES,
+        : liveApi
+          ? []
+          : SEED_CLASSES,
     );
     setTransportRoutes(snap.transportRoutes);
     setTransportVehicles(snap.transportVehicles);
@@ -3159,12 +3225,16 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
               normalizeFeeTerm(t as Partial<FeeTerm> & Pick<FeeTerm, "id" | "label">),
             )
             .filter((t): t is FeeTerm => t !== null)
-        : SEED_FEE_TERMS,
+        : liveApi
+          ? []
+          : SEED_FEE_TERMS,
     );
     setStudentYearLedgers(
       snap.studentYearLedgers?.length
         ? snap.studentYearLedgers
-        : SEED_STUDENT_YEAR_LEDGERS,
+        : liveApi
+          ? []
+          : SEED_STUDENT_YEAR_LEDGERS,
     );
     setAcademicYears(snap.academicYears);
     setAcademicYearState(snap.academicYear);
@@ -3173,12 +3243,15 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
     setDashboardTodos(snap.dashboardTodos);
     setDashboardNote(snap.dashboardNote);
     setNotifications(snap.notifications);
-  }, []);
+  }, [liveApi]);
 
   useEffect(() => {
+    activeStoreKey = storeKey;
     let cancelled = false;
+    setHydrated(false);
+
     const hydrate = async () => {
-      // Prefer live API data when a JWT exists (school admin / tenant user).
+      // Prefer live API data when a JWT exists (school admin / impersonation).
       if (getApiToken()) {
         try {
           const remote = await fetchRemoteTenantBundle();
@@ -3198,7 +3271,13 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
               academicYears: remote.academicYears,
               academicYear: remote.academicYear,
               themeSettings: remote.themeSettings,
-              schoolDetails: remote.schoolDetails,
+              schoolDetails: {
+                ...remote.schoolDetails,
+                name:
+                  remote.schoolDetails.name?.trim() ||
+                  tenantName?.trim() ||
+                  remote.schoolDetails.name,
+              },
               dashboardTodos: remote.dashboardTodos,
               dashboardNote: remote.dashboardNote,
               notifications: remote.notifications,
@@ -3208,12 +3287,42 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
             return;
           }
         } catch {
-          // fall through to localStorage / seeds
+          // fall through to tenant-scoped localStorage only (never shared seed)
         }
+
+        if (cancelled) return;
+        const snap = readSnapshot(storeKey);
+        if (snap) {
+          applySnapshot(snap);
+        } else {
+          applySnapshot({
+            students: [],
+            staff: [],
+            payments: [],
+            departments: [],
+            roles: [],
+            classes: [],
+            transportRoutes: [],
+            transportVehicles: [],
+            paymentCategories: [],
+            feeTerms: [],
+            studentYearLedgers: [],
+            academicYears: [...SEED_ACADEMIC_YEARS],
+            academicYear: SEED_ACADEMIC_YEAR,
+            themeSettings: SEED_THEME_SETTINGS,
+            schoolDetails: blankSchool,
+            dashboardTodos: [...DEFAULT_DASHBOARD_TODOS],
+            dashboardNote: "",
+            notifications: [],
+            tenantUsers: [],
+          });
+        }
+        setHydrated(true);
+        return;
       }
 
       if (cancelled) return;
-      const snap = readSnapshot();
+      const snap = readSnapshot(storeKey);
       if (snap) applySnapshot(snap);
       setHydrated(true);
     };
@@ -3222,7 +3331,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [applySnapshot]);
+  }, [applySnapshot, blankSchool, storeKey, tenantName]);
 
   useEffect(() => {
     applyWorkspaceThemeMode(themeSettings.mode);
@@ -3230,14 +3339,14 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
-      if (event.key !== STORAGE_KEY || !event.newValue) return;
+      if (event.key !== storeKey || !event.newValue) return;
       const snap = parseSnapshot(event.newValue);
       if (!snap) return;
       applySnapshot(snap);
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
-  }, [applySnapshot]);
+  }, [applySnapshot, storeKey]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -3270,27 +3379,30 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!hydrated) return;
-    writeSnapshot({
-      students,
-      staff,
-      payments,
-      departments,
-      roles,
-      classes,
-      transportRoutes,
-      transportVehicles,
-      paymentCategories,
-      feeTerms,
-      studentYearLedgers,
-      academicYears,
-      academicYear,
-      themeSettings,
-      schoolDetails,
-      dashboardTodos,
-      dashboardNote,
-      notifications,
-      tenantUsers,
-    });
+    writeSnapshot(
+      {
+        students,
+        staff,
+        payments,
+        departments,
+        roles,
+        classes,
+        transportRoutes,
+        transportVehicles,
+        paymentCategories,
+        feeTerms,
+        studentYearLedgers,
+        academicYears,
+        academicYear,
+        themeSettings,
+        schoolDetails,
+        dashboardTodos,
+        dashboardNote,
+        notifications,
+        tenantUsers,
+      },
+      storeKey,
+    );
   }, [
     hydrated,
     students,
@@ -3312,6 +3424,7 @@ export function TenantStoreProvider({ children }: { children: ReactNode }) {
     dashboardNote,
     notifications,
     tenantUsers,
+    storeKey,
   ]);
 
   const activePayments = useMemo(
