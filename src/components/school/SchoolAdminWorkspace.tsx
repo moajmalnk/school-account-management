@@ -228,14 +228,15 @@ import { apiSaveDashboardTodos } from "@/lib/api/dashboard";
 import { apiUploadDataUrl } from "@/lib/api/settings";
 import { getApiToken } from "@/lib/api/client";
 import {
-  ACCOUNTS_PAYABLE,
-  OPERATING_EXPENSES,
   bankBalance,
   cashOnHand,
+  expenseSegmentsFromDisbursements,
   formatInr,
   operatingExpenseForPeriod,
+  queuedPayables,
   salaryPayable,
 } from "@/lib/dashboard-finance";
+import { useDisbursements } from "@/lib/use-disbursements";
 import {
   buildIncomeExpenseSeries,
   filterPaymentsByPeriod,
@@ -346,20 +347,6 @@ function readFileAsDataUrl(file: File): Promise<string> {
     reader.readAsDataURL(file);
   });
 }
-
-const LEDGER_INCOME_SEGMENTS = [
-  { label: "Tuition", value: 1_840_000 },
-  { label: "Transport", value: 320_000 },
-  { label: "Donations", value: 95_000 },
-  { label: "Other", value: 42_000 },
-];
-
-const LEDGER_OUTFLOW_SEGMENTS = [
-  { label: "Salaries", value: 1_220_000 },
-  { label: "Vehicle Upkeep", value: 184_000 },
-  { label: "Utilities", value: 88_000 },
-  { label: "Rent", value: 240_000 },
-];
 
 const EXPENSE_CHART_COLORS = ["#0F766E", "#10B981", "#F59E0B", "#EF4444", "#64748B"];
 
@@ -1499,6 +1486,7 @@ export function SchoolDashboard() {
     academicYear,
     notifications,
   } = useTenantStore();
+  const { disbursements } = useDisbursements();
 
   const [period, setPeriod] = useState<PaymentPeriod>("this_month");
   const [customRange, setCustomRange] = useState<CustomDateRange>({ from: "", to: "" });
@@ -1522,10 +1510,13 @@ export function SchoolDashboard() {
   const inBank = useMemo(() => bankBalance(payments), [payments]);
   const totalBalance = inHand + inBank;
   const expenseTotal = useMemo(
-    () => operatingExpenseForPeriod(period, customRange),
-    [period, customRange],
+    () => operatingExpenseForPeriod(disbursements, period, customRange),
+    [disbursements, period, customRange],
   );
-  const salaryOutstanding = salaryPayable();
+  const salaryOutstanding = useMemo(
+    () => salaryPayable(disbursements, liveStaff),
+    [disbursements, liveStaff],
+  );
 
   const recentReceipts = useMemo(() => filteredPayments.slice(0, 5), [filteredPayments]);
 
@@ -5317,24 +5308,24 @@ function FinanceOverview({
     [payments, incomePeriod, customRange],
   );
 
+  const { disbursements } = useDisbursements();
+
   const incomeSegments = useMemo(() => {
     const buckets = new Map<string, number>();
     for (const payment of filteredPayments) {
       const key = payment.cat || "Other";
       buckets.set(key, (buckets.get(key) ?? 0) + payment.amount);
     }
-    const rows = Array.from(buckets.entries())
+    return Array.from(buckets.entries())
       .map(([label, value]) => ({ label, value }))
       .sort((a, b) => b.value - a.value);
-    if (rows.length) return rows;
-    return LEDGER_INCOME_SEGMENTS;
   }, [filteredPayments]);
 
   const incomeTotal = incomeSegments.reduce((sum, item) => sum + item.value, 0);
 
   const expenseSegments = useMemo(
-    () => OPERATING_EXPENSES.map((item) => ({ label: item.account, value: item.amount })),
-    [],
+    () => expenseSegmentsFromDisbursements(disbursements, incomePeriod, customRange),
+    [disbursements, incomePeriod, customRange],
   );
 
   const expenseChartConfig = {
@@ -5343,14 +5334,14 @@ function FinanceOverview({
 
   const overdueBills = useMemo(
     () =>
-      ACCOUNTS_PAYABLE.map((item, index) => ({
-        id: `OBL-${String(index + 1).padStart(3, "0")}`,
+      queuedPayables(disbursements).map((item, index) => ({
+        id: item.id || `OBL-${String(index + 1).padStart(3, "0")}`,
         name: item.payee,
         amount: item.amount,
-        due: /payroll|salary/i.test(item.payee) ? "25 May" : "18 May",
-        type: /payroll|salary/i.test(item.payee) ? "Salary" : "Vendor",
+        due: item.time || "Due",
+        type: /salary|payroll/i.test(item.payeeType || item.payee) ? "Salary" : "Vendor",
       })),
-    [],
+    [disbursements],
   );
 
   const exportTransactionsCsv = () => {
@@ -5793,6 +5784,11 @@ function FinanceOverview({
             </span>
           </div>
           <ChartContainer config={expenseChartConfig} className="mx-auto mt-2 h-[180px] w-full max-w-[220px]">
+            {expenseSegments.length === 0 ? (
+              <div className="flex h-full items-center justify-center text-center text-[12px] text-slate-500">
+                No expenses recorded yet
+              </div>
+            ) : (
             <PieChart>
               <ChartTooltip
                 content={
@@ -5818,16 +5814,23 @@ function FinanceOverview({
                 ))}
               </Pie>
             </PieChart>
+            )}
           </ChartContainer>
           <div className="mt-2 grid grid-cols-2 gap-2">
-            {expenseSegments.slice(0, 4).map((segment) => (
+            {expenseSegments.length === 0 ? (
+              <div className={cn(glassInsetClass, "col-span-2 px-2.5 py-3 text-center text-[11px] text-slate-500")}>
+                Make a payment to see outflow here
+              </div>
+            ) : (
+              expenseSegments.slice(0, 4).map((segment) => (
               <div key={segment.label} className={cn(glassInsetClass, "px-2.5 py-2")}>
                 <div className="truncate text-[10px] font-medium text-slate-500">{segment.label}</div>
                 <div className="mt-0.5 truncate font-mono text-[11px] font-semibold text-slate-900">
                   {formatInr(segment.value)}
                 </div>
               </div>
-            ))}
+              ))
+            )}
           </div>
         </section>
 
@@ -5837,7 +5840,12 @@ function FinanceOverview({
             {overdueBills.length} open obligation{overdueBills.length === 1 ? "" : "s"}
           </p>
           <div className="mt-4 flex-1 space-y-2.5">
-            {overdueBills.map((bill, index) => (
+            {overdueBills.length === 0 ? (
+              <div className={cn(glassInsetClass, "px-3.5 py-6 text-center text-[12px] text-slate-500")}>
+                No open obligations
+              </div>
+            ) : (
+              overdueBills.map((bill, index) => (
               <div
                 key={bill.id}
                 className={cn(glassInsetClass, "flex flex-col gap-2.5 px-3.5 py-3")}
@@ -5874,7 +5882,8 @@ function FinanceOverview({
                   </button>
                 </div>
               </div>
-            ))}
+            ))
+            )}
           </div>
         </section>
       </div>
@@ -8329,14 +8338,13 @@ function MakePayment() {
   const { staff, setStaff } = useTenantStore();
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/finance" });
-  const initialObligation = PENDING_OBLIGATIONS[0];
-  const [obligations, setObligations] = useState<PendingObligation[]>(PENDING_OBLIGATIONS);
-  const [madePayments, setMadePayments] = useState<MadePayment[]>(MADE_PAYMENTS);
+  const [obligations, setObligations] = useState<PendingObligation[]>([]);
+  const [madePayments, setMadePayments] = useState<MadePayment[]>([]);
   const [selectedObligationId, setSelectedObligationId] = useState<string | null>(
-    search.staffId ? null : (initialObligation?.id ?? null),
+    search.staffId ? null : null,
   );
   const [payeeType, setPayeeType] = useState<"Salary" | "Vendor">(
-    search.staffId ? "Salary" : (initialObligation?.payeeType ?? "Salary"),
+    search.staffId ? "Salary" : "Salary",
   );
   const [selectedStaffId, setSelectedStaffId] = useState<string>(search.staffId ?? "");
   const [salaryMonth, setSalaryMonth] = useState(
@@ -8344,16 +8352,9 @@ function MakePayment() {
   );
   const [daysPresent, setDaysPresent] = useState("");
   const [workingDays, setWorkingDays] = useState("");
-  const [beneficiary, setBeneficiary] = useState(
-    search.staffId ? "" : (initialObligation?.payee ?? ""),
-  );
-  const [description, setDescription] = useState(
-    search.staffId ? "" : (initialObligation?.desc ?? ""),
-  );
-  const [amount, setAmount] = useState(
-    search.amount ??
-      (search.staffId ? "" : initialObligation ? String(initialObligation.amount) : ""),
-  );
+  const [beneficiary, setBeneficiary] = useState("");
+  const [description, setDescription] = useState("");
+  const [amount, setAmount] = useState(search.amount ?? "");
   const [mode, setMode] = useState("Bank");
   const [attachments, setAttachments] = useState<PaymentAttachment[]>([]);
   const [pendingAuthorisation, setPendingAuthorisation] = useState(false);
@@ -8377,9 +8378,10 @@ function MakePayment() {
     let cancelled = false;
     void apiListDisbursements()
       .then((rows) => {
-        if (cancelled || !Array.isArray(rows) || rows.length === 0) return;
+        if (cancelled) return;
+        const list = Array.isArray(rows) ? rows : [];
         setMadePayments(
-          rows.map((row) => ({
+          list.map((row) => ({
             id: row.id || `DISB-${Date.now()}`,
             payee: row.payee,
             desc: row.desc,
@@ -8393,9 +8395,23 @@ function MakePayment() {
               : undefined,
           })),
         );
+        setObligations(
+          list
+            .filter((row) => row.status === "Queued")
+            .map((row) => ({
+              id: row.id || `OBL-${Date.now()}`,
+              payee: row.payee,
+              desc: row.desc || "",
+              amount: row.amount,
+              due: row.time || "Due",
+              payeeType: (row.payeeType === "Salary" ? "Salary" : "Vendor") as "Salary" | "Vendor",
+            })),
+        );
       })
       .catch(() => {
-        // keep seed list if API unavailable
+        if (cancelled) return;
+        setMadePayments([]);
+        setObligations([]);
       });
     return () => {
       cancelled = true;
@@ -9606,27 +9622,46 @@ function MakePayment() {
 }
 
 function LedgerAnalytics() {
+  const { activePayments: payments } = useTenantStore();
+  const { disbursements } = useDisbursements();
+
+  const incomeSegments = useMemo(() => {
+    const buckets = new Map<string, number>();
+    for (const payment of payments) {
+      const key = payment.cat || "Other";
+      buckets.set(key, (buckets.get(key) ?? 0) + payment.amount);
+    }
+    return Array.from(buckets.entries())
+      .map(([label, value]) => ({ label, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [payments]);
+
+  const outflowSegments = useMemo(
+    () => expenseSegmentsFromDisbursements(disbursements),
+    [disbursements],
+  );
+
   return (
     <div className="grid grid-cols-12 gap-3 sm:gap-4 lg:gap-5">
       <div className="col-span-6 min-w-0">
         <FinanceDonutCard
           title="Income Distribution"
           cornerSide="tr"
-          segments={LEDGER_INCOME_SEGMENTS}
+          segments={incomeSegments}
         />
       </div>
       <div className="col-span-6 min-w-0">
         <FinanceDonutCard
           title="Monthly Outflow Breakdown"
           cornerSide="bl"
-          segments={LEDGER_OUTFLOW_SEGMENTS}
+          segments={outflowSegments}
         />
       </div>
       <div className="col-span-6 min-w-0">
         <FinanceBarCard
           title="Income by Category"
           cornerSide="tr"
-          segments={LEDGER_INCOME_SEGMENTS}
+          segments={incomeSegments}
         />
       </div>
       <div className="col-span-6 min-w-0">
@@ -9634,7 +9669,7 @@ function LedgerAnalytics() {
           title="Outflow by Category"
           cornerSide="bl"
           fill="#0F766E"
-          segments={LEDGER_OUTFLOW_SEGMENTS}
+          segments={outflowSegments}
         />
       </div>
     </div>

@@ -33,12 +33,15 @@ import {
 import { FinanceBarCard, FinanceDonutCard } from "@/components/school/finance-charts";
 import { OrganicCard } from "@/components/ui/organic-card";
 import {
-  ACCOUNTS_PAYABLE,
-  OPERATING_EXPENSES,
+  expenseSegmentsFromDisbursements,
+  isSalaryDisbursement,
+  queuedPayables,
   totalAccountsPayable,
   totalOperatingExpense,
+  type FinanceDisbursement,
 } from "@/lib/dashboard-finance";
 import { downloadCsv, downloadTablePdf } from "@/lib/finance-export";
+import { useDisbursements } from "@/lib/use-disbursements";
 import { useTenantStore, resolvePaymentFeePeriod, currentPayrollMonth, formatPayrollMonthLabel, staffPayableSalary, type Payment, type Student } from "@/lib/tenant-store";
 import { cn } from "@/lib/utils";
 
@@ -56,15 +59,17 @@ function inr(n: number) {
   return `₹ ${n.toLocaleString("en-IN")}`;
 }
 
-function buildLedgerRows(payments: Payment[]): LedgerRow[] {
-  const expenseRows: Omit<LedgerRow, "balance">[] = OPERATING_EXPENSES.map((e, i) => ({
-    date: `01/${String(i + 4).padStart(2, "0")}/26`,
-    voucher: `JV-26${100 + i}`,
-    particulars: `${e.account} · monthly allocation`,
-    account: e.account,
-    debit: e.amount,
-    credit: 0,
-  }));
+function buildLedgerRows(payments: Payment[], disbursements: FinanceDisbursement[]): LedgerRow[] {
+  const expenseRows: Omit<LedgerRow, "balance">[] = disbursements
+    .filter((d) => (d.status || "Cleared") !== "Queued")
+    .map((e) => ({
+      date: e.time?.includes("·") ? e.time.split("·")[0].trim() : e.time || "",
+      voucher: e.id || "",
+      particulars: `${e.payee}${e.desc ? ` · ${e.desc}` : ""}`,
+      account: e.payeeType || "Expense",
+      debit: e.amount,
+      credit: 0,
+    }));
 
   const receiptRows: Omit<LedgerRow, "balance">[] = [...payments].reverse().map((p) => ({
     date: p.time.includes("·") ? p.time.split("·")[0].trim() : p.time,
@@ -256,9 +261,13 @@ function SummaryStrip({ items }: { items: { label: string; value: string; accent
 
 export function GeneralLedgerReport() {
   const { activePayments: payments, academicYear, schoolDetails } = useTenantStore();
-  const schoolName = schoolDetails.name || "Silver Hills Global";
+  const { disbursements } = useDisbursements();
+  const schoolName = schoolDetails.name || "School";
 
-  const rows = useMemo(() => buildLedgerRows(payments), [payments]);
+  const rows = useMemo(
+    () => buildLedgerRows(payments, disbursements),
+    [payments, disbursements],
+  );
   const totalDebit = rows.reduce((s, r) => s + r.debit, 0);
   const totalCredit = rows.reduce((s, r) => s + r.credit, 0);
   const closing = rows.at(-1)?.balance ?? 0;
@@ -318,7 +327,8 @@ export function GeneralLedgerReport() {
 
 export function ProfitLossReport() {
   const { activePayments: payments, academicYear, schoolDetails } = useTenantStore();
-  const schoolName = schoolDetails.name || "Silver Hills Global";
+  const { disbursements } = useDisbursements();
+  const schoolName = schoolDetails.name || "School";
 
   const incomeByCategory = useMemo(() => {
     const map = new Map<string, number>();
@@ -326,14 +336,19 @@ export function ProfitLossReport() {
     return Array.from(map.entries()).map(([label, amount]) => ({ label, amount }));
   }, [payments]);
 
+  const expenseSegments = useMemo(
+    () => expenseSegmentsFromDisbursements(disbursements),
+    [disbursements],
+  );
+
   const totalIncome = incomeByCategory.reduce((s, i) => s + i.amount, 0);
-  const totalExpense = totalOperatingExpense();
+  const totalExpense = totalOperatingExpense(disbursements);
   const netProfit = totalIncome - totalExpense;
 
   const headers = ["Line Item", "Type", "Amount (₹)"];
   const tableRows = [
     ...incomeByCategory.map((i) => [i.label, "Income", inr(i.amount)]),
-    ...OPERATING_EXPENSES.map((e) => [e.account, "Expense", inr(e.amount)]),
+    ...expenseSegments.map((e) => [e.label, "Expense", inr(e.value)]),
     ["Net Surplus / (Deficit)", "Result", inr(netProfit)],
   ];
 
@@ -342,7 +357,7 @@ export function ProfitLossReport() {
   const handleCsv = () => {
     downloadCsv(`profit-loss-${academicYear.replace(/\s+/g, "-").toLowerCase()}.csv`, headers, [
       ...incomeByCategory.map((i) => [i.label, "Income", i.amount]),
-      ...OPERATING_EXPENSES.map((e) => [e.account, "Expense", e.amount]),
+      ...expenseSegments.map((e) => [e.label, "Expense", e.value]),
       ["Net Surplus / (Deficit)", "Result", netProfit],
     ]);
     toast.success("P&L exported as CSV");
@@ -422,9 +437,9 @@ export function ProfitLossReport() {
           title="Expense Breakdown"
           cornerSide="bl"
           fill="#0F766E"
-          segments={OPERATING_EXPENSES.map((item) => ({
-            label: item.account.replace(" & ", " · "),
-            value: item.amount,
+          segments={expenseSegments.map((item) => ({
+            label: item.label.replace(" & ", " · "),
+            value: item.value,
           }))}
         />
       </div>
@@ -435,7 +450,9 @@ export function ProfitLossReport() {
 export function BalanceSheetReport() {
   const { activePayments: payments, activeStudents: students, academicYear, schoolDetails } =
     useTenantStore();
-  const schoolName = schoolDetails.name || "Silver Hills Global";
+  const { disbursements } = useDisbursements();
+  const schoolName = schoolDetails.name || "School";
+  const openPayables = useMemo(() => queuedPayables(disbursements), [disbursements]);
 
   const cashOnHand = useMemo(
     () => payments.filter((p) => p.mode === "Cash").reduce((s, p) => s + p.amount, 0),
@@ -452,7 +469,7 @@ export function BalanceSheetReport() {
         .reduce((s, st) => s + st.due, 0),
     [students],
   );
-  const payables = totalAccountsPayable();
+  const payables = totalAccountsPayable(disbursements);
   const totalAssets = cashOnHand + bankBalance + receivables;
   const equity = totalAssets - payables;
 
@@ -522,17 +539,23 @@ export function BalanceSheetReport() {
 
       <OrganicCard tone="white" cornerSide="bl" padded className="col-span-12 lg:col-span-6">
         <div className="text-title text-slate-900 dark:text-zinc-50">Outstanding Payables</div>
-        <p className="mt-1 text-[12px] text-black/55">{ACCOUNTS_PAYABLE.length} open obligations</p>
+        <p className="mt-1 text-[12px] text-black/55">{openPayables.length} open obligation{openPayables.length === 1 ? "" : "s"}</p>
         <div className="mt-4 space-y-2">
-          {ACCOUNTS_PAYABLE.map((p) => (
+          {openPayables.length === 0 ? (
+            <div className="rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-4 text-center text-[12px] text-black/55">
+              No open payables
+            </div>
+          ) : (
+            openPayables.map((p) => (
             <div
-              key={p.payee}
+              key={p.id || p.payee}
               className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5 text-[12.5px]"
             >
               <span className="min-w-0 flex-1 truncate font-medium text-black">{p.payee}</span>
               <span className="shrink-0 font-mono text-black">{inr(p.amount)}</span>
             </div>
-          ))}
+            ))
+          )}
         </div>
         <div className="mt-4 rounded-lg bg-[#F4F4F5] p-4">
           <div className="text-[10px] font-semibold uppercase tracking-wider text-black/55">
@@ -560,7 +583,7 @@ export function BalanceSheetReport() {
         <FinanceBarCard
           title="Payables Snapshot"
           cornerSide="bl"
-          segments={ACCOUNTS_PAYABLE.map((item) => ({
+          segments={openPayables.map((item) => ({
             label: item.payee.split(" · ")[0],
             value: item.amount,
           }))}
@@ -977,7 +1000,8 @@ export function FeesReport() {
 
 export function SalaryReport() {
   const { staff, academicYear, schoolDetails } = useTenantStore();
-  const schoolName = schoolDetails.name || "Silver Hills Global";
+  const { disbursements } = useDisbursements();
+  const schoolName = schoolDetails.name || "School";
   const payrollMonth = currentPayrollMonth();
 
   const [query, setQuery] = useState("");
@@ -1050,8 +1074,8 @@ export function SalaryReport() {
   const attendanceCount = payrollRows.filter((row) => row.attendance).length;
 
   const salaryPayables = useMemo(
-    () => ACCOUNTS_PAYABLE.filter((item) => /payroll|salary/i.test(item.payee)),
-    [],
+    () => queuedPayables(disbursements).filter(isSalaryDisbursement),
+    [disbursements],
   );
 
   const filteredPayables = useMemo(() => {
@@ -1326,7 +1350,8 @@ type DayBookEntry = {
 
 export function DayBookReport() {
   const { activePayments: payments, academicYear, schoolDetails } = useTenantStore();
-  const schoolName = schoolDetails.name || "Silver Hills Global";
+  const { disbursements } = useDisbursements();
+  const schoolName = schoolDetails.name || "School";
 
   const [query, setQuery] = useState("");
   const [entryType, setEntryType] = useState<"all" | "Receipt" | "Payment">("all");
@@ -1344,19 +1369,21 @@ export function DayBookReport() {
       narration: p.narration,
     }));
 
-    const outflows: DayBookEntry[] = OPERATING_EXPENSES.map((e, i) => ({
-      id: `PAY-${1001 + i}`,
-      time: `01/${String(i + 4).padStart(2, "0")}/26`,
-      particular: e.account,
-      account: e.account,
-      mode: i % 2 === 0 ? "Bank" : "UPI",
-      type: "Payment",
-      amount: e.amount,
-      narration: "Monthly allocation",
-    }));
+    const outflows: DayBookEntry[] = disbursements
+      .filter((d) => (d.status || "Cleared") !== "Queued")
+      .map((e) => ({
+        id: e.id || "",
+        time: e.time || "",
+        particular: e.payee,
+        account: e.payeeType || "Expense",
+        mode: e.mode || "Bank",
+        type: "Payment" as const,
+        amount: e.amount,
+        narration: e.desc,
+      }));
 
     return [...receipts, ...outflows];
-  }, [payments]);
+  }, [payments, disbursements]);
 
   const modeOptions = useMemo(
     () => Array.from(new Set(entries.map((e) => e.mode))).sort(),

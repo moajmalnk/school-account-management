@@ -1,52 +1,147 @@
-import type { Payment } from "@/lib/tenant-store";
+import type { DisbursementPayload } from "@/lib/api/records";
+import { isRecordActive, isRecordDeleted } from "@/components/school/ProfileAccountActions";
 import {
-  getPeriodDayCount,
+  filterPaymentsByPeriod,
   type CustomDateRange,
   type PaymentPeriod,
 } from "@/lib/payment-period";
+import type { Payment, Staff } from "@/lib/tenant-store";
+import { currentPayrollMonth, staffPayableSalary } from "@/lib/tenant-store";
 
-export const OPERATING_EXPENSES = [
-  { account: "Salaries & Wages", amount: 1_220_000 },
-  { account: "Vehicle Upkeep", amount: 184_000 },
-  { account: "Utilities & Power", amount: 88_000 },
-  { account: "Rent & Campus", amount: 240_000 },
-  { account: "Office & Supplies", amount: 42_000 },
-] as const;
+/** @deprecated Kept empty — live totals come from disbursements API. */
+export const OPERATING_EXPENSES: readonly { account: string; amount: number }[] = [];
 
-export const ACCOUNTS_PAYABLE = [
-  { payee: "BrightBus Logistics", amount: 48_200 },
-  { payee: "Faculty Payroll · May", amount: 612_000 },
-  { payee: "Adani Electricity", amount: 18_450 },
-  { payee: "Office Stationery Co.", amount: 6_800 },
-] as const;
+/** @deprecated Kept empty — live payables come from queued disbursements / staff. */
+export const ACCOUNTS_PAYABLE: readonly { payee: string; amount: number }[] = [];
 
-export function totalOperatingExpense(): number {
-  return OPERATING_EXPENSES.reduce((sum, item) => sum + item.amount, 0);
+export type FinanceDisbursement = Pick<
+  DisbursementPayload,
+  "id" | "payee" | "desc" | "amount" | "mode" | "payeeType" | "time" | "status"
+>;
+
+function asTimedPayment(row: FinanceDisbursement): Payment {
+  return {
+    id: row.id || `tmp-${row.payee}-${row.amount}-${row.time || ""}`,
+    name: row.payee,
+    cat: row.payeeType || "Vendor",
+    mode: row.mode || "Bank",
+    amount: row.amount,
+    time: row.time || "",
+  };
 }
 
-/**
- * Scale the monthly operating-expense baseline to the selected reporting period
- * so dashboard totals move when the duration filter changes.
- */
-export function operatingExpenseForPeriod(
+export function isSalaryDisbursement(row: FinanceDisbursement): boolean {
+  return /salary|payroll/i.test(row.payeeType || "") || /salary|payroll/i.test(row.payee);
+}
+
+export function isClearedDisbursement(row: FinanceDisbursement): boolean {
+  return (row.status || "Cleared") !== "Queued";
+}
+
+export function isQueuedDisbursement(row: FinanceDisbursement): boolean {
+  return row.status === "Queued";
+}
+
+export function filterDisbursementsByPeriod(
+  rows: FinanceDisbursement[],
   period: PaymentPeriod,
   customRange?: CustomDateRange,
   reference = new Date(),
-): number {
-  const monthly = totalOperatingExpense();
-  const days = getPeriodDayCount(period, customRange, reference);
-  return Math.round((monthly * days) / 30);
-}
-
-export function totalAccountsPayable(): number {
-  return ACCOUNTS_PAYABLE.reduce((sum, item) => sum + item.amount, 0);
-}
-
-export function salaryPayable(): number {
-  return ACCOUNTS_PAYABLE.filter((item) => /payroll|salary/i.test(item.payee)).reduce(
-    (sum, item) => sum + item.amount,
-    0,
+): FinanceDisbursement[] {
+  const tagged = rows.map((row, index) => {
+    const payment = asTimedPayment(row);
+    return {
+      row,
+      payment: { ...payment, id: payment.id || `idx-${index}` },
+    };
+  });
+  const allowed = new Set(
+    filterPaymentsByPeriod(
+      tagged.map((t) => t.payment),
+      period,
+      customRange,
+      reference,
+    ).map((p) => p.id),
   );
+  return tagged.filter(({ payment }) => allowed.has(payment.id)).map(({ row }) => row);
+}
+
+/** Sum of cleared (paid) disbursements in the selected period. */
+export function operatingExpenseForPeriod(
+  rows: FinanceDisbursement[] = [],
+  period: PaymentPeriod = "this_month",
+  customRange?: CustomDateRange,
+  reference = new Date(),
+): number {
+  return filterDisbursementsByPeriod(rows, period, customRange, reference)
+    .filter(isClearedDisbursement)
+    .reduce((sum, row) => sum + row.amount, 0);
+}
+
+export function totalOperatingExpense(rows: FinanceDisbursement[] = []): number {
+  return rows.filter(isClearedDisbursement).reduce((sum, row) => sum + row.amount, 0);
+}
+
+export function expenseSegmentsFromDisbursements(
+  rows: FinanceDisbursement[],
+  period?: PaymentPeriod,
+  customRange?: CustomDateRange,
+): { label: string; value: number }[] {
+  const scoped =
+    period != null
+      ? filterDisbursementsByPeriod(rows, period, customRange).filter(isClearedDisbursement)
+      : rows.filter(isClearedDisbursement);
+
+  const buckets = new Map<string, number>();
+  for (const row of scoped) {
+    const label = isSalaryDisbursement(row)
+      ? "Salaries & Wages"
+      : row.payee?.trim() || row.payeeType || "Other";
+    buckets.set(label, (buckets.get(label) ?? 0) + row.amount);
+  }
+  return Array.from(buckets.entries())
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+}
+
+export function queuedPayables(rows: FinanceDisbursement[]): FinanceDisbursement[] {
+  return rows.filter(isQueuedDisbursement);
+}
+
+export function totalAccountsPayable(rows: FinanceDisbursement[] = []): number {
+  return queuedPayables(rows).reduce((sum, row) => sum + row.amount, 0);
+}
+
+/**
+ * Salary still owed: queued salary disbursements first; otherwise current-month
+ * staff payroll minus cleared salary disbursements. Zero when there is no staff.
+ */
+export function salaryPayable(
+  rows: FinanceDisbursement[] = [],
+  staff: Staff[] = [],
+  month = currentPayrollMonth(),
+): number {
+  const queuedSalary = queuedPayables(rows)
+    .filter(isSalaryDisbursement)
+    .reduce((sum, row) => sum + row.amount, 0);
+  if (queuedSalary > 0) return queuedSalary;
+
+  const activeStaff = staff.filter(
+    (s) => isRecordActive(s.active) && !isRecordDeleted(s.deletedAt),
+  );
+  if (activeStaff.length === 0) return 0;
+
+  const monthDue = activeStaff.reduce((sum, member) => {
+    const { payable } = staffPayableSalary(member, month);
+    return sum + payable;
+  }, 0);
+
+  const clearedSalaryTotal = rows
+    .filter(isClearedDisbursement)
+    .filter(isSalaryDisbursement)
+    .reduce((sum, row) => sum + row.amount, 0);
+
+  return Math.max(0, monthDue - clearedSalaryTotal);
 }
 
 export function cashOnHand(payments: Payment[]): number {
