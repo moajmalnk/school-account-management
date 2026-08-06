@@ -1,4 +1,10 @@
-import { apiRequest, getApiToken } from "@/lib/api/client";
+import {
+  ApiError,
+  apiRequest,
+  getApiToken,
+  isAuthExpiredError,
+  isUnauthorizedNotified,
+} from "@/lib/api/client";
 import {
   SEED_CLASSES,
   SEED_DEPARTMENTS,
@@ -66,11 +72,17 @@ const EMPTY_SCHOOL_DETAILS: SchoolDetails = {
 };
 
 async function getSafe<T>(path: string, fallback: T): Promise<T> {
+  if (isUnauthorizedNotified()) {
+    throw new ApiError("Unauthorized: Token expired", 401);
+  }
   const maxAttempts = 3;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       return await apiRequest<T>(path);
     } catch (err) {
+      // Never soft-fallback on auth failure — caller must abort hydration.
+      if (isAuthExpiredError(err)) throw err;
+
       const msg = err instanceof Error ? err.message : String(err);
       const retryable =
         /2002|Operation not permitted|Connection refused|Too many connections/i.test(
@@ -109,6 +121,7 @@ export async function fetchRemoteTenantBundle(
   inflightBundle = (async (): Promise<RemoteTenantBundle | null> => {
     void signal;
 
+    try {
     // Sequential on purpose — do not Promise.all these on shared hosting.
     const students = await getSafe<Student[]>(
       "/api/students/list.php?includeDeleted=1",
@@ -183,6 +196,10 @@ export async function fetchRemoteTenantBundle(
       dashboardNote: typeof todos?.dashboardNote === "string" ? todos.dashboardNote : "",
       studentYearLedgers: [buildLedgerFromStudents(students, academicYear)],
     };
+    } catch (err) {
+      if (isAuthExpiredError(err)) return null;
+      throw err;
+    }
   })().finally(() => {
     if (inflightToken === token) {
       inflightBundle = null;

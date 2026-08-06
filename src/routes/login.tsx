@@ -57,6 +57,18 @@ function LoginPage() {
     }
   }, [hydrated, session, navigate]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const reason = new URLSearchParams(window.location.search).get("reason");
+    if (reason === "session_expired") {
+      toast.error("Session expired — please sign in again");
+      const url = new URL(window.location.href);
+      url.searchParams.delete("reason");
+      url.searchParams.delete("from");
+      window.history.replaceState({}, "", url.pathname + url.search);
+    }
+  }, []);
+
   const tierMeta = TIERS.find((t) => t.key === tier)!;
 
   const handleTierSwitch = (next: keyof typeof MOCK_CREDENTIALS) => {

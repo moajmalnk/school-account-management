@@ -28,10 +28,52 @@ export function getApiToken(): string | null {
 export function setApiToken(token: string | null) {
   if (typeof window === "undefined") return;
   try {
-    if (token) window.localStorage.setItem(TOKEN_KEY, token);
-    else window.localStorage.removeItem(TOKEN_KEY);
+    if (token) {
+      window.localStorage.setItem(TOKEN_KEY, token);
+      resetUnauthorizedGate();
+    } else {
+      window.localStorage.removeItem(TOKEN_KEY);
+    }
   } catch {
     // ignore
+  }
+}
+
+/** Fired once when an authenticated request gets 401 (expired / invalid JWT). */
+type UnauthorizedListener = () => void;
+const unauthorizedListeners = new Set<UnauthorizedListener>();
+let unauthorizedNotified = false;
+
+export function onUnauthorized(listener: UnauthorizedListener): () => void {
+  unauthorizedListeners.add(listener);
+  return () => {
+    unauthorizedListeners.delete(listener);
+  };
+}
+
+export function resetUnauthorizedGate() {
+  unauthorizedNotified = false;
+}
+
+export function isUnauthorizedNotified(): boolean {
+  return unauthorizedNotified;
+}
+
+function emitUnauthorized() {
+  if (unauthorizedNotified) return;
+  unauthorizedNotified = true;
+  try {
+    window.localStorage.removeItem(TOKEN_KEY);
+    window.sessionStorage.removeItem(IMPERSONATION_TOKEN_KEY);
+  } catch {
+    // ignore
+  }
+  for (const listener of unauthorizedListeners) {
+    try {
+      listener();
+    } catch {
+      // ignore listener errors
+    }
   }
 }
 
@@ -40,6 +82,7 @@ export function setImpersonationApiToken(token: string) {
   if (typeof window === "undefined") return;
   try {
     window.sessionStorage.setItem(IMPERSONATION_TOKEN_KEY, token);
+    resetUnauthorizedGate();
   } catch {
     // ignore
   }
@@ -74,6 +117,7 @@ export function restoreApiTokenBackup(): boolean {
     window.sessionStorage.removeItem(TOKEN_BACKUP_KEY);
     if (backup) {
       window.localStorage.setItem(TOKEN_KEY, backup);
+      resetUnauthorizedGate();
       return true;
     }
   } catch {
@@ -107,6 +151,10 @@ export class ApiError extends Error {
   }
 }
 
+export function isAuthExpiredError(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 401;
+}
+
 type RequestOptions = {
   method?: string;
   body?: unknown;
@@ -119,6 +167,11 @@ export async function apiRequest<T>(
   options: RequestOptions = {},
 ): Promise<T> {
   const { method = "GET", body, auth = true, signal } = options;
+
+  if (auth && unauthorizedNotified) {
+    throw new ApiError("Unauthorized: Token expired", 401);
+  }
+
   const headers: Record<string, string> = {
     Accept: "application/json",
   };
@@ -127,7 +180,10 @@ export async function apiRequest<T>(
   }
   if (auth) {
     const token = getApiToken();
-    if (token) headers.Authorization = `Bearer ${token}`;
+    if (!token) {
+      throw new ApiError("Unauthorized: Missing token", 401);
+    }
+    headers.Authorization = `Bearer ${token}`;
   }
 
   const url = `${apiBaseUrl()}${path.startsWith("/") ? path : `/${path}`}`;
@@ -148,13 +204,18 @@ export async function apiRequest<T>(
 
   if (!res.ok || !payload?.success) {
     const snippet = raw.replace(/\s+/g, " ").slice(0, 180);
-    throw new ApiError(
+    const message =
       payload?.error ||
-        (snippet
-          ? `Request failed (${res.status}): ${snippet}`
-          : `Request failed (${res.status})`),
-      res.status,
-    );
+      (snippet
+        ? `Request failed (${res.status}): ${snippet}`
+        : `Request failed (${res.status})`);
+
+    // Authenticated 401 → clear JWT once and notify AuthProvider (login 401 stays local).
+    if (auth && res.status === 401) {
+      emitUnauthorized();
+    }
+
+    throw new ApiError(message, res.status);
   }
 
   return payload.data as T;

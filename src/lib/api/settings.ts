@@ -32,7 +32,11 @@ export async function apiUploadDataUrl(
 /** Persist school identity; uploads data-URL logo/letterhead first. */
 export async function apiSaveSchoolDetails(
   schoolDetails: SchoolDetails,
-  extras?: { themeSettings?: ThemeSettings; academicYear?: string },
+  extras?: {
+    themeSettings?: ThemeSettings;
+    academicYear?: string;
+    academicYears?: string[];
+  },
 ): Promise<SchoolDetails> {
   if (!hasToken()) return schoolDetails;
 
@@ -56,9 +60,59 @@ export async function apiSaveSchoolDetails(
       schoolDetails: next,
       themeSettings: extras?.themeSettings,
       academicYear: extras?.academicYear,
+      academicYears: extras?.academicYears,
     },
   });
   return data.schoolDetails;
+}
+
+/** Persist academic / financial year list + active year to the server. */
+export async function apiSyncAcademicYears(input: {
+  academicYears: string[];
+  academicYear: string;
+}): Promise<{ academicYears: string[]; academicYear: string }> {
+  if (!hasToken()) return input;
+  const data = await apiRequest<{
+    academicYears: string[];
+    academicYear: string;
+  }>("/api/settings/school.php", {
+    method: "PUT",
+    body: {
+      academicYears: input.academicYears,
+      academicYear: input.academicYear,
+    },
+  });
+  return {
+    academicYears: data.academicYears?.length ? data.academicYears : input.academicYears,
+    academicYear: data.academicYear || input.academicYear,
+  };
+}
+
+export async function apiUpsertFeeTerm(term: {
+  id: string;
+  kind: string;
+  periodMode?: string;
+  label: string;
+  academicYear?: string;
+  startDate?: string;
+  endDate?: string;
+  feeAmount?: number | null;
+  coverage?: string;
+}): Promise<void> {
+  if (!hasToken()) return;
+  const list = await apiRequest<Array<{ id: string }>>("/api/settings/fees.php");
+  const exists = list.some((t) => t.id === term.id);
+  await apiRequest("/api/settings/fees.php", {
+    method: exists ? "PUT" : "POST",
+    body: term,
+  });
+}
+
+export async function apiDeleteFeeTerm(id: string): Promise<void> {
+  if (!hasToken()) return;
+  await apiRequest(`/api/settings/fees.php?id=${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
 }
 
 export async function apiUpsertClass(cls: ClassConfig): Promise<ClassConfig> {

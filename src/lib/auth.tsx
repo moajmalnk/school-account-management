@@ -8,11 +8,13 @@ import {
   type ReactNode,
 } from "react";
 
-import { apiLogin } from "@/lib/api/auth";
+import { apiLogin, apiMe } from "@/lib/api/auth";
 import {
   ApiError,
   clearApiTokenBackup,
   clearImpersonationApiToken,
+  getApiToken,
+  onUnauthorized,
   restoreApiTokenBackup,
   setApiToken,
 } from "@/lib/api/client";
@@ -326,13 +328,67 @@ export function isTenantWorkspaceSession(
 
 const AuthContext = createContext<AuthState | null>(null);
 
+export function clearAllAuthState() {
+  clearImpersonationSession();
+  clearApiTokenBackup();
+  setApiToken(null);
+  writeSession(null);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    setSession(readSession());
-    setHydrated(true);
+    let cancelled = false;
+
+    const bootstrap = async () => {
+      const existing = readSession();
+      const token = getApiToken();
+
+      // JWT present → confirm it before treating the local session as valid.
+      if (existing && token) {
+        try {
+          await apiMe();
+          if (!cancelled) setSession(readSession() ?? existing);
+        } catch (err) {
+          if (err instanceof ApiError && err.status === 401) {
+            clearAllAuthState();
+            if (!cancelled) setSession(null);
+          } else if (!cancelled) {
+            // Network / API down: keep the cached session so the UI can still open.
+            setSession(existing);
+          }
+        }
+      } else if (!cancelled) {
+        // Orphan JWT without a session (or session without JWT) — clean up.
+        if (token && !existing) setApiToken(null);
+        setSession(existing);
+      }
+
+      if (!cancelled) setHydrated(true);
+    };
+
+    void bootstrap();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    return onUnauthorized(() => {
+      clearImpersonationSession();
+      clearApiTokenBackup();
+      setApiToken(null);
+      writeSession(null);
+      setSession(null);
+
+      if (typeof window === "undefined") return;
+      const path = window.location.pathname;
+      if (path.startsWith("/login")) return;
+      const next = `/login?reason=session_expired&from=${encodeURIComponent(path)}`;
+      window.location.replace(next);
+    });
   }, []);
 
   const login = useCallback<AuthState["login"]>(async (role, email, password) => {
@@ -470,9 +526,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // ignore
       }
     }
-    clearApiTokenBackup();
-    setApiToken(null);
-    writeSession(null);
+    clearAllAuthState();
     setSession(null);
   }, []);
 

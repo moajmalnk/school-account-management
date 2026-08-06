@@ -93,7 +93,7 @@ function TenantShell() {
           planFlags: normalizePlanFlags(me.planFlags),
         });
       } catch {
-        // Keep cached session flags if /me is unavailable.
+        // 401 is handled globally (logout). Other errors keep cached flags.
       }
     })();
     return () => {

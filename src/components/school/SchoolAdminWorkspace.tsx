@@ -14047,7 +14047,7 @@ function CategoriesCard({
   const [yearDraft, setYearDraft] = useState("");
   const [pendingYearDelete, setPendingYearDelete] = useState<string | null>(null);
 
-  const submitAcademicYear = (e: React.FormEvent) => {
+  const submitAcademicYear = async (e: React.FormEvent) => {
     e.preventDefault();
     const nextLabel = normalizeAcademicYearLabel(yearDraft);
     if (!nextLabel) return;
@@ -14057,7 +14057,9 @@ function CategoriesCard({
       return;
     }
     toast.success(`Opened books for ${nextLabel}`, {
-      description: "Fee periods cloned from the previous year · ready to enroll students",
+      description: getApiToken()
+        ? "Synced to server · fee periods cloned from the previous year"
+        : "Fee periods cloned from the previous year · ready to enroll students",
     });
     setYearDraft("");
   };

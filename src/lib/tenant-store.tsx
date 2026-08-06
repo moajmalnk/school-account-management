@@ -12,6 +12,11 @@ import {
 import { fetchRemoteTenantBundle } from "@/lib/api/tenant-sync";
 import { getApiToken } from "@/lib/api/client";
 import {
+  apiDeleteFeeTerm,
+  apiSyncAcademicYears,
+  apiUpsertFeeTerm,
+} from "@/lib/api/settings";
+import {
   normalizePermissionSet,
   type PermissionSet,
 } from "@/lib/permissions";
@@ -3482,10 +3487,20 @@ export function TenantStoreProvider({
           );
           return ensured;
         });
+        if (getApiToken()) {
+          void apiSyncAcademicYears({
+            academicYears: academicYears.includes(next)
+              ? academicYears
+              : [...academicYears, next],
+            academicYear: next,
+          }).catch(() => {
+            /* keep local books; next hydrate may overwrite until sync succeeds */
+          });
+        }
         return next;
       });
     },
-    [],
+    [academicYears],
   );
 
   const openAcademicYear = useCallback(
@@ -3515,13 +3530,29 @@ export function TenantStoreProvider({
         year,
         `FT-${year.replace(/\s+/g, "")}`,
       );
+      const nextYears = [...academicYears, year];
       setFeeTerms((prev) => [...prev, ...cloned]);
       setStudentYearLedgers((prev) => ensureYearLedger(prev, year));
-      setAcademicYears((prev) => [...prev, year]);
-      setAcademicYear(year);
+      setAcademicYears(nextYears);
+      setAcademicYearState(year);
+      if (getApiToken()) {
+        void (async () => {
+          try {
+            await apiSyncAcademicYears({
+              academicYears: nextYears,
+              academicYear: year,
+            });
+            for (const term of cloned) {
+              await apiUpsertFeeTerm(term);
+            }
+          } catch {
+            /* local snapshot kept; user sees toast from Settings UI if needed */
+          }
+        })();
+      }
       return true;
     },
-    [academicYear, academicYears, feeTerms, setAcademicYear],
+    [academicYear, academicYears, feeTerms],
   );
 
   const canDeleteAcademicYear = useCallback(
@@ -3546,17 +3577,37 @@ export function TenantStoreProvider({
     (year: string) => {
       const check = canDeleteAcademicYear(year);
       if (!check.ok) return false;
-      setAcademicYears((prev) => prev.filter((y) => y !== year));
+      const removedTerms = feeTerms.filter((t) => t.academicYear === year);
+      const nextYears = academicYears.filter((y) => y !== year);
+      const nextActive =
+        academicYear === year
+          ? (nextYears[0] ?? academicYear)
+          : academicYear;
+      setAcademicYears(nextYears);
       setFeeTerms((prev) => prev.filter((t) => t.academicYear !== year));
       setStudentYearLedgers((prev) => prev.filter((l) => l.academicYear !== year));
       setPayments((prev) => prev.filter((p) => p.academicYear !== year));
-      if (academicYear === year) {
-        const next = academicYears.find((y) => y !== year);
-        if (next) setAcademicYear(next);
+      if (academicYear === year && nextActive) {
+        setAcademicYearState(nextActive);
+      }
+      if (getApiToken()) {
+        void (async () => {
+          try {
+            await apiSyncAcademicYears({
+              academicYears: nextYears,
+              academicYear: nextActive,
+            });
+            for (const term of removedTerms) {
+              await apiDeleteFeeTerm(term.id);
+            }
+          } catch {
+            /* local snapshot kept */
+          }
+        })();
       }
       return true;
     },
-    [academicYear, academicYears, canDeleteAcademicYear, setAcademicYear],
+    [academicYear, academicYears, canDeleteAcademicYear, feeTerms],
   );
 
   const enrollStudentInActiveYear = useCallback(
