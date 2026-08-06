@@ -1,9 +1,9 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Bell, LogOut, Search, Settings, UserCog } from "lucide-react";
+import { Bell, LogOut, Settings, UserCog } from "lucide-react";
 import { toast } from "sonner";
 
 import { ADMIN_NAV, type ViewKey } from "@/components/admin/admin-nav";
-import { Input } from "@/components/ui/input";
+import { GlobalSearch } from "@/components/admin/GlobalSearch";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,9 +43,9 @@ export function TopNav() {
   const activeLabel = ADMIN_NAV.find((n) => n.key === active)?.label ?? "Overview";
 
   return (
-    <header className="sticky top-0 z-30 bg-[#F4F6F9]/92 px-3 pb-2 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl sm:px-4 sm:pt-[calc(1rem+env(safe-area-inset-top))] lg:border-b-0 lg:bg-transparent lg:px-6 lg:pb-0 lg:pt-6 lg:backdrop-blur-none">
-      <div className="mobile-app-rail flex items-center justify-between gap-3 rounded-xl border border-white/70 bg-white/88 px-3 py-2.5 shadow-[0_14px_44px_-32px_rgba(0,0,0,0.45)] lg:mx-auto lg:max-w-[1480px] lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
-        <Link to="/super-admin/overview" className="flex min-w-0 items-center gap-2.5">
+    <header className="sticky top-0 z-30 bg-[#F4F6F9]/92 px-3 pb-2 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl sm:px-4 sm:pt-[calc(1rem+env(safe-area-inset-top))] lg:border-b lg:border-[#E5E5E5]/60 lg:bg-[#F4F6F9]/92 lg:px-6 lg:pb-3 lg:pt-[calc(1.25rem+env(safe-area-inset-top))] lg:backdrop-blur-xl">
+      <div className="mobile-app-rail flex min-w-0 items-center justify-between gap-2 rounded-xl border border-white/70 bg-white/88 px-3 py-2.5 shadow-[0_14px_44px_-32px_rgba(0,0,0,0.45)] sm:gap-3 lg:mx-auto lg:max-w-[1480px] lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
+        <Link to="/super-admin/overview" className="flex min-w-0 shrink items-center gap-2.5">
           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-black text-sm font-bold text-white">
             S
           </div>
@@ -60,14 +60,14 @@ export function TopNav() {
           </div>
         </Link>
 
-        <nav className="hidden items-center gap-1 rounded-full border border-[#E5E5E5] bg-white p-1 shadow-[0_1px_2px_rgba(0,0,0,0.03),0_8px_24px_-12px_rgba(0,0,0,0.1)] lg:flex">
+        <nav className="hidden min-w-0 items-center gap-0.5 rounded-full border border-[#E5E5E5] bg-white p-1 shadow-[0_1px_2px_rgba(0,0,0,0.03),0_8px_24px_-12px_rgba(0,0,0,0.1)] lg:flex xl:gap-1">
           {ADMIN_NAV.map((n) => {
             const isActive = active === n.key;
             return (
               <Link
                 key={n.key}
                 to={n.to}
-                className={`relative rounded-full px-5 py-2 text-[13px] font-medium transition-all ${
+                className={`relative rounded-full px-3 py-2 text-[12.5px] font-medium transition-all xl:px-5 xl:text-[13px] ${
                   isActive ? "bg-black text-white shadow-sm" : "text-black/65 hover:text-black"
                 }`}
               >
@@ -78,19 +78,18 @@ export function TopNav() {
         </nav>
 
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-          <div className="relative hidden lg:block">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-black/40" />
-            <Input
-              placeholder="Search…"
-              className="h-10 w-56 rounded-full border-[#E5E5E5] bg-white pl-9 text-[13px] placeholder:text-black/35"
-            />
+          <div className="hidden xl:block">
+            <GlobalSearch variant="field" />
+          </div>
+          <div className="xl:hidden">
+            <GlobalSearch variant="icon" />
           </div>
 
           <button
             onClick={() =>
               toast("Settings drawer coming online", { description: "Module placeholder · v2.1" })
             }
-            className="hidden h-10 w-10 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:bg-black hover:text-white sm:grid"
+            className="hidden h-10 w-10 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:bg-black hover:text-white xl:grid"
             aria-label="Settings"
           >
             <Settings className="h-4 w-4" />
@@ -101,7 +100,7 @@ export function TopNav() {
                 description: "Open the notification stream from the bell icon",
               })
             }
-            className="relative hidden h-10 w-10 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:bg-black hover:text-white sm:grid"
+            className="relative hidden h-10 w-10 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:bg-black hover:text-white xl:grid"
             aria-label="Notifications"
           >
             <Bell className="h-4 w-4" />

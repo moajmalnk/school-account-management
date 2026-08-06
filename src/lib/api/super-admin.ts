@@ -3,6 +3,7 @@ import type { Status, Tenant, Tier } from "@/components/admin/data";
 
 export type SuperAdminOverview = {
   totalActiveSchools: number;
+  trialTenants?: number;
   mrr: number;
   arr: number;
   systemUptime: number;
@@ -17,20 +18,29 @@ export type SuperAdminOverview = {
   }[];
 };
 
+export type SuperAdminPlanFlags = {
+  finance: boolean;
+  students: boolean;
+  classes: boolean;
+  staff: boolean;
+  vehicle: boolean;
+  analytics: boolean;
+  feeReminders: boolean;
+  feeCollection: boolean;
+  extraUsers: boolean;
+  staffAttendance: boolean;
+  payroll: boolean;
+  autoFeeCollection: boolean;
+  whatsapp: boolean;
+};
+
 export type SuperAdminPlan = {
   name: Tier | string;
   accent: string;
   monthly: number;
   annually: number;
   defaultCapacity?: number;
-  flags: {
-    finance: boolean;
-    vehicle: boolean;
-    analytics: boolean;
-    alerts: boolean;
-    exams: boolean;
-    library: boolean;
-  };
+  flags: SuperAdminPlanFlags;
 };
 
 export type ImpersonationLogRow = {
@@ -138,6 +148,8 @@ export type UpdateTenantInput = {
   tier: Tier;
   status: Status;
   capacity: number;
+  /** When set, updates the primary school admin login email (username). */
+  username?: string;
   /** When set, resets the primary school admin login password. */
   password?: string;
 };

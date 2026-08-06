@@ -2,7 +2,6 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Bell,
   Building2,
-  ClipboardList,
   Code2,
   LayoutDashboard,
   LogOut,
@@ -48,7 +47,6 @@ const NAV: NavEntry[] = [
     helper: "Billing matrix",
     icon: Receipt,
   },
-  { to: "/super-admin/audits", label: "System Audits", helper: "Trace logs", icon: ClipboardList },
 ];
 
 export function SuperAdminSidebar() {

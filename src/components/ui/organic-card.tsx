@@ -36,7 +36,7 @@ export function OrganicCard({
     <div
       {...rest}
       className={cn(
-        "organic-card relative",
+        "organic-card relative min-w-0",
         toneClasses[tone],
         cornerClasses[cornerSide],
         SHADOW,

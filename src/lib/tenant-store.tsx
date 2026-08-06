@@ -24,6 +24,7 @@ import {
   filterByAcademicYear,
   getYearLedger,
   parseAcademicYearBounds,
+  reconcileLedgersWithStudents,
   studentsForAcademicYear,
   syncLedgerFromActiveStudents,
   upsertStudentYearFields,
@@ -605,7 +606,7 @@ export function normalizeStudent(
   };
 }
 
-export function normalizeStaff(raw: Partial<Staff> & Pick<Staff, "id" | "name" | "role" | "dept" | "active">): Staff {
+export function normalizeStaff(raw: Partial<Staff> & Pick<Staff, "id" | "name">): Staff {
   const joinedAt = typeof raw.joinedAt === "string" && raw.joinedAt ? raw.joinedAt : "2025-01-01";
   const attendanceByMonth = Array.isArray(raw.attendanceByMonth)
     ? raw.attendanceByMonth
@@ -614,11 +615,11 @@ export function normalizeStaff(raw: Partial<Staff> & Pick<Staff, "id" | "name" |
         .sort((a, b) => b.month.localeCompare(a.month))
     : undefined;
   return {
-    id: raw.id,
-    name: raw.name,
-    role: raw.role,
-    dept: raw.dept,
-    active: raw.active,
+    id: String(raw.id ?? ""),
+    name: String(raw.name ?? "").trim() || "Staff",
+    role: typeof raw.role === "string" && raw.role.trim() ? raw.role.trim() : "Staff",
+    dept: typeof raw.dept === "string" && raw.dept.trim() ? raw.dept.trim() : "General",
+    active: typeof raw.active === "boolean" ? raw.active : true,
     joinedAt,
     phone: typeof raw.phone === "string" ? raw.phone : undefined,
     altPhone: typeof raw.altPhone === "string" && raw.altPhone.trim() ? raw.altPhone.trim() : undefined,
@@ -638,7 +639,7 @@ export function normalizeStaff(raw: Partial<Staff> & Pick<Staff, "id" | "name" |
       : {}),
     documents: normalizeStaffDocuments(raw.documents),
     salaryHistory: normalizeSalaryHistory(raw.salaryHistory),
-    statusHistory: normalizeStatusHistory(raw.statusHistory, joinedAt, raw.id),
+    statusHistory: normalizeStatusHistory(raw.statusHistory, joinedAt, String(raw.id ?? "")),
     deletedAt:
       typeof raw.deletedAt === "string" && raw.deletedAt.trim() ? raw.deletedAt.trim() : undefined,
   };
@@ -2660,6 +2661,8 @@ type TenantStoreValue = {
   notifications: TenantNotification[];
   setNotifications: Dispatch<SetStateAction<TenantNotification[]>>;
   resetTenant: () => void;
+  /** False until remote/local snapshot has been applied — use for page skeletons. */
+  hydrated: boolean;
 };
 
 function normalizeThemeMode(value: unknown): ThemeSettings["mode"] {
@@ -3197,8 +3200,14 @@ export function TenantStoreProvider({
   const [hydrated, setHydrated] = useState(false);
 
   const applySnapshot = useCallback((snap: Snapshot) => {
-    setStudents(snap.students);
-    setStaff(snap.staff);
+    setStudents(Array.isArray(snap.students) ? snap.students : []);
+    setStaff(
+      Array.isArray(snap.staff)
+        ? snap.staff
+            .filter((s): s is Staff => Boolean(s && typeof s.id === "string" && s.id))
+            .map((s) => normalizeStaff(s))
+        : [],
+    );
     setPayments(snap.payments);
     setDepartments(snap.departments);
     setRoles(snap.roles);
@@ -3267,7 +3276,11 @@ export function TenantStoreProvider({
               transportVehicles: remote.transportVehicles,
               paymentCategories: remote.paymentCategories,
               feeTerms: remote.feeTerms,
-              studentYearLedgers: remote.studentYearLedgers,
+              studentYearLedgers: reconcileLedgersWithStudents(
+                remote.students,
+                remote.studentYearLedgers,
+                remote.academicYear,
+              ),
               academicYears: remote.academicYears,
               academicYear: remote.academicYear,
               themeSettings: remote.themeSettings,
@@ -3293,7 +3306,14 @@ export function TenantStoreProvider({
         if (cancelled) return;
         const snap = readSnapshot(storeKey);
         if (snap) {
-          applySnapshot(snap);
+          applySnapshot({
+            ...snap,
+            studentYearLedgers: reconcileLedgersWithStudents(
+              snap.students,
+              snap.studentYearLedgers,
+              snap.academicYear,
+            ),
+          });
         } else {
           applySnapshot({
             students: [],
@@ -3323,7 +3343,16 @@ export function TenantStoreProvider({
 
       if (cancelled) return;
       const snap = readSnapshot(storeKey);
-      if (snap) applySnapshot(snap);
+      if (snap) {
+        applySnapshot({
+          ...snap,
+          studentYearLedgers: reconcileLedgersWithStudents(
+            snap.students,
+            snap.studentYearLedgers,
+            snap.academicYear,
+          ),
+        });
+      }
       setHydrated(true);
     };
 
@@ -3656,6 +3685,7 @@ export function TenantStoreProvider({
       notifications,
       setNotifications,
       resetTenant,
+      hydrated,
     }),
     [
       students,
@@ -3687,6 +3717,7 @@ export function TenantStoreProvider({
       dashboardTodos,
       dashboardNote,
       notifications,
+      hydrated,
     ],
   );
 

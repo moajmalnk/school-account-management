@@ -761,45 +761,88 @@
 }
 
 /* Sonner: compact dark pill toasts (Hostinger-style) */
+[data-sonner-toaster] {
+  width: auto !important;
+}
+
+[data-sonner-toaster][data-x-position="center"] {
+  left: 50% !important;
+  right: auto !important;
+  transform: translateX(-50%) !important;
+}
+
 [data-sonner-toaster][data-y-position="bottom"] {
   bottom: 24px !important;
 }
 
+/*
+ * Fit-content toasts are position:absolute, so the toaster collapses and
+ * Sonner never sets left/right for center — the pill sat at viewport mid
+ * and grew right. Anchor + translate so the pill itself is bottom-centered.
+ */
+[data-sonner-toast][data-x-position="center"] {
+  left: 50% !important;
+  right: auto !important;
+  translate: -50% 0;
+}
+
 [data-sonner-toast],
 [data-sonner-toast][data-styled="true"] {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
   background: #1c1c1e !important;
   color: #fff !important;
   border: none !important;
   border-radius: 9999px !important;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28) !important;
-  width: auto !important;
-  min-width: 0 !important;
+  width: max-content !important;
+  min-width: min(280px, calc(100vw - 2rem)) !important;
   max-width: min(420px, calc(100vw - 2rem)) !important;
+  height: auto !important;
   padding: 10px 16px !important;
   gap: 10px !important;
-  align-items: center !important;
+  box-sizing: border-box !important;
+}
+
+[data-sonner-toast] [data-content] {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
 }
 
 [data-sonner-toast] [data-title] {
   color: #fff !important;
   font-size: 13px !important;
   font-weight: 500 !important;
-  line-height: 1.2 !important;
+  line-height: 1.35 !important;
+  white-space: normal !important;
+  word-break: normal !important;
+  overflow-wrap: anywhere !important;
 }
 
 [data-sonner-toast] [data-description] {
   display: none !important;
 }
 
+[data-sonner-toast] [data-icon] {
+  flex-shrink: 0 !important;
+  margin: 0 !important;
+}
+
 [data-sonner-toast] [data-close-button] {
   position: static !important;
+  inset: auto !important;
   transform: none !important;
+  flex-shrink: 0 !important;
   background: transparent !important;
   border: none !important;
   color: rgba(255, 255, 255, 0.7) !important;
   width: 20px !important;
   height: 20px !important;
-  margin-left: 4px !important;
+  margin-left: 2px !important;
 }
 
 [data-sonner-toast][data-type="success"] [data-icon] {

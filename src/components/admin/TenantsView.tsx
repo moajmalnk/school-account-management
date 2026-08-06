@@ -17,9 +17,16 @@ import {
   CircleAlert,
   Info,
   Loader2,
+  Eye,
+  EyeOff,
+  Building2,
+  Wallet,
+  Activity,
+  Shield,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
-import { seedTenants, type Tenant, type Tier, type Status } from "./data";
+import { type Tenant, type Tier, type Status } from "./data";
 import {
   deleteSuperAdminTenant,
   fetchSuperAdminTenants,
@@ -56,7 +63,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Tone, CornerSide } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 const TIER_STYLE: Record<Tier, { bg: string; fg: string }> = {
   Basic: { bg: "#F4F4F5", fg: "#000000" },
@@ -195,6 +204,8 @@ export function TenantsView({
   const [editTarget, setEditTarget] = useState<Tenant | null>(null);
   const [billingTarget, setBillingTarget] = useState<Tenant | null>(null);
   const [auditTarget, setAuditTarget] = useState<Tenant | null>(null);
+  const [detailTarget, setDetailTarget] = useState<Tenant | null>(null);
+  const [detailTab, setDetailTab] = useState("overview");
   const [pendingDelete, setPendingDelete] = useState<Tenant | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -210,11 +221,11 @@ export function TenantsView({
         if (!cancelled) setTenants(list);
       } catch (err) {
         if (!cancelled) {
-          setTenants(seedTenants);
+          setTenants([]);
           const msg =
             err instanceof ApiError ? err.message : "Failed to load tenants";
-          toast.error("Showing local seed tenants", {
-            description: `${msg}. Log out and sign in again as super admin so provisions persist.`,
+          toast.error("Could not load tenants", {
+            description: msg,
           });
         }
       } finally {
@@ -353,7 +364,16 @@ export function TenantsView({
               className="space-y-4"
             >
               <div>
-                <div className="text-[15px] font-semibold leading-tight">{t.name}</div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDetailTab("overview");
+                    setDetailTarget(t);
+                  }}
+                  className="text-left text-[15px] font-semibold leading-tight transition-opacity hover:opacity-80"
+                >
+                  {t.name}
+                </button>
                 <div className={`mt-1 font-mono text-[11px] ${subText}`}>
                   {t.id} · {t.uuid}
                 </div>
@@ -429,9 +449,12 @@ export function TenantsView({
                   />
                   <TenantAction
                     icon={FileText}
-                    label="Alter Billing Rules"
+                    label="View Tenant Details"
                     tone={tone}
-                    onClick={() => setBillingTarget(t)}
+                    onClick={() => {
+                      setDetailTab("overview");
+                      setDetailTarget(t);
+                    }}
                   />
                   <TenantAction
                     icon={ScrollText}
@@ -483,6 +506,38 @@ export function TenantsView({
         onSave={(updated) => {
           updateTenant(updated.id, updated);
           setEditTarget(null);
+          setDetailTarget((prev) => (prev?.id === updated.id ? updated : prev));
+        }}
+      />
+
+      <TenantDetailDrawer
+        tenant={detailTarget}
+        tab={detailTab}
+        onTabChange={setDetailTab}
+        billing={detailTarget ? getBilling(detailTarget) : null}
+        onClose={() => setDetailTarget(null)}
+        onEdit={() => {
+          if (!detailTarget) return;
+          setEditTarget(detailTarget);
+        }}
+        onBilling={() => {
+          if (!detailTarget) return;
+          setBillingTarget(detailTarget);
+        }}
+        onAudit={() => {
+          if (!detailTarget) return;
+          setAuditTarget(detailTarget);
+        }}
+        onImpersonate={() => {
+          if (!detailTarget) return;
+          onImpersonate?.(detailTarget);
+        }}
+        onSaveBilling={(rule) => {
+          if (!detailTarget) return;
+          upsertBilling(detailTarget.id, rule);
+          toast.success("Billing rules saved", {
+            description: `${detailTarget.name} · ${rule.cycle} · ${CURRENCY_SYMBOL[rule.currency]}${rule.ratePerStudent}/student`,
+          });
         }}
       />
 
@@ -702,22 +757,21 @@ function TenantFormDrawer({
                 placeholder="Anika Roy"
               />
             </Field>
-            <Field label="Administrator Email">
+            <Field label="Setup Username">
               <Input
                 value={adminEmail}
                 onChange={(e) => setAdminEmail(e.target.value)}
                 placeholder="admin@school.in"
                 type="email"
+                autoComplete="username"
               />
             </Field>
           </div>
 
           <Field label="Setup Password">
-            <Input
-              type="password"
-              autoComplete="new-password"
+            <PasswordInput
               value={setupPassword}
-              onChange={(e) => setSetupPassword(e.target.value)}
+              onChange={setSetupPassword}
               placeholder="Initial school admin password"
             />
           </Field>
@@ -822,6 +876,443 @@ function TenantFormDrawer({
   );
 }
 
+function TenantDetailDrawer({
+  tenant,
+  tab,
+  onTabChange,
+  billing,
+  onClose,
+  onEdit,
+  onBilling,
+  onAudit,
+  onImpersonate,
+  onSaveBilling,
+}: {
+  tenant: Tenant | null;
+  tab: string;
+  onTabChange: (tab: string) => void;
+  billing: BillingRule | null;
+  onClose: () => void;
+  onEdit: () => void;
+  onBilling: () => void;
+  onAudit: () => void;
+  onImpersonate: () => void;
+  onSaveBilling: (rule: BillingRule) => void;
+}) {
+  const [draft, setDraft] = useState<BillingRule | null>(null);
+  const [activity, setActivity] = useState<AuditEvent[]>([]);
+
+  useEffect(() => {
+    if (!tenant || !billing) {
+      setDraft(null);
+      setActivity([]);
+      return;
+    }
+    setDraft(billing);
+    setActivity(buildAuditLog(tenant, 8));
+  }, [tenant, billing]);
+
+  if (!tenant || !draft) return null;
+
+  const pct = tenant.capacity > 0 ? Math.round((tenant.students / tenant.capacity) * 100) : 0;
+  const tStyle = TIER_STYLE[tenant.tier];
+  const sStyle = STATUS_STYLE[tenant.status];
+  const sym = CURRENCY_SYMBOL[draft.currency];
+  const grossPerCycle = draft.ratePerStudent * Math.max(tenant.students, 1);
+  const discount = grossPerCycle * (draft.discountPercent / 100);
+  const tax = (grossPerCycle - discount) * (draft.taxPercent / 100);
+  const total = grossPerCycle - discount + tax;
+
+  const set = <K extends keyof BillingRule>(k: K, v: BillingRule[K]) =>
+    setDraft((prev) => (prev ? { ...prev, [k]: v } : prev));
+
+  const saveBilling = () => {
+    if (draft.ratePerStudent <= 0) {
+      toast.error("Rate per student must be greater than zero");
+      return;
+    }
+    onSaveBilling(draft);
+  };
+
+  return (
+    <Sheet open={!!tenant} onOpenChange={(v) => !v && onClose()}>
+      <SheetContent className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[640px]">
+        <SheetHeader className="border-b border-[#E5E5E5] bg-[#F4F4F5] px-6 py-5">
+          <SheetTitle className="text-[18px] font-semibold text-black">
+            Tenant Details
+          </SheetTitle>
+          <SheetDescription className="text-[12px] text-black/55">
+            {tenant.name} · {tenant.id} · {tenant.subdomain}.schoolaccounts.in
+          </SheetDescription>
+        </SheetHeader>
+
+        <Tabs
+          value={tab}
+          onValueChange={onTabChange}
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <div className="border-b border-[#E5E5E5] bg-white px-4 pt-3 sm:px-6">
+            <TabsList className="h-auto w-full justify-start gap-1 overflow-x-auto rounded-none bg-transparent p-0">
+              {(
+                [
+                  { id: "overview", label: "Overview", icon: Building2 },
+                  { id: "billing", label: "Billing", icon: Wallet },
+                  { id: "activity", label: "Activity", icon: Activity },
+                  { id: "access", label: "Access", icon: Shield },
+                ] as const
+              ).map((item) => {
+                const Icon = item.icon;
+                return (
+                  <TabsTrigger
+                    key={item.id}
+                    value={item.id}
+                    className={cn(
+                      "shrink-0 gap-1.5 rounded-full border border-transparent px-3 py-2 text-[12px] data-[state=active]:border-[#E5E5E5] data-[state=active]:bg-[#F4F4F5] data-[state=active]:shadow-none",
+                    )}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    {item.label}
+                  </TabsTrigger>
+                );
+              })}
+            </TabsList>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+            <TabsContent value="overview" className="mt-0 space-y-5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                  style={{ backgroundColor: tStyle.bg, color: tStyle.fg }}
+                >
+                  {tenant.tier}
+                </span>
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                  style={{ backgroundColor: sStyle.bg, color: sStyle.fg }}
+                >
+                  <span
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{ backgroundColor: sStyle.dot }}
+                  />
+                  {tenant.status}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <DetailStat label="Public ID" value={tenant.id} mono />
+                <DetailStat label="UUID" value={tenant.uuid} mono />
+                <DetailStat
+                  label="Routing host"
+                  value={`${tenant.subdomain}.schoolaccounts.in`}
+                  mono
+                />
+                <DetailStat label="Created" value={tenant.createdAt || "—"} mono />
+                <DetailStat
+                  label="Setup username"
+                  value={tenant.adminEmail?.trim() || "Not set"}
+                  mono
+                />
+                <DetailStat
+                  label="Seat utilisation"
+                  value={`${tenant.students.toLocaleString()} / ${tenant.capacity.toLocaleString()} · ${pct}%`}
+                />
+              </div>
+
+              <div>
+                <div className="mb-1.5 flex items-center justify-between font-mono text-[11px] text-black/55">
+                  <span>
+                    {tenant.students.toLocaleString()} enrolled
+                  </span>
+                  <span>{pct}%</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-[#F4F4F5]">
+                  <div
+                    className="h-full rounded-full bg-[#0F766E]"
+                    style={{ width: `${Math.min(100, pct)}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-full"
+                  onClick={onEdit}
+                >
+                  <Pencil className="h-3.5 w-3.5" /> Edit meta
+                </Button>
+                <Button
+                  type="button"
+                  className="rounded-full bg-black text-white hover:bg-black/85"
+                  onClick={onImpersonate}
+                >
+                  <KeyRound className="h-3.5 w-3.5" /> Impersonate
+                </Button>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="billing" className="mt-0 space-y-5">
+              <Field label="Billing Cycle">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  {(["Monthly", "Quarterly", "Annual"] as BillingCycle[]).map((c) => {
+                    const sel = draft.cycle === c;
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => set("cycle", c)}
+                        className={`rounded-full border px-3 py-2 text-[12px] font-semibold transition ${
+                          sel
+                            ? "border-transparent bg-[#0F766E] text-white shadow-sm"
+                            : "border-[#E5E5E5] bg-white text-black/65 hover:border-black/30"
+                        }`}
+                      >
+                        {c}
+                      </button>
+                    );
+                  })}
+                </div>
+              </Field>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label={`Rate / student (${sym})`}>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={draft.ratePerStudent}
+                    onChange={(e) => set("ratePerStudent", Number(e.target.value) || 0)}
+                    className="font-mono"
+                  />
+                </Field>
+                <Field label="Currency">
+                  <Select
+                    value={draft.currency}
+                    onValueChange={(v) => set("currency", v as Currency)}
+                  >
+                    <SelectTrigger className="h-10 rounded-lg border-[#E5E5E5] bg-white text-[13px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="INR">INR · ₹</SelectItem>
+                      <SelectItem value="USD">USD · $</SelectItem>
+                      <SelectItem value="EUR">EUR · €</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label="Tax / GST %">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={50}
+                    value={draft.taxPercent}
+                    onChange={(e) => set("taxPercent", Number(e.target.value) || 0)}
+                    className="font-mono"
+                  />
+                </Field>
+                <Field label="Discount %">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={draft.discountPercent}
+                    onChange={(e) => set("discountPercent", Number(e.target.value) || 0)}
+                    className="font-mono"
+                  />
+                </Field>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label="Next Invoice Date">
+                  <DatePicker
+                    value={draft.nextInvoice}
+                    onChange={(v) => set("nextInvoice", v)}
+                    placeholder="Pick invoice date"
+                    min={new Date().toISOString().slice(0, 10)}
+                  />
+                </Field>
+                <Field label="Payment Method">
+                  <Select
+                    value={draft.paymentMethod}
+                    onValueChange={(v) => set("paymentMethod", v as PaymentMethod)}
+                  >
+                    <SelectTrigger className="h-10 rounded-lg border-[#E5E5E5] bg-white text-[13px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Razorpay">Razorpay</SelectItem>
+                      <SelectItem value="Stripe">Stripe</SelectItem>
+                      <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+                      <SelectItem value="Manual Invoice">Manual Invoice</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+              </div>
+
+              <div className="rounded-2xl border border-[#E5E5E5] bg-[#F4F4F5] p-4">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  Projected next invoice
+                </div>
+                <div className="mt-2 font-mono text-[22px] font-semibold text-black">
+                  {sym}
+                  {Math.round(total).toLocaleString("en-IN")}
+                </div>
+                <div className="mt-1 text-[12px] text-black/55">
+                  {draft.cycle} · {draft.paymentMethod}
+                  {draft.autoCharge ? " · auto-charge on" : " · manual"}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  className="rounded-full bg-black text-white hover:bg-black/85"
+                  onClick={saveBilling}
+                >
+                  <Save className="h-3.5 w-3.5" /> Save billing
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-full"
+                  onClick={onBilling}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" /> Full billing editor
+                </Button>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="activity" className="mt-0 space-y-4">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[13px] text-black/55">
+                  Recent connection and admin events for this tenant.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="shrink-0 rounded-full"
+                  onClick={onAudit}
+                >
+                  <ScrollText className="h-3.5 w-3.5" /> Full audit
+                </Button>
+              </div>
+              <div className="divide-y divide-[#F0F0F0] rounded-2xl border border-[#E5E5E5] bg-white">
+                {activity.length === 0 ? (
+                  <div className="px-4 py-10 text-center text-[13px] text-black/45">
+                    No activity recorded yet.
+                  </div>
+                ) : (
+                  activity.map((e, i) => (
+                    <div key={`${e.ts}-${i}`} className="px-4 py-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[13px] font-semibold text-black">{e.action}</span>
+                        <span className="font-mono text-[10px] text-black/45">{e.ts}</span>
+                      </div>
+                      <div className="mt-0.5 text-[12px] text-black/55">
+                        {e.actor} · {e.detail}
+                      </div>
+                      <div className="mt-1 font-mono text-[10px] uppercase tracking-wider text-black/40">
+                        {e.severity} · {e.ip}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="access" className="mt-0 space-y-5">
+              <div className="rounded-2xl border border-[#E5E5E5] bg-[#F4F4F5] p-4">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                  School admin login
+                </div>
+                <div className="mt-2 font-mono text-[14px] font-semibold text-black">
+                  {tenant.adminEmail?.trim() || "No username on file"}
+                </div>
+                <p className="mt-2 text-[12px] text-black/55">
+                  Reset username or password from Edit Tenant Meta. Impersonation opens the
+                  school workspace without sharing credentials.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <DetailStat label="Lifecycle" value={tenant.status} />
+                <DetailStat label="Package" value={tenant.tier} />
+                <DetailStat label="Tenant ID" value={tenant.id} mono />
+                <DetailStat label="Provisioned" value={tenant.createdAt || "—"} mono />
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-full"
+                  onClick={onEdit}
+                >
+                  <Pencil className="h-3.5 w-3.5" /> Edit credentials
+                </Button>
+                <Button
+                  type="button"
+                  className="rounded-full bg-black text-white hover:bg-black/85"
+                  onClick={onImpersonate}
+                >
+                  <KeyRound className="h-3.5 w-3.5" /> Impersonate workspace
+                </Button>
+              </div>
+            </TabsContent>
+          </div>
+        </Tabs>
+
+        <div className="mt-auto flex items-center justify-between gap-3 border-t border-[#E5E5E5] bg-[#F4F4F5] px-6 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-4 py-2 text-[12px] font-semibold text-black/75"
+          >
+            <X className="h-3.5 w-3.5" /> Close
+          </button>
+          <button
+            type="button"
+            onClick={onImpersonate}
+            className="inline-flex items-center gap-1.5 rounded-full bg-black px-5 py-2 text-[12px] font-semibold text-white shadow-sm hover:bg-black/85"
+          >
+            <KeyRound className="h-3.5 w-3.5" /> Impersonate
+          </button>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function DetailStat({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-[#E5E5E5] bg-white px-3.5 py-3">
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+        {label}
+      </div>
+      <div
+        className={cn(
+          "mt-1 break-all text-[13px] font-medium text-black",
+          mono && "font-mono text-[12px]",
+        )}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
 function EditTenantDrawer({
   tenant,
   onClose,
@@ -836,6 +1327,7 @@ function EditTenantDrawer({
   const [tier, setTier] = useState<Tier>("Basic");
   const [status, setStatus] = useState<Status>("Active");
   const [capacity, setCapacity] = useState(0);
+  const [setupUsername, setSetupUsername] = useState("");
   const [setupPassword, setSetupPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -846,10 +1338,14 @@ function EditTenantDrawer({
     setTier(tenant.tier);
     setStatus(tenant.status);
     setCapacity(tenant.capacity);
+    setSetupUsername(tenant.adminEmail ?? "");
     setSetupPassword("");
   }, [tenant]);
 
   if (!tenant) return null;
+  const currentUsername = (tenant.adminEmail ?? "").trim().toLowerCase();
+  const usernameDirty =
+    setupUsername.trim().toLowerCase() !== currentUsername;
   const passwordDirty = setupPassword.trim().length > 0;
   const dirty =
     name !== tenant.name ||
@@ -857,6 +1353,7 @@ function EditTenantDrawer({
     tier !== tenant.tier ||
     status !== tenant.status ||
     capacity !== tenant.capacity ||
+    usernameDirty ||
     passwordDirty;
 
   const submit = async () => {
@@ -874,6 +1371,13 @@ function EditTenantDrawer({
       });
       return;
     }
+    if (usernameDirty) {
+      const email = setupUsername.trim().toLowerCase();
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        toast.error("Setup username must be a valid email");
+        return;
+      }
+    }
     if (passwordDirty && setupPassword.trim().length < 6) {
       toast.error("Setup password must be at least 6 characters");
       return;
@@ -887,13 +1391,19 @@ function EditTenantDrawer({
         tier,
         status,
         capacity,
+        ...(usernameDirty ? { username: setupUsername.trim().toLowerCase() } : {}),
         ...(passwordDirty ? { password: setupPassword.trim() } : {}),
       });
       onSave(updated);
+      setSetupUsername(updated.adminEmail ?? setupUsername.trim().toLowerCase());
       setSetupPassword("");
+      const credBits = [
+        usernameDirty ? "username updated" : null,
+        passwordDirty ? "password reset" : null,
+      ].filter(Boolean);
       toast.success("Tenant meta updated", {
-        description: passwordDirty
-          ? `${updated.name} · admin password reset`
+        description: credBits.length
+          ? `${updated.name} · ${credBits.join(" · ")}`
           : `${updated.name} · ${updated.subdomain}.schoolaccounts.in`,
       });
     } catch (err) {
@@ -988,21 +1498,30 @@ function EditTenantDrawer({
             />
           </Field>
 
-          <Field label="Setup Password">
-            <Input
-              type="password"
-              autoComplete="new-password"
-              value={setupPassword}
-              onChange={(e) => setSetupPassword(e.target.value)}
-              placeholder="Leave blank to keep current password"
-            />
-          </Field>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Setup Username">
+              <Input
+                type="email"
+                autoComplete="username"
+                value={setupUsername}
+                onChange={(e) => setSetupUsername(e.target.value)}
+                placeholder="admin@school.in"
+              />
+            </Field>
+            <Field label="Setup Password">
+              <PasswordInput
+                value={setupPassword}
+                onChange={setSetupPassword}
+                placeholder="Leave blank to keep current"
+              />
+            </Field>
+          </div>
 
           <div className="flex items-center gap-2 rounded-2xl border border-[#E5E5E5] bg-[#F4F4F5] px-3 py-2.5 text-[11.5px] text-black/65">
             <Info className="h-3.5 w-3.5 shrink-0 text-black/45" />
             Updates write to the tenant&apos;s metadata store. The routing key is rebuilt
-            automatically on subdomain change. Filling setup password resets the school
-            admin login.
+            automatically on subdomain change. Setup username is the school admin login
+            email; leave password blank to keep the current one.
           </div>
         </div>
 
@@ -1479,6 +1998,39 @@ function SeverityBadge({ severity }: { severity: AuditEvent["severity"] }) {
     >
       <s.Icon className="h-3.5 w-3.5" />
     </span>
+  );
+}
+
+function PasswordInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  const [visible, setVisible] = useState(false);
+
+  return (
+    <div className="relative">
+      <Input
+        type={visible ? "text" : "password"}
+        autoComplete="new-password"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="pr-10"
+      />
+      <button
+        type="button"
+        onClick={() => setVisible((v) => !v)}
+        aria-label={visible ? "Hide password" : "Show password"}
+        className="absolute right-2 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full text-black/45 transition-colors hover:bg-black/5 hover:text-black"
+      >
+        {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </button>
+    </div>
   );
 }
 

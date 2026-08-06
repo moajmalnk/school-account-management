@@ -1,18 +1,66 @@
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { School, IndianRupee, TrendingUp, Activity, CheckCircle2, Clock } from "lucide-react";
-import { recentRegistrations } from "./data";
 import { OrganicCard } from "@/components/ui/organic-card";
-import type { Tone, CornerSide } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  fetchSuperAdminOverview,
+  type SuperAdminOverview,
+} from "@/lib/api/super-admin";
+import { ApiError, getApiToken } from "@/lib/api/client";
+import { cn, type Tone, type CornerSide } from "@/lib/utils";
 
-const weeklyBars = [
-  { d: "Mon", v: 42 },
-  { d: "Tue", v: 58 },
-  { d: "Wed", v: 74 },
-  { d: "Thu", v: 96 },
-  { d: "Fri", v: 88 },
-  { d: "Sat", v: 51 },
-  { d: "Sun", v: 33 },
-];
-const peakIdx = weeklyBars.reduce((m, b, i, a) => (b.v > a[m].v ? i : m), 0);
+const PLAN_COLORS: Record<string, string> = {
+  Basic: "#000000",
+  Premium: "#0F766E",
+  Enterprise: "#CCFBF1",
+};
+
+const EMPTY_OVERVIEW: SuperAdminOverview = {
+  totalActiveSchools: 0,
+  trialTenants: 0,
+  mrr: 0,
+  arr: 0,
+  systemUptime: 0,
+  weeklyRegistrations: [
+    { d: "Mon", v: 0 },
+    { d: "Tue", v: 0 },
+    { d: "Wed", v: 0 },
+    { d: "Thu", v: 0 },
+    { d: "Fri", v: 0 },
+    { d: "Sat", v: 0 },
+    { d: "Sun", v: 0 },
+  ],
+  planDistribution: [
+    { name: "Basic", pct: 0, count: 0 },
+    { name: "Premium", pct: 0, count: 0 },
+    { name: "Enterprise", pct: 0, count: 0 },
+  ],
+  recentRegistrations: [],
+};
+
+function formatInr(n: number) {
+  return `₹ ${Math.round(n).toLocaleString("en-IN")}`;
+}
+
+function formatRelativeTime(raw: string) {
+  const t = Date.parse(raw.includes("T") ? raw : raw.replace(" ", "T"));
+  if (!Number.isFinite(t)) return raw;
+  const diffMs = Date.now() - t;
+  if (diffMs < 0) return raw;
+  const mins = Math.floor(diffMs / 60_000);
+  if (mins < 60) return `${Math.max(1, mins)}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 48) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function sparkFromWeekly(weekly: { v: number }[]): number[] {
+  const vals = weekly.map((b) => b.v);
+  const max = Math.max(1, ...vals);
+  return vals.map((v) => Math.max(12, Math.round((v / max) * 100)));
+}
 
 function MetricCard({
   label,
@@ -95,56 +143,140 @@ function MetricCard({
   );
 }
 
+function OverviewSkeleton() {
+  return (
+    <div className="space-y-4 sm:space-y-6" aria-busy="true" aria-label="Loading overview">
+      <div className="space-y-2">
+        <Skeleton className="h-8 w-64 bg-black/[0.07]" />
+        <Skeleton className="h-4 w-80 bg-black/[0.05]" />
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-40 rounded-3xl bg-black/[0.06]" />
+        ))}
+      </div>
+      <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">
+        <Skeleton className="h-64 rounded-3xl bg-black/[0.06] lg:col-span-2" />
+        <Skeleton className="h-64 rounded-3xl bg-black/[0.06]" />
+      </div>
+      <Skeleton className="h-56 rounded-3xl bg-black/[0.06]" />
+    </div>
+  );
+}
+
 export function OverviewView() {
+  const [data, setData] = useState<SuperAdminOverview | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        if (!getApiToken()) throw new ApiError("Not authenticated", 401);
+        const overview = await fetchSuperAdminOverview();
+        if (!cancelled) setData(overview);
+      } catch {
+        if (!cancelled) setData(EMPTY_OVERVIEW);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const overview = data ?? EMPTY_OVERVIEW;
+  const weeklyBars = overview.weeklyRegistrations?.length
+    ? overview.weeklyRegistrations
+    : EMPTY_OVERVIEW.weeklyRegistrations;
+  const peakIdx = useMemo(
+    () => weeklyBars.reduce((m, b, i, a) => (b.v > a[m].v ? i : m), 0),
+    [weeklyBars],
+  );
+  const weekTotal = useMemo(
+    () => weeklyBars.reduce((s, b) => s + b.v, 0),
+    [weeklyBars],
+  );
+  const maxBar = Math.max(1, ...weeklyBars.map((b) => b.v));
+  const spark = sparkFromWeekly(weeklyBars);
+  const planRows = overview.planDistribution?.length
+    ? overview.planDistribution
+    : EMPTY_OVERVIEW.planDistribution;
+  const totalTenants = planRows.reduce((s, p) => s + p.count, 0);
+  const trialCount = overview.trialTenants ?? 0;
+
+  if (loading) return <OverviewSkeleton />;
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
         <div>
           <h1 className="text-heading">Platform Control Overview</h1>
           <p className="mt-2 text-[14px] text-black/55">
-            You have <span className="font-semibold text-black">3 trial</span> tenants nearing
-            conversion this week.
+            {trialCount > 0 ? (
+              <>
+                You have{" "}
+                <span className="font-semibold text-black">
+                  {trialCount} trial
+                </span>{" "}
+                tenant{trialCount === 1 ? "" : "s"} on the platform.
+              </>
+            ) : (
+              <>Live metrics from your provisioned school tenants.</>
+            )}
           </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-          <button className="min-h-11 w-full rounded-full border border-[#E5E5E5] bg-white px-4 py-2 text-[12.5px] font-medium text-black/75 transition-colors hover:bg-[#F4F4F5] sm:min-h-0 sm:w-auto">
-            Last 30 days
+          <button
+            type="button"
+            className="min-h-11 w-full rounded-full border border-[#E5E5E5] bg-white px-4 py-2 text-[12.5px] font-medium text-black/75 transition-colors hover:bg-[#F4F4F5] sm:min-h-0 sm:w-auto"
+          >
+            Last 7 days
           </button>
-          <button className="min-h-11 w-full rounded-full bg-black px-4 py-2 text-[12.5px] font-semibold text-white shadow-sm transition-colors hover:bg-black/85 sm:min-h-0 sm:w-auto">
-            Export Report
-          </button>
+          <Link
+            to="/super-admin/tenants"
+            className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-black px-4 py-2 text-[12.5px] font-semibold text-white shadow-sm transition-colors hover:bg-black/85 sm:min-h-0 sm:w-auto"
+          >
+            Manage Tenants
+          </Link>
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           label="Total Active Schools"
-          value="142"
+          value={String(overview.totalActiveSchools)}
           icon={School}
           cornerSide="tr"
-          spark={[30, 42, 38, 55, 60, 72, 84]}
-          sub={<span className="font-medium text-black/65">+12% vs last month</span>}
+          spark={spark}
+          sub={
+            <span className="font-medium text-black/65">
+              {totalTenants} total tenant{totalTenants === 1 ? "" : "s"}
+            </span>
+          }
         />
         <MetricCard
           label="Monthly Recurring Revenue"
-          value="₹ 8,45,000"
+          value={formatInr(overview.mrr)}
           icon={IndianRupee}
           tone="lime"
           cornerSide="bl"
-          spark={[44, 50, 48, 60, 65, 70, 82]}
+          spark={spark}
           sub={<span className="font-medium">MRR · billed in INR</span>}
         />
         <MetricCard
           label="Annual Recurring Revenue"
-          value="₹ 1,01,40,000"
+          value={formatInr(overview.arr)}
           icon={TrendingUp}
           cornerSide="tr"
-          spark={[20, 35, 40, 52, 58, 66, 78]}
+          spark={spark}
           sub={<span className="font-medium text-black/65">Projected ARR</span>}
         />
         <MetricCard
           label="System Processing Load"
-          value="99.98%"
+          value={`${Number(overview.systemUptime || 0).toFixed(2)}%`}
           icon={Activity}
           tone="black"
           cornerSide="bl"
@@ -154,26 +286,29 @@ export function OverviewView() {
       </div>
 
       <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">
-        {/* Activity Tracker */}
         <OrganicCard tone="white" cornerSide="tr" arrow padded className="lg:col-span-2">
           <div className="flex items-start justify-between">
             <div>
               <div className="text-title">Weekly Registrations</div>
               <div className="mt-1 text-[13px] text-black/55">
-                New tenant signups · peak on {weeklyBars[peakIdx].d}
+                New tenant signups
+                {weekTotal > 0 ? ` · peak on ${weeklyBars[peakIdx]?.d}` : ""}
               </div>
             </div>
-            <div className="font-mono text-[12px] text-black/45">+24 this week</div>
+            <div className="font-mono text-[12px] text-black/45">
+              {weekTotal > 0 ? `+${weekTotal} this week` : "0 this week"}
+            </div>
           </div>
           <div className="mt-6 flex h-44 items-end gap-3">
             {weeklyBars.map((b, i) => {
-              const isPeak = i === peakIdx;
+              const isPeak = weekTotal > 0 && i === peakIdx;
+              const heightPct = Math.max(6, Math.round((b.v / maxBar) * 100));
               return (
-                <div key={b.d} className="flex flex-1 flex-col items-center gap-2">
+                <div key={`${b.d}-${i}`} className="flex flex-1 flex-col items-center gap-2">
                   <div className="font-mono text-[10px] text-black/45">{b.v}</div>
                   <div
                     className="relative w-full overflow-hidden rounded-t-xl"
-                    style={{ height: `${b.v}%` }}
+                    style={{ height: `${heightPct}%` }}
                   >
                     <div
                       className="absolute inset-0 rounded-t-xl"
@@ -199,28 +334,32 @@ export function OverviewView() {
           </div>
         </OrganicCard>
 
-        {/* Plan Breakdown */}
         <OrganicCard tone="white" cornerSide="bl" arrow padded>
           <div className="text-title">Plan Distribution</div>
-          <div className="mt-1 text-[13px] text-black/55">Across 142 tenants</div>
+          <div className="mt-1 text-[13px] text-black/55">
+            Across {totalTenants} tenant{totalTenants === 1 ? "" : "s"}
+          </div>
           <div className="mt-5 flex h-3 overflow-hidden rounded-full bg-[#F4F4F5]">
-            <div className="h-full" style={{ width: "30%", backgroundColor: "#000000" }} />
-            <div className="h-full" style={{ width: "55%", backgroundColor: "#0F766E" }} />
-            <div className="h-full" style={{ width: "15%", backgroundColor: "#CCFBF1" }} />
+            {planRows.map((p) => (
+              <div
+                key={p.name}
+                className={cn("h-full", p.count === 0 && "min-w-0")}
+                style={{
+                  width: `${p.pct}%`,
+                  backgroundColor: PLAN_COLORS[p.name] ?? "#94A3B8",
+                }}
+              />
+            ))}
           </div>
           <div className="mt-5 space-y-3">
-            {[
-              { label: "Basic", pct: 30, count: 43, color: "#000000" },
-              { label: "Premium", pct: 55, count: 78, color: "#0F766E" },
-              { label: "Enterprise", pct: 15, count: 21, color: "#CCFBF1" },
-            ].map((p) => (
-              <div key={p.label} className="flex items-center justify-between">
+            {planRows.map((p) => (
+              <div key={p.name} className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span
                     className="h-2.5 w-2.5 rounded-full ring-2 ring-black/5"
-                    style={{ backgroundColor: p.color }}
+                    style={{ backgroundColor: PLAN_COLORS[p.name] ?? "#94A3B8" }}
                   />
-                  <span className="text-[13.5px] font-medium text-black">{p.label}</span>
+                  <span className="text-[13.5px] font-medium text-black">{p.name}</span>
                 </div>
                 <div className="font-mono text-[12px] text-black/55">
                   {p.count} <span className="text-black/40">/ {p.pct}%</span>
@@ -231,47 +370,57 @@ export function OverviewView() {
         </OrganicCard>
       </div>
 
-      {/* Recent Registrations */}
       <OrganicCard tone="white" cornerSide="tr" arrow padded>
         <div className="flex items-center justify-between">
           <div>
             <div className="text-title">Recent Registrations</div>
             <div className="mt-1 text-[13px] text-black/55">
-              Latest 5 tenant signups · provisioning pipeline
+              Latest tenant signups · provisioning pipeline
             </div>
           </div>
-          <button className="rounded-full bg-black/5 px-3 py-1.5 text-[12px] font-medium text-black hover:bg-black hover:text-white">
+          <Link
+            to="/super-admin/tenants"
+            className="rounded-full bg-black/5 px-3 py-1.5 text-[12px] font-medium text-black hover:bg-black hover:text-white"
+          >
             View all →
-          </button>
+          </Link>
         </div>
         <div className="mt-4 divide-y divide-[#F0F0F0]">
-          {recentRegistrations.map((r) => (
-            <div key={r.domain} className="flex items-center justify-between py-3.5">
-              <div className="flex items-center gap-3">
-                <div className="grid h-10 w-10 place-items-center rounded-2xl bg-[#F4F4F5] text-black/65">
-                  <School className="h-4 w-4" />
-                </div>
-                <div>
-                  <div className="text-[13.5px] font-medium text-black">{r.name}</div>
-                  <div className="font-mono text-[11px] text-black/55">{r.domain}</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <span className="hidden items-center gap-1.5 text-[12px] text-black/65 md:flex">
-                  {r.step === "Provisioned" ? (
-                    <CheckCircle2 className="h-3.5 w-3.5 text-black" />
-                  ) : (
-                    <Clock className="h-3.5 w-3.5 text-black/50" />
-                  )}
-                  {r.step}
-                </span>
-                <span className="rounded-full border border-[#E5E5E5] bg-white px-2.5 py-1 font-mono text-[10px] text-black/65">
-                  {r.flag}
-                </span>
-                <span className="font-mono text-[11px] text-black/45">{r.time}</span>
-              </div>
+          {overview.recentRegistrations.length === 0 ? (
+            <div className="py-8 text-center text-[13px] text-black/45">
+              No tenants provisioned yet.
             </div>
-          ))}
+          ) : (
+            overview.recentRegistrations.map((r) => (
+              <div key={`${r.domain}-${r.time}`} className="flex items-center justify-between py-3.5">
+                <div className="flex items-center gap-3">
+                  <div className="grid h-10 w-10 place-items-center rounded-2xl bg-[#F4F4F5] text-black/65">
+                    <School className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div className="text-[13.5px] font-medium text-black">{r.name}</div>
+                    <div className="font-mono text-[11px] text-black/55">{r.domain}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="hidden items-center gap-1.5 text-[12px] text-black/65 md:flex">
+                    {r.step === "Live" || r.step === "Provisioned" ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-black" />
+                    ) : (
+                      <Clock className="h-3.5 w-3.5 text-black/50" />
+                    )}
+                    {r.step}
+                  </span>
+                  <span className="rounded-full border border-[#E5E5E5] bg-white px-2.5 py-1 font-mono text-[10px] text-black/65">
+                    {r.flag}
+                  </span>
+                  <span className="font-mono text-[11px] text-black/45">
+                    {formatRelativeTime(r.time)}
+                  </span>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </OrganicCard>
     </div>

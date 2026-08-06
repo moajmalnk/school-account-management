@@ -176,6 +176,10 @@ import { StudentProfileDetail } from "@/components/school/StudentProfileDetail";
 import { ShareParentLinkDialog } from "@/components/school/ShareParentLinkDialog";
 import { StaffProfileDetail } from "@/components/school/StaffProfileDetail";
 import {
+  TenantDashboardSkeleton,
+  TenantDirectorySkeleton,
+} from "@/components/school/TenantDirectorySkeleton";
+import {
   EnrollmentStatusBadge,
   isRecordActive,
   isRecordDeleted,
@@ -1426,14 +1430,20 @@ function DashboardStatCard({
 
 export function SchoolDashboard() {
   const navigate = useNavigate();
+  const { session } = useAuth();
   const {
     activeStudents: students,
     staff,
     activePayments: payments,
     academicYear,
     notifications,
+    hydrated,
   } = useTenantStore();
-  const { disbursements } = useDisbursements();
+  const tenantScope = session?.tenantId ?? session?.tenantName ?? "tenant";
+  const { disbursements, loaded: disbursementsLoaded } = useDisbursements(
+    tenantScope,
+    hydrated,
+  );
 
   const [period, setPeriod] = useState<PaymentPeriod>("this_month");
   const [customRange, setCustomRange] = useState<CustomDateRange>({ from: "", to: "" });
@@ -1471,6 +1481,10 @@ export function SchoolDashboard() {
     () => notifications.filter((n) => !n.read).length,
     [notifications],
   );
+
+  if (!hydrated || !disbursementsLoaded) {
+    return <TenantDashboardSkeleton />;
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -2347,7 +2361,15 @@ export function AdmitStudentPage() {
 
 
 export function StudentsLedger() {
-  const { activeStudents: students, setStudents, classes, schoolDetails, enrollStudentInActiveYear, academicYear } =
+  const {
+    activeStudents: students,
+    setStudents,
+    classes,
+    schoolDetails,
+    enrollStudentInActiveYear,
+    academicYear,
+    hydrated,
+  } =
     useTenantStore();
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/students" }) as {
@@ -2929,6 +2951,10 @@ export function StudentsLedger() {
       </div>
     ) : undefined;
 
+  if (!hydrated) {
+    return <TenantDirectorySkeleton label="Loading students directory" />;
+  }
+
   if (activeStudent) {
     return (
       <StudentProfileDetail
@@ -3443,11 +3469,11 @@ function ContactAction({
 type StaffStatusFilter = "all" | "active" | "inactive";
 
 function isTeachingStaff(member: Staff): boolean {
-  return member.role.toLowerCase().includes("teacher");
+  return (member.role ?? "").toLowerCase().includes("teacher");
 }
 
 export function StaffRoster() {
-  const { staff, setStaff, departments, roles } = useTenantStore();
+  const { staff, setStaff, departments, roles, hydrated } = useTenantStore();
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/staff" }) as { id?: string; edit?: string };
   const activeStaffViewId = search.id ?? null;
@@ -3513,9 +3539,11 @@ export function StaffRoster() {
   );
 
   const departmentOptions = useMemo(() => {
-    const fromStaff = liveStaff.map((s) => s.dept);
-    const fromConfig = departments.map((d) => d.name);
-    return Array.from(new Set([...fromConfig, ...fromStaff])).sort();
+    const fromStaff = liveStaff.map((s) => s.dept).filter((d): d is string => Boolean(d?.trim()));
+    const fromConfig = departments.map((d) => d.name).filter((d): d is string => Boolean(d?.trim()));
+    return Array.from(new Set([...fromConfig, ...fromStaff])).sort((a, b) =>
+      a.localeCompare(b),
+    );
   }, [departments, liveStaff]);
 
   const filteredStaff = useMemo(() => {
@@ -4053,6 +4081,10 @@ export function StaffRoster() {
     reader.onerror = () => toast.error("Could not read the selected file");
     reader.readAsText(file);
   };
+
+  if (!hydrated) {
+    return <TenantDirectorySkeleton label="Loading staff directory" />;
+  }
 
   if (activeStaff) {
     return (

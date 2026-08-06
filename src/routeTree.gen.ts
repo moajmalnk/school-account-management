@@ -25,7 +25,6 @@ import { Route as TenantDashboardRouteImport } from './routes/tenant/dashboard'
 import { Route as SuperAdminTenantsRouteImport } from './routes/super-admin/tenants'
 import { Route as SuperAdminPlansRouteImport } from './routes/super-admin/plans'
 import { Route as SuperAdminOverviewRouteImport } from './routes/super-admin/overview'
-import { Route as SuperAdminAuditsRouteImport } from './routes/super-admin/audits'
 import { Route as TenantStudentsAdmitRouteImport } from './routes/tenant/students_.admit'
 import { Route as ParentStudentTokenRouteImport } from './routes/parent/student.$token'
 
@@ -109,11 +108,6 @@ const SuperAdminOverviewRoute = SuperAdminOverviewRouteImport.update({
   path: '/overview',
   getParentRoute: () => SuperAdminRoute,
 } as any)
-const SuperAdminAuditsRoute = SuperAdminAuditsRouteImport.update({
-  id: '/audits',
-  path: '/audits',
-  getParentRoute: () => SuperAdminRoute,
-} as any)
 const TenantStudentsAdmitRoute = TenantStudentsAdmitRouteImport.update({
   id: '/students_/admit',
   path: '/students/admit',
@@ -131,7 +125,6 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/super-admin': typeof SuperAdminRouteWithChildren
   '/tenant': typeof TenantRouteWithChildren
-  '/super-admin/audits': typeof SuperAdminAuditsRoute
   '/super-admin/overview': typeof SuperAdminOverviewRoute
   '/super-admin/plans': typeof SuperAdminPlansRoute
   '/super-admin/tenants': typeof SuperAdminTenantsRoute
@@ -150,7 +143,6 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/impersonate': typeof ImpersonateRoute
   '/login': typeof LoginRoute
-  '/super-admin/audits': typeof SuperAdminAuditsRoute
   '/super-admin/overview': typeof SuperAdminOverviewRoute
   '/super-admin/plans': typeof SuperAdminPlansRoute
   '/super-admin/tenants': typeof SuperAdminTenantsRoute
@@ -172,7 +164,6 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/super-admin': typeof SuperAdminRouteWithChildren
   '/tenant': typeof TenantRouteWithChildren
-  '/super-admin/audits': typeof SuperAdminAuditsRoute
   '/super-admin/overview': typeof SuperAdminOverviewRoute
   '/super-admin/plans': typeof SuperAdminPlansRoute
   '/super-admin/tenants': typeof SuperAdminTenantsRoute
@@ -195,7 +186,6 @@ export interface FileRouteTypes {
     | '/login'
     | '/super-admin'
     | '/tenant'
-    | '/super-admin/audits'
     | '/super-admin/overview'
     | '/super-admin/plans'
     | '/super-admin/tenants'
@@ -214,7 +204,6 @@ export interface FileRouteTypes {
     | '/'
     | '/impersonate'
     | '/login'
-    | '/super-admin/audits'
     | '/super-admin/overview'
     | '/super-admin/plans'
     | '/super-admin/tenants'
@@ -235,7 +224,6 @@ export interface FileRouteTypes {
     | '/login'
     | '/super-admin'
     | '/tenant'
-    | '/super-admin/audits'
     | '/super-admin/overview'
     | '/super-admin/plans'
     | '/super-admin/tenants'
@@ -374,13 +362,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SuperAdminOverviewRouteImport
       parentRoute: typeof SuperAdminRoute
     }
-    '/super-admin/audits': {
-      id: '/super-admin/audits'
-      path: '/audits'
-      fullPath: '/super-admin/audits'
-      preLoaderRoute: typeof SuperAdminAuditsRouteImport
-      parentRoute: typeof SuperAdminRoute
-    }
     '/tenant/students_/admit': {
       id: '/tenant/students_/admit'
       path: '/students/admit'
@@ -399,7 +380,6 @@ declare module '@tanstack/react-router' {
 }
 
 interface SuperAdminRouteChildren {
-  SuperAdminAuditsRoute: typeof SuperAdminAuditsRoute
   SuperAdminOverviewRoute: typeof SuperAdminOverviewRoute
   SuperAdminPlansRoute: typeof SuperAdminPlansRoute
   SuperAdminTenantsRoute: typeof SuperAdminTenantsRoute
@@ -407,7 +387,6 @@ interface SuperAdminRouteChildren {
 }
 
 const SuperAdminRouteChildren: SuperAdminRouteChildren = {
-  SuperAdminAuditsRoute: SuperAdminAuditsRoute,
   SuperAdminOverviewRoute: SuperAdminOverviewRoute,
   SuperAdminPlansRoute: SuperAdminPlansRoute,
   SuperAdminTenantsRoute: SuperAdminTenantsRoute,

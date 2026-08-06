@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -9,6 +9,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+
+const META_LABEL =
+  "text-[11px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400";
+const CARD_FRAME =
+  "rounded-xl border border-slate-100 bg-white p-4 shadow-sm sm:p-6 dark:border-white/10 dark:bg-[#171717] dark:text-zinc-100 dark:shadow-black/40";
 
 export function EnrollmentStatusBadge({
   active,
@@ -46,6 +51,31 @@ export function isRecordDeleted(deletedAt: string | undefined) {
   return Boolean(deletedAt);
 }
 
+function StatusTableRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <tr className="flex flex-col gap-1 border-b border-slate-100 py-3 last:border-b-0 last:pb-0 first:pt-0 sm:table-row sm:border-slate-100/90 dark:border-white/10">
+      <th
+        scope="row"
+        className={cn(
+          META_LABEL,
+          "whitespace-nowrap text-left font-semibold sm:w-[38%] sm:max-w-[14rem] sm:py-3 sm:pr-4 sm:align-top",
+        )}
+      >
+        {label}
+      </th>
+      <td className="min-w-0 break-words text-[14px] font-medium text-black dark:text-zinc-100 sm:py-3 sm:align-top">
+        {children}
+      </td>
+    </tr>
+  );
+}
+
 export function ProfileAccountActions({
   name,
   recordId,
@@ -66,46 +96,52 @@ export function ProfileAccountActions({
 
   return (
     <>
-      <section className="rounded-xl border border-slate-100 bg-white p-5 shadow-sm sm:p-6 dark:border-white/10 dark:bg-[#171717] dark:text-zinc-100 dark:shadow-black/40">
-        <div className="flex flex-col items-center gap-3 text-center lg:flex-row lg:items-start lg:justify-between lg:gap-4 lg:text-left">
-          <div className="max-w-xl">
-            <h2 className="text-base font-semibold text-black dark:text-zinc-50">Account Status</h2>
-            <p className="mt-1 text-[12.5px] leading-relaxed text-black/55 dark:text-zinc-400">
-              Deactivate to archive this {entityLabel} without deleting records. Move to Recycle Bin
-              hides the profile from the directory — you can restore it later.
-            </p>
-          </div>
-          <EnrollmentStatusBadge active={active} className="shrink-0" />
-        </div>
+      <section className={CARD_FRAME}>
+        <h2 className="text-base font-semibold text-black dark:text-zinc-50">Account Status</h2>
+        <p className="mt-1 text-[12.5px] text-black/50 dark:text-zinc-400">
+          Deactivate to archive this {entityLabel} without deleting records. Move to Recycle Bin
+          hides the profile from the directory — you can restore it later.
+        </p>
 
-        <div className="mt-5 flex flex-wrap items-center justify-center gap-2 lg:justify-start">
-          {active ? (
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-full dark:border-white/20 dark:bg-transparent dark:text-zinc-100 dark:hover:bg-white/10"
-              onClick={() => setConfirmDeactivate(true)}
-            >
-              Deactivate
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-full border-[#0F766E] bg-[#F0FDFA] text-[#0F172A] hover:bg-[#CCFBF1] dark:border-[#14B8A6]/50 dark:bg-[#0F766E]/25 dark:text-[#5EEAD4] dark:hover:bg-[#0F766E]/40"
-              onClick={() => onToggleActive(true)}
-            >
-              Reactivate
-            </Button>
-          )}
-          <Button
-            type="button"
-            variant="outline"
-            className="rounded-full border-[#FECACA] text-[#EF4444] hover:bg-[#FEF2F2] hover:text-[#EF4444] dark:border-rose-400/45 dark:bg-transparent dark:text-rose-300 dark:hover:bg-rose-950/55 dark:hover:text-rose-200"
-            onClick={() => setConfirmDelete(true)}
-          >
-            Move to Recycle Bin
-          </Button>
+        <div className="mt-4 -mx-1 overflow-x-auto sm:mx-0">
+          <table className="w-full min-w-0 border-collapse text-left">
+            <tbody>
+              <StatusTableRow label="Enrollment Status">
+                <EnrollmentStatusBadge active={active} />
+              </StatusTableRow>
+              <StatusTableRow label="Actions">
+                <div className="flex flex-wrap items-center gap-2">
+                  {active ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="rounded-full dark:border-white/20 dark:bg-transparent dark:text-zinc-100 dark:hover:bg-white/10"
+                      onClick={() => setConfirmDeactivate(true)}
+                    >
+                      Deactivate
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="rounded-full border-[#0F766E] bg-[#F0FDFA] text-[#0F172A] hover:bg-[#CCFBF1] dark:border-[#14B8A6]/50 dark:bg-[#0F766E]/25 dark:text-[#5EEAD4] dark:hover:bg-[#0F766E]/40"
+                      onClick={() => onToggleActive(true)}
+                    >
+                      Reactivate
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-full border-[#FECACA] text-[#EF4444] hover:bg-[#FEF2F2] hover:text-[#EF4444] dark:border-rose-400/45 dark:bg-transparent dark:text-rose-300 dark:hover:bg-rose-950/55 dark:hover:text-rose-200"
+                    onClick={() => setConfirmDelete(true)}
+                  >
+                    Move to Recycle Bin
+                  </Button>
+                </div>
+              </StatusTableRow>
+            </tbody>
+          </table>
         </div>
       </section>
 

@@ -207,6 +207,31 @@ export function buildLedgerFromStudents<T extends {
   return { academicYear: year, byStudentId };
 }
 
+/**
+ * On hydrate: if students exist but the active-year book is empty (stale cache /
+ * year-key mismatch), rebuild the ledger so dashboard/directory don't flash 0.
+ * Does not run on intentional empty books after the user opens a new year mid-session.
+ */
+export function reconcileLedgersWithStudents<T extends {
+  id: string;
+  cls: string;
+  due: number;
+  active?: boolean;
+  deletedAt?: string;
+}>(
+  students: T[],
+  ledgers: StudentYearLedger[],
+  year: string,
+): StudentYearLedger[] {
+  const live = students.filter((s) => !s.deletedAt);
+  const ledger = getYearLedger(ledgers, year);
+  const enrolled = Object.keys(ledger.byStudentId).length;
+  if (live.length > 0 && enrolled === 0) {
+    return [buildLedgerFromStudents(live, year)];
+  }
+  return ensureYearLedger(ledgers, year);
+}
+
 export function applyLedgerToStudent<T extends {
   id: string;
   cls: string;

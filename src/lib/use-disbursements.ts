@@ -4,12 +4,17 @@ import {
   type DisbursementPayload,
 } from "@/lib/api/records";
 
-/** Load this tenant's disbursements (expenses). Empty array when none — never seed mock rows. */
-export function useDisbursements() {
+/**
+ * Load this tenant's disbursements (expenses). Empty array when none — never seed mock rows.
+ * Pass `enabled: false` while the tenant store is still hydrating so the dashboard
+ * stays on its skeleton instead of flashing ₹0.
+ */
+export function useDisbursements(scopeKey?: string, enabled = true) {
   const [disbursements, setDisbursements] = useState<DisbursementPayload[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   const reload = useCallback(async () => {
+    setLoaded(false);
     try {
       const rows = await apiListDisbursements();
       setDisbursements(Array.isArray(rows) ? rows : []);
@@ -21,7 +26,15 @@ export function useDisbursements() {
   }, []);
 
   useEffect(() => {
+    if (!enabled) {
+      setLoaded(false);
+      setDisbursements([]);
+      return;
+    }
+
     let cancelled = false;
+    setLoaded(false);
+    setDisbursements([]);
     void (async () => {
       try {
         const rows = await apiListDisbursements();
@@ -35,7 +48,7 @@ export function useDisbursements() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [scopeKey, enabled]);
 
   return { disbursements, setDisbursements, loaded, reload };
 }

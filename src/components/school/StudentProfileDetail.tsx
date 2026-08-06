@@ -147,10 +147,70 @@ type Receipt = {
 const META_LABEL =
   "text-[11px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400";
 const CARD_FRAME =
-  "rounded-xl border border-slate-100 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#171717] dark:text-zinc-100 dark:shadow-black/40";
+  "rounded-xl border border-slate-100 bg-white p-4 shadow-sm sm:p-6 dark:border-white/10 dark:bg-[#171717] dark:text-zinc-100 dark:shadow-black/40";
 const profileBottomPad = "pb-[calc(5.75rem+env(safe-area-inset-bottom))] md:pb-0";
 const MAX_FILES_PER_DOC = 8;
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
+
+const EMPTY = <span className="font-normal text-black/40 dark:text-zinc-500">—</span>;
+
+type ProfileTableRow = {
+  label: string;
+  value: ReactNode;
+  mono?: boolean;
+};
+
+/** Responsive field/value table — stacks on mobile, two columns from sm up. */
+function ProfileDataTable({
+  title,
+  description,
+  rows,
+  className,
+}: {
+  title: string;
+  description?: string;
+  rows: ProfileTableRow[];
+  className?: string;
+}) {
+  return (
+    <section className={cn(CARD_FRAME, className)}>
+      <h2 className="text-base font-semibold text-black dark:text-zinc-50">{title}</h2>
+      {description ? (
+        <p className="mt-1 text-[12.5px] text-black/50 dark:text-zinc-400">{description}</p>
+      ) : null}
+      <div className="mt-4 -mx-1 overflow-x-auto sm:mx-0">
+        <table className="w-full min-w-0 border-collapse text-left">
+          <tbody>
+            {rows.map((row) => (
+              <tr
+                key={row.label}
+                className="flex flex-col gap-1 border-b border-slate-100 py-3 last:border-b-0 last:pb-0 first:pt-0 sm:table-row sm:border-slate-100/90 dark:border-white/10"
+              >
+                <th
+                  scope="row"
+                  className={cn(
+                    META_LABEL,
+                    "whitespace-nowrap text-left font-semibold sm:w-[38%] sm:max-w-[14rem] sm:py-3 sm:pr-4 sm:align-top",
+                  )}
+                >
+                  {row.label}
+                </th>
+                <td
+                  className={cn(
+                    "min-w-0 break-words text-[14px] font-medium text-black dark:text-zinc-100 sm:py-3 sm:align-top",
+                    row.mono && "font-mono",
+                  )}
+                >
+                  {row.value}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
 
 function formatFileSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -434,25 +494,6 @@ function StudentPhotoAvatar({
         </DialogContent>
       </Dialog>
     </>
-  );
-}
-
-function MetaRow({
-  label,
-  mono,
-  children,
-}: {
-  label: string;
-  mono?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <div>
-      <div className={META_LABEL}>{label}</div>
-      <div className={cn("mt-1.5 text-[14px] font-medium text-black", mono && "font-mono")}>
-        {children}
-      </div>
-    </div>
   );
 }
 
@@ -786,160 +827,131 @@ export function StudentProfileDetail({
 
       <ProfileDetailTabs tabs={STUDENT_PROFILE_TABS} value={activeTab} onValueChange={setActiveTab}>
         <ProfileTabPanel value="profile">
-          <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
-            <section className={CARD_FRAME}>
-              <h2 className="text-base font-semibold text-black">Personal Information</h2>
-              <p className="mt-1 text-[12.5px] text-black/50">
-                Core identity, contact, and personal details for {student.name}.
-              </p>
-              <div className="mt-5 space-y-5">
-                <MetaRow label="Guardian">{student.guardian}</MetaRow>
-
-                <div>
-                  <div className={META_LABEL}>Contact Phone</div>
-                  <div className="mt-1.5 flex flex-wrap items-center justify-between gap-3">
-                    <span className="font-mono text-[14px] font-medium text-black">
-                      {student.phone ? (
-                        formatPhone(student.phone)
-                      ) : (
-                        <span className="font-normal text-black/40">—</span>
-                      )}
-                    </span>
-                    {phoneDigits.length > 0 && (
-                      <div className="flex shrink-0 items-center gap-1.5">
-                        <a
-                          href={`tel:${phoneDigits}`}
-                          className="inline-flex items-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow-sm transition-colors hover:border-[#0F766E]/40 hover:bg-[#CCFBF1] hover:text-[#0F766E]"
-                        >
-                          <Phone className="h-3 w-3" /> Call
-                        </a>
-                        {waHref && (
+          <div className="grid grid-cols-1 gap-4 sm:gap-5">
+            <ProfileDataTable
+              title="Personal Information"
+              description={`Core identity, contact, and personal details for ${student.name}.`}
+              rows={[
+                { label: "Guardian", value: student.guardian || EMPTY },
+                {
+                  label: "Contact Phone",
+                  mono: true,
+                  value: student.phone ? (
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                      <span>{formatPhone(student.phone)}</span>
+                      {phoneDigits.length > 0 && (
+                        <span className="inline-flex flex-wrap items-center gap-1.5">
                           <a
-                            href={waHref}
-                            target="_blank"
-                            rel="noreferrer noopener"
-                            className="inline-flex items-center gap-1 rounded-full bg-[#10B981] px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition-colors hover:bg-[#059669]"
+                            href={`tel:${phoneDigits}`}
+                            className="inline-flex items-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow-sm transition-colors hover:border-[#0F766E]/40 hover:bg-[#CCFBF1] hover:text-[#0F766E] dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-200"
                           >
-                            <MessageCircle className="h-3 w-3" /> WhatsApp
+                            <Phone className="h-3 w-3" /> Call
                           </a>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <MetaRow label="Date of Birth" mono>
-                  {student.dob || <span className="font-normal text-black/40">—</span>}
-                </MetaRow>
-
-                <MetaRow label="Email Address" mono>
-                  {student.email || <span className="font-normal text-black/40">—</span>}
-                </MetaRow>
-
-                <MetaRow label="Residential Mailing Address">
-                  {student.address ? (
-                    <span className="whitespace-pre-line leading-snug text-black/85">
+                          {waHref && (
+                            <a
+                              href={waHref}
+                              target="_blank"
+                              rel="noreferrer noopener"
+                              className="inline-flex items-center gap-1 rounded-full bg-[#10B981] px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition-colors hover:bg-[#059669]"
+                            >
+                              <MessageCircle className="h-3 w-3" /> WhatsApp
+                            </a>
+                          )}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    EMPTY
+                  ),
+                },
+                { label: "Date of Birth", mono: true, value: student.dob || EMPTY },
+                { label: "Email Address", mono: true, value: student.email || EMPTY },
+                {
+                  label: "Residential Mailing Address",
+                  value: student.address ? (
+                    <span className="whitespace-pre-line leading-snug text-black/85 dark:text-zinc-200">
                       {student.address}
                     </span>
                   ) : (
-                    <span className="font-normal text-black/40">—</span>
-                  )}
-                </MetaRow>
+                    EMPTY
+                  ),
+                },
+                { label: "Nationality", value: student.nationality || EMPTY },
+                { label: "Religion", value: student.religion || EMPTY },
+                { label: "Place of Birth", value: student.placeOfBirth || EMPTY },
+                { label: "Blood Group", value: student.bloodGroup || EMPTY },
+              ]}
+            />
 
-                <MetaRow label="Nationality">
-                  {student.nationality || <span className="font-normal text-black/40">—</span>}
-                </MetaRow>
-                <MetaRow label="Religion">
-                  {student.religion || <span className="font-normal text-black/40">—</span>}
-                </MetaRow>
-                <MetaRow label="Place of Birth">
-                  {student.placeOfBirth || <span className="font-normal text-black/40">—</span>}
-                </MetaRow>
-                <MetaRow label="Blood Group">
-                  {student.bloodGroup || <span className="font-normal text-black/40">—</span>}
-                </MetaRow>
-              </div>
-            </section>
-
-            <section className={CARD_FRAME}>
-              <h2 className="text-base font-semibold text-black">Family Details</h2>
-              <p className="mt-1 text-[12.5px] text-black/50">
-                Parent and guardian information on file.
-              </p>
-              <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2">
-                <MetaRow label="Mother Name">
-                  {student.motherName || <span className="font-normal text-black/40">—</span>}
-                </MetaRow>
-                <MetaRow label="Father Occupation">
-                  {student.fatherOccupation || <span className="font-normal text-black/40">—</span>}
-                </MetaRow>
-                <MetaRow label="If Guardian Is">
-                  {student.guardianRelation || <span className="font-normal text-black/40">—</span>}
-                </MetaRow>
-                <MetaRow label="Guardian Occupation">
-                  {student.guardianOccupation || (
-                    <span className="font-normal text-black/40">—</span>
-                  )}
-                </MetaRow>
-              </div>
-            </section>
+            <ProfileDataTable
+              title="Family Details"
+              description="Parent and guardian information on file."
+              rows={[
+                { label: "Mother Name", value: student.motherName || EMPTY },
+                { label: "Father Occupation", value: student.fatherOccupation || EMPTY },
+                { label: "If Guardian Is", value: student.guardianRelation || EMPTY },
+                { label: "Guardian Occupation", value: student.guardianOccupation || EMPTY },
+              ]}
+            />
           </div>
         </ProfileTabPanel>
 
         <ProfileTabPanel value="professional">
-          <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
-            <section className={CARD_FRAME}>
-              <h2 className="text-base font-semibold text-black">Academic Placement</h2>
-              <p className="mt-1 text-[12.5px] text-black/50">
-                Class assignment and school category details.
-              </p>
-              <div className="mt-5 space-y-5">
-                <MetaRow label="Admission Number">
-                  {student.admissionNumber ? (
-                    <span className="font-mono">{student.admissionNumber}</span>
-                  ) : (
-                    <span className="font-normal text-black/40">—</span>
-                  )}
-                </MetaRow>
-                <div>
-                  <div className={META_LABEL}>Class</div>
-                  <div className="mt-1.5">
-                    <span className="inline-flex rounded-full bg-[#CCFBF1] px-3 py-1.5 text-[12px] font-semibold text-black">
+          <div className="grid grid-cols-1 gap-4 sm:gap-5">
+            <ProfileDataTable
+              title="Academic Placement"
+              description="Class assignment and school category details."
+              rows={[
+                {
+                  label: "Admission Number",
+                  mono: true,
+                  value: student.admissionNumber || EMPTY,
+                },
+                {
+                  label: "Class",
+                  value: (
+                    <span className="inline-flex rounded-full bg-[#CCFBF1] px-3 py-1.5 text-[12px] font-semibold text-black dark:bg-[#0F766E]/35 dark:text-[#5EEAD4]">
                       {student.cls}
                     </span>
-                  </div>
-                </div>
-                <MetaRow label="Student Category">
-                  {student.studentCategory || <span className="font-normal text-black/40">—</span>}
-                </MetaRow>
-              </div>
-            </section>
+                  ),
+                },
+                { label: "Student Category", value: student.studentCategory || EMPTY },
+              ]}
+            />
 
-            <section className={CARD_FRAME}>
-              <h2 className="text-base font-semibold text-black">Transport</h2>
-              <p className="mt-1 text-[12.5px] text-black/50">
-                School bus requirement and pickup points.
-              </p>
-              <div className="mt-5 space-y-5">
-                <MetaRow label="School Bus">
-                  {student.needsBus ? "Required" : "Not required"}
-                </MetaRow>
-                {student.needsBus ? (
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <MetaRow label="Bus Point 1">
-                      {student.busPoint1 || <span className="font-normal text-black/40">—</span>}
-                    </MetaRow>
-                    <MetaRow label="Bus Point 2">
-                      {student.busPoint2 || <span className="font-normal text-black/40">—</span>}
-                    </MetaRow>
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 py-6 text-center text-[13px] text-black/50 dark:border-white/15 dark:bg-zinc-900/60 dark:text-zinc-400">
-                    No transport route assigned for this student.
-                  </div>
-                )}
-              </div>
-            </section>
+            <ProfileDataTable
+              title="Transport"
+              description="School bus requirement and pickup points."
+              rows={
+                [
+                  {
+                    label: "School Bus",
+                    value: student.needsBus ? "Required" : "Not required",
+                  },
+                  ...(student.needsBus
+                    ? [
+                        {
+                          label: "Bus Point 1",
+                          value: student.busPoint1 || EMPTY,
+                        },
+                        {
+                          label: "Bus Point 2",
+                          value: student.busPoint2 || EMPTY,
+                        },
+                      ]
+                    : [
+                        {
+                          label: "Route",
+                          value: (
+                            <span className="font-normal text-black/50 dark:text-zinc-400">
+                              No transport route assigned for this student.
+                            </span>
+                          ),
+                        },
+                      ]),
+                ] satisfies ProfileTableRow[]
+              }
+            />
           </div>
         </ProfileTabPanel>
 
