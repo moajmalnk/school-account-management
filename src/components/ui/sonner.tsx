@@ -1,45 +1,9 @@
 import { useEffect, useState } from "react";
 import { Toaster as Sonner } from "sonner";
 
-import {
-  getStoredNavPlacement,
-  NAV_PLACEMENT_CHANGE_EVENT,
-  peekStoredThemeMode,
-  type ThemeSettings,
-} from "@/lib/tenant-store";
+import { peekStoredThemeMode } from "@/lib/tenant-store";
 
 type ToasterProps = React.ComponentProps<typeof Sonner>;
-
-const DESKTOP_MQ = "(min-width: 768px)";
-
-function isDesktopViewport(): boolean {
-  if (typeof window === "undefined") return true;
-  return window.matchMedia(DESKTOP_MQ).matches;
-}
-
-/**
- * Desktop: always bottom-center.
- * Mobile + bottom dock: top-right so toasts clear the tab bar.
- */
-function resolveToastPosition(
-  placement: ThemeSettings["navPlacement"],
-  desktop = isDesktopViewport(),
-): ToasterProps["position"] {
-  if (desktop) return "bottom-center";
-  return placement === "Bottom" ? "top-right" : "bottom-center";
-}
-
-function resolveToastOffset(
-  placement: ThemeSettings["navPlacement"],
-  position: ToasterProps["position"],
-  desktop = isDesktopViewport(),
-): number {
-  // Clear the floating Mac dock / mobile tab bar when toast sits at the bottom.
-  if (position === "bottom-center" && (placement === "Bottom" || desktop)) {
-    return desktop ? 96 : 88;
-  }
-  return 28;
-}
 
 function resolveToastTheme(): NonNullable<ToasterProps["theme"]> {
   if (typeof document !== "undefined" && document.documentElement.classList.contains("dark")) {
@@ -49,49 +13,25 @@ function resolveToastTheme(): NonNullable<ToasterProps["theme"]> {
 }
 
 const Toaster = ({ ...props }: ToasterProps) => {
-  const [placement, setPlacement] = useState<ThemeSettings["navPlacement"]>(() =>
-    getStoredNavPlacement(),
-  );
-  const [desktop, setDesktop] = useState(() => isDesktopViewport());
-  const position = resolveToastPosition(placement, desktop);
-  const offset = resolveToastOffset(placement, position, desktop);
   const [theme, setTheme] = useState<NonNullable<ToasterProps["theme"]>>(() => resolveToastTheme());
 
   useEffect(() => {
-    const syncPlacement = (next?: ThemeSettings["navPlacement"]) => {
-      setPlacement(next ?? getStoredNavPlacement());
-    };
-
     const syncTheme = () => setTheme(resolveToastTheme());
-
-    const onPlacement = (event: Event) => {
-      const detail = (event as CustomEvent<ThemeSettings["navPlacement"]>).detail;
-      syncPlacement(detail);
-    };
 
     const onStorage = (event: StorageEvent) => {
       if (event.key && !event.key.includes("tenant-store")) return;
-      syncPlacement();
       syncTheme();
     };
-
-    const mq = window.matchMedia(DESKTOP_MQ);
-    const onMq = () => setDesktop(mq.matches);
-    onMq();
-    mq.addEventListener("change", onMq);
 
     const root = document.documentElement;
     const observer = new MutationObserver(() => syncTheme());
     observer.observe(root, { attributes: true, attributeFilter: ["class"] });
 
-    window.addEventListener(NAV_PLACEMENT_CHANGE_EVENT, onPlacement);
     window.addEventListener("storage", onStorage);
     syncTheme();
 
     return () => {
       observer.disconnect();
-      mq.removeEventListener("change", onMq);
-      window.removeEventListener(NAV_PLACEMENT_CHANGE_EVENT, onPlacement);
       window.removeEventListener("storage", onStorage);
     };
   }, []);
@@ -102,7 +42,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
       richColors
       closeButton
       expand
-      offset={offset}
+      offset={16}
       gap={12}
       visibleToasts={4}
       duration={4500}
@@ -157,7 +97,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
       }
       {...props}
       theme={theme}
-      position={position}
+      position="top-right"
     />
   );
 };

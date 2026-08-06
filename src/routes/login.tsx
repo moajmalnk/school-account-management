@@ -73,6 +73,7 @@ function LoginPage() {
     setBannerError(false);
     setFieldErrors({});
     setShowPw(false);
+    toast.dismiss();
     toast.message(`${creds.displayName} credentials loaded`, {
       description: "Hit Authenticate to continue · or edit before submitting",
     });
