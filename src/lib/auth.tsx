@@ -10,6 +10,7 @@ import {
 
 import { apiLogin } from "@/lib/api/auth";
 import {
+  ApiError,
   clearApiTokenBackup,
   clearImpersonationApiToken,
   restoreApiTokenBackup,

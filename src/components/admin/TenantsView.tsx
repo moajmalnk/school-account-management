@@ -596,6 +596,7 @@ function TenantFormDrawer({
   const [slug, setSlug] = useState("");
   const [adminName, setAdminName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
+  const [setupPassword, setSetupPassword] = useState("school2026");
   const [contact, setContact] = useState("");
   const [gstin, setGstin] = useState("");
   const [students, setStudents] = useState(500);
@@ -610,6 +611,7 @@ function TenantFormDrawer({
     setSlug("");
     setAdminName("");
     setAdminEmail("");
+    setSetupPassword("school2026");
     setContact("");
     setGstin("");
     setStudents(500);
@@ -628,6 +630,10 @@ function TenantFormDrawer({
       toast.error("Administrator email is required");
       return;
     }
+    if (setupPassword.trim().length < 6) {
+      toast.error("Setup password must be at least 6 characters");
+      return;
+    }
     setBusy(true);
     try {
       const result = await provisionSuperAdminTenant({
@@ -637,7 +643,7 @@ function TenantFormDrawer({
         capacity: students,
         adminName: adminName || "School Admin",
         adminEmail: adminEmail.trim(),
-        password: "school2026",
+        password: setupPassword.trim(),
       });
       onCreate(result.tenant);
       toast.success("Tenant provisioned", {
@@ -705,6 +711,16 @@ function TenantFormDrawer({
               />
             </Field>
           </div>
+
+          <Field label="Setup Password">
+            <Input
+              type="password"
+              autoComplete="new-password"
+              value={setupPassword}
+              onChange={(e) => setSetupPassword(e.target.value)}
+              placeholder="Initial school admin password"
+            />
+          </Field>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Contact String">
@@ -820,6 +836,7 @@ function EditTenantDrawer({
   const [tier, setTier] = useState<Tier>("Basic");
   const [status, setStatus] = useState<Status>("Active");
   const [capacity, setCapacity] = useState(0);
+  const [setupPassword, setSetupPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -829,15 +846,18 @@ function EditTenantDrawer({
     setTier(tenant.tier);
     setStatus(tenant.status);
     setCapacity(tenant.capacity);
+    setSetupPassword("");
   }, [tenant]);
 
   if (!tenant) return null;
+  const passwordDirty = setupPassword.trim().length > 0;
   const dirty =
     name !== tenant.name ||
     subdomain !== tenant.subdomain ||
     tier !== tenant.tier ||
     status !== tenant.status ||
-    capacity !== tenant.capacity;
+    capacity !== tenant.capacity ||
+    passwordDirty;
 
   const submit = async () => {
     if (!name.trim()) {
@@ -854,6 +874,10 @@ function EditTenantDrawer({
       });
       return;
     }
+    if (passwordDirty && setupPassword.trim().length < 6) {
+      toast.error("Setup password must be at least 6 characters");
+      return;
+    }
     setBusy(true);
     try {
       const updated = await updateSuperAdminTenant({
@@ -863,10 +887,14 @@ function EditTenantDrawer({
         tier,
         status,
         capacity,
+        ...(passwordDirty ? { password: setupPassword.trim() } : {}),
       });
       onSave(updated);
+      setSetupPassword("");
       toast.success("Tenant meta updated", {
-        description: `${updated.name} · ${updated.subdomain}.schoolaccounts.in`,
+        description: passwordDirty
+          ? `${updated.name} · admin password reset`
+          : `${updated.name} · ${updated.subdomain}.schoolaccounts.in`,
       });
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Update failed";
@@ -960,10 +988,21 @@ function EditTenantDrawer({
             />
           </Field>
 
+          <Field label="Setup Password">
+            <Input
+              type="password"
+              autoComplete="new-password"
+              value={setupPassword}
+              onChange={(e) => setSetupPassword(e.target.value)}
+              placeholder="Leave blank to keep current password"
+            />
+          </Field>
+
           <div className="flex items-center gap-2 rounded-2xl border border-[#E5E5E5] bg-[#F4F4F5] px-3 py-2.5 text-[11.5px] text-black/65">
             <Info className="h-3.5 w-3.5 shrink-0 text-black/45" />
             Updates write to the tenant&apos;s metadata store. The routing key is rebuilt
-            automatically on subdomain change.
+            automatically on subdomain change. Filling setup password resets the school
+            admin login.
           </div>
         </div>
 

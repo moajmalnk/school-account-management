@@ -138,6 +138,8 @@ export type UpdateTenantInput = {
   tier: Tier;
   status: Status;
   capacity: number;
+  /** When set, resets the primary school admin login password. */
+  password?: string;
 };
 
 export async function updateSuperAdminTenant(
