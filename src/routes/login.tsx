@@ -74,9 +74,7 @@ function LoginPage() {
     setFieldErrors({});
     setShowPw(false);
     toast.dismiss();
-    toast.message(`${creds.displayName} credentials loaded`, {
-      description: "Hit Authenticate to continue · or edit before submitting",
-    });
+    toast.success(`${creds.displayName} credentials loaded`);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
