@@ -1,8 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Outlet, Link, createRootRouteWithContext, useRouter } from "@tanstack/react-router";
 
+import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
+import { PwaUpdateToast } from "@/components/pwa/PwaUpdateToast";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/lib/auth";
+import { PwaProvider } from "@/lib/pwa";
 
 function NotFoundComponent() {
   return (
@@ -71,8 +74,12 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <Outlet />
-        <Toaster />
+        <PwaProvider>
+          <Outlet />
+          <PwaInstallBanner />
+          <PwaUpdateToast />
+          <Toaster />
+        </PwaProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

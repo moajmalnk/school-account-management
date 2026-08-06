@@ -22,6 +22,8 @@ import {
   sessionHasAnyFinance,
   sessionHasPermission,
 } from "@/lib/auth";
+import { apiMe } from "@/lib/api/auth";
+import { normalizePlanFlags } from "@/lib/permissions";
 import { TenantStoreProvider, schoolInitials, useTenantStore } from "@/lib/tenant-store";
 import { cn, glassInsetClass } from "@/lib/utils";
 import { KeyRound, X } from "lucide-react";
@@ -71,11 +73,33 @@ function TenantLayout() {
 }
 
 function TenantShell() {
+  const { session, updateSession } = useAuth();
   const { themeSettings } = useTenantStore();
   const placement = themeSettings.navPlacement ?? "Left";
   const isVertical = placement === "Left" || placement === "Right";
   const isBottom = placement === "Bottom";
   const isTop = placement === "Top";
+
+  // Refresh subscription plan flags so Super Admin Plan toggles apply without re-login.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const me = await apiMe();
+        if (cancelled || !me.planFlags) return;
+        updateSession({
+          tier: me.tier,
+          planName: me.planName,
+          planFlags: normalizePlanFlags(me.planFlags),
+        });
+      } catch {
+        // Keep cached session flags if /me is unavailable.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [updateSession]);
 
   return (
     <div className="tenant-canvas min-h-dvh text-slate-900 dark:text-zinc-100">
@@ -162,11 +186,6 @@ function ImpersonationBanner() {
                 as {session.displayName}
                 {session.email ? ` · ${session.email}` : ""}
               </span>
-            </p>
-            <p className="text-[11px] text-white/70">
-              {fromSuper
-                ? "Super Admin session paused — Exit returns to the control plane."
-                : "This tab only — Exit restores your admin login."}
             </p>
           </div>
         </div>

@@ -1,5 +1,5 @@
 import { apiRequest, setApiToken } from "@/lib/api/client";
-import type { PermissionSet } from "@/lib/permissions";
+import type { PermissionSet, PlanFlags } from "@/lib/permissions";
 
 export type ApiLoginSession = {
   role: string;
@@ -11,6 +11,9 @@ export type ApiLoginSession = {
   userId?: string;
   staffId?: string | null;
   permissions: PermissionSet;
+  tier?: string;
+  planName?: string;
+  planFlags?: PlanFlags;
 };
 
 export type ApiLoginResponse = {

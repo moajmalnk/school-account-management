@@ -36,14 +36,14 @@ export function MobileTabBar({ items, pathname, className }: MobileTabBarProps) 
               key={item.to}
               to={item.to}
               className={cn(
-                "relative flex min-h-[54px] min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 text-[11px] font-semibold transition-colors duration-200",
+                "relative flex min-h-[58px] min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 text-[11px] font-semibold transition-colors duration-200 sm:min-h-[62px]",
                 active
                   ? "font-bold text-black dark:text-[#5EEAD4]"
                   : "font-medium text-slate-400 dark:text-zinc-400",
               )}
             >
-              <Icon className="h-5 w-5 shrink-0" strokeWidth={active ? 2.5 : 2} />
-              <span className="max-w-full truncate">{item.label}</span>
+              <Icon className="h-6 w-6 shrink-0 sm:h-7 sm:w-7" strokeWidth={active ? 2.5 : 2} />
+              <span className="max-w-full truncate text-[11px] sm:text-[12px]">{item.label}</span>
             </Link>
           );
         })}

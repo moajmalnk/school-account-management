@@ -24,9 +24,13 @@ import {
   canAccessSettingsTab as canAccessSettingsTabPerm,
   canAccessSettingsModule as canAccessSettingsModulePerm,
   canAccessFinanceView as canAccessFinanceViewPerm,
+  normalizePlanFlags,
+  planAllowsModule,
+  planAllowsSettingsTab,
   type FinanceViewKey,
   type PermissionKey,
   type PermissionSet,
+  type PlanFlags,
   type SettingsTabId,
 } from "@/lib/permissions";
 import { findActiveTenantUserByCredentials } from "@/lib/tenant-store";
@@ -44,6 +48,11 @@ export type Session = {
   userId?: string;
   staffId?: string;
   permissions: PermissionSet;
+  /** Subscription tier name (Basic / Premium / Enterprise). */
+  tier?: string;
+  planName?: string;
+  /** Live feature matrix from the tenant's subscription plan. */
+  planFlags?: PlanFlags;
   /** True when an admin is previewing this workspace via impersonation (per-tab). */
   impersonated?: boolean;
   /** Who started impersonation — controls Exit destination. */
@@ -62,7 +71,16 @@ type AuthState = {
   logout: () => void;
   updateSession: (
     patch: Partial<
-      Pick<Session, "displayName" | "tenantName" | "permissions" | "staffId">
+      Pick<
+        Session,
+        | "displayName"
+        | "tenantName"
+        | "permissions"
+        | "staffId"
+        | "tier"
+        | "planName"
+        | "planFlags"
+      >
     >,
   ) => void;
 };
@@ -142,6 +160,9 @@ function parseSessionRaw(raw: string, impersonated: boolean): Session | null {
     userId: parsed.userId,
     staffId: parsed.staffId,
     permissions,
+    tier: typeof parsed.tier === "string" ? parsed.tier : undefined,
+    planName: typeof parsed.planName === "string" ? parsed.planName : undefined,
+    planFlags: parsed.planFlags ? normalizePlanFlags(parsed.planFlags) : undefined,
     ...(impersonated || parsed.impersonated
       ? { impersonated: true as const }
       : {}),
@@ -246,12 +267,19 @@ export function sessionHasPermission(
   key: PermissionKey,
 ): boolean {
   if (!session) return false;
-  if (session.role === "school_admin" || session.role === "super_admin") return true;
+  if (session.role === "school_admin" || session.role === "super_admin") {
+    if (key === "students" && !planAllowsModule(session.planFlags, "students")) return false;
+    if (key === "staff" && !planAllowsModule(session.planFlags, "staff")) return false;
+    return true;
+  }
+  if (key === "students" && !planAllowsModule(session.planFlags, "students")) return false;
+  if (key === "staff" && !planAllowsModule(session.planFlags, "staff")) return false;
   return hasPermissionKey(session.permissions, key);
 }
 
 export function sessionHasAnyFinance(session: Session | null | undefined): boolean {
   if (!session) return false;
+  if (!planAllowsModule(session.planFlags, "finance")) return false;
   if (session.role === "school_admin" || session.role === "super_admin") return true;
   return hasAnyFinancePerm(session.permissions);
 }
@@ -261,8 +289,9 @@ export function sessionCanAccessSettingsTab(
   tab: SettingsTabId,
 ): boolean {
   if (!session) return false;
+  if (!planAllowsSettingsTab(session.planFlags, tab)) return false;
   if (session.role === "school_admin" || session.role === "super_admin") return true;
-  return canAccessSettingsTabPerm(session.permissions, tab);
+  return canAccessSettingsTabPerm(session.permissions, tab, session.planFlags);
 }
 
 export function sessionCanAccessSettings(
@@ -278,6 +307,13 @@ export function sessionCanAccessFinanceView(
   view: FinanceViewKey,
 ): boolean {
   if (!session) return false;
+  if (!planAllowsModule(session.planFlags, "finance")) return false;
+  if (view === "analytics" && session.planFlags && !session.planFlags.analytics) {
+    return false;
+  }
+  if (view === "salary" && session.planFlags && !session.planFlags.payroll) {
+    return false;
+  }
   if (session.role === "school_admin" || session.role === "super_admin") return true;
   return canAccessFinanceViewPerm(session.permissions, view);
 }
@@ -373,6 +409,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           userId: data.session.userId,
           staffId: data.session.staffId || undefined,
           permissions,
+          tier: data.session.tier,
+          planName: data.session.planName,
+          planFlags: data.session.planFlags
+            ? normalizePlanFlags(data.session.planFlags)
+            : undefined,
         };
         writeSession(next);
         setSession(next);

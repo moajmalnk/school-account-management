@@ -12,6 +12,7 @@ export const SETTINGS_TABS = [
   "vehicles",
   "transport",
   "fees",
+  "billing",
   "system",
 ] as const;
 

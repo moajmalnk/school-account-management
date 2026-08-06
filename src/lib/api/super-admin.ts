@@ -98,6 +98,9 @@ export type ImpersonateResult = {
     userId: string;
     staffId?: string | null;
     permissions: string[];
+    tier?: string;
+    planName?: string;
+    planFlags?: SuperAdminPlanFlags;
     impersonation?: boolean;
     ticket?: string;
   };
@@ -172,17 +175,75 @@ export async function deleteSuperAdminTenant(
   });
 }
 
-export async function impersonateSuperAdminTenant(
+export type PlatformInvoice = {
+  id: string;
+  invoiceNumber: string;
+  issueDate: string;
+  dueDate: string;
+  periodLabel: string;
+  billingCycle: string;
+  currency: string;
+  studentsBilled: number;
+  ratePerStudent: number;
+  subtotal: number;
+  discountPercent: number;
+  discountAmount: number;
+  taxPercent: number;
+  taxAmount: number;
+  total: number;
+  status: string;
+  paymentMethod?: string | null;
+  paidAt?: string | null;
+  paymentRef?: string | null;
+  receiptNumber?: string | null;
+  notes?: string | null;
+  tenantId?: string | null;
+  tenantName?: string | null;
+};
+
+export async function fetchSuperAdminTenantInvoices(
   tenantId: string,
-  ticket?: string,
-): Promise<ImpersonateResult> {
-  return apiRequest<ImpersonateResult>(
-    "/api/super-admin/tenants/impersonate.php",
-    {
-      method: "POST",
-      body: { tenantId, ticket },
-    },
+): Promise<PlatformInvoice[]> {
+  return apiRequest<PlatformInvoice[]>(
+    `/api/super-admin/tenants/invoices.php?tenantId=${encodeURIComponent(tenantId)}`,
   );
+}
+
+export async function issueSuperAdminTenantInvoice(input: {
+  tenantId: string;
+  billingCycle: string;
+  currency: string;
+  studentsBilled: number;
+  ratePerStudent: number;
+  discountPercent: number;
+  taxPercent: number;
+  issueDate?: string;
+  dueDate?: string;
+  periodLabel?: string;
+  paymentMethod?: string;
+  markPaid?: boolean;
+  notes?: string;
+}): Promise<PlatformInvoice> {
+  return apiRequest<PlatformInvoice>("/api/super-admin/tenants/invoices.php", {
+    method: "POST",
+    body: { action: "issue", ...input },
+  });
+}
+
+export async function markSuperAdminTenantInvoicePaid(input: {
+  tenantId: string;
+  invoiceId: string;
+  paymentMethod?: string;
+  paymentRef?: string;
+}): Promise<PlatformInvoice> {
+  return apiRequest<PlatformInvoice>("/api/super-admin/tenants/invoices.php", {
+    method: "POST",
+    body: { action: "markPaid", ...input },
+  });
+}
+
+export async function fetchTenantPlatformInvoices(): Promise<PlatformInvoice[]> {
+  return apiRequest<PlatformInvoice[]>("/api/tenant/invoices.php");
 }
 
 export async function fetchSuperAdminOverview(): Promise<SuperAdminOverview> {

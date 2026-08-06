@@ -10,6 +10,16 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { OrganicCard } from "@/components/ui/organic-card";
 import type { TenantNotification } from "@/lib/tenant-store";
 import { useTenantStore } from "@/lib/tenant-store";
@@ -32,6 +42,7 @@ export function NotificationsPage() {
   const navigate = useNavigate();
   const { notifications, setNotifications } = useTenantStore();
   const [filter, setFilter] = useState<FilterKey>("all");
+  const [confirmMarkAllOpen, setConfirmMarkAllOpen] = useState(false);
 
   const unreadCount = useMemo(
     () => notifications.filter((n) => !n.read).length,
@@ -54,6 +65,7 @@ export function NotificationsPage() {
   const markAllRead = () => {
     if (unreadCount === 0) return;
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setConfirmMarkAllOpen(false);
     toast.success("All notifications marked as read");
   };
 
@@ -74,16 +86,7 @@ export function NotificationsPage() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div>
-        <h1 className="text-[28px] font-semibold leading-none tracking-tight text-black sm:text-title">
-          Notifications
-        </h1>
-        <p className="mt-1 text-[12px] text-black/55">
-          {unreadCount > 0
-            ? `${unreadCount} unread · fee reminders, admissions, and staff updates`
-            : "You're all caught up"}
-        </p>
-      </div>
+
 
       <div className="flex items-center justify-between gap-3">
         <div className="inline-flex shrink-0 rounded-full border border-[#E5E5E5] bg-white p-1">
@@ -112,7 +115,7 @@ export function NotificationsPage() {
 
         <button
           type="button"
-          onClick={markAllRead}
+          onClick={() => setConfirmMarkAllOpen(true)}
           disabled={unreadCount === 0}
           className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-4 text-[12.5px] font-semibold text-black transition-colors hover:border-black/20 hover:bg-[#F4F4F5] disabled:cursor-not-allowed disabled:opacity-45"
         >
@@ -120,6 +123,29 @@ export function NotificationsPage() {
           Mark all read
         </button>
       </div>
+
+      <AlertDialog open={confirmMarkAllOpen} onOpenChange={setConfirmMarkAllOpen}>
+        <AlertDialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-[22px] font-semibold text-black">
+              Mark all as read?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60 dark:text-zinc-400">
+              This will mark all {unreadCount} unread notification
+              {unreadCount === 1 ? "" : "s"} as read.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-5 flex-row justify-end gap-2 sm:space-x-0">
+            <AlertDialogCancel className="mt-0 rounded-full">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={markAllRead}
+              className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+            >
+              Mark all read
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <OrganicCard tone="white" cornerSide="tr" padded className="overflow-hidden">
         {visible.length === 0 ? (

@@ -126,7 +126,7 @@ const FloatingDockDesktop = ({
       onMouseLeave={() => mouseX.set(Infinity)}
       className={cn(
         glassPanelClass,
-        "mx-auto h-16 items-end gap-3 rounded-xl border border-white/70 bg-white/55 px-3 pb-2.5 shadow-[0_12px_40px_-16px_rgba(15,23,42,0.35)] backdrop-blur-2xl",
+        "mx-auto h-[4.75rem] items-end gap-3 rounded-xl border border-white/70 bg-white/55 px-3 pb-2.5 shadow-[0_12px_40px_-16px_rgba(15,23,42,0.35)] backdrop-blur-2xl sm:h-20",
         "dark:border-white/12 dark:bg-[#141416]/92 dark:shadow-[0_20px_50px_-18px_rgba(0,0,0,0.75),0_0_0_1px_rgba(45,212,191,0.08),inset_0_1px_0_rgba(255,255,255,0.1)]",
         alwaysVisible ? "flex" : "hidden md:flex",
         className,
@@ -161,11 +161,11 @@ function IconContainer({
     return val - bounds.x - bounds.width / 2;
   });
 
-  const widthTransform = useTransform(distance, [-150, 0, 150], [44, 72, 44]);
-  const heightTransform = useTransform(distance, [-150, 0, 150], [44, 72, 44]);
+  const widthTransform = useTransform(distance, [-150, 0, 150], [52, 80, 52]);
+  const heightTransform = useTransform(distance, [-150, 0, 150], [52, 80, 52]);
 
-  const widthTransformIcon = useTransform(distance, [-150, 0, 150], [20, 34, 20]);
-  const heightTransformIcon = useTransform(distance, [-150, 0, 150], [20, 34, 20]);
+  const widthTransformIcon = useTransform(distance, [-150, 0, 150], [24, 38, 24]);
+  const heightTransformIcon = useTransform(distance, [-150, 0, 150], [24, 38, 24]);
 
   const width = useSpring(widthTransform, {
     mass: 0.1,

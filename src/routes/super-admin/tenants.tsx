@@ -11,6 +11,14 @@ function TenantsPage() {
   return (
     <TenantsView
       onImpersonate={(tenant) => {
+        if (tenant.status === "Suspended") {
+          toast.error("Cannot open this school", {
+            description:
+              `${tenant.name} is suspended. Set Lifecycle Status to Active or Trial in Edit Tenant Meta, then try Impersonate again.`,
+            duration: 7000,
+          });
+          return;
+        }
         const opened = window.open(
           `/impersonate?tenant=${encodeURIComponent(tenant.id)}`,
           "_blank",

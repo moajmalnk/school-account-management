@@ -50,6 +50,12 @@ import {
   type StaffDocumentAttachment,
   type Student,
 } from "@/lib/tenant-store";
+import {
+  buildStudentFeeStatement,
+  type StudentLedgerRow as LedgerRow,
+  type StudentLedgerStatus as LedgerStatus,
+  type StudentReceipt as Receipt,
+} from "@/lib/student-fees";
 import { ShareParentLinkDialog } from "@/components/school/ShareParentLinkDialog";
 import { downloadReceiptPdf } from "@/lib/finance-export";
 import { sendWhatsAppNotify, toNotifyWhatsAppNumber } from "@/lib/whatsapp-notify";
@@ -67,8 +73,6 @@ import {
   type ProfileDetailTabId,
 } from "@/components/school/ProfileDetailTabs";
 import { cn } from "@/lib/utils";
-
-type LedgerStatus = "Paid" | "Partially Paid" | "Overdue";
 
 type StudentDraft = {
   name: string;
@@ -126,23 +130,6 @@ function emptyToUndefined(value: string): string | undefined {
   const trimmed = value.trim();
   return trimmed ? trimmed : undefined;
 }
-
-type LedgerRow = {
-  date: string;
-  desc: string;
-  due: string;
-  charge: number;
-  paid: number;
-  balance: number;
-  status: LedgerStatus;
-};
-
-type Receipt = {
-  id: string;
-  date: string;
-  amount: number;
-  mode: string;
-};
 
 const META_LABEL =
   "text-[11px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400";
@@ -273,100 +260,6 @@ function formatPhone(raw?: string) {
     return `+${digits.slice(0, 2)} ${digits.slice(2, 7)} ${digits.slice(7)}`;
   }
   return raw?.trim() || "";
-}
-
-function deriveFees(due: number) {
-  const factor = due === 0 ? 0 : due / 5500;
-  const round = (n: number) => Math.round(n);
-  return {
-    factor,
-    totalDue: due === 0 ? 12000 : round(12000 * factor),
-    totalPaid: due === 0 ? 12000 : round(6500 * factor),
-    balance: due,
-    overdue: due > 0,
-  };
-}
-
-function deriveLedger(due: number): LedgerRow[] {
-  const factor = due === 0 ? 1 : due / 5500;
-  const round = (n: number) => Math.round(n);
-
-  if (due === 0) {
-    return [
-      {
-        date: "1/12/25",
-        desc: "Tuition Fee",
-        due: "05/08/25",
-        charge: 4000,
-        paid: 4000,
-        balance: 0,
-        status: "Paid",
-      },
-      {
-        date: "12/05/25",
-        desc: "Annual Fee",
-        due: "04/05/26",
-        charge: 800,
-        paid: 800,
-        balance: 0,
-        status: "Paid",
-      },
-      {
-        date: "19/06/25",
-        desc: "Vehicle Fee",
-        due: "12/12/24",
-        charge: 800,
-        paid: 800,
-        balance: 0,
-        status: "Paid",
-      },
-    ];
-  }
-
-  return [
-    {
-      date: "1/12/25",
-      desc: "Tuition Fee",
-      due: "05/08/25",
-      charge: round(4000 * factor),
-      paid: round(2500 * factor),
-      balance: round(1500 * factor),
-      status: "Partially Paid",
-    },
-    {
-      date: "12/05/25",
-      desc: "Annual Fee",
-      due: "04/05/26",
-      charge: round(800 * factor),
-      paid: round(800 * factor),
-      balance: 0,
-      status: "Paid",
-    },
-    {
-      date: "19/06/25",
-      desc: "Vehicle Fee",
-      due: "12/12/24",
-      charge: round(800 * factor),
-      paid: 0,
-      balance: round(800 * factor),
-      status: "Overdue",
-    },
-  ];
-}
-
-function deriveReceipts(due: number): Receipt[] {
-  const factor = due === 0 ? 1 : due / 5500;
-  const round = (n: number) => Math.round(n);
-  return [
-    { id: "REC-2026-104", date: "12/01/2026", amount: round(2500 * factor), mode: "UPI - GPay" },
-    { id: "REC-2025-098", date: "08/11/2025", amount: round(800 * factor), mode: "Bank - NEFT" },
-    {
-      id: "REC-2025-072",
-      date: "22/09/2025",
-      amount: round(3200 * factor),
-      mode: "Cash - Counter",
-    },
-  ];
 }
 
 function initials(name: string) {
@@ -507,7 +400,8 @@ export function StudentProfileDetail({
   initialEdit?: boolean;
 }) {
   const navigate = useNavigate();
-  const { setStudents, academicYear, schoolDetails, classes: classConfigs } = useTenantStore();
+  const { setStudents, academicYear, schoolDetails, classes: classConfigs, activePayments, activeFeeTerms } =
+    useTenantStore();
   const { session } = useAuth();
   const schoolName = schoolDetails.name || session?.tenantName || "Silver Hills Global";
   const [editOpen, setEditOpen] = useState(initialEdit);
@@ -539,9 +433,20 @@ export function StudentProfileDetail({
     }
   }, [initialEdit, navigate, student.id]);
 
-  const fees = useMemo(() => deriveFees(student.due), [student.due]);
-  const ledger = useMemo(() => deriveLedger(student.due), [student.due]);
-  const receipts = useMemo(() => deriveReceipts(student.due), [student.due]);
+  const feeStatement = useMemo(
+    () =>
+      buildStudentFeeStatement({
+        student,
+        payments: activePayments,
+        classes: classConfigs,
+        feeTerms: activeFeeTerms,
+        academicYear,
+      }),
+    [student, activePayments, classConfigs, activeFeeTerms, academicYear],
+  );
+  const fees = feeStatement;
+  const ledger = feeStatement.ledger;
+  const receipts = feeStatement.receipts;
   const documents = useMemo(() => ensureStudentDocuments(student), [student]);
   const docsNormalizedForId = useRef<string | null>(null);
 
@@ -1596,6 +1501,15 @@ function FeesTable({
           </span>
         </div>
 
+        {ledger.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-[#E5E5E5] bg-[#FAFAFA] px-4 py-10 text-center">
+            <p className="text-[13px] font-medium text-black/70">No fee lines for this year</p>
+            <p className="mt-1 text-[12px] text-black/45">
+              Charges appear from class tier fees and student receipts posted in {academicYear}.
+            </p>
+          </div>
+        ) : (
+          <>
         <div className="space-y-2.5 md:hidden">
           {ledger.map((r, i) => (
             <button
@@ -1727,6 +1641,8 @@ function FeesTable({
             </tbody>
           </table>
         </div>
+          </>
+        )}
       </div>
 
       <Dialog open={Boolean(selectedRow)} onOpenChange={(open) => !open && setSelectedRow(null)}>
@@ -1819,7 +1735,7 @@ function ReceiptsList({
         {
           id: r.id,
           name: student.name,
-          cat: `Fee Payment · ${student.cls}`,
+          cat: r.cat ? `${r.cat}${r.period ? ` · ${r.period}` : ""}` : `Fee Payment · ${student.cls}`,
           mode: r.mode,
           amount: r.amount,
           time: r.date,
@@ -1897,14 +1813,26 @@ function ReceiptsList({
         <div>
           <h2 className="text-base font-semibold text-black">Receipts</h2>
           <div className="mt-1 text-[12px] text-black/55">
-            {receipts.length} historical digital receipts
+            {receipts.length === 0
+              ? `No receipts posted for ${academicYear}`
+              : `${receipts.length} digital receipt${receipts.length === 1 ? "" : "s"} · ${academicYear}`}
           </div>
         </div>
-        <span className="inline-flex items-center gap-1 rounded-full bg-[#0F766E] px-2.5 py-1 text-[10.5px] font-semibold text-white">
-          <span className="h-1.5 w-1.5 rounded-full bg-black" />
-          Reconciled
-        </span>
+        {receipts.length > 0 && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-[#0F766E] px-2.5 py-1 text-[10.5px] font-semibold text-white">
+            <span className="h-1.5 w-1.5 rounded-full bg-black" />
+            On file
+          </span>
+        )}
       </div>
+      {receipts.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-[#E5E5E5] bg-[#FAFAFA] px-4 py-10 text-center">
+          <p className="text-[13px] font-medium text-black/70">No receipts yet</p>
+          <p className="mt-1 text-[12px] text-black/45">
+            Post a payment under Finance → Receive Payment to attach receipts to this student.
+          </p>
+        </div>
+      ) : (
       <ul className="divide-y divide-[#F0F0F0]">
         {receipts.map((r) => {
           const isSending = sendingId === r.id;
@@ -1919,8 +1847,14 @@ function ReceiptsList({
                   <span className="rounded-full bg-[#F4F4F5] px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-black/65">
                     {r.mode}
                   </span>
+                  {r.cat ? (
+                    <span className="truncate text-[11px] text-black/45">{r.cat}</span>
+                  ) : null}
                 </div>
-                <div className="mt-1 font-mono text-[11px] text-black/55">{r.date}</div>
+                <div className="mt-1 font-mono text-[11px] text-black/55">
+                  {r.date}
+                  {r.period ? ` · ${r.period}` : ""}
+                </div>
               </div>
               <div className="shrink-0 font-mono text-base font-semibold text-black">
                 {inr(r.amount)}
@@ -1955,6 +1889,7 @@ function ReceiptsList({
           );
         })}
       </ul>
+      )}
     </div>
   );
 }

@@ -35,6 +35,7 @@ import {
 } from "@/lib/api/super-admin";
 import { ApiError, getApiToken } from "@/lib/api/client";
 import { TenantsViewSkeleton } from "@/components/admin/TenantsViewSkeleton";
+import { PlatformInvoicesPanel } from "@/components/admin/PlatformInvoicesPanel";
 import { OrganicCard } from "@/components/ui/organic-card";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
@@ -64,6 +65,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { Tone, CornerSide } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
@@ -78,11 +85,21 @@ const STATUS_STYLE: Record<Status, { bg: string; fg: string; dot: string }> = {
   Overdue: { bg: "#000000", fg: "#EF4444", dot: "#EF4444" },
   Suspended: { bg: "#FEE2E2", fg: "#EF4444", dot: "#EF4444" },
 };
-const STATUS_TONE: Record<Status, Tone> = {
-  Active: "white",
-  Trial: "white",
-  Overdue: "lime",
-  Suspended: "black",
+/** Card surface follows subscription tier — same tones as Plans matrix. */
+const TIER_TONE: Record<Tier, Tone> = {
+  Basic: "white",
+  Premium: "lime",
+  Enterprise: "black",
+};
+const STATUS_TOOLTIP: Record<Status, string> = {
+  Active:
+    "School is live and in good standing. Staff can sign in and Impersonate is allowed.",
+  Trial:
+    "Limited evaluation period. Workspace works normally until the trial ends or you convert to Active.",
+  Overdue:
+    "Payment or renewal is past due. Access may be restricted until billing is cleared.",
+  Suspended:
+    "Account is locked. School login and Impersonate are blocked until you set Active or Trial.",
 };
 
 type BillingCycle = "Monthly" | "Quarterly" | "Annual";
@@ -347,39 +364,57 @@ export function TenantsView({
       <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">
         {filtered.map((t, i) => {
           const pct = Math.round((t.students / t.capacity) * 100);
-          const tStyle = TIER_STYLE[t.tier];
           const sStyle = STATUS_STYLE[t.status];
-          const tone = STATUS_TONE[t.status];
+          const tone = TIER_TONE[t.tier];
           const cornerSide: CornerSide = i % 2 === 0 ? "tr" : "bl";
           const isLight = tone === "white";
           const isLime = tone === "lime";
           const isBlack = tone === "black";
-          const subText = isBlack ? "text-white/70" : isLime ? "text-black/70" : "text-black/55";
+          const onDark = isLime || isBlack;
+          const subText = onDark ? "text-white/65" : "text-black/55";
+          const hostText = isBlack
+            ? "text-[#5EEAD4]"
+            : isLime
+              ? "text-white/80"
+              : "text-black/65";
+          const tierBadge = isLight
+            ? { bg: TIER_STYLE[t.tier].bg, fg: TIER_STYLE[t.tier].fg }
+            : isLime
+              ? { bg: "rgba(255,255,255,0.18)", fg: "#FFFFFF" }
+              : { bg: "rgba(255,255,255,0.12)", fg: "#FFFFFF" };
+          const statusBadge = onDark
+            ? t.status === "Suspended" || t.status === "Overdue"
+              ? { bg: "rgba(239,68,68,0.22)", fg: "#FCA5A5", dot: "#F87171" }
+              : { bg: "rgba(255,255,255,0.14)", fg: "#FFFFFF", dot: "#FFFFFF" }
+            : sStyle;
           return (
             <OrganicCard
               key={t.id}
               tone={tone}
               cornerSide={cornerSide}
               padded
-              className="space-y-4"
+              role="button"
+              tabIndex={0}
+              aria-label={`Open details for ${t.name}`}
+              onClick={() => {
+                setDetailTab("overview");
+                setDetailTarget(t);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setDetailTab("overview");
+                  setDetailTarget(t);
+                }
+              }}
+              className="cursor-pointer space-y-4 transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-[0_1px_2px_rgba(0,0,0,0.05),0_28px_64px_-28px_rgba(15,23,42,0.28)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]/40 focus-visible:ring-offset-2"
             >
               <div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDetailTab("overview");
-                    setDetailTarget(t);
-                  }}
-                  className="text-left text-[15px] font-semibold leading-tight transition-opacity hover:opacity-80"
-                >
-                  {t.name}
-                </button>
+                <div className="text-[15px] font-semibold leading-tight">{t.name}</div>
                 <div className={`mt-1 font-mono text-[11px] ${subText}`}>
                   {t.id} · {t.uuid}
                 </div>
-                <div
-                  className={`mt-0.5 font-mono text-[11px] ${isBlack ? "text-[#0F766E]" : "text-black/65"}`}
-                >
+                <div className={`mt-0.5 font-mono text-[11px] ${hostText}`}>
                   {t.subdomain}.schoolaccounts.in
                 </div>
               </div>
@@ -387,17 +422,17 @@ export function TenantsView({
               <div className="flex flex-wrap items-center gap-2">
                 <span
                   className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
-                  style={{ backgroundColor: tStyle.bg, color: tStyle.fg }}
+                  style={{ backgroundColor: tierBadge.bg, color: tierBadge.fg }}
                 >
                   {t.tier}
                 </span>
                 <span
                   className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
-                  style={{ backgroundColor: sStyle.bg, color: sStyle.fg }}
+                  style={{ backgroundColor: statusBadge.bg, color: statusBadge.fg }}
                 >
                   <span
                     className="h-1.5 w-1.5 rounded-full"
-                    style={{ backgroundColor: sStyle.dot }}
+                    style={{ backgroundColor: statusBadge.dot }}
                   />
                   {t.status}
                 </span>
@@ -414,7 +449,7 @@ export function TenantsView({
                 </div>
                 <div
                   className={`mt-1.5 h-1.5 overflow-hidden rounded-full ${
-                    isBlack ? "bg-white/15" : isLime ? "bg-black/15" : "bg-[#F4F4F5]"
+                    onDark ? "bg-white/15" : "bg-[#F4F4F5]"
                   }`}
                 >
                   <div
@@ -422,7 +457,7 @@ export function TenantsView({
                     style={{
                       width: `${pct}%`,
                       backgroundColor: isLime
-                        ? "#000000"
+                        ? "#FFFFFF"
                         : isBlack
                           ? "#0F766E"
                           : pct > 90
@@ -437,8 +472,10 @@ export function TenantsView({
 
               <div
                 className={`flex flex-wrap items-center justify-between gap-2 border-t pt-3 ${
-                  isBlack ? "border-white/10" : isLime ? "border-black/10" : "border-black/8"
+                  onDark ? "border-white/10" : "border-black/8"
                 }`}
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
               >
                 <div className="flex items-center gap-1.5">
                   <TenantAction
@@ -470,12 +507,16 @@ export function TenantsView({
                   />
                 </div>
                 <button
-                  onClick={() => onImpersonate?.(t)}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onImpersonate?.(t);
+                  }}
                   className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[11.5px] font-semibold shadow-[0_6px_18px_-10px_rgba(0,0,0,0.5)] transition-colors ${
                     isBlack
-                      ? "bg-[#0F766E] text-white hover:bg-white"
+                      ? "bg-[#0F766E] text-white hover:bg-white hover:text-black"
                       : isLime
-                        ? "bg-black text-white hover:bg-black/85"
+                        ? "bg-white text-[#0F766E] hover:bg-black hover:text-white"
                         : "bg-black text-white hover:bg-black/85"
                   }`}
                 >
@@ -620,7 +661,7 @@ function TenantAction({
     tone === "black"
       ? "bg-white/10 text-white hover:bg-white hover:text-black"
       : tone === "lime"
-        ? "bg-black/10 text-black hover:bg-black hover:text-white"
+        ? "bg-white/15 text-white hover:bg-white hover:text-[#0F766E]"
         : "bg-[#F4F4F5] text-black/70 hover:bg-black hover:text-white";
   return (
     <button
@@ -899,20 +940,22 @@ function TenantDetailDrawer({
   onImpersonate: () => void;
   onSaveBilling: (rule: BillingRule) => void;
 }) {
-  const [draft, setDraft] = useState<BillingRule | null>(null);
+  const [billingDraft, setBillingDraft] = useState<BillingRule | null>(null);
   const [activity, setActivity] = useState<AuditEvent[]>([]);
 
   useEffect(() => {
     if (!tenant || !billing) {
-      setDraft(null);
+      setBillingDraft(null);
       setActivity([]);
       return;
     }
-    setDraft(billing);
+    setBillingDraft(billing);
     setActivity(buildAuditLog(tenant, 8));
   }, [tenant, billing]);
 
-  if (!tenant || !draft) return null;
+  if (!tenant) return null;
+  const draft = billingDraft ?? billing;
+  if (!draft) return null;
 
   const pct = tenant.capacity > 0 ? Math.round((tenant.students / tenant.capacity) * 100) : 0;
   const tStyle = TIER_STYLE[tenant.tier];
@@ -924,7 +967,10 @@ function TenantDetailDrawer({
   const total = grossPerCycle - discount + tax;
 
   const set = <K extends keyof BillingRule>(k: K, v: BillingRule[K]) =>
-    setDraft((prev) => (prev ? { ...prev, [k]: v } : prev));
+    setBillingDraft((prev) => {
+      const base = prev ?? billing;
+      return base ? { ...base, [k]: v } : prev;
+    });
 
   const saveBilling = () => {
     if (draft.ratePerStudent <= 0) {
@@ -935,24 +981,30 @@ function TenantDetailDrawer({
   };
 
   return (
-    <Sheet open={!!tenant} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[640px]">
-        <SheetHeader className="border-b border-[#E5E5E5] bg-[#F4F4F5] px-6 py-5">
-          <SheetTitle className="text-[18px] font-semibold text-black">
+    <Dialog open={!!tenant} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent
+        className={cn(
+          "flex w-[calc(100%-1rem)] max-w-[960px] flex-col gap-0 overflow-hidden p-0",
+          "max-h-[min(920px,calc(100dvh-1rem))] translate-x-[-50%] translate-y-[-50%]",
+          "rounded-2xl border-[#E5E5E5] bg-white text-black shadow-[0_24px_80px_-28px_rgba(15,23,42,0.45)] sm:w-[calc(100%-2rem)] sm:rounded-3xl",
+        )}
+      >
+        <DialogHeader className="shrink-0 space-y-1 border-b border-[#E5E5E5] bg-[#F4F4F5] px-4 py-4 pr-12 text-left sm:px-6 sm:py-5">
+          <DialogTitle className="text-[18px] font-semibold tracking-tight text-black sm:text-[20px]">
             Tenant Details
-          </SheetTitle>
-          <SheetDescription className="text-[12px] text-black/55">
+          </DialogTitle>
+          <DialogDescription className="text-[12px] text-black/55">
             {tenant.name} · {tenant.id} · {tenant.subdomain}.schoolaccounts.in
-          </SheetDescription>
-        </SheetHeader>
+          </DialogDescription>
+        </DialogHeader>
 
         <Tabs
           value={tab}
           onValueChange={onTabChange}
           className="flex min-h-0 flex-1 flex-col"
         >
-          <div className="border-b border-[#E5E5E5] bg-white px-4 pt-3 sm:px-6">
-            <TabsList className="h-auto w-full justify-start gap-1 overflow-x-auto rounded-none bg-transparent p-0">
+          <div className="shrink-0 border-b border-[#E5E5E5] bg-white px-3 pt-3 sm:px-6">
+            <TabsList className="grid h-auto w-full grid-cols-12 gap-1.5 rounded-none bg-transparent p-0 pb-3">
               {(
                 [
                   { id: "overview", label: "Overview", icon: Building2 },
@@ -967,323 +1019,386 @@ function TenantDetailDrawer({
                     key={item.id}
                     value={item.id}
                     className={cn(
-                      "shrink-0 gap-1.5 rounded-full border border-transparent px-3 py-2 text-[12px] data-[state=active]:border-[#E5E5E5] data-[state=active]:bg-[#F4F4F5] data-[state=active]:shadow-none",
+                      "col-span-6 w-full gap-1.5 rounded-xl border border-transparent px-2 py-2.5 text-[12px] text-black/55 sm:col-span-3",
+                      "data-[state=active]:border-[#E5E5E5] data-[state=active]:bg-[#F4F4F5] data-[state=active]:font-semibold data-[state=active]:text-black data-[state=active]:shadow-none",
                     )}
                   >
-                    <Icon className="h-3.5 w-3.5" />
-                    {item.label}
+                    <Icon className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{item.label}</span>
                   </TabsTrigger>
                 );
               })}
             </TabsList>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
-            <TabsContent value="overview" className="mt-0 space-y-5">
-              <div className="flex flex-wrap items-center gap-2">
-                <span
-                  className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
-                  style={{ backgroundColor: tStyle.bg, color: tStyle.fg }}
-                >
-                  {tenant.tier}
-                </span>
-                <span
-                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
-                  style={{ backgroundColor: sStyle.bg, color: sStyle.fg }}
-                >
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 sm:px-6 sm:py-5">
+            <TabsContent value="overview" className="mt-0">
+              <div className="grid grid-cols-12 gap-3">
+                <div className="col-span-12 flex flex-wrap items-center gap-2">
                   <span
-                    className="h-1.5 w-1.5 rounded-full"
-                    style={{ backgroundColor: sStyle.dot }}
-                  />
-                  {tenant.status}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <DetailStat label="Public ID" value={tenant.id} mono />
-                <DetailStat label="UUID" value={tenant.uuid} mono />
-                <DetailStat
-                  label="Routing host"
-                  value={`${tenant.subdomain}.schoolaccounts.in`}
-                  mono
-                />
-                <DetailStat label="Created" value={tenant.createdAt || "—"} mono />
-                <DetailStat
-                  label="Setup username"
-                  value={tenant.adminEmail?.trim() || "Not set"}
-                  mono
-                />
-                <DetailStat
-                  label="Seat utilisation"
-                  value={`${tenant.students.toLocaleString()} / ${tenant.capacity.toLocaleString()} · ${pct}%`}
-                />
-              </div>
-
-              <div>
-                <div className="mb-1.5 flex items-center justify-between font-mono text-[11px] text-black/55">
-                  <span>
-                    {tenant.students.toLocaleString()} enrolled
+                    className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                    style={{ backgroundColor: tStyle.bg, color: tStyle.fg }}
+                  >
+                    {tenant.tier}
                   </span>
-                  <span>{pct}%</span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-[#F4F4F5]">
-                  <div
-                    className="h-full rounded-full bg-[#0F766E]"
-                    style={{ width: `${Math.min(100, pct)}%` }}
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="rounded-full"
-                  onClick={onEdit}
-                >
-                  <Pencil className="h-3.5 w-3.5" /> Edit meta
-                </Button>
-                <Button
-                  type="button"
-                  className="rounded-full bg-black text-white hover:bg-black/85"
-                  onClick={onImpersonate}
-                >
-                  <KeyRound className="h-3.5 w-3.5" /> Impersonate
-                </Button>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="billing" className="mt-0 space-y-5">
-              <Field label="Billing Cycle">
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  {(["Monthly", "Quarterly", "Annual"] as BillingCycle[]).map((c) => {
-                    const sel = draft.cycle === c;
-                    return (
-                      <button
-                        key={c}
-                        type="button"
-                        onClick={() => set("cycle", c)}
-                        className={`rounded-full border px-3 py-2 text-[12px] font-semibold transition ${
-                          sel
-                            ? "border-transparent bg-[#0F766E] text-white shadow-sm"
-                            : "border-[#E5E5E5] bg-white text-black/65 hover:border-black/30"
-                        }`}
-                      >
-                        {c}
-                      </button>
-                    );
-                  })}
-                </div>
-              </Field>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Field label={`Rate / student (${sym})`}>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={draft.ratePerStudent}
-                    onChange={(e) => set("ratePerStudent", Number(e.target.value) || 0)}
-                    className="font-mono"
-                  />
-                </Field>
-                <Field label="Currency">
-                  <Select
-                    value={draft.currency}
-                    onValueChange={(v) => set("currency", v as Currency)}
+                  <span
+                    className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                    style={{ backgroundColor: sStyle.bg, color: sStyle.fg }}
                   >
-                    <SelectTrigger className="h-10 rounded-lg border-[#E5E5E5] bg-white text-[13px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="INR">INR · ₹</SelectItem>
-                      <SelectItem value="USD">USD · $</SelectItem>
-                      <SelectItem value="EUR">EUR · €</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Field label="Tax / GST %">
-                  <Input
-                    type="number"
-                    min={0}
-                    max={50}
-                    value={draft.taxPercent}
-                    onChange={(e) => set("taxPercent", Number(e.target.value) || 0)}
-                    className="font-mono"
-                  />
-                </Field>
-                <Field label="Discount %">
-                  <Input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={draft.discountPercent}
-                    onChange={(e) => set("discountPercent", Number(e.target.value) || 0)}
-                    className="font-mono"
-                  />
-                </Field>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Field label="Next Invoice Date">
-                  <DatePicker
-                    value={draft.nextInvoice}
-                    onChange={(v) => set("nextInvoice", v)}
-                    placeholder="Pick invoice date"
-                    min={new Date().toISOString().slice(0, 10)}
-                  />
-                </Field>
-                <Field label="Payment Method">
-                  <Select
-                    value={draft.paymentMethod}
-                    onValueChange={(v) => set("paymentMethod", v as PaymentMethod)}
-                  >
-                    <SelectTrigger className="h-10 rounded-lg border-[#E5E5E5] bg-white text-[13px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Razorpay">Razorpay</SelectItem>
-                      <SelectItem value="Stripe">Stripe</SelectItem>
-                      <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
-                      <SelectItem value="Manual Invoice">Manual Invoice</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-              </div>
-
-              <div className="rounded-2xl border border-[#E5E5E5] bg-[#F4F4F5] p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                  Projected next invoice
+                    <span
+                      className="h-1.5 w-1.5 rounded-full"
+                      style={{ backgroundColor: sStyle.dot }}
+                    />
+                    {tenant.status}
+                  </span>
                 </div>
-                <div className="mt-2 font-mono text-[22px] font-semibold text-black">
-                  {sym}
-                  {Math.round(total).toLocaleString("en-IN")}
-                </div>
-                <div className="mt-1 text-[12px] text-black/55">
-                  {draft.cycle} · {draft.paymentMethod}
-                  {draft.autoCharge ? " · auto-charge on" : " · manual"}
-                </div>
-              </div>
 
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  className="rounded-full bg-black text-white hover:bg-black/85"
-                  onClick={saveBilling}
-                >
-                  <Save className="h-3.5 w-3.5" /> Save billing
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="rounded-full"
-                  onClick={onBilling}
-                >
-                  <ExternalLink className="h-3.5 w-3.5" /> Full billing editor
-                </Button>
-              </div>
-            </TabsContent>
+                <div className="col-span-12 sm:col-span-4">
+                  <DetailStat label="Public ID" value={tenant.id} mono />
+                </div>
+                <div className="col-span-12 sm:col-span-8">
+                  <DetailStat label="UUID" value={tenant.uuid} mono />
+                </div>
+                <div className="col-span-12 sm:col-span-8">
+                  <DetailStat
+                    label="Routing host"
+                    value={`${tenant.subdomain}.schoolaccounts.in`}
+                    mono
+                  />
+                </div>
+                <div className="col-span-12 sm:col-span-4">
+                  <DetailStat label="Created" value={tenant.createdAt || "—"} mono />
+                </div>
+                <div className="col-span-12 sm:col-span-8">
+                  <DetailStat
+                    label="Setup username"
+                    value={tenant.adminEmail?.trim() || "Not set"}
+                    mono
+                  />
+                </div>
+                <div className="col-span-12 sm:col-span-4">
+                  <DetailStat
+                    label="Seat utilisation"
+                    value={`${tenant.students.toLocaleString()} / ${tenant.capacity.toLocaleString()} · ${pct}%`}
+                  />
+                </div>
 
-            <TabsContent value="activity" className="mt-0 space-y-4">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-[13px] text-black/55">
-                  Recent connection and admin events for this tenant.
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="shrink-0 rounded-full"
-                  onClick={onAudit}
-                >
-                  <ScrollText className="h-3.5 w-3.5" /> Full audit
-                </Button>
-              </div>
-              <div className="divide-y divide-[#F0F0F0] rounded-2xl border border-[#E5E5E5] bg-white">
-                {activity.length === 0 ? (
-                  <div className="px-4 py-10 text-center text-[13px] text-black/45">
-                    No activity recorded yet.
+                <div className="col-span-12 rounded-2xl border border-[#E5E5E5] bg-white px-3.5 py-3">
+                  <div className="mb-2 flex items-center justify-between font-mono text-[11px] text-black/55">
+                    <span>{tenant.students.toLocaleString()} enrolled</span>
+                    <span>
+                      {tenant.capacity.toLocaleString()} seats · {pct}%
+                    </span>
                   </div>
-                ) : (
-                  activity.map((e, i) => (
-                    <div key={`${e.ts}-${i}`} className="px-4 py-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[13px] font-semibold text-black">{e.action}</span>
-                        <span className="font-mono text-[10px] text-black/45">{e.ts}</span>
-                      </div>
-                      <div className="mt-0.5 text-[12px] text-black/55">
-                        {e.actor} · {e.detail}
-                      </div>
-                      <div className="mt-1 font-mono text-[10px] uppercase tracking-wider text-black/40">
-                        {e.severity} · {e.ip}
-                      </div>
-                    </div>
-                  ))
-                )}
+                  <div className="h-2 overflow-hidden rounded-full bg-[#F4F4F5]">
+                    <div
+                      className="h-full rounded-full bg-[#0F766E] transition-[width]"
+                      style={{ width: `${Math.min(100, Math.max(pct, pct > 0 ? pct : 0))}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="col-span-12">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={onEdit}
+                  >
+                    <Pencil className="h-3.5 w-3.5" /> Edit meta
+                  </Button>
+                </div>
               </div>
             </TabsContent>
 
-            <TabsContent value="access" className="mt-0 space-y-5">
-              <div className="rounded-2xl border border-[#E5E5E5] bg-[#F4F4F5] p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                  School admin login
+            <TabsContent value="billing" className="mt-0">
+              <div className="grid grid-cols-12 gap-3">
+                <div className="col-span-12">
+                  <Field label="Billing Cycle">
+                    <div className="grid grid-cols-12 gap-2">
+                      {(["Monthly", "Quarterly", "Annual"] as BillingCycle[]).map((c) => {
+                        const sel = draft.cycle === c;
+                        return (
+                          <button
+                            key={c}
+                            type="button"
+                            onClick={() => set("cycle", c)}
+                            className={cn(
+                              "col-span-4 rounded-xl border px-3 py-2.5 text-[12px] font-semibold transition",
+                              sel
+                                ? "border-transparent bg-[#0F766E] text-white shadow-sm"
+                                : "border-[#E5E5E5] bg-white text-black/65 hover:border-black/30",
+                            )}
+                          >
+                            {c}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </Field>
                 </div>
-                <div className="mt-2 font-mono text-[14px] font-semibold text-black">
-                  {tenant.adminEmail?.trim() || "No username on file"}
+
+                <div className="col-span-12 sm:col-span-6">
+                  <Field label={`Rate / student (${sym})`}>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={draft.ratePerStudent}
+                      onChange={(e) => set("ratePerStudent", Number(e.target.value) || 0)}
+                      className="font-mono"
+                    />
+                  </Field>
                 </div>
-                <p className="mt-2 text-[12px] text-black/55">
-                  Reset username or password from Edit Tenant Meta. Impersonation opens the
-                  school workspace without sharing credentials.
-                </p>
-              </div>
+                <div className="col-span-12 sm:col-span-6">
+                  <Field label="Currency">
+                    <Select
+                      value={draft.currency}
+                      onValueChange={(v) => set("currency", v as Currency)}
+                    >
+                      <SelectTrigger className="h-10 rounded-lg border-[#E5E5E5] bg-white text-[13px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="INR">INR · ₹</SelectItem>
+                        <SelectItem value="USD">USD · $</SelectItem>
+                        <SelectItem value="EUR">EUR · €</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                </div>
 
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <DetailStat label="Lifecycle" value={tenant.status} />
-                <DetailStat label="Package" value={tenant.tier} />
-                <DetailStat label="Tenant ID" value={tenant.id} mono />
-                <DetailStat label="Provisioned" value={tenant.createdAt || "—"} mono />
-              </div>
+                <div className="col-span-6 sm:col-span-3">
+                  <Field label="Tax / GST %">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={50}
+                      value={draft.taxPercent}
+                      onChange={(e) => set("taxPercent", Number(e.target.value) || 0)}
+                      className="font-mono"
+                    />
+                  </Field>
+                </div>
+                <div className="col-span-6 sm:col-span-3">
+                  <Field label="Discount %">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={draft.discountPercent}
+                      onChange={(e) => set("discountPercent", Number(e.target.value) || 0)}
+                      className="font-mono"
+                    />
+                  </Field>
+                </div>
+                <div className="col-span-12 sm:col-span-6">
+                  <Field label="Grace days">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={90}
+                      value={draft.graceDays}
+                      onChange={(e) => set("graceDays", Number(e.target.value) || 0)}
+                      className="font-mono"
+                    />
+                  </Field>
+                </div>
 
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="rounded-full"
-                  onClick={onEdit}
-                >
-                  <Pencil className="h-3.5 w-3.5" /> Edit credentials
-                </Button>
-                <Button
-                  type="button"
-                  className="rounded-full bg-black text-white hover:bg-black/85"
-                  onClick={onImpersonate}
-                >
-                  <KeyRound className="h-3.5 w-3.5" /> Impersonate workspace
-                </Button>
+                <div className="col-span-12 sm:col-span-6">
+                  <Field label="Next Invoice Date">
+                    <DatePicker
+                      value={draft.nextInvoice}
+                      onChange={(v) => set("nextInvoice", v)}
+                      placeholder="Pick invoice date"
+                      min={new Date().toISOString().slice(0, 10)}
+                    />
+                  </Field>
+                </div>
+                <div className="col-span-12 sm:col-span-6">
+                  <Field label="Payment Method">
+                    <Select
+                      value={draft.paymentMethod}
+                      onValueChange={(v) => set("paymentMethod", v as PaymentMethod)}
+                    >
+                      <SelectTrigger className="h-10 rounded-lg border-[#E5E5E5] bg-white text-[13px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Razorpay">Razorpay</SelectItem>
+                        <SelectItem value="Stripe">Stripe</SelectItem>
+                        <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+                        <SelectItem value="Manual Invoice">Manual Invoice</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                </div>
+
+                <div className="col-span-12 rounded-2xl border border-[#E5E5E5] bg-[#F4F4F5] p-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                    Projected next invoice
+                  </div>
+                  <div className="mt-2 font-mono text-[22px] font-semibold text-black">
+                    {sym}
+                    {Math.round(total).toLocaleString("en-IN")}
+                  </div>
+                  <div className="mt-1 text-[12px] text-black/55">
+                    {draft.cycle} · {draft.paymentMethod}
+                    {draft.autoCharge ? " · auto-charge on" : " · manual"}
+                  </div>
+                </div>
+
+                <div className="col-span-12 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    className="rounded-full bg-black text-white hover:bg-black/85"
+                    onClick={saveBilling}
+                  >
+                    <Save className="h-3.5 w-3.5" /> Save billing
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={onBilling}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" /> Full billing editor
+                  </Button>
+                </div>
+
+                <div className="col-span-12 border-t border-[#EFEFEF] pt-3 dark:border-white/10">
+                  <PlatformInvoicesPanel
+                    mode="super_admin"
+                    tenantId={tenant.id}
+                    tenantName={tenant.name}
+                    schoolHost={`${tenant.subdomain}.schoolaccounts.in`}
+                    issueDraft={{
+                      billingCycle: draft.cycle,
+                      currency: draft.currency,
+                      studentsBilled: Math.max(tenant.students, 1),
+                      ratePerStudent: draft.ratePerStudent,
+                      discountPercent: draft.discountPercent,
+                      taxPercent: draft.taxPercent,
+                      paymentMethod: draft.paymentMethod,
+                      periodLabel: `${draft.cycle} · ${draft.nextInvoice}`,
+                      issueDate: new Date().toISOString().slice(0, 10),
+                      dueDate: draft.nextInvoice || new Date().toISOString().slice(0, 10),
+                    }}
+                  />
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="activity" className="mt-0">
+              <div className="grid grid-cols-12 gap-3">
+                <div className="col-span-12 flex flex-col gap-3 sm:col-span-8 sm:flex-row sm:items-center">
+                  <p className="text-[13px] leading-snug text-black/55">
+                    Recent connection and admin events for this tenant.
+                  </p>
+                </div>
+                <div className="col-span-12 sm:col-span-4 sm:flex sm:justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full rounded-full sm:w-auto"
+                    onClick={onAudit}
+                  >
+                    <ScrollText className="h-3.5 w-3.5" /> Full audit
+                  </Button>
+                </div>
+                <div className="col-span-12 divide-y divide-[#F0F0F0] rounded-2xl border border-[#E5E5E5] bg-white">
+                  {activity.length === 0 ? (
+                    <div className="px-4 py-10 text-center text-[13px] text-black/45">
+                      No activity recorded yet.
+                    </div>
+                  ) : (
+                    activity.map((e, i) => (
+                      <div key={`${e.ts}-${i}`} className="grid grid-cols-12 gap-2 px-4 py-3">
+                        <div className="col-span-12 sm:col-span-8">
+                          <div className="text-[13px] font-semibold text-black">{e.action}</div>
+                          <div className="mt-0.5 text-[12px] text-black/55">
+                            {e.actor} · {e.detail}
+                          </div>
+                          <div className="mt-1 font-mono text-[10px] uppercase tracking-wider text-black/40">
+                            {e.severity} · {e.ip}
+                          </div>
+                        </div>
+                        <div className="col-span-12 font-mono text-[10px] text-black/45 sm:col-span-4 sm:text-right">
+                          {e.ts}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="access" className="mt-0">
+              <div className="grid grid-cols-12 gap-3">
+                <div className="col-span-12 rounded-2xl border border-[#E5E5E5] bg-[#F4F4F5] p-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                    School admin login
+                  </div>
+                  <div className="mt-2 break-all font-mono text-[14px] font-semibold text-black">
+                    {tenant.adminEmail?.trim() || "No username on file"}
+                  </div>
+                  <p className="mt-2 text-[12px] leading-relaxed text-black/55">
+                    Reset username or password from Edit Tenant Meta. Impersonation opens the
+                    school workspace without sharing credentials.
+                  </p>
+                </div>
+
+                <div className="col-span-6">
+                  <DetailStat label="Lifecycle" value={tenant.status} />
+                </div>
+                <div className="col-span-6">
+                  <DetailStat label="Package" value={tenant.tier} />
+                </div>
+                <div className="col-span-6">
+                  <DetailStat label="Tenant ID" value={tenant.id} mono />
+                </div>
+                <div className="col-span-6">
+                  <DetailStat label="Provisioned" value={tenant.createdAt || "—"} mono />
+                </div>
+
+                <div className="col-span-12">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={onEdit}
+                  >
+                    <Pencil className="h-3.5 w-3.5" /> Edit credentials
+                  </Button>
+                </div>
               </div>
             </TabsContent>
           </div>
         </Tabs>
 
-        <div className="mt-auto flex items-center justify-between gap-3 border-t border-[#E5E5E5] bg-[#F4F4F5] px-6 py-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-4 py-2 text-[12px] font-semibold text-black/75"
-          >
-            <X className="h-3.5 w-3.5" /> Close
-          </button>
-          <button
-            type="button"
-            onClick={onImpersonate}
-            className="inline-flex items-center gap-1.5 rounded-full bg-black px-5 py-2 text-[12px] font-semibold text-white shadow-sm hover:bg-black/85"
-          >
-            <KeyRound className="h-3.5 w-3.5" /> Impersonate
-          </button>
+        <div className="mt-auto grid shrink-0 grid-cols-12 items-center gap-3 border-t border-[#E5E5E5] bg-[#F4F4F5] px-3 py-3 sm:px-6 sm:py-4">
+          <div className="col-span-5 sm:col-span-3">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full rounded-full"
+              onClick={onClose}
+            >
+              <X className="h-3.5 w-3.5" /> Close
+            </Button>
+          </div>
+          <div className="col-span-7 sm:col-span-9 sm:flex sm:justify-end">
+            <Button
+              type="button"
+              className="w-full rounded-full bg-black text-white hover:bg-black/85 sm:w-auto"
+              onClick={onImpersonate}
+            >
+              <KeyRound className="h-3.5 w-3.5" />
+              <span className="truncate">Impersonate workspace</span>
+            </Button>
+          </div>
         </div>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1297,7 +1412,7 @@ function DetailStat({
   mono?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-[#E5E5E5] bg-white px-3.5 py-3">
+    <div className="h-full rounded-2xl border border-[#E5E5E5] bg-white px-3.5 py-3">
       <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
         {label}
       </div>
@@ -1467,25 +1582,37 @@ function EditTenantDrawer({
           </Field>
 
           <Field label="Lifecycle Status">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {(["Active", "Trial", "Overdue", "Suspended"] as Status[]).map((ss) => {
-                const sel = status === ss;
-                return (
-                  <button
-                    key={ss}
-                    type="button"
-                    onClick={() => setStatus(ss)}
-                    className={`rounded-full border px-2.5 py-2 text-[11.5px] font-semibold transition ${
-                      sel
-                        ? "border-transparent bg-black text-white shadow-sm"
-                        : "border-[#E5E5E5] bg-white text-black/65 hover:border-black/30"
-                    }`}
-                  >
-                    {ss}
-                  </button>
-                );
-              })}
-            </div>
+            <TooltipProvider delayDuration={200}>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {(["Active", "Trial", "Overdue", "Suspended"] as Status[]).map((ss) => {
+                  const sel = status === ss;
+                  return (
+                    <Tooltip key={ss}>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => setStatus(ss)}
+                          className={`rounded-full border px-2.5 py-2 text-[11.5px] font-semibold transition ${
+                            sel
+                              ? "border-transparent bg-black text-white shadow-sm"
+                              : "border-[#E5E5E5] bg-white text-black/65 hover:border-black/30"
+                          }`}
+                        >
+                          {ss}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="top"
+                        className="max-w-[240px] border border-[#E5E5E5] bg-white px-3 py-2 text-left text-[12px] leading-snug text-black shadow-md"
+                      >
+                        <div className="font-semibold text-black">{ss}</div>
+                        <p className="mt-1 text-black/65">{STATUS_TOOLTIP[ss]}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+              </div>
+            </TooltipProvider>
           </Field>
 
           <Field label={`Student Seat Capacity · current ${tenant.students.toLocaleString()}`}>

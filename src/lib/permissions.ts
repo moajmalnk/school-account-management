@@ -114,13 +114,97 @@ export type SettingsTabId =
   | "vehicles"
   | "transport"
   | "fees"
+  | "billing"
   | "system"
   | "users";
+
+/** Subscription plan feature matrix (from Super Admin Plans). */
+export type PlanFlags = {
+  finance: boolean;
+  students: boolean;
+  classes: boolean;
+  staff: boolean;
+  vehicle: boolean;
+  analytics: boolean;
+  feeReminders: boolean;
+  feeCollection: boolean;
+  extraUsers: boolean;
+  staffAttendance: boolean;
+  payroll: boolean;
+  autoFeeCollection: boolean;
+  whatsapp: boolean;
+};
+
+export const DEFAULT_PLAN_FLAGS: PlanFlags = {
+  finance: true,
+  students: true,
+  classes: true,
+  staff: true,
+  vehicle: true,
+  analytics: true,
+  feeReminders: true,
+  feeCollection: true,
+  extraUsers: true,
+  staffAttendance: true,
+  payroll: true,
+  autoFeeCollection: true,
+  whatsapp: true,
+};
+
+export function normalizePlanFlags(value: unknown): PlanFlags {
+  if (!value || typeof value !== "object") return { ...DEFAULT_PLAN_FLAGS };
+  const raw = value as Partial<Record<keyof PlanFlags, unknown>>;
+  const next = { ...DEFAULT_PLAN_FLAGS };
+  (Object.keys(DEFAULT_PLAN_FLAGS) as (keyof PlanFlags)[]).forEach((key) => {
+    if (typeof raw[key] === "boolean") next[key] = raw[key] as boolean;
+  });
+  return next;
+}
+
+/** Settings tab → required plan flag (undefined = always allowed by plan). */
+const SETTINGS_TAB_PLAN_FLAG: Partial<Record<SettingsTabId, keyof PlanFlags>> = {
+  classes: "classes",
+  departments: "staff",
+  roles: "staff",
+  vehicles: "vehicle",
+  transport: "vehicle",
+  fees: "feeCollection",
+  users: "extraUsers",
+};
+
+export function planAllowsSettingsTab(
+  flags: PlanFlags | undefined | null,
+  tab: SettingsTabId,
+): boolean {
+  const required = SETTINGS_TAB_PLAN_FLAG[tab];
+  if (!required) return true;
+  const resolved = flags ?? DEFAULT_PLAN_FLAGS;
+  // Fees can still show when finance is on but feeCollection is off.
+  if (tab === "fees") {
+    return Boolean(resolved.feeCollection || resolved.finance);
+  }
+  // Core school admins always need Users tab even if extraUsers is off.
+  if (tab === "users") return true;
+  return Boolean(resolved[required]);
+}
+
+export function planAllowsModule(
+  flags: PlanFlags | undefined | null,
+  module: "students" | "staff" | "finance" | "dashboard" | "settings" | "notifications",
+): boolean {
+  const resolved = flags ?? DEFAULT_PLAN_FLAGS;
+  if (module === "dashboard" || module === "settings" || module === "notifications") {
+    return true;
+  }
+  return Boolean(resolved[module]);
+}
 
 export function canAccessSettingsTab(
   permissions: PermissionSet | undefined | null,
   tab: SettingsTabId,
+  flags?: PlanFlags | null,
 ): boolean {
+  if (!planAllowsSettingsTab(flags, tab)) return false;
   if (hasFullAccess(permissions)) return true;
   if (tab === "fees") {
     return (
@@ -128,7 +212,7 @@ export function canAccessSettingsTab(
     );
   }
   if (tab === "users") {
-    return hasPermission(permissions, "settings.users");
+    return hasPermission(permissions, "settings.users") || hasPermission(permissions, "settings");
   }
   return hasPermission(permissions, "settings");
 }

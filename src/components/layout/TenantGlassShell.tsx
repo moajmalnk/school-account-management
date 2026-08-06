@@ -159,6 +159,7 @@ const NAV: NavEntry[] = [
   { to: "/tenant/students", label: "Students", icon: Users },
   { to: "/tenant/staff", label: "Staff", icon: UserCog },
   { to: "/tenant/finance", label: "Finance", icon: Wallet },
+  { to: "/tenant/notifications", label: "Notifications", icon: Bell },
   { to: "/tenant/settings", label: "Settings", icon: Settings },
 ];
 
@@ -170,6 +171,7 @@ function navAllowed(
   if (to.startsWith("/tenant/students")) return sessionHasPermission(session, "students");
   if (to.startsWith("/tenant/staff")) return sessionHasPermission(session, "staff");
   if (to.startsWith("/tenant/finance")) return sessionHasAnyFinance(session);
+  if (to.startsWith("/tenant/notifications")) return true;
   if (to.startsWith("/tenant/settings")) return sessionCanAccessSettings(session);
   return true;
 }
@@ -269,7 +271,7 @@ export function TenantMacDock({
       className={cn(
         "relative z-40 hidden shrink-0 overflow-visible transition-[width] duration-200 md:flex",
         "sticky top-4 h-[calc(100dvh-2rem)] flex-col",
-        expanded ? "w-[200px]" : "w-[76px] items-center",
+        expanded ? "w-[220px] xl:w-[240px]" : "w-[84px] items-center xl:w-[92px]",
         className,
       )}
       onMouseLeave={() => setHovered(null)}
@@ -278,13 +280,15 @@ export function TenantMacDock({
         className={cn(
           glassPanelClass,
           "relative z-40 flex h-full w-full flex-col overflow-visible rounded-xl border border-white/70 bg-white/55 py-3 shadow-[0_12px_40px_-16px_rgba(15,23,42,0.35)] backdrop-blur-2xl",
-          expanded ? "items-stretch px-2.5" : "items-center px-1.5",
+          expanded ? "items-stretch px-2.5 sm:px-3" : "items-center px-1.5",
         )}
       >
         <div
           className={cn(
-            "mb-2 grid shrink-0 place-items-center overflow-hidden rounded-lg font-bold text-white shadow-md shadow-teal-900/20",
-            expanded ? "mx-auto h-11 w-11 text-[11px]" : "h-10 w-10 text-[11px]",
+            "mb-2 grid shrink-0 place-items-center overflow-hidden rounded-xl font-bold text-white shadow-md shadow-teal-900/20",
+            expanded
+              ? "mx-auto h-12 w-12 text-[12px] xl:h-14 xl:w-14"
+              : "h-11 w-11 text-[11px] xl:h-12 xl:w-12",
             !logoUrl && "bg-gradient-to-br from-[#0F766E] to-[#115E59]",
           )}
           title={tenantName}
@@ -296,7 +300,7 @@ export function TenantMacDock({
           )}
         </div>
         {expanded && (
-          <div className="mb-3 px-1 text-center text-[10px] font-bold uppercase tracking-[0.12em] text-slate-600">
+          <div className="mb-3 px-1 text-center text-[10px] font-bold uppercase tracking-[0.12em] text-slate-600 xl:text-[11px]">
             {initials}
           </div>
         )}
@@ -304,7 +308,7 @@ export function TenantMacDock({
         <nav
           className={cn(
             "flex min-h-0 w-full flex-1 flex-col overflow-visible",
-            expanded ? "gap-1.5" : "items-center gap-0.5",
+            expanded ? "gap-1.5 xl:gap-2" : "items-center gap-1",
           )}
           aria-label="Primary navigation"
         >
@@ -326,7 +330,7 @@ export function TenantMacDock({
                   aria-label={item.label}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 transition-colors",
+                    "flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 transition-colors xl:gap-3.5 xl:px-3 xl:py-3",
                     active
                       ? "bg-[#0F766E]/12 text-[#0F172A] ring-1 ring-[#0F766E]/25 dark:bg-[#0F766E]/30 dark:text-[#99F6E4] dark:ring-[#2DD4BF]/35"
                       : "text-slate-600 hover:bg-white/70 hover:text-slate-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-zinc-100",
@@ -334,15 +338,20 @@ export function TenantMacDock({
                 >
                   <span
                     className={cn(
-                      "grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-white/70 dark:border-white/10",
+                      "grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/70 dark:border-white/10 xl:h-11 xl:w-11",
                       active
                         ? "bg-white text-[#0F766E] dark:bg-[#0F766E] dark:text-white"
                         : "bg-white/70 text-slate-700 dark:bg-white/5 dark:text-zinc-300",
                     )}
                   >
-                    <Icon className="h-[18px] w-[18px]" strokeWidth={active ? 2.35 : 2} />
+                    <Icon
+                      className="h-5 w-5 xl:h-6 xl:w-6"
+                      strokeWidth={active ? 2.35 : 2}
+                    />
                   </span>
-                  <span className="min-w-0 flex-1 truncate text-[12px] font-semibold">{item.label}</span>
+                  <span className="min-w-0 flex-1 truncate text-[13px] font-semibold xl:text-[14px]">
+                    {item.label}
+                  </span>
                 </Link>
               );
             }
@@ -355,7 +364,7 @@ export function TenantMacDock({
                 aria-current={active ? "page" : undefined}
                 onMouseEnter={() => setHovered(index)}
                 className={cn(
-                  "group relative z-10 flex h-14 w-14 shrink-0 items-center justify-center",
+                  "group relative z-10 flex h-14 w-14 shrink-0 items-center justify-center xl:h-16 xl:w-16",
                   distance === 0 && "z-50",
                 )}
               >
@@ -377,12 +386,15 @@ export function TenantMacDock({
                 >
                   <span
                     className={cn(
-                      "grid h-11 w-11 place-items-center rounded-lg border border-white/70 bg-gradient-to-br from-white/95 to-white/70 shadow-[0_6px_18px_-10px_rgba(15,23,42,0.45)]",
+                      "grid h-12 w-12 place-items-center rounded-xl border border-white/70 bg-gradient-to-br from-white/95 to-white/70 shadow-[0_6px_18px_-10px_rgba(15,23,42,0.45)] xl:h-14 xl:w-14",
                       active && "ring-2 ring-[#0F766E]/40",
                     )}
                   >
                     <Icon
-                      className={cn("h-5 w-5", active ? "text-[#0F766E]" : "text-slate-700")}
+                      className={cn(
+                        "h-6 w-6 xl:h-7 xl:w-7",
+                        active ? "text-[#0F766E]" : "text-slate-700",
+                      )}
                       strokeWidth={active ? 2.35 : 2}
                     />
                   </span>

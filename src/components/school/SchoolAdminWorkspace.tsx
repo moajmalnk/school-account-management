@@ -175,6 +175,7 @@ import {
 import { StudentProfileDetail } from "@/components/school/StudentProfileDetail";
 import { ShareParentLinkDialog } from "@/components/school/ShareParentLinkDialog";
 import { StaffProfileDetail } from "@/components/school/StaffProfileDetail";
+import { AttachmentPreviewDialog } from "@/components/school/AttachmentPreviewDialog";
 import {
   TenantDashboardSkeleton,
   TenantDirectorySkeleton,
@@ -185,6 +186,8 @@ import {
   isRecordDeleted,
 } from "@/components/school/ProfileAccountActions";
 import { SettingsUsersCard } from "@/components/school/SettingsUsersCard";
+import { PlatformInvoicesPanel } from "@/components/admin/PlatformInvoicesPanel";
+import { PwaInstallCard } from "@/components/pwa/PwaInstallBanner";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   sessionCanAccessSettings,
@@ -5272,6 +5275,7 @@ function FinanceOverview({
   const [customRange, setCustomRange] = useState<CustomDateRange>({ from: "", to: "" });
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
   const [pendingDeletePayment, setPendingDeletePayment] = useState<Payment | null>(null);
+  const [previewAttachment, setPreviewAttachment] = useState<PaymentAttachment | null>(null);
   const [editForm, setEditForm] = useState({
     name: "",
     cat: "",
@@ -5977,15 +5981,15 @@ function FinanceOverview({
               {(p.attachments?.length ?? 0) > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {p.attachments!.map((file) => (
-                    <a
+                    <button
                       key={file.id}
-                      href={file.dataUrl}
-                      download={file.name}
+                      type="button"
+                      onClick={() => setPreviewAttachment(file)}
                       className="inline-flex max-w-full items-center gap-1 truncate rounded-full border border-[#E5E5E5] bg-[#F8F8F9] px-2 py-0.5 text-[10px] font-medium text-black/65 transition-colors hover:border-black/20 hover:bg-white"
                     >
                       <Paperclip className="h-3 w-3 shrink-0" />
                       <span className="truncate">{file.name}</span>
-                    </a>
+                    </button>
                   ))}
                 </div>
               )}
@@ -6305,6 +6309,14 @@ function FinanceOverview({
             }
             onConfirm={confirmDeletePayment}
           />
+
+          <AttachmentPreviewDialog
+            file={previewAttachment}
+            open={Boolean(previewAttachment)}
+            onOpenChange={(open) => {
+              if (!open) setPreviewAttachment(null);
+            }}
+          />
         </>
       )}
 
@@ -6381,6 +6393,7 @@ function ReceivePayment() {
   const [attachments, setAttachments] = useState<PaymentAttachment[]>([]);
   const [historyQuery, setHistoryQuery] = useState("");
   const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const [previewAttachment, setPreviewAttachment] = useState<PaymentAttachment | null>(null);
   const [viewingPayment, setViewingPayment] = useState<Payment | null>(null);
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
   const [pendingDeletePayment, setPendingDeletePayment] = useState<Payment | null>(null);
@@ -7164,40 +7177,41 @@ function ReceivePayment() {
           )}
         </div>
 
-        <div className="mt-5 space-y-5 sm:space-y-6">
-          {/* 1 · Who */}
-          <section className="space-y-3 border-b border-[#EFEFEF] pb-5 dark:border-white/10 sm:pb-6">
-            <div>
-              <FieldLabel>Received From</FieldLabel>
-              <div className="flex w-full gap-1 rounded-full border border-[#E5E5E5] bg-white p-1 dark:border-white/10 dark:bg-zinc-900 sm:max-w-sm">
-                {(
-                  [
-                    { key: "student" as const, label: "Student" },
-                    { key: "external" as const, label: "External payer" },
-                  ] as const
-                ).map((option) => {
-                  const active = payerSource === option.key;
-                  return (
-                    <button
-                      key={option.key}
-                      type="button"
-                      onClick={() => setPayerSource(option.key)}
-                      className={cn(
-                        "flex-1 rounded-full px-3 py-2.5 text-[12px] font-medium transition-colors sm:py-1.5",
-                        active
-                          ? "bg-[#0F766E] text-white"
-                          : "text-black/65 hover:text-black dark:text-zinc-300 dark:hover:text-zinc-50",
-                      )}
-                    >
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
+        <div className="mt-5 grid grid-cols-12 gap-x-4 gap-y-5 sm:gap-x-5 sm:gap-y-6">
+          {/* 1 · Received from */}
+          <div className="col-span-12">
+            <FieldLabel>Received From</FieldLabel>
+            <div className="flex h-11 w-full gap-1 rounded-full border border-[#E5E5E5] bg-white p-1 dark:border-white/10 dark:bg-zinc-900 sm:h-10">
+              {(
+                [
+                  { key: "student" as const, label: "Student" },
+                  { key: "external" as const, label: "External payer" },
+                ] as const
+              ).map((option) => {
+                const active = payerSource === option.key;
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    onClick={() => setPayerSource(option.key)}
+                    className={cn(
+                      "flex h-full flex-1 items-center justify-center rounded-full px-3 text-[12px] font-medium transition-colors",
+                      active
+                        ? "bg-[#0F766E] text-white"
+                        : "text-black/65 hover:text-black dark:text-zinc-300 dark:hover:text-zinc-50",
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
             </div>
+          </div>
 
-            {isExternal ? (
-              <div className="min-w-0">
+          {/* 2 · Identity (same 6+6 grid for both modes) */}
+          {isExternal ? (
+            <>
+              <div className="col-span-12 sm:col-span-6">
                 <FieldLabel>Donor / Payer Name</FieldLabel>
                 <Input
                   value={externalPayer}
@@ -7205,57 +7219,78 @@ function ReceivePayment() {
                   placeholder="e.g. Parent Association · Ravi Kumar"
                   className="h-11 sm:h-10"
                 />
-                <p className="mt-1.5 text-[10.5px] leading-snug text-black/45">
-                  Not linked to a student ledger · counted as school income only
+                <p className="mt-1.5 min-h-[1.125rem] text-[10.5px] leading-snug text-black/45">
+                  Counted as school income only
                 </p>
               </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="min-w-0">
-                  <FieldLabel>Class</FieldLabel>
-                  <FieldSelect
-                    value={cls}
-                    onValueChange={(next) => {
-                      setCls(next);
-                      const first = students.find((s) => s.cls === next);
-                      if (first) setStu(first.name);
-                    }}
-                    options={classes.map((c) => ({ value: c, label: c }))}
-                    placeholder="Select class"
-                    disabled={classes.length === 0}
-                    searchable
-                    searchPlaceholder="Search class..."
-                  />
+              <div className="col-span-12 sm:col-span-6">
+                <FieldLabel>Ledger Link</FieldLabel>
+                <div className="flex h-11 items-center rounded-lg border border-dashed border-[#E5E5E5] bg-[#FAFAFA] px-3 text-[12px] text-black/55 dark:border-white/10 dark:bg-zinc-900/50 dark:text-zinc-400 sm:h-10">
+                  Not linked to a student ledger
                 </div>
-                <div className="min-w-0">
-                  <FieldLabel>Student</FieldLabel>
-                  <FieldSelect
-                    value={stu}
-                    onValueChange={setStu}
-                    options={(studentsInClass.length ? studentsInClass : students).map((s) => ({
-                      value: s.name,
-                      label: s.name,
-                    }))}
-                    placeholder="Select student"
-                    searchable
-                    searchPlaceholder="Search student..."
-                  />
-                </div>
+                <p className="mt-1.5 min-h-[1.125rem] text-[10.5px] leading-snug text-black/45">
+                  External receipts stay on school income
+                </p>
               </div>
-            )}
-          </section>
+            </>
+          ) : (
+            <>
+              <div className="col-span-12 sm:col-span-6">
+                <FieldLabel>Class</FieldLabel>
+                <FieldSelect
+                  value={cls}
+                  onValueChange={(next) => {
+                    setCls(next);
+                    const first = students.find((s) => s.cls === next);
+                    if (first) setStu(first.name);
+                  }}
+                  options={classes.map((c) => ({ value: c, label: c }))}
+                  placeholder="Select class"
+                  disabled={classes.length === 0}
+                  searchable
+                  searchPlaceholder="Search class..."
+                  triggerClassName="h-11 sm:h-10"
+                />
+                <p className="mt-1.5 min-h-[1.125rem] text-[10.5px] leading-snug text-black/45">
+                  {"\u00A0"}
+                </p>
+              </div>
+              <div className="col-span-12 sm:col-span-6">
+                <FieldLabel>Student</FieldLabel>
+                <FieldSelect
+                  value={stu}
+                  onValueChange={setStu}
+                  options={(studentsInClass.length ? studentsInClass : students).map((s) => ({
+                    value: s.name,
+                    label: s.name,
+                  }))}
+                  placeholder="Select student"
+                  searchable
+                  searchPlaceholder="Search student..."
+                  triggerClassName="h-11 sm:h-10"
+                />
+                <p className="mt-1.5 min-h-[1.125rem] text-[10.5px] leading-snug text-black/45">
+                  {"\u00A0"}
+                </p>
+              </div>
+            </>
+          )}
 
-          {/* 2 · Category & period */}
-          <section className="grid grid-cols-1 gap-4 border-b border-[#EFEFEF] pb-5 dark:border-white/10 sm:grid-cols-2 sm:gap-5 sm:pb-6">
-            <div className="min-w-0">
-              <FieldLabel>Fee Category</FieldLabel>
-              <div className="flex flex-wrap gap-2">
-                {paymentCategories.length === 0 && (
-                  <span className="text-[12px] text-black/55 dark:text-zinc-400">
-                    No categories configured · add them under Settings
-                  </span>
-                )}
-                {paymentCategories.map((c) => {
+          {/* Divider */}
+          <div className="col-span-12 border-t border-[#EFEFEF] dark:border-white/10" />
+
+          {/* 3 · Category & period */}
+          <div className="col-span-12 flex flex-col sm:col-span-6">
+            <div className="mb-1.5 flex h-8 items-center">
+              <FieldLabel className="mb-0">Fee Category</FieldLabel>
+            </div>
+            <div className="flex min-h-11 flex-wrap content-center gap-2 sm:min-h-10">
+              {paymentCategories.length === 0 ? (
+                <div className="flex h-11 w-full items-center rounded-lg border border-dashed border-[#E5E5E5] bg-[#FAFAFA] px-3 text-[12px] text-black/55 dark:border-white/10 dark:bg-zinc-900/50 dark:text-zinc-400 sm:h-10">
+                  No categories configured · add them under Settings
+                </div>
+              ) : (
+                paymentCategories.map((c) => {
                   const active = category === c.label;
                   return (
                     <button
@@ -7263,7 +7298,7 @@ function ReceivePayment() {
                       type="button"
                       onClick={() => selectCategory(c.label)}
                       className={cn(
-                        "rounded-full border px-3.5 py-2 text-[12px] font-medium transition-colors sm:py-1.5",
+                        "inline-flex h-11 items-center rounded-full border px-3.5 text-[12px] font-medium transition-colors sm:h-10",
                         active
                           ? "border-transparent bg-[#0F766E] text-white"
                           : "border-[#E5E5E5] text-black/65 hover:bg-[#F4F4F5] dark:border-white/15 dark:text-zinc-300 dark:hover:bg-white/5",
@@ -7272,215 +7307,222 @@ function ReceivePayment() {
                       {c.label}
                     </button>
                   );
-                })}
-              </div>
-            </div>
-
-            <div className="min-w-0">
-              <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-                <FieldLabel className="mb-0">Fee Period</FieldLabel>
-                <div className="flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-0.5 dark:border-white/10 dark:bg-zinc-900">
-                  {(
-                    [
-                      { key: "month" as const, label: "Month" },
-                      { key: "term" as const, label: "Term" },
-                    ] as const
-                  ).map((option) => {
-                    const active = feePeriodKind === option.key;
-                    const termDisabled = option.key === "term" && !termKindForCategory;
-                    return (
-                      <button
-                        key={option.key}
-                        type="button"
-                        disabled={termDisabled}
-                        title={
-                          termDisabled
-                            ? "Terms apply to Tuition Fee and Vehicle Fee"
-                            : undefined
-                        }
-                        onClick={() => setPeriodKind(option.key)}
-                        className={cn(
-                          "rounded-full px-3.5 py-1.5 text-[11px] font-medium transition-colors",
-                          active
-                            ? "bg-[#0F766E] text-white"
-                            : "text-black/65 hover:text-black dark:text-zinc-300 dark:hover:text-zinc-50",
-                          termDisabled &&
-                            "cursor-not-allowed opacity-40 hover:text-black/65 dark:hover:text-zinc-300",
-                        )}
-                      >
-                        {option.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              {feePeriodKind === "month" ? (
-                <FieldSelect
-                  value={feePeriod}
-                  onValueChange={setFeePeriod}
-                  options={monthOptions}
-                  placeholder="Select month"
-                />
-              ) : termsAvailable ? (
-                <FieldSelect
-                  value={feePeriod}
-                  onValueChange={setFeePeriod}
-                  options={termOptions}
-                  placeholder="Select term"
-                />
-              ) : (
-                <div className="flex min-h-11 items-center rounded-lg border border-dashed border-[#E5E5E5] bg-[#FAFAFA] px-3 text-[12px] text-black/55 dark:text-zinc-400 sm:min-h-10">
-                  No {termKindForCategory ? FEE_TERM_KIND_LABELS[termKindForCategory] : ""} terms
-                  yet · Settings → Fees
-                </div>
+                })
               )}
-              <p className="mt-1.5 text-[10.5px] leading-snug text-black/45 dark:text-zinc-400">
-                {feePeriodKind === "term" && selectedTerm
-                  ? [
-                      selectedTerm.coverage ||
-                        formatFeeTermCoverage(selectedTerm.startDate, selectedTerm.endDate),
-                      academicYear,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")
-                  : feePeriodKind === "month" && selectedMonthPeriod
-                    ? [
-                        selectedMonthPeriod.coverage ||
-                          formatFeeTermCoverage(
-                            selectedMonthPeriod.startDate,
-                            selectedMonthPeriod.endDate,
-                          ),
-                        academicYear,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")
-                    : `${feePeriodKind === "term" ? "Term" : "Month"} this receipt covers · ${academicYear}`}
-              </p>
             </div>
-          </section>
+            <p className="mt-1.5 min-h-[1.125rem] text-[10.5px] leading-snug text-black/45 dark:text-zinc-400">
+              {category ? `Selected · ${category}` : "\u00A0"}
+            </p>
+          </div>
 
-          {/* 4 · Amount & mode */}
-          <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="min-w-0">
-              <FieldLabel>Amount (₹)</FieldLabel>
-              <input
-                value={amount}
-                onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ""))}
-                inputMode="numeric"
-                placeholder="0"
-                className="h-11 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 font-mono text-[15px] font-semibold dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 sm:h-10 sm:text-[13px] sm:font-normal"
-              />
-              <p className="mt-1.5 min-h-[1.125rem] text-[10.5px] leading-snug text-black/45 dark:text-zinc-400">
-                {prefill !== undefined && prefill > 0 && prefillSource
-                  ? `Prefilled ₹ ${prefill.toLocaleString("en-IN")} from ${prefillSource}`
-                  : "\u00A0"}
-              </p>
-            </div>
-            <div className="min-w-0">
-              <FieldLabel>Payment Mode</FieldLabel>
-              <div className="flex h-11 gap-1 rounded-full border border-[#E5E5E5] bg-white p-1 dark:border-white/10 dark:bg-zinc-900 sm:h-10">
-                {["Bank", "UPI", "Cash"].map((m) => {
-                  const active = mode === m;
+          <div className="col-span-12 flex flex-col sm:col-span-6">
+            <div className="mb-1.5 flex h-8 items-center justify-between gap-2">
+              <FieldLabel className="mb-0">Fee Period</FieldLabel>
+              <div className="flex h-8 gap-1 rounded-full border border-[#E5E5E5] bg-white p-0.5 dark:border-white/10 dark:bg-zinc-900">
+                {(
+                  [
+                    { key: "month" as const, label: "Month" },
+                    { key: "term" as const, label: "Term" },
+                  ] as const
+                ).map((option) => {
+                  const active = feePeriodKind === option.key;
+                  const termDisabled = option.key === "term" && !termKindForCategory;
                   return (
                     <button
-                      key={m}
+                      key={option.key}
                       type="button"
-                      onClick={() => setMode(m)}
+                      disabled={termDisabled}
+                      title={
+                        termDisabled
+                          ? "Terms apply to Tuition Fee and Vehicle Fee"
+                          : undefined
+                      }
+                      onClick={() => setPeriodKind(option.key)}
                       className={cn(
-                        "flex-1 rounded-full px-2 text-[12px] font-medium transition-colors sm:px-3",
+                        "rounded-full px-3 text-[11px] font-medium transition-colors",
                         active
                           ? "bg-[#0F766E] text-white"
                           : "text-black/65 hover:text-black dark:text-zinc-300 dark:hover:text-zinc-50",
+                        termDisabled &&
+                          "cursor-not-allowed opacity-40 hover:text-black/65 dark:hover:text-zinc-300",
                       )}
                     >
-                      {m}
+                      {option.label}
                     </button>
                   );
                 })}
               </div>
             </div>
-          </section>
+            {feePeriodKind === "month" ? (
+              <FieldSelect
+                value={feePeriod}
+                onValueChange={setFeePeriod}
+                options={monthOptions}
+                placeholder="Select month"
+                triggerClassName="h-11 sm:h-10"
+              />
+            ) : termsAvailable ? (
+              <FieldSelect
+                value={feePeriod}
+                onValueChange={setFeePeriod}
+                options={termOptions}
+                placeholder="Select term"
+                triggerClassName="h-11 sm:h-10"
+              />
+            ) : (
+              <div className="flex h-11 items-center rounded-lg border border-dashed border-[#E5E5E5] bg-[#FAFAFA] px-3 text-[12px] text-black/55 dark:border-white/10 dark:bg-zinc-900/50 dark:text-zinc-400 sm:h-10">
+                No {termKindForCategory ? FEE_TERM_KIND_LABELS[termKindForCategory] : ""} terms
+                yet · Settings → Fees
+              </div>
+            )}
+            <p className="mt-1.5 min-h-[1.125rem] text-[10.5px] leading-snug text-black/45 dark:text-zinc-400">
+              {feePeriodKind === "term" && selectedTerm
+                ? [
+                    selectedTerm.coverage ||
+                      formatFeeTermCoverage(selectedTerm.startDate, selectedTerm.endDate),
+                    academicYear,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")
+                : feePeriodKind === "month" && selectedMonthPeriod
+                  ? [
+                      selectedMonthPeriod.coverage ||
+                        formatFeeTermCoverage(
+                          selectedMonthPeriod.startDate,
+                          selectedMonthPeriod.endDate,
+                        ),
+                      academicYear,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")
+                  : `${feePeriodKind === "term" ? "Term" : "Month"} this receipt covers · ${academicYear}`}
+            </p>
+          </div>
+
+          {/* Divider */}
+          <div className="col-span-12 border-t border-[#EFEFEF] dark:border-white/10" />
+
+          {/* 4 · Amount & mode */}
+          <div className="col-span-12 sm:col-span-6">
+            <FieldLabel>Amount (₹)</FieldLabel>
+            <input
+              value={amount}
+              onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ""))}
+              inputMode="numeric"
+              placeholder="0"
+              className="h-11 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 font-mono text-[15px] font-semibold dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 sm:h-10 sm:text-[13px] sm:font-normal"
+            />
+            <p className="mt-1.5 min-h-[1.125rem] text-[10.5px] leading-snug text-black/45 dark:text-zinc-400">
+              {prefill !== undefined && prefill > 0 && prefillSource
+                ? `Prefilled ₹ ${prefill.toLocaleString("en-IN")} from ${prefillSource}`
+                : "\u00A0"}
+            </p>
+          </div>
+          <div className="col-span-12 sm:col-span-6">
+            <FieldLabel>Payment Mode</FieldLabel>
+            <div className="flex h-11 gap-1 rounded-full border border-[#E5E5E5] bg-white p-1 dark:border-white/10 dark:bg-zinc-900 sm:h-10">
+              {["Bank", "UPI", "Cash"].map((m) => {
+                const active = mode === m;
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setMode(m)}
+                    className={cn(
+                      "flex h-full flex-1 items-center justify-center rounded-full px-2 text-[12px] font-medium transition-colors sm:px-3",
+                      active
+                        ? "bg-[#0F766E] text-white"
+                        : "text-black/65 hover:text-black dark:text-zinc-300 dark:hover:text-zinc-50",
+                    )}
+                  >
+                    {m}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-1.5 min-h-[1.125rem] text-[10.5px] leading-snug text-black/45 dark:text-zinc-400">
+              {"\u00A0"}
+            </p>
+          </div>
 
           {/* 5 · Notes & files */}
-          <section className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
-            <div className="min-w-0">
-              <FieldLabel>Narration</FieldLabel>
-              <Textarea
-                value={narration}
-                onChange={(e) => setNarration(e.target.value)}
-                placeholder="Optional note · purpose, reference, or remarks"
-                className="min-h-[96px] w-full resize-none rounded-lg border border-[#E5E5E5] bg-white px-3 py-2.5 text-[13px] lg:min-h-[120px]"
-              />
-            </div>
+          <div className="col-span-12 flex flex-col lg:col-span-6">
+            <FieldLabel>Narration</FieldLabel>
+            <Textarea
+              value={narration}
+              onChange={(e) => setNarration(e.target.value)}
+              placeholder="Optional note · purpose, reference, or remarks"
+              className="min-h-[140px] w-full flex-1 resize-none rounded-lg border border-[#E5E5E5] bg-white px-3 py-2.5 text-[13px] lg:min-h-[152px]"
+            />
+          </div>
 
-            <div className="min-w-0">
-              <div className="mb-1.5 flex items-center justify-between gap-2">
-                <FieldLabel className="mb-0">Attachments</FieldLabel>
-                <span className="text-[10.5px] font-medium text-black/45">
-                  {attachments.length} / {MAX_PAYMENT_ATTACHMENTS} · max 5 MB each
-                </span>
-              </div>
-              <div className="rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] p-3 dark:border-white/10 dark:bg-zinc-900/50">
-                {attachments.length > 0 ? (
-                  <ul className="mb-3 max-h-36 space-y-2 overflow-y-auto">
-                    {attachments.map((file) => (
-                      <li
-                        key={file.id}
-                        className="flex items-center gap-2 rounded-lg border border-[#EFEFEF] bg-white px-2.5 py-2 dark:border-white/10 dark:bg-zinc-900"
-                      >
-                        <FileText className="h-3.5 w-3.5 shrink-0 text-black/40" />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-[12px] font-medium text-black">{file.name}</div>
-                          <div className="font-mono text-[10px] text-black/45">
-                            {formatAttachmentSize(file.size)}
-                          </div>
-                        </div>
-                        <a
-                          href={file.dataUrl}
-                          download={file.name}
-                          className="inline-flex h-7 items-center rounded-lg border border-slate-200 px-2 text-[10.5px] font-semibold text-black/60 transition-colors hover:bg-slate-50 dark:text-zinc-400"
-                        >
-                          Open
-                        </a>
-                        <button
-                          type="button"
-                          onClick={() => removeAttachment(file.id)}
-                          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-red-200 text-red-600 transition-colors hover:bg-red-50"
-                          aria-label={`Remove ${file.name}`}
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="mb-3 text-[12px] leading-snug text-black/45">
-                    Attach bank slips, UPI screenshots, cheques, or supporting documents.
-                  </p>
-                )}
-                <input
-                  ref={attachmentInputRef}
-                  type="file"
-                  multiple
-                  accept="image/*,.pdf,.jpg,.jpeg,.png,.webp"
-                  className="hidden"
-                  onChange={(e) => {
-                    void addAttachments(e.target.files);
-                    e.target.value = "";
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => attachmentInputRef.current?.click()}
-                  disabled={attachments.length >= MAX_PAYMENT_ATTACHMENTS}
-                  className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3.5 text-[12px] font-semibold text-black transition-colors hover:border-black/20 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-                >
-                  <Paperclip className="h-3.5 w-3.5" />
-                  Add files
-                </button>
-              </div>
+          <div className="col-span-12 flex flex-col lg:col-span-6">
+            <div className="mb-1 flex min-h-[15px] items-center justify-between gap-2">
+              <FieldLabel className="mb-0">Attachments</FieldLabel>
+              <span className="text-[10.5px] font-medium text-black/45">
+                {attachments.length} / {MAX_PAYMENT_ATTACHMENTS} · max 5 MB each
+              </span>
             </div>
-          </section>
+            <div className="flex min-h-[140px] flex-1 flex-col rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] p-3 dark:border-white/10 dark:bg-zinc-900/50 lg:min-h-[152px]">
+              {attachments.length > 0 ? (
+                <ul className="mb-3 max-h-28 flex-1 space-y-2 overflow-y-auto">
+                  {attachments.map((file) => (
+                    <li
+                      key={file.id}
+                      className="flex items-center gap-2 rounded-lg border border-[#EFEFEF] bg-white px-2.5 py-2 dark:border-white/10 dark:bg-zinc-900"
+                    >
+                      <FileText className="h-3.5 w-3.5 shrink-0 text-black/40" />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[12px] font-medium text-black">{file.name}</div>
+                        <div className="font-mono text-[10px] text-black/45">
+                          {formatAttachmentSize(file.size)}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewAttachment(file)}
+                        className="inline-flex h-7 items-center rounded-lg border border-slate-200 px-2 text-[10.5px] font-semibold text-black/60 transition-colors hover:bg-slate-50 dark:text-zinc-400"
+                      >
+                        Open
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeAttachment(file.id)}
+                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-red-200 text-red-600 transition-colors hover:bg-red-50"
+                        aria-label={`Remove ${file.name}`}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mb-3 flex-1 text-[12px] leading-snug text-black/45">
+                  Attach bank slips, UPI screenshots, cheques, or supporting documents.
+                </p>
+              )}
+              <input
+                ref={attachmentInputRef}
+                type="file"
+                multiple
+                accept="image/*,.pdf,.jpg,.jpeg,.png,.webp"
+                className="hidden"
+                onChange={(e) => {
+                  void addAttachments(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => attachmentInputRef.current?.click()}
+                disabled={attachments.length >= MAX_PAYMENT_ATTACHMENTS}
+                className="mt-auto inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3.5 text-[12px] font-semibold text-black transition-colors hover:border-black/20 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+              >
+                <Paperclip className="h-3.5 w-3.5" />
+                Add files
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="mt-5 flex flex-col gap-3 rounded-xl border border-[#E8E8EA] bg-[#F8F8F9] p-4 dark:border-white/10 dark:bg-zinc-900/80 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:p-5">
@@ -7904,15 +7946,14 @@ function ReceivePayment() {
                             {formatAttachmentSize(file.size)}
                           </div>
                         </div>
-                        <a
-                          href={file.dataUrl}
-                          target="_blank"
-                          rel="noreferrer noopener"
+                        <button
+                          type="button"
+                          onClick={() => setPreviewAttachment(file)}
                           className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 text-[11px] font-semibold text-black/65 transition-colors hover:border-black/20 hover:text-black"
                         >
                           <ExternalLink className="h-3.5 w-3.5" />
                           Open
-                        </a>
+                        </button>
                       </li>
                     ))}
                   </ul>
@@ -8203,6 +8244,14 @@ function ReceivePayment() {
         }
         onConfirm={confirmDeleteHistoryPayment}
       />
+
+      <AttachmentPreviewDialog
+        file={previewAttachment}
+        open={Boolean(previewAttachment)}
+        onOpenChange={(open) => {
+          if (!open) setPreviewAttachment(null);
+        }}
+      />
     </div>
   );
 }
@@ -8345,6 +8394,7 @@ function MakePayment() {
   const [pendingAuthorisation, setPendingAuthorisation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const [previewAttachment, setPreviewAttachment] = useState<PaymentAttachment | null>(null);
   const [editingDisbursal, setEditingDisbursal] = useState<MadePayment | null>(null);
   const [pendingDeleteDisbursal, setPendingDeleteDisbursal] = useState<MadePayment | null>(null);
   const [disbursalEditForm, setDisbursalEditForm] = useState({
@@ -9019,9 +9069,8 @@ function MakePayment() {
               />
             )}
             {payeeType === "Salary" && selectedStaffId && (
-              <p className="mt-1.5 text-[11px] text-black/45">
-                Amount prefilled from attendance-adjusted salary for the selected month
-              </p>
+              <div className="mt-1.5 text-[11px] text-black/45">
+              </div>
             )}
           </div>
           {payeeType === "Salary" && (
@@ -9138,13 +9187,13 @@ function MakePayment() {
                           {formatAttachmentSize(file.size)}
                         </div>
                       </div>
-                      <a
-                        href={file.dataUrl}
-                        download={file.name}
+                      <button
+                        type="button"
+                        onClick={() => setPreviewAttachment(file)}
                         className="inline-flex h-7 items-center rounded-lg border border-slate-200 px-2 text-[10.5px] font-semibold text-black/60 dark:text-zinc-400 transition-colors hover:bg-slate-50"
                       >
                         Open
-                      </a>
+                      </button>
                       <button
                         type="button"
                         onClick={() => removeAttachment(file.id)}
@@ -9341,16 +9390,16 @@ function MakePayment() {
               {(payment.attachments?.length ?? 0) > 0 && (
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                   {payment.attachments?.map((file) => (
-                    <a
+                    <button
                       key={file.id}
-                      href={file.dataUrl}
-                      download={file.name}
+                      type="button"
+                      onClick={() => setPreviewAttachment(file)}
                       className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#E5E5E5] bg-[#FAFAFA] px-2 py-0.5 text-[10px] font-medium text-black/70 transition-colors hover:border-black/20 hover:bg-white"
                       title={file.name}
                     >
                       <FileText className="h-3 w-3 shrink-0" />
                       <span className="truncate">{file.name}</span>
-                    </a>
+                    </button>
                   ))}
                 </div>
               )}
@@ -9602,6 +9651,14 @@ function MakePayment() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AttachmentPreviewDialog
+        file={previewAttachment}
+        open={Boolean(previewAttachment)}
+        onOpenChange={(open) => {
+          if (!open) setPreviewAttachment(null);
+        }}
+      />
     </div>
   );
 }
@@ -9732,6 +9789,7 @@ export function SchoolSettings() {
       { id: "vehicles", label: "Vehicles" },
       { id: "transport", label: "Transport" },
       { id: "fees", label: "Fees" },
+      { id: "billing", label: "Billing" },
       { id: "system", label: "System" },
     ],
     [],
@@ -9868,6 +9926,28 @@ export function SchoolSettings() {
         </div>
       )}
 
+      {activeTab === "billing" && (
+        <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
+          <div className="mb-4">
+            <div className="text-[17px] font-bold tracking-tight text-black dark:text-zinc-50">
+              Platform billing
+            </div>
+            <p className="mt-1 text-[12px] text-black/55 dark:text-zinc-400">
+              Subscription invoices and payment receipts for {tenantName}
+              {session?.tier ? ` · ${session.tier} plan` : ""}
+            </p>
+          </div>
+          <PlatformInvoicesPanel
+            mode="tenant"
+            tenantId={session?.tenantId}
+            tenantName={tenantName}
+            schoolHost={
+              typeof window !== "undefined" ? window.location.hostname : undefined
+            }
+          />
+        </OrganicCard>
+      )}
+
       {activeTab === "system" && (
         <div className="grid grid-cols-12 gap-3 sm:gap-4 lg:gap-5">
           <CategoriesCard
@@ -9880,6 +9960,9 @@ export function SchoolSettings() {
             themeSettings={themeSettings}
             setThemeSettings={setThemeSettings}
           />
+          <div className="col-span-12">
+            <PwaInstallCard />
+          </div>
         </div>
       )}
     </>

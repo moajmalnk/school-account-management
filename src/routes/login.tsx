@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { Label } from "@/components/ui/label";
 import { OrganicCard } from "@/components/ui/organic-card";
+import { PwaInstallCard } from "@/components/pwa/PwaInstallBanner";
 import { INVALID_CREDENTIALS_MESSAGE, MOCK_CREDENTIALS, useAuth } from "@/lib/auth";
 import { firstAllowedTenantPath } from "@/lib/permissions";
 
@@ -257,6 +258,10 @@ function LoginPage() {
             })}
           </div>
         </OrganicCard>
+
+        <div className="mt-4">
+          <PwaInstallCard />
+        </div>
 
         <div className="mt-6 text-center font-mono text-[10px] uppercase tracking-wider text-black/40">
           School Accounts SaaS · v2.0
