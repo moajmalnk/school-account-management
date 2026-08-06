@@ -175,6 +175,20 @@ export async function deleteSuperAdminTenant(
   });
 }
 
+/** Open a school workspace as its primary admin (short-lived JWT + audit ticket). */
+export async function impersonateSuperAdminTenant(
+  tenantId: string,
+  ticket?: string,
+): Promise<ImpersonateResult> {
+  return apiRequest<ImpersonateResult>("/api/super-admin/tenants/impersonate.php", {
+    method: "POST",
+    body: {
+      tenantId,
+      ...(ticket ? { ticket } : {}),
+    },
+  });
+}
+
 export type PlatformInvoice = {
   id: string;
   invoiceNumber: string;
