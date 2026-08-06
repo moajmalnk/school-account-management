@@ -9,6 +9,7 @@ import {
 } from "react";
 
 const DISMISS_KEY = "pwa-install-dismissed-at";
+const INSTALLED_KEY = "pwa-app-installed";
 const DISMISS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 type PwaContextValue = {
@@ -29,14 +30,18 @@ const PwaContext = createContext<PwaContextValue | null>(null);
 function detectIos() {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent;
-  const iOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const iOS =
+    /iPad|iPhone|iPod/.test(ua) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   return iOS && !(window as Window & { MSStream?: unknown }).MSStream;
 }
 
 function detectStandalone() {
   if (typeof window === "undefined") return false;
   const media = window.matchMedia("(display-mode: standalone)").matches;
-  const iosStandalone = Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
+  const iosStandalone = Boolean(
+    (navigator as Navigator & { standalone?: boolean }).standalone,
+  );
   const twa = document.referrer.startsWith("android-app://");
   return media || iosStandalone || twa;
 }
@@ -53,6 +58,36 @@ function readDismissed() {
   }
 }
 
+function readInstalledFlag() {
+  try {
+    return localStorage.getItem(INSTALLED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeInstalledFlag() {
+  try {
+    localStorage.setItem(INSTALLED_KEY, "1");
+    localStorage.removeItem(DISMISS_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+async function detectRelatedAppsInstalled(): Promise<boolean> {
+  try {
+    const nav = navigator as Navigator & {
+      getInstalledRelatedApps?: () => Promise<unknown[]>;
+    };
+    if (typeof nav.getInstalledRelatedApps !== "function") return false;
+    const apps = await nav.getInstalledRelatedApps();
+    return Array.isArray(apps) && apps.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 export function PwaProvider({ children }: { children: ReactNode }) {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
@@ -61,26 +96,47 @@ export function PwaProvider({ children }: { children: ReactNode }) {
   const [isDismissed, setIsDismissed] = useState(false);
   const [installing, setInstalling] = useState(false);
 
+  const markInstalled = useCallback(() => {
+    writeInstalledFlag();
+    setDeferred(null);
+    setIsInstalled(true);
+    setIsStandalone(detectStandalone() || true);
+    setIsDismissed(true);
+  }, []);
+
   useEffect(() => {
+    const standalone = detectStandalone();
+    const storedInstalled = readInstalledFlag();
     setIsIos(detectIos());
-    setIsStandalone(detectStandalone());
+    setIsStandalone(standalone);
     setIsDismissed(readDismissed());
+    if (standalone || storedInstalled) {
+      setIsInstalled(true);
+      writeInstalledFlag();
+    }
+
+    void detectRelatedAppsInstalled().then((related) => {
+      if (related) {
+        writeInstalledFlag();
+        setIsInstalled(true);
+      }
+    });
 
     const onBip = (e: BeforeInstallPromptEvent) => {
       e.preventDefault();
+      // Never revive the prompt if the app is already installed / running standalone.
+      if (detectStandalone() || readInstalledFlag()) {
+        setDeferred(null);
+        setIsInstalled(true);
+        return;
+      }
       setDeferred(e);
-      setIsInstalled(false);
     };
     const onInstalled = () => {
-      setDeferred(null);
-      setIsInstalled(true);
-      setIsStandalone(true);
+      markInstalled();
     };
     const onDisplayMode = (e: MediaQueryListEvent) => {
-      if (e.matches) {
-        setIsStandalone(true);
-        setIsInstalled(true);
-      }
+      if (e.matches) markInstalled();
     };
 
     window.addEventListener("beforeinstallprompt", onBip);
@@ -88,14 +144,12 @@ export function PwaProvider({ children }: { children: ReactNode }) {
     const mql = window.matchMedia("(display-mode: standalone)");
     mql.addEventListener?.("change", onDisplayMode);
 
-    if (detectStandalone()) setIsInstalled(true);
-
     return () => {
       window.removeEventListener("beforeinstallprompt", onBip);
       window.removeEventListener("appinstalled", onInstalled);
       mql.removeEventListener?.("change", onDisplayMode);
     };
-  }, []);
+  }, [markInstalled]);
 
   const dismissBanner = useCallback(() => {
     try {
@@ -107,6 +161,8 @@ export function PwaProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const resetDismiss = useCallback(() => {
+    // Do not revive prompts after a confirmed install.
+    if (readInstalledFlag() || detectStandalone()) return;
     try {
       localStorage.removeItem(DISMISS_KEY);
     } catch {
@@ -116,6 +172,10 @@ export function PwaProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const install = useCallback(async () => {
+    if (detectStandalone() || readInstalledFlag()) {
+      markInstalled();
+      return "accepted";
+    }
     if (detectIos() && !detectStandalone()) return "ios";
     if (!deferred) return "unavailable";
     setInstalling(true);
@@ -124,8 +184,7 @@ export function PwaProvider({ children }: { children: ReactNode }) {
       const choice = await deferred.userChoice;
       setDeferred(null);
       if (choice.outcome === "accepted") {
-        setIsInstalled(true);
-        setIsStandalone(true);
+        markInstalled();
       }
       return choice.outcome;
     } catch {
@@ -133,15 +192,17 @@ export function PwaProvider({ children }: { children: ReactNode }) {
     } finally {
       setInstalling(false);
     }
-  }, [deferred]);
+  }, [deferred, markInstalled]);
 
-  const canInstall = Boolean(deferred) || (isIos && !isStandalone && !isInstalled);
-  const showBanner = canInstall && !isStandalone && !isDismissed;
+  const installed = isInstalled || isStandalone || readInstalledFlag();
+  const canInstall =
+    !installed && (Boolean(deferred) || (isIos && !isStandalone));
+  const showBanner = canInstall && !isDismissed;
 
   const value = useMemo<PwaContextValue>(
     () => ({
       canInstall,
-      isInstalled: isInstalled || isStandalone,
+      isInstalled: installed,
       isIos,
       isStandalone,
       isDismissed,
@@ -153,7 +214,7 @@ export function PwaProvider({ children }: { children: ReactNode }) {
     }),
     [
       canInstall,
-      isInstalled,
+      installed,
       isStandalone,
       isIos,
       isDismissed,

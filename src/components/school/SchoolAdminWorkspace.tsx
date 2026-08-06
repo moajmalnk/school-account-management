@@ -5,7 +5,6 @@ import {
   TrendingUp,
   Plus,
   AlertTriangle,
-  Bell,
   CheckCircle2,
   Printer,
   Download,
@@ -607,7 +606,6 @@ type PremiumDashboardProps = {
   totalBalance: number;
   overdueStudents: Student[];
   recentReceipts: Payment[];
-  unreadNotifications: number;
   period: PaymentPeriod;
   setPeriod: (p: PaymentPeriod) => void;
   customRange: CustomDateRange;
@@ -877,7 +875,6 @@ function PremiumDashboard({
   totalBalance,
   overdueStudents,
   recentReceipts,
-  unreadNotifications,
   period,
   setPeriod,
   customRange,
@@ -935,26 +932,6 @@ function PremiumDashboard({
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      {unreadNotifications > 0 && (
-        <Link
-          to="/tenant/notifications"
-          className={cn(
-            dashCardClass,
-            "flex w-full items-center gap-3 bg-white/75 p-4 transition-colors hover:bg-white/90 md:hidden",
-          )}
-        >
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#CCFBF1]">
-            <Bell className="h-4 w-4 text-[#0F766E]" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-[13px] font-semibold text-slate-900">
-              {unreadNotifications} unread alert{unreadNotifications === 1 ? "" : "s"}
-            </div>
-            <p className="mt-0.5 text-[12px] text-slate-500">Fee reminders & staff updates</p>
-          </div>
-        </Link>
-      )}
-
       <div className="grid min-w-0 grid-cols-1 gap-4 sm:gap-5 xl:grid-cols-12">
         <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:col-span-8">
           {/* School Overview */}
@@ -1439,7 +1416,6 @@ export function SchoolDashboard() {
     staff,
     activePayments: payments,
     academicYear,
-    notifications,
     hydrated,
   } = useTenantStore();
   const tenantScope = session?.tenantId ?? session?.tenantName ?? "tenant";
@@ -1480,18 +1456,13 @@ export function SchoolDashboard() {
 
   const recentReceipts = useMemo(() => filteredPayments.slice(0, 5), [filteredPayments]);
 
-  const unreadNotifications = useMemo(
-    () => notifications.filter((n) => !n.read).length,
-    [notifications],
-  );
-
   if (!hydrated || !disbursementsLoaded) {
     return <TenantDashboardSkeleton />;
   }
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-teal-500/20 bg-teal-500/5 px-3.5 py-2.5 dark:border-teal-400/20 dark:bg-teal-400/10">
+      <div className="hidden flex-wrap items-center justify-between gap-2 rounded-2xl border border-teal-500/20 bg-teal-500/5 px-3.5 py-2.5 dark:border-teal-400/20 dark:bg-teal-400/10 md:flex">
         <p className="text-[12.5px] font-medium text-slate-700 dark:text-zinc-200">
           Books open for <span className="font-semibold text-teal-800 dark:text-teal-300">{academicYear}</span>
         </p>
@@ -1512,7 +1483,6 @@ export function SchoolDashboard() {
         totalBalance={totalBalance}
         overdueStudents={overdueStudents}
         recentReceipts={recentReceipts}
-        unreadNotifications={unreadNotifications}
         period={period}
         setPeriod={setPeriod}
         customRange={customRange}
