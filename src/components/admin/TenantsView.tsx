@@ -27,6 +27,7 @@ import {
   updateSuperAdminTenant,
 } from "@/lib/api/super-admin";
 import { ApiError, getApiToken } from "@/lib/api/client";
+import { TenantsViewSkeleton } from "@/components/admin/TenantsViewSkeleton";
 import { OrganicCard } from "@/components/ui/organic-card";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
@@ -270,15 +271,17 @@ export function TenantsView({
     }
   };
 
+  if (loading) {
+    return <TenantsViewSkeleton />;
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
         <div>
           <h1 className="text-heading">School Tenants Registry</h1>
           <p className="mt-2 text-[14px] text-black/55">
-            {loading
-              ? "Loading tenants from API…"
-              : `${filtered.length} of ${tenants.length} tenants · isolated routing keys, provisioning & billing`}
+            {`${filtered.length} of ${tenants.length} tenants · isolated routing keys, provisioning & billing`}
           </p>
         </div>
         <button

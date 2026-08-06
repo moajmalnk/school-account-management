@@ -10,8 +10,8 @@ import {
 
 import { apiLogin } from "@/lib/api/auth";
 import {
-  ApiError,
   clearApiTokenBackup,
+  clearImpersonationApiToken,
   restoreApiTokenBackup,
   setApiToken,
 } from "@/lib/api/client";
@@ -94,6 +94,25 @@ export const MOCK_CREDENTIALS: Record<
 
 export const INVALID_CREDENTIALS_MESSAGE =
   "Invalid credentials matching selected authentication tier. Please review inputs.";
+
+export const API_UNREACHABLE_MESSAGE =
+  "Cannot reach the API (network or CORS). Confirm spi.macadz.com allows this site origin, then retry.";
+
+function loginFailureMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    return err.message || INVALID_CREDENTIALS_MESSAGE;
+  }
+  if (
+    err instanceof TypeError ||
+    (err instanceof Error &&
+      /failed to fetch|networkerror|load failed|network request failed/i.test(
+        err.message,
+      ))
+  ) {
+    return API_UNREACHABLE_MESSAGE;
+  }
+  return INVALID_CREDENTIALS_MESSAGE;
+}
 
 function isSessionRole(value: unknown): value is Role {
   return value === "super_admin" || value === "school_admin" || value === "tenant_user";
@@ -213,6 +232,7 @@ export function clearImpersonationSession() {
 export function endImpersonation(): string {
   const source = readSession()?.impersonationSource;
   clearImpersonationSession();
+  clearImpersonationApiToken();
   restoreApiTokenBackup();
   return source === "super_admin" ? "/super-admin/tenants" : "/tenant/settings?tab=users";
 }
@@ -319,9 +339,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setSession(next);
           return { ok: true, redirect: expected.redirect, session: next };
         }
-        const message =
-          err instanceof ApiError ? err.message : INVALID_CREDENTIALS_MESSAGE;
-        return { ok: false, error: message || INVALID_CREDENTIALS_MESSAGE };
+        return { ok: false, error: loginFailureMessage(err) };
       }
     }
 
@@ -382,9 +400,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             session: next,
           };
         }
-        const message =
-          err instanceof ApiError ? err.message : INVALID_CREDENTIALS_MESSAGE;
-        return { ok: false, error: message || INVALID_CREDENTIALS_MESSAGE };
+        return { ok: false, error: loginFailureMessage(err) };
       }
     }
 
@@ -397,6 +413,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         if (window.sessionStorage.getItem(IMPERSONATION_KEY)) {
           window.sessionStorage.removeItem(IMPERSONATION_KEY);
+          clearImpersonationApiToken();
           restoreApiTokenBackup();
           setSession(readPersistentSession());
           return;
