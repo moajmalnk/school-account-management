@@ -52,6 +52,19 @@ export type RemoteTenantBundle = {
   studentYearLedgers: ReturnType<typeof buildLedgerFromStudents>[];
 };
 
+const EMPTY_SCHOOL_DETAILS: SchoolDetails = {
+  name: "",
+  tagline: "",
+  address: "",
+  phone: "",
+  email: "",
+  website: "",
+  registrationNo: "",
+  affiliationNo: "",
+  principalName: "",
+  establishedYear: "",
+};
+
 async function getSafe<T>(path: string, fallback: T): Promise<T> {
   const maxAttempts = 3;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -74,24 +87,25 @@ async function getSafe<T>(path: string, fallback: T): Promise<T> {
   return fallback;
 }
 
-function nonEmpty<T>(remote: T[], seed: T[]): T[] {
-  return remote.length > 0 ? remote : seed;
-}
-
 /** Dedupe concurrent hydrates (React Strict Mode mounts twice in dev). */
 let inflightBundle: Promise<RemoteTenantBundle | null> | null = null;
+let inflightToken: string | null = null;
 
 /**
  * Load tenant workspace data from production API when a JWT is present.
+ * Empty lists are kept empty — do NOT substitute mock/seed data for a live school
+ * (new tenants would otherwise show Silver Hills demo rows).
  * Requests run one-at-a-time — Hostinger shared MySQL drops sockets under storms
  * (SQLSTATE[HY000] [2002] Operation not permitted).
  */
 export async function fetchRemoteTenantBundle(
   signal?: AbortSignal,
 ): Promise<RemoteTenantBundle | null> {
-  if (!getApiToken()) return null;
-  if (inflightBundle) return inflightBundle;
+  const token = getApiToken();
+  if (!token) return null;
+  if (inflightBundle && inflightToken === token) return inflightBundle;
 
+  inflightToken = token;
   inflightBundle = (async (): Promise<RemoteTenantBundle | null> => {
     void signal;
 
@@ -145,21 +159,20 @@ export async function fetchRemoteTenantBundle(
       ? school.academicYears
       : ["AY 2024-25", "AY 2025-26", "AY 2026-27"];
 
-    const nextStudents = nonEmpty(students, SEED_STUDENTS);
     return {
-      students: nextStudents,
-      staff: nonEmpty(staff, SEED_STAFF),
-      payments: nonEmpty(payments, SEED_PAYMENTS),
-      departments: nonEmpty(departments, SEED_DEPARTMENTS),
-      roles: nonEmpty(roles, SEED_ROLES),
-      classes: nonEmpty(classes, SEED_CLASSES),
-      transportRoutes: nonEmpty(routes, SEED_TRANSPORT),
-      transportVehicles: nonEmpty(vehicles, SEED_VEHICLES),
-      paymentCategories: nonEmpty(paymentCategories, SEED_PAYMENT_CATEGORIES),
-      feeTerms: nonEmpty(feeTerms, SEED_FEE_TERMS),
+      students,
+      staff,
+      payments,
+      departments,
+      roles,
+      classes,
+      transportRoutes: routes,
+      transportVehicles: vehicles,
+      paymentCategories,
+      feeTerms,
       tenantUsers: users,
-      notifications: nonEmpty(notifications, [...SEED_NOTIFICATIONS]),
-      schoolDetails: school?.schoolDetails ?? { ...SEED_SCHOOL_DETAILS },
+      notifications,
+      schoolDetails: school?.schoolDetails ?? { ...EMPTY_SCHOOL_DETAILS },
       themeSettings: school?.themeSettings ?? { ...SEED_THEME_SETTINGS },
       academicYear,
       academicYears,
@@ -168,11 +181,40 @@ export async function fetchRemoteTenantBundle(
         ? todos.dashboardTodos
         : ["", "", "", "", ""],
       dashboardNote: typeof todos?.dashboardNote === "string" ? todos.dashboardNote : "",
-      studentYearLedgers: [buildLedgerFromStudents(nextStudents, academicYear)],
+      studentYearLedgers: [buildLedgerFromStudents(students, academicYear)],
     };
   })().finally(() => {
-    inflightBundle = null;
+    if (inflightToken === token) {
+      inflightBundle = null;
+      inflightToken = null;
+    }
   });
 
   return inflightBundle;
+}
+
+/** Offline / no-JWT demo bundle (seeds only). */
+export function seedTenantBundle(): RemoteTenantBundle {
+  const academicYear = "AY 2025-26";
+  return {
+    students: SEED_STUDENTS,
+    staff: SEED_STAFF,
+    payments: SEED_PAYMENTS,
+    departments: SEED_DEPARTMENTS,
+    roles: SEED_ROLES,
+    classes: SEED_CLASSES,
+    transportRoutes: SEED_TRANSPORT,
+    transportVehicles: SEED_VEHICLES,
+    paymentCategories: SEED_PAYMENT_CATEGORIES,
+    feeTerms: SEED_FEE_TERMS,
+    tenantUsers: [],
+    notifications: [...SEED_NOTIFICATIONS],
+    schoolDetails: { ...SEED_SCHOOL_DETAILS },
+    themeSettings: { ...SEED_THEME_SETTINGS },
+    academicYear,
+    academicYears: ["AY 2024-25", "AY 2025-26", "AY 2026-27"],
+    dashboardTodos: ["", "", "", "", ""],
+    dashboardNote: "",
+    studentYearLedgers: [buildLedgerFromStudents(SEED_STUDENTS, academicYear)],
+  };
 }
