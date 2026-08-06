@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Download, FileText, Loader2, Plus, Receipt } from "lucide-react";
 import { toast } from "sonner";
 
+import { PlatformDocumentPreview, type PlatformDocKind } from "@/components/admin/PlatformDocumentPreview";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/client";
 import {
@@ -11,10 +12,6 @@ import {
   markSuperAdminTenantInvoicePaid,
   type PlatformInvoice,
 } from "@/lib/api/super-admin";
-import {
-  downloadPlatformInvoicePdf,
-  downloadPlatformReceiptPdf,
-} from "@/lib/platform-invoice-export";
 import { cn } from "@/lib/utils";
 
 const CURRENCY_SYMBOL: Record<string, string> = {
@@ -25,6 +22,7 @@ const CURRENCY_SYMBOL: Record<string, string> = {
 
 type IssueDraft = {
   billingCycle: string;
+  pricingModel?: "per_student" | "flat_cycle";
   currency: string;
   studentsBilled: number;
   ratePerStudent: number;
@@ -57,6 +55,10 @@ export function PlatformInvoicesPanel({
   const [rows, setRows] = useState<PlatformInvoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{
+    kind: PlatformDocKind;
+    invoice: PlatformInvoice;
+  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -122,26 +124,37 @@ export function PlatformInvoicesPanel({
     }
   };
 
-  const downloadInvoice = (invoice: PlatformInvoice) => {
-    downloadPlatformInvoicePdf(
-      { ...invoice, tenantName: invoice.tenantName || tenantName },
-      { schoolHost },
-    );
+  const openInvoice = (invoice: PlatformInvoice) => {
+    setPreview({
+      kind: "invoice",
+      invoice: { ...invoice, tenantName: invoice.tenantName || tenantName },
+    });
   };
 
-  const downloadReceipt = (invoice: PlatformInvoice) => {
-    try {
-      downloadPlatformReceiptPdf(
-        { ...invoice, tenantName: invoice.tenantName || tenantName },
-        { schoolHost },
-      );
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Receipt unavailable");
+  const openReceipt = (invoice: PlatformInvoice) => {
+    if (invoice.status !== "Paid" || !invoice.receiptNumber) {
+      toast.error("Receipt unavailable", {
+        description: "Mark the invoice paid to unlock the receipt",
+      });
+      return;
     }
+    setPreview({
+      kind: "receipt",
+      invoice: { ...invoice, tenantName: invoice.tenantName || tenantName },
+    });
   };
 
   return (
     <div className={cn("space-y-3", className)}>
+      <PlatformDocumentPreview
+        open={Boolean(preview)}
+        onOpenChange={(next) => {
+          if (!next) setPreview(null);
+        }}
+        kind={preview?.kind || "invoice"}
+        invoice={preview?.invoice || null}
+        schoolHost={schoolHost}
+      />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
@@ -237,7 +250,7 @@ export function PlatformInvoicesPanel({
                       variant="outline"
                       size="sm"
                       className="h-8 rounded-full px-2.5 text-[11px]"
-                      onClick={() => downloadInvoice(inv)}
+                      onClick={() => openInvoice(inv)}
                     >
                       <FileText className="h-3.5 w-3.5" />
                       Invoice
@@ -248,8 +261,8 @@ export function PlatformInvoicesPanel({
                       size="sm"
                       className="h-8 rounded-full px-2.5 text-[11px]"
                       disabled={!paid}
-                      onClick={() => downloadReceipt(inv)}
-                      title={paid ? "Download receipt" : "Mark paid to unlock receipt"}
+                      onClick={() => openReceipt(inv)}
+                      title={paid ? "View receipt" : "Mark paid to unlock receipt"}
                     >
                       <Download className="h-3.5 w-3.5" />
                       Receipt

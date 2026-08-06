@@ -182,6 +182,7 @@ export type PlatformInvoice = {
   dueDate: string;
   periodLabel: string;
   billingCycle: string;
+  pricingModel?: "per_student" | "flat_cycle" | string | null;
   currency: string;
   studentsBilled: number;
   ratePerStudent: number;
@@ -212,6 +213,7 @@ export async function fetchSuperAdminTenantInvoices(
 export async function issueSuperAdminTenantInvoice(input: {
   tenantId: string;
   billingCycle: string;
+  pricingModel?: "per_student" | "flat_cycle";
   currency: string;
   studentsBilled: number;
   ratePerStudent: number;

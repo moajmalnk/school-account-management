@@ -105,9 +105,13 @@ const STATUS_TOOLTIP: Record<Status, string> = {
 type BillingCycle = "Monthly" | "Quarterly" | "Annual";
 type Currency = "INR" | "USD" | "EUR";
 type PaymentMethod = "Razorpay" | "Stripe" | "Bank Transfer" | "Manual Invoice";
+/** Per student = seats × rate. Flat cycle = fixed fee for the billing period. */
+type PricingModel = "per_student" | "flat_cycle";
 
 type BillingRule = {
   cycle: BillingCycle;
+  pricingModel: PricingModel;
+  /** Per-student rate, or flat fee for the billing cycle when pricingModel is flat_cycle. */
   ratePerStudent: number;
   currency: Currency;
   autoCharge: boolean;
@@ -120,6 +124,36 @@ type BillingRule = {
 
 const CURRENCY_SYMBOL: Record<Currency, string> = { INR: "₹", USD: "$", EUR: "€" };
 
+const PRICING_MODEL_LABEL: Record<PricingModel, string> = {
+  per_student: "Per student",
+  flat_cycle: "Flat per cycle",
+};
+
+function cycleUnitLabel(cycle: BillingCycle): string {
+  if (cycle === "Quarterly") return "quarter";
+  if (cycle === "Annual") return "year";
+  return "month";
+}
+
+function rateFieldLabel(rule: BillingRule, sym: string): string {
+  if (rule.pricingModel === "flat_cycle") {
+    return `Flat rate / ${cycleUnitLabel(rule.cycle)} (${sym})`;
+  }
+  return `Rate / student (${sym})`;
+}
+
+function billingGross(rule: BillingRule, students: number): number {
+  if (rule.pricingModel === "flat_cycle") return Math.max(0, rule.ratePerStudent);
+  return rule.ratePerStudent * Math.max(students, 1);
+}
+
+function billingRateDescription(rule: BillingRule, sym: string): string {
+  if (rule.pricingModel === "flat_cycle") {
+    return `${sym}${rule.ratePerStudent}/${cycleUnitLabel(rule.cycle)} flat`;
+  }
+  return `${sym}${rule.ratePerStudent}/student`;
+}
+
 function defaultBilling(t: Tenant): BillingRule {
   const created = new Date(t.createdAt);
   const next = new Date(created);
@@ -127,6 +161,7 @@ function defaultBilling(t: Tenant): BillingRule {
   next.setMonth(next.getMonth() + monthsAhead);
   return {
     cycle: t.tier === "Enterprise" ? "Annual" : t.tier === "Premium" ? "Quarterly" : "Monthly",
+    pricingModel: "per_student",
     ratePerStudent: t.tier === "Enterprise" ? 299 : t.tier === "Premium" ? 199 : 99,
     currency: "INR",
     autoCharge: t.status === "Active",
@@ -270,7 +305,13 @@ export function TenantsView({
   const upsertBilling = (id: string, rule: BillingRule) => {
     setBillingMap((prev) => ({ ...prev, [id]: rule }));
   };
-  const getBilling = (t: Tenant) => billingMap[t.id] ?? defaultBilling(t);
+  const getBilling = (t: Tenant): BillingRule => {
+    const base = billingMap[t.id] ?? defaultBilling(t);
+    return {
+      ...base,
+      pricingModel: base.pricingModel ?? "per_student",
+    };
+  };
 
   const confirmDeleteTenant = async () => {
     if (!pendingDelete || deleting) return;
@@ -577,7 +618,7 @@ export function TenantsView({
           if (!detailTarget) return;
           upsertBilling(detailTarget.id, rule);
           toast.success("Billing rules saved", {
-            description: `${detailTarget.name} · ${rule.cycle} · ${CURRENCY_SYMBOL[rule.currency]}${rule.ratePerStudent}/student`,
+            description: `${detailTarget.name} · ${rule.cycle} · ${PRICING_MODEL_LABEL[rule.pricingModel]} · ${billingRateDescription(rule, CURRENCY_SYMBOL[rule.currency])}`,
           });
         }}
       />
@@ -590,7 +631,7 @@ export function TenantsView({
           if (!billingTarget) return;
           upsertBilling(billingTarget.id, rule);
           toast.success("Billing rules saved", {
-            description: `${billingTarget.name} · ${rule.cycle} · ${CURRENCY_SYMBOL[rule.currency]}${rule.ratePerStudent}/student`,
+            description: `${billingTarget.name} · ${rule.cycle} · ${PRICING_MODEL_LABEL[rule.pricingModel]} · ${billingRateDescription(rule, CURRENCY_SYMBOL[rule.currency])}`,
           });
           setBillingTarget(null);
         }}
@@ -961,10 +1002,11 @@ function TenantDetailDrawer({
   const tStyle = TIER_STYLE[tenant.tier];
   const sStyle = STATUS_STYLE[tenant.status];
   const sym = CURRENCY_SYMBOL[draft.currency];
-  const grossPerCycle = draft.ratePerStudent * Math.max(tenant.students, 1);
+  const grossPerCycle = billingGross(draft, tenant.students);
   const discount = grossPerCycle * (draft.discountPercent / 100);
   const tax = (grossPerCycle - discount) * (draft.taxPercent / 100);
   const total = grossPerCycle - discount + tax;
+  const seats = Math.max(tenant.students, 1);
 
   const set = <K extends keyof BillingRule>(k: K, v: BillingRule[K]) =>
     setBillingDraft((prev) => {
@@ -974,7 +1016,11 @@ function TenantDetailDrawer({
 
   const saveBilling = () => {
     if (draft.ratePerStudent <= 0) {
-      toast.error("Rate per student must be greater than zero");
+      toast.error(
+        draft.pricingModel === "flat_cycle"
+          ? "Flat rate must be greater than zero"
+          : "Rate per student must be greater than zero",
+      );
       return;
     }
     onSaveBilling(draft);
@@ -1114,6 +1160,52 @@ function TenantDetailDrawer({
             <TabsContent value="billing" className="mt-0">
               <div className="grid grid-cols-12 gap-3">
                 <div className="col-span-12">
+                  <Field label="Payment system">
+                    <div className="grid grid-cols-12 gap-2">
+                      {(
+                        [
+                          {
+                            id: "per_student" as const,
+                            title: "Per student",
+                            hint: "Bill seats × rate each cycle",
+                          },
+                          {
+                            id: "flat_cycle" as const,
+                            title: "Flat per cycle",
+                            hint: "Fixed fee for the billing period",
+                          },
+                        ] as const
+                      ).map((opt) => {
+                        const sel = draft.pricingModel === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => set("pricingModel", opt.id)}
+                            className={cn(
+                              "col-span-6 rounded-xl border px-3 py-2.5 text-left transition",
+                              sel
+                                ? "border-transparent bg-[#0F766E] text-white shadow-sm"
+                                : "border-[#E5E5E5] bg-white text-black/65 hover:border-black/30",
+                            )}
+                          >
+                            <div className="text-[12px] font-semibold">{opt.title}</div>
+                            <div
+                              className={cn(
+                                "mt-0.5 text-[10.5px] leading-snug",
+                                sel ? "text-white/80" : "text-black/45",
+                              )}
+                            >
+                              {opt.hint}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </Field>
+                </div>
+
+                <div className="col-span-12">
                   <Field label="Billing Cycle">
                     <div className="grid grid-cols-12 gap-2">
                       {(["Monthly", "Quarterly", "Annual"] as BillingCycle[]).map((c) => {
@@ -1139,7 +1231,7 @@ function TenantDetailDrawer({
                 </div>
 
                 <div className="col-span-12 sm:col-span-6">
-                  <Field label={`Rate / student (${sym})`}>
+                  <Field label={rateFieldLabel(draft, sym)}>
                     <Input
                       type="number"
                       min={0}
@@ -1242,7 +1334,11 @@ function TenantDetailDrawer({
                     {Math.round(total).toLocaleString("en-IN")}
                   </div>
                   <div className="mt-1 text-[12px] text-black/55">
-                    {draft.cycle} · {draft.paymentMethod}
+                    {PRICING_MODEL_LABEL[draft.pricingModel]} ·{" "}
+                    {draft.pricingModel === "per_student"
+                      ? `${seats.toLocaleString("en-IN")} × ${sym}${draft.ratePerStudent}`
+                      : `${sym}${draft.ratePerStudent}/${cycleUnitLabel(draft.cycle)}`}{" "}
+                    · {draft.cycle} · {draft.paymentMethod}
                     {draft.autoCharge ? " · auto-charge on" : " · manual"}
                   </div>
                 </div>
@@ -1273,13 +1369,15 @@ function TenantDetailDrawer({
                     schoolHost={`${tenant.subdomain}.schoolaccounts.in`}
                     issueDraft={{
                       billingCycle: draft.cycle,
+                      pricingModel: draft.pricingModel,
                       currency: draft.currency,
-                      studentsBilled: Math.max(tenant.students, 1),
+                      studentsBilled:
+                        draft.pricingModel === "flat_cycle" ? 1 : seats,
                       ratePerStudent: draft.ratePerStudent,
                       discountPercent: draft.discountPercent,
                       taxPercent: draft.taxPercent,
                       paymentMethod: draft.paymentMethod,
-                      periodLabel: `${draft.cycle} · ${draft.nextInvoice}`,
+                      periodLabel: `${draft.cycle} · ${PRICING_MODEL_LABEL[draft.pricingModel]} · ${draft.nextInvoice}`,
                       issueDate: new Date().toISOString().slice(0, 10),
                       dueDate: draft.nextInvoice || new Date().toISOString().slice(0, 10),
                     }}
@@ -1701,16 +1799,21 @@ function BillingRulesDrawer({
   const set = <K extends keyof BillingRule>(k: K, v: BillingRule[K]) =>
     setDraft((prev) => (prev ? { ...prev, [k]: v } : prev));
 
-  const grossPerCycle = draft.ratePerStudent * tenant.students;
+  const grossPerCycle = billingGross(draft, tenant.students);
   const discount = grossPerCycle * (draft.discountPercent / 100);
   const taxBase = grossPerCycle - discount;
   const tax = taxBase * (draft.taxPercent / 100);
   const total = taxBase + tax;
   const sym = CURRENCY_SYMBOL[draft.currency];
+  const seats = Math.max(tenant.students, 1);
 
   const submit = () => {
     if (draft.ratePerStudent <= 0) {
-      toast.error("Rate per student must be greater than zero");
+      toast.error(
+        draft.pricingModel === "flat_cycle"
+          ? "Flat rate must be greater than zero"
+          : "Rate per student must be greater than zero",
+      );
       return;
     }
     if (draft.graceDays < 0 || draft.graceDays > 60) {
@@ -1733,6 +1836,37 @@ function BillingRulesDrawer({
         </SheetHeader>
 
         <div className="space-y-5 px-6 py-5">
+          <Field label="Payment system">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {(
+                [
+                  { id: "per_student" as const, title: "Per student", hint: "Seats × rate" },
+                  { id: "flat_cycle" as const, title: "Flat per cycle", hint: "Fixed period fee" },
+                ] as const
+              ).map((opt) => {
+                const sel = draft.pricingModel === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => set("pricingModel", opt.id)}
+                    className={cn(
+                      "rounded-xl border px-3 py-2.5 text-left transition",
+                      sel
+                        ? "border-transparent bg-[#0F766E] text-white shadow-sm"
+                        : "border-[#E5E5E5] bg-white text-black/65 hover:border-black/30",
+                    )}
+                  >
+                    <div className="text-[12px] font-semibold">{opt.title}</div>
+                    <div className={cn("mt-0.5 text-[10.5px]", sel ? "text-white/80" : "text-black/45")}>
+                      {opt.hint}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+
           <Field label="Billing Cycle">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               {(["Monthly", "Quarterly", "Annual"] as BillingCycle[]).map((c) => {
@@ -1756,7 +1890,7 @@ function BillingRulesDrawer({
           </Field>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label={`Rate / student (${sym})`}>
+            <Field label={rateFieldLabel(draft, sym)}>
               <Input
                 type="number"
                 min={0}
@@ -1856,7 +1990,11 @@ function BillingRulesDrawer({
             </div>
             <div className="mt-3 space-y-1.5 text-[12px]">
               <SummaryRow
-                label={`Subtotal · ${tenant.students.toLocaleString()} × ${sym}${draft.ratePerStudent}`}
+                label={
+                  draft.pricingModel === "flat_cycle"
+                    ? `Subtotal · flat / ${cycleUnitLabel(draft.cycle)}`
+                    : `Subtotal · ${seats.toLocaleString()} × ${sym}${draft.ratePerStudent}`
+                }
                 value={`${sym}${grossPerCycle.toLocaleString()}`}
               />
               <SummaryRow
