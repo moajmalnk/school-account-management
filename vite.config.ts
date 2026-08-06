@@ -10,11 +10,18 @@ export default defineConfig({
     host: "::",
     port: 8080,
     proxy: {
+      // Must be listed before the catch-all `/api` proxy.
       "/api/bugricer-whatsapp": {
         target: "https://notifyapi.bugricer.com",
         changeOrigin: true,
         secure: true,
         rewrite: (path) => path.replace(/^\/api\/bugricer-whatsapp/, "/wapp/api"),
+      },
+      // Same-origin API in DEV — avoids browser CORS + SW cross-origin issues.
+      "/api": {
+        target: "https://spi.macadz.com",
+        changeOrigin: true,
+        secure: true,
       },
     },
   },
@@ -105,19 +112,20 @@ export default defineConfig({
             },
           },
           {
-            urlPattern: ({ url }) => url.pathname.startsWith("/api/"),
-            handler: "NetworkFirst",
+            // Only same-origin /api — never intercept https://spi.macadz.com (breaks CORS in the SW).
+            urlPattern: ({ sameOrigin, url }) =>
+              sameOrigin && url.pathname.startsWith("/api/"),
+            handler: "NetworkOnly",
             options: {
-              cacheName: "api-network-first",
-              networkTimeoutSeconds: 8,
-              expiration: { maxEntries: 64, maxAgeSeconds: 60 * 60 },
-              cacheableResponse: { statuses: [0, 200] },
+              cacheName: "api-network-only",
             },
           },
         ],
       },
       devOptions: {
-        enabled: true,
+        // Keep SW off in DEV by default — it was intercepting cross-origin API and
+        // surfacing false CORS errors. Enable with VITE_PWA_DEV=1 when testing install.
+        enabled: process.env.VITE_PWA_DEV === "1",
         suppressWarnings: true,
         type: "module",
       },

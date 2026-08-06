@@ -1,11 +1,18 @@
 /** API base URL for School Admin Console backend (spi.macadz.com). */
 export function apiBaseUrl(): string {
+  // Local Vite → proxy `/api` to spi.macadz.com (same-origin, no CORS).
+  // Set VITE_API_DIRECT=1 to call the remote host from the browser instead.
+  if (import.meta.env.DEV && import.meta.env.VITE_API_DIRECT !== "1") {
+    return "";
+  }
   const raw = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
   if (raw) return raw.replace(/\/$/, "");
   return "https://spi.macadz.com";
 }
 
 export function isApiConfigured(): boolean {
+  // Empty string in DEV still means "API via Vite proxy".
+  if (import.meta.env.DEV && import.meta.env.VITE_API_DIRECT !== "1") return true;
   return Boolean(apiBaseUrl());
 }
 
