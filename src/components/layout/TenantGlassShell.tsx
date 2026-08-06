@@ -10,6 +10,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
+  Receipt,
   Settings,
   Sun,
   UserCog,
@@ -42,6 +43,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   sessionCanAccessSettings,
+  sessionCanAccessSettingsTab,
   sessionHasAnyFinance,
   sessionHasPermission,
   useAuth,
@@ -160,6 +162,7 @@ const NAV: NavEntry[] = [
   { to: "/tenant/staff", label: "Staff", icon: UserCog },
   { to: "/tenant/finance", label: "Finance", icon: Wallet },
   { to: "/tenant/notifications", label: "Notifications", icon: Bell },
+  { to: "/tenant/billing", label: "Billing", icon: Receipt },
   { to: "/tenant/settings", label: "Settings", icon: Settings },
 ];
 
@@ -172,6 +175,7 @@ function navAllowed(
   if (to.startsWith("/tenant/staff")) return sessionHasPermission(session, "staff");
   if (to.startsWith("/tenant/finance")) return sessionHasAnyFinance(session);
   if (to.startsWith("/tenant/notifications")) return true;
+  if (to.startsWith("/tenant/billing")) return sessionCanAccessSettingsTab(session, "billing");
   if (to.startsWith("/tenant/settings")) return sessionCanAccessSettings(session);
   return true;
 }

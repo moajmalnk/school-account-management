@@ -22,6 +22,7 @@ import { Route as TenantSettingsRouteImport } from './routes/tenant/settings'
 import { Route as TenantNotificationsRouteImport } from './routes/tenant/notifications'
 import { Route as TenantFinanceRouteImport } from './routes/tenant/finance'
 import { Route as TenantDashboardRouteImport } from './routes/tenant/dashboard'
+import { Route as TenantBillingRouteImport } from './routes/tenant/billing'
 import { Route as SuperAdminTenantsRouteImport } from './routes/super-admin/tenants'
 import { Route as SuperAdminPlansRouteImport } from './routes/super-admin/plans'
 import { Route as SuperAdminOverviewRouteImport } from './routes/super-admin/overview'
@@ -93,6 +94,11 @@ const TenantDashboardRoute = TenantDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => TenantRoute,
 } as any)
+const TenantBillingRoute = TenantBillingRouteImport.update({
+  id: '/billing',
+  path: '/billing',
+  getParentRoute: () => TenantRoute,
+} as any)
 const SuperAdminTenantsRoute = SuperAdminTenantsRouteImport.update({
   id: '/tenants',
   path: '/tenants',
@@ -128,6 +134,7 @@ export interface FileRoutesByFullPath {
   '/super-admin/overview': typeof SuperAdminOverviewRoute
   '/super-admin/plans': typeof SuperAdminPlansRoute
   '/super-admin/tenants': typeof SuperAdminTenantsRoute
+  '/tenant/billing': typeof TenantBillingRoute
   '/tenant/dashboard': typeof TenantDashboardRoute
   '/tenant/finance': typeof TenantFinanceRoute
   '/tenant/notifications': typeof TenantNotificationsRoute
@@ -146,6 +153,7 @@ export interface FileRoutesByTo {
   '/super-admin/overview': typeof SuperAdminOverviewRoute
   '/super-admin/plans': typeof SuperAdminPlansRoute
   '/super-admin/tenants': typeof SuperAdminTenantsRoute
+  '/tenant/billing': typeof TenantBillingRoute
   '/tenant/dashboard': typeof TenantDashboardRoute
   '/tenant/finance': typeof TenantFinanceRoute
   '/tenant/notifications': typeof TenantNotificationsRoute
@@ -167,6 +175,7 @@ export interface FileRoutesById {
   '/super-admin/overview': typeof SuperAdminOverviewRoute
   '/super-admin/plans': typeof SuperAdminPlansRoute
   '/super-admin/tenants': typeof SuperAdminTenantsRoute
+  '/tenant/billing': typeof TenantBillingRoute
   '/tenant/dashboard': typeof TenantDashboardRoute
   '/tenant/finance': typeof TenantFinanceRoute
   '/tenant/notifications': typeof TenantNotificationsRoute
@@ -189,6 +198,7 @@ export interface FileRouteTypes {
     | '/super-admin/overview'
     | '/super-admin/plans'
     | '/super-admin/tenants'
+    | '/tenant/billing'
     | '/tenant/dashboard'
     | '/tenant/finance'
     | '/tenant/notifications'
@@ -207,6 +217,7 @@ export interface FileRouteTypes {
     | '/super-admin/overview'
     | '/super-admin/plans'
     | '/super-admin/tenants'
+    | '/tenant/billing'
     | '/tenant/dashboard'
     | '/tenant/finance'
     | '/tenant/notifications'
@@ -227,6 +238,7 @@ export interface FileRouteTypes {
     | '/super-admin/overview'
     | '/super-admin/plans'
     | '/super-admin/tenants'
+    | '/tenant/billing'
     | '/tenant/dashboard'
     | '/tenant/finance'
     | '/tenant/notifications'
@@ -341,6 +353,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TenantDashboardRouteImport
       parentRoute: typeof TenantRoute
     }
+    '/tenant/billing': {
+      id: '/tenant/billing'
+      path: '/billing'
+      fullPath: '/tenant/billing'
+      preLoaderRoute: typeof TenantBillingRouteImport
+      parentRoute: typeof TenantRoute
+    }
     '/super-admin/tenants': {
       id: '/super-admin/tenants'
       path: '/tenants'
@@ -398,6 +417,7 @@ const SuperAdminRouteWithChildren = SuperAdminRoute._addFileChildren(
 )
 
 interface TenantRouteChildren {
+  TenantBillingRoute: typeof TenantBillingRoute
   TenantDashboardRoute: typeof TenantDashboardRoute
   TenantFinanceRoute: typeof TenantFinanceRoute
   TenantNotificationsRoute: typeof TenantNotificationsRoute
@@ -409,6 +429,7 @@ interface TenantRouteChildren {
 }
 
 const TenantRouteChildren: TenantRouteChildren = {
+  TenantBillingRoute: TenantBillingRoute,
   TenantDashboardRoute: TenantDashboardRoute,
   TenantFinanceRoute: TenantFinanceRoute,
   TenantNotificationsRoute: TenantNotificationsRoute,

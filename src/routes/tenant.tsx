@@ -217,6 +217,7 @@ function TenantMobileHeader() {
     "/tenant/students": "STUDENTS",
     "/tenant/staff": "STAFF",
     "/tenant/finance": "FINANCE",
+    "/tenant/billing": "BILLING",
     "/tenant/settings": "SETTINGS",
   };
   const activeKey = Object.keys(NAV_LABELS).find((k) => pathname.startsWith(k));

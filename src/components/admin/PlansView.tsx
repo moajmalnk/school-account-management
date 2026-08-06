@@ -254,7 +254,13 @@ export function PlansView() {
             const cornerSide: CornerSide = "tr";
             const isLime = tone === "lime";
             const isBlack = tone === "black";
-            const subText = isLime ? "text-black/70" : isBlack ? "text-white/70" : "text-black/55";
+            const onDark = isLime || isBlack;
+            const subText = onDark ? "text-white/75" : "text-black/55";
+            const ink = onDark ? "text-white" : "text-black";
+            const inkMuted = onDark ? "text-white/55" : "text-black/45";
+            const rowBg = onDark ? "bg-white/10" : "bg-[#F4F4F5]";
+            const rule = onDark ? "border-white/15" : "border-black/10";
+            const divider = onDark ? "bg-white/15" : "bg-black/10";
             const saving = savingName === t.name;
             const annualSavings = Math.max(0, fullContract - t.annually);
 
@@ -278,25 +284,19 @@ export function PlansView() {
                 <div className="flex items-center gap-2">
                   <span
                     className="h-2.5 w-2.5 rounded-full"
-                    style={{ backgroundColor: isBlack ? "#0F766E" : "#000000" }}
+                    style={{ backgroundColor: onDark ? "#CCFBF1" : "#000000" }}
                   />
                   <Input
                     value={t.name}
                     readOnly
-                    className={`h-9 border-transparent bg-transparent px-1 text-[18px] font-semibold focus-visible:bg-black/5 ${
-                      isBlack ? "text-white" : "text-black"
-                    }`}
+                    className={`h-9 border-transparent bg-transparent px-1 text-[18px] font-semibold focus-visible:bg-white/10 ${ink}`}
                   />
                 </div>
 
                 <div
-                  className={`mt-4 flex w-full items-baseline gap-2 border-b pb-2 font-mono ${
-                    isBlack ? "border-white/15" : "border-black/10"
-                  }`}
+                  className={`mt-4 flex w-full items-baseline gap-2 border-b pb-2 font-mono ${rule}`}
                 >
-                  <span className={`text-[20px] font-bold ${isBlack ? "text-white" : "text-black"}`}>
-                    ₹
-                  </span>
+                  <span className={`text-[20px] font-bold ${ink}`}>₹</span>
                   <input
                     type="number"
                     value={price}
@@ -308,9 +308,7 @@ export function PlansView() {
                           : { annually: Number(e.target.value) || 0 },
                       )
                     }
-                    className={`w-full min-w-0 bg-transparent text-[28px] font-bold tracking-tight focus:outline-none ${
-                      isBlack ? "text-white" : "text-black"
-                    }`}
+                    className={`w-full min-w-0 bg-transparent text-[28px] font-bold tracking-tight focus:outline-none ${ink}`}
                   />
                   <span className={`shrink-0 font-sans text-[12px] ${subText}`}>
                     / {interval === "Monthly" ? "mo" : "yr"}
@@ -322,10 +320,7 @@ export function PlansView() {
                       <div>₹ {formatInr(fullContract)} annual contract</div>
                       <div>
                         Offer{" "}
-                        <span className={isBlack ? "text-white" : "text-black"}>
-                          ₹ {formatInr(t.annually)}
-                        </span>{" "}
-                        / year
+                        <span className={ink}>₹ {formatInr(t.annually)}</span> / year
                       </div>
                     </>
                   ) : (
@@ -340,7 +335,7 @@ export function PlansView() {
                   )}
                 </div>
 
-                <div className={`my-5 h-px ${isBlack ? "bg-white/10" : "bg-black/10"}`} />
+                <div className={`my-5 h-px ${divider}`} />
 
                 <div className="space-y-2.5">
                   <div className={`text-[10.5px] font-semibold uppercase tracking-wider ${subText}`}>
@@ -348,7 +343,6 @@ export function PlansView() {
                   </div>
                   {FEATURES.map((f) => {
                     const on = Boolean(t.flags[f.key]);
-                    const rowBg = isBlack ? "bg-white/5" : isLime ? "bg-black/5" : "bg-[#F4F4F5]";
                     return (
                       <div
                         key={f.key}
@@ -356,24 +350,26 @@ export function PlansView() {
                       >
                         <div className="flex min-w-0 items-center gap-2">
                           <Check
-                            className={`h-3.5 w-3.5 shrink-0 ${on ? "" : "opacity-30"}`}
-                            style={{ color: isBlack ? "#0F766E" : "#000000" }}
+                            className={`h-3.5 w-3.5 shrink-0 ${on ? "" : "opacity-40"}`}
+                            style={{ color: onDark ? "#CCFBF1" : "#000000" }}
                           />
                           <span
                             className={`truncate text-[12px] ${
-                              on
-                                ? isBlack
-                                  ? "font-medium text-white"
-                                  : "font-medium text-black"
-                                : isBlack
-                                  ? "text-white/40"
-                                  : "text-black/40"
+                              on ? `font-medium ${ink}` : inkMuted
                             }`}
                           >
                             {f.label}
                           </span>
                         </div>
-                        <Switch checked={on} onCheckedChange={() => toggleFlag(i, f.key)} />
+                        <Switch
+                          checked={on}
+                          onCheckedChange={() => toggleFlag(i, f.key)}
+                          className={
+                            onDark
+                              ? "data-[state=checked]:bg-[#CCFBF1] data-[state=unchecked]:bg-white/30"
+                              : undefined
+                          }
+                        />
                       </div>
                     );
                   })}
