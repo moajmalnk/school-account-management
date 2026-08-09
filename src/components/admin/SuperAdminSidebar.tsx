@@ -180,7 +180,7 @@ export function SuperAdminSidebar() {
                 {session?.displayName ?? "Super Admin"}
               </span>
               <span className="truncate font-mono text-[10px] text-slate-500">
-                {session?.email ?? "superadmin@saas.com"}
+                {session?.email ?? "—"}
               </span>
             </span>
             <span className="font-mono text-[10px] text-slate-400 group-hover:text-slate-600">
@@ -194,7 +194,7 @@ export function SuperAdminSidebar() {
               {session?.displayName ?? "Super Admin"}
             </span>
             <span className="font-mono text-[10.5px] text-slate-500">
-              {session?.email ?? "superadmin@saas.com"}
+              {session?.email ?? "—"}
             </span>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />

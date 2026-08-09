@@ -8,7 +8,7 @@ export {
   onUnauthorized,
   isAuthExpiredError,
 } from "@/lib/api/client";
-export { apiLogin, apiMe } from "@/lib/api/auth";
+export { apiLogin, apiMe, apiForgotPassword, apiResetPassword } from "@/lib/api/auth";
 export { fetchRemoteTenantBundle } from "@/lib/api/tenant-sync";
 export {
   apiFetchDashboardTodos,

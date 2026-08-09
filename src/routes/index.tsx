@@ -1,8 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 
-import { MOCK_CREDENTIALS, useAuth } from "@/lib/auth";
-import { firstAllowedTenantPath } from "@/lib/permissions";
+import { homePathForSession, useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/")({
   component: IndexRedirect,
@@ -15,11 +14,7 @@ function IndexRedirect() {
   useEffect(() => {
     if (!hydrated) return;
     if (session) {
-      if (session.role === "tenant_user") {
-        navigate({ to: firstAllowedTenantPath(session.permissions), replace: true });
-      } else {
-        navigate({ to: MOCK_CREDENTIALS[session.role].redirect, replace: true });
-      }
+      navigate({ to: homePathForSession(session), replace: true });
     } else {
       navigate({ to: "/login", replace: true });
     }

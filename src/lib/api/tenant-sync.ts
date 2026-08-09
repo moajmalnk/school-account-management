@@ -138,7 +138,28 @@ export async function fetchRemoteTenantBundle(
       "/api/settings/classes.php",
       [],
     );
-    const feeTerms = await getSafe<FeeTerm[]>("/api/settings/fees.php", []);
+    const school = await getSafe<{
+      schoolDetails: SchoolDetails;
+      themeSettings: ThemeSettings;
+      academicYear: string;
+      academicYears: string[];
+    } | null>("/api/settings/school.php", null);
+
+    const academicYear = school?.academicYear ?? "AY 2025-26";
+    const academicYears = school?.academicYears?.length
+      ? school.academicYears
+      : ["AY 2024-25", "AY 2025-26", "AY 2026-27"];
+
+    // Fees GET auto-seeds missing term/month defaults for the tenant's academic years.
+    const feeTerms = await getSafe<FeeTerm[]>(
+      `/api/settings/fees.php?academicYear=${encodeURIComponent(academicYear)}`,
+      [],
+    );
+    // Re-fetch unfiltered so year-switching still has every AY's periods in memory.
+    const allFeeTerms =
+      feeTerms.length > 0
+        ? await getSafe<FeeTerm[]>("/api/settings/fees.php", feeTerms)
+        : feeTerms;
     const paymentCategories = await getSafe<PaymentCategory[]>(
       "/api/settings/fees.php?resource=categories",
       [],
@@ -156,21 +177,10 @@ export async function fetchRemoteTenantBundle(
       "/api/notifications/list.php",
       [],
     );
-    const school = await getSafe<{
-      schoolDetails: SchoolDetails;
-      themeSettings: ThemeSettings;
-      academicYear: string;
-      academicYears: string[];
-    } | null>("/api/settings/school.php", null);
     const todos = await getSafe<{
       dashboardTodos: string[];
       dashboardNote: string;
     } | null>("/api/dashboard/todos.php", null);
-
-    const academicYear = school?.academicYear ?? "AY 2025-26";
-    const academicYears = school?.academicYears?.length
-      ? school.academicYears
-      : ["AY 2024-25", "AY 2025-26", "AY 2026-27"];
 
     return {
       students,

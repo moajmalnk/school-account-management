@@ -182,63 +182,261 @@ function ReportTable({
   rows,
   footer,
   compact = false,
+  className,
+  mobileCards = true,
 }: {
   headers: string[];
   rows: (string | number)[][];
   footer?: ReactNode;
   compact?: boolean;
+  className?: string;
+  /** Render stacked cards below md. Set false when a custom mobile layout is used. */
+  mobileCards?: boolean;
 }) {
+  const isSection = (cell: string | number) =>
+    typeof cell === "string" && /^—\s+.+\s+—$/.test(cell.trim());
+
   return (
-    <div className="mobile-scrollbar-none mt-4 overflow-x-auto rounded-lg border border-[#E5E5E5] dark:border-white/10">
-      <table
+    <>
+      {mobileCards ? (
+        <div className="mt-4 space-y-2.5 md:hidden">
+          {rows.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-[#E5E5E5] bg-[#FAFAFA] px-4 py-8 text-center text-[13px] text-black/45 dark:border-white/10 dark:bg-zinc-900/40 dark:text-zinc-500">
+              No rows to show
+            </div>
+          ) : (
+            rows.map((row, i) => {
+              if (isSection(row[0] ?? "")) {
+                return (
+                  <div
+                    key={`section-${i}`}
+                    className="px-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-500"
+                  >
+                    {String(row[0]).replace(/^—\s*|\s*—$/g, "")}
+                  </div>
+                );
+              }
+
+              const title = String(row[0] ?? "—");
+              const detailPairs = headers
+                .slice(1)
+                .map((header, idx) => ({
+                  header,
+                  value: row[idx + 1],
+                }))
+                .filter((pair) => {
+                  const v = pair.value;
+                  return v !== "" && v !== undefined && v !== null;
+                });
+
+              const lastPair = detailPairs[detailPairs.length - 1];
+              const isAmountHeavy =
+                detailPairs.length <= 3 ||
+                /amount|due|payable|gross|balance|receipt|payment/i.test(
+                  lastPair?.header ?? "",
+                );
+
+              return (
+                <article
+                  key={i}
+                  className="rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 dark:border-white/10 dark:bg-zinc-900/50"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-[13px] font-semibold text-black dark:text-zinc-100">
+                        {title}
+                      </div>
+                      {detailPairs.length > 0 && !isAmountHeavy && (
+                        <p className="mt-1 truncate text-[12px] text-black/55 dark:text-zinc-400">
+                          {String(detailPairs[0]?.value ?? "")}
+                        </p>
+                      )}
+                    </div>
+                    {isAmountHeavy && lastPair ? (
+                      <div className="shrink-0 text-right font-mono text-[13px] font-semibold text-black dark:text-zinc-100">
+                        {String(lastPair.value)}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div
+                    className={cn(
+                      "mt-3 grid gap-2 border-t border-[#EFEFEF] pt-3 dark:border-white/10",
+                      detailPairs.length >= 4 ? "grid-cols-2" : "grid-cols-1",
+                    )}
+                  >
+                    {detailPairs.map((pair) => {
+                      if (isAmountHeavy && pair === lastPair && detailPairs.length > 1) {
+                        return null;
+                      }
+                      return (
+                        <div
+                          key={pair.header}
+                          className="rounded-xl bg-white px-2.5 py-2 ring-1 ring-black/5 dark:bg-zinc-800 dark:ring-white/10"
+                        >
+                          <div className="text-[9.5px] font-semibold uppercase tracking-wider text-black/40 dark:text-zinc-500">
+                            {pair.header}
+                          </div>
+                          <div className="mt-0.5 truncate text-[12.5px] font-medium text-black dark:text-zinc-100">
+                            {String(pair.value ?? "—")}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </article>
+              );
+            })
+          )}
+          {footer ? (
+            <div className="rounded-2xl border border-[#E5E5E5] bg-white px-3.5 py-3 text-[12px] font-semibold text-black dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100">
+              {footer}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div
         className={cn(
-          "w-full text-left text-[12.5px]",
-          compact ? "min-w-[320px]" : "min-w-[640px]",
+          "mobile-scrollbar-none mt-4 overflow-x-auto rounded-lg border border-[#E5E5E5] dark:border-white/10",
+          mobileCards && "hidden md:block",
+          className,
         )}
       >
-        <thead>
-          <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5] dark:border-white/10 dark:bg-zinc-800/80">
-            {headers.map((h) => (
-              <th
-                key={h}
-                className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400"
-              >
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, i) => (
-            <tr key={i} className="border-b border-[#F0F0F0] last:border-0 dark:border-white/5">
-              {row.map((cell, j) => (
-                <td
-                  key={j}
-                  className={cn(
-                    "px-3 py-2.5 text-black/80 dark:text-zinc-200",
-                    j >= row.length - 3 && "font-mono text-black dark:text-zinc-100",
-                  )}
+        <table
+          className={cn(
+            "w-full text-left text-[12.5px]",
+            compact ? "min-w-[320px]" : "min-w-[640px]",
+          )}
+        >
+          <thead>
+            <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5] dark:border-white/10 dark:bg-zinc-800/80">
+              {headers.map((h) => (
+                <th
+                  key={h}
+                  className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400"
                 >
-                  {cell}
-                </td>
+                  {h}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
-      {footer}
+          </thead>
+          <tbody>
+            {rows.map((row, i) => (
+              <tr key={i} className="border-b border-[#F0F0F0] last:border-0 dark:border-white/5">
+                {row.map((cell, j) => (
+                  <td
+                    key={j}
+                    className={cn(
+                      "px-3 py-2.5 text-black/80 dark:text-zinc-200",
+                      j >= row.length - 3 && "font-mono text-black dark:text-zinc-100",
+                    )}
+                  >
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {footer}
+      </div>
+    </>
+  );
+}
+
+function LedgerPostingCards({ rows }: { rows: LedgerRow[] }) {
+  if (rows.length === 0) {
+    return (
+      <div className="mt-4 rounded-2xl border border-dashed border-[#E5E5E5] bg-[#FAFAFA] px-4 py-10 text-center text-[13px] text-black/45 dark:border-white/10 dark:bg-zinc-900/40 dark:text-zinc-500">
+        No ledger postings yet
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 space-y-2.5 md:hidden">
+      {rows.map((row, i) => (
+        <article
+          key={`${row.voucher}-${i}`}
+          className="rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 dark:border-white/10 dark:bg-zinc-900/50"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="text-[12px] font-semibold text-black dark:text-zinc-100">
+                  {row.date || "—"}
+                </span>
+                <span className="rounded-full bg-white px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-[#0F766E] ring-1 ring-[#0F766E]/20 dark:bg-zinc-800">
+                  {row.voucher || "—"}
+                </span>
+              </div>
+              <p className="mt-1.5 text-[13px] font-medium leading-snug text-black dark:text-zinc-100">
+                {row.particulars || "—"}
+              </p>
+              <p className="mt-1 text-[11px] text-black/50 dark:text-zinc-400">
+                Account · {row.account || "—"}
+              </p>
+            </div>
+            <div className="shrink-0 text-right">
+              {row.credit > 0 ? (
+                <div className="font-mono text-[13px] font-semibold text-[#0F766E]">
+                  +{inr(row.credit)}
+                </div>
+              ) : row.debit > 0 ? (
+                <div className="font-mono text-[13px] font-semibold text-[#B45309]">
+                  −{inr(row.debit)}
+                </div>
+              ) : (
+                <div className="font-mono text-[13px] text-black/40">—</div>
+              )}
+              <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-black/40 dark:text-zinc-500">
+                Bal {inr(row.balance)}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-2 border-t border-[#EFEFEF] pt-3 dark:border-white/10">
+            <div className="rounded-xl bg-white px-2.5 py-2 ring-1 ring-black/5 dark:bg-zinc-800 dark:ring-white/10">
+              <div className="text-[9.5px] font-semibold uppercase tracking-wider text-black/40 dark:text-zinc-500">
+                Debit
+              </div>
+              <div className="mt-0.5 font-mono text-[12.5px] font-semibold text-black dark:text-zinc-100">
+                {row.debit ? inr(row.debit) : "—"}
+              </div>
+            </div>
+            <div className="rounded-xl bg-white px-2.5 py-2 ring-1 ring-black/5 dark:bg-zinc-800 dark:ring-white/10">
+              <div className="text-[9.5px] font-semibold uppercase tracking-wider text-black/40 dark:text-zinc-500">
+                Credit
+              </div>
+              <div className="mt-0.5 font-mono text-[12.5px] font-semibold text-black dark:text-zinc-100">
+                {row.credit ? inr(row.credit) : "—"}
+              </div>
+            </div>
+          </div>
+        </article>
+      ))}
     </div>
   );
 }
 
 function SummaryStrip({ items }: { items: { label: string; value: string; accent?: boolean }[] }) {
   return (
-    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div
+      className={cn(
+        "mt-4 grid gap-2.5 sm:gap-3",
+        items.length === 4
+          ? "grid-cols-2"
+          : items.length >= 3
+            ? "grid-cols-3"
+            : "grid-cols-1 sm:grid-cols-2",
+      )}
+    >
       {items.map((item) => (
         <div
           key={item.label}
           className={cn(
-            "rounded-2xl p-4",
+            "min-w-0 rounded-2xl p-3 sm:p-4",
             item.accent
               ? "bg-gradient-to-br from-[#0F766E] to-[#115E59] text-white shadow-sm shadow-teal-900/15"
               : "bg-slate-50 text-slate-900 ring-1 ring-slate-200/70 dark:bg-zinc-800 dark:text-zinc-50 dark:ring-white/10",
@@ -246,13 +444,15 @@ function SummaryStrip({ items }: { items: { label: string; value: string; accent
         >
           <div
             className={cn(
-              "text-[10px] font-semibold uppercase tracking-wider",
+              "text-[9px] font-semibold uppercase tracking-wider sm:text-[10px]",
               item.accent ? "text-teal-100/75" : "text-slate-500 dark:text-zinc-400",
             )}
           >
             {item.label}
           </div>
-          <div className="mt-1 font-mono text-[18px] font-semibold tracking-tight">{item.value}</div>
+          <div className="mt-1 truncate font-mono text-[14px] font-semibold tracking-tight sm:text-[18px]">
+            {item.value}
+          </div>
         </div>
       ))}
     </div>
@@ -320,7 +520,8 @@ export function GeneralLedgerReport() {
           { label: "Closing Balance", value: inr(closing), accent: true },
         ]}
       />
-      <ReportTable headers={headers} rows={tableRows} />
+      <LedgerPostingCards rows={rows} />
+      <ReportTable headers={headers} rows={tableRows} mobileCards={false} className="hidden md:block" />
     </OrganicCard>
   );
 }
@@ -422,7 +623,7 @@ export function ProfitLossReport() {
         </div>
       </OrganicCard>
 
-      <div className="col-span-6 min-w-0">
+      <div className="col-span-12 min-w-0 sm:col-span-6">
         <FinanceDonutCard
           title="Income Mix"
           cornerSide="tr"
@@ -432,7 +633,7 @@ export function ProfitLossReport() {
           }))}
         />
       </div>
-      <div className="col-span-6 min-w-0">
+      <div className="col-span-12 min-w-0 sm:col-span-6">
         <FinanceBarCard
           title="Expense Breakdown"
           cornerSide="bl"
@@ -1348,6 +1549,77 @@ type DayBookEntry = {
   narration?: string;
 };
 
+function DayBookEntryCards({
+  entries,
+  footer,
+}: {
+  entries: DayBookEntry[];
+  footer?: ReactNode;
+}) {
+  return (
+    <div className="mt-4 space-y-2.5 md:hidden">
+      {entries.map((entry) => {
+        const isReceipt = entry.type === "Receipt";
+        return (
+          <article
+            key={`${entry.type}-${entry.id}`}
+            className="rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 dark:border-white/10 dark:bg-zinc-900/50"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="rounded-full bg-white px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-[#0F766E] ring-1 ring-[#0F766E]/20 dark:bg-zinc-800">
+                    {entry.id || "—"}
+                  </span>
+                  <span
+                    className={cn(
+                      "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
+                      isReceipt
+                        ? "bg-[#CCFBF1] text-[#0F766E]"
+                        : "bg-[#FFEDD5] text-[#C2410C]",
+                    )}
+                  >
+                    {entry.type}
+                  </span>
+                  <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-black/55 ring-1 ring-black/5 dark:bg-zinc-800 dark:text-zinc-400">
+                    {entry.mode}
+                  </span>
+                </div>
+                <p className="mt-2 text-[13px] font-semibold leading-snug text-black dark:text-zinc-100">
+                  {entry.particular || "—"}
+                </p>
+                <p className="mt-1 text-[11px] text-black/50 dark:text-zinc-400">
+                  {entry.account}
+                  {entry.time ? ` · ${entry.time}` : ""}
+                </p>
+                {entry.narration ? (
+                  <p className="mt-1 line-clamp-2 text-[11px] text-black/40 dark:text-zinc-500">
+                    {entry.narration}
+                  </p>
+                ) : null}
+              </div>
+              <div
+                className={cn(
+                  "shrink-0 text-right font-mono text-[13px] font-semibold",
+                  isReceipt ? "text-[#0F766E]" : "text-[#C2410C]",
+                )}
+              >
+                {isReceipt ? "+" : "−"}
+                {inr(entry.amount)}
+              </div>
+            </div>
+          </article>
+        );
+      })}
+      {footer ? (
+        <div className="rounded-2xl border border-[#E5E5E5] bg-white px-3.5 py-3 text-[12px] font-semibold text-black dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100">
+          {footer}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function DayBookReport() {
   const { activePayments: payments, academicYear, schoolDetails } = useTenantStore();
   const { disbursements } = useDisbursements();
@@ -1543,32 +1815,45 @@ export function DayBookReport() {
           />
         </div>
 
-        {tableRows.length === 0 ? (
+        {filtered.length === 0 ? (
           <div className="mt-4 rounded-lg border border-dashed border-black/15 px-4 py-8 text-center text-[12px] text-black/55">
             {entries.length === 0
               ? "No day book entries yet"
               : "No entries match your search or filters"}
           </div>
         ) : (
-          <ReportTable
-            headers={[
-              "Voucher",
-              "Date / Time",
-              "Particulars",
-              "Account",
-              "Mode",
-              "Type",
-              "Receipt",
-              "Payment",
-            ]}
-            rows={tableRows}
-            footer={
-              <div className="border-t border-[#E5E5E5] bg-[#FAFAFA] px-3 py-3 text-[12px] font-semibold text-black">
-                Totals · Receipts {inr(totalReceipts)} · Payments {inr(totalPayments)} · Net{" "}
-                {inr(net)}
-              </div>
-            }
-          />
+          <>
+            <DayBookEntryCards
+              entries={filtered}
+              footer={
+                <>
+                  Totals · Receipts {inr(totalReceipts)} · Payments {inr(totalPayments)} · Net{" "}
+                  {inr(net)}
+                </>
+              }
+            />
+            <ReportTable
+              mobileCards={false}
+              className="hidden md:block"
+              headers={[
+                "Voucher",
+                "Date / Time",
+                "Particulars",
+                "Account",
+                "Mode",
+                "Type",
+                "Receipt",
+                "Payment",
+              ]}
+              rows={tableRows}
+              footer={
+                <div className="border-t border-[#E5E5E5] bg-[#FAFAFA] px-3 py-3 text-[12px] font-semibold text-black">
+                  Totals · Receipts {inr(totalReceipts)} · Payments {inr(totalPayments)} · Net{" "}
+                  {inr(net)}
+                </div>
+              }
+            />
+          </>
         )}
       </OrganicCard>
     </div>
@@ -1881,65 +2166,117 @@ export function BankReconciliationReport() {
               : "No transactions match your search or filters"}
           </div>
         ) : (
-          <div className="mobile-scrollbar-none mt-4 overflow-x-auto rounded-lg border border-[#E5E5E5]">
-            <table className="w-full min-w-[640px] text-left text-[12.5px]">
-              <thead>
-                <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5]">
-                  {["Cleared", "Voucher", "Account", "Mode", "Date / Time", "Amount"].map((h) => (
-                    <th
-                      key={h}
-                      className={cn(
-                        "px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/55",
-                        h === "Amount" && "text-right",
-                      )}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((t) => {
-                  const cleared = isCleared(t.id);
-                  return (
-                    <tr
-                      key={t.id}
-                      className={cn(
-                        "border-b border-[#F0F0F0] last:border-0 transition-colors",
-                        !cleared && "bg-[#FFF7ED]/60",
-                      )}
-                    >
-                      <td className="px-3 py-2.5">
-                        <Checkbox
-                          checked={cleared}
-                          onCheckedChange={() => toggleCleared(t.id)}
-                          aria-label={`Mark ${t.id} as ${cleared ? "uncleared" : "cleared"}`}
-                        />
-                      </td>
-                      <td className="px-3 py-2.5 font-mono text-[11px] text-black/70">{t.id}</td>
-                      <td className="px-3 py-2.5">
-                        <div className="font-medium text-black">{t.name}</div>
-                        <div className="text-[11px] text-black/45">{t.cat}</div>
-                      </td>
-                      <td className="px-3 py-2.5 text-black/70">{t.mode}</td>
-                      <td className="px-3 py-2.5 font-mono text-[11px] text-black/55">{t.time}</td>
-                      <td className="px-3 py-2.5 text-right font-mono font-semibold text-black">
+          <>
+            <div className="mt-4 space-y-2.5 md:hidden">
+              {filtered.map((t) => {
+                const cleared = isCleared(t.id);
+                return (
+                  <article
+                    key={t.id}
+                    className={cn(
+                      "rounded-2xl border p-3.5",
+                      cleared
+                        ? "border-[#EFEFEF] bg-[#FAFAFA] dark:border-white/10 dark:bg-zinc-900/50"
+                        : "border-[#FDBA74]/50 bg-[#FFF7ED]/70 dark:border-amber-500/30 dark:bg-amber-950/30",
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        checked={cleared}
+                        onCheckedChange={() => toggleCleared(t.id)}
+                        aria-label={`Mark ${t.id} as ${cleared ? "uncleared" : "cleared"}`}
+                        className="mt-0.5"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-mono text-[11px] font-semibold text-[#0F766E]">
+                            {t.id}
+                          </span>
+                          <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-black/55 ring-1 ring-black/5 dark:bg-zinc-800 dark:text-zinc-400">
+                            {t.mode}
+                          </span>
+                        </div>
+                        <p className="mt-1.5 text-[13px] font-semibold text-black dark:text-zinc-100">
+                          {t.name}
+                        </p>
+                        <p className="mt-0.5 text-[11px] text-black/50 dark:text-zinc-400">
+                          {t.cat}
+                          {t.time ? ` · ${t.time}` : ""}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right font-mono text-[13px] font-semibold text-black dark:text-zinc-100">
                         {inr(t.amount)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              <tfoot>
-                <tr className="border-t border-[#E5E5E5] bg-[#FAFAFA] text-[12px] font-semibold text-black">
-                  <td className="px-3 py-3" colSpan={5}>
-                    Cleared {inr(clearedTotal)} · Uncleared {inr(unclearedTotal)}
-                  </td>
-                  <td className="px-3 py-3 text-right font-mono">{inr(bookBalance)}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+              <div className="rounded-2xl border border-[#E5E5E5] bg-white px-3.5 py-3 text-[12px] font-semibold text-black dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100">
+                Cleared {inr(clearedTotal)} · Uncleared {inr(unclearedTotal)} · Book{" "}
+                {inr(bookBalance)}
+              </div>
+            </div>
+
+            <div className="mobile-scrollbar-none mt-4 hidden overflow-x-auto rounded-lg border border-[#E5E5E5] md:block">
+              <table className="w-full min-w-[640px] text-left text-[12.5px]">
+                <thead>
+                  <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5]">
+                    {["Cleared", "Voucher", "Account", "Mode", "Date / Time", "Amount"].map((h) => (
+                      <th
+                        key={h}
+                        className={cn(
+                          "px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/55",
+                          h === "Amount" && "text-right",
+                        )}
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((t) => {
+                    const cleared = isCleared(t.id);
+                    return (
+                      <tr
+                        key={t.id}
+                        className={cn(
+                          "border-b border-[#F0F0F0] last:border-0 transition-colors",
+                          !cleared && "bg-[#FFF7ED]/60",
+                        )}
+                      >
+                        <td className="px-3 py-2.5">
+                          <Checkbox
+                            checked={cleared}
+                            onCheckedChange={() => toggleCleared(t.id)}
+                            aria-label={`Mark ${t.id} as ${cleared ? "uncleared" : "cleared"}`}
+                          />
+                        </td>
+                        <td className="px-3 py-2.5 font-mono text-[11px] text-black/70">{t.id}</td>
+                        <td className="px-3 py-2.5">
+                          <div className="font-medium text-black">{t.name}</div>
+                          <div className="text-[11px] text-black/45">{t.cat}</div>
+                        </td>
+                        <td className="px-3 py-2.5 text-black/70">{t.mode}</td>
+                        <td className="px-3 py-2.5 font-mono text-[11px] text-black/55">{t.time}</td>
+                        <td className="px-3 py-2.5 text-right font-mono font-semibold text-black">
+                          {inr(t.amount)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-[#E5E5E5] bg-[#FAFAFA] text-[12px] font-semibold text-black">
+                    <td className="px-3 py-3" colSpan={5}>
+                      Cleared {inr(clearedTotal)} · Uncleared {inr(unclearedTotal)}
+                    </td>
+                    <td className="px-3 py-3 text-right font-mono">{inr(bookBalance)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </>
         )}
       </OrganicCard>
     </div>

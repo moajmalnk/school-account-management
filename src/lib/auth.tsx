@@ -35,7 +35,6 @@ import {
   type PlanFlags,
   type SettingsTabId,
 } from "@/lib/permissions";
-import { findActiveTenantUserByCredentials } from "@/lib/tenant-store";
 
 export type Role = "super_admin" | "school_admin" | "tenant_user";
 
@@ -69,7 +68,7 @@ export type LoginResult =
 type AuthState = {
   session: Session | null;
   hydrated: boolean;
-  login: (role: Role, email: string, password: string) => Promise<LoginResult>;
+  login: (email: string, password: string) => Promise<LoginResult>;
   logout: () => void;
   updateSession: (
     patch: Partial<
@@ -90,33 +89,21 @@ type AuthState = {
 const STORAGE_KEY = "school-accounts/session/v1";
 const IMPERSONATION_KEY = "school-accounts/impersonation/v1";
 
-export const MOCK_CREDENTIALS: Record<
-  "super_admin" | "school_admin",
-  {
-    email: string;
-    password: string;
-    displayName: string;
-    tenantName?: string;
-    redirect: string;
-  }
-> = {
-  super_admin: {
-    email: "superadmin@saas.com",
-    password: "admin2026",
-    displayName: "Super Admin",
-    redirect: "/super-admin/overview",
-  },
-  school_admin: {
-    email: "silverhills@tenant.com",
-    password: "school2026",
-    displayName: "Silver Hills Admin",
-    tenantName: "Silver Hills Global",
-    redirect: "/tenant/dashboard",
-  },
+/** Post-login home paths by role (tenant_user uses permission-aware routing). */
+export const ROLE_HOME: Record<"super_admin" | "school_admin", string> = {
+  super_admin: "/super-admin/overview",
+  school_admin: "/tenant/dashboard",
 };
 
+export function homePathForSession(session: Session): string {
+  if (session.role === "tenant_user") {
+    return firstAllowedTenantPath(session.permissions);
+  }
+  return ROLE_HOME[session.role];
+}
+
 export const INVALID_CREDENTIALS_MESSAGE =
-  "Invalid credentials matching selected authentication tier. Please review inputs.";
+  "Invalid email or password. Please review your credentials and try again.";
 
 export const API_UNREACHABLE_MESSAGE =
   "Cannot reach the API (network or CORS). Confirm spi.macadz.com allows this site origin, then retry.";
@@ -391,124 +378,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const login = useCallback<AuthState["login"]>(async (role, email, password) => {
+  const login = useCallback<AuthState["login"]>(async (email, password) => {
     const normalizedEmail = email.trim().toLowerCase();
 
-    // Super admin → production API (JWT required for /api/super-admin/*)
-    if (role === "super_admin") {
-      try {
-        const data = await apiLogin(normalizedEmail, password);
-        if (data.session.role !== "super_admin") {
-          setApiToken(null);
-          return {
-            ok: false,
-            error: "This account is not a platform super admin",
-          };
-        }
-        const next: Session = {
-          role: "super_admin",
-          email: data.session.email,
-          displayName: data.session.displayName,
-          issuedAt: Date.now(),
-          userId: data.session.userId,
-          permissions: ALL_PERMISSIONS,
-        };
-        writeSession(next);
-        setSession(next);
-        return { ok: true, redirect: "/super-admin/overview", session: next };
-      } catch (err) {
-        // Offline fallback to mock credentials (no API token — tenants won't persist)
-        const expected = MOCK_CREDENTIALS.super_admin;
-        if (
-          expected &&
-          normalizedEmail === expected.email.toLowerCase() &&
-          password === expected.password
-        ) {
-          setApiToken(null);
-          const next: Session = {
-            role,
-            email: expected.email,
-            displayName: expected.displayName,
-            tenantName: expected.tenantName,
-            issuedAt: Date.now(),
-            permissions: ALL_PERMISSIONS,
-          };
-          writeSession(next);
-          setSession(next);
-          return { ok: true, redirect: expected.redirect, session: next };
-        }
-        return { ok: false, error: loginFailureMessage(err) };
-      }
+    try {
+      const data = await apiLogin(normalizedEmail, password);
+      const apiRole: Role =
+        data.session.role === "super_admin"
+          ? "super_admin"
+          : data.session.role === "school_admin"
+            ? "school_admin"
+            : "tenant_user";
+      const rawPerms = data.session.permissions;
+      const permissions: PermissionSet =
+        apiRole === "super_admin" ||
+        apiRole === "school_admin" ||
+        (Array.isArray(rawPerms) && (rawPerms as string[]).includes("*"))
+          ? ALL_PERMISSIONS
+          : Array.isArray(rawPerms)
+            ? (rawPerms as PermissionKey[])
+            : [];
+      const next: Session = {
+        role: apiRole,
+        email: data.session.email,
+        displayName: data.session.displayName,
+        tenantName: data.session.tenantName,
+        tenantId: data.session.tenantId,
+        issuedAt: Date.now(),
+        userId: data.session.userId,
+        staffId: data.session.staffId || undefined,
+        permissions,
+        tier: data.session.tier,
+        planName: data.session.planName,
+        planFlags: data.session.planFlags
+          ? normalizePlanFlags(data.session.planFlags)
+          : undefined,
+      };
+      writeSession(next);
+      setSession(next);
+      return { ok: true, redirect: homePathForSession(next), session: next };
+    } catch (err) {
+      setApiToken(null);
+      return { ok: false, error: loginFailureMessage(err) };
     }
-
-    // School admin + tenant users → production API
-    if (role === "school_admin" || role === "tenant_user") {
-      try {
-        const data = await apiLogin(normalizedEmail, password);
-        const apiRole: Role =
-          data.session.role === "school_admin" ? "school_admin" : "tenant_user";
-        const rawPerms = data.session.permissions;
-        const permissions: PermissionSet =
-          apiRole === "school_admin" ||
-          (Array.isArray(rawPerms) && (rawPerms as string[]).includes("*"))
-            ? ALL_PERMISSIONS
-            : Array.isArray(rawPerms)
-              ? (rawPerms as PermissionKey[])
-              : [];
-        const next: Session = {
-          role: apiRole,
-          email: data.session.email,
-          displayName: data.session.displayName,
-          tenantName: data.session.tenantName,
-          tenantId: data.session.tenantId,
-          issuedAt: Date.now(),
-          userId: data.session.userId,
-          staffId: data.session.staffId || undefined,
-          permissions,
-          tier: data.session.tier,
-          planName: data.session.planName,
-          planFlags: data.session.planFlags
-            ? normalizePlanFlags(data.session.planFlags)
-            : undefined,
-        };
-        writeSession(next);
-        setSession(next);
-        return {
-          ok: true,
-          redirect:
-            apiRole === "school_admin"
-              ? "/tenant/dashboard"
-              : firstAllowedTenantPath(permissions),
-          session: next,
-        };
-      } catch (err) {
-        // Offline / API down: fall back to local tenant-user credentials
-        const user = findActiveTenantUserByCredentials(normalizedEmail, password);
-        if (user) {
-          setApiToken(null);
-          const next: Session = {
-            role: "tenant_user",
-            email: user.email,
-            displayName: user.displayName,
-            tenantName: MOCK_CREDENTIALS.school_admin.tenantName,
-            issuedAt: Date.now(),
-            userId: user.id,
-            staffId: user.staffId,
-            permissions: user.permissions,
-          };
-          writeSession(next);
-          setSession(next);
-          return {
-            ok: true,
-            redirect: firstAllowedTenantPath(user.permissions),
-            session: next,
-          };
-        }
-        return { ok: false, error: loginFailureMessage(err) };
-      }
-    }
-
-    return { ok: false, error: INVALID_CREDENTIALS_MESSAGE };
   }, []);
 
   const logout = useCallback(() => {

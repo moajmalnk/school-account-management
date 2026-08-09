@@ -110,6 +110,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DatePicker, MonthPicker } from "@/components/ui/date-picker";
 import { OrganicCard } from "@/components/ui/organic-card";
+import { ImageCropDialog } from "@/components/ui/image-crop-dialog";
 import {
   normalizeAcademicYearLabel,
   composeClassName,
@@ -178,6 +179,7 @@ import { AttachmentPreviewDialog } from "@/components/school/AttachmentPreviewDi
 import {
   TenantDashboardSkeleton,
   TenantDirectorySkeleton,
+  TenantFeesSkeleton,
 } from "@/components/school/TenantDirectorySkeleton";
 import {
   EnrollmentStatusBadge,
@@ -9730,6 +9732,7 @@ export function SchoolSettings() {
     setStaff,
     activeStudents: students,
     setStudents,
+    hydrated,
   } = useTenantStore();
 
   const setActiveFeeTerms = useCallback<React.Dispatch<React.SetStateAction<FeeTerm[]>>>(
@@ -9879,21 +9882,25 @@ export function SchoolSettings() {
       )}
 
       {activeTab === "fees" && (
-        <div className="space-y-4 sm:space-y-5">
-          {!viewingFeePeriod && (
-            <FeeCategoriesCard
-              paymentCategories={paymentCategories}
-              setPaymentCategories={setPaymentCategories}
+        hydrated ? (
+          <div className="space-y-4 sm:space-y-5">
+            {!viewingFeePeriod && (
+              <FeeCategoriesCard
+                paymentCategories={paymentCategories}
+                setPaymentCategories={setPaymentCategories}
+              />
+            )}
+            <FeeTermsCard
+              feeTerms={feeTerms}
+              setFeeTerms={setActiveFeeTerms}
+              academicYear={academicYear}
+              classes={classes}
+              onViewingChange={setViewingFeePeriod}
             />
-          )}
-          <FeeTermsCard
-            feeTerms={feeTerms}
-            setFeeTerms={setActiveFeeTerms}
-            academicYear={academicYear}
-            classes={classes}
-            onViewingChange={setViewingFeePeriod}
-          />
-        </div>
+          </div>
+        ) : (
+          <TenantFeesSkeleton />
+        )
       )}
 
       {activeTab === "billing" && (
@@ -12591,6 +12598,8 @@ function SchoolDetailsCard({
   const [draft, setDraft] = useState<SchoolDetails>(schoolDetails);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const letterheadInputRef = useRef<HTMLInputElement>(null);
+  const [cropTarget, setCropTarget] = useState<"logo" | "letterhead" | null>(null);
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
 
   useEffect(() => {
     setDraft(schoolDetails);
@@ -12601,6 +12610,11 @@ function SchoolDetailsCard({
 
   const patch = <K extends keyof SchoolDetails>(key: K, value: SchoolDetails[K]) => {
     setDraft((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const closeCrop = () => {
+    setCropTarget(null);
+    setCropSrc(null);
   };
 
   const save = async (e: React.FormEvent) => {
@@ -12651,8 +12665,8 @@ function SchoolDetailsCard({
         maxBytes: 2 * 1024 * 1024,
         label: "Logo",
       });
-      patch("logoUrl", dataUrl);
-      toast.success("Logo ready — click Save Changes");
+      setCropTarget("logo");
+      setCropSrc(dataUrl);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not upload logo");
     }
@@ -12667,11 +12681,22 @@ function SchoolDetailsCard({
         maxBytes: 3 * 1024 * 1024,
         label: "Letterhead",
       });
-      patch("letterheadUrl", dataUrl);
-      toast.success("Letterhead ready — click Save Changes");
+      setCropTarget("letterhead");
+      setCropSrc(dataUrl);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not upload letterhead");
     }
+  };
+
+  const applyCrop = (dataUrl: string) => {
+    if (cropTarget === "logo") {
+      patch("logoUrl", dataUrl);
+      toast.success("Logo ready — click Save Changes");
+    } else if (cropTarget === "letterhead") {
+      patch("letterheadUrl", dataUrl);
+      toast.success("Letterhead ready — click Save Changes");
+    }
+    closeCrop();
   };
 
   return (
@@ -12918,6 +12943,23 @@ function SchoolDetailsCard({
           </Button>
         </div>
       </form>
+
+      <ImageCropDialog
+        open={Boolean(cropTarget && cropSrc)}
+        imageSrc={cropSrc}
+        title={cropTarget === "letterhead" ? "Adjust letterhead" : "Adjust logo"}
+        description="Drag to reposition, zoom, then confirm the crop."
+        aspect={cropTarget === "letterhead" ? 16 / 5 : 1}
+        outputSize={cropTarget === "letterhead" ? 1280 : 512}
+        onOpenChange={(next) => {
+          if (!next) closeCrop();
+        }}
+        onConfirm={applyCrop}
+        onRetake={() => {
+          if (cropTarget === "letterhead") letterheadInputRef.current?.click();
+          else logoInputRef.current?.click();
+        }}
+      />
     </OrganicCard>
   );
 }

@@ -37,3 +37,29 @@ export async function apiLogin(
 export async function apiMe(): Promise<ApiLoginSession> {
   return apiRequest<ApiLoginSession>("/api/auth/me.php");
 }
+
+export type ForgotPasswordResponse = {
+  message: string;
+  emailed: boolean;
+  resetUrl?: string;
+};
+
+export async function apiForgotPassword(email: string): Promise<ForgotPasswordResponse> {
+  return apiRequest<ForgotPasswordResponse>("/api/auth/forgot-password.php", {
+    method: "POST",
+    body: { email },
+    auth: false,
+  });
+}
+
+export async function apiResetPassword(
+  token: string,
+  password: string,
+  passwordConfirm: string,
+): Promise<{ message: string }> {
+  return apiRequest<{ message: string }>("/api/auth/reset-password.php", {
+    method: "POST",
+    body: { token, password, passwordConfirm },
+    auth: false,
+  });
+}

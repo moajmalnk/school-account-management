@@ -121,7 +121,7 @@ export function TopNav() {
                   {session?.displayName ?? "Super Admin"}
                 </span>
                 <span className="font-mono text-[10.5px] text-black/55">
-                  {session?.email ?? "superadmin@saas.com"}
+                  {session?.email ?? "—"}
                 </span>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
