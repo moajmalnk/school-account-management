@@ -316,6 +316,67 @@ export function staffPayableSalary(
   return { gross, payable, ratio, attendance };
 }
 
+const MONTH_NAME_TO_INDEX: Record<string, number> = {
+  january: 1,
+  february: 2,
+  march: 3,
+  april: 4,
+  may: 5,
+  june: 6,
+  july: 7,
+  august: 8,
+  september: 9,
+  october: 10,
+  november: 11,
+  december: 12,
+};
+
+/** Infer payroll month (YYYY-MM) from a salary history row. */
+export function salaryHistoryPayrollMonth(entry: StaffSalaryHistoryEntry): string | null {
+  const desc = entry.description ?? "";
+  const iso = desc.match(/\b(\d{4}-\d{2})\b/);
+  if (iso) return iso[1];
+  const named = desc.match(
+    /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})\b/i,
+  );
+  if (named) {
+    const monthNum = MONTH_NAME_TO_INDEX[named[1].toLowerCase()];
+    if (monthNum) return `${named[2]}-${String(monthNum).padStart(2, "0")}`;
+  }
+  const paid = entry.paidAt?.trim() ?? "";
+  if (/^\d{4}-\d{2}/.test(paid)) return paid.slice(0, 7);
+  return null;
+}
+
+export function salaryPaymentsForMonth(
+  history: StaffSalaryHistoryEntry[] | undefined,
+  month: string,
+): StaffSalaryHistoryEntry[] {
+  const key = month.trim();
+  if (!key) return [];
+  return (history ?? []).filter((entry) => salaryHistoryPayrollMonth(entry) === key);
+}
+
+export function salaryPaidAmountForMonth(
+  history: StaffSalaryHistoryEntry[] | undefined,
+  month: string,
+): number {
+  return salaryPaymentsForMonth(history, month).reduce((sum, entry) => sum + entry.amount, 0);
+}
+
+export function isSalaryMonthSettled(
+  history: StaffSalaryHistoryEntry[] | undefined,
+  month: string,
+  payable: number,
+): boolean {
+  if (payable <= 0) return true;
+  return salaryPaidAmountForMonth(history, month) >= payable;
+}
+
+export function totalSalaryDisbursed(history: StaffSalaryHistoryEntry[] | undefined): number {
+  return (history ?? []).reduce((sum, entry) => sum + entry.amount, 0);
+}
+
 export function normalizeStaffAttendanceMonth(
   raw: Partial<StaffAttendanceMonth> | null | undefined,
 ): StaffAttendanceMonth | null {

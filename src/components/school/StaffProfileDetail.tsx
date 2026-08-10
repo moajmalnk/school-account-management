@@ -44,6 +44,11 @@ import {
   staffGrossSalary,
   upsertStaffAttendanceMonth,
   normalizeStaffAttendanceMonth,
+  salaryHistoryPayrollMonth,
+  salaryPaidAmountForMonth,
+  isSalaryMonthSettled,
+  totalSalaryDisbursed,
+  type StaffSalaryHistoryEntry,
 } from "@/lib/tenant-store";
 import { sessionHasPermission, useAuth } from "@/lib/auth";
 import {
@@ -542,6 +547,66 @@ export function StaffProfileDetail({
       [...(staff.attendanceByMonth ?? [])].sort((a, b) => b.month.localeCompare(a.month)),
     [staff.attendanceByMonth],
   );
+
+  const totalPaidSalary = useMemo(
+    () => totalSalaryDisbursed(salaryHistory),
+    [salaryHistory],
+  );
+  const lastSalaryPayment = salaryHistory[0] ?? null;
+  const currentMonthPaid = useMemo(
+    () => salaryPaidAmountForMonth(salaryHistory, payrollMonth),
+    [salaryHistory, payrollMonth],
+  );
+  const currentMonthSettled = useMemo(
+    () => isSalaryMonthSettled(salaryHistory, payrollMonth, attendancePay.payable),
+    [salaryHistory, payrollMonth, attendancePay.payable],
+  );
+  const currentMonthOutstanding = Math.max(0, attendancePay.payable - currentMonthPaid);
+
+  const monthlyPayrollLedger = useMemo(() => {
+    const monthSet = new Set<string>();
+    for (const row of staff.attendanceByMonth ?? []) monthSet.add(row.month);
+    for (const entry of salaryHistory) {
+      const month = salaryHistoryPayrollMonth(entry);
+      if (month) monthSet.add(month);
+    }
+    monthSet.add(payrollMonth);
+    return Array.from(monthSet)
+      .sort((a, b) => b.localeCompare(a))
+      .map((month) => {
+        const pay = staffPayableSalary(staff, month);
+        const payments = salaryHistory.filter(
+          (entry) => salaryHistoryPayrollMonth(entry) === month,
+        );
+        const paid = payments.reduce((sum, entry) => sum + entry.amount, 0);
+        const outstanding = Math.max(0, pay.payable - paid);
+        const settled = pay.payable <= 0 || paid >= pay.payable;
+        const hasQueued = payments.some((entry) => entry.status === "Queued");
+        const hasCleared = payments.some(
+          (entry) => entry.status === "Cleared" || entry.status === "Paid",
+        );
+        const status: "Paid" | "Queued" | "Partial" | "Due" | "No due" =
+          pay.payable <= 0
+            ? "No due"
+            : settled
+              ? hasQueued && !hasCleared
+                ? "Queued"
+                : "Paid"
+              : paid > 0
+                ? "Partial"
+                : "Due";
+        return {
+          month,
+          pay,
+          paid,
+          outstanding,
+          settled,
+          status,
+          payments,
+        };
+      });
+  }, [staff, salaryHistory, payrollMonth]);
+
   const [attendanceForm, setAttendanceForm] = useState({
     month: payrollMonth,
     daysPresent: "",
@@ -1035,24 +1100,42 @@ export function StaffProfileDetail({
                       Gross ₹ {staffGrossSalary(staff).toLocaleString("en-IN")} ×{" "}
                       {Math.round(attendancePay.ratio * 100)}% attendance
                     </p>
-                    <Button
-                      type="button"
-                      className="mt-3 h-9 w-full rounded-full bg-[#0F766E] text-[12.5px] font-semibold text-white hover:bg-[#0D9488]"
-                      onClick={() =>
-                        navigate({
-                          to: "/tenant/finance",
-                          search: {
-                            tab: "make",
-                            staffId: staff.id,
-                            amount: String(attendancePay.payable),
-                            month: payrollMonth,
-                          },
-                        })
-                      }
-                    >
-                      <Wallet className="mr-1.5 h-3.5 w-3.5" />
-                      Pay ₹ {attendancePay.payable.toLocaleString("en-IN")}
-                    </Button>
+                    {currentMonthSettled ? (
+                      <div className="mt-3 space-y-2">
+                        <div className="inline-flex rounded-full bg-[#D1F2E1] px-2.5 py-1 text-[11px] font-semibold text-[#059669]">
+                          Settled for {formatPayrollMonthLabel(payrollMonth)}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-9 w-full rounded-full text-[12.5px] font-semibold"
+                          onClick={() => setActiveTab("payments")}
+                        >
+                          <Wallet className="mr-1.5 h-3.5 w-3.5" />
+                          View salary history
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        type="button"
+                        className="mt-3 h-9 w-full rounded-full bg-[#0F766E] text-[12.5px] font-semibold text-white hover:bg-[#0D9488]"
+                        onClick={() =>
+                          navigate({
+                            to: "/tenant/finance",
+                            search: {
+                              tab: "make",
+                              staffId: staff.id,
+                              amount: String(currentMonthOutstanding || attendancePay.payable),
+                              month: payrollMonth,
+                            },
+                          })
+                        }
+                      >
+                        <Wallet className="mr-1.5 h-3.5 w-3.5" />
+                        Pay ₹{" "}
+                        {(currentMonthOutstanding || attendancePay.payable).toLocaleString("en-IN")}
+                      </Button>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -1151,9 +1234,13 @@ export function StaffProfileDetail({
                   <h3 className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
                     Attendance History
                   </h3>
-                  <span className="font-mono text-[11px] text-black/40">
-                    {attendanceHistory.length} month{attendanceHistory.length === 1 ? "" : "s"}
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("payments")}
+                    className="text-[11px] font-semibold text-[#0F766E] hover:underline"
+                  >
+                    Salary history →
+                  </button>
                 </div>
 
                 {attendanceHistory.length === 0 ? (
@@ -1162,7 +1249,7 @@ export function StaffProfileDetail({
                   </div>
                 ) : (
                   <div className="mt-3 overflow-x-auto rounded-lg border border-slate-100 dark:border-white/10">
-                    <table className="w-full min-w-[520px] text-left text-[12.5px]">
+                    <table className="w-full min-w-[480px] text-left text-[12.5px]">
                       <thead>
                         <tr className="border-b border-slate-100 bg-slate-50 dark:border-white/10 dark:bg-zinc-900/70">
                           {["Month", "Present", "Working", "Rate", "Payable", ""].map((header) => (
@@ -1186,6 +1273,12 @@ export function StaffProfileDetail({
                             row.month,
                           );
                           const isCurrent = row.month === payrollMonth;
+                          const monthPaid = salaryPaidAmountForMonth(salaryHistory, row.month);
+                          const monthSettled = isSalaryMonthSettled(
+                            salaryHistory,
+                            row.month,
+                            pay.payable,
+                          );
                           return (
                             <tr
                               key={row.month}
@@ -1216,26 +1309,21 @@ export function StaffProfileDetail({
                                 <div className="font-mono font-semibold text-[#0F766E]">
                                   ₹ {pay.payable.toLocaleString("en-IN")}
                                 </div>
-                                {pay.payable > 0 && (
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    className="mt-1.5 h-7 rounded-full bg-[#0F766E] px-2.5 text-[11px] font-semibold text-white hover:bg-[#0D9488]"
-                                    onClick={() =>
-                                      navigate({
-                                        to: "/tenant/finance",
-                                        search: {
-                                          tab: "make",
-                                          staffId: staff.id,
-                                          amount: String(pay.payable),
-                                          month: row.month,
-                                        },
-                                      })
-                                    }
-                                  >
-                                    Pay
-                                  </Button>
-                                )}
+                                <div className="mt-1">
+                                  {monthSettled ? (
+                                    <span className="inline-flex rounded-full bg-[#D1F2E1] px-2 py-0.5 text-[10px] font-semibold text-[#059669]">
+                                      Paid
+                                    </span>
+                                  ) : monthPaid > 0 ? (
+                                    <span className="inline-flex rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[10px] font-semibold text-[#B45309]">
+                                      Partial
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-semibold text-black/55">
+                                      Unpaid
+                                    </span>
+                                  )}
+                                </div>
                               </td>
                               <td className="px-3 py-3 text-right">
                                 <div className="inline-flex items-center gap-1">
@@ -1314,20 +1402,303 @@ export function StaffProfileDetail({
           </section>
         </ProfileTabPanel>
 
-        <ProfileTabPanel value="payments">
+        <ProfileTabPanel value="payments" className="space-y-4 sm:space-y-6">
           <section className={CARD_FRAME}>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <h2 className="text-base font-semibold text-black">Salary History</h2>
+                <h2 className="text-base font-semibold text-black">Salary Overview</h2>
                 <p className="mt-1 text-[12.5px] text-black/50">
-                  Past salary payments for {staff.name}.
+                  Payroll summary for {staff.name} · {formatPayrollMonthLabel(payrollMonth)}
+                </p>
+              </div>
+              {!currentMonthSettled && attendancePay.payable > 0 && (
+                <Button
+                  type="button"
+                  className="h-9 shrink-0 rounded-full bg-[#0F766E] px-4 text-[12.5px] font-semibold text-white hover:bg-[#0D9488]"
+                  onClick={() =>
+                    navigate({
+                      to: "/tenant/finance",
+                      search: {
+                        tab: "make",
+                        staffId: staff.id,
+                        amount: String(currentMonthOutstanding || attendancePay.payable),
+                        month: payrollMonth,
+                      },
+                    })
+                  }
+                >
+                  <Wallet className="mr-1.5 h-3.5 w-3.5" />
+                  Pay outstanding
+                </Button>
+              )}
+            </div>
+
+            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="rounded-lg bg-slate-50 p-4 dark:bg-zinc-900/70">
+                <div className={META_LABEL}>Total Paid</div>
+                <div className="mt-2 font-mono text-xl font-semibold tracking-tight text-[#059669]">
+                  ₹ {totalPaidSalary.toLocaleString("en-IN")}
+                </div>
+                <p className="mt-1 text-[11px] text-black/45">
+                  {salaryHistory.length} payment{salaryHistory.length === 1 ? "" : "s"} recorded
+                </p>
+              </div>
+              <div className="rounded-lg bg-slate-50 p-4 dark:bg-zinc-900/70">
+                <div className={META_LABEL}>This Month Payable</div>
+                <div className="mt-2 font-mono text-xl font-semibold tracking-tight text-black dark:text-zinc-100">
+                  ₹ {attendancePay.payable.toLocaleString("en-IN")}
+                </div>
+                <p className="mt-1 text-[11px] text-black/45">
+                  {attendancePay.attendance
+                    ? `${attendancePay.attendance.daysPresent}/${attendancePay.attendance.workingDays} days · ${Math.round(attendancePay.ratio * 100)}%`
+                    : "Full gross · no attendance yet"}
+                </p>
+              </div>
+              <div
+                className={cn(
+                  "rounded-lg p-4",
+                  currentMonthOutstanding > 0 ? "bg-[#0F766E]" : "bg-slate-50 dark:bg-zinc-900/70",
+                )}
+              >
+                <div
+                  className={cn(
+                    "text-[11px] font-semibold uppercase tracking-wider",
+                    currentMonthOutstanding > 0 ? "text-white/75" : "text-black/45 dark:text-zinc-400",
+                  )}
+                >
+                  Outstanding
+                </div>
+                <div
+                  className={cn(
+                    "mt-2 font-mono text-xl font-semibold tracking-tight",
+                    currentMonthOutstanding > 0 ? "text-white" : "text-black dark:text-zinc-100",
+                  )}
+                >
+                  ₹ {currentMonthOutstanding.toLocaleString("en-IN")}
+                </div>
+                <p
+                  className={cn(
+                    "mt-1 text-[11px]",
+                    currentMonthOutstanding > 0 ? "text-white/70" : "text-black/45",
+                  )}
+                >
+                  {currentMonthSettled
+                    ? "Settled for this payroll month"
+                    : currentMonthPaid > 0
+                      ? `₹ ${currentMonthPaid.toLocaleString("en-IN")} already paid`
+                      : "No payment yet this month"}
+                </p>
+              </div>
+            </div>
+
+            {lastSalaryPayment && (
+              <div className="mt-4 rounded-lg border border-slate-100 bg-[#FAFAFA] px-4 py-3 dark:border-white/10 dark:bg-zinc-900/50">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                      Last payment
+                    </div>
+                    <p className="mt-0.5 text-[13px] font-medium text-black">
+                      {lastSalaryPayment.description}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-mono text-[14px] font-semibold text-[#0F766E]">
+                      ₹ {lastSalaryPayment.amount.toLocaleString("en-IN")}
+                    </div>
+                    <div className="font-mono text-[11px] text-black/45">
+                      {lastSalaryPayment.paidAt} · {lastSalaryPayment.mode}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className={CARD_FRAME}>
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-black">Monthly Payroll Ledger</h2>
+                <p className="mt-1 text-[12.5px] text-black/50">
+                  Month-by-month payable vs paid · attendance drives the amount due.
+                </p>
+              </div>
+              <span className="font-mono text-[11px] text-black/40">
+                {monthlyPayrollLedger.length} month
+                {monthlyPayrollLedger.length === 1 ? "" : "s"}
+              </span>
+            </div>
+
+            {monthlyPayrollLedger.length === 0 ? (
+              <div className="mt-5 rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center text-[13px] text-black/50 dark:border-white/15 dark:bg-zinc-900/60 dark:text-zinc-400">
+                No payroll months yet. Record attendance or confirm a salary payment to start the
+                ledger.
+              </div>
+            ) : (
+              <>
+                <div className="mt-5 space-y-2.5 sm:hidden">
+                  {monthlyPayrollLedger.map((row) => (
+                    <article
+                      key={row.month}
+                      className="rounded-xl border border-slate-100 bg-slate-50/70 p-3.5 dark:border-white/10 dark:bg-zinc-900/60"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-[13px] font-semibold text-black">
+                            {formatPayrollMonthLabel(row.month)}
+                          </div>
+                          <div className="mt-0.5 font-mono text-[10.5px] text-black/40">
+                            {row.month}
+                            {row.month === payrollMonth ? " · current" : ""}
+                          </div>
+                        </div>
+                        <SalaryStatusBadge status={row.status} />
+                      </div>
+                      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-slate-200/70 pt-3 text-center dark:border-white/10">
+                        <div>
+                          <div className="text-[10px] font-semibold uppercase tracking-wider text-black/40">
+                            Payable
+                          </div>
+                          <div className="mt-0.5 font-mono text-[12.5px] font-semibold text-black">
+                            ₹ {row.pay.payable.toLocaleString("en-IN")}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-semibold uppercase tracking-wider text-black/40">
+                            Paid
+                          </div>
+                          <div className="mt-0.5 font-mono text-[12.5px] font-semibold text-[#059669]">
+                            ₹ {row.paid.toLocaleString("en-IN")}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-semibold uppercase tracking-wider text-black/40">
+                            Due
+                          </div>
+                          <div className="mt-0.5 font-mono text-[12.5px] font-semibold text-black">
+                            ₹ {row.outstanding.toLocaleString("en-IN")}
+                          </div>
+                        </div>
+                      </div>
+                      {row.outstanding > 0 && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="mt-3 h-8 w-full rounded-full bg-[#0F766E] text-[11px] font-semibold text-white hover:bg-[#0D9488]"
+                          onClick={() =>
+                            navigate({
+                              to: "/tenant/finance",
+                              search: {
+                                tab: "make",
+                                staffId: staff.id,
+                                amount: String(row.outstanding),
+                                month: row.month,
+                              },
+                            })
+                          }
+                        >
+                          Pay ₹ {row.outstanding.toLocaleString("en-IN")}
+                        </Button>
+                      )}
+                    </article>
+                  ))}
+                </div>
+
+                <div className="mt-5 hidden overflow-x-auto rounded-lg border border-slate-100 dark:border-white/10 sm:block">
+                  <table className="w-full min-w-[640px] text-left text-[12.5px]">
+                    <thead>
+                      <tr className="border-b border-slate-100 bg-slate-50 dark:border-white/10 dark:bg-zinc-900/70">
+                        {["Month", "Attendance", "Payable", "Paid", "Outstanding", "Status", ""].map(
+                          (header) => (
+                            <th
+                              key={header || "actions"}
+                              className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/50 dark:text-zinc-400"
+                            >
+                              {header}
+                            </th>
+                          ),
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {monthlyPayrollLedger.map((row) => (
+                        <tr
+                          key={row.month}
+                          className={cn(
+                            "border-b border-slate-50 last:border-0",
+                            row.month === payrollMonth && "bg-[#F0FDFA]/70",
+                          )}
+                        >
+                          <td className="px-3 py-3">
+                            <div className="font-medium text-black">
+                              {formatPayrollMonthLabel(row.month)}
+                            </div>
+                            <div className="font-mono text-[10.5px] text-black/40">
+                              {row.month}
+                              {row.month === payrollMonth ? " · current" : ""}
+                            </div>
+                          </td>
+                          <td className="px-3 py-3 font-mono text-black/70">
+                            {row.pay.attendance
+                              ? `${row.pay.attendance.daysPresent}/${row.pay.attendance.workingDays} · ${Math.round(row.pay.ratio * 100)}%`
+                              : "—"}
+                          </td>
+                          <td className="px-3 py-3 font-mono font-semibold text-black">
+                            ₹ {row.pay.payable.toLocaleString("en-IN")}
+                          </td>
+                          <td className="px-3 py-3 font-mono font-semibold text-[#059669]">
+                            ₹ {row.paid.toLocaleString("en-IN")}
+                          </td>
+                          <td className="px-3 py-3 font-mono font-semibold text-black">
+                            ₹ {row.outstanding.toLocaleString("en-IN")}
+                          </td>
+                          <td className="px-3 py-3">
+                            <SalaryStatusBadge status={row.status} />
+                          </td>
+                          <td className="px-3 py-3 text-right">
+                            {row.outstanding > 0 ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="h-7 rounded-full bg-[#0F766E] px-2.5 text-[11px] font-semibold text-white hover:bg-[#0D9488]"
+                                onClick={() =>
+                                  navigate({
+                                    to: "/tenant/finance",
+                                    search: {
+                                      tab: "make",
+                                      staffId: staff.id,
+                                      amount: String(row.outstanding),
+                                      month: row.month,
+                                    },
+                                  })
+                                }
+                              >
+                                Pay
+                              </Button>
+                            ) : null}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </section>
+
+          <section className={CARD_FRAME}>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-black">Payment History</h2>
+                <p className="mt-1 text-[12.5px] text-black/50">
+                  Individual salary disbursements for {staff.name}.
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2 rounded-lg bg-slate-50 px-4 py-3 dark:bg-zinc-900/70">
                 <Wallet className="h-4 w-4 text-black/45" />
                 <div className="text-right">
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                    Payments
+                    Transactions
                   </div>
                   <div className="font-mono text-lg font-bold text-black">
                     {salaryHistory.length}
@@ -1343,85 +1714,59 @@ export function StaffProfileDetail({
               </div>
             ) : (
               <>
-                {/* Mobile · cards */}
                 <div className="mt-5 space-y-2.5 sm:hidden">
                   {salaryHistory.map((row) => (
-                    <article
-                      key={row.id}
-                      className="rounded-xl border border-slate-100 bg-slate-50/70 p-3.5 dark:border-white/10 dark:bg-zinc-900/60"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="font-mono text-[11px] text-black/50 dark:text-zinc-400">
-                            {row.paidAt}
-                          </div>
-                          <p className="mt-1 text-[13px] font-medium leading-snug text-black dark:text-zinc-100">
-                            {row.description}
-                          </p>
-                        </div>
-                        <span
-                          className={cn(
-                            "shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold",
-                            row.status === "Cleared" || row.status === "Paid"
-                              ? "bg-[#D1F2E1] text-[#059669]"
-                              : "bg-[#FEF3C7] text-[#B45309]",
-                          )}
-                        >
-                          {row.status}
-                        </span>
-                      </div>
-                      <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-200/70 pt-3 dark:border-white/10">
-                        <span className="text-[12px] text-black/55 dark:text-zinc-400">
-                          {row.mode}
-                        </span>
-                        <span className="font-mono text-[14px] font-semibold text-[#0F766E] dark:text-[#5EEAD4]">
-                          ₹ {row.amount.toLocaleString("en-IN")}
-                        </span>
-                      </div>
-                    </article>
+                    <SalaryPaymentCard key={row.id} row={row} />
                   ))}
                 </div>
 
-                {/* Desktop · table */}
                 <div className="mt-5 hidden overflow-x-auto rounded-lg border border-slate-100 dark:border-white/10 sm:block">
-                  <table className="w-full min-w-[560px] text-left text-[12.5px]">
+                  <table className="w-full min-w-[640px] text-left text-[12.5px]">
                     <thead>
                       <tr className="border-b border-slate-100 bg-slate-50 dark:border-white/10 dark:bg-zinc-900/70">
-                        {["Date", "Description", "Mode", "Amount", "Status"].map((header) => (
-                          <th
-                            key={header}
-                            className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/50 dark:text-zinc-400"
-                          >
-                            {header}
-                          </th>
-                        ))}
+                        {["Date", "Payroll month", "Description", "Mode", "Amount", "Status"].map(
+                          (header) => (
+                            <th
+                              key={header}
+                              className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/50 dark:text-zinc-400"
+                            >
+                              {header}
+                            </th>
+                          ),
+                        )}
                       </tr>
                     </thead>
                     <tbody>
-                      {salaryHistory.map((row) => (
-                        <tr key={row.id} className="border-b border-slate-50 last:border-0">
-                          <td className="px-3 py-3 font-mono text-[11px] text-black/60 dark:text-zinc-400">
-                            {row.paidAt}
-                          </td>
-                          <td className="px-3 py-3 font-medium text-black">{row.description}</td>
-                          <td className="px-3 py-3 text-black/65">{row.mode}</td>
-                          <td className="px-3 py-3 font-mono font-semibold text-black">
-                            ₹ {row.amount.toLocaleString("en-IN")}
-                          </td>
-                          <td className="px-3 py-3">
-                            <span
-                              className={cn(
-                                "inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold",
-                                row.status === "Cleared" || row.status === "Paid"
-                                  ? "bg-[#D1F2E1] text-[#059669]"
-                                  : "bg-[#FEF3C7] text-[#B45309]",
-                              )}
-                            >
-                              {row.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
+                      {salaryHistory.map((row) => {
+                        const month = salaryHistoryPayrollMonth(row);
+                        return (
+                          <tr key={row.id} className="border-b border-slate-50 last:border-0">
+                            <td className="px-3 py-3 font-mono text-[11px] text-black/60 dark:text-zinc-400">
+                              {row.paidAt}
+                            </td>
+                            <td className="px-3 py-3 text-black/70">
+                              {month ? formatPayrollMonthLabel(month) : "—"}
+                            </td>
+                            <td className="px-3 py-3 font-medium text-black">{row.description}</td>
+                            <td className="px-3 py-3 text-black/65">{row.mode}</td>
+                            <td className="px-3 py-3 font-mono font-semibold text-black">
+                              ₹ {row.amount.toLocaleString("en-IN")}
+                            </td>
+                            <td className="px-3 py-3">
+                              <span
+                                className={cn(
+                                  "inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold",
+                                  row.status === "Cleared" || row.status === "Paid"
+                                    ? "bg-[#D1F2E1] text-[#059669]"
+                                    : "bg-[#FEF3C7] text-[#B45309]",
+                                )}
+                              >
+                                {row.status}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -2072,5 +2417,61 @@ function MetaRow({
         {children}
       </div>
     </div>
+  );
+}
+
+function SalaryStatusBadge({
+  status,
+}: {
+  status: "Paid" | "Queued" | "Partial" | "Due" | "No due";
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold",
+        status === "Paid" && "bg-[#D1F2E1] text-[#059669]",
+        status === "Queued" && "bg-[#FEF3C7] text-[#B45309]",
+        status === "Partial" && "bg-[#FEF3C7] text-[#B45309]",
+        status === "Due" && "bg-[#FEE2E2] text-[#EF4444]",
+        status === "No due" && "bg-[#F4F4F5] text-black/55",
+      )}
+    >
+      {status}
+    </span>
+  );
+}
+
+function SalaryPaymentCard({ row }: { row: StaffSalaryHistoryEntry }) {
+  const month = salaryHistoryPayrollMonth(row);
+  return (
+    <article className="rounded-xl border border-slate-100 bg-slate-50/70 p-3.5 dark:border-white/10 dark:bg-zinc-900/60">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="font-mono text-[11px] text-black/50 dark:text-zinc-400">
+            {row.paidAt}
+            {month ? ` · ${formatPayrollMonthLabel(month)}` : ""}
+          </div>
+          <p className="mt-1 text-[13px] font-medium leading-snug text-black dark:text-zinc-100">
+            {row.description}
+          </p>
+        </div>
+        <span
+          className={cn(
+            "shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold",
+            row.status === "Cleared" || row.status === "Paid"
+              ? "bg-[#D1F2E1] text-[#059669]"
+              : "bg-[#FEF3C7] text-[#B45309]",
+          )}
+        >
+          {row.status}
+        </span>
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-200/70 pt-3 dark:border-white/10">
+        <span className="text-[12px] text-black/55 dark:text-zinc-400">{row.mode}</span>
+        <span className="font-mono text-[14px] font-semibold text-[#0F766E] dark:text-[#5EEAD4]">
+          ₹ {row.amount.toLocaleString("en-IN")}
+        </span>
+      </div>
+    </article>
   );
 }

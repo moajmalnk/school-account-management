@@ -30,6 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { MonthPicker } from "@/components/ui/date-picker";
 import { FinanceBarCard, FinanceDonutCard } from "@/components/school/finance-charts";
 import { OrganicCard } from "@/components/ui/organic-card";
 import {
@@ -42,7 +43,7 @@ import {
 } from "@/lib/dashboard-finance";
 import { downloadCsv, downloadTablePdf } from "@/lib/finance-export";
 import { useDisbursements } from "@/lib/use-disbursements";
-import { useTenantStore, resolvePaymentFeePeriod, currentPayrollMonth, formatPayrollMonthLabel, staffPayableSalary, type Payment, type Student } from "@/lib/tenant-store";
+import { useTenantStore, resolvePaymentFeePeriod, currentPayrollMonth, formatPayrollMonthLabel, staffPayableSalary, salaryHistoryPayrollMonth, isSalaryMonthSettled, type Payment, type Student } from "@/lib/tenant-store";
 import { cn } from "@/lib/utils";
 
 export type LedgerRow = {
@@ -1360,13 +1361,15 @@ export function SalaryReport() {
   const { staff, academicYear, schoolDetails } = useTenantStore();
   const { disbursements } = useDisbursements();
   const schoolName = schoolDetails.name || "School";
-  const payrollMonth = currentPayrollMonth();
+  const [payrollMonth, setPayrollMonth] = useState(currentPayrollMonth);
 
   const [query, setQuery] = useState("");
   const [department, setDepartment] = useState("all");
   const [role, setRole] = useState("all");
   const [status, setStatus] = useState<"all" | "active" | "inactive">("active");
   const [payableQuery, setPayableQuery] = useState("");
+  const isCurrentPayrollMonth = payrollMonth === currentPayrollMonth();
+  const payrollMonthLabel = formatPayrollMonthLabel(payrollMonth);
 
   const departmentOptions = useMemo(
     () => Array.from(new Set(staff.map((s) => s.dept))).sort(),
@@ -1429,7 +1432,6 @@ export function SalaryReport() {
   );
   const totalGross = payrollRows.reduce((sum, row) => sum + row.gross, 0);
   const totalPayable = payrollRows.reduce((sum, row) => sum + row.payable, 0);
-  const attendanceCount = payrollRows.filter((row) => row.attendance).length;
 
   const salaryPayables = useMemo(
     () => queuedPayables(disbursements).filter(isSalaryDisbursement),
@@ -1449,19 +1451,73 @@ export function SalaryReport() {
 
   const salaryPayableAmount = filteredPayables.reduce((sum, item) => sum + item.amount, 0);
 
-  const tableRows = payrollRows.map(({ staff: s, gross, payable, attendanceLabel }) => [
-    s.id,
-    s.name,
-    s.role,
-    s.dept,
-    attendanceLabel,
-    inr(s.basicSalary),
-    inr(s.additionalAllowances),
-    inr(gross),
-    inr(payable),
-  ]);
+  const recentSalaryHistory = useMemo(() => {
+    const rows: Array<{
+      id: string;
+      staffId: string;
+      staffName: string;
+      paidAt: string;
+      month: string | null;
+      description: string;
+      mode: string;
+      amount: number;
+      status: string;
+    }> = [];
+    for (const member of staff) {
+      if (isRecordDeleted(member.deletedAt)) continue;
+      for (const entry of member.salaryHistory ?? []) {
+        rows.push({
+          id: entry.id,
+          staffId: member.id,
+          staffName: member.name,
+          paidAt: entry.paidAt,
+          month: salaryHistoryPayrollMonth(entry),
+          description: entry.description,
+          mode: entry.mode,
+          amount: entry.amount,
+          status: entry.status,
+        });
+      }
+    }
+    return rows.sort((a, b) => String(b.paidAt).localeCompare(String(a.paidAt))).slice(0, 24);
+  }, [staff]);
+
+  const historyPaidTotal = recentSalaryHistory.reduce((sum, row) => sum + row.amount, 0);
+
+  const paidThisMonthCount = useMemo(
+    () =>
+      filteredStaff.filter((s) => {
+        const pay = staffPayableSalary(s, payrollMonth);
+        return isSalaryMonthSettled(s.salaryHistory, payrollMonth, pay.payable);
+      }).length,
+    [filteredStaff, payrollMonth],
+  );
+
+  const tableRows = payrollRows.map(({ staff: s, gross, payable, attendanceLabel }) => {
+    const settled = isSalaryMonthSettled(s.salaryHistory, payrollMonth, payable);
+    return [
+      s.id,
+      s.name,
+      s.role,
+      s.dept,
+      attendanceLabel,
+      inr(s.basicSalary),
+      inr(s.additionalAllowances),
+      inr(gross),
+      inr(payable),
+      settled ? "Paid" : "Due",
+    ];
+  });
 
   const payableRows = filteredPayables.map((item) => [item.payee, inr(item.amount)]);
+  const historyRows = recentSalaryHistory.map((row) => [
+    row.paidAt,
+    row.staffName,
+    row.month ? formatPayrollMonthLabel(row.month) : "—",
+    row.mode,
+    inr(row.amount),
+    row.status,
+  ]);
 
   const deptSegments = useMemo(
     () =>
@@ -1483,7 +1539,7 @@ export function SalaryReport() {
 
   const handleCsv = () => {
     downloadCsv(
-      `salary-report-${academicYear.replace(/\s+/g, "-").toLowerCase()}.csv`,
+      `salary-report-${payrollMonth}-${academicYear.replace(/\s+/g, "-").toLowerCase()}.csv`,
       [
         "Staff ID",
         "Name",
@@ -1494,6 +1550,7 @@ export function SalaryReport() {
         "Allowances",
         "Gross",
         "Payable",
+        "Status",
         "Month",
       ],
       payrollRows.map(({ staff: s, gross, payable, attendanceLabel }) => [
@@ -1506,6 +1563,7 @@ export function SalaryReport() {
         s.additionalAllowances,
         gross,
         payable,
+        isSalaryMonthSettled(s.salaryHistory, payrollMonth, payable) ? "Paid" : "Due",
         payrollMonth,
       ]),
     );
@@ -1514,10 +1572,10 @@ export function SalaryReport() {
 
   const handlePdf = () => {
     downloadTablePdf({
-      filename: `salary-report-${academicYear.replace(/\s+/g, "-").toLowerCase()}.pdf`,
-      title: "Salary Report",
-      subtitle: `${schoolName} · ${academicYear} · ${formatPayrollMonthLabel(payrollMonth)}`,
-      headers: ["ID", "Name", "Role", "Dept", "Attn", "Basic", "Allow.", "Gross", "Payable"],
+      filename: `salary-report-${payrollMonth}-${academicYear.replace(/\s+/g, "-").toLowerCase()}.pdf`,
+      title: `Salary Report · ${payrollMonthLabel}`,
+      subtitle: `${schoolName} · ${academicYear} · ${payrollMonth}`,
+      headers: ["ID", "Name", "Role", "Dept", "Attn", "Basic", "Allow.", "Gross", "Payable", "Status"],
       rows: payrollRows.map(({ staff: s, gross, payable, attendanceLabel }) => [
         s.id,
         s.name,
@@ -1528,6 +1586,7 @@ export function SalaryReport() {
         s.additionalAllowances.toLocaleString("en-IN"),
         gross.toLocaleString("en-IN"),
         payable.toLocaleString("en-IN"),
+        isSalaryMonthSettled(s.salaryHistory, payrollMonth, payable) ? "Paid" : "Due",
       ]),
       footer: `Gross ${inr(totalGross)} · Attendance payable ${inr(totalPayable)} · Ledger payable ${inr(salaryPayableAmount)}`,
     });
@@ -1538,11 +1597,45 @@ export function SalaryReport() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 sm:gap-5">
       <OrganicCard tone="white" cornerSide="tr" padded className="shrink-0">
-        <ExportBar title="Salary Report" onCsv={handleCsv} onPdf={handlePdf} />
-        <p className="mt-1 text-[12px] text-black/55">
-          Payroll for {formatPayrollMonthLabel(payrollMonth)} · attendance adjusts payable ·{" "}
-          {academicYear}
-        </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 flex-1">
+            <ExportBar title="Salary Report" onCsv={handleCsv} onPdf={handlePdf} />
+            <p className="mt-1 text-[12px] text-black/55">
+              Monthly payroll · attendance adjusts payable · {academicYear}
+            </p>
+          </div>
+          <div className="w-full shrink-0 sm:w-[200px]">
+            <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/45">
+              Payroll month
+            </div>
+            <MonthPicker
+              value={payrollMonth}
+              onChange={(month) => setPayrollMonth(month || currentPayrollMonth())}
+              allowClear={false}
+              placeholder="Select month"
+              className="h-10 w-full"
+            />
+          </div>
+        </div>
+        <div className="mt-3 inline-flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center rounded-full bg-[#0F766E] px-3 py-1 text-[12px] font-semibold text-white">
+            {payrollMonthLabel}
+          </span>
+          <span className="font-mono text-[11px] text-black/45">{payrollMonth}</span>
+          {isCurrentPayrollMonth ? (
+            <span className="rounded-full bg-[#CCFBF1] px-2.5 py-1 text-[10px] font-semibold text-[#0F766E]">
+              Current month
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setPayrollMonth(currentPayrollMonth())}
+              className="text-[11px] font-semibold text-[#0F766E] hover:underline"
+            >
+              Jump to current
+            </button>
+          )}
+        </div>
         <SummaryStrip
           items={[
             { label: "Staff Shown", value: String(filteredStaff.length) },
@@ -1553,8 +1646,8 @@ export function SalaryReport() {
               accent: true,
             },
             {
-              label: "With Attendance",
-              value: `${attendanceCount}/${filteredStaff.length}`,
+              label: "Settled",
+              value: `${paidThisMonthCount}/${filteredStaff.length}`,
             },
           ]}
         />
@@ -1569,10 +1662,15 @@ export function SalaryReport() {
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="text-title text-slate-900 dark:text-zinc-50">Payroll Register</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="text-title text-slate-900 dark:text-zinc-50">Payroll Register</div>
+                <span className="rounded-full bg-[#F0FDFA] px-2.5 py-1 text-[11px] font-semibold text-[#0F766E] ring-1 ring-[#0F766E]/15">
+                  {payrollMonthLabel}
+                </span>
+              </div>
               <p className="mt-1 text-[12px] text-black/55">
-                {filteredStaff.length} of {staff.length} staff · payable = gross × (days present ÷
-                working days)
+                {filteredStaff.length} of {staff.length} staff · salary month {payrollMonth} ·
+                payable = gross × (days present ÷ working days)
               </p>
             </div>
             {(query || department !== "all" || role !== "all" || status !== "active") && (
@@ -1637,13 +1735,15 @@ export function SalaryReport() {
                   "Allowances",
                   "Gross",
                   "Payable",
+                  "Status",
                 ]}
                 rows={tableRows}
                 className="mt-0 min-h-0 flex-1"
                 footer={
                   <div className="border-t border-[#E5E5E5] bg-[#FAFAFA] px-3 py-3 text-[12px] font-semibold text-black">
-                    Totals · Basic {inr(totalBasic)} · Allowances {inr(totalAllowances)} · Gross{" "}
-                    {inr(totalGross)} · Payable {inr(totalPayable)}
+                    Totals · {payrollMonthLabel} · Basic {inr(totalBasic)} · Allowances{" "}
+                    {inr(totalAllowances)} · Gross {inr(totalGross)} · Payable {inr(totalPayable)} ·
+                    Settled {paidThisMonthCount}/{filteredStaff.length}
                   </div>
                 }
               />
@@ -1706,6 +1806,30 @@ export function SalaryReport() {
           )}
         </div>
       </div>
+
+      <OrganicCard tone="white" cornerSide="bl" padded className="shrink-0">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-title text-slate-900 dark:text-zinc-50">Salary Payment History</div>
+            <p className="mt-1 text-[12px] text-black/55">
+              Recent disbursements across staff · {recentSalaryHistory.length} shown
+              {historyPaidTotal > 0 ? ` · ${inr(historyPaidTotal)} total` : ""}
+            </p>
+          </div>
+        </div>
+
+        {historyRows.length === 0 ? (
+          <div className="mt-4 rounded-lg border border-dashed border-black/15 px-4 py-8 text-center text-[12px] text-black/55">
+            No salary payments recorded yet. Confirm payments from Finance → Make Payment.
+          </div>
+        ) : (
+          <ReportTable
+            headers={["Date", "Staff", "Payroll month", "Mode", "Amount", "Status"]}
+            rows={historyRows}
+            className="mt-4"
+          />
+        )}
+      </OrganicCard>
     </div>
   );
 }
