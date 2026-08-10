@@ -17,10 +17,11 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -33,6 +34,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
@@ -59,11 +61,23 @@ import { cn, glassInsetClass, glassPanelClass } from "@/lib/utils";
 
 /** Soft fade when academic year books switch. */
 export function AcademicYearBooksFade({ children }: { children: ReactNode }) {
-  const { academicYear } = useTenantStore();
+  const { academicYear, hydrated } = useTenantStore();
   const [visible, setVisible] = useState(true);
   const [displayYear, setDisplayYear] = useState(academicYear);
+  const booksReady = useRef(false);
 
   useEffect(() => {
+    // Skip the fade on first hydrate so seed→API year swaps don't blink the page.
+    if (!hydrated) {
+      setDisplayYear(academicYear);
+      return;
+    }
+    if (!booksReady.current) {
+      booksReady.current = true;
+      setDisplayYear(academicYear);
+      setVisible(true);
+      return;
+    }
     if (academicYear === displayYear) return;
     setVisible(false);
     const t = window.setTimeout(() => {
@@ -71,13 +85,13 @@ export function AcademicYearBooksFade({ children }: { children: ReactNode }) {
       setVisible(true);
     }, 140);
     return () => window.clearTimeout(t);
-  }, [academicYear, displayYear]);
+  }, [academicYear, displayYear, hydrated]);
 
   return (
     <div
-      key={displayYear}
+      key={displayYear || "books-loading"}
       className={cn(
-        "min-w-0 transition-opacity duration-200 ease-out",
+        "flex min-h-0 min-w-0 flex-1 flex-col transition-opacity duration-200 ease-out",
         visible ? "opacity-100" : "opacity-0",
       )}
     >
@@ -273,8 +287,8 @@ export function TenantMacDock({
   return (
     <aside
       className={cn(
-        "relative z-40 hidden shrink-0 overflow-visible transition-[width] duration-200 md:flex",
-        "sticky top-4 h-[calc(100dvh-2rem)] flex-col",
+        "relative z-40 hidden shrink-0 self-stretch overflow-visible transition-[width] duration-200 md:flex",
+        "sticky top-4 max-h-[calc(100dvh-2rem)] flex-col",
         expanded ? "w-[220px] xl:w-[240px]" : "w-[84px] items-center xl:w-[92px]",
         className,
       )}
@@ -283,7 +297,7 @@ export function TenantMacDock({
       <div
         className={cn(
           glassPanelClass,
-          "relative z-40 flex h-full w-full flex-col overflow-visible rounded-xl border border-white/70 bg-white/55 py-3 shadow-[0_12px_40px_-16px_rgba(15,23,42,0.35)] backdrop-blur-2xl",
+          "relative z-40 flex h-full min-h-[calc(100dvh-2rem)] w-full flex-col overflow-visible rounded-xl border border-white/70 bg-white/55 py-3 shadow-[0_12px_40px_-16px_rgba(15,23,42,0.35)] backdrop-blur-2xl",
           expanded ? "items-stretch px-2.5 sm:px-3" : "items-center px-1.5",
         )}
       >
@@ -456,10 +470,12 @@ export function TenantDesktopTopBar() {
   const {
     academicYear,
     academicYears,
+    closedAcademicYears,
     openAcademicYear,
     addAcademicYear,
     notifications,
     schoolDetails,
+    hydrated,
   } = useTenantStore();
   const { showBack, goBack, backLabel } = useWorkspaceSubViewBack();
   const [pendingLogout, setPendingLogout] = useState(false);
@@ -467,6 +483,10 @@ export function TenantDesktopTopBar() {
   const [yearDraft, setYearDraft] = useState("");
   const unreadCount = notifications.filter((n) => !n.read).length;
   const tenantName = schoolDetails.name || session?.tenantName || "Silver Hills Global";
+  const selectableYears = useMemo(
+    () => academicYears.filter((y) => !closedAcademicYears.includes(y) || y === academicYear),
+    [academicYear, academicYears, closedAcademicYears],
+  );
 
   const confirmLogout = () => {
     const name = session?.displayName ?? "Tenant Admin";
@@ -479,7 +499,12 @@ export function TenantDesktopTopBar() {
   const submitNewYear = (e: FormEvent) => {
     e.preventDefault();
     const label = normalizeAcademicYearLabel(yearDraft);
-    if (!label) return;
+    if (!label) {
+      toast.error("Use format 2026-27", {
+        description: "Financial years must look like AY 2026-27",
+      });
+      return;
+    }
     const added = addAcademicYear(label);
     if (!added) {
       toast.error(`${label} already exists`);
@@ -524,6 +549,12 @@ export function TenantDesktopTopBar() {
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
+          {!hydrated || !academicYear ? (
+            <Skeleton
+              aria-label="Loading academic year"
+              className="h-9 w-[9.5rem] rounded-full bg-emerald-500/25 sm:w-[11rem]"
+            />
+          ) : (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -548,12 +579,36 @@ export function TenantDesktopTopBar() {
                   });
                 }}
               >
-                {academicYears.map((y) => (
+                {selectableYears.map((y) => (
                   <DropdownMenuRadioItem key={y} value={y} className="rounded-md text-[13px]">
                     {y}
                   </DropdownMenuRadioItem>
                 ))}
               </DropdownMenuRadioGroup>
+              {closedAcademicYears.filter((y) => y !== academicYear).length > 0 && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400">
+                    Closed years
+                  </DropdownMenuLabel>
+                  {closedAcademicYears
+                    .filter((y) => y !== academicYear)
+                    .map((y) => (
+                      <DropdownMenuItem
+                        key={`closed-${y}`}
+                        className="rounded-md text-[13px] text-slate-500"
+                        onSelect={() => {
+                          const stats = openAcademicYear(y);
+                          toast.success(`Reopened books for ${y}`, {
+                            description: `${stats.receipts} receipt${stats.receipts === 1 ? "" : "s"} · ${stats.enrolled} student${stats.enrolled === 1 ? "" : "s"} enrolled`,
+                          });
+                        }}
+                      >
+                        {y} · reopen
+                      </DropdownMenuItem>
+                    ))}
+                </>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="rounded-md text-[13px]"
@@ -567,6 +622,7 @@ export function TenantDesktopTopBar() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          )}
 
           <ThemeModeToggle />
 

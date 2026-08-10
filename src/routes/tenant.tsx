@@ -102,12 +102,12 @@ function TenantShell() {
   }, [updateSession]);
 
   return (
-    <div className="tenant-canvas min-h-dvh text-slate-900 dark:text-zinc-100">
+    <div className="tenant-canvas flex min-h-dvh flex-col text-slate-900 dark:text-zinc-100">
       <ImpersonationBanner />
       <TenantMobileHeader />
       <div
         className={cn(
-          "flex min-h-dvh w-full gap-4 px-4 py-4 md:gap-5 md:px-5 md:py-5",
+          "flex min-h-0 w-full flex-1 gap-4 px-4 py-4 md:gap-5 md:px-5 md:py-5",
           isVertical && placement === "Left" && "flex-row",
           isVertical && placement === "Right" && "flex-row-reverse",
           (isTop || isBottom) && "flex-col",
@@ -117,11 +117,11 @@ function TenantShell() {
         {isTop && <TenantMacDock placement={placement} className="order-first" />}
         {isVertical && <TenantMacDock placement={placement} />}
 
-        <div className="relative z-0 flex min-w-0 flex-1 flex-col">
+        <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col">
           <TenantDesktopTopBar />
           <main
             className={cn(
-              "min-w-0 flex-1",
+              "flex min-h-0 min-w-0 flex-1 flex-col",
               mobileMainPadding,
               isBottom ? "md:pb-8" : "md:pb-6",
             )}

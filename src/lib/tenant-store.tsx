@@ -28,6 +28,7 @@ import {
   ensureYearLedger,
   filterByAcademicYear,
   getYearLedger,
+  mergeStudentYearLedgers,
   parseAcademicYearBounds,
   reconcileLedgersWithStudents,
   studentsForAcademicYear,
@@ -37,6 +38,7 @@ import {
   type StudentYearFields,
   type StudentYearLedger,
 } from "@/lib/academic-year";
+import { toDobIso } from "@/lib/dates";
 
 export type { StudentYearFields, StudentYearLedger };
 export {
@@ -580,7 +582,7 @@ export function normalizeStudent(
     due: typeof raw.due === "number" && Number.isFinite(raw.due) ? raw.due : 0,
     gender: raw.gender === "M" || raw.gender === "F" ? raw.gender : undefined,
     phone: optionalTrimmedString(raw.phone),
-    dob: optionalTrimmedString(raw.dob),
+    dob: toDobIso(optionalTrimmedString(raw.dob)),
     email: optionalTrimmedString(raw.email),
     address: optionalTrimmedString(raw.address),
     photoUrl: optionalTrimmedString(raw.photoUrl),
@@ -2484,24 +2486,22 @@ export const SEED_STUDENT_YEAR_LEDGERS: StudentYearLedger[] = [
   },
 ];
 
-/** Normalize free-text into `AY YYYY-YY` when possible. */
+/** Normalize free-text into `AY YYYY-YY`. Rejects free-form labels like "demo". */
 export function normalizeAcademicYearLabel(input: string): string | null {
   const trimmed = input.trim().replace(/\s+/g, " ");
   if (!trimmed) return null;
 
   const match = trimmed.match(/^(?:AY\s*)?(\d{4})\s*[-–/]\s*(\d{2}|\d{4})$/i);
-  if (match) {
-    const start = match[1];
-    const endRaw = match[2];
-    const end = endRaw.length === 4 ? endRaw.slice(2) : endRaw;
-    return `AY ${start}-${end}`;
-  }
+  if (!match) return null;
 
-  if (/^AY\s+/i.test(trimmed)) {
-    return trimmed.replace(/^AY\s+/i, "AY ");
-  }
+  const start = Number(match[1]);
+  const endRaw = match[2];
+  const endYear = endRaw.length === 4 ? Number(endRaw) : 2000 + Number(endRaw);
+  if (!Number.isFinite(start) || !Number.isFinite(endYear)) return null;
+  if (endYear !== start && endYear !== start + 1) return null;
 
-  return `AY ${trimmed}`;
+  const end = String(endYear).slice(-2);
+  return `AY ${start}-${end}`;
 }
 
 function ensureAcademicYearInList(years: string[], active: string): string[] {
@@ -2598,6 +2598,8 @@ type Snapshot = {
   feeTerms: FeeTerm[];
   studentYearLedgers: StudentYearLedger[];
   academicYears: string[];
+  /** Years closed for day-to-day posting (still visible for history). */
+  closedAcademicYears: string[];
   academicYear: string;
   themeSettings: ThemeSettings;
   schoolDetails: SchoolDetails;
@@ -2640,14 +2642,23 @@ type TenantStoreValue = {
   setStudentYearLedgers: Dispatch<SetStateAction<StudentYearLedger[]>>;
   academicYears: string[];
   setAcademicYears: Dispatch<SetStateAction<string[]>>;
+  closedAcademicYears: string[];
   academicYear: string;
   setAcademicYear: Dispatch<SetStateAction<string>>;
   /** Open another year’s books (updates active year + syncs student overlays). */
   openAcademicYear: (year: string) => { receipts: number; enrolled: number };
   /** Add a year, cloning fee terms from the nearest existing year. */
   addAcademicYear: (year: string) => boolean;
-  /** Whether a year can be deleted (no payments / enrollments / sole year). */
+  /** Rename a year label across books, fees, receipts, and enrollments. */
+  renameAcademicYear: (from: string, to: string) => { ok: boolean; reason?: string };
+  /** Close (deactivate) or reopen a financial year. Closing the open year switches books. */
+  setAcademicYearClosed: (
+    year: string,
+    closed: boolean,
+  ) => { ok: boolean; reason?: string };
+  /** Whether a year can be hard-deleted (only blocked when it is the sole year). */
   canDeleteAcademicYear: (year: string) => { ok: boolean; reason?: string };
+  /** Hard-delete a year and cascade local receipts, enrollments, and fee periods. */
   deleteAcademicYear: (year: string) => boolean;
   enrollStudentInActiveYear: (
     studentId: string,
@@ -2762,7 +2773,7 @@ function normalizePayment(
 
 function normalizeStudentYearLedgers(
   raw: unknown,
-  students: Student[],
+  _students: Student[],
   fallbackYear: string,
 ): StudentYearLedger[] {
   if (Array.isArray(raw) && raw.length > 0) {
@@ -2795,7 +2806,8 @@ function normalizeStudentYearLedgers(
       return ensureYearLedger(parsed, fallbackYear);
     }
   }
-  return [buildLedgerFromStudents(students, fallbackYear)];
+  // Invalid / empty ledger payload — keep an empty book (do not enroll everyone).
+  return [{ academicYear: fallbackYear, byStudentId: {} }];
 }
 
 function parseSnapshot(raw: string): Snapshot | null {
@@ -2901,6 +2913,11 @@ function parseSnapshot(raw: string): Snapshot | null {
         : [...SEED_ACADEMIC_YEARS],
       parsed.academicYear,
     ),
+    closedAcademicYears: Array.isArray((parsed as Partial<Snapshot>).closedAcademicYears)
+      ? ((parsed as Partial<Snapshot>).closedAcademicYears as unknown[])
+          .filter((y): y is string => typeof y === "string" && y.trim().length > 0)
+          .map((y) => y.trim())
+      : [],
     academicYear: parsed.academicYear,
     themeSettings: normalizeThemeSettings(parsed.themeSettings),
     schoolDetails: normalizeSchoolDetails(
@@ -3072,7 +3089,7 @@ export function applyParentStudentUpdate(
     guardian,
     phone: patch.phone,
     gender: patch.gender,
-    dob: patch.dob,
+    dob: toDobIso(patch.dob),
     email: patch.email,
     address: patch.address,
     photoUrl: patch.photoUrl,
@@ -3125,7 +3142,10 @@ export function findTenantUserById(userId: string): TenantUser | null {
 }
 
 /** Persist a student into localStorage immediately (so parent links work before React effects flush). */
-export function upsertStudentInSnapshot(student: Student) {
+export function upsertStudentInSnapshot(
+  student: Student,
+  enrollment?: { academicYear: string; fields: StudentYearFields },
+) {
   const snap = readSnapshot();
   if (!snap) return;
   const normalized = normalizeStudent(student);
@@ -3133,7 +3153,29 @@ export function upsertStudentInSnapshot(student: Student) {
   const nextStudents = [...snap.students];
   if (idx >= 0) nextStudents[idx] = { ...nextStudents[idx], ...normalized };
   else nextStudents.unshift(normalized);
-  writeSnapshot({ ...snap, students: nextStudents });
+
+  let studentYearLedgers = snap.studentYearLedgers ?? [];
+  if (enrollment) {
+    studentYearLedgers = upsertStudentYearFields(
+      studentYearLedgers,
+      enrollment.academicYear,
+      normalized.id,
+      enrollment.fields,
+    );
+  } else {
+    // Profile/API edits: refresh year fields only when already enrolled in the open books.
+    const year = snap.academicYear;
+    const existing = getYearLedger(studentYearLedgers, year).byStudentId[normalized.id];
+    if (existing) {
+      studentYearLedgers = upsertStudentYearFields(studentYearLedgers, year, normalized.id, {
+        cls: normalized.cls,
+        due: normalized.due,
+        active: normalized.active !== false,
+      });
+    }
+  }
+
+  writeSnapshot({ ...snap, students: nextStudents, studentYearLedgers });
 }
 
 const TenantStoreContext = createContext<TenantStoreValue | null>(null);
@@ -3191,8 +3233,14 @@ export function TenantStoreProvider({
   const [studentYearLedgers, setStudentYearLedgers] = useState<StudentYearLedger[]>(
     () => (liveApi ? [] : SEED_STUDENT_YEAR_LEDGERS),
   );
-  const [academicYears, setAcademicYears] = useState<string[]>([...SEED_ACADEMIC_YEARS]);
-  const [academicYear, setAcademicYearState] = useState<string>(SEED_ACADEMIC_YEAR);
+  // Live API: start empty so seed years never flash before hydrate finishes.
+  const [academicYears, setAcademicYears] = useState<string[]>(() =>
+    liveApi ? [] : [...SEED_ACADEMIC_YEARS],
+  );
+  const [closedAcademicYears, setClosedAcademicYears] = useState<string[]>([]);
+  const [academicYear, setAcademicYearState] = useState<string>(() =>
+    liveApi ? "" : SEED_ACADEMIC_YEAR,
+  );
   const [themeSettings, setThemeSettings] = useState<ThemeSettings>(SEED_THEME_SETTINGS);
   const [schoolDetails, setSchoolDetails] = useState<SchoolDetails>(() =>
     liveApi ? blankSchool : SEED_SCHOOL_DETAILS,
@@ -3251,6 +3299,7 @@ export function TenantStoreProvider({
           : SEED_STUDENT_YEAR_LEDGERS,
     );
     setAcademicYears(snap.academicYears);
+    setClosedAcademicYears(snap.closedAcademicYears ?? []);
     setAcademicYearState(snap.academicYear);
     setThemeSettings(snap.themeSettings);
     setSchoolDetails(snap.schoolDetails);
@@ -3270,6 +3319,14 @@ export function TenantStoreProvider({
         try {
           const remote = await fetchRemoteTenantBundle();
           if (!cancelled && remote) {
+            // Year enrollments live in localStorage (API has no per-AY ledger yet).
+            // Merge local books over the remote placeholder so hard refresh keeps
+            // empty years empty and does not move all students into the active AY.
+            const localLedgers = readSnapshot(storeKey)?.studentYearLedgers ?? [];
+            const mergedLedgers = mergeStudentYearLedgers(
+              localLedgers,
+              remote.studentYearLedgers,
+            );
             applySnapshot({
               students: remote.students,
               staff: remote.staff,
@@ -3283,10 +3340,11 @@ export function TenantStoreProvider({
               feeTerms: remote.feeTerms,
               studentYearLedgers: reconcileLedgersWithStudents(
                 remote.students,
-                remote.studentYearLedgers,
+                mergedLedgers,
                 remote.academicYear,
               ),
               academicYears: remote.academicYears,
+              closedAcademicYears: remote.closedAcademicYears ?? [],
               academicYear: remote.academicYear,
               themeSettings: remote.themeSettings,
               schoolDetails: {
@@ -3333,6 +3391,7 @@ export function TenantStoreProvider({
             feeTerms: [],
             studentYearLedgers: [],
             academicYears: [...SEED_ACADEMIC_YEARS],
+            closedAcademicYears: [],
             academicYear: SEED_ACADEMIC_YEAR,
             themeSettings: SEED_THEME_SETTINGS,
             schoolDetails: blankSchool,
@@ -3427,6 +3486,7 @@ export function TenantStoreProvider({
         feeTerms,
         studentYearLedgers,
         academicYears,
+        closedAcademicYears,
         academicYear,
         themeSettings,
         schoolDetails,
@@ -3451,6 +3511,7 @@ export function TenantStoreProvider({
     feeTerms,
     studentYearLedgers,
     academicYears,
+    closedAcademicYears,
     academicYear,
     themeSettings,
     schoolDetails,
@@ -3479,6 +3540,7 @@ export function TenantStoreProvider({
       setAcademicYearState((prev) => {
         const next = typeof action === "function" ? action(prev) : action;
         if (next === prev) return prev;
+        setClosedAcademicYears((prevClosed) => prevClosed.filter((y) => y !== next));
         setStudentYearLedgers((ledgers) => {
           const ensured = ensureYearLedger(ledgers, next);
           const ledger = getYearLedger(ensured, next);
@@ -3493,6 +3555,7 @@ export function TenantStoreProvider({
               ? academicYears
               : [...academicYears, next],
             academicYear: next,
+            closedAcademicYears: closedAcademicYears.filter((y) => y !== next),
           }).catch(() => {
             /* keep local books; next hydrate may overwrite until sync succeeds */
           });
@@ -3500,11 +3563,14 @@ export function TenantStoreProvider({
         return next;
       });
     },
-    [academicYears],
+    [academicYears, closedAcademicYears],
   );
 
   const openAcademicYear = useCallback(
     (year: string) => {
+      if (closedAcademicYears.includes(year)) {
+        setClosedAcademicYears((prev) => prev.filter((y) => y !== year));
+      }
       setAcademicYear(year);
       return academicYearBookStats({
         payments,
@@ -3512,7 +3578,7 @@ export function TenantStoreProvider({
         year,
       });
     },
-    [payments, setAcademicYear, studentYearLedgers],
+    [closedAcademicYears, payments, setAcademicYear, studentYearLedgers],
   );
 
   const addAcademicYear = useCallback(
@@ -3541,6 +3607,7 @@ export function TenantStoreProvider({
             await apiSyncAcademicYears({
               academicYears: nextYears,
               academicYear: year,
+              closedAcademicYears,
             });
             for (const term of cloned) {
               await apiUpsertFeeTerm(term);
@@ -3552,25 +3619,120 @@ export function TenantStoreProvider({
       }
       return true;
     },
-    [academicYear, academicYears, feeTerms],
+    [academicYear, academicYears, closedAcademicYears, feeTerms],
+  );
+
+  const renameAcademicYear = useCallback(
+    (from: string, to: string) => {
+      const nextLabel = normalizeAcademicYearLabel(to) ?? to.trim();
+      if (!nextLabel) {
+        return { ok: false, reason: "Enter a valid year like 2026-27" };
+      }
+      if (from === nextLabel) return { ok: true };
+      if (academicYears.some((y) => y.toLowerCase() === nextLabel.toLowerCase() && y !== from)) {
+        return { ok: false, reason: `${nextLabel} already exists` };
+      }
+      const nextYears = academicYears.map((y) => (y === from ? nextLabel : y));
+      const nextClosed = closedAcademicYears.map((y) => (y === from ? nextLabel : y));
+      const nextActive = academicYear === from ? nextLabel : academicYear;
+      setAcademicYears(nextYears);
+      setClosedAcademicYears(nextClosed);
+      setFeeTerms((prev) =>
+        prev.map((t) => (t.academicYear === from ? { ...t, academicYear: nextLabel } : t)),
+      );
+      setPayments((prev) =>
+        prev.map((p) => (p.academicYear === from ? { ...p, academicYear: nextLabel } : p)),
+      );
+      setStudentYearLedgers((prev) =>
+        prev.map((l) =>
+          l.academicYear === from ? { ...l, academicYear: nextLabel } : l,
+        ),
+      );
+      if (academicYear === from) {
+        setAcademicYearState(nextLabel);
+      }
+      if (getApiToken()) {
+        void apiSyncAcademicYears({
+          academicYears: nextYears,
+          academicYear: nextActive,
+          closedAcademicYears: nextClosed,
+          renameAcademicYear: { from, to: nextLabel },
+        }).catch(() => {
+          /* local rename kept */
+        });
+      }
+      return { ok: true };
+    },
+    [academicYear, academicYears, closedAcademicYears],
+  );
+
+  const setAcademicYearClosed = useCallback(
+    (year: string, closed: boolean) => {
+      if (!academicYears.includes(year)) {
+        return { ok: false, reason: "Year not found" };
+      }
+      if (!closed) {
+        const nextClosed = closedAcademicYears.filter((y) => y !== year);
+        setClosedAcademicYears(nextClosed);
+        if (getApiToken()) {
+          void apiSyncAcademicYears({
+            academicYears,
+            academicYear,
+            closedAcademicYears: nextClosed,
+          }).catch(() => {});
+        }
+        return { ok: true };
+      }
+
+      const openCandidates = academicYears.filter(
+        (y) => y !== year && !closedAcademicYears.includes(y),
+      );
+      if (academicYear === year) {
+        if (openCandidates.length === 0) {
+          return {
+            ok: false,
+            reason: "Open another year before closing the only open books",
+          };
+        }
+        const nextActive = openCandidates[0]!;
+        const nextClosed = Array.from(new Set([...closedAcademicYears, year]));
+        setClosedAcademicYears(nextClosed);
+        setAcademicYear(nextActive);
+        if (getApiToken()) {
+          void apiSyncAcademicYears({
+            academicYears,
+            academicYear: nextActive,
+            closedAcademicYears: nextClosed,
+          }).catch(() => {});
+        }
+        return { ok: true };
+      }
+
+      const nextClosed = Array.from(new Set([...closedAcademicYears, year]));
+      setClosedAcademicYears(nextClosed);
+      if (getApiToken()) {
+        void apiSyncAcademicYears({
+          academicYears,
+          academicYear,
+          closedAcademicYears: nextClosed,
+        }).catch(() => {});
+      }
+      return { ok: true };
+    },
+    [academicYear, academicYears, closedAcademicYears, setAcademicYear],
   );
 
   const canDeleteAcademicYear = useCallback(
     (year: string) => {
+      if (!academicYears.includes(year)) {
+        return { ok: false, reason: "Year not found" };
+      }
       if (academicYears.length <= 1) {
-        return { ok: false, reason: "Keep at least one academic year" };
-      }
-      if (filterByAcademicYear(payments, year).length > 0) {
-        return { ok: false, reason: "This year still has receipts recorded" };
-      }
-      const enrolled = Object.keys(getYearLedger(studentYearLedgers, year).byStudentId)
-        .length;
-      if (enrolled > 0) {
-        return { ok: false, reason: "This year still has student enrollments" };
+        return { ok: false, reason: "Keep at least one financial year" };
       }
       return { ok: true };
     },
-    [academicYears.length, payments, studentYearLedgers],
+    [academicYears],
   );
 
   const deleteAcademicYear = useCallback(
@@ -3579,11 +3741,14 @@ export function TenantStoreProvider({
       if (!check.ok) return false;
       const removedTerms = feeTerms.filter((t) => t.academicYear === year);
       const nextYears = academicYears.filter((y) => y !== year);
+      const nextClosed = closedAcademicYears.filter((y) => y !== year);
       const nextActive =
         academicYear === year
-          ? (nextYears[0] ?? academicYear)
+          ? (nextYears.find((y) => !nextClosed.includes(y)) ?? nextYears[0] ?? academicYear)
           : academicYear;
       setAcademicYears(nextYears);
+      setClosedAcademicYears(nextClosed);
+      // Hard delete: wipe year-scoped books data locally.
       setFeeTerms((prev) => prev.filter((t) => t.academicYear !== year));
       setStudentYearLedgers((prev) => prev.filter((l) => l.academicYear !== year));
       setPayments((prev) => prev.filter((p) => p.academicYear !== year));
@@ -3593,9 +3758,11 @@ export function TenantStoreProvider({
       if (getApiToken()) {
         void (async () => {
           try {
+            // Server sync removes the year and cascades fee terms / receipts / enrollments.
             await apiSyncAcademicYears({
               academicYears: nextYears,
               academicYear: nextActive,
+              closedAcademicYears: nextClosed,
             });
             for (const term of removedTerms) {
               await apiDeleteFeeTerm(term.id);
@@ -3607,7 +3774,7 @@ export function TenantStoreProvider({
       }
       return true;
     },
-    [academicYear, academicYears, canDeleteAcademicYear, feeTerms],
+    [academicYear, academicYears, canDeleteAcademicYear, closedAcademicYears, feeTerms],
   );
 
   const enrollStudentInActiveYear = useCallback(
@@ -3637,7 +3804,7 @@ export function TenantStoreProvider({
         upsertStudentYearFields(prev, academicYear, enrolled.id, fields),
       );
       setStudents((prev) => [enrolled, ...prev.filter((s) => s.id !== enrolled.id)]);
-      upsertStudentInSnapshot(enrolled);
+      upsertStudentInSnapshot(enrolled, { academicYear, fields });
       return enrolled;
     },
     [academicYear],
@@ -3657,6 +3824,7 @@ export function TenantStoreProvider({
     setFeeTerms(SEED_FEE_TERMS);
     setStudentYearLedgers(SEED_STUDENT_YEAR_LEDGERS);
     setAcademicYears([...SEED_ACADEMIC_YEARS]);
+    setClosedAcademicYears([]);
     setAcademicYearState(SEED_ACADEMIC_YEAR);
     setThemeSettings(SEED_THEME_SETTINGS);
     setSchoolDetails(SEED_SCHOOL_DETAILS);
@@ -3676,6 +3844,7 @@ export function TenantStoreProvider({
       feeTerms: SEED_FEE_TERMS,
       studentYearLedgers: SEED_STUDENT_YEAR_LEDGERS,
       academicYears: [...SEED_ACADEMIC_YEARS],
+      closedAcademicYears: [],
       academicYear: SEED_ACADEMIC_YEAR,
       themeSettings: SEED_THEME_SETTINGS,
       schoolDetails: SEED_SCHOOL_DETAILS,
@@ -3717,10 +3886,13 @@ export function TenantStoreProvider({
       setStudentYearLedgers,
       academicYears,
       setAcademicYears,
+      closedAcademicYears,
       academicYear,
       setAcademicYear,
       openAcademicYear,
       addAcademicYear,
+      renameAcademicYear,
+      setAcademicYearClosed,
       canDeleteAcademicYear,
       deleteAcademicYear,
       enrollStudentInActiveYear,
@@ -3755,10 +3927,13 @@ export function TenantStoreProvider({
       activeFeeTerms,
       studentYearLedgers,
       academicYears,
+      closedAcademicYears,
       academicYear,
       setAcademicYear,
       openAcademicYear,
       addAcademicYear,
+      renameAcademicYear,
+      setAcademicYearClosed,
       canDeleteAcademicYear,
       deleteAcademicYear,
       enrollStudentInActiveYear,

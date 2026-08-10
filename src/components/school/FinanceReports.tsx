@@ -59,11 +59,28 @@ function inr(n: number) {
   return `₹ ${n.toLocaleString("en-IN")}`;
 }
 
+/** Normalize payment/disbursement timestamps for ledger display. */
+function formatLedgerDate(raw: string | undefined | null): string {
+  const value = (raw ?? "").trim();
+  if (!value) return "—";
+  if (/^0{4}-0{2}-0{2}/.test(value) || value.startsWith("0000-00-00")) return "—";
+  if (value.includes("·")) return value.split("·")[0].trim() || "—";
+  // Keep human labels like "Today" / "Yesterday"
+  if (!/^\d{4}-\d{2}-\d{2}/.test(value)) return value;
+  const parsed = Date.parse(value.replace(" ", "T"));
+  if (!Number.isFinite(parsed)) return value;
+  return new Date(parsed).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 function buildLedgerRows(payments: Payment[], disbursements: FinanceDisbursement[]): LedgerRow[] {
   const expenseRows: Omit<LedgerRow, "balance">[] = disbursements
     .filter((d) => (d.status || "Cleared") !== "Queued")
     .map((e) => ({
-      date: e.time?.includes("·") ? e.time.split("·")[0].trim() : e.time || "",
+      date: formatLedgerDate(e.time),
       voucher: e.id || "",
       particulars: `${e.payee}${e.desc ? ` · ${e.desc}` : ""}`,
       account: e.payeeType || "Expense",
@@ -72,7 +89,7 @@ function buildLedgerRows(payments: Payment[], disbursements: FinanceDisbursement
     }));
 
   const receiptRows: Omit<LedgerRow, "balance">[] = [...payments].reverse().map((p) => ({
-    date: p.time.includes("·") ? p.time.split("·")[0].trim() : p.time,
+    date: formatLedgerDate(p.time),
     voucher: p.id,
     particulars: `${p.name} · ${p.cat}`,
     account: p.cat,
@@ -83,6 +100,14 @@ function buildLedgerRows(payments: Payment[], disbursements: FinanceDisbursement
   const merged = [...expenseRows, ...receiptRows];
   let balance = 0;
   return merged.map((row) => {
+    balance += row.credit - row.debit;
+    return { ...row, balance };
+  });
+}
+
+function withRunningBalance(rows: Omit<LedgerRow, "balance">[]): LedgerRow[] {
+  let balance = 0;
+  return rows.map((row) => {
     balance += row.credit - row.debit;
     return { ...row, balance };
   });
@@ -464,15 +489,56 @@ export function GeneralLedgerReport() {
   const { disbursements } = useDisbursements();
   const schoolName = schoolDetails.name || "School";
 
-  const rows = useMemo(
+  const [query, setQuery] = useState("");
+  const [entryType, setEntryType] = useState<"all" | "credit" | "debit">("all");
+  const [account, setAccount] = useState("all");
+
+  const allRows = useMemo(
     () => buildLedgerRows(payments, disbursements),
     [payments, disbursements],
   );
-  const totalDebit = rows.reduce((s, r) => s + r.debit, 0);
-  const totalCredit = rows.reduce((s, r) => s + r.credit, 0);
-  const closing = rows.at(-1)?.balance ?? 0;
 
-  const tableRows = rows.map((r) => [
+  const accountOptions = useMemo(
+    () =>
+      Array.from(new Set(allRows.map((r) => r.account).filter(Boolean))).sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    [allRows],
+  );
+
+  const filteredRows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const matched = allRows.filter((row) => {
+      if (entryType === "credit" && row.credit <= 0) return false;
+      if (entryType === "debit" && row.debit <= 0) return false;
+      if (account !== "all" && row.account !== account) return false;
+      if (!q) return true;
+      const haystack = [
+        row.date,
+        row.voucher,
+        row.particulars,
+        row.account,
+        String(row.debit),
+        String(row.credit),
+        row.debit ? row.debit.toLocaleString("en-IN") : "",
+        row.credit ? row.credit.toLocaleString("en-IN") : "",
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+    // Recompute running balance for the visible set so the ledger stays coherent when filtered.
+    return withRunningBalance(
+      matched.map(({ balance: _balance, ...rest }) => rest),
+    );
+  }, [allRows, query, entryType, account]);
+
+  const totalDebit = filteredRows.reduce((s, r) => s + r.debit, 0);
+  const totalCredit = filteredRows.reduce((s, r) => s + r.credit, 0);
+  const closing = filteredRows.at(-1)?.balance ?? 0;
+  const filtersActive = Boolean(query) || entryType !== "all" || account !== "all";
+
+  const tableRows = filteredRows.map((r) => [
     r.date,
     r.voucher,
     r.particulars,
@@ -486,11 +552,25 @@ export function GeneralLedgerReport() {
 
   const exportMeta = `${schoolName} · ${academicYear} · General Ledger`;
 
+  const clearFilters = () => {
+    setQuery("");
+    setEntryType("all");
+    setAccount("all");
+  };
+
   const handleCsv = () => {
     downloadCsv(
       `general-ledger-${academicYear.replace(/\s+/g, "-").toLowerCase()}.csv`,
       headers,
-      rows.map((r) => [r.date, r.voucher, r.particulars, r.account, r.debit, r.credit, r.balance]),
+      filteredRows.map((r) => [
+        r.date,
+        r.voucher,
+        r.particulars,
+        r.account,
+        r.debit,
+        r.credit,
+        r.balance,
+      ]),
     );
     toast.success("Ledger exported as CSV");
   };
@@ -508,21 +588,98 @@ export function GeneralLedgerReport() {
   };
 
   return (
-    <OrganicCard tone="white" cornerSide="tr" padded>
-      <ExportBar title="General Ledger" onCsv={handleCsv} onPdf={handlePdf} />
-      <p className="mt-1 text-[12px] text-black/55">
-        Chronological double-entry view · {rows.length} postings · {academicYear}
-      </p>
-      <SummaryStrip
-        items={[
-          { label: "Total Debit", value: inr(totalDebit) },
-          { label: "Total Credit", value: inr(totalCredit) },
-          { label: "Closing Balance", value: inr(closing), accent: true },
-        ]}
-      />
-      <LedgerPostingCards rows={rows} />
-      <ReportTable headers={headers} rows={tableRows} mobileCards={false} className="hidden md:block" />
-    </OrganicCard>
+    <div className="grid grid-cols-12 gap-4 sm:gap-5">
+      <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12">
+        <ExportBar title="General Ledger" onCsv={handleCsv} onPdf={handlePdf} />
+        <p className="mt-1 text-[12px] text-black/55">
+          Chronological double-entry view · {filteredRows.length}
+          {filtersActive ? ` of ${allRows.length}` : ""} postings · {academicYear}
+        </p>
+        <SummaryStrip
+          items={[
+            { label: "Total Debit", value: inr(totalDebit) },
+            { label: "Total Credit", value: inr(totalCredit) },
+            { label: "Closing Balance", value: inr(closing), accent: true },
+          ]}
+        />
+      </OrganicCard>
+
+      <OrganicCard tone="white" cornerSide="bl" padded className="col-span-12">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-title text-slate-900 dark:text-zinc-50">Ledger Postings</div>
+            <p className="mt-1 text-[12px] text-black/55">
+              {filteredRows.length} of {allRows.length} entr
+              {allRows.length === 1 ? "y" : "ies"}
+              {filtersActive ? " · filters applied" : ""}
+            </p>
+          </div>
+          {filtersActive && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="text-[11px] font-semibold text-[#0F766E] hover:underline"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="sm:col-span-2 xl:col-span-4">
+            <ReportSearchInput
+              value={query}
+              onChange={setQuery}
+              placeholder="Search voucher, particulars, account, amount…"
+            />
+          </div>
+          <Select
+            value={entryType}
+            onValueChange={(v) => setEntryType(v as typeof entryType)}
+          >
+            <SelectTrigger className="h-10 w-full rounded-xl border-[#E5E5E5] bg-white">
+              <SelectValue placeholder="All entries" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All entries</SelectItem>
+              <SelectItem value="credit">Credits only</SelectItem>
+              <SelectItem value="debit">Debits only</SelectItem>
+            </SelectContent>
+          </Select>
+          <ReportFilterSelect
+            value={account}
+            onChange={setAccount}
+            placeholder="All accounts"
+            options={accountOptions}
+            className="sm:col-span-1 xl:col-span-1"
+          />
+        </div>
+
+        {filteredRows.length === 0 ? (
+          <div className="mt-4 rounded-2xl border border-dashed border-black/15 px-4 py-10 text-center text-[13px] text-black/55">
+            {allRows.length === 0
+              ? "No ledger postings yet"
+              : "No postings match your search or filters"}
+          </div>
+        ) : (
+          <>
+            <LedgerPostingCards rows={filteredRows} />
+            <ReportTable
+              headers={headers}
+              rows={tableRows}
+              mobileCards={false}
+              className="hidden md:block"
+              footer={
+                <div className="border-t border-[#E5E5E5] bg-[#FAFAFA] px-3 py-3 text-[12px] font-semibold text-black">
+                  Totals · Debit {inr(totalDebit)} · Credit {inr(totalCredit)} · Closing{" "}
+                  {inr(closing)}
+                </div>
+              }
+            />
+          </>
+        )}
+      </OrganicCard>
+    </div>
   );
 }
 
@@ -1379,8 +1536,8 @@ export function SalaryReport() {
 
 
   return (
-    <div className="grid grid-cols-12 gap-4 sm:gap-5">
-      <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 sm:gap-5">
+      <OrganicCard tone="white" cornerSide="tr" padded className="shrink-0">
         <ExportBar title="Salary Report" onCsv={handleCsv} onPdf={handlePdf} />
         <p className="mt-1 text-[12px] text-black/55">
           Payroll for {formatPayrollMonthLabel(payrollMonth)} · attendance adjusts payable ·{" "}
@@ -1403,136 +1560,151 @@ export function SalaryReport() {
         />
       </OrganicCard>
 
-      <OrganicCard tone="white" cornerSide="bl" padded className="col-span-12 lg:col-span-8">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="text-title text-slate-900 dark:text-zinc-50">Payroll Register</div>
-            <p className="mt-1 text-[12px] text-black/55">
-              {filteredStaff.length} of {staff.length} staff · payable = gross × (days present ÷
-              working days)
-            </p>
-          </div>
-          {(query || department !== "all" || role !== "all" || status !== "active") && (
-            <button
-              type="button"
-              onClick={clearPayrollFilters}
-              className="text-[11px] font-semibold text-[#0F766E] hover:underline"
-            >
-              Clear filters
-            </button>
-          )}
-        </div>
-
-        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="sm:col-span-2 xl:col-span-4">
-            <ReportSearchInput
-              value={query}
-              onChange={setQuery}
-              placeholder="Search staff, role, department…"
-            />
-          </div>
-          <ReportFilterSelect
-            value={department}
-            onChange={setDepartment}
-            placeholder="All departments"
-            options={departmentOptions}
-          />
-          <ReportFilterSelect
-            value={role}
-            onChange={setRole}
-            placeholder="All roles"
-            options={roleOptions}
-          />
-          <Select value={status} onValueChange={(v) => setStatus(v as typeof status)}>
-            <SelectTrigger className="h-10 w-full rounded-xl border-[#E5E5E5] bg-white sm:col-span-2 xl:col-span-1">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All status</SelectItem>
-              <SelectItem value="active">Active only</SelectItem>
-              <SelectItem value="inactive">Inactive only</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {tableRows.length === 0 ? (
-          <div className="mt-4 rounded-lg border border-dashed border-black/15 px-4 py-8 text-center text-[12px] text-black/55">
-            {staff.length === 0
-              ? "No staff on payroll"
-              : "No staff match your search or filters"}
-          </div>
-        ) : (
-          <ReportTable
-            headers={[
-              "ID",
-              "Name",
-              "Role",
-              "Dept",
-              "Attn",
-              "Basic",
-              "Allowances",
-              "Gross",
-              "Payable",
-            ]}
-            rows={tableRows}
-            footer={
-              <div className="border-t border-[#E5E5E5] bg-[#FAFAFA] px-3 py-3 text-[12px] font-semibold text-black">
-                Totals · Basic {inr(totalBasic)} · Allowances {inr(totalAllowances)} · Gross{" "}
-                {inr(totalGross)} · Payable {inr(totalPayable)}
-              </div>
-            }
-          />
-        )}
-      </OrganicCard>
-
-      <div className="col-span-12 space-y-4 lg:col-span-4">
-        <OrganicCard tone="white" cornerSide="tr" padded>
+      <div className="grid min-h-0 flex-1 grid-cols-12 content-stretch items-stretch gap-4 sm:gap-5">
+        <OrganicCard
+          tone="white"
+          cornerSide="tl"
+          padded
+          className="col-span-12 flex h-full min-h-0 flex-col lg:col-span-8"
+        >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="text-title text-slate-900 dark:text-zinc-50">Open Salary Obligations</div>
+              <div className="text-title text-slate-900 dark:text-zinc-50">Payroll Register</div>
               <p className="mt-1 text-[12px] text-black/55">
-                {filteredPayables.length} of {salaryPayables.length} payroll payable
-                {salaryPayables.length === 1 ? "" : "s"}
+                {filteredStaff.length} of {staff.length} staff · payable = gross × (days present ÷
+                working days)
               </p>
             </div>
-            {payableQuery && (
+            {(query || department !== "all" || role !== "all" || status !== "active") && (
               <button
                 type="button"
-                onClick={() => setPayableQuery("")}
+                onClick={clearPayrollFilters}
                 className="text-[11px] font-semibold text-[#0F766E] hover:underline"
               >
-                Clear
+                Clear filters
               </button>
             )}
           </div>
 
-          <div className="mt-4">
-            <ReportSearchInput
-              value={payableQuery}
-              onChange={setPayableQuery}
-              placeholder="Search obligation…"
+          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="sm:col-span-2 xl:col-span-4">
+              <ReportSearchInput
+                value={query}
+                onChange={setQuery}
+                placeholder="Search staff, role, department…"
+              />
+            </div>
+            <ReportFilterSelect
+              value={department}
+              onChange={setDepartment}
+              placeholder="All departments"
+              options={departmentOptions}
             />
+            <ReportFilterSelect
+              value={role}
+              onChange={setRole}
+              placeholder="All roles"
+              options={roleOptions}
+            />
+            <Select value={status} onValueChange={(v) => setStatus(v as typeof status)}>
+              <SelectTrigger className="h-10 w-full rounded-xl border-[#E5E5E5] bg-white sm:col-span-2 xl:col-span-1">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All status</SelectItem>
+                <SelectItem value="active">Active only</SelectItem>
+                <SelectItem value="inactive">Inactive only</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
-          {payableRows.length === 0 ? (
-            <div className="mt-4 rounded-lg border border-dashed border-black/15 px-4 py-6 text-center text-[12px] text-black/55">
-              {salaryPayables.length === 0
-                ? "No open salary payables"
-                : "No obligations match your search"}
-            </div>
-          ) : (
-            <ReportTable headers={["Obligation", "Amount"]} rows={payableRows} compact />
-          )}
+          <div className="mt-4 flex min-h-0 flex-1 flex-col">
+            {tableRows.length === 0 ? (
+              <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-black/15 px-4 py-8 text-center text-[12px] text-black/55">
+                {staff.length === 0
+                  ? "No staff on payroll"
+                  : "No staff match your search or filters"}
+              </div>
+            ) : (
+              <ReportTable
+                headers={[
+                  "ID",
+                  "Name",
+                  "Role",
+                  "Dept",
+                  "Attn",
+                  "Basic",
+                  "Allowances",
+                  "Gross",
+                  "Payable",
+                ]}
+                rows={tableRows}
+                className="mt-0 min-h-0 flex-1"
+                footer={
+                  <div className="border-t border-[#E5E5E5] bg-[#FAFAFA] px-3 py-3 text-[12px] font-semibold text-black">
+                    Totals · Basic {inr(totalBasic)} · Allowances {inr(totalAllowances)} · Gross{" "}
+                    {inr(totalGross)} · Payable {inr(totalPayable)}
+                  </div>
+                }
+              />
+            )}
+          </div>
         </OrganicCard>
 
-        {deptSegments.length > 0 && (
-          <FinanceBarCard
-            title="Payable by Department"
-            cornerSide="bl"
-            fill="#0F766E"
-            segments={deptSegments}
-          />
-        )}
+        <div className="col-span-12 flex h-full min-h-0 flex-col gap-4 lg:col-span-4">
+          <OrganicCard tone="white" cornerSide="tr" padded className="shrink-0">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-title text-slate-900 dark:text-zinc-50">
+                  Open Salary Obligations
+                </div>
+                <p className="mt-1 text-[12px] text-black/55">
+                  {filteredPayables.length} of {salaryPayables.length} payroll payable
+                  {salaryPayables.length === 1 ? "" : "s"}
+                </p>
+              </div>
+              {payableQuery && (
+                <button
+                  type="button"
+                  onClick={() => setPayableQuery("")}
+                  className="text-[11px] font-semibold text-[#0F766E] hover:underline"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+
+            <div className="mt-4">
+              <ReportSearchInput
+                value={payableQuery}
+                onChange={setPayableQuery}
+                placeholder="Search obligation…"
+              />
+            </div>
+
+            {payableRows.length === 0 ? (
+              <div className="mt-4 rounded-lg border border-dashed border-black/15 px-4 py-6 text-center text-[12px] text-black/55">
+                {salaryPayables.length === 0
+                  ? "No open salary payables"
+                  : "No obligations match your search"}
+              </div>
+            ) : (
+              <ReportTable headers={["Obligation", "Amount"]} rows={payableRows} compact />
+            )}
+          </OrganicCard>
+
+          {deptSegments.length > 0 ? (
+            <FinanceBarCard
+              title="Payable by Department"
+              cornerSide="br"
+              fill="#0F766E"
+              segments={deptSegments}
+              className="min-h-0 flex-1 sm:min-h-[220px]"
+            />
+          ) : (
+            <div className="hidden min-h-0 flex-1 lg:block" aria-hidden />
+          )}
+        </div>
       </div>
     </div>
   );

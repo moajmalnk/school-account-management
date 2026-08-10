@@ -47,6 +47,8 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  Archive,
+  ArchiveRestore,
   ImagePlus,
   FileImage,
   Paperclip,
@@ -180,6 +182,7 @@ import {
   TenantDashboardSkeleton,
   TenantDirectorySkeleton,
   TenantFeesSkeleton,
+  TenantSystemSkeleton,
 } from "@/components/school/TenantDirectorySkeleton";
 import {
   EnrollmentStatusBadge,
@@ -462,6 +465,31 @@ const MobileSectionTitle = MobileDashboardSectionTitle;
 
 const mobileOutlineBtn =
   "inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full border border-slate-200/80 bg-white px-4 text-[12.5px] font-semibold text-slate-900 shadow-sm transition-colors hover:bg-slate-50 dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800";
+
+/** Compact outline chip used in directory bulk-selection filters */
+const bulkFilterBtn =
+  "inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg border border-slate-200/90 bg-white px-2.5 text-[11.5px] font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-45 dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800";
+
+const bulkFilterBtnOverdue = cn(
+  bulkFilterBtn,
+  "border-[#FECACA] text-[#DC2626] hover:bg-[#FEF2F2] dark:border-rose-500/40 dark:text-rose-300 dark:hover:bg-rose-950/40",
+);
+
+const bulkFilterBtnPaid = cn(
+  bulkFilterBtn,
+  "border-[#A7F3D0] text-[#059669] hover:bg-[#ECFDF5] dark:border-emerald-500/40 dark:text-emerald-300 dark:hover:bg-emerald-950/40",
+);
+
+const bulkFilterBtnActive = cn(
+  bulkFilterBtn,
+  "border-[#99F6E4] text-[#0F766E] hover:bg-[#F0FDFA] dark:border-teal-500/40 dark:text-teal-300 dark:hover:bg-teal-950/40",
+);
+
+const bulkActionDeleteBtn =
+  "inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-[#FECACA] bg-white px-3 text-[13px] font-semibold text-[#DC2626] shadow-sm transition-colors hover:bg-[#FEF2F2] dark:border-rose-500/40 dark:bg-zinc-900 dark:text-rose-300 dark:hover:bg-rose-950/40";
+
+const bulkActionWhatsAppBtn =
+  "inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#10B981] px-3 text-[13px] font-semibold text-white transition-colors hover:bg-[#059669]";
 
 /** Equal-width outline actions for directory toolbars on small screens */
 const directoryToolbarBtn = cn(
@@ -1672,6 +1700,37 @@ function FinanceFloatingPaymentActions({
   );
 }
 
+function DirectoryBulkActionBar({
+  selectedCount,
+  filters,
+  actions,
+  className,
+}: {
+  selectedCount: number;
+  filters: ReactNode;
+  actions: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex flex-col gap-3 border-b border-slate-100/80 p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-4",
+        className,
+      )}
+    >
+      <div className="flex min-w-0 flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex h-8 items-center rounded-lg bg-[#F0FDFA] px-2.5 text-[12px] font-semibold text-[#0F766E] ring-1 ring-[#99F6E4]/60 dark:bg-teal-950/40 dark:text-teal-300 dark:ring-teal-500/30">
+            {selectedCount} selected
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">{filters}</div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 sm:justify-end">{actions}</div>
+    </div>
+  );
+}
+
 function DirectoryRecycleBinList({
   items,
   emptyLabel,
@@ -2368,6 +2427,7 @@ export function StudentsLedger() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showRecycleBin, setShowRecycleBin] = useState(false);
   const [pendingPurgeId, setPendingPurgeId] = useState<string | null>(null);
+  const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [bulkWhatsAppOpen, setBulkWhatsAppOpen] = useState(false);
@@ -2580,6 +2640,32 @@ export function StudentsLedger() {
         : `${ids.size} student${ids.size === 1 ? "" : "s"} set to Inactive`,
     );
     clearSelection();
+  };
+
+  const confirmBulkDeleteStudents = () => {
+    if (!selectedIds.size) {
+      setPendingBulkDelete(false);
+      return;
+    }
+    const ids = new Set(selectedIds);
+    const stamp = new Date().toISOString();
+    const count = ids.size;
+    setStudents((prev) =>
+      prev.map((s) => (ids.has(s.id) ? { ...s, deletedAt: stamp } : s)),
+    );
+    for (const id of ids) {
+      void apiDeleteStudent(id).catch((err) =>
+        toast.error("Could not delete student on server", {
+          description: err instanceof Error ? err.message : "Delete failed",
+        }),
+      );
+    }
+    clearSelection();
+    setPendingBulkDelete(false);
+    toast.success(
+      `${count} student${count === 1 ? "" : "s"} moved to recycle bin`,
+      { description: "Restore anytime from Recycle" },
+    );
   };
 
   const openBulkWhatsApp = () => {
@@ -2850,80 +2936,79 @@ export function StudentsLedger() {
 
   const studentsBulkBar =
     selectedIds.size > 0 ? (
-      <div className="flex flex-col gap-3 border-b border-slate-100/80 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4 lg:border-b">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="rounded-full bg-[#F0FDFA] px-2.5 py-1 text-[12px] font-semibold text-[#0F766E]">
-            {selectedIds.size} selected
-          </span>
-          {!allShownSelected && (
+      <DirectoryBulkActionBar
+        selectedCount={selectedIds.size}
+        className="lg:border-b"
+        filters={
+          <>
+            {!allShownSelected && (
+              <button type="button" onClick={() => toggleSelectAll(true)} className={bulkFilterBtn}>
+                Select all shown
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => toggleSelectAll(true)}
-              className="text-[12px] font-semibold text-slate-600 underline-offset-2 hover:text-slate-900 hover:underline"
+              onClick={() => selectByFeesStatus("overdue")}
+              className={bulkFilterBtnOverdue}
             >
-              Select all shown
+              Select overdue
             </button>
-          )}
-          <button
-            type="button"
-            onClick={() => selectByFeesStatus("overdue")}
-            className="text-[12px] font-semibold text-[#EF4444] underline-offset-2 hover:underline"
-          >
-            Select overdue
-          </button>
-          <button
-            type="button"
-            onClick={() => selectByFeesStatus("paid")}
-            className="text-[12px] font-semibold text-[#10B981] underline-offset-2 hover:underline"
-          >
-            Select paid
-          </button>
-          <button
-            type="button"
-            onClick={clearSelection}
-            className="text-[12px] font-semibold text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
-          >
-            Clear
-          </button>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button type="button" className={mobileOutlineBtn}>
-                Change Status
-                <ChevronDown className="h-3.5 w-3.5" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              sideOffset={8}
-              collisionPadding={12}
-              className="z-[250] w-44 rounded-lg border-[#E5E5E5] bg-white p-1 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+            <button
+              type="button"
+              onClick={() => selectByFeesStatus("paid")}
+              className={bulkFilterBtnPaid}
             >
-              <DropdownMenuItem
-                className="cursor-pointer rounded-md text-[13px]"
-                onClick={() => bulkChangeStatus(true)}
+              Select paid
+            </button>
+            <button type="button" onClick={clearSelection} className={bulkFilterBtn}>
+              Clear
+            </button>
+          </>
+        }
+        actions={
+          <>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" className={cn(mobileOutlineBtn, "h-9 rounded-lg px-3")}>
+                  Change Status
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                sideOffset={8}
+                collisionPadding={12}
+                className="z-[250] w-44 rounded-lg border-[#E5E5E5] bg-white p-1 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
               >
-                Set Active
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="cursor-pointer rounded-md text-[13px]"
-                onClick={() => bulkChangeStatus(false)}
-              >
-                Set Inactive
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <button
-            type="button"
-            onClick={openBulkWhatsApp}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#10B981] px-3 text-[13px] font-semibold text-white transition-colors hover:bg-[#059669]"
-          >
-            <MessageCircle className="h-3.5 w-3.5" />
-            Bulk WhatsApp
-          </button>
-        </div>
-      </div>
+                <DropdownMenuItem
+                  className="cursor-pointer rounded-md text-[13px]"
+                  onClick={() => bulkChangeStatus(true)}
+                >
+                  Set Active
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="cursor-pointer rounded-md text-[13px]"
+                  onClick={() => bulkChangeStatus(false)}
+                >
+                  Set Inactive
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <button type="button" onClick={openBulkWhatsApp} className={bulkActionWhatsAppBtn}>
+              <MessageCircle className="h-3.5 w-3.5" />
+              Bulk WhatsApp
+            </button>
+            <button
+              type="button"
+              onClick={() => setPendingBulkDelete(true)}
+              className={bulkActionDeleteBtn}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete
+            </button>
+          </>
+        }
+      />
     ) : undefined;
 
   if (!hydrated) {
@@ -3319,6 +3404,16 @@ export function StudentsLedger() {
         }}
       />
 
+      <DeleteConfirmDialog
+        open={pendingBulkDelete}
+        onOpenChange={(next) => {
+          if (!next) setPendingBulkDelete(false);
+        }}
+        title="Delete selected students"
+        description={`Move ${selectedIds.size} selected student${selectedIds.size === 1 ? "" : "s"} to the recycle bin? You can restore them later from Recycle.`}
+        onConfirm={confirmBulkDeleteStudents}
+      />
+
       <Dialog open={bulkWhatsAppOpen} onOpenChange={setBulkWhatsAppOpen}>
         <DialogContent className="flex max-h-[min(90dvh,760px)] w-[calc(100%-1.5rem)] max-w-2xl flex-col gap-0 overflow-hidden rounded-xl border border-[#E5E5E5] bg-white p-0 sm:max-w-2xl">
           <DialogHeader className="shrink-0 space-y-1.5 border-b border-[#F0F0F0] px-5 pb-4 pt-5 pr-12 text-left sm:px-6 sm:pt-6">
@@ -3467,6 +3562,7 @@ export function StaffRoster() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showRecycleBin, setShowRecycleBin] = useState(false);
   const [pendingPurgeId, setPendingPurgeId] = useState<string | null>(null);
+  const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [bulkWhatsAppOpen, setBulkWhatsAppOpen] = useState(false);
   const [bulkWhatsAppMsg, setBulkWhatsAppMsg] = useState("");
@@ -3574,6 +3670,91 @@ export function StaffRoster() {
     filteredStaff.length > 0 && filteredStaff.every((s) => selectedIds.has(s.id));
   const someStaffSelected = filteredStaff.some((s) => selectedIds.has(s.id));
 
+  const renderStaffBulkBar = (className?: string) =>
+    selectedIds.size > 0 ? (
+      <DirectoryBulkActionBar
+        selectedCount={selectedIds.size}
+        className={className}
+        filters={
+          <>
+            {!allStaffSelected && (
+              <button
+                type="button"
+                onClick={() => toggleStaffSelectAll(true)}
+                className={bulkFilterBtn}
+              >
+                Select all shown
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => selectStaffByStatus("active")}
+              className={bulkFilterBtnActive}
+            >
+              Select active
+            </button>
+            <button
+              type="button"
+              onClick={() => selectStaffByStatus("inactive")}
+              className={bulkFilterBtn}
+            >
+              Select inactive
+            </button>
+            <button type="button" onClick={clearStaffSelection} className={bulkFilterBtn}>
+              Clear
+            </button>
+          </>
+        }
+        actions={
+          <>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" className={cn(mobileOutlineBtn, "h-9 rounded-lg px-3")}>
+                  Change Status
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                sideOffset={8}
+                collisionPadding={12}
+                className="z-[250] w-44 rounded-lg border-[#E5E5E5] bg-white p-1 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+              >
+                <DropdownMenuItem
+                  className="cursor-pointer rounded-md text-[13px]"
+                  onClick={() => bulkChangeStaffStatus(true)}
+                >
+                  Set Active
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="cursor-pointer rounded-md text-[13px]"
+                  onClick={() => bulkChangeStaffStatus(false)}
+                >
+                  Set Inactive
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <button
+              type="button"
+              onClick={openStaffBulkWhatsApp}
+              className={bulkActionWhatsAppBtn}
+            >
+              <MessageCircle className="h-3.5 w-3.5" />
+              Bulk WhatsApp
+            </button>
+            <button
+              type="button"
+              onClick={() => setPendingBulkDelete(true)}
+              className={bulkActionDeleteBtn}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete
+            </button>
+          </>
+        }
+      />
+    ) : null;
+
   const toggleStaffSelect = (id: string, selected: boolean) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -3636,6 +3817,32 @@ export function StaffRoster() {
         : `${ids.size} staff set to Inactive`,
     );
     clearStaffSelection();
+  };
+
+  const confirmBulkDeleteStaff = () => {
+    if (!selectedIds.size) {
+      setPendingBulkDelete(false);
+      return;
+    }
+    const ids = new Set(selectedIds);
+    const stamp = new Date().toISOString();
+    const count = ids.size;
+    setStaff((prev) =>
+      prev.map((s) => (ids.has(s.id) ? { ...s, deletedAt: stamp } : s)),
+    );
+    for (const id of ids) {
+      void apiDeleteStaff(id).catch((err) =>
+        toast.error("Could not delete staff on server", {
+          description: err instanceof Error ? err.message : "Delete failed",
+        }),
+      );
+    }
+    clearStaffSelection();
+    setPendingBulkDelete(false);
+    toast.success(
+      `${count} staff member${count === 1 ? "" : "s"} moved to recycle bin`,
+      { description: "Restore anytime from Recycle" },
+    );
   };
 
   const openStaffBulkWhatsApp = () => {
@@ -4455,84 +4662,11 @@ export function StaffRoster() {
         </div>
       </div>
 
-      {selectedIds.size > 0 && (
+      {selectedIds.size > 0 ? (
         <div className={cn(glassCardClass, "overflow-hidden p-0 lg:hidden")}>
-          <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <span className="rounded-full bg-[#F0FDFA] px-2.5 py-1 text-[12px] font-semibold text-[#0F766E]">
-                {selectedIds.size} selected
-              </span>
-              {!allStaffSelected && (
-                <button
-                  type="button"
-                  onClick={() => toggleStaffSelectAll(true)}
-                  className="text-[12px] font-semibold text-slate-600 underline-offset-2 hover:text-slate-900 hover:underline"
-                >
-                  Select all shown
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => selectStaffByStatus("active")}
-                className="text-[12px] font-semibold text-[#0F766E] underline-offset-2 hover:underline"
-              >
-                Select active
-              </button>
-              <button
-                type="button"
-                onClick={() => selectStaffByStatus("inactive")}
-                className="text-[12px] font-semibold text-slate-500 underline-offset-2 hover:underline"
-              >
-                Select inactive
-              </button>
-              <button
-                type="button"
-                onClick={clearStaffSelection}
-                className="text-[12px] font-semibold text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
-              >
-                Clear
-              </button>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button type="button" className={mobileOutlineBtn}>
-                    Change Status
-                    <ChevronDown className="h-3.5 w-3.5" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  sideOffset={8}
-                  collisionPadding={12}
-                  className="z-[250] w-44 rounded-lg border-[#E5E5E5] bg-white p-1 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
-                >
-                  <DropdownMenuItem
-                    className="cursor-pointer rounded-md text-[13px]"
-                    onClick={() => bulkChangeStaffStatus(true)}
-                  >
-                    Set Active
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="cursor-pointer rounded-md text-[13px]"
-                    onClick={() => bulkChangeStaffStatus(false)}
-                  >
-                    Set Inactive
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <button
-                type="button"
-                onClick={openStaffBulkWhatsApp}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#10B981] px-3 text-[13px] font-semibold text-white transition-colors hover:bg-[#059669]"
-              >
-                <MessageCircle className="h-3.5 w-3.5" />
-                Bulk WhatsApp
-              </button>
-            </div>
-          </div>
+          {renderStaffBulkBar()}
         </div>
-      )}
+      ) : null}
 
       <div className={cn(directoryMobileListClass, "lg:hidden")}>
         {filteredStaff.length > 0 && (
@@ -4642,82 +4776,7 @@ export function StaffRoster() {
 
       <div className="mobile-scrollbar-none hidden w-full max-w-full overflow-x-auto lg:block">
         <div className={glassTableWrapClass}>
-          {selectedIds.size > 0 && (
-            <div className="flex flex-col gap-3 border-b border-slate-100/80 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <span className="rounded-full bg-[#F0FDFA] px-2.5 py-1 text-[12px] font-semibold text-[#0F766E]">
-                  {selectedIds.size} selected
-                </span>
-                {!allStaffSelected && (
-                  <button
-                    type="button"
-                    onClick={() => toggleStaffSelectAll(true)}
-                    className="text-[12px] font-semibold text-slate-600 underline-offset-2 hover:text-slate-900 hover:underline"
-                  >
-                    Select all shown
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => selectStaffByStatus("active")}
-                  className="text-[12px] font-semibold text-[#0F766E] underline-offset-2 hover:underline"
-                >
-                  Select active
-                </button>
-                <button
-                  type="button"
-                  onClick={() => selectStaffByStatus("inactive")}
-                  className="text-[12px] font-semibold text-slate-500 underline-offset-2 hover:underline"
-                >
-                  Select inactive
-                </button>
-                <button
-                  type="button"
-                  onClick={clearStaffSelection}
-                  className="text-[12px] font-semibold text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
-                >
-                  Clear
-                </button>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button type="button" className={mobileOutlineBtn}>
-                      Change Status
-                      <ChevronDown className="h-3.5 w-3.5" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="end"
-                    sideOffset={8}
-                    collisionPadding={12}
-                    className="z-[250] w-44 rounded-lg border-[#E5E5E5] bg-white p-1 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
-                  >
-                    <DropdownMenuItem
-                      className="cursor-pointer rounded-md text-[13px]"
-                      onClick={() => bulkChangeStaffStatus(true)}
-                    >
-                      Set Active
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className="cursor-pointer rounded-md text-[13px]"
-                      onClick={() => bulkChangeStaffStatus(false)}
-                    >
-                      Set Inactive
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                <button
-                  type="button"
-                  onClick={openStaffBulkWhatsApp}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#10B981] px-3 text-[13px] font-semibold text-white transition-colors hover:bg-[#059669]"
-                >
-                  <MessageCircle className="h-3.5 w-3.5" />
-                  Bulk WhatsApp
-                </button>
-              </div>
-            </div>
-          )}
+          {renderStaffBulkBar()}
           <table className="w-full min-w-[700px] table-fixed border-collapse text-left">
             <colgroup>
               <col className="w-[44px]" />
@@ -4844,6 +4903,16 @@ export function StaffRoster() {
         onConfirm={() => {
           if (pendingPurgeId) purgeStaffMember(pendingPurgeId);
         }}
+      />
+
+      <DeleteConfirmDialog
+        open={pendingBulkDelete}
+        onOpenChange={(next) => {
+          if (!next) setPendingBulkDelete(false);
+        }}
+        title="Delete selected staff"
+        description={`Move ${selectedIds.size} selected staff member${selectedIds.size === 1 ? "" : "s"} to the recycle bin? You can restore them later from Recycle.`}
+        onConfirm={confirmBulkDeleteStaff}
       />
 
       <Dialog open={bulkWhatsAppOpen} onOpenChange={setBulkWhatsAppOpen}>
@@ -5189,7 +5258,7 @@ export function FinanceModule() {
 
   if (view === "salary") {
     return (
-      <div className="w-full space-y-4 sm:space-y-5">
+      <div className="flex w-full flex-1 flex-col space-y-4 sm:space-y-5">
         <SalaryReport />
       </div>
     );
@@ -5600,13 +5669,6 @@ function FinanceOverview({
                 iconClass: "bg-[#CCFBF1] text-[#0F766E]",
               },
               {
-                k: "salary" as const,
-                l: "Salary Report",
-                d: "Payroll obligations",
-                icon: Users,
-                iconClass: "bg-[#F3E8FF] text-violet-600",
-              },
-              {
                 k: "daybook" as const,
                 l: "Day Book",
                 d: "Daily cash activity",
@@ -5647,6 +5709,13 @@ function FinanceOverview({
                 d: "Match statement & books",
                 icon: Landmark,
                 iconClass: "bg-[#CFFAFE] text-cyan-700",
+              },
+              {
+                k: "salary" as const,
+                l: "Salary Report",
+                d: "Payroll & staff payables",
+                icon: Users,
+                iconClass: "bg-[#F3E8FF] text-violet-600",
               },
             ] as const
           )
@@ -6362,13 +6431,16 @@ function ReceivePayment() {
   const [feePeriod, setFeePeriod] = useState(() => currentFeeMonth());
   const [mode, setMode] = useState("Bank");
   const [narration, setNarration] = useState("");
+  const [receiptTime, setReceiptTime] = useState(() => formatDisbursalTime());
   const [attachments, setAttachments] = useState<PaymentAttachment[]>([]);
   const [historyQuery, setHistoryQuery] = useState("");
   const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const editAttachmentInputRef = useRef<HTMLInputElement>(null);
   const [previewAttachment, setPreviewAttachment] = useState<PaymentAttachment | null>(null);
   const [viewingPayment, setViewingPayment] = useState<Payment | null>(null);
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
   const [pendingDeletePayment, setPendingDeletePayment] = useState<Payment | null>(null);
+  const [editAttachments, setEditAttachments] = useState<PaymentAttachment[]>([]);
   const [editForm, setEditForm] = useState({
     name: "",
     cat: "",
@@ -6762,9 +6834,14 @@ function ReceivePayment() {
     }
   };
 
-  const addAttachments = async (fileList: FileList | null) => {
+  const addAttachments = async (
+    fileList: FileList | null,
+    target: "create" | "edit" = "create",
+  ) => {
     if (!fileList?.length) return;
-    const room = MAX_PAYMENT_ATTACHMENTS - attachments.length;
+    const current = target === "edit" ? editAttachments : attachments;
+    const setNext = target === "edit" ? setEditAttachments : setAttachments;
+    const room = MAX_PAYMENT_ATTACHMENTS - current.length;
     if (room <= 0) {
       toast.error(`Maximum ${MAX_PAYMENT_ATTACHMENTS} attachments allowed`);
       return;
@@ -6797,13 +6874,17 @@ function ReceivePayment() {
     }
 
     if (!next.length) return;
-    setAttachments((prev) => [...prev, ...next]);
+    setNext((prev) => [...prev, ...next]);
     toast.success(
       next.length === 1 ? `${next[0].name} attached` : `${next.length} files attached`,
     );
   };
 
-  const removeAttachment = (id: string) => {
+  const removeAttachment = (id: string, target: "create" | "edit" = "create") => {
+    if (target === "edit") {
+      setEditAttachments((prev) => prev.filter((a) => a.id !== id));
+      return;
+    }
     setAttachments((prev) => prev.filter((a) => a.id !== id));
   };
 
@@ -6874,6 +6955,7 @@ function ReceivePayment() {
 
   const openEditHistoryPayment = (payment: Payment) => {
     setEditingPayment(payment);
+    setEditAttachments(payment.attachments ? [...payment.attachments] : []);
     setEditForm({
       name: payment.name,
       cat: payment.cat,
@@ -6934,6 +7016,9 @@ function ReceivePayment() {
       feeMonth: nextFeePeriod,
       payerType: editForm.payerType,
       ...(note ? { narration: note } : { narration: undefined }),
+      ...(editAttachments.length
+        ? { attachments: editAttachments }
+        : { attachments: undefined }),
     };
 
     if (isStudentReceipt(editingPayment) && isStudentReceipt(nextPayment)) {
@@ -6952,6 +7037,7 @@ function ReceivePayment() {
     );
     toast.success(`Receipt ${editingPayment.id} updated`);
     setEditingPayment(null);
+    setEditAttachments([]);
   };
 
   const confirmDeleteHistoryPayment = () => {
@@ -6983,9 +7069,12 @@ function ReceivePayment() {
       });
       return;
     }
+    if (!receiptTime.trim()) {
+      toast.error("Date / time is required");
+      return;
+    }
 
-    const now = new Date();
-    const stamp = `Today · ${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
+    const stamp = receiptTime.trim();
     const note = narration.trim();
     const receiptAttachments = attachments.length ? attachments : undefined;
     const periodLabel = feePeriod.trim();
@@ -7023,6 +7112,7 @@ function ReceivePayment() {
       setAmount("");
       setExternalPayer("");
       setNarration("");
+      setReceiptTime(formatDisbursalTime());
       setAttachments([]);
       return;
     }
@@ -7066,6 +7156,7 @@ function ReceivePayment() {
     });
     setAmount("");
     setNarration("");
+    setReceiptTime(formatDisbursalTime());
     setAttachments([]);
   };
 
@@ -7374,8 +7465,8 @@ function ReceivePayment() {
           {/* Divider */}
           <div className="col-span-12 border-t border-[#EFEFEF] dark:border-white/10" />
 
-          {/* 4 · Amount & mode */}
-          <div className="col-span-12 sm:col-span-6">
+          {/* 4 · Amount, mode & date */}
+          <div className="col-span-12 sm:col-span-4">
             <FieldLabel>Amount (₹)</FieldLabel>
             <input
               value={amount}
@@ -7390,7 +7481,7 @@ function ReceivePayment() {
                 : "\u00A0"}
             </p>
           </div>
-          <div className="col-span-12 sm:col-span-6">
+          <div className="col-span-12 sm:col-span-4">
             <FieldLabel>Payment Mode</FieldLabel>
             <div className="flex h-11 gap-1 rounded-full border border-[#E5E5E5] bg-white p-1 dark:border-white/10 dark:bg-zinc-900 sm:h-10">
               {["Bank", "UPI", "Cash"].map((m) => {
@@ -7414,6 +7505,18 @@ function ReceivePayment() {
             </div>
             <p className="mt-1.5 min-h-[1.125rem] text-[10.5px] leading-snug text-black/45 dark:text-zinc-400">
               {"\u00A0"}
+            </p>
+          </div>
+          <div className="col-span-12 sm:col-span-4">
+            <FieldLabel>Date / Time</FieldLabel>
+            <Input
+              value={receiptTime}
+              onChange={(e) => setReceiptTime(e.target.value)}
+              placeholder="e.g. Today · 10:22"
+              className="h-11 font-mono sm:h-10"
+            />
+            <p className="mt-1.5 min-h-[1.125rem] text-[10.5px] leading-snug text-black/45 dark:text-zinc-400">
+              Same stamp used on edit · adjust if backdating
             </p>
           </div>
 
@@ -7501,7 +7604,7 @@ function ReceivePayment() {
           <div className="min-w-0 text-[13px] leading-relaxed text-black/65 dark:text-zinc-300">
             <div className="font-semibold text-black dark:text-zinc-50">{summaryName}</div>
             <div className="mt-0.5 break-words text-[12px]">
-              {summaryContext} · {category} · {feePeriod} · {mode}
+              {summaryContext} · {category} · {feePeriod} · {mode} · {receiptTime}
               {attachments.length > 0 && (
                 <span className="text-black/45">
                   {" "}
@@ -7961,7 +8064,10 @@ function ReceivePayment() {
       <Dialog
         open={Boolean(editingPayment)}
         onOpenChange={(open) => {
-          if (!open) setEditingPayment(null);
+          if (!open) {
+            setEditingPayment(null);
+            setEditAttachments([]);
+          }
         }}
       >
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
@@ -8191,8 +8297,86 @@ function ReceivePayment() {
                 className="min-h-[72px] resize-none"
               />
             </div>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                  Attachments
+                </Label>
+                <span className="text-[10.5px] font-medium text-black/45">
+                  {editAttachments.length} / {MAX_PAYMENT_ATTACHMENTS}
+                </span>
+              </div>
+              <div className="rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] p-3 dark:border-white/10 dark:bg-zinc-900/50">
+                {editAttachments.length > 0 ? (
+                  <ul className="mb-3 max-h-28 space-y-2 overflow-y-auto">
+                    {editAttachments.map((file) => (
+                      <li
+                        key={file.id}
+                        className="flex items-center gap-2 rounded-lg border border-[#EFEFEF] bg-white px-2.5 py-2 dark:border-white/10 dark:bg-zinc-900"
+                      >
+                        <FileText className="h-3.5 w-3.5 shrink-0 text-black/40" />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[12px] font-medium text-black">
+                            {file.name}
+                          </div>
+                          <div className="font-mono text-[10px] text-black/45">
+                            {formatAttachmentSize(file.size)}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setPreviewAttachment(file)}
+                          className="inline-flex h-7 items-center rounded-lg border border-slate-200 px-2 text-[10.5px] font-semibold text-black/60 transition-colors hover:bg-slate-50"
+                        >
+                          Open
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeAttachment(file.id, "edit")}
+                          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-red-200 text-red-600 transition-colors hover:bg-red-50"
+                          aria-label={`Remove ${file.name}`}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mb-3 text-[12px] leading-snug text-black/45">
+                    Attach bank slips, UPI screenshots, or supporting documents.
+                  </p>
+                )}
+                <input
+                  ref={editAttachmentInputRef}
+                  type="file"
+                  multiple
+                  accept="image/*,.pdf,.jpg,.jpeg,.png,.webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    void addAttachments(e.target.files, "edit");
+                    e.target.value = "";
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => editAttachmentInputRef.current?.click()}
+                  disabled={editAttachments.length >= MAX_PAYMENT_ATTACHMENTS}
+                  className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3.5 text-[12px] font-semibold text-black transition-colors hover:border-black/20 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Paperclip className="mr-0 h-3.5 w-3.5" />
+                  Add files
+                </button>
+              </div>
+            </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setEditingPayment(null)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setEditingPayment(null);
+                  setEditAttachments([]);
+                }}
+              >
                 Cancel
               </Button>
               <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
@@ -9720,8 +9904,11 @@ export function SchoolSettings() {
     activeFeeTerms,
     academicYears,
     academicYear,
+    closedAcademicYears,
     openAcademicYear,
     addAcademicYear,
+    renameAcademicYear,
+    setAcademicYearClosed,
     canDeleteAcademicYear,
     deleteAcademicYear,
     themeSettings,
@@ -9926,21 +10113,28 @@ export function SchoolSettings() {
       )}
 
       {activeTab === "system" && (
-        <div className="grid grid-cols-12 gap-3 sm:gap-4 lg:gap-5">
-          <CategoriesCard
-            academicYears={academicYears}
-            academicYear={academicYear}
-            openAcademicYear={openAcademicYear}
-            addAcademicYear={addAcademicYear}
-            canDeleteAcademicYear={canDeleteAcademicYear}
-            deleteAcademicYear={deleteAcademicYear}
-            themeSettings={themeSettings}
-            setThemeSettings={setThemeSettings}
-          />
-          <div className="col-span-12">
-            <PwaInstallCard />
+        hydrated ? (
+          <div className="grid grid-cols-12 gap-3 sm:gap-4 lg:gap-5">
+            <CategoriesCard
+              academicYears={academicYears}
+              academicYear={academicYear}
+              closedAcademicYears={closedAcademicYears}
+              openAcademicYear={openAcademicYear}
+              addAcademicYear={addAcademicYear}
+              renameAcademicYear={renameAcademicYear}
+              setAcademicYearClosed={setAcademicYearClosed}
+              canDeleteAcademicYear={canDeleteAcademicYear}
+              deleteAcademicYear={deleteAcademicYear}
+              themeSettings={themeSettings}
+              setThemeSettings={setThemeSettings}
+            />
+            <div className="col-span-12">
+              <PwaInstallCard />
+            </div>
           </div>
-        </div>
+        ) : (
+          <TenantSystemSkeleton />
+        )
       )}
     </>
   );
@@ -14040,8 +14234,11 @@ function FeeTermsCard({
 function CategoriesCard({
   academicYears,
   academicYear,
+  closedAcademicYears,
   openAcademicYear,
   addAcademicYear,
+  renameAcademicYear,
+  setAcademicYearClosed,
   canDeleteAcademicYear,
   deleteAcademicYear,
   themeSettings,
@@ -14049,8 +14246,14 @@ function CategoriesCard({
 }: {
   academicYears: string[];
   academicYear: string;
+  closedAcademicYears: string[];
   openAcademicYear: (year: string) => { receipts: number; enrolled: number };
   addAcademicYear: (year: string) => boolean;
+  renameAcademicYear: (from: string, to: string) => { ok: boolean; reason?: string };
+  setAcademicYearClosed: (
+    year: string,
+    closed: boolean,
+  ) => { ok: boolean; reason?: string };
   canDeleteAcademicYear: (year: string) => { ok: boolean; reason?: string };
   deleteAcademicYear: (year: string) => boolean;
   themeSettings: ThemeSettings;
@@ -14058,11 +14261,42 @@ function CategoriesCard({
 }) {
   const [yearDraft, setYearDraft] = useState("");
   const [pendingYearDelete, setPendingYearDelete] = useState<string | null>(null);
+  const [editingYear, setEditingYear] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState("");
+  const { payments, studentYearLedgers, feeTerms } = useTenantStore();
 
-  const submitAcademicYear = async (e: React.FormEvent) => {
+  const sortedYears = useMemo(
+    () =>
+      [...academicYears].sort((a, b) => {
+        if (a === academicYear) return -1;
+        if (b === academicYear) return 1;
+        const aClosed = closedAcademicYears.includes(a);
+        const bClosed = closedAcademicYears.includes(b);
+        if (aClosed !== bClosed) return aClosed ? 1 : -1;
+        return b.localeCompare(a);
+      }),
+    [academicYears, academicYear, closedAcademicYears],
+  );
+
+  const pendingDeleteImpact = useMemo(() => {
+    if (!pendingYearDelete) return null;
+    const receipts = payments.filter((p) => (p.academicYear ?? "") === pendingYearDelete).length;
+    const enrolled = Object.keys(
+      studentYearLedgers.find((l) => l.academicYear === pendingYearDelete)?.byStudentId ?? {},
+    ).length;
+    const periods = feeTerms.filter((t) => (t.academicYear ?? "") === pendingYearDelete).length;
+    return { receipts, enrolled, periods };
+  }, [pendingYearDelete, payments, studentYearLedgers, feeTerms]);
+
+  const submitAcademicYear = (e: React.FormEvent) => {
     e.preventDefault();
     const nextLabel = normalizeAcademicYearLabel(yearDraft);
-    if (!nextLabel) return;
+    if (!nextLabel) {
+      toast.error("Use format 2026-27", {
+        description: "Financial years must look like AY 2026-27",
+      });
+      return;
+    }
     const added = addAcademicYear(nextLabel);
     if (!added) {
       toast.error(`${nextLabel} already exists`);
@@ -14076,22 +14310,70 @@ function CategoriesCard({
     setYearDraft("");
   };
 
-  const removeAcademicYear = (year: string) => {
+  const startEdit = (year: string) => {
+    setEditingYear(year);
+    setEditDraft(year.replace(/^AY\s+/i, ""));
+  };
+
+  const submitEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingYear) return;
+    const result = renameAcademicYear(editingYear, editDraft);
+    if (!result.ok) {
+      toast.error(result.reason ?? "Could not rename year");
+      return;
+    }
+    const nextLabel = normalizeAcademicYearLabel(editDraft) ?? editDraft.trim();
+    toast.success(`Renamed to ${nextLabel}`);
+    setEditingYear(null);
+    setEditDraft("");
+  };
+
+  const activateYear = (year: string) => {
+    if (year === academicYear) return;
+    const stats = openAcademicYear(year);
+    toast.success(`Opened books for ${year}`, {
+      description: `${stats.receipts} receipt${stats.receipts === 1 ? "" : "s"} · ${stats.enrolled} student${stats.enrolled === 1 ? "" : "s"} enrolled`,
+    });
+  };
+
+  const toggleClosed = (year: string, closed: boolean) => {
+    const result = setAcademicYearClosed(year, closed);
+    if (!result.ok) {
+      toast.error(result.reason ?? "Could not update year status");
+      return;
+    }
+    toast.success(closed ? `${year} closed` : `${year} reopened`, {
+      description: closed
+        ? "Closed years stay in history but are not used for new posting"
+        : "Year is available to open for books again",
+    });
+  };
+
+  const requestDelete = (year: string) => {
     const check = canDeleteAcademicYear(year);
     if (!check.ok) {
-      toast.error(check.reason ?? "Cannot delete this academic year");
+      toast.error(check.reason ?? "Cannot delete this year");
       return;
     }
-    if (!deleteAcademicYear(year)) {
-      toast.error("Could not delete academic year");
-      return;
-    }
-    toast.error(`${year} removed`);
+    setPendingYearDelete(year);
   };
 
   const confirmYearDelete = () => {
     if (!pendingYearDelete) return;
-    removeAcademicYear(pendingYearDelete);
+    const year = pendingYearDelete;
+    const check = canDeleteAcademicYear(year);
+    if (!check.ok) {
+      toast.error(check.reason ?? "Cannot delete this year");
+      setPendingYearDelete(null);
+      return;
+    }
+    if (!deleteAcademicYear(year)) {
+      toast.error("Could not delete financial year");
+      setPendingYearDelete(null);
+      return;
+    }
+    toast.success(`${year} deleted`);
     setPendingYearDelete(null);
   };
 
@@ -14106,73 +14388,150 @@ function CategoriesCard({
         System Constants
       </div>
       <p className="mt-1 text-[12px] text-black/55 dark:text-zinc-400">
-        Academic year books and navigation dock placement
+        Financial year books and navigation dock placement
       </p>
 
       <div className="mt-4 grid grid-cols-12 gap-3">
-        <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-8">
-          <div className="flex items-center justify-between">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-              Academic Year
-            </Label>
+        <div className="col-span-12 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-8 dark:border-white/10 dark:bg-zinc-900/40">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                Financial Year
+              </Label>
+              <p className="mt-0.5 text-[11px] text-black/45">
+                Open books · close finished years · edit labels · hard-delete years and their data
+              </p>
+            </div>
             <span className="font-mono text-[10.5px] text-black/45">
-              {academicYears.length} defined
+              {academicYears.length} defined · {closedAcademicYears.length} closed
             </span>
           </div>
-          <FieldSelect
-            value={academicYear}
-            onValueChange={(y) => {
-              const stats = openAcademicYear(y);
-              toast.success(`Opened books for ${y}`, {
-                description: `${stats.receipts} receipt${stats.receipts === 1 ? "" : "s"} · ${stats.enrolled} student${stats.enrolled === 1 ? "" : "s"} enrolled`,
-              });
-            }}
-            options={academicYears.map((y) => ({ value: y, label: y }))}
-            className="mt-1.5 font-medium"
-          />
 
-          <div className="mt-2 flex flex-wrap gap-2">
-            {academicYears.map((y) => (
-              <span
-                key={y}
-                className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-3 py-1 text-[12px] font-semibold text-black"
-              >
-                {y}
-                {y === academicYear && (
-                  <span className="rounded-full bg-[#10B981]/15 px-1.5 py-0.5 text-[9px] font-bold text-[#10B981]">
-                    Active
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setPendingYearDelete(y)}
-                  className="grid h-4 w-4 place-items-center rounded-full text-black/55 dark:text-zinc-400 hover:bg-[#0F766E] hover:text-white disabled:pointer-events-none disabled:opacity-40"
-                  aria-label={`Remove ${y}`}
-                  disabled={academicYears.length <= 1}
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
-            ))}
+          <div className="mt-3 overflow-hidden rounded-xl border border-[#E5E5E5] bg-white dark:border-white/10 dark:bg-zinc-950/40">
+            <div className="hidden grid-cols-[minmax(0,1.2fr)_7.5rem_minmax(0,1fr)] gap-2 border-b border-[#EFEFEF] bg-[#F8FAFC] px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-500 sm:grid">
+              <span>Year</span>
+              <span>Status</span>
+              <span className="text-right">Actions</span>
+            </div>
+            <ul className="divide-y divide-[#EFEFEF] dark:divide-white/10">
+              {sortedYears.map((y) => {
+                const isOpen = y === academicYear;
+                const isClosed = closedAcademicYears.includes(y);
+                return (
+                  <li
+                    key={y}
+                    className="flex flex-col gap-2.5 px-3 py-3 sm:grid sm:grid-cols-[minmax(0,1.2fr)_7.5rem_minmax(0,1fr)] sm:items-center sm:gap-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-[13px] font-semibold text-black dark:text-zinc-100">
+                        {y}
+                      </div>
+                      <p className="mt-0.5 text-[11px] text-black/45 sm:hidden">
+                        {isOpen ? "Open books" : isClosed ? "Closed" : "Available"}
+                      </p>
+                    </div>
+                    <div>
+                      {isOpen ? (
+                        <span className="inline-flex rounded-full bg-[#10B981]/15 px-2 py-0.5 text-[10px] font-bold text-[#059669]">
+                          Open books
+                        </span>
+                      ) : isClosed ? (
+                        <span className="inline-flex rounded-full bg-slate-200/80 px-2 py-0.5 text-[10px] font-bold text-slate-600 dark:bg-white/10 dark:text-zinc-300">
+                          Closed
+                        </span>
+                      ) : (
+                        <span className="inline-flex rounded-full bg-[#0F766E]/10 px-2 py-0.5 text-[10px] font-bold text-[#0F766E]">
+                          Available
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
+                      {!isOpen && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 rounded-full px-2.5 text-[11px]"
+                          onClick={() => activateYear(y)}
+                        >
+                          <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+                          Open
+                        </Button>
+                      )}
+                      {isClosed ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 rounded-full px-2.5 text-[11px]"
+                          onClick={() => toggleClosed(y, false)}
+                        >
+                          <ArchiveRestore className="mr-1 h-3.5 w-3.5" />
+                          Reopen
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 rounded-full px-2.5 text-[11px]"
+                          disabled={academicYears.length <= 1}
+                          onClick={() => toggleClosed(y, true)}
+                        >
+                          <Archive className="mr-1 h-3.5 w-3.5" />
+                          Close
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-8 rounded-full px-2.5 text-[11px]"
+                        onClick={() => startEdit(y)}
+                      >
+                        <Pencil className="mr-1 h-3.5 w-3.5" />
+                        Edit
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-8 rounded-full px-2.5 text-[11px] text-[#EF4444] hover:bg-[#FEE2E2] hover:text-[#DC2626]"
+                        disabled={academicYears.length <= 1}
+                        onClick={() => requestDelete(y)}
+                      >
+                        <Trash2 className="mr-1 h-3.5 w-3.5" />
+                        Delete
+                      </Button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
 
-          <form onSubmit={submitAcademicYear} className="mt-3 flex gap-2">
-            <Input
-              value={yearDraft}
-              onChange={(e) => setYearDraft(e.target.value)}
-              placeholder="e.g. 2027-28"
-              className="min-w-0 flex-1"
-            />
+          <form onSubmit={submitAcademicYear} className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <div className="min-w-0 flex-1">
+              <Input
+                value={yearDraft}
+                onChange={(e) => setYearDraft(e.target.value)}
+                placeholder="e.g. 2027-28"
+                className="w-full"
+              />
+              <p className="mt-1 text-[10.5px] text-black/45">
+                Format <span className="font-mono">YYYY-YY</span> (Indian FY Apr–Mar)
+              </p>
+            </div>
             <Button
               type="submit"
               className="shrink-0 rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
             >
-              <Plus className="mr-1 h-3.5 w-3.5" /> Add
+              <Plus className="mr-1 h-3.5 w-3.5" /> Add year
             </Button>
           </form>
         </div>
 
-        <div className="col-span-12 hidden rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-4 lg:block">
+        <div className="col-span-12 hidden rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-4 lg:block dark:border-white/10 dark:bg-zinc-900/40">
           <ThemeSelect
             label="Navigation"
             value={themeSettings.navPlacement ?? "Left"}
@@ -14188,20 +14547,80 @@ function CategoriesCard({
         </div>
       </div>
 
+      <Dialog
+        open={Boolean(editingYear)}
+        onOpenChange={(next) => {
+          if (!next) {
+            setEditingYear(null);
+            setEditDraft("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6">
+          <DialogHeader>
+            <DialogTitle className="text-[20px] font-semibold text-black">
+              Edit financial year
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-[13px] text-black/60">
+              Rename {editingYear}. Receipts, fees, and enrollments move with the label.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={submitEdit} className="mt-4 space-y-3">
+            <div>
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                Year label
+              </Label>
+              <Input
+                value={editDraft}
+                onChange={(e) => setEditDraft(e.target.value)}
+                placeholder="2026-27"
+                className="mt-1.5"
+                autoFocus
+              />
+            </div>
+            <DialogFooter className="flex-row justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setEditingYear(null);
+                  setEditDraft("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+              >
+                Save
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       <DeleteConfirmDialog
         open={Boolean(pendingYearDelete)}
         onOpenChange={(next) => {
           if (!next) setPendingYearDelete(null);
         }}
-        title="Delete Academic Year"
+        title="Hard delete financial year"
         description={
           pendingYearDelete
-            ? `Are you sure you want to remove "${pendingYearDelete}" from academic years?${
+            ? [
+                `Permanently remove "${pendingYearDelete}" and all of its year books data.`,
+                pendingDeleteImpact
+                  ? `This will delete ${pendingDeleteImpact.receipts} receipt${pendingDeleteImpact.receipts === 1 ? "" : "s"}, ${pendingDeleteImpact.enrolled} enrollment${pendingDeleteImpact.enrolled === 1 ? "" : "s"}, and ${pendingDeleteImpact.periods} fee period${pendingDeleteImpact.periods === 1 ? "" : "s"}.`
+                  : null,
                 pendingYearDelete === academicYear
-                  ? " The next year in the list will become active."
-                  : ""
-              }`
-            : "Are you sure you want to delete this academic year?"
+                  ? "The next available year will become open books."
+                  : null,
+                "This cannot be undone.",
+              ]
+                .filter(Boolean)
+                .join(" ")
+            : "Hard delete this financial year?"
         }
         onConfirm={confirmYearDelete}
       />

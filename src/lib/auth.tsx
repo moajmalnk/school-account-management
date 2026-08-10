@@ -300,7 +300,8 @@ export function sessionCanAccessFinanceView(
   if (view === "analytics" && session.planFlags && !session.planFlags.analytics) {
     return false;
   }
-  if (view === "salary" && session.planFlags && !session.planFlags.payroll) {
+  // Salary report needs Staff module (payroll automation flag is separate).
+  if (view === "salary" && session.planFlags && !planAllowsModule(session.planFlags, "staff")) {
     return false;
   }
   if (session.role === "school_admin" || session.role === "super_admin") return true;

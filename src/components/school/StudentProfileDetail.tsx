@@ -45,6 +45,7 @@ import {
   STUDENT_RELIGIONS,
   upsertStudentInSnapshot,
   useTenantStore,
+  transportBusPointOptions,
   type GuardianRelation,
   type StaffDocument,
   type StaffDocumentAttachment,
@@ -73,6 +74,7 @@ import {
   type ProfileDetailTabId,
 } from "@/components/school/ProfileDetailTabs";
 import { cn } from "@/lib/utils";
+import { formatDobDisplay, toDobIso } from "@/lib/dates";
 
 type StudentDraft = {
   name: string;
@@ -400,7 +402,7 @@ export function StudentProfileDetail({
   initialEdit?: boolean;
 }) {
   const navigate = useNavigate();
-  const { setStudents, academicYear, schoolDetails, classes: classConfigs, activePayments, activeFeeTerms } =
+  const { setStudents, academicYear, schoolDetails, classes: classConfigs, activePayments, activeFeeTerms, transportRoutes } =
     useTenantStore();
   const { session } = useAuth();
   const schoolName = schoolDetails.name || session?.tenantName || "Silver Hills Global";
@@ -418,6 +420,29 @@ export function StudentProfileDetail({
     const fromConfig = classConfigs.map((c) => c.className);
     return Array.from(new Set([...fromConfig, student.cls, draft.cls].filter(Boolean)));
   }, [classConfigs, draft.cls, student.cls]);
+
+  const busPointOptions = useMemo(() => {
+    const { pickups, drops } = transportBusPointOptions(transportRoutes);
+    const withCurrent = (current: string, pool: string[]) => {
+      const value = current.trim();
+      if (value && !pool.includes(value)) return [value, ...pool];
+      return pool;
+    };
+    const dropPool = drops.length > 0 ? drops : pickups;
+    return {
+      point1: withCurrent(draft.busPoint1 || student.busPoint1 || "", pickups),
+      point2: withCurrent(draft.busPoint2 || student.busPoint2 || "", dropPool),
+    };
+  }, [
+    draft.busPoint1,
+    draft.busPoint2,
+    student.busPoint1,
+    student.busPoint2,
+    transportRoutes,
+  ]);
+
+  const studentNeedsBus =
+    student.needsBus === true || Boolean(student.busPoint1 || student.busPoint2);
 
   useEffect(() => {
     setShareToken(student.shareToken ?? "");
@@ -480,6 +505,26 @@ export function StudentProfileDetail({
           description: err instanceof Error ? err.message : "Save failed",
         }),
       );
+  };
+
+  const updateTransport = (patch: {
+    needsBus: boolean;
+    busPoint1?: string;
+    busPoint2?: string;
+  }) => {
+    const updated: Student = {
+      ...student,
+      needsBus: patch.needsBus,
+      busPoint1: patch.needsBus ? emptyToUndefined(patch.busPoint1 ?? "") : undefined,
+      busPoint2: patch.needsBus ? emptyToUndefined(patch.busPoint2 ?? "") : undefined,
+    };
+    syncStudent(updated);
+    toast.success("Transport route updated", {
+      description: patch.needsBus
+        ? [updated.busPoint1, updated.busPoint2].filter(Boolean).join(" · ") ||
+          "School bus required · pick points below"
+        : "School bus not required",
+    });
   };
 
   const persistDocuments = (nextDocs: StaffDocument[], aadhaarOverride?: string) => {
@@ -607,7 +652,7 @@ export function StudentProfileDetail({
       cls: draft.cls.trim(),
       guardian: draft.guardian.trim(),
       phone: emptyToUndefined(draft.phone),
-      dob: emptyToUndefined(draft.dob),
+      dob: toDobIso(draft.dob),
       email: emptyToUndefined(draft.email),
       address: emptyToUndefined(draft.address),
       motherName: emptyToUndefined(draft.motherName),
@@ -769,7 +814,11 @@ export function StudentProfileDetail({
                     EMPTY
                   ),
                 },
-                { label: "Date of Birth", mono: true, value: student.dob || EMPTY },
+                {
+                  label: "Date of Birth",
+                  mono: true,
+                  value: formatDobDisplay(student.dob) || EMPTY,
+                },
                 { label: "Email Address", mono: true, value: student.email || EMPTY },
                 {
                   label: "Residential Mailing Address",
@@ -824,39 +873,70 @@ export function StudentProfileDetail({
               ]}
             />
 
-            <ProfileDataTable
-              title="Transport"
-              description="School bus requirement and pickup points."
-              rows={
-                [
-                  {
-                    label: "School Bus",
-                    value: student.needsBus ? "Required" : "Not required",
-                  },
-                  ...(student.needsBus
-                    ? [
-                        {
-                          label: "Bus Point 1",
-                          value: student.busPoint1 || EMPTY,
-                        },
-                        {
-                          label: "Bus Point 2",
-                          value: student.busPoint2 || EMPTY,
-                        },
-                      ]
-                    : [
-                        {
-                          label: "Route",
-                          value: (
-                            <span className="font-normal text-black/50 dark:text-zinc-400">
-                              No transport route assigned for this student.
-                            </span>
-                          ),
-                        },
-                      ]),
-                ] satisfies ProfileTableRow[]
-              }
-            />
+            <section className={CARD_FRAME}>
+              <h2 className="text-base font-semibold text-black dark:text-zinc-50">Transport</h2>
+              <p className="mt-1 text-[12.5px] text-black/50 dark:text-zinc-400">
+                School bus requirement and pickup points. Changes save immediately.
+              </p>
+
+              <div className="mt-4 space-y-3">
+                <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] px-3 py-2.5 text-[13px] font-medium text-black dark:border-white/10 dark:bg-zinc-900/50 dark:text-zinc-100">
+                  <Checkbox
+                    checked={studentNeedsBus}
+                    onCheckedChange={(checked) => {
+                      const needsBus = checked === true;
+                      updateTransport({
+                        needsBus,
+                        busPoint1: needsBus ? student.busPoint1 ?? "" : "",
+                        busPoint2: needsBus ? student.busPoint2 ?? "" : "",
+                      });
+                    }}
+                  />
+                  Requires school bus transport
+                </label>
+
+                {studentNeedsBus ? (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <MetaSelect
+                      label="Bus Point 1"
+                      value={student.busPoint1 ?? ""}
+                      editing
+                      onChange={(v) =>
+                        updateTransport({
+                          needsBus: true,
+                          busPoint1: v === "__none__" ? "" : v,
+                          busPoint2: student.busPoint2 ?? "",
+                        })
+                      }
+                      options={busPointOptions.point1}
+                      placeholder="Select pickup point"
+                      allowNone
+                      noneLabel="No pickup point"
+                    />
+                    <MetaSelect
+                      label="Bus Point 2"
+                      value={student.busPoint2 ?? ""}
+                      editing
+                      onChange={(v) =>
+                        updateTransport({
+                          needsBus: true,
+                          busPoint1: student.busPoint1 ?? "",
+                          busPoint2: v === "__none__" ? "" : v,
+                        })
+                      }
+                      options={busPointOptions.point2}
+                      placeholder="Select drop point"
+                      allowNone
+                      noneLabel="No drop point"
+                    />
+                  </div>
+                ) : (
+                  <p className="text-[12.5px] text-black/50 dark:text-zinc-400">
+                    No transport route assigned for this student.
+                  </p>
+                )}
+              </div>
+            </section>
           </div>
         </ProfileTabPanel>
 
@@ -1162,19 +1242,25 @@ export function StudentProfileDetail({
               </div>
               {draft.needsBus && (
                 <>
-                  <MetaField
+                  <MetaSelect
                     label="Bus Point 1"
                     value={draft.busPoint1}
                     editing
-                    onChange={(v) => patchDraft("busPoint1", v)}
-                    placeholder="Pickup point"
+                    onChange={(v) => patchDraft("busPoint1", v === "__none__" ? "" : v)}
+                    options={busPointOptions.point1}
+                    placeholder="Select pickup point"
+                    allowNone
+                    noneLabel="No pickup point"
                   />
-                  <MetaField
+                  <MetaSelect
                     label="Bus Point 2"
                     value={draft.busPoint2}
                     editing
-                    onChange={(v) => patchDraft("busPoint2", v)}
-                    placeholder="Drop point"
+                    onChange={(v) => patchDraft("busPoint2", v === "__none__" ? "" : v)}
+                    options={busPointOptions.point2}
+                    placeholder="Select drop point"
+                    allowNone
+                    noneLabel="No drop point"
                   />
                 </>
               )}
@@ -1271,6 +1357,8 @@ function MetaSelect({
   onChange,
   options,
   placeholder,
+  allowNone = false,
+  noneLabel = "None",
 }: {
   label: string;
   value: string;
@@ -1278,13 +1366,22 @@ function MetaSelect({
   onChange: (value: string) => void;
   options: string[];
   placeholder?: string;
+  allowNone?: boolean;
+  noneLabel?: string;
 }) {
+  const resolved =
+    value && options.includes(value)
+      ? value
+      : allowNone && !value
+        ? "__none__"
+        : value || undefined;
+
   return (
     <div>
       <div className={META_LABEL}>{label}</div>
       <div className="mt-1.5">
         {editing ? (
-          <Select value={value || undefined} onValueChange={onChange}>
+          <Select value={resolved} onValueChange={onChange}>
             <SelectTrigger className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white text-[13px]">
               <SelectValue placeholder={placeholder ?? "Select…"} />
             </SelectTrigger>
@@ -1292,6 +1389,11 @@ function MetaSelect({
               position="popper"
               className="z-[250] rounded-lg border border-[#E5E5E5] bg-white"
             >
+              {allowNone && (
+                <SelectItem value="__none__" className="text-slate-500">
+                  {noneLabel}
+                </SelectItem>
+              )}
               {options.map((option) => (
                 <SelectItem key={option} value={option}>
                   {option}
@@ -1336,7 +1438,7 @@ function MetaField({
               value={value}
               onChange={onChange}
               placeholder={placeholder ?? "Pick a date"}
-              valueFormat="display"
+              valueFormat="iso"
               variant="pill"
               quickPicks={[]}
               min="1990-01-01"

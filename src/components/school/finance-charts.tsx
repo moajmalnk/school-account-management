@@ -7,7 +7,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
-import type { CornerSide } from "@/lib/utils";
+import { cn, type CornerSide } from "@/lib/utils";
 
 const CHART_COLORS = ["#0F172A", "#0F766E", "#99F6E4", "#94A3B8", "#64748B"];
 
@@ -112,11 +112,13 @@ export function FinanceBarCard({
   segments,
   cornerSide = "bl",
   fill = "#0F766E",
+  className,
 }: {
   title: string;
   segments: Segment[];
   cornerSide?: CornerSide;
   fill?: string;
+  className?: string;
 }) {
   const chartConfig = {
     value: { label: title, color: fill },
@@ -127,10 +129,16 @@ export function FinanceBarCard({
       tone="white"
       cornerSide={cornerSide}
       padded
-      className="flex h-full min-h-0 flex-col p-4 sm:min-h-[300px] sm:p-6"
+      className={cn(
+        "flex h-full min-h-0 flex-col p-4 sm:min-h-[300px] sm:p-6",
+        className,
+      )}
     >
       <div className="text-[15px] font-semibold leading-tight text-black sm:text-title">{title}</div>
-      <ChartContainer config={chartConfig} className="mt-3 aspect-auto h-[180px] w-full sm:mt-4 sm:h-[220px]">
+      <ChartContainer
+        config={chartConfig}
+        className="mt-3 aspect-auto h-[180px] w-full flex-1 sm:mt-4 sm:h-[220px] sm:min-h-[220px]"
+      >
         <BarChart data={segments} layout="vertical" margin={{ top: 4, right: 8, left: 4, bottom: 4 }}>
           <CartesianGrid horizontal={false} strokeDasharray="4 4" stroke="#E5E5E5" className="dark:stroke-white/15" />
           <XAxis type="number" hide />

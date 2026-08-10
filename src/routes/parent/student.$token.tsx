@@ -382,7 +382,7 @@ function ParentStudentPage() {
                   value={form.dob ?? ""}
                   onChange={(dob) => setForm({ ...form, dob })}
                   placeholder="14 Mar 2012"
-                  valueFormat="display"
+                  valueFormat="iso"
                   variant="pill"
                   quickPicks={[]}
                   min="1990-01-01"

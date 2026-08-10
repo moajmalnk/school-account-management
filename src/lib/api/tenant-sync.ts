@@ -34,7 +34,10 @@ import {
   type TransportRoute,
   type TransportVehicle,
 } from "@/lib/tenant-store";
-import { buildLedgerFromStudents } from "@/lib/academic-year";
+import {
+  buildLedgerFromStudents,
+  type StudentYearLedger,
+} from "@/lib/academic-year";
 
 export type RemoteTenantBundle = {
   students: Student[];
@@ -53,9 +56,11 @@ export type RemoteTenantBundle = {
   themeSettings: ThemeSettings;
   academicYear: string;
   academicYears: string[];
+  closedAcademicYears: string[];
   dashboardTodos: string[];
   dashboardNote: string;
-  studentYearLedgers: ReturnType<typeof buildLedgerFromStudents>[];
+  /** Year enrollments are client-scoped today; API returns [] so local ledgers can win. */
+  studentYearLedgers: StudentYearLedger[];
 };
 
 const EMPTY_SCHOOL_DETAILS: SchoolDetails = {
@@ -143,12 +148,16 @@ export async function fetchRemoteTenantBundle(
       themeSettings: ThemeSettings;
       academicYear: string;
       academicYears: string[];
+      closedAcademicYears?: string[];
     } | null>("/api/settings/school.php", null);
 
     const academicYear = school?.academicYear ?? "AY 2025-26";
     const academicYears = school?.academicYears?.length
       ? school.academicYears
       : ["AY 2024-25", "AY 2025-26", "AY 2026-27"];
+    const closedAcademicYears = Array.isArray(school?.closedAcademicYears)
+      ? school.closedAcademicYears.filter((y) => typeof y === "string" && y.trim())
+      : [];
 
     // Fees GET auto-seeds missing term/month defaults for the tenant's academic years.
     const feeTerms = await getSafe<FeeTerm[]>(
@@ -199,12 +208,15 @@ export async function fetchRemoteTenantBundle(
       themeSettings: school?.themeSettings ?? { ...SEED_THEME_SETTINGS },
       academicYear,
       academicYears,
+      closedAcademicYears,
       // Prefer live API payload (including empty strings) — do not replace with seed copy.
       dashboardTodos: Array.isArray(todos?.dashboardTodos)
         ? todos.dashboardTodos
         : ["", "", "", "", ""],
       dashboardNote: typeof todos?.dashboardNote === "string" ? todos.dashboardNote : "",
-      studentYearLedgers: [buildLedgerFromStudents(students, academicYear)],
+      // Do not invent enrollments from the flat student list — that puts every
+      // student into the active year and wipes other AY books on hard refresh.
+      studentYearLedgers: [],
     };
     } catch (err) {
       if (isAuthExpiredError(err)) return null;
@@ -240,6 +252,7 @@ export function seedTenantBundle(): RemoteTenantBundle {
     themeSettings: { ...SEED_THEME_SETTINGS },
     academicYear,
     academicYears: ["AY 2024-25", "AY 2025-26", "AY 2026-27"],
+    closedAcademicYears: [],
     dashboardTodos: ["", "", "", "", ""],
     dashboardNote: "",
     studentYearLedgers: [buildLedgerFromStudents(SEED_STUDENTS, academicYear)],

@@ -328,3 +328,71 @@ export function TenantFeesSkeleton() {
     </div>
   );
 }
+
+/** Matches Settings → System (financial years + navigation) while tenant store hydrates. */
+export function TenantSystemSkeleton() {
+  return (
+    <div
+      className="grid grid-cols-12 gap-3 sm:gap-4 lg:gap-5"
+      aria-busy="true"
+      aria-live="polite"
+      aria-label="Loading system settings"
+    >
+      <section className={cn(glassCardClass, "col-span-12 rounded-2xl p-4 sm:p-5")}>
+        <div className="space-y-2">
+          <Bone className="h-5 w-44 rounded-md sm:h-6 sm:w-52" />
+          <Bone className={cn("h-3 w-64 max-w-full rounded-md sm:w-80", boneSoft)} />
+        </div>
+
+        <div className="mt-4 grid grid-cols-12 gap-3">
+          <div className="col-span-12 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-8 dark:border-white/10 dark:bg-zinc-900/40">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="space-y-1.5">
+                <Bone className="h-3 w-28 rounded-md" />
+                <Bone className={cn("h-2.5 w-56 max-w-full rounded-md", boneSoft)} />
+              </div>
+              <Bone className={cn("h-2.5 w-24 rounded-md", boneSoft)} />
+            </div>
+
+            <div className="mt-3 overflow-hidden rounded-xl border border-[#E5E5E5] bg-white dark:border-white/10 dark:bg-zinc-950/40">
+              <div className="hidden border-b border-[#EFEFEF] bg-[#F8FAFC] px-3 py-2 dark:border-white/10 dark:bg-zinc-900 sm:block">
+                <div className="grid grid-cols-[minmax(0,1.2fr)_7.5rem_minmax(0,1fr)] gap-2">
+                  <Bone className={cn("h-2.5 w-10 rounded-md", boneSoft)} />
+                  <Bone className={cn("h-2.5 w-12 rounded-md", boneSoft)} />
+                  <Bone className={cn("ml-auto h-2.5 w-14 rounded-md", boneSoft)} />
+                </div>
+              </div>
+              <ul className="divide-y divide-[#EFEFEF] dark:divide-white/10">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <li
+                    key={i}
+                    className="flex flex-col gap-2.5 px-3 py-3 sm:grid sm:grid-cols-[minmax(0,1.2fr)_7.5rem_minmax(0,1fr)] sm:items-center sm:gap-2"
+                  >
+                    <Bone className="h-3.5 w-28 rounded-md" />
+                    <Bone className="h-5 w-20 rounded-full" />
+                    <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
+                      <Bone className="h-8 w-16 rounded-full" />
+                      <Bone className="h-8 w-16 rounded-full" />
+                      <Bone className="h-8 w-14 rounded-full" />
+                      <Bone className="h-8 w-16 rounded-full" />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <Bone className="h-10 min-w-0 flex-1 rounded-lg" />
+              <Bone className="h-10 w-28 shrink-0 rounded-full" />
+            </div>
+          </div>
+
+          <div className="col-span-12 hidden rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-4 lg:block dark:border-white/10 dark:bg-zinc-900/40">
+            <Bone className="h-3 w-24 rounded-md" />
+            <Bone className="mt-3 h-10 w-full rounded-lg" />
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}

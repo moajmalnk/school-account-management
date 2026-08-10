@@ -207,10 +207,45 @@ export function buildLedgerFromStudents<T extends {
   return { academicYear: year, byStudentId };
 }
 
+/** Drop ledger rows for students that no longer exist (or are soft-deleted). */
+export function pruneLedgersToStudents<T extends { id: string; deletedAt?: string }>(
+  ledgers: StudentYearLedger[],
+  students: T[],
+): StudentYearLedger[] {
+  const liveIds = new Set(students.filter((s) => !s.deletedAt).map((s) => s.id));
+  return ledgers.map((ledger) => {
+    const byStudentId: Record<string, StudentYearFields> = {};
+    for (const [id, fields] of Object.entries(ledger.byStudentId)) {
+      if (liveIds.has(id)) byStudentId[id] = fields;
+    }
+    return { ...ledger, byStudentId };
+  });
+}
+
 /**
- * On hydrate: if students exist but the active-year book is empty (stale cache /
- * year-key mismatch), rebuild the ledger so dashboard/directory don't flash 0.
- * Does not run on intentional empty books after the user opens a new year mid-session.
+ * Prefer ledgers from `preferred` per academic year; keep unique years from `fallback`.
+ */
+export function mergeStudentYearLedgers(
+  preferred: StudentYearLedger[],
+  fallback: StudentYearLedger[],
+): StudentYearLedger[] {
+  const byYear = new Map<string, StudentYearLedger>();
+  for (const ledger of fallback) {
+    if (!ledger.academicYear) continue;
+    byYear.set(ledger.academicYear, ledger);
+  }
+  for (const ledger of preferred) {
+    if (!ledger.academicYear) continue;
+    byYear.set(ledger.academicYear, ledger);
+  }
+  return Array.from(byYear.values());
+}
+
+/**
+ * On hydrate: ensure the active year has a ledger book.
+ * Empty books stay empty — never dump the global student list into one year
+ * (that wiped other years and leaked counts across AY switches).
+ * Bootstrap from the student list only when no year ledgers exist at all.
  */
 export function reconcileLedgersWithStudents<T extends {
   id: string;
@@ -223,13 +258,12 @@ export function reconcileLedgersWithStudents<T extends {
   ledgers: StudentYearLedger[],
   year: string,
 ): StudentYearLedger[] {
-  const live = students.filter((s) => !s.deletedAt);
-  const ledger = getYearLedger(ledgers, year);
-  const enrolled = Object.keys(ledger.byStudentId).length;
-  if (live.length > 0 && enrolled === 0) {
-    return [buildLedgerFromStudents(live, year)];
+  if (ledgers.length === 0) {
+    const live = students.filter((s) => !s.deletedAt);
+    if (live.length > 0) return [buildLedgerFromStudents(live, year)];
+    return [{ academicYear: year, byStudentId: {} }];
   }
-  return ensureYearLedger(ledgers, year);
+  return ensureYearLedger(pruneLedgersToStudents(ledgers, students), year);
 }
 
 export function applyLedgerToStudent<T extends {

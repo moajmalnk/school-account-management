@@ -70,21 +70,39 @@ export async function apiSaveSchoolDetails(
 export async function apiSyncAcademicYears(input: {
   academicYears: string[];
   academicYear: string;
-}): Promise<{ academicYears: string[]; academicYear: string }> {
-  if (!hasToken()) return input;
+  closedAcademicYears?: string[];
+  renameAcademicYear?: { from: string; to: string };
+}): Promise<{
+  academicYears: string[];
+  academicYear: string;
+  closedAcademicYears: string[];
+}> {
+  if (!hasToken()) {
+    return {
+      academicYears: input.academicYears,
+      academicYear: input.academicYear,
+      closedAcademicYears: input.closedAcademicYears ?? [],
+    };
+  }
   const data = await apiRequest<{
     academicYears: string[];
     academicYear: string;
+    closedAcademicYears?: string[];
   }>("/api/settings/school.php", {
     method: "PUT",
     body: {
       academicYears: input.academicYears,
       academicYear: input.academicYear,
+      closedAcademicYears: input.closedAcademicYears ?? [],
+      renameAcademicYear: input.renameAcademicYear,
     },
   });
   return {
     academicYears: data.academicYears?.length ? data.academicYears : input.academicYears,
     academicYear: data.academicYear || input.academicYear,
+    closedAcademicYears: Array.isArray(data.closedAcademicYears)
+      ? data.closedAcademicYears
+      : (input.closedAcademicYears ?? []),
   };
 }
 
