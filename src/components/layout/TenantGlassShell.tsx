@@ -20,6 +20,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 
+import { FeezoBrand } from "@/components/brand/FeezoBrand";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -57,6 +58,7 @@ import {
   type ThemeSettings,
 } from "@/lib/tenant-store";
 import { isFinanceTab } from "@/lib/finance-tabs";
+import { resolveMediaUrl } from "@/lib/media";
 import { cn, glassInsetClass, glassPanelClass } from "@/lib/utils";
 
 /** Soft fade when academic year books switch. */
@@ -215,7 +217,7 @@ export function TenantMacDock({
   const { themeSettings, schoolDetails } = useTenantStore();
   const placement = placementProp ?? themeSettings.navPlacement ?? "Left";
   const tenantName = schoolDetails.name || session?.tenantName || "Silver Hills Global";
-  const logoUrl = schoolDetails.logoUrl;
+  const logoUrl = resolveMediaUrl(schoolDetails.logoUrl);
   const initials = useMemo(() => schoolInitials(tenantName), [tenantName]);
 
   const isVertical = placement === "Left" || placement === "Right";
@@ -289,7 +291,9 @@ export function TenantMacDock({
       className={cn(
         "relative z-40 hidden shrink-0 self-stretch overflow-visible transition-[width] duration-200 md:flex",
         "sticky top-4 max-h-[calc(100dvh-2rem)] flex-col",
-        expanded ? "w-[220px] xl:w-[240px]" : "w-[84px] items-center xl:w-[92px]",
+        expanded
+          ? "w-[220px] min-w-0 max-w-[220px] xl:w-[240px] xl:max-w-[240px]"
+          : "w-[84px] min-w-0 max-w-[84px] items-center xl:w-[92px] xl:max-w-[92px]",
         className,
       )}
       onMouseLeave={() => setHovered(null)}
@@ -297,31 +301,47 @@ export function TenantMacDock({
       <div
         className={cn(
           glassPanelClass,
-          "relative z-40 flex h-full min-h-[calc(100dvh-2rem)] w-full flex-col overflow-visible rounded-xl border border-white/70 bg-white/55 py-3 shadow-[0_12px_40px_-16px_rgba(15,23,42,0.35)] backdrop-blur-2xl",
+          "relative z-40 flex h-full min-h-[calc(100dvh-2rem)] w-full min-w-0 flex-col overflow-visible rounded-xl border border-white/70 bg-white/55 py-3 shadow-[0_12px_40px_-16px_rgba(15,23,42,0.35)] backdrop-blur-2xl",
           expanded ? "items-stretch px-2.5 sm:px-3" : "items-center px-1.5",
         )}
       >
         <div
           className={cn(
-            "mb-2 grid shrink-0 place-items-center overflow-hidden rounded-xl font-bold text-white shadow-md shadow-teal-900/20",
-            expanded
-              ? "mx-auto h-12 w-12 text-[12px] xl:h-14 xl:w-14"
-              : "h-11 w-11 text-[11px] xl:h-12 xl:w-12",
-            !logoUrl && "bg-gradient-to-br from-[#0F766E] to-[#115E59]",
+            "mb-3 flex w-full min-w-0 shrink-0 flex-col items-center border-b border-slate-200/60 pb-3 dark:border-white/10",
+            expanded ? "gap-1.5 px-0.5" : "",
           )}
-          title={tenantName}
         >
-          {logoUrl ? (
-            <img src={logoUrl} alt={tenantName} className="h-full w-full object-cover" />
-          ) : (
-            initials
+          <div
+            className={cn(
+              "grid shrink-0 place-items-center overflow-hidden rounded-xl font-bold text-white shadow-md shadow-teal-900/20",
+              expanded
+                ? "h-12 w-12 text-[12px] xl:h-14 xl:w-14"
+                : "h-11 w-11 text-[11px] xl:h-12 xl:w-12",
+              !logoUrl && "bg-gradient-to-br from-[#0F766E] to-[#115E59]",
+            )}
+            title={tenantName}
+            aria-label={tenantName}
+          >
+            {logoUrl ? (
+              <img src={logoUrl} alt="" className="h-full w-full object-cover" />
+            ) : (
+              initials
+            )}
+          </div>
+          {expanded && (
+            <div className="w-full min-w-0 px-1 text-center leading-tight">
+              <div
+                className="line-clamp-2 break-words text-[12px] font-semibold text-slate-800 xl:text-[13px] dark:text-zinc-100"
+                title={tenantName}
+              >
+                {tenantName}
+              </div>
+              <div className="mt-0.5 text-[9px] font-medium uppercase tracking-wider text-slate-400 xl:text-[10px] dark:text-zinc-500">
+                Tenant
+              </div>
+            </div>
           )}
         </div>
-        {expanded && (
-          <div className="mb-3 px-1 text-center text-[10px] font-bold uppercase tracking-[0.12em] text-slate-600 xl:text-[11px]">
-            {initials}
-          </div>
-        )}
 
         <nav
           className={cn(
@@ -428,32 +448,43 @@ export function TenantMacDock({
           })}
         </nav>
 
-        {showCollapse && (
-          <button
-            type="button"
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              toggleCollapsed();
-            }}
-            aria-pressed={collapsed}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className={cn(
-              "mt-auto flex shrink-0 items-center justify-center gap-2 rounded-xl text-slate-500 transition-colors hover:bg-white/70 hover:text-[#0F766E]",
-              expanded ? "mx-1 h-10 w-auto px-3" : "h-10 w-10",
-            )}
-          >
-            {collapsed ? (
-              <PanelLeftOpen className="h-4 w-4" />
-            ) : (
-              <>
-                <PanelLeftClose className="h-4 w-4" />
-                <span className="text-[12px] font-semibold">Collapse</span>
-              </>
-            )}
-          </button>
-        )}
+        <div
+          className={cn(
+            "mt-auto flex shrink-0 flex-col gap-1.5 border-t border-slate-200/60 pt-2 dark:border-white/10",
+            expanded ? "items-stretch" : "items-center",
+          )}
+        >
+          <div className={cn(expanded ? "mx-0.5 px-1.5 py-1.5" : "")}>
+            <FeezoBrand compact={!expanded} />
+          </div>
+
+          {showCollapse && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                toggleCollapsed();
+              }}
+              aria-pressed={collapsed}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              className={cn(
+                "flex shrink-0 items-center justify-center gap-2 rounded-xl text-slate-500 transition-colors hover:bg-white/70 hover:text-[#0F766E] dark:hover:bg-white/5",
+                expanded ? "mx-1 h-10 w-auto px-3" : "h-10 w-10",
+              )}
+            >
+              {collapsed ? (
+                <PanelLeftOpen className="h-4 w-4" />
+              ) : (
+                <>
+                  <PanelLeftClose className="h-4 w-4" />
+                  <span className="text-[12px] font-semibold">Collapse</span>
+                </>
+              )}
+            </button>
+          )}
+        </div>
       </div>
     </aside>
   );

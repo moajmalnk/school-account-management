@@ -2784,9 +2784,29 @@ function asTrimmedString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value.trim() : fallback;
 }
 
-function asOptionalDataUrl(value: unknown): string | undefined {
-  if (typeof value !== "string" || !value.startsWith("data:image/")) return undefined;
-  return value;
+/** Keep data URLs and uploaded media paths (reject truncated / garbage values). */
+function asOptionalMediaUrl(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+
+  if (trimmed.startsWith("data:image/")) {
+    if (trimmed.length < 64 || !trimmed.includes(";base64,")) return undefined;
+    return trimmed;
+  }
+
+  if (
+    trimmed.startsWith("blob:") ||
+    trimmed.startsWith("http://") ||
+    trimmed.startsWith("https://") ||
+    trimmed.startsWith("/api/media.php") ||
+    trimmed.startsWith("/uploads/") ||
+    trimmed.startsWith("uploads/")
+  ) {
+    return trimmed;
+  }
+
+  return undefined;
 }
 
 export function normalizeSchoolDetails(value: unknown): SchoolDetails {
@@ -2795,8 +2815,8 @@ export function normalizeSchoolDetails(value: unknown): SchoolDetails {
   const name = asTrimmedString(raw.name, SEED_SCHOOL_DETAILS.name) || SEED_SCHOOL_DETAILS.name;
   return {
     name,
-    logoUrl: asOptionalDataUrl(raw.logoUrl),
-    letterheadUrl: asOptionalDataUrl(raw.letterheadUrl),
+    logoUrl: asOptionalMediaUrl(raw.logoUrl),
+    letterheadUrl: asOptionalMediaUrl(raw.letterheadUrl),
     tagline: asTrimmedString(raw.tagline, SEED_SCHOOL_DETAILS.tagline),
     address: asTrimmedString(raw.address, SEED_SCHOOL_DETAILS.address),
     phone: asTrimmedString(raw.phone, SEED_SCHOOL_DETAILS.phone),
@@ -3302,10 +3322,23 @@ export function TenantStoreProvider({
   const [academicYear, setAcademicYearState] = useState<string>(() =>
     liveApi ? "" : SEED_ACADEMIC_YEAR,
   );
-  const [themeSettings, setThemeSettings] = useState<ThemeSettings>(SEED_THEME_SETTINGS);
-  const [schoolDetails, setSchoolDetails] = useState<SchoolDetails>(() =>
-    liveApi ? blankSchool : SEED_SCHOOL_DETAILS,
-  );
+  const [themeSettings, setThemeSettings] = useState<ThemeSettings>(() => {
+    if (!liveApi) return SEED_THEME_SETTINGS;
+    return readSnapshot(storeKey)?.themeSettings ?? SEED_THEME_SETTINGS;
+  });
+  // Live API: paint cached logo/name immediately so the dock does not flash initials
+  // while the remote hydrate is in flight.
+  const [schoolDetails, setSchoolDetails] = useState<SchoolDetails>(() => {
+    if (!liveApi) return SEED_SCHOOL_DETAILS;
+    const cached = readSnapshot(storeKey)?.schoolDetails;
+    if (cached) {
+      return {
+        ...cached,
+        name: cached.name?.trim() || tenantName?.trim() || cached.name,
+      };
+    }
+    return blankSchool;
+  });
   const [dashboardTodos, setDashboardTodos] = useState<string[]>([...DEFAULT_DASHBOARD_TODOS]);
   const [dashboardNote, setDashboardNote] = useState("");
   const [notifications, setNotifications] = useState<TenantNotification[]>(() =>

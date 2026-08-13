@@ -234,15 +234,28 @@ export function SettingsUsersCard({
     setOpen(false);
   };
 
+  const openImpersonate = (href: string, label: string) => {
+    const tab = window.open(href, "_blank");
+    if (tab) {
+      try {
+        tab.opener = null;
+      } catch {
+        // ignore
+      }
+      toast.success(label, {
+        description: "New tab · your admin session stays here",
+      });
+      return;
+    }
+    toast.message(label, { description: "Pop-ups blocked · continuing in this tab" });
+    window.location.assign(href);
+  };
+
   const impersonateUser = (user: TenantUser) => {
-    window.open(
+    openImpersonate(
       `/impersonate?user=${encodeURIComponent(user.id)}`,
-      "_blank",
-      "noopener",
+      `Opening workspace as ${user.displayName}`,
     );
-    toast.success(`Opening workspace as ${user.displayName}`, {
-      description: "New tab · no credentials needed · your admin session stays here",
-    });
   };
 
   const testDriveForm = () => {
@@ -252,10 +265,9 @@ export function SettingsUsersCard({
       return;
     }
     const name = form.displayName.trim() || "Permission preview";
-    window.open(
+    openImpersonate(
       `/impersonate?perms=${encodeURIComponent(permissions)}&name=${encodeURIComponent(name)}`,
-      "_blank",
-      "noopener",
+      `Opening permission preview · ${name}`,
     );
   };
 

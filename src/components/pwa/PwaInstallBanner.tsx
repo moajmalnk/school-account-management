@@ -26,7 +26,7 @@ export function PwaInstallBanner() {
     }
     const result = await install();
     if (result === "accepted") {
-      toast.success("App installed", { description: "School Admin is ready on your device" });
+      toast.success("App installed", { description: "Feezo is ready on your device" });
       dismissBanner();
     } else if (result === "ios") {
       setIosOpen(true);
@@ -55,12 +55,12 @@ export function PwaInstallBanner() {
           <div className="relative overflow-hidden rounded-2xl border border-white/70 bg-white/95 shadow-[0_18px_50px_-20px_rgba(15,118,110,0.55)] backdrop-blur-xl dark:border-white/10 dark:bg-zinc-950/95">
             <div className="h-1 w-full bg-gradient-to-r from-[#0F766E] via-[#14B8A6] to-[#0F766E]" />
             <div className="flex items-start gap-3 p-3.5 sm:p-4">
-              <div className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-[#0F766E]">
-                <img src="/icons/icon-192.png" alt="" className="h-full w-full object-cover" />
+              <div className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-slate-950">
+                <img src="/icons/feezo-mark.png" alt="" className="h-9 w-9 object-contain" />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="pr-8 text-[14px] font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
-                  Download School Admin
+                  Download Feezo
                 </div>
                 <p className="mt-0.5 text-[12.5px] leading-snug text-slate-500 dark:text-zinc-400">
                   Install the app for faster launch, home-screen access, and offline shell support.
@@ -199,15 +199,15 @@ export function PwaInstallCard({ className }: { className?: string }) {
         )}
       >
         <div className="flex items-start gap-3">
-          <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-[#0F766E]">
-            <img src="/icons/icon-192.png" alt="" className="h-full w-full object-cover" />
+          <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-slate-950">
+            <img src="/icons/feezo-mark.png" alt="" className="h-10 w-10 object-contain" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-[14px] font-semibold text-slate-900 dark:text-zinc-50">
               Progressive Web App
             </div>
             <p className="mt-1 text-[12.5px] leading-relaxed text-slate-500 dark:text-zinc-400">
-              Download School Admin to your device for a native-like experience with offline shell
+              Download Feezo to your device for a native-like experience with offline shell
               caching.
             </p>
             <div className="mt-3">
@@ -251,7 +251,7 @@ function IosInstallDialog({
             Install on iPhone / iPad
           </DialogTitle>
           <DialogDescription className="mt-1 text-[13px] leading-relaxed text-slate-500 dark:text-zinc-400">
-            Safari doesn’t show a native install prompt. Add School Admin to your Home Screen
+            Safari doesn’t show a native install prompt. Add Feezo to your Home Screen
             instead.
           </DialogDescription>
         </DialogHeader>

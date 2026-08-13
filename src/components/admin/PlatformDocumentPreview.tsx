@@ -112,7 +112,7 @@ export function PlatformDocumentPreview({
                 <div className="text-[18px] font-bold sm:text-[20px]">
                   {platformMoney(invoice.currency, invoice.total)}
                 </div>
-                <div className="mt-0.5 text-[11px] text-teal-100">School Accounts Platform</div>
+                <div className="mt-0.5 text-[11px] text-teal-100">Feezo Platform</div>
               </div>
             </header>
 
@@ -136,7 +136,7 @@ export function PlatformDocumentPreview({
                   {isReceipt ? "Received by" : "From"}
                 </div>
                 <div className="mt-1 text-[14px] font-semibold text-black">
-                  School Accounts Platform
+                  Feezo
                 </div>
                 <div className="mt-0.5 text-[12px] text-black/55">
                   {isReceipt ? "Subscription settlement" : "SaaS subscription billing"}

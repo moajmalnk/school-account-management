@@ -32,6 +32,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ProfileAvatar } from "@/components/ui/profile-avatar";
+import { ImageCropDialog } from "@/components/ui/image-crop-dialog";
 import type { Staff, StaffDocument, StaffDocumentAttachment, TenantUser } from "@/lib/tenant-store";
 import { apiDeleteStaff, apiUpsertStaff } from "@/lib/api/records";
 import {
@@ -94,15 +96,32 @@ function StaffPhotoAvatar({
   size = "md",
 }: {
   staff: Staff;
-  onPhotoChange: (photoUrl: string | undefined) => void;
+  onPhotoChange: (photoUrl: string | undefined) => void | Promise<void>;
   size?: "md" | "lg";
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [localPreview, setLocalPreview] = useState<string | undefined>();
+  const [uploading, setUploading] = useState(false);
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
   const dim = size === "lg" ? "h-20 w-20 sm:h-24 sm:w-24" : "h-16 w-16";
   const text = size === "lg" ? "text-2xl sm:text-3xl" : "text-lg";
   const cam = size === "lg" ? "h-8 w-8" : "h-7 w-7";
   const camIcon = size === "lg" ? "h-4 w-4" : "h-3.5 w-3.5";
+
+  // Drop local blob preview once the store has a persisted server URL.
+  useEffect(() => {
+    if (
+      localPreview &&
+      staff.photoUrl &&
+      !staff.photoUrl.startsWith("data:") &&
+      staff.photoUrl !== localPreview
+    ) {
+      setLocalPreview(undefined);
+    }
+  }, [staff.photoUrl, localPreview]);
+
+  const displayUrl = localPreview ?? staff.photoUrl;
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -111,53 +130,56 @@ function StaffPhotoAvatar({
       toast.error("Please choose a JPG, PNG, or WebP image");
       return;
     }
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error("Image must be 2 MB or smaller");
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error("Image must be 8 MB or smaller");
       return;
     }
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = String(reader.result ?? "");
-      if (dataUrl) onPhotoChange(dataUrl);
+      if (dataUrl) setCropSrc(dataUrl);
     };
     reader.onerror = () => toast.error("Could not read the selected image");
     reader.readAsDataURL(file);
     e.target.value = "";
   };
 
+  const applyCrop = (dataUrl: string) => {
+    setCropSrc(null);
+    setLocalPreview(dataUrl);
+    setUploading(true);
+    void Promise.resolve(onPhotoChange(dataUrl)).finally(() => setUploading(false));
+  };
+
   return (
     <>
       <div className={cn("relative shrink-0", dim)}>
-        {staff.photoUrl ? (
-          <img
-            src={staff.photoUrl}
-            alt={`${staff.name} profile`}
-            className={cn(dim, "rounded-2xl object-cover ring-2 ring-white shadow-md")}
-          />
-        ) : (
-          <div
-            className={cn(
-              dim,
-              "grid place-items-center rounded-2xl bg-gradient-to-br from-slate-900 to-slate-700 font-semibold text-white shadow-md ring-2 ring-white",
-              text,
-            )}
-          >
-            {initials(staff.name)}
-          </div>
-        )}
+        <ProfileAvatar
+          name={staff.name}
+          photoUrl={displayUrl}
+          alt=""
+          busy={uploading}
+          className={cn(dim, "rounded-2xl shadow-md ring-2 ring-white")}
+          imgClassName="object-cover"
+          initialsClassName={cn(
+            "bg-gradient-to-br from-slate-900 to-slate-700",
+            text,
+          )}
+        />
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
           aria-label={`Change photo for ${staff.name}`}
           title="Change photo"
           className={cn(
-            "absolute -bottom-1 -right-1 grid place-items-center rounded-full border-2 border-white bg-[#0F766E] text-white shadow-sm transition-colors hover:bg-slate-900",
+            "absolute -bottom-1 -right-1 grid place-items-center rounded-full border-2 border-white bg-[#0F766E] text-white shadow-sm transition-colors hover:bg-slate-900 disabled:opacity-60",
             cam,
           )}
         >
           <Camera className={camIcon} />
         </button>
-        {staff.photoUrl && (
+        {(displayUrl || staff.photoUrl) && !uploading && (
           <button
             type="button"
             onClick={() => setConfirmRemove(true)}
@@ -177,6 +199,20 @@ function StaffPhotoAvatar({
         />
       </div>
 
+      <ImageCropDialog
+        open={Boolean(cropSrc)}
+        imageSrc={cropSrc}
+        title="Change photo"
+        description="Drag to reposition, zoom, then confirm the crop."
+        aspect={1}
+        outputSize={512}
+        onOpenChange={(next) => {
+          if (!next) setCropSrc(null);
+        }}
+        onConfirm={applyCrop}
+        onRetake={() => fileInputRef.current?.click()}
+      />
+
       <Dialog open={confirmRemove} onOpenChange={setConfirmRemove}>
         <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6">
           <DialogHeader>
@@ -193,7 +229,8 @@ function StaffPhotoAvatar({
               type="button"
               className="rounded-full bg-[#EF4444] text-white hover:bg-[#DC2626]"
               onClick={() => {
-                onPhotoChange(undefined);
+                setLocalPreview(undefined);
+                void onPhotoChange(undefined);
                 setConfirmRemove(false);
               }}
             >
@@ -274,20 +311,24 @@ export function StaffProfileDetail({
   const { setStaff, departments, roles, tenantUsers, setTenantUsers } =
     useTenantStore();
 
-  const syncStaff = (updated: Staff) => {
+  const syncStaff = async (updated: Staff) => {
     setStaff((prev) => prev.map((s) => (s.id === staff.id ? updated : s)));
-    void apiUpsertStaff(updated)
-      .then((saved) => {
-        setStaff((prev) =>
-          prev.map((s) => (s.id === staff.id || s.id === saved.id ? { ...updated, ...saved } : s)),
-        );
-      })
-      .catch((err) =>
-        toast.error("Could not save staff to server", {
-          description: err instanceof Error ? err.message : "Save failed",
-        }),
+    try {
+      const saved = await apiUpsertStaff(updated);
+      const merged = { ...updated, ...saved };
+      setStaff((prev) =>
+        prev.map((s) => (s.id === staff.id || s.id === saved.id ? merged : s)),
       );
-  };  const canManageUsers = sessionHasPermission(session, "settings.users");
+      return merged;
+    } catch (err) {
+      toast.error("Could not save staff to server", {
+        description: err instanceof Error ? err.message : "Save failed",
+      });
+      throw err;
+    }
+  };
+
+  const canManageUsers = sessionHasPermission(session, "settings.users");
   const linkedUser = useMemo(
     () => tenantUsers.find((u) => u.staffId === staff.id) ?? null,
     [tenantUsers, staff.id],
@@ -409,6 +450,7 @@ export function StaffProfileDetail({
     guardianPhone: staff.guardianPhone ?? "",
     photoUrl: staff.photoUrl ?? "",
   });
+  const [editCropSrc, setEditCropSrc] = useState<string | null>(null);
   const editPhotoRef = useRef<HTMLInputElement>(null);
 
   const resetDraft = () => {
@@ -758,14 +800,14 @@ export function StaffProfileDetail({
       toast.error("Please choose a JPG, PNG, or WebP image");
       return;
     }
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error("Image must be 2 MB or smaller");
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error("Image must be 8 MB or smaller");
       return;
     }
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = String(reader.result ?? "");
-      if (dataUrl) setDraft((prev) => ({ ...prev, photoUrl: dataUrl }));
+      if (dataUrl) setEditCropSrc(dataUrl);
     };
     reader.onerror = () => toast.error("Could not read the selected image");
     reader.readAsDataURL(file);
@@ -803,9 +845,13 @@ export function StaffProfileDetail({
     setEditOpen(false);
   };
 
-  const updatePhoto = (photoUrl: string | undefined) => {
-    syncStaff({ ...staff, photoUrl });
-    toast.success(photoUrl ? `${staff.name}'s photo updated` : `${staff.name}'s photo removed`);
+  const updatePhoto = async (photoUrl: string | undefined) => {
+    try {
+      await syncStaff({ ...staff, photoUrl });
+      toast.success(photoUrl ? `${staff.name}'s photo updated` : `${staff.name}'s photo removed`);
+    } catch {
+      // Error toast already shown by syncStaff
+    }
   };
 
   const isActive = isRecordActive(staff.active);
@@ -2056,7 +2102,7 @@ export function StaffProfileDetail({
               </div>
               <div className="min-w-0 text-[12px] text-black/55">
                 <div className="font-medium text-black">Profile Photo</div>
-                <div className="mt-0.5">Optional · JPG, PNG or WebP up to 2 MB</div>
+                <div className="mt-0.5">Optional · JPG, PNG or WebP · crop after pick</div>
                 {draft.photoUrl && (
                   <button
                     type="button"
@@ -2199,6 +2245,23 @@ export function StaffProfileDetail({
           </form>
         </DialogContent>
       </Dialog>
+
+      <ImageCropDialog
+        open={Boolean(editCropSrc)}
+        imageSrc={editCropSrc}
+        title="Change photo"
+        description="Drag to reposition, zoom, then confirm the crop."
+        aspect={1}
+        outputSize={512}
+        onOpenChange={(next) => {
+          if (!next) setEditCropSrc(null);
+        }}
+        onConfirm={(dataUrl) => {
+          setEditCropSrc(null);
+          setDraft((prev) => ({ ...prev, photoUrl: dataUrl }));
+        }}
+        onRetake={() => editPhotoRef.current?.click()}
+      />
     </div>
   );
 }

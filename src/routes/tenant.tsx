@@ -23,6 +23,7 @@ import {
   sessionHasPermission,
 } from "@/lib/auth";
 import { apiMe } from "@/lib/api/auth";
+import { resolveMediaUrl } from "@/lib/media";
 import { normalizePlanFlags } from "@/lib/permissions";
 import { TenantStoreProvider, schoolInitials, useTenantStore } from "@/lib/tenant-store";
 import { cn, glassInsetClass } from "@/lib/utils";
@@ -225,7 +226,7 @@ function TenantMobileHeader() {
   const tenantName = schoolDetails.name || session?.tenantName || "Silver Hills Global";
   const tenantLabel = tenantName.toUpperCase();
   const sectionLabel = onNotifications ? "NOTIFICATIONS" : activeKey ? NAV_LABELS[activeKey] : "DASHBOARD";
-  const logoUrl = schoolDetails.logoUrl;
+  const logoUrl = resolveMediaUrl(schoolDetails.logoUrl);
   const initials = schoolInitials(tenantName);
 
   return (

@@ -113,6 +113,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { DatePicker, MonthPicker } from "@/components/ui/date-picker";
 import { OrganicCard } from "@/components/ui/organic-card";
 import { ImageCropDialog } from "@/components/ui/image-crop-dialog";
+import { ProfileAvatar } from "@/components/ui/profile-avatar";
 import {
   normalizeAcademicYearLabel,
   composeClassName,
@@ -238,6 +239,7 @@ import { apiCreateDisbursement, apiCreatePayment, apiDeleteDisbursement, apiDele
 import { apiSaveDashboardTodos } from "@/lib/api/dashboard";
 import { apiUploadDataUrl } from "@/lib/api/settings";
 import { getApiToken } from "@/lib/api/client";
+import { resolveMediaUrl } from "@/lib/media";
 import {
   bankBalance,
   cashOnHand,
@@ -1618,19 +1620,15 @@ const directoryStatValueClass =
   "shrink-0 font-mono text-[18px] font-semibold leading-none tracking-tight text-black dark:text-zinc-50 md:text-[32px]";
 
 function DirectoryPersonAvatar({ name, photoUrl }: { name: string; photoUrl?: string }) {
-  if (photoUrl) {
-    return (
-      <img
-        src={photoUrl}
-        alt=""
-        className="h-9 w-9 shrink-0 rounded-lg object-cover ring-1 ring-black/5 sm:h-10 sm:w-10"
-      />
-    );
-  }
   return (
-    <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#0F766E] text-[11px] font-semibold text-white sm:h-10 sm:w-10 sm:text-[12px]">
-      {personInitials(name)}
-    </div>
+    <ProfileAvatar
+      name={name}
+      photoUrl={photoUrl}
+      alt=""
+      className="h-9 w-9 shrink-0 rounded-lg sm:h-10 sm:w-10"
+      imgClassName="object-cover ring-1 ring-black/5"
+      initialsClassName="bg-[#0F766E] text-[11px] sm:text-[12px]"
+    />
   );
 }
 
@@ -2088,17 +2086,13 @@ function StudentsDirectoryTable({
                 </td>
                 <td className="px-3 py-3.5 align-middle sm:px-4 lg:px-6">
                   <div className="flex min-w-0 items-center gap-3">
-                    {student.photoUrl ? (
-                      <img
-                        src={student.photoUrl}
-                        alt=""
-                        className="h-10 w-10 shrink-0 rounded-xl object-cover"
-                      />
-                    ) : (
-                      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#0F766E] text-[12px] font-semibold text-white">
-                        {personInitials(student.name)}
-                      </div>
-                    )}
+                    <ProfileAvatar
+                      name={student.name}
+                      photoUrl={student.photoUrl}
+                      className="h-10 w-10 shrink-0 rounded-xl"
+                      imgClassName="object-cover"
+                      initialsClassName="bg-[#0F766E] text-[12px]"
+                    />
                     <div className="min-w-0">
                       <div className="truncate text-[13.5px] font-semibold text-black">
                         {student.name}
@@ -3577,6 +3571,7 @@ export function StaffRoster() {
     guardianPhone: "",
     photoUrl: "",
   });
+  const [recruitCropSrc, setRecruitCropSrc] = useState<string | null>(null);
   const recruitPhotoRef = useRef<HTMLInputElement>(null);
   const staffImportRef = useRef<HTMLInputElement>(null);
   const attendanceImportRef = useRef<HTMLInputElement>(null);
@@ -3954,14 +3949,14 @@ export function StaffRoster() {
       toast.error("Please choose a JPG, PNG, or WebP image");
       return;
     }
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error("Image must be 2 MB or smaller");
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error("Image must be 8 MB or smaller");
       return;
     }
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = String(reader.result ?? "");
-      if (dataUrl) setForm((prev) => ({ ...prev, photoUrl: dataUrl }));
+      if (dataUrl) setRecruitCropSrc(dataUrl);
     };
     reader.onerror = () => toast.error("Could not read the selected image");
     reader.readAsDataURL(file);
@@ -4849,17 +4844,13 @@ export function StaffRoster() {
                   </td>
                   <td className="px-4 py-3.5 align-middle sm:px-6">
                     <div className="flex min-w-0 items-center gap-3">
-                      {member.photoUrl ? (
-                        <img
-                          src={member.photoUrl}
-                          alt=""
-                          className="h-10 w-10 shrink-0 rounded-xl object-cover"
-                        />
-                      ) : (
-                        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#0F766E] text-[12px] font-semibold text-white">
-                          {personInitials(member.name)}
-                        </div>
-                      )}
+                      <ProfileAvatar
+                        name={member.name}
+                        photoUrl={member.photoUrl}
+                        className="h-10 w-10 shrink-0 rounded-xl"
+                        imgClassName="object-cover"
+                        initialsClassName="bg-[#0F766E] text-[12px]"
+                      />
                       <div className="min-w-0">
                         <div className="truncate text-[13.5px] font-semibold text-black">
                           {member.name}
@@ -4986,17 +4977,13 @@ export function StaffRoster() {
           <form onSubmit={handleRecruit} className="space-y-3">
             <div className="flex items-center gap-4 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3">
               <div className="relative h-14 w-14 shrink-0">
-                {form.photoUrl ? (
-                  <img
-                    src={form.photoUrl}
-                    alt=""
-                    className="h-14 w-14 rounded-lg object-cover"
-                  />
-                ) : (
-                  <div className="grid h-14 w-14 place-items-center rounded-lg bg-[#0F766E] text-sm font-semibold text-white">
-                    {form.name.trim() ? personInitials(form.name) : "?"}
-                  </div>
-                )}
+                <ProfileAvatar
+                  name={form.name.trim() || "Staff"}
+                  photoUrl={form.photoUrl || undefined}
+                  className="h-14 w-14 rounded-lg"
+                  imgClassName="object-cover"
+                  initialsClassName="bg-[#0F766E] text-sm"
+                />
                 <button
                   type="button"
                   onClick={() => recruitPhotoRef.current?.click()}
@@ -5008,7 +4995,7 @@ export function StaffRoster() {
               </div>
               <div className="min-w-0 text-[12px] text-black/55 dark:text-zinc-400">
                 <div className="font-medium text-black">Profile Photo</div>
-                <div className="mt-0.5">Optional · JPG, PNG or WebP up to 2 MB</div>
+                <div className="mt-0.5">Optional · JPG, PNG or WebP · crop after pick</div>
                 {form.photoUrl && (
                   <button
                     type="button"
@@ -5128,6 +5115,23 @@ export function StaffRoster() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <ImageCropDialog
+        open={Boolean(recruitCropSrc)}
+        imageSrc={recruitCropSrc}
+        title="Change photo"
+        description="Drag to reposition, zoom, then confirm the crop."
+        aspect={1}
+        outputSize={512}
+        onOpenChange={(next) => {
+          if (!next) setRecruitCropSrc(null);
+        }}
+        onConfirm={(dataUrl) => {
+          setRecruitCropSrc(null);
+          setForm((prev) => ({ ...prev, photoUrl: dataUrl }));
+        }}
+        onRetake={() => recruitPhotoRef.current?.click()}
+      />
 
       <DirectoryFloatingAddButton label="Recruit Staff" onClick={() => setOpen(true)} />
     </div>
@@ -9998,7 +10002,7 @@ export function SchoolSettings() {
 
   const tenantName = schoolDetails.name || session?.tenantName || "School";
   const initials = schoolInitials(tenantName);
-  const logoUrl = schoolDetails.logoUrl;
+  const logoUrl = resolveMediaUrl(schoolDetails.logoUrl);
 
   const renderSettingsContent = (listLayout: "cards" | "table") => (
     <>
@@ -12942,7 +12946,7 @@ function SchoolDetailsCard({
             <div className="mt-3 flex items-center gap-3">
               {draft.logoUrl ? (
                 <img
-                  src={draft.logoUrl}
+                  src={resolveMediaUrl(draft.logoUrl) ?? draft.logoUrl}
                   alt="School logo"
                   className="h-14 w-14 rounded-lg object-cover ring-1 ring-black/10"
                 />

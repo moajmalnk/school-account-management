@@ -50,8 +50,8 @@ export default defineConfig({
       registerType: "prompt",
       includeAssets: ["favicon.svg", "icons/**/*"],
       manifest: {
-        name: "School Admin Console",
-        short_name: "School Admin",
+        name: "Feezo",
+        short_name: "Feezo",
         description:
           "Multi-tenant school management for students, staff, finance, and settings.",
         theme_color: "#0F766E",

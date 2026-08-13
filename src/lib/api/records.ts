@@ -1,8 +1,17 @@
 import { ApiError, apiRequest, getApiToken } from "@/lib/api/client";
+import { apiUploadDataUrl } from "@/lib/api/settings";
+import { isDataUrl } from "@/lib/media";
 import type { Payment, Staff, Student } from "@/lib/tenant-store";
 
 function hasToken() {
   return Boolean(getApiToken());
+}
+
+/** Upload oversized data-URL photos before DB write (photo_url is short-URL only). */
+async function withUploadedPhoto<T extends { photoUrl?: string }>(row: T): Promise<T> {
+  if (!isDataUrl(row.photoUrl)) return row;
+  const url = await apiUploadDataUrl(row.photoUrl!, "photo", "profile-photo.png");
+  return { ...row, photoUrl: url };
 }
 
 /** Prefer POST (Hostinger-friendly); fall back to PUT on 405. */
@@ -28,23 +37,24 @@ export async function apiUpsertStudent(student: Student): Promise<Student> {
   if (!hasToken()) {
     throw new Error("Not signed in to API — log in again to save student changes");
   }
+  const payload = await withUploadedPhoto(student);
   try {
-    await apiRequest(`/api/students/get.php?id=${encodeURIComponent(student.id)}`);
-    return mutate<Student>("/api/students/update.php", student);
+    await apiRequest(`/api/students/get.php?id=${encodeURIComponent(payload.id)}`);
+    return mutate<Student>("/api/students/update.php", payload);
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) {
       return apiRequest<Student>("/api/students/create.php", {
         method: "POST",
-        body: student,
+        body: payload,
       });
     }
     // get.php failed for other reasons — still try update, then create
     try {
-      return await mutate<Student>("/api/students/update.php", student);
+      return await mutate<Student>("/api/students/update.php", payload);
     } catch {
       return apiRequest<Student>("/api/students/create.php", {
         method: "POST",
-        body: student,
+        body: payload,
       });
     }
   }
@@ -68,22 +78,23 @@ export async function apiUpsertStaff(staff: Staff): Promise<Staff> {
   if (!hasToken()) {
     throw new Error("Not signed in to API — log in again to save staff changes");
   }
+  const payload = await withUploadedPhoto(staff);
   try {
-    await apiRequest(`/api/staff/get.php?id=${encodeURIComponent(staff.id)}`);
-    return mutate<Staff>("/api/staff/update.php", staff);
+    await apiRequest(`/api/staff/get.php?id=${encodeURIComponent(payload.id)}`);
+    return mutate<Staff>("/api/staff/update.php", payload);
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) {
       return apiRequest<Staff>("/api/staff/create.php", {
         method: "POST",
-        body: staff,
+        body: payload,
       });
     }
     try {
-      return await mutate<Staff>("/api/staff/update.php", staff);
+      return await mutate<Staff>("/api/staff/update.php", payload);
     } catch {
       return apiRequest<Staff>("/api/staff/create.php", {
         method: "POST",
-        body: staff,
+        body: payload,
       });
     }
   }

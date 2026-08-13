@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { PlatformInvoicesPanel } from "@/components/admin/PlatformInvoicesPanel";
 import { OrganicCard } from "@/components/ui/organic-card";
 import { sessionCanAccessSettingsTab, useAuth } from "@/lib/auth";
+import { resolveMediaUrl } from "@/lib/media";
 import { schoolInitials, useTenantStore } from "@/lib/tenant-store";
 import { cn, glassCardClass } from "@/lib/utils";
 
@@ -16,6 +17,7 @@ function TenantBillingPage() {
   const { session, hydrated } = useAuth();
   const { schoolDetails } = useTenantStore();
   const tenantName = schoolDetails.name || session?.tenantName || "School";
+  const logoUrl = resolveMediaUrl(schoolDetails.logoUrl);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -38,14 +40,14 @@ function TenantBillingPage() {
       <div className="mb-4 flex items-start gap-3">
         <div
           className={
-            schoolDetails.logoUrl
+            logoUrl
               ? "grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-xl"
               : "grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-br from-[#0F766E] to-[#115E59] text-[11px] font-bold text-white"
           }
         >
-          {schoolDetails.logoUrl ? (
+          {logoUrl ? (
             <img
-              src={schoolDetails.logoUrl}
+              src={logoUrl}
               alt={tenantName}
               className="h-full w-full object-cover"
             />

@@ -164,6 +164,9 @@ export function ImageCropDialog({
         <DialogDescription className="sr-only">{description}</DialogDescription>
 
         <div className="relative h-[min(62vh,360px)] w-full bg-[#E8E8ED]">
+          <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-md bg-black/80 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm">
+            {title}
+          </div>
           {imageSrc ? (
             <Cropper
               image={imageSrc}
@@ -178,7 +181,7 @@ export function ImageCropDialog({
               style={{
                 containerStyle: { background: "#E8E8ED" },
                 cropAreaStyle: {
-                  border: "2px solid rgba(255,255,255,0.95)",
+                  border: "2px solid rgba(59,130,246,0.95)",
                   boxShadow: "0 0 0 9999px rgba(0,0,0,0.35)",
                 },
               }}

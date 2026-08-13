@@ -19,6 +19,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { FeezoBrand } from "@/components/brand/FeezoBrand";
 import { useAuth } from "@/lib/auth";
 
 type NavEntry = {
@@ -71,19 +72,8 @@ export function SuperAdminSidebar() {
 
   return (
     <aside className="sticky top-0 flex h-screen w-64 flex-col border-r border-slate-200 bg-white">
-      <div className="flex items-center gap-2.5 px-5 pb-4 pt-5">
-        <div
-          className="grid h-9 w-9 place-items-center rounded-lg text-sm font-bold text-white"
-          style={{ background: "linear-gradient(135deg,#10B981,#6366F1)" }}
-        >
-          S
-        </div>
-        <div className="leading-tight">
-          <div className="text-[13px] font-semibold text-slate-900">School Accounts</div>
-          <div className="text-[10px] font-medium uppercase tracking-wider text-slate-400">
-            Control Plane
-          </div>
-        </div>
+      <div className="flex items-center px-5 pb-4 pt-5">
+        <FeezoBrand subtitle="Control Plane" markClassName="h-9 w-9" />
       </div>
 
       <div className="mx-3 mb-3 flex items-center gap-1.5 rounded-md border border-slate-200/70 bg-slate-50 px-2 py-1 font-mono text-[10px] text-slate-500">
