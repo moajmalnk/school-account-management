@@ -119,8 +119,14 @@ import {
   normalizeAcademicYearLabel,
   composeClassName,
   normalizeClassConfig,
-  CLASS_BILLING_CYCLES,
-  CLASS_BILLING_CYCLE_HINTS,
+  CLASS_SCHEDULE_CYCLES,
+  CLASS_ONE_TIME_FEE_SUGGESTIONS,
+  withClassFeeSchedule,
+  buildFixedInstallments,
+  installmentLabel,
+  sumFeeSchedule,
+  scheduleSummary,
+  classFeePrefillAmount,
   DEFAULT_STAFF_DOCUMENTS,
   THEME_NAV_PLACEMENT_OPTIONS,
   useTenantStore,
@@ -140,9 +146,6 @@ import {
   currentFeeMonth,
   categoryFeeTermKind,
   formatFeeTermCoverage,
-  classFeeAmountForTerm,
-  splitAmountAcrossTerms,
-  sortFeeTerms,
   filterFeePeriods,
   resolveFeePeriodMode,
   resolvePaymentFeePeriod,
@@ -154,6 +157,7 @@ import {
   upsertStaffAttendanceMonth,
   normalizeStaffAttendanceMonth,
   type ClassBillingCycle,
+  type ClassFeeAmountMode,
   type ClassConfig,
   type Department,
   type FeePeriodKind,
@@ -255,6 +259,7 @@ import {
   formatInr,
   operatingExpenseForPeriod,
   queuedPayables,
+  queuedSalaryPayables,
   salaryPayable,
 } from "@/lib/dashboard-finance";
 import { useDisbursements } from "@/lib/use-disbursements";
@@ -641,6 +646,7 @@ type PremiumDashboardProps = {
   periodPayments: Payment[];
   totalDue: number;
   salaryOutstanding: number;
+  salaryOutstandingStaff: number;
   inHand: number;
   inBank: number;
   totalBalance: number;
@@ -910,6 +916,7 @@ function PremiumDashboard({
   periodPayments,
   totalDue,
   salaryOutstanding,
+  salaryOutstandingStaff,
   inHand,
   inBank,
   totalBalance,
@@ -1084,7 +1091,11 @@ function PremiumDashboard({
                   </span>
                 </div>
                 <div className="min-w-0">
-                  <div className="text-[11px] font-medium text-slate-500">{activeStaff} staff</div>
+                  <div className="text-[11px] font-medium text-slate-500">
+                    {salaryOutstandingStaff > 0
+                      ? `${salaryOutstandingStaff} queued`
+                      : "No payroll created"}
+                  </div>
                   <DashboardAmount value={salaryOutstanding} className="mt-1 text-slate-900" />
                 </div>
               </div>
@@ -1489,9 +1500,13 @@ export function SchoolDashboard() {
     () => operatingExpenseForPeriod(disbursements, period, customRange),
     [disbursements, period, customRange],
   );
+  const salaryOutstandingRows = useMemo(
+    () => queuedSalaryPayables(disbursements),
+    [disbursements],
+  );
   const salaryOutstanding = useMemo(
-    () => salaryPayable(disbursements, liveStaff),
-    [disbursements, liveStaff],
+    () => salaryPayable(disbursements),
+    [disbursements],
   );
 
   const recentReceipts = useMemo(() => filteredPayments.slice(0, 5), [filteredPayments]);
@@ -1518,6 +1533,7 @@ export function SchoolDashboard() {
         periodPayments={filteredPayments}
         totalDue={totalDue}
         salaryOutstanding={salaryOutstanding}
+        salaryOutstandingStaff={salaryOutstandingRows.length}
         inHand={inHand}
         inBank={inBank}
         totalBalance={totalBalance}
@@ -6730,87 +6746,38 @@ function ReceivePayment() {
   const prefill = useMemo(() => {
     if (isExternal) return undefined;
     const lower = category.toLowerCase();
-    const classTuition =
-      tuitionFee && tuitionFee > 0 ? tuitionFee : undefined;
-    const classVehicle =
-      matchedClass && matchedClass.vehicleFeeAmount > 0
-        ? matchedClass.vehicleFeeAmount
-        : undefined;
-    const useTermSplit = matchedClass?.billingCycle === "Term";
-    const useMonthSplit =
-      matchedClass?.billingCycle === "Monthly" && monthsForCategory.length > 0;
-
-    if (feePeriodKind === "term") {
-      // Term-billed classes: divide Class Tier total evenly across terms
-      if (useTermSplit && lower.includes("tuition") && classTuition) {
-        const split = classFeeAmountForTerm(
-          classTuition,
-          termsForCategory,
-          selectedTerm,
-        );
-        if (split && split > 0) return split;
-      }
-      if (
-        useTermSplit &&
-        (lower.includes("vehicle") ||
-          lower.includes("transport") ||
-          lower.includes("bus")) &&
-        (classVehicle || matchedRouteFee)
-      ) {
-        const split = classFeeAmountForTerm(
-          classVehicle ?? matchedRouteFee,
-          termsForCategory,
-          selectedTerm,
-        );
-        if (split && split > 0) return split;
-      }
-      if (selectedTerm?.feeAmount && selectedTerm.feeAmount > 0) {
-        return selectedTerm.feeAmount;
-      }
-      if (lower.includes("tuition")) return classTuition;
-      if (lower.includes("vehicle") || lower.includes("transport") || lower.includes("bus")) {
-        return classVehicle ?? matchedRouteFee;
-      }
-      return undefined;
+    if (matchedClass) {
+      const scheduled = withClassFeeSchedule(matchedClass, feeTerms);
+      const periodList = feePeriodKind === "term" ? termsForCategory : monthsForCategory;
+      const selectedPeriod = feePeriodKind === "term" ? selectedTerm : selectedMonthPeriod;
+      const periodIndex = selectedPeriod
+        ? periodList.findIndex(
+            (p) => p.id === selectedPeriod.id || p.label === selectedPeriod.label,
+          )
+        : -1;
+      const fromSchedule = classFeePrefillAmount(scheduled, {
+        category,
+        periodLabel: feePeriod || selectedPeriod?.label,
+        periodIndex: periodIndex >= 0 ? periodIndex : undefined,
+      });
+      if (fromSchedule && fromSchedule > 0) return fromSchedule;
     }
-
-    // Month mode · Monthly-billed classes split across configured fee months
-    if (useMonthSplit && lower.includes("tuition") && classTuition) {
-      const split = classFeeAmountForTerm(
-        classTuition,
-        monthsForCategory,
-        selectedMonthPeriod,
-      );
-      if (split && split > 0) return split;
-    }
-    if (
-      useMonthSplit &&
-      (lower.includes("vehicle") ||
-        lower.includes("transport") ||
-        lower.includes("bus")) &&
-      (classVehicle || matchedRouteFee)
-    ) {
-      const split = classFeeAmountForTerm(
-        classVehicle ?? matchedRouteFee,
-        monthsForCategory,
-        selectedMonthPeriod,
-      );
-      if (split && split > 0) return split;
-    }
+    if (selectedTerm?.feeAmount && selectedTerm.feeAmount > 0) return selectedTerm.feeAmount;
     if (selectedMonthPeriod?.feeAmount && selectedMonthPeriod.feeAmount > 0) {
       return selectedMonthPeriod.feeAmount;
     }
-    if (lower.includes("tuition")) return classTuition;
-    if (lower.includes("vehicle") || lower.includes("transport") || lower.includes("bus"))
+    if (lower.includes("vehicle") || lower.includes("transport") || lower.includes("bus")) {
       return vehicleFee;
-    return undefined;
+    }
+    return tuitionFee && tuitionFee > 0 ? tuitionFee : undefined;
   }, [
     category,
     tuitionFee,
     vehicleFee,
     matchedClass,
-    matchedRouteFee,
+    feeTerms,
     isExternal,
+    feePeriod,
     feePeriodKind,
     selectedTerm,
     selectedMonthPeriod,
@@ -6820,78 +6787,19 @@ function ReceivePayment() {
 
   const prefillSource = useMemo(() => {
     if (prefill === undefined || prefill <= 0) return null;
-    const termCount = termsForCategory.length;
-    const monthCount = monthsForCategory.length;
-    const useTermSplit = matchedClass?.billingCycle === "Term";
-    const useMonthSplit =
-      matchedClass?.billingCycle === "Monthly" && monthCount > 0;
-    if (
-      feePeriodKind === "term" &&
-      useTermSplit &&
-      matchedClass &&
-      termCount > 0 &&
-      category.toLowerCase().includes("tuition") &&
-      matchedClass.tuitionFeeAmount > 0
-    ) {
-      return `Class Tier · ₹ ${matchedClass.tuitionFeeAmount.toLocaleString("en-IN")} ÷ ${termCount} terms`;
-    }
-    if (
-      feePeriodKind === "term" &&
-      useTermSplit &&
-      matchedClass &&
-      termCount > 0 &&
-      (category.toLowerCase().includes("vehicle") ||
-        category.toLowerCase().includes("transport") ||
-        category.toLowerCase().includes("bus")) &&
-      matchedClass.vehicleFeeAmount > 0
-    ) {
-      return `Class Tier · ₹ ${matchedClass.vehicleFeeAmount.toLocaleString("en-IN")} ÷ ${termCount} terms`;
-    }
-    if (
-      feePeriodKind === "month" &&
-      useMonthSplit &&
-      matchedClass &&
-      category.toLowerCase().includes("tuition") &&
-      matchedClass.tuitionFeeAmount > 0
-    ) {
-      return `Class Tier · ₹ ${matchedClass.tuitionFeeAmount.toLocaleString("en-IN")} ÷ ${monthCount} months`;
-    }
-    if (
-      feePeriodKind === "month" &&
-      useMonthSplit &&
-      matchedClass &&
-      (category.toLowerCase().includes("vehicle") ||
-        category.toLowerCase().includes("transport") ||
-        category.toLowerCase().includes("bus")) &&
-      matchedClass.vehicleFeeAmount > 0
-    ) {
-      return `Class Tier · ₹ ${matchedClass.vehicleFeeAmount.toLocaleString("en-IN")} ÷ ${monthCount} months`;
+    if (matchedClass) {
+      const scheduled = withClassFeeSchedule(matchedClass, feeTerms);
+      const line = scheduled.feeSchedule.find((l) => l.amount === prefill);
+      if (line) {
+        return `${matchedClass.className} · ${line.label}`;
+      }
+      return `Class schedule · ${matchedClass.className}`;
     }
     if (feePeriodKind === "term" && selectedTerm?.feeAmount && selectedTerm.feeAmount > 0) {
-      return `Settings · ${selectedTerm.label} term fee`;
-    }
-    if (category.toLowerCase().includes("tuition") && matchedClass) {
-      return `Class Tier · ${matchedClass.className} tuition (${matchedClass.billingCycle})`;
-    }
-    if (
-      (category.toLowerCase().includes("vehicle") ||
-        category.toLowerCase().includes("transport") ||
-        category.toLowerCase().includes("bus")) &&
-      matchedClass &&
-      matchedClass.vehicleFeeAmount > 0
-    ) {
-      return `Class Tier · ${matchedClass.className} vehicle (${matchedClass.billingCycle})`;
+      return `Settings · ${selectedTerm.label}`;
     }
     return `Settings · ${category}`;
-  }, [
-    prefill,
-    feePeriodKind,
-    selectedTerm,
-    category,
-    matchedClass,
-    termsForCategory.length,
-    monthsForCategory.length,
-  ]);
+  }, [prefill, feePeriodKind, selectedTerm, category, matchedClass, feeTerms]);
 
   useEffect(() => {
     if (prefill !== undefined && prefill > 0) {
@@ -10863,17 +10771,35 @@ function ClassesCard({
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ClassConfig | null>(null);
+  type FeeDraftRow = { id: string; label: string; amount: string; dueDate: string };
+
+  const emptyOneTimeRows = (): FeeDraftRow[] =>
+    CLASS_ONE_TIME_FEE_SUGGESTIONS.map((label, index) => ({
+      id: `ot-${index + 1}`,
+      label,
+      amount: "",
+      dueDate: "",
+    }));
+
   const [form, setForm] = useState<{
     grade: string;
     section: string;
-    tuitionFeeAmount: string;
-    billingCycle: ClassBillingCycle;
+    billingCycle: Extract<ClassBillingCycle, "Monthly" | "Term">;
+    feeAmountMode: ClassFeeAmountMode;
+    installmentCount: string;
+    fixedAmount: string;
+    installments: FeeDraftRow[];
+    oneTimeFees: FeeDraftRow[];
     classTeacherId: string;
   }>({
     grade: "",
     section: "",
-    tuitionFeeAmount: "",
     billingCycle: "Monthly",
+    feeAmountMode: "fixed",
+    installmentCount: "12",
+    fixedAmount: "",
+    installments: [],
+    oneTimeFees: emptyOneTimeRows(),
     classTeacherId: "",
   });
 
@@ -10889,33 +10815,48 @@ function ClassesCard({
   const teacherName = (id?: string) =>
     id ? teacherOptions.find((m) => m.id === id)?.name ?? staff.find((m) => m.id === id)?.name : undefined;
 
-  const tuitionTermCount = filterFeePeriods(feeTerms, "term", "tuition").length;
-  const tuitionMonthCount = filterFeePeriods(feeTerms, "month", "tuition").length;
-  const tuitionPreview = Number(form.tuitionFeeAmount) || 0;
-  const splitPeriodCount =
-    form.billingCycle === "Term"
-      ? tuitionTermCount
-      : form.billingCycle === "Monthly"
-        ? tuitionMonthCount
-        : 0;
-  const splitUnit =
-    form.billingCycle === "Term" ? "term" : form.billingCycle === "Monthly" ? "month" : null;
-  const tuitionPerPeriod =
-    splitUnit && splitPeriodCount > 0 && tuitionPreview > 0
-      ? splitAmountAcrossTerms(tuitionPreview, splitPeriodCount)[0]
-      : undefined;
-  const cycleUnit =
-    form.billingCycle === "Annually"
-      ? "year"
-      : form.billingCycle === "Term"
-        ? "term"
-        : "month";
+  const defaultInstallmentCount = (cycle: Extract<ClassBillingCycle, "Monthly" | "Term">) => {
+    const mode = cycle === "Term" ? "term" : "month";
+    const n = filterFeePeriods(feeTerms, mode, "tuition").length;
+    if (n > 0) return String(n);
+    return cycle === "Term" ? "4" : "12";
+  };
+
+  const schedulePreview = useMemo(() => {
+    const count = Math.max(1, Math.floor(Number(form.installmentCount) || 0));
+    const fixed = Math.max(0, Math.round(Number(form.fixedAmount) || 0));
+    const installmentLines =
+      form.feeAmountMode === "fixed"
+        ? buildFixedInstallments(count, fixed, form.billingCycle)
+        : form.installments.map((row, index) => ({
+            id: row.id || `fl-i-${index + 1}`,
+            kind: "installment" as const,
+            label: row.label.trim() || installmentLabel(index, form.billingCycle),
+            amount: Math.max(0, Math.round(Number(row.amount) || 0)),
+            ...(row.dueDate ? { dueDate: row.dueDate } : {}),
+          }));
+    const oneTimeLines = form.oneTimeFees
+      .map((row, index) => ({
+        id: row.id || `fl-ot-${index + 1}`,
+        kind: "one_time" as const,
+        label: row.label.trim(),
+        amount: Math.max(0, Math.round(Number(row.amount) || 0)),
+        ...(row.dueDate ? { dueDate: row.dueDate } : {}),
+      }))
+      .filter((row) => row.label && row.amount > 0);
+    const feeSchedule = [...installmentLines.filter((l) => l.amount > 0), ...oneTimeLines];
+    return { installmentLines, oneTimeLines, feeSchedule, total: sumFeeSchedule(feeSchedule) };
+  }, [form]);
 
   const emptyForm = () => ({
     grade: "",
     section: "",
-    tuitionFeeAmount: "",
-    billingCycle: "Monthly" as ClassBillingCycle,
+    billingCycle: "Monthly" as Extract<ClassBillingCycle, "Monthly" | "Term">,
+    feeAmountMode: "fixed" as ClassFeeAmountMode,
+    installmentCount: defaultInstallmentCount("Monthly"),
+    fixedAmount: "",
+    installments: [],
+    oneTimeFees: emptyOneTimeRows(),
     classTeacherId: "",
   });
 
@@ -10925,13 +10866,36 @@ function ClassesCard({
     setOpen(true);
   };
   const startEdit = (c: ClassConfig) => {
-    const normalized = normalizeClassConfig(c);
+    const normalized = withClassFeeSchedule(normalizeClassConfig(c), feeTerms);
+    const cycle: Extract<ClassBillingCycle, "Monthly" | "Term"> =
+      normalized.billingCycle === "Term" ? "Term" : "Monthly";
+    const installments = normalized.feeSchedule.filter((l) => l.kind === "installment");
+    const oneTime = normalized.feeSchedule.filter((l) => l.kind === "one_time");
+    const uniqueAmounts = [...new Set(installments.map((l) => l.amount))];
     setEditingId(c.id);
     setForm({
       grade: normalized.grade,
       section: normalized.section,
-      tuitionFeeAmount: String(normalized.tuitionFeeAmount),
-      billingCycle: normalized.billingCycle,
+      billingCycle: cycle,
+      feeAmountMode:
+        normalized.feeAmountMode === "custom" || uniqueAmounts.length > 1 ? "custom" : "fixed",
+      installmentCount: String(installments.length || defaultInstallmentCount(cycle)),
+      fixedAmount: String(installments[0]?.amount || ""),
+      installments: installments.map((line) => ({
+        id: line.id,
+        label: line.label,
+        amount: line.amount ? String(line.amount) : "",
+        dueDate: line.dueDate ?? "",
+      })),
+      oneTimeFees:
+        oneTime.length > 0
+          ? oneTime.map((line) => ({
+              id: line.id,
+              label: line.label,
+              amount: line.amount ? String(line.amount) : "",
+              dueDate: line.dueDate ?? "",
+            }))
+          : emptyOneTimeRows(),
       classTeacherId: normalized.classTeacherId ?? "",
     });
     setOpen(true);
@@ -10941,7 +10905,6 @@ function ClassesCard({
     e.preventDefault();
     const grade = form.grade.trim();
     const section = form.section.trim();
-    const tuitionFeeAmount = Number(form.tuitionFeeAmount);
     if (!grade) {
       toast.error("Class is required");
       return;
@@ -10950,8 +10913,9 @@ function ClassesCard({
       toast.error("Division is required");
       return;
     }
-    if (!tuitionFeeAmount || tuitionFeeAmount <= 0) {
-      toast.error("Total tuition fee must be a positive amount");
+    const { feeSchedule, total } = schedulePreview;
+    if (total <= 0) {
+      toast.error("Add at least one fee amount");
       return;
     }
     const className = composeClassName(grade, section);
@@ -10961,9 +10925,11 @@ function ClassesCard({
       className,
       grade,
       section,
-      tuitionFeeAmount: Math.round(tuitionFeeAmount),
+      tuitionFeeAmount: total,
       vehicleFeeAmount: existing?.vehicleFeeAmount ?? 0,
       billingCycle: form.billingCycle,
+      feeAmountMode: form.feeAmountMode,
+      feeSchedule,
       classTeacherId,
     };
     if (editingId) {
@@ -10981,7 +10947,7 @@ function ClassesCard({
         toast.error(err instanceof Error ? err.message : "Could not sync class"),
       );
       toast.success(`${className} updated`, {
-        description: `Tuition ₹ ${next.tuitionFeeAmount.toLocaleString("en-IN")} · ${next.billingCycle}`,
+        description: `₹ ${next.tuitionFeeAmount.toLocaleString("en-IN")} · ${scheduleSummary({ ...next, id: editingId })}`,
       });
     } else {
       const nextId = `CLS-${(classes.length + 1).toString().padStart(3, "0")}`;
@@ -10991,7 +10957,7 @@ function ClassesCard({
         toast.error(err instanceof Error ? err.message : "Could not sync class"),
       );
       toast.success(`${className} added`, {
-        description: `Billed ${next.billingCycle.toLowerCase()} · prefills Receive Payment`,
+        description: `₹ ${next.tuitionFeeAmount.toLocaleString("en-IN")} · ${scheduleSummary(created)}`,
       });
     }
     setOpen(false);
@@ -11022,7 +10988,7 @@ function ClassesCard({
     <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
       <CardHeader
         title="Class Tier"
-        subtitle="Per-class tuition & billing cycle for Receive Payment"
+        subtitle="Per-class fee schedule for Receive Payment"
         actionLabel="Add Class"
         onAction={startCreate}
       />
@@ -11030,7 +10996,7 @@ function ClassesCard({
       <div className="mt-4 space-y-2">
         {classes.length === 0 && <EmptyRow label="No class tiers configured" />}
         {classes.map((c) => {
-          const normalized = normalizeClassConfig(c);
+          const normalized = withClassFeeSchedule(normalizeClassConfig(c), feeTerms);
           const teacher = teacherName(normalized.classTeacherId);
           return (
             <div
@@ -11043,30 +11009,12 @@ function ClassesCard({
                 </div>
                 <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-black/55 dark:text-zinc-400">
                   <span className="font-mono text-black">
-                    Tuition ₹ {normalized.tuitionFeeAmount.toLocaleString("en-IN")}
-                    {normalized.billingCycle === "Term" &&
-                    filterFeePeriods(feeTerms, "term", "tuition").length > 0
-                      ? ` · ₹ ${splitAmountAcrossTerms(normalized.tuitionFeeAmount, filterFeePeriods(feeTerms, "term", "tuition").length)[0]?.toLocaleString("en-IN")}/term`
-                      : normalized.billingCycle === "Monthly" &&
-                          filterFeePeriods(feeTerms, "month", "tuition").length > 0
-                        ? ` · ₹ ${splitAmountAcrossTerms(normalized.tuitionFeeAmount, filterFeePeriods(feeTerms, "month", "tuition").length)[0]?.toLocaleString("en-IN")}/mo`
-                        : ""}
+                    ₹ {normalized.tuitionFeeAmount.toLocaleString("en-IN")}
                   </span>
-                  {normalized.vehicleFeeAmount > 0 && (
-                    <span className="font-mono text-black/70">
-                      Vehicle ₹ {normalized.vehicleFeeAmount.toLocaleString("en-IN")}
-                      {normalized.billingCycle === "Term" &&
-                      filterFeePeriods(feeTerms, "term", "vehicle").length > 0
-                        ? ` · ₹ ${splitAmountAcrossTerms(normalized.vehicleFeeAmount, filterFeePeriods(feeTerms, "term", "vehicle").length)[0]?.toLocaleString("en-IN")}/term`
-                        : normalized.billingCycle === "Monthly" &&
-                            filterFeePeriods(feeTerms, "month", "vehicle").length > 0
-                          ? ` · ₹ ${splitAmountAcrossTerms(normalized.vehicleFeeAmount, filterFeePeriods(feeTerms, "month", "vehicle").length)[0]?.toLocaleString("en-IN")}/mo`
-                          : ""}
-                    </span>
-                  )}
                   <span className="rounded-full bg-[#CCFBF1] px-2 py-0.5 text-[10.5px] font-semibold text-black">
                     {normalized.billingCycle}
                   </span>
+                  <span className="text-[11px] text-black/50">{scheduleSummary(normalized)}</span>
                   {teacher && (
                     <span className="truncate text-[11px] text-black/50">Teacher · {teacher}</span>
                   )}
@@ -11110,12 +11058,12 @@ function ClassesCard({
       />
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>{editingId ? "Edit Class Tier" : "Add Class Tier"}</DialogTitle>
             <DialogDescription>
-              Set the class and division, choose a billing cycle, then enter total tuition. This
-              amount prefills Finance · Receive Payment.
+              Set the class, then define installments and one-time fees. Totals prefill Finance ·
+              Receive Payment.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={submit} className="space-y-4">
@@ -11165,24 +11113,24 @@ function ClassesCard({
             <div className="space-y-3 rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] p-3.5">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
-                  Fee schedule
+                  Fee structure
                 </p>
                 <p className="mt-1 text-[12px] leading-snug text-black/50">
-                  Amount below is the total tuition charged for one {cycleUnit}. Choose the cycle
-                  first, then enter the fee.
+                  Monthly or term installments, fixed or different amounts, plus optional one-time
+                  fees.
                 </p>
               </div>
 
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                  Billing Cycle
+                  Billing
                 </Label>
                 <div
                   role="tablist"
                   aria-label="Billing cycle"
                   className="flex border-b border-[#E8E8EA] dark:border-white/10"
                 >
-                  {CLASS_BILLING_CYCLES.map((cycle) => {
+                  {CLASS_SCHEDULE_CYCLES.map((cycle) => {
                     const active = form.billingCycle === cycle;
                     return (
                       <button
@@ -11190,7 +11138,18 @@ function ClassesCard({
                         type="button"
                         role="tab"
                         aria-selected={active}
-                        onClick={() => setForm({ ...form, billingCycle: cycle })}
+                        onClick={() => {
+                          const count = defaultInstallmentCount(cycle);
+                          setForm((prev) => ({
+                            ...prev,
+                            billingCycle: cycle,
+                            installmentCount: prev.installmentCount || count,
+                            installments: prev.installments.map((row, index) => ({
+                              ...row,
+                              label: installmentLabel(index, cycle),
+                            })),
+                          }));
+                        }}
                         className={cn(
                           "relative min-w-0 flex-1 px-2 py-2.5 text-center text-[12.5px] font-semibold tracking-tight transition-colors",
                           active
@@ -11206,59 +11165,262 @@ function ClassesCard({
                     );
                   })}
                 </div>
-                <p className="text-[11px] leading-snug text-black/45">
-                  {CLASS_BILLING_CYCLE_HINTS[form.billingCycle]}
-                </p>
               </div>
 
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                  Total Tuition Fee (₹)
+                  Amounts
                 </Label>
-                <Input
-                  inputMode="numeric"
-                  value={form.tuitionFeeAmount}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      tuitionFeeAmount: e.target.value.replace(/[^0-9]/g, ""),
-                    })
-                  }
-                  placeholder="0"
-                  className="font-mono bg-white"
-                />
-                <p className="text-[10.5px] text-black/40">Required · Tuition Fee category</p>
+                <div className="flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
+                  {(
+                    [
+                      { key: "fixed" as const, label: "Fixed" },
+                      { key: "custom" as const, label: "Different" },
+                    ] as const
+                  ).map((option) => {
+                    const active = form.feeAmountMode === option.key;
+                    return (
+                      <button
+                        key={option.key}
+                        type="button"
+                        onClick={() => {
+                          setForm((prev) => {
+                            if (option.key === "custom" && prev.installments.length === 0) {
+                              const count = Math.max(1, Math.floor(Number(prev.installmentCount) || 0));
+                              const amount = prev.fixedAmount;
+                              return {
+                                ...prev,
+                                feeAmountMode: "custom",
+                                installments: Array.from({ length: count }, (_, index) => ({
+                                  id: `fl-i-${index + 1}`,
+                                  label: installmentLabel(index, prev.billingCycle),
+                                  amount,
+                                  dueDate: "",
+                                })),
+                              };
+                            }
+                            return { ...prev, feeAmountMode: option.key };
+                          });
+                        }}
+                        className={cn(
+                          "flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors",
+                          active ? "bg-[#0F766E] text-white" : "text-black/65 hover:text-black",
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              {tuitionPreview > 0 && (
-                <div className="space-y-2 rounded-lg border border-[#D1FAE5] bg-white px-3 py-2.5">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-[12px] text-black/55 dark:text-zinc-400">
-                      {splitUnit ? "Annual total" : `Total per ${cycleUnit}`}
-                    </div>
-                    <div className="font-mono text-[14px] font-semibold text-[#0F766E]">
-                      ₹ {tuitionPreview.toLocaleString("en-IN")}
-                    </div>
+              {form.feeAmountMode === "fixed" ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                      {form.billingCycle === "Term" ? "Terms" : "Installments"}
+                    </Label>
+                    <Input
+                      inputMode="numeric"
+                      value={form.installmentCount}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          installmentCount: e.target.value.replace(/[^0-9]/g, ""),
+                        })
+                      }
+                      placeholder={form.billingCycle === "Term" ? "4" : "12"}
+                      className="font-mono bg-white"
+                    />
                   </div>
-                  {splitUnit && tuitionPerPeriod !== undefined ? (
-                    <div className="border-t border-[#D1FAE5] pt-2 text-[11.5px] leading-snug text-black/55 dark:text-zinc-400">
-                      Auto-split across fee {splitUnit}s
-                      <div className="mt-1 font-mono text-[12px] text-black">
-                        Tuition ₹ {tuitionPreview.toLocaleString("en-IN")} ÷ {splitPeriodCount} ={" "}
-                        <span className="font-semibold text-[#0F766E]">
-                          ₹ {tuitionPerPeriod.toLocaleString("en-IN")}
-                        </span>{" "}
-                        / {splitUnit}
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                      Amount each (₹)
+                    </Label>
+                    <Input
+                      inputMode="numeric"
+                      value={form.fixedAmount}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          fixedAmount: e.target.value.replace(/[^0-9]/g, ""),
+                        })
+                      }
+                      placeholder="0"
+                      className="font-mono bg-white"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {form.installments.map((row, index) => (
+                    <div key={row.id} className="grid grid-cols-[1fr_7rem_auto] items-end gap-2">
+                      <div className="space-y-1">
+                        {index === 0 && (
+                          <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                            Label
+                          </Label>
+                        )}
+                        <Input
+                          value={row.label}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              installments: form.installments.map((item) =>
+                                item.id === row.id ? { ...item, label: e.target.value } : item,
+                              ),
+                            })
+                          }
+                          className="h-9 bg-white text-[13px]"
+                        />
                       </div>
-                      {splitPeriodCount === 0 && (
-                        <p className="mt-1 text-[10.5px] text-amber-700">
-                          Add fee {splitUnit}s in Settings · Fees to enable the split.
-                        </p>
-                      )}
+                      <div className="space-y-1">
+                        {index === 0 && (
+                          <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                            Amount
+                          </Label>
+                        )}
+                        <Input
+                          inputMode="numeric"
+                          value={row.amount}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              installments: form.installments.map((item) =>
+                                item.id === row.id
+                                  ? { ...item, amount: e.target.value.replace(/[^0-9]/g, "") }
+                                  : item,
+                              ),
+                            })
+                          }
+                          className="h-9 font-mono bg-white"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        aria-label={`Remove ${row.label}`}
+                        onClick={() =>
+                          setForm({
+                            ...form,
+                            installments: form.installments.filter((item) => item.id !== row.id),
+                            installmentCount: String(
+                              Math.max(1, form.installments.length - 1),
+                            ),
+                          })
+                        }
+                        className="mb-0.5 grid h-9 w-9 place-items-center rounded-full text-black/40 hover:bg-[#FEE2E2] hover:text-[#EF4444]"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
                     </div>
-                  ) : null}
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setForm({
+                        ...form,
+                        installments: [
+                          ...form.installments,
+                          {
+                            id: `fl-i-${form.installments.length + 1}-${Date.now()}`,
+                            label: installmentLabel(form.installments.length, form.billingCycle),
+                            amount: form.fixedAmount,
+                            dueDate: "",
+                          },
+                        ],
+                        installmentCount: String(form.installments.length + 1),
+                      })
+                    }
+                    className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#0F766E] hover:underline"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add installment
+                  </button>
                 </div>
               )}
+
+              <div className="space-y-2 border-t border-[#E8E8EA] pt-3">
+                <div className="flex items-center justify-between gap-2">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                    One-time fees
+                  </Label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setForm({
+                        ...form,
+                        oneTimeFees: [
+                          ...form.oneTimeFees,
+                          {
+                            id: `ot-${Date.now()}`,
+                            label: "",
+                            amount: "",
+                            dueDate: "",
+                          },
+                        ],
+                      })
+                    }
+                    className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#0F766E] hover:underline"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add fee
+                  </button>
+                </div>
+                {form.oneTimeFees.map((row) => (
+                  <div key={row.id} className="grid grid-cols-[1fr_7rem_auto] items-center gap-2">
+                    <Input
+                      value={row.label}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          oneTimeFees: form.oneTimeFees.map((item) =>
+                            item.id === row.id ? { ...item, label: e.target.value } : item,
+                          ),
+                        })
+                      }
+                      placeholder="Admission Fee"
+                      className="h-9 bg-white text-[13px]"
+                    />
+                    <Input
+                      inputMode="numeric"
+                      value={row.amount}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          oneTimeFees: form.oneTimeFees.map((item) =>
+                            item.id === row.id
+                              ? { ...item, amount: e.target.value.replace(/[^0-9]/g, "") }
+                              : item,
+                          ),
+                        })
+                      }
+                      placeholder="0"
+                      className="h-9 font-mono bg-white"
+                    />
+                    <button
+                      type="button"
+                      aria-label={`Remove ${row.label || "fee"}`}
+                      onClick={() =>
+                        setForm({
+                          ...form,
+                          oneTimeFees: form.oneTimeFees.filter((item) => item.id !== row.id),
+                        })
+                      }
+                      className="grid h-9 w-9 place-items-center rounded-full text-black/40 hover:bg-[#FEE2E2] hover:text-[#EF4444]"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+                <p className="text-[10.5px] text-black/40">Leave amount blank to skip a row.</p>
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg border border-[#D1FAE5] bg-white px-3 py-2.5">
+                <span className="text-[12px] text-black/55">Class total</span>
+                <span className="font-mono text-[15px] font-semibold text-[#0F766E]">
+                  ₹ {schedulePreview.total.toLocaleString("en-IN")}
+                </span>
+              </div>
             </div>
 
             <DialogFooter>
@@ -13565,33 +13727,6 @@ function FeeTermsCard({
     return () => window.clearTimeout(id);
   }, [detailId]);
 
-  const splitExample = useMemo(() => {
-    const mode: FeePeriodMode = filterMode === "month" ? "month" : "term";
-    const cycle = mode === "month" ? "Monthly" : "Term";
-    const sample = classes
-      .map((c) => normalizeClassConfig(c))
-      .find((c) => c.billingCycle === cycle && c.tuitionFeeAmount > 0);
-    const tuitionPeriods = filterFeePeriods(feeTerms, mode, "tuition").length;
-    const vehiclePeriods = filterFeePeriods(feeTerms, mode, "vehicle").length;
-    if (!sample || tuitionPeriods <= 0) return null;
-    const perPeriod = splitAmountAcrossTerms(sample.tuitionFeeAmount, tuitionPeriods)[0];
-    if (!perPeriod) return null;
-    return {
-      mode,
-      unit: mode === "month" ? "month" : "term",
-      className: sample.className,
-      total: sample.tuitionFeeAmount,
-      periodCount: tuitionPeriods,
-      perPeriod,
-      vehicleTotal: sample.vehicleFeeAmount,
-      vehiclePerPeriod:
-        sample.vehicleFeeAmount > 0 && vehiclePeriods > 0
-          ? splitAmountAcrossTerms(sample.vehicleFeeAmount, vehiclePeriods)[0]
-          : undefined,
-      vehiclePeriodCount: vehiclePeriods,
-    };
-  }, [classes, feeTerms, filterMode]);
-
   const detailMeta = useMemo(() => {
     if (!detailTerm) return null;
     const mode = resolveFeePeriodMode(detailTerm.periodMode);
@@ -13601,24 +13736,23 @@ function FeeTermsCard({
     const coverage =
       detailTerm.coverage ||
       formatFeeTermCoverage(detailTerm.startDate, detailTerm.endDate);
-    const cycle = mode === "month" ? "Monthly" : "Term";
+    const needle = detailTerm.label.trim().toLowerCase();
     const termClasses = classes
-      .map((c) => normalizeClassConfig(c))
-      .filter((c) => c.billingCycle === cycle)
-      .filter((c) =>
-        detailTerm.kind === "tuition" ? c.tuitionFeeAmount > 0 : c.vehicleFeeAmount > 0,
-      )
+      .map((c) => withClassFeeSchedule(normalizeClassConfig(c), feeTerms))
       .map((c) => {
-        const total =
-          detailTerm.kind === "tuition" ? c.tuitionFeeAmount : c.vehicleFeeAmount;
-        const perTerm = classFeeAmountForTerm(total, orderedSameKind, detailTerm);
+        const line = c.feeSchedule.find(
+          (l) => l.amount > 0 && l.label.trim().toLowerCase() === needle,
+        );
+        if (!line) return null;
         return {
           id: c.id,
           className: c.className,
-          total,
-          perTerm: perTerm ?? 0,
+          total: c.tuitionFeeAmount,
+          amount: line.amount,
+          label: line.label,
         };
-      });
+      })
+      .filter((row): row is NonNullable<typeof row> => row !== null);
     return {
       term: detailTerm,
       mode,
@@ -13629,7 +13763,6 @@ function FeeTermsCard({
       coverage,
       orderedSameKind,
       termClasses,
-      cycle,
     };
   }, [detailTerm, feeTerms, classes]);
 
@@ -13693,15 +13826,6 @@ function FeeTermsCard({
       ...(coverage ? { coverage } : {}),
     };
 
-    const kindCountAfter =
-      feeTerms.filter(
-        (t) =>
-          resolveFeePeriodMode(t.periodMode) === periodMode &&
-          t.kind === kind &&
-          t.id !== editingId,
-      ).length + 1;
-    const unit = periodMode === "month" ? "months" : "terms";
-
     if (editingId) {
       setFeeTerms((prev) =>
         prev.map((t) =>
@@ -13720,13 +13844,7 @@ function FeeTermsCard({
         ),
       );
       toast.success(`${FEE_PERIOD_MODE_LABELS[periodMode]} updated · ${nextLabel}`, {
-        description: [
-          FEE_TERM_KIND_LABELS[kind],
-          coverage,
-          `Class totals split ÷ ${kindCountAfter} ${unit}`,
-        ]
-          .filter(Boolean)
-          .join(" · "),
+        description: [FEE_TERM_KIND_LABELS[kind], coverage].filter(Boolean).join(" · "),
       });
     } else {
       const maxNum = feeTerms.reduce((max, t) => {
@@ -13736,7 +13854,7 @@ function FeeTermsCard({
       const nextId = `FT-${(maxNum + 1).toString().padStart(3, "0")}`;
       setFeeTerms((prev) => [...prev, { id: nextId, ...nextTerm }]);
       toast.success(`${FEE_PERIOD_MODE_LABELS[periodMode]} added · ${nextLabel}`, {
-        description: `Class Tier totals now split across ${kindCountAfter} ${FEE_TERM_KIND_LABELS[kind].toLowerCase()} ${unit}`,
+        description: `${FEE_TERM_KIND_LABELS[kind]} coverage window`,
       });
     }
     setOpen(false);
@@ -13748,19 +13866,11 @@ function FeeTermsCard({
     const deletedId = pendingDelete.id;
     setFeeTerms((prev) => prev.filter((t) => t.id !== deletedId));
     toast.error(`${pendingDelete.label} removed`, {
-      description: "Existing receipts retain the label · splits recalculate",
+      description: "Existing receipts retain the label",
     });
     setPendingDelete(null);
     if (detailId === deletedId) setDetailId(null);
   };
-
-  const formKindCount =
-    feeTerms.filter(
-      (t) =>
-        resolveFeePeriodMode(t.periodMode) === periodMode &&
-        t.kind === kind &&
-        t.id !== editingId,
-    ).length + 1;
 
   const editDialog = (
     <Dialog
@@ -13778,8 +13888,8 @@ function FeeTermsCard({
               : `Add Fee ${FEE_PERIOD_MODE_LABELS[periodMode]}`}
           </DialogTitle>
           <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
-            Define the billing window. Class Tier totals auto-split evenly across all{" "}
-            {periodMode === "month" ? "months" : "terms"} of this fee type.
+            Define the billing window for this {periodMode}. Class fee amounts are set on each
+            class schedule.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="mt-4 space-y-4">
@@ -13877,15 +13987,10 @@ function FeeTermsCard({
             </p>
           </div>
           <div className="rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] px-3.5 py-3 text-[12px] text-black/60">
-            <p className="font-semibold text-black/80">No per-{periodMode} amount needed</p>
-            <p className="mt-1 font-mono text-[11.5px] text-black">
-              Will split across {formKindCount} {periodMode}
-              {formKindCount === 1 ? "" : "s"}
-              {splitExample &&
-              splitExample.mode === periodMode &&
-              kind === "tuition"
-                ? ` · e.g. ₹ ${splitExample.total.toLocaleString("en-IN")} → ₹ ${splitAmountAcrossTerms(splitExample.total, formKindCount)[0]?.toLocaleString("en-IN") ?? "—"} each`
-                : ""}
+            <p className="font-semibold text-black/80">Date window only</p>
+            <p className="mt-1 text-[11.5px] text-black/55">
+              Amounts live on each class fee schedule. This {periodMode} is a coverage date for
+              receipts and due dates.
             </p>
           </div>
           <DialogFooter className="flex-row justify-end gap-2">
@@ -13910,7 +14015,7 @@ function FeeTermsCard({
       title={`Delete Fee ${pendingDelete ? FEE_PERIOD_MODE_LABELS[resolveFeePeriodMode(pendingDelete.periodMode)] : "Period"}`}
       description={
         pendingDelete
-          ? `Remove "${pendingDelete.label}"? Class Tier splits will recalculate across the remaining ${resolveFeePeriodMode(pendingDelete.periodMode) === "month" ? "months" : "terms"}.`
+          ? `Remove "${pendingDelete.label}"? Class fee schedules are unchanged.`
           : "Are you sure you want to delete this fee period?"
       }
       onConfirm={confirmDelete}
@@ -13918,7 +14023,7 @@ function FeeTermsCard({
   );
 
   if (detailMeta) {
-    const { term, mode, unit, unitPlural, kindCount, termIndex, coverage, orderedSameKind, termClasses, cycle } =
+    const { term, mode, unit, unitPlural, kindCount, termIndex, coverage, orderedSameKind, termClasses } =
       detailMeta;
     return (
       <>
@@ -13964,7 +14069,7 @@ function FeeTermsCard({
                         {FEE_PERIOD_MODE_LABELS[mode]}
                       </span>
                       <span className="rounded-full bg-[#ECFDF5] px-2.5 py-0.5 text-[10px] font-semibold text-[#0F766E] dark:bg-[#0F766E]/25 dark:text-[#5EEAD4]">
-                        {termIndex >= 0 ? termIndex + 1 : "—"}/{kindCount || 1} of class total
+                        {termIndex >= 0 ? termIndex + 1 : "—"} of {kindCount || 1}
                       </span>
                     </div>
                     <p className="mt-0.5 text-[12px] text-black/50 dark:text-zinc-400">
@@ -14007,10 +14112,10 @@ function FeeTermsCard({
             </div>
             <div className="col-span-6 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4 dark:border-white/10 dark:bg-zinc-800/80 lg:col-span-3">
               <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
-                Split Share
+                Sequence
               </div>
               <div className="mt-1.5 font-mono text-[18px] font-bold text-[#0F766E] dark:text-[#2DD4BF]">
-                1/{kindCount || 1}
+                {termIndex >= 0 ? termIndex + 1 : "—"}/{kindCount || 1}
               </div>
             </div>
             <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4 dark:border-white/10 dark:bg-zinc-800/80 sm:col-span-6 lg:col-span-6">
@@ -14026,10 +14131,10 @@ function FeeTermsCard({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
-                    Class Tier amounts for this {unit}
+                    Class schedules using {term.label}
                   </div>
                   <p className="mt-1 text-[12px] text-black/50 dark:text-zinc-400">
-                    {cycle}-billed classes · total ÷ {kindCount || 1} {unitPlural}
+                    Amounts come from each class fee structure
                   </p>
                 </div>
                 <span className="font-mono text-[10.5px] text-black/45 dark:text-zinc-500">
@@ -14038,8 +14143,7 @@ function FeeTermsCard({
               </div>
               {termClasses.length === 0 ? (
                 <p className="mt-3 text-[13px] text-black/45 dark:text-zinc-400">
-                  No {cycle}-billed class tiers with a{" "}
-                  {term.kind === "tuition" ? "tuition" : "vehicle"} fee yet.
+                  No class schedules include a line named {term.label}.
                 </p>
               ) : (
                 <ul className="mt-3 space-y-2">
@@ -14053,12 +14157,12 @@ function FeeTermsCard({
                           {row.className}
                         </div>
                         <div className="mt-0.5 font-mono text-[11px] text-black/45 dark:text-zinc-400">
-                          Total ₹ {row.total.toLocaleString("en-IN")} ÷ {kindCount || 1}
+                          {row.label} · class total ₹ {row.total.toLocaleString("en-IN")}
                         </div>
                       </div>
                       <div className="shrink-0 text-right">
                         <div className="font-mono text-[15px] font-bold text-[#0F766E] dark:text-[#2DD4BF]">
-                          ₹ {row.perTerm.toLocaleString("en-IN")}
+                          ₹ {row.amount.toLocaleString("en-IN")}
                         </div>
                         <div className="text-[10px] font-medium uppercase tracking-wider text-black/40 dark:text-zinc-500">
                           This {unit}
@@ -14142,30 +14246,17 @@ function FeeTermsCard({
     <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
       <CardHeader
         title="Fee Periods"
-        subtitle={`${termCount} terms · ${monthCount} months · Class Tier totals auto-split`}
+        subtitle={`${termCount} terms · ${monthCount} months · date windows for receipts`}
         actionLabel="Add Period"
         onAction={startCreate}
       />
 
-      <div className="mt-3 rounded-xl border border-[#D1FAE5] bg-[#F0FDFA] px-3.5 py-3 text-[12px] leading-snug text-black/65 dark:border-[#0F766E]/35 dark:bg-[#0F766E]/20 dark:text-zinc-200">
-        <p className="font-semibold text-[#0F766E] dark:text-[#5EEAD4]">Auto-split from Class Tier</p>
+      <div className="mt-3 rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] px-3.5 py-3 text-[12px] leading-snug text-black/65 dark:border-white/10 dark:bg-zinc-900/50 dark:text-zinc-200">
+        <p className="font-semibold text-black dark:text-zinc-100">Coverage windows</p>
         <p className="mt-1">
-          Terms split Term-billed classes · Months split Monthly-billed classes. Example: ₹ 20,000
-          ÷ 4 terms = ₹ 5,000 each · ₹ 24,000 ÷ 12 months = ₹ 2,000 each.
+          Fee amounts are set on each class. Periods here are date ranges used on receipts and due
+          dates.
         </p>
-        {splitExample ? (
-          <p className="mt-2 font-mono text-[11.5px] text-black dark:text-zinc-100">
-            {splitExample.className}: ₹ {splitExample.total.toLocaleString("en-IN")} ÷{" "}
-            {splitExample.periodCount} ={" "}
-            <span className="font-semibold text-[#0F766E] dark:text-[#2DD4BF]">
-              ₹ {splitExample.perPeriod.toLocaleString("en-IN")}
-            </span>
-            /{splitExample.unit}
-            {splitExample.vehiclePerPeriod
-              ? ` · Vehicle ₹ ${splitExample.vehicleTotal.toLocaleString("en-IN")} ÷ ${splitExample.vehiclePeriodCount} = ₹ ${splitExample.vehiclePerPeriod.toLocaleString("en-IN")}/${splitExample.unit}`
-              : ""}
-          </p>
-        ) : null}
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 sm:gap-4">
@@ -14268,7 +14359,6 @@ function FeeTermsCard({
           const mode = resolveFeePeriodMode(term.periodMode);
           const coverage =
             term.coverage || formatFeeTermCoverage(term.startDate, term.endDate);
-          const kindCount = filterFeePeriods(feeTerms, mode, term.kind).length;
           return (
             <div
               key={term.id}
@@ -14305,8 +14395,8 @@ function FeeTermsCard({
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-black/55 dark:bg-white/10 dark:text-zinc-300">
                       {FEE_PERIOD_MODE_LABELS[mode]}
                     </span>
-                    <span className="rounded-full bg-[#ECFDF5] px-2 py-0.5 text-[10px] font-semibold text-[#0F766E] dark:bg-[#0F766E]/25 dark:text-[#5EEAD4]">
-                      1/{kindCount || 1} of class total
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-black/55 dark:bg-white/10 dark:text-zinc-300">
+                      {FEE_TERM_KIND_LABELS[term.kind]}
                     </span>
                   </div>
                   <div className="truncate text-[11px] text-black/45 dark:text-zinc-400">

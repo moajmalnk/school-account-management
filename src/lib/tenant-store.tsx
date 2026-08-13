@@ -781,7 +781,7 @@ export type FeeTerm = {
   startDate?: string;
   /** Coverage end · ISO YYYY-MM-DD */
   endDate?: string;
-  /** Optional school-wide override · normally unused — Class Tier totals auto-split across periods */
+  /** Optional school-wide override · unused when the class has its own fee schedule */
   feeAmount?: number;
   /** Display coverage · auto-built from dates when present */
   coverage?: string;
@@ -798,9 +798,8 @@ export const FEE_PERIOD_MODE_LABELS: Record<FeePeriodMode, string> = {
 };
 
 /**
- * Split a class-tier total evenly across N periods (terms or months).
+ * Even split used only to migrate classes that predate per-class fee schedules.
  * Remainder rupees go to the earliest periods so the parts always sum to `total`.
- * e.g. 20000 / 4 → [5000, 5000, 5000, 5000]; 20001 / 4 → [5001, 5000, 5000, 5000]
  */
 export function splitAmountAcrossTerms(total: number, termCount: number): number[] {
   if (!Number.isFinite(total) || total <= 0 || !Number.isFinite(termCount) || termCount <= 0) {
@@ -1005,11 +1004,34 @@ export const CLASS_BILLING_CYCLES: ClassBillingCycle[] = [
   "Annually",
 ];
 
+/** Cycles offered when creating a class (Annually is migrated to a single installment). */
+export const CLASS_SCHEDULE_CYCLES: Array<Extract<ClassBillingCycle, "Monthly" | "Term">> = [
+  "Monthly",
+  "Term",
+];
+
 export const CLASS_BILLING_CYCLE_HINTS: Record<ClassBillingCycle, string> = {
-  Monthly: "Total is split evenly across Fee Months (e.g. ₹24,000 ÷ 12 months = ₹2,000 each)",
-  Term: "Total is split evenly across Fee Terms (e.g. ₹20,000 ÷ 4 terms = ₹5,000 each)",
-  Annually: "Amount charged once per academic year",
+  Monthly: "Monthly installments — same amount each month, or different.",
+  Term: "Term installments — same amount each term, or different.",
+  Annually: "One charge for the academic year",
 };
+
+export type ClassFeeLineKind = "installment" | "one_time";
+export type ClassFeeAmountMode = "fixed" | "custom";
+
+export type ClassFeeLine = {
+  id: string;
+  kind: ClassFeeLineKind;
+  label: string;
+  amount: number;
+  dueDate?: string;
+};
+
+export const CLASS_ONE_TIME_FEE_SUGGESTIONS = [
+  "Admission Fee",
+  "Registration Fee",
+  "Exam Fee",
+] as const;
 
 export type ClassConfig = {
   id: string;
@@ -1019,12 +1041,14 @@ export type ClassConfig = {
   grade: string;
   /** Section / division · e.g. "A", "B" */
   section: string;
-  /** Total tuition for one billing cycle */
+  /** Sum of feeSchedule lines (kept for older API columns) */
   tuitionFeeAmount: number;
-  /** Transport / vehicle fee for one billing cycle · 0 when not applicable */
+  /** Transport / vehicle fee · 0 when not applicable */
   vehicleFeeAmount: number;
-  /** How often tuition + vehicle amounts are billed */
+  /** How installments are labeled and billed */
   billingCycle: ClassBillingCycle;
+  feeAmountMode: ClassFeeAmountMode;
+  feeSchedule: ClassFeeLine[];
   /** Optional class teacher from staff roster */
   classTeacherId?: string;
 };
@@ -1054,6 +1078,217 @@ export function normalizeClassBillingCycle(
   return "Monthly";
 }
 
+export function normalizeClassFeeAmountMode(value: unknown): ClassFeeAmountMode {
+  return value === "custom" ? "custom" : "fixed";
+}
+
+export function classFeeLineOrdinal(index: number): string {
+  const n = index + 1;
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1:
+      return `${n}st`;
+    case 2:
+      return `${n}nd`;
+    case 3:
+      return `${n}rd`;
+    default:
+      return `${n}th`;
+  }
+}
+
+export function installmentLabel(index: number, cycle: ClassBillingCycle): string {
+  if (cycle === "Term") return `Term ${index + 1}`;
+  if (cycle === "Annually") return "Annual Fee";
+  return `${classFeeLineOrdinal(index)} Installment`;
+}
+
+export function sumFeeSchedule(lines: ClassFeeLine[]): number {
+  return lines.reduce((sum, line) => sum + Math.max(0, Math.round(line.amount) || 0), 0);
+}
+
+export function normalizeClassFeeLine(raw: unknown, index: number): ClassFeeLine | null {
+  if (!raw || typeof raw !== "object") return null;
+  const row = raw as Record<string, unknown>;
+  const label = typeof row.label === "string" ? row.label.trim() : "";
+  const amountRaw = row.amount;
+  const amount =
+    typeof amountRaw === "number" && Number.isFinite(amountRaw)
+      ? Math.max(0, Math.round(amountRaw))
+      : typeof amountRaw === "string"
+        ? Math.max(0, Math.round(Number(amountRaw.replace(/[^0-9.-]/g, ""))) || 0)
+        : 0;
+  if (!label && amount <= 0) return null;
+  const dueDate =
+    typeof row.dueDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(row.dueDate.trim())
+      ? row.dueDate.trim()
+      : undefined;
+  const kind: ClassFeeLineKind = row.kind === "one_time" ? "one_time" : "installment";
+  return {
+    id: typeof row.id === "string" && row.id.trim() ? row.id.trim() : `fl-${index + 1}`,
+    kind,
+    label: label || installmentLabel(index, "Monthly"),
+    amount,
+    ...(dueDate ? { dueDate } : {}),
+  };
+}
+
+export function parseClassFeeSchedule(raw: unknown): ClassFeeLine[] {
+  let value: unknown = raw;
+  if (typeof value === "string" && value.trim()) {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((row, index) => normalizeClassFeeLine(row, index))
+    .filter((row): row is ClassFeeLine => row !== null);
+}
+
+export function buildFixedInstallments(
+  count: number,
+  amountEach: number,
+  cycle: ClassBillingCycle,
+): ClassFeeLine[] {
+  const n = Math.max(0, Math.floor(count));
+  const amount = Math.max(0, Math.round(amountEach) || 0);
+  return Array.from({ length: n }, (_, index) => ({
+    id: `fl-i-${index + 1}`,
+    kind: "installment" as const,
+    label: installmentLabel(index, cycle),
+    amount,
+  }));
+}
+
+export function migrateClassFeeSchedule(
+  cls: Pick<ClassConfig, "tuitionFeeAmount" | "vehicleFeeAmount" | "billingCycle">,
+  feeTerms: FeeTerm[],
+): ClassFeeLine[] {
+  const lines: ClassFeeLine[] = [];
+  const total = Math.max(0, Math.round(cls.tuitionFeeAmount) || 0);
+  if (total > 0) {
+    if (cls.billingCycle === "Annually") {
+      lines.push({
+        id: "fl-i-1",
+        kind: "installment",
+        label: "Annual Fee",
+        amount: total,
+      });
+    } else {
+      const mode: FeePeriodMode = cls.billingCycle === "Monthly" ? "month" : "term";
+      const periods = filterFeePeriods(feeTerms, mode, "tuition");
+      const parts =
+        periods.length > 0 ? splitAmountAcrossTerms(total, periods.length) : [total];
+      const labels =
+        periods.length > 0
+          ? periods.map((p) => p.label)
+          : parts.map((_, i) => installmentLabel(i, cls.billingCycle));
+      parts.forEach((amount, index) => {
+        lines.push({
+          id: `fl-i-${index + 1}`,
+          kind: "installment",
+          label: labels[index] ?? installmentLabel(index, cls.billingCycle),
+          amount,
+          ...(periods[index]?.startDate ? { dueDate: periods[index].startDate } : {}),
+        });
+      });
+    }
+  }
+  if (cls.vehicleFeeAmount > 0) {
+    lines.push({
+      id: "fl-ot-vehicle",
+      kind: "one_time",
+      label: "Vehicle Fee",
+      amount: Math.round(cls.vehicleFeeAmount),
+    });
+  }
+  return lines;
+}
+
+export function withClassFeeSchedule(cls: ClassConfig, feeTerms: FeeTerm[] = []): ClassConfig {
+  if (cls.feeSchedule.length > 0) {
+    const tuitionFeeAmount = sumFeeSchedule(cls.feeSchedule) || cls.tuitionFeeAmount;
+    return tuitionFeeAmount === cls.tuitionFeeAmount ? cls : { ...cls, tuitionFeeAmount };
+  }
+  if (cls.tuitionFeeAmount <= 0 && cls.vehicleFeeAmount <= 0) return cls;
+  const feeSchedule = migrateClassFeeSchedule(cls, feeTerms);
+  const uniqueInstallments = [
+    ...new Set(feeSchedule.filter((l) => l.kind === "installment").map((l) => l.amount)),
+  ];
+  return {
+    ...cls,
+    feeSchedule,
+    feeAmountMode: uniqueInstallments.length > 1 ? "custom" : "fixed",
+    tuitionFeeAmount: sumFeeSchedule(feeSchedule) || cls.tuitionFeeAmount,
+  };
+}
+
+export function classFeePrefillAmount(
+  cls: ClassConfig,
+  opts: {
+    category: string;
+    periodLabel?: string;
+    periodIndex?: number;
+  },
+): number | undefined {
+  const lines = cls.feeSchedule.filter((line) => line.amount > 0);
+  const cat = opts.category.toLowerCase();
+  if (cat.includes("vehicle") || cat.includes("transport") || cat.includes("bus")) {
+    const vehicle = lines.find(
+      (line) => line.kind === "one_time" && /vehicle|transport|bus/i.test(line.label),
+    );
+    if (vehicle) return vehicle.amount;
+    return cls.vehicleFeeAmount > 0 ? cls.vehicleFeeAmount : undefined;
+  }
+  const oneTime = lines.find((line) => {
+    if (line.kind !== "one_time") return false;
+    const label = line.label.toLowerCase();
+    return (
+      (cat.includes("admission") && label.includes("admission")) ||
+      (cat.includes("registration") && label.includes("registration")) ||
+      (cat.includes("exam") && label.includes("exam"))
+    );
+  });
+  if (oneTime) return oneTime.amount;
+
+  const installments = lines.filter((line) => line.kind === "installment");
+  if (opts.periodLabel) {
+    const needle = opts.periodLabel.trim().toLowerCase();
+    const exact = installments.find((line) => line.label.trim().toLowerCase() === needle);
+    if (exact) return exact.amount;
+  }
+  if (
+    opts.periodIndex != null &&
+    opts.periodIndex >= 0 &&
+    installments[opts.periodIndex]
+  ) {
+    return installments[opts.periodIndex].amount;
+  }
+  if (installments[0]) return installments[0].amount;
+  return cls.tuitionFeeAmount > 0 ? cls.tuitionFeeAmount : undefined;
+}
+
+export function scheduleSummary(cls: ClassConfig): string {
+  const installments = cls.feeSchedule.filter((l) => l.kind === "installment" && l.amount > 0);
+  const oneTime = cls.feeSchedule.filter((l) => l.kind === "one_time" && l.amount > 0);
+  const bits: string[] = [];
+  if (installments.length) {
+    bits.push(
+      cls.billingCycle === "Term"
+        ? `${installments.length} term${installments.length === 1 ? "" : "s"}`
+        : `${installments.length} installment${installments.length === 1 ? "" : "s"}`,
+    );
+  }
+  if (oneTime.length) {
+    bits.push(`${oneTime.length} one-time`);
+  }
+  return bits.join(" · ") || cls.billingCycle;
+}
+
 export function normalizeClassConfig(
   raw: Partial<ClassConfig> & Pick<ClassConfig, "id" | "tuitionFeeAmount"> & {
     className?: string;
@@ -1072,10 +1307,17 @@ export function normalizeClassConfig(
     typeof raw.className === "string" && raw.className.trim()
       ? raw.className.trim()
       : composeClassName(grade, section);
+  const feeSchedule = parseClassFeeSchedule(
+    (raw as Partial<ClassConfig> & { fee_schedule?: unknown }).feeSchedule ??
+      (raw as { fee_schedule?: unknown }).fee_schedule,
+  );
+  const tuitionFromSchedule = sumFeeSchedule(feeSchedule);
   const tuitionFeeAmount =
-    typeof raw.tuitionFeeAmount === "number" && Number.isFinite(raw.tuitionFeeAmount)
-      ? Math.max(0, Math.round(raw.tuitionFeeAmount))
-      : 0;
+    tuitionFromSchedule > 0
+      ? tuitionFromSchedule
+      : typeof raw.tuitionFeeAmount === "number" && Number.isFinite(raw.tuitionFeeAmount)
+        ? Math.max(0, Math.round(raw.tuitionFeeAmount))
+        : 0;
   const vehicleFeeAmount =
     typeof raw.vehicleFeeAmount === "number" && Number.isFinite(raw.vehicleFeeAmount)
       ? Math.max(0, Math.round(raw.vehicleFeeAmount))
@@ -1088,6 +1330,11 @@ export function normalizeClassConfig(
     tuitionFeeAmount,
     vehicleFeeAmount,
     billingCycle: normalizeClassBillingCycle(raw.billingCycle),
+    feeAmountMode: normalizeClassFeeAmountMode(
+      (raw as Partial<ClassConfig>).feeAmountMode ??
+        (raw as { fee_amount_mode?: unknown }).fee_amount_mode,
+    ),
+    feeSchedule,
     classTeacherId:
       typeof raw.classTeacherId === "string" && raw.classTeacherId.trim()
         ? raw.classTeacherId.trim()
@@ -2215,6 +2462,8 @@ export const SEED_CLASSES: ClassConfig[] = [
     tuitionFeeAmount: 3273,
     vehicleFeeAmount: 1500,
     billingCycle: "Monthly",
+    feeAmountMode: "fixed",
+    feeSchedule: [],
   },
   {
     id: "CLS-002",
@@ -2224,6 +2473,8 @@ export const SEED_CLASSES: ClassConfig[] = [
     tuitionFeeAmount: 4000,
     vehicleFeeAmount: 1600,
     billingCycle: "Monthly",
+    feeAmountMode: "fixed",
+    feeSchedule: [],
   },
   {
     id: "CLS-003",
@@ -2233,6 +2484,8 @@ export const SEED_CLASSES: ClassConfig[] = [
     tuitionFeeAmount: 4500,
     vehicleFeeAmount: 1700,
     billingCycle: "Monthly",
+    feeAmountMode: "fixed",
+    feeSchedule: [],
   },
   {
     id: "CLS-004",
@@ -2242,6 +2495,8 @@ export const SEED_CLASSES: ClassConfig[] = [
     tuitionFeeAmount: 5200,
     vehicleFeeAmount: 1800,
     billingCycle: "Term",
+    feeAmountMode: "fixed",
+    feeSchedule: [],
   },
   {
     id: "CLS-005",
@@ -2251,6 +2506,8 @@ export const SEED_CLASSES: ClassConfig[] = [
     tuitionFeeAmount: 6800,
     vehicleFeeAmount: 2000,
     billingCycle: "Term",
+    feeAmountMode: "fixed",
+    feeSchedule: [],
   },
   {
     id: "CLS-006",
@@ -2260,6 +2517,8 @@ export const SEED_CLASSES: ClassConfig[] = [
     tuitionFeeAmount: 8400,
     vehicleFeeAmount: 2200,
     billingCycle: "Annually",
+    feeAmountMode: "fixed",
+    feeSchedule: [],
   },
 ];
 
@@ -2974,7 +3233,10 @@ function parseSnapshot(raw: string): Snapshot | null {
     roles: parsed.roles,
     classes: Array.isArray(parsed.classes)
       ? parsed.classes.map((c) =>
-          normalizeClassConfig(c as Partial<ClassConfig> & Pick<ClassConfig, "id" | "tuitionFeeAmount">),
+          withClassFeeSchedule(
+            normalizeClassConfig(c as Partial<ClassConfig> & Pick<ClassConfig, "id" | "tuitionFeeAmount">),
+            migratedFeeTerms,
+          ),
         )
       : [...SEED_CLASSES],
     transportRoutes: (parsed.transportRoutes ?? [])
@@ -3362,9 +3624,12 @@ export function TenantStoreProvider({
     setClasses(
       Array.isArray(snap.classes)
         ? snap.classes.map((c) =>
-            normalizeClassConfig(
-              c as Partial<ClassConfig> &
-                Pick<ClassConfig, "id" | "tuitionFeeAmount">,
+            withClassFeeSchedule(
+              normalizeClassConfig(
+                c as Partial<ClassConfig> &
+                  Pick<ClassConfig, "id" | "tuitionFeeAmount">,
+              ),
+              snap.feeTerms ?? [],
             ),
           )
         : liveApi

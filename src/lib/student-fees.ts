@@ -1,15 +1,10 @@
 import { filterByAcademicYear } from "@/lib/academic-year";
 import {
   categoryFeeTermKind,
-  classFeeAmountForTerm,
-  currentFeeMonth,
-  FEE_MONTHS,
-  FEE_TERM_KIND_LABELS,
-  filterFeePeriods,
   resolvePaymentFeePeriod,
+  withClassFeeSchedule,
   type ClassConfig,
   type FeeTerm,
-  type FeeTermKind,
   type Payment,
   type Student,
 } from "@/lib/tenant-store";
@@ -102,80 +97,27 @@ type ChargeDraft = {
   paid: number;
 };
 
-function periodHasStarted(period: FeeTerm, now = new Date()): boolean {
-  if (period.startDate && /^\d{4}-\d{2}-\d{2}$/.test(period.startDate)) {
-    return new Date(period.startDate + "T00:00:00").getTime() <= now.getTime();
-  }
-  if (period.endDate && /^\d{4}-\d{2}-\d{2}$/.test(period.endDate)) {
-    return new Date(period.endDate + "T23:59:59").getTime() >= now.getTime() - 1000 * 60 * 60 * 24 * 60;
-  }
-  // Month labels without dates · include up to the current academic fee month
-  const monthIdx = (FEE_MONTHS as readonly string[]).indexOf(period.label);
-  if (monthIdx >= 0) {
-    const currentIdx = (FEE_MONTHS as readonly string[]).indexOf(currentFeeMonth());
-    return currentIdx < 0 || monthIdx <= currentIdx;
-  }
-  return true;
-}
-
 function expectedChargeLines(
   classConfig: ClassConfig | undefined,
   feeTerms: FeeTerm[],
 ): ChargeDraft[] {
   if (!classConfig) return [];
+  const scheduled = withClassFeeSchedule(classConfig, feeTerms).feeSchedule.filter(
+    (line) => line.amount > 0,
+  );
+  if (scheduled.length === 0) return [];
 
-  const lines: ChargeDraft[] = [];
-  const kinds: { kind: FeeTermKind; total: number }[] = [
-    { kind: "tuition", total: classConfig.tuitionFeeAmount },
-    { kind: "vehicle", total: classConfig.vehicleFeeAmount },
-  ];
-
-  for (const { kind, total } of kinds) {
-    if (!total || total <= 0) continue;
-    const label = FEE_TERM_KIND_LABELS[kind];
-
-    if (classConfig.billingCycle === "Annually") {
-      lines.push({
-        key: `${kind}::annual`,
-        date: formatDisplayDate(feeTerms[0]?.startDate),
-        desc: label,
-        due: feeTerms[0]?.endDate ?? "—",
-        charge: total,
-        paid: 0,
-      });
-      continue;
-    }
-
-    const periodMode = classConfig.billingCycle === "Monthly" ? "month" : "term";
-    const periods = filterFeePeriods(feeTerms, periodMode, kind);
-    if (periods.length === 0) {
-      lines.push({
-        key: `${kind}::${periodMode}`,
-        date: "—",
-        desc: label,
-        due: "—",
-        charge: total,
-        paid: 0,
-      });
-      continue;
-    }
-
-    for (const period of periods) {
-      if (!periodHasStarted(period)) continue;
-      const split = classFeeAmountForTerm(total, periods, period) ?? 0;
-      if (split <= 0) continue;
-      lines.push({
-        key: `${kind}::${period.label}`,
-        date: formatDisplayDate(period.startDate),
-        desc: `${label} · ${period.label}`,
-        due: period.endDate ?? period.startDate ?? "—",
-        charge: split,
-        paid: 0,
-      });
-    }
-  }
-
-  return lines;
+  return scheduled.map((line) => {
+    const due = line.dueDate || "—";
+    return {
+      key: `line::${line.id}`,
+      date: formatDisplayDate(line.dueDate),
+      desc: line.label,
+      due,
+      charge: line.amount,
+      paid: 0,
+    };
+  });
 }
 
 function allocatePaymentsToCharges(
@@ -190,14 +132,30 @@ function allocatePaymentsToCharges(
     const termKind = categoryFeeTermKind(payment.cat);
     let matchedIndex = -1;
 
-    if (termKind && period) {
-      matchedIndex = next.findIndex((c) => c.key === `${termKind}::${period}`);
-    }
-    if (matchedIndex < 0 && termKind && !period) {
-      // Annual / unlabeled — match first open line of that kind
+    if (period) {
+      const needle = period.trim().toLowerCase();
       matchedIndex = next.findIndex(
-        (c) => c.key.startsWith(`${termKind}::`) && c.paid < c.charge,
+        (c) =>
+          c.desc.trim().toLowerCase() === needle ||
+          c.desc.toLowerCase().includes(needle),
       );
+    }
+    if (matchedIndex < 0 && payment.cat) {
+      const cat = payment.cat.trim().toLowerCase();
+      matchedIndex = next.findIndex(
+        (c) =>
+          c.paid < c.charge &&
+          (c.desc.toLowerCase().includes(cat) || cat.includes(c.desc.toLowerCase())),
+      );
+    }
+    if (matchedIndex < 0) {
+      matchedIndex = next.findIndex(
+        (c) =>
+          c.paid < c.charge && /installment|term|annual/i.test(c.desc),
+      );
+    }
+    if (matchedIndex < 0 && termKind) {
+      matchedIndex = next.findIndex((c) => c.paid < c.charge);
     }
     if (matchedIndex < 0) {
       leftovers.push(payment);

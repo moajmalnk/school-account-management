@@ -1,12 +1,10 @@
 import type { DisbursementPayload } from "@/lib/api/records";
-import { isRecordActive, isRecordDeleted } from "@/components/school/ProfileAccountActions";
 import {
   filterPaymentsByPeriod,
   type CustomDateRange,
   type PaymentPeriod,
 } from "@/lib/payment-period";
-import type { Payment, Staff } from "@/lib/tenant-store";
-import { currentPayrollMonth, staffPayableSalary } from "@/lib/tenant-store";
+import type { Payment } from "@/lib/tenant-store";
 
 /** @deprecated Kept empty — live totals come from disbursements API. */
 export const OPERATING_EXPENSES: readonly { account: string; amount: number }[] = [];
@@ -113,35 +111,16 @@ export function totalAccountsPayable(rows: FinanceDisbursement[] = []): number {
 }
 
 /**
- * Salary still owed: queued salary disbursements first; otherwise current-month
- * staff payroll minus cleared salary disbursements. Zero when there is no staff.
+ * Salary still owed for the dashboard: only queued salary disbursements
+ * (payroll that was created / Make Payment → Salary and not yet cleared).
+ * Do not estimate “this month’s” payroll from staff rates before salary is created.
  */
-export function salaryPayable(
-  rows: FinanceDisbursement[] = [],
-  staff: Staff[] = [],
-  month = currentPayrollMonth(),
-): number {
-  const queuedSalary = queuedPayables(rows)
-    .filter(isSalaryDisbursement)
-    .reduce((sum, row) => sum + row.amount, 0);
-  if (queuedSalary > 0) return queuedSalary;
+export function queuedSalaryPayables(rows: FinanceDisbursement[] = []): FinanceDisbursement[] {
+  return queuedPayables(rows).filter(isSalaryDisbursement);
+}
 
-  const activeStaff = staff.filter(
-    (s) => isRecordActive(s.active) && !isRecordDeleted(s.deletedAt),
-  );
-  if (activeStaff.length === 0) return 0;
-
-  const monthDue = activeStaff.reduce((sum, member) => {
-    const { payable } = staffPayableSalary(member, month);
-    return sum + payable;
-  }, 0);
-
-  const clearedSalaryTotal = rows
-    .filter(isClearedDisbursement)
-    .filter(isSalaryDisbursement)
-    .reduce((sum, row) => sum + row.amount, 0);
-
-  return Math.max(0, monthDue - clearedSalaryTotal);
+export function salaryPayable(rows: FinanceDisbursement[] = []): number {
+  return queuedSalaryPayables(rows).reduce((sum, row) => sum + row.amount, 0);
 }
 
 export function cashOnHand(payments: Payment[]): number {

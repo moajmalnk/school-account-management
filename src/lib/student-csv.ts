@@ -202,6 +202,8 @@ export function buildClassFromLabel(id: string, label: string): ClassConfig {
     tuitionFeeAmount: 0,
     vehicleFeeAmount: 0,
     billingCycle: "Monthly",
+    feeAmountMode: "fixed",
+    feeSchedule: [],
   };
 }
 
