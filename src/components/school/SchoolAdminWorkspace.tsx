@@ -3330,15 +3330,9 @@ export function StudentsLedger() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button type="button" className={directoryToolbarBtn} disabled={importing}>
-                    {importing ? (
-                      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-                    ) : (
-                      <Upload className="h-3.5 w-3.5 shrink-0" />
-                    )}
-                    <span className="truncate sm:hidden">{importing ? "Importing" : "Upload"}</span>
-                    <span className="hidden truncate sm:inline">
-                      {importing ? "Importing…" : "Bulk Upload"}
-                    </span>
+                    <Upload className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate sm:hidden">Upload</span>
+                    <span className="hidden truncate sm:inline">Bulk Upload</span>
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
@@ -3513,6 +3507,28 @@ export function StudentsLedger() {
         className="hidden"
         onChange={handleImport}
       />
+
+      <Dialog open={importing}>
+        <DialogContent
+          showCloseButton={false}
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+          className="max-w-[min(22rem,calc(100%-2rem))] rounded-2xl border border-[#E5E5E5] bg-white p-8 text-center shadow-[0_24px_64px_-16px_rgba(0,0,0,0.28)] sm:max-w-sm"
+        >
+          <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-[#0F766E]/10">
+            <Loader2 className="h-7 w-7 animate-spin text-[#0F766E]" />
+          </div>
+          <DialogHeader className="space-y-2 text-center sm:text-center">
+            <DialogTitle className="text-[18px] font-semibold tracking-tight text-black">
+              Importing students
+            </DialogTitle>
+            <DialogDescription className="text-[13px] leading-relaxed text-black/55">
+              Adding records and creating missing classes. Please keep this window open.
+            </DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
 
       <StudentsDirectoryTable
         students={filtered}
