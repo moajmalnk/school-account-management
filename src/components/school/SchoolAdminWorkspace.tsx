@@ -35,6 +35,7 @@ import {
   TriangleAlert,
   Users,
   Filter,
+  Loader2,
   Recycle,
   RotateCcw,
   Search,
@@ -239,6 +240,13 @@ import { apiCreateDisbursement, apiCreatePayment, apiDeleteDisbursement, apiDele
 import { apiSaveDashboardTodos } from "@/lib/api/dashboard";
 import { apiUploadDataUrl } from "@/lib/api/settings";
 import { getApiToken } from "@/lib/api/client";
+import {
+  buildClassFromLabel,
+  isDuplicateStudent,
+  matchExistingClass,
+  nextPrefixedId,
+  parseStudentCsv,
+} from "@/lib/student-csv";
 import { resolveMediaUrl } from "@/lib/media";
 import {
   bankBalance,
@@ -2391,10 +2399,13 @@ export function AdmitStudentPage() {
 export function StudentsLedger() {
   const {
     activeStudents: students,
+    students: allStudents,
     setStudents,
     classes,
+    setClasses,
     schoolDetails,
     enrollStudentInActiveYear,
+    admitStudentToActiveYear,
     academicYear,
     hydrated,
   } =
@@ -2423,6 +2434,7 @@ export function StudentsLedger() {
   const [pendingPurgeId, setPendingPurgeId] = useState<string | null>(null);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [bulkWhatsAppOpen, setBulkWhatsAppOpen] = useState(false);
   const [bulkWhatsAppMsg, setBulkWhatsAppMsg] = useState("");
@@ -2815,7 +2827,7 @@ export function StudentsLedger() {
       ],
     );
     toast.success("Student template downloaded", {
-      description: "Fill the sample rows, save as CSV, then Upload CSV",
+      description: "Fill Name, Class, Guardian, Phone, Balance · missing classes are created on upload",
     });
   };
 
@@ -2824,37 +2836,147 @@ export function StudentsLedger() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const text = String(reader.result ?? "");
-      const lines = text.trim().split(/\r?\n/);
-      if (!lines.length) {
-        toast.error("Empty CSV file");
-        return;
-      }
-      const start = /name|student/i.test(lines[0] ?? "") ? 1 : 0;
-      const fresh: Student[] = [];
-      let next = 2900 + students.length + fresh.length;
-      for (let i = start; i < lines.length; i++) {
-        const cells = lines[i].split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
-        const [name, cls, guardian, phone, balance] = cells;
-        if (!name) continue;
-        fresh.push({
-          id: `STU-${next++}`,
-          name,
-          cls: cls || defaultClass,
-          guardian: guardian || "—",
-          phone: phone || undefined,
-          due: Number(balance) || 0,
-        });
-      }
-      if (!fresh.length) {
-        toast.error("CSV had no parsable rows");
-      } else {
-        setStudents((prev) => [...fresh, ...prev]);
-        toast.success(`${fresh.length} students imported`, {
-          description: "Appended to the active tenant ledger",
-        });
-      }
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      void (async () => {
+        const rows = parseStudentCsv(String(reader.result ?? ""));
+        if (!rows.length) {
+          toast.error("CSV had no student rows", {
+            description: "Use the template: Name, Class, Guardian, Phone, Balance",
+          });
+          if (fileInputRef.current) fileInputRef.current.value = "";
+          return;
+        }
+
+        setImporting(true);
+        try {
+          let classPool = [...classes];
+          const createdClasses: ClassConfig[] = [];
+          const admitted: Student[] = [];
+          let skipped = 0;
+          let usedIds = allStudents.map((s) => s.id);
+
+          for (const row of rows) {
+            const classLabel = row.classLabel || defaultClass;
+            if (!classLabel) {
+              skipped += 1;
+              continue;
+            }
+
+            let cls = matchExistingClass(classPool, classLabel);
+            if (!cls) {
+              cls = buildClassFromLabel(
+                nextPrefixedId("CLS", classPool.map((c) => c.id), 3),
+                classLabel,
+              );
+              classPool = [...classPool, cls];
+              createdClasses.push(cls);
+            }
+
+            const duplicateOf = {
+              name: row.name,
+              phone: row.phone,
+              className: cls.className,
+            };
+            if (
+              isDuplicateStudent(students, duplicateOf) ||
+              isDuplicateStudent(admitted, duplicateOf)
+            ) {
+              skipped += 1;
+              continue;
+            }
+
+            const phoneDigits = row.phone.replace(/\D/g, "");
+            const prior = allStudents.find((student) => {
+              if (student.deletedAt) return false;
+              if (student.name.trim().toLowerCase() !== row.name.trim().toLowerCase()) {
+                return false;
+              }
+              return phoneDigits
+                ? (student.phone ?? "").replace(/\D/g, "") === phoneDigits
+                : false;
+            });
+            if (prior) {
+              enrollStudentInActiveYear(prior.id, {
+                cls: cls.className,
+                due: row.due,
+                active: true,
+              });
+              admitted.push({
+                ...prior,
+                cls: cls.className,
+                due: row.due,
+                active: true,
+              });
+              continue;
+            }
+
+            const id = nextPrefixedId("STU", usedIds, 4);
+            usedIds = [...usedIds, id];
+            const draft = normalizeStudent({
+              id,
+              admissionNumber: `ADM-${id.replace(/^STU-/i, "")}`,
+              name: row.name,
+              cls: cls.className,
+              guardian: row.guardian || "—",
+              phone: row.phone || undefined,
+              due: row.due,
+              shareToken: createStudentShareToken(),
+              active: true,
+            });
+            admitted.push(
+              admitStudentToActiveYear(draft, {
+                cls: draft.cls,
+                due: draft.due,
+                active: true,
+              }),
+            );
+          }
+
+          if (createdClasses.length) {
+            setClasses((prev) => {
+              const seen = new Set(prev.map((c) => c.id));
+              return [...prev, ...createdClasses.filter((c) => !seen.has(c.id))];
+            });
+          }
+
+          if (!admitted.length) {
+            toast.error("No new students to admit", {
+              description:
+                skipped > 0
+                  ? `${skipped} row${skipped === 1 ? "" : "s"} skipped · already enrolled or missing class`
+                  : "Check the CSV columns and try again",
+            });
+            return;
+          }
+
+          for (const cls of createdClasses) {
+            await apiUpsertClass(cls).catch(() => {
+              /* local class kept; settings sync can retry */
+            });
+          }
+          for (const student of admitted) {
+            await apiUpsertStudent(student).catch((err) => {
+              toast.error(
+                err instanceof Error ? err.message : `Could not sync ${student.name}`,
+              );
+            });
+          }
+
+          const classNote = createdClasses.length
+            ? `${createdClasses.length} class${createdClasses.length === 1 ? "" : "es"} created`
+            : null;
+          const skipNote =
+            skipped > 0 ? `${skipped} skipped` : null;
+          toast.success(
+            `${admitted.length} student${admitted.length === 1 ? "" : "s"} admitted`,
+            {
+              description: [classNote, skipNote, academicYear].filter(Boolean).join(" · "),
+            },
+          );
+        } finally {
+          setImporting(false);
+          if (fileInputRef.current) fileInputRef.current.value = "";
+        }
+      })();
     };
     reader.onerror = () => toast.error("Could not read the selected file");
     reader.readAsText(file);
@@ -3191,10 +3313,16 @@ export function StudentsLedger() {
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button type="button" className={directoryToolbarBtn}>
-                    <Upload className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate sm:hidden">Upload</span>
-                    <span className="hidden truncate sm:inline">Bulk Upload</span>
+                  <button type="button" className={directoryToolbarBtn} disabled={importing}>
+                    {importing ? (
+                      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                    ) : (
+                      <Upload className="h-3.5 w-3.5 shrink-0" />
+                    )}
+                    <span className="truncate sm:hidden">{importing ? "Importing" : "Upload"}</span>
+                    <span className="hidden truncate sm:inline">
+                      {importing ? "Importing…" : "Bulk Upload"}
+                    </span>
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
@@ -3212,6 +3340,7 @@ export function StudentsLedger() {
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={handleImportClick}
+                    disabled={importing}
                     className="cursor-pointer gap-2 rounded-xl text-[13px]"
                   >
                     <Upload className="h-3.5 w-3.5" />
