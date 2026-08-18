@@ -20,6 +20,7 @@ import {
   type SupportFaq,
   type SupportSettings,
   type SupportTicket,
+  type SupportTicketStatus,
 } from "@/lib/api/support";
 import { useTenantStore } from "@/lib/tenant-store";
 import { cn, glassCardClass } from "@/lib/utils";
@@ -44,6 +45,12 @@ function WhatsAppMark({ className }: { className?: string }) {
   );
 }
 
+const STATUS_LABEL: Record<SupportTicketStatus, string> = {
+  open: "Waiting",
+  answered: "Replied",
+  closed: "Closed",
+};
+
 function formatStamp(raw: string): string {
   const parsed = Date.parse(raw.replace(" ", "T"));
   if (!Number.isFinite(parsed)) return raw;
@@ -53,6 +60,21 @@ function formatStamp(raw: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function StatusPill({ status }: { status: SupportTicketStatus }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
+        status === "open" && "bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-zinc-300",
+        status === "answered" && "bg-[#CCFBF1] text-[#0F766E]",
+        status === "closed" && "bg-black/5 text-black/45 dark:bg-white/10 dark:text-zinc-500",
+      )}
+    >
+      {STATUS_LABEL[status]}
+    </span>
+  );
 }
 
 export function CustomerSupportCard() {
@@ -168,7 +190,7 @@ export function CustomerSupportCard() {
             : line,
         ),
       );
-      toast.success("Ticket opened", { description: `${ticket.id} · the team will reply here` });
+      toast.success("Sent to Feezo", { description: "The team will reply in Your messages" });
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Could not open a ticket";
       toast.error("Could not send to Feezo", { description: msg });
@@ -229,7 +251,7 @@ export function CustomerSupportCard() {
       >
         <div className="text-[18px] font-bold leading-tight tracking-tight text-black">Customer Support</div>
         <p className="mt-1 text-[12px] text-black/55 dark:text-zinc-400">
-          Reach Feezo for {schoolName}. Organization-wide — not scoped per campus.
+          Email, WhatsApp, or a message to Feezo — for the whole school, not one campus.
         </p>
         <div className="mt-4 grid grid-cols-1 overflow-hidden rounded-xl border border-[#EFEFEF] bg-white sm:grid-cols-2 dark:border-white/10 dark:bg-zinc-950/40">
           <button
@@ -237,7 +259,12 @@ export function CustomerSupportCard() {
             onClick={openGmail}
             className="flex w-full items-center justify-between gap-3 border-b border-[#EFEFEF] px-4 py-3.5 text-left transition-colors hover:bg-[#FAFAFA] sm:border-b-0 sm:border-r dark:border-white/10 dark:hover:bg-white/5"
           >
-            <span className="text-[14px] font-medium text-slate-900 dark:text-zinc-100">Support With Gmail</span>
+            <span className="min-w-0">
+              <span className="block text-[14px] font-medium text-slate-900 dark:text-zinc-100">Email</span>
+              <span className="mt-0.5 block truncate text-[11px] font-normal text-black/40 dark:text-zinc-500">
+                {settings?.supportEmail || "support@schoolaccounts.in"}
+              </span>
+            </span>
             <Mail className="h-4 w-4 shrink-0 text-slate-500" />
           </button>
           <button
@@ -246,9 +273,7 @@ export function CustomerSupportCard() {
             className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left transition-colors hover:bg-[#FAFAFA] dark:hover:bg-white/5"
           >
             <span className="min-w-0">
-              <span className="block text-[14px] font-medium text-slate-900 dark:text-zinc-100">
-                Support With WhatsApp
-              </span>
+              <span className="block text-[14px] font-medium text-slate-900 dark:text-zinc-100">WhatsApp</span>
               <span className="mt-0.5 block text-[11px] font-normal text-black/40 dark:text-zinc-500">
                 {formatWhatsAppDisplay(settings?.whatsappE164)}
               </span>
@@ -256,7 +281,6 @@ export function CustomerSupportCard() {
             <WhatsAppMark className="h-4 w-4 shrink-0 text-slate-700 dark:text-zinc-200" />
           </button>
         </div>
-        <p className="mt-2 text-[11px] text-black/40">{settings?.supportEmail}</p>
       </OrganicCard>
 
       <OrganicCard
@@ -265,8 +289,8 @@ export function CustomerSupportCard() {
         padded
         className={cn(workspacePanelClass, "col-span-12")}
       >
-        <div className="text-[13px] font-semibold uppercase tracking-wider text-black/45">Assistant</div>
-        <p className="mt-1 text-[12px] text-black/55">Answers only from the Feezo help list. Unknown questions can become a ticket.</p>
+        <div className="text-[13px] font-semibold text-black">Help answers</div>
+        <p className="mt-1 text-[12px] text-black/55">Pick a question or type your own. If we do not have an answer, send it to Feezo.</p>
         <div className="mt-3 min-h-[140px] space-y-2.5 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3 dark:border-white/10 dark:bg-zinc-950/40">
           {chat.map((line) => (
             <div
@@ -340,17 +364,18 @@ export function CustomerSupportCard() {
         padded
         className={cn(workspacePanelClass, "col-span-12")}
       >
-        <div className="text-[13px] font-semibold uppercase tracking-wider text-black/45">Tickets</div>
-        <p className="mt-1 text-[12px] text-black/55">Threads with Feezo. A reply from the team lands here.</p>
+        <div className="text-[13px] font-semibold text-black">Your messages</div>
+        <p className="mt-1 text-[12px] text-black/55">Feezo replies here.</p>
         {tickets.length === 0 ? (
-          <div className="mt-4 rounded-xl border border-dashed border-black/15 px-4 py-8 text-center text-[12px] text-black/45">
-            No tickets yet. Send an unanswered question to Feezo to start one.
+          <div className="mt-4 rounded-xl border border-dashed border-black/15 px-4 py-8 text-center text-[13px] text-black/45">
+            No messages yet. If help chat cannot answer, send it to Feezo.
           </div>
         ) : (
           <div className="mt-4 grid grid-cols-12 gap-3">
-            <ul className="col-span-12 space-y-1.5 lg:col-span-4">
+            <ul className="mobile-scrollbar-none col-span-12 max-h-[28rem] space-y-1.5 overflow-y-auto lg:col-span-4">
               {tickets.map((ticket) => {
                 const active = ticket.id === activeTicket?.id;
+                const preview = ticket.lastMessage?.body || ticket.subject;
                 return (
                   <li key={ticket.id}>
                     <button
@@ -363,60 +388,65 @@ export function CustomerSupportCard() {
                           : "border-[#EFEFEF] bg-white hover:bg-[#FAFAFA] dark:border-white/10 dark:bg-zinc-900",
                       )}
                     >
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-start justify-between gap-2">
                         <span className="truncate text-[13px] font-semibold text-black dark:text-zinc-100">
                           {ticket.subject}
                         </span>
                         {ticket.schoolUnread ? (
-                          <span className="h-2 w-2 shrink-0 rounded-full bg-[#0F766E]" />
+                          <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#0F766E]" />
                         ) : null}
                       </div>
-                      <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-black/40">
-                        {ticket.id} · {ticket.status}
+                      <p className="mt-0.5 truncate text-[12px] text-black/50">{preview}</p>
+                      <div className="mt-1.5 flex items-center justify-between gap-2">
+                        <StatusPill status={ticket.status} />
+                        <span className="text-[10.5px] text-black/35">{formatStamp(ticket.updatedAt)}</span>
                       </div>
                     </button>
                   </li>
                 );
               })}
             </ul>
-            <div className="col-span-12 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3 lg:col-span-8 dark:border-white/10 dark:bg-zinc-950/40">
+            <div className="col-span-12 flex min-h-[18rem] flex-col rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3 lg:col-span-8 dark:border-white/10 dark:bg-zinc-950/40">
               {activeTicket ? (
                 <>
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <div className="text-[14px] font-semibold text-black dark:text-zinc-100">
+                  <div className="mb-3 flex flex-wrap items-start justify-between gap-2 border-b border-[#EFEFEF] pb-3 dark:border-white/10">
+                    <div className="min-w-0">
+                      <div className="truncate text-[15px] font-semibold text-black dark:text-zinc-100">
                         {activeTicket.subject}
                       </div>
-                      <div className="font-mono text-[10.5px] text-black/40">
-                        {activeTicket.id} · {activeTicket.status}
-                      </div>
+                      <div className="mt-0.5 text-[12px] text-black/50">Feezo team</div>
                     </div>
+                    <StatusPill status={activeTicket.status} />
                   </div>
-                  <div className="max-h-72 space-y-2 overflow-y-auto">
-                    {(activeTicket.messages ?? []).map((msg) => (
-                      <div
-                        key={msg.id}
-                        className={cn(
-                          "rounded-xl px-3 py-2 text-[13px]",
-                          msg.author === "school"
-                            ? "bg-[#0F766E] text-white"
-                            : "bg-white text-slate-800 dark:bg-zinc-900 dark:text-zinc-100",
-                        )}
-                      >
-                        <div className="text-[10px] font-semibold uppercase tracking-wider opacity-70">
-                          {msg.author === "school" ? "You" : msg.author === "admin" ? "Feezo" : "Assistant"}
-                          {" · "}
-                          {formatStamp(msg.createdAt)}
+                  <div className="mobile-scrollbar-none min-h-0 flex-1 space-y-2 overflow-y-auto">
+                    {(activeTicket.messages ?? []).map((msg) => {
+                      const fromYou = msg.author === "school";
+                      return (
+                        <div key={msg.id} className={cn("flex", fromYou ? "justify-end" : "justify-start")}>
+                          <div
+                            className={cn(
+                              "max-w-[88%] rounded-2xl px-3 py-2 text-[13px]",
+                              fromYou
+                                ? "bg-[#0F766E] text-white"
+                                : "bg-white text-slate-800 shadow-sm dark:bg-zinc-900 dark:text-zinc-100",
+                            )}
+                          >
+                            <div className="text-[10px] font-semibold uppercase tracking-wider opacity-70">
+                              {fromYou ? "You" : msg.author === "admin" ? "Feezo" : "Help chat"}
+                              {" · "}
+                              {formatStamp(msg.createdAt)}
+                            </div>
+                            <div className="mt-1 whitespace-pre-wrap">{msg.body}</div>
+                          </div>
                         </div>
-                        <div className="mt-1 whitespace-pre-wrap">{msg.body}</div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   {activeTicket.status === "closed" ? (
-                    <p className="mt-3 text-[12px] text-black/45">This ticket is closed.</p>
+                    <p className="mt-3 text-[12px] text-black/45">Closed. Send a new message to start again.</p>
                   ) : (
                     <form
-                      className="mt-3 space-y-2"
+                      className="mt-3 flex gap-2"
                       onSubmit={(e) => {
                         e.preventDefault();
                         void sendTicketReply();
@@ -425,20 +455,31 @@ export function CustomerSupportCard() {
                       <Textarea
                         value={ticketDraft}
                         onChange={(e) => setTicketDraft(e.target.value)}
-                        placeholder="Reply to Feezo…"
-                        className="min-h-[72px] rounded-xl bg-white"
+                        placeholder="Write a reply…"
+                        className="min-h-[72px] flex-1 rounded-xl bg-white"
                       />
                       <Button
                         type="submit"
                         disabled={ticketBusy || !ticketDraft.trim()}
-                        className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+                        className="h-11 shrink-0 self-end rounded-full bg-[#0F766E] px-4 text-white hover:bg-[#0D9488]"
                       >
-                        {ticketBusy ? "Sending…" : "Send reply"}
+                        {ticketBusy ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            <Send className="mr-1.5 h-4 w-4" />
+                            Send
+                          </>
+                        )}
                       </Button>
                     </form>
                   )}
                 </>
-              ) : null}
+              ) : (
+                <div className="grid flex-1 place-items-center text-center text-[13px] text-black/45">
+                  Pick a message on the left.
+                </div>
+              )}
             </div>
           </div>
         )}

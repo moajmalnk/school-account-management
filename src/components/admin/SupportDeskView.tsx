@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { LifeBuoy, Loader2, Plus, Save, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { LifeBuoy, Loader2, Plus, Save, Send, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -21,12 +21,26 @@ import {
 } from "@/lib/api/support";
 import { cn } from "@/lib/utils";
 
+type Section = "messages" | "help" | "contact";
+
+const SECTIONS: { id: Section; label: string }[] = [
+  { id: "messages", label: "Messages" },
+  { id: "help", label: "Help answers" },
+  { id: "contact", label: "Contact" },
+];
+
 const STATUS_FILTERS: { id: "all" | SupportTicketStatus; label: string }[] = [
   { id: "all", label: "All" },
-  { id: "open", label: "Open" },
-  { id: "answered", label: "Answered" },
+  { id: "open", label: "Needs reply" },
+  { id: "answered", label: "Replied" },
   { id: "closed", label: "Closed" },
 ];
+
+const STATUS_LABEL: Record<SupportTicketStatus, string> = {
+  open: "Needs reply",
+  answered: "Replied",
+  closed: "Closed",
+};
 
 function formatStamp(raw: string): string {
   const parsed = Date.parse(String(raw).replace(" ", "T"));
@@ -43,7 +57,57 @@ function emptyFaq(): SupportFaq {
   return { id: "", question: "", keywords: "", answer: "", active: true };
 }
 
+function keywordsFromQuestion(question: string): string {
+  const skip = new Set([
+    "the",
+    "and",
+    "for",
+    "how",
+    "what",
+    "can",
+    "you",
+    "are",
+    "our",
+    "with",
+    "from",
+    "this",
+    "that",
+    "have",
+    "does",
+    "do",
+    "a",
+    "an",
+    "to",
+    "of",
+    "in",
+    "is",
+    "on",
+  ]);
+  return question
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((word) => word.length > 2 && !skip.has(word))
+    .join(" ");
+}
+
+function StatusPill({ status }: { status: SupportTicketStatus }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
+        status === "open" && "bg-[#CCFBF1] text-[#0F766E]",
+        status === "answered" && "bg-slate-100 text-slate-600",
+        status === "closed" && "bg-black/5 text-black/45",
+      )}
+    >
+      {STATUS_LABEL[status]}
+    </span>
+  );
+}
+
 export function SupportDeskView() {
+  const [section, setSection] = useState<Section>("messages");
   const [settings, setSettings] = useState<SupportSettings>({
     supportEmail: "support@schoolaccounts.in",
     whatsappE164: SUPPORT_DEFAULT_WHATSAPP_E164,
@@ -62,24 +126,35 @@ export function SupportDeskView() {
   const [reply, setReply] = useState("");
   const [replyBusy, setReplyBusy] = useState(false);
 
+  const visibleTickets = useMemo(() => {
+    if (status === "all") return tickets;
+    return tickets.filter((ticket) => ticket.status === status);
+  }, [tickets, status]);
+
+  const statusCounts = useMemo(() => {
+    const counts = { all: tickets.length, open: 0, answered: 0, closed: 0 };
+    for (const ticket of tickets) counts[ticket.status] += 1;
+    return counts;
+  }, [tickets]);
+
   const load = useCallback(async () => {
     if (!getApiToken()) {
       setLoading(false);
       return;
     }
     try {
-      const data = await fetchSuperAdminSupport(status);
+      const data = await fetchSuperAdminSupport("all");
       setSettings(data.settings);
       setFaqs(data.faqs);
       setTickets(data.tickets);
       setUnreadCount(data.unreadCount);
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Could not load support";
-      toast.error("Support desk unavailable", { description: msg });
+      toast.error("Support unavailable", { description: msg });
     } finally {
       setLoading(false);
     }
-  }, [status]);
+  }, []);
 
   useEffect(() => {
     void load();
@@ -91,11 +166,14 @@ export function SupportDeskView() {
       const full = await fetchSuperAdminSupportTicket(ticket.id);
       setThread(full);
       setTickets((prev) =>
-        prev.map((t) => (t.id === full.id ? { ...t, adminUnread: false, status: full.status } : t)),
+        prev.map((item) =>
+          item.id === full.id ? { ...item, adminUnread: false, status: full.status } : item,
+        ),
       );
+      setUnreadCount((n) => (ticket.adminUnread ? Math.max(0, n - 1) : n));
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : "Could not open ticket";
-      toast.error("Ticket failed to load", { description: msg });
+      const msg = err instanceof ApiError ? err.message : "Could not open message";
+      toast.error("Could not open message", { description: msg });
     }
   };
 
@@ -111,9 +189,11 @@ export function SupportDeskView() {
       setReply("");
       setThread(data.ticket);
       setTickets((prev) =>
-        prev.map((t) => (t.id === data.ticket.id ? { ...t, ...data.ticket, messages: undefined } : t)),
+        prev.map((item) =>
+          item.id === data.ticket.id ? { ...item, ...data.ticket, messages: undefined } : item,
+        ),
       );
-      toast.success("Reply sent", { description: data.ticket.id });
+      toast.success("Reply sent");
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Reply failed";
       toast.error("Could not send reply", { description: msg });
@@ -131,11 +211,13 @@ export function SupportDeskView() {
         ticketId: thread.id,
       });
       setThread(data.ticket);
-      setTickets((prev) => prev.map((t) => (t.id === data.ticket.id ? { ...t, status: "closed" } : t)));
-      toast.success("Ticket closed");
+      setTickets((prev) =>
+        prev.map((item) => (item.id === data.ticket.id ? { ...item, status: "closed" } : item)),
+      );
+      toast.success("Marked as closed");
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Close failed";
-      toast.error("Could not close ticket", { description: msg });
+      toast.error("Could not close", { description: msg });
     } finally {
       setReplyBusy(false);
     }
@@ -151,10 +233,10 @@ export function SupportDeskView() {
         greeting: settings.greeting,
       });
       setSettings(data.settings);
-      toast.success("Channels saved");
+      toast.success("Contact details saved");
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Save failed";
-      toast.error("Could not save channels", { description: msg });
+      toast.error("Could not save", { description: msg });
     } finally {
       setSavingChannels(false);
     }
@@ -162,7 +244,7 @@ export function SupportDeskView() {
 
   const saveFaq = async () => {
     if (!faqDraft.question.trim() || !faqDraft.answer?.trim()) {
-      toast.error("Question and answer are required");
+      toast.error("Add a question and an answer");
       return;
     }
     setFaqBusy(true);
@@ -172,20 +254,20 @@ export function SupportDeskView() {
         faq: {
           id: faqDraft.id || undefined,
           question: faqDraft.question.trim(),
-          keywords: faqDraft.keywords ?? "",
+          keywords: keywordsFromQuestion(faqDraft.question),
           answer: faqDraft.answer.trim(),
           active: faqDraft.active !== false,
         },
       });
       setFaqs((prev) => {
-        const rest = prev.filter((f) => f.id !== data.faq.id);
+        const rest = prev.filter((item) => item.id !== data.faq.id);
         return [...rest, data.faq].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
       });
       setFaqDraft(emptyFaq());
-      toast.success(faqDraft.id ? "FAQ updated" : "FAQ added");
+      toast.success(faqDraft.id ? "Answer updated" : "Answer added");
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Save failed";
-      toast.error("Could not save FAQ", { description: msg });
+      toast.error("Could not save answer", { description: msg });
     } finally {
       setFaqBusy(false);
     }
@@ -195,12 +277,12 @@ export function SupportDeskView() {
     setFaqBusy(true);
     try {
       await postSuperAdminSupport({ action: "faq.delete", id });
-      setFaqs((prev) => prev.filter((f) => f.id !== id));
+      setFaqs((prev) => prev.filter((item) => item.id !== id));
       if (faqDraft.id === id) setFaqDraft(emptyFaq());
-      toast.success("FAQ removed");
+      toast.success("Answer removed");
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Delete failed";
-      toast.error("Could not remove FAQ", { description: msg });
+      toast.error("Could not remove answer", { description: msg });
     } finally {
       setFaqBusy(false);
     }
@@ -210,11 +292,8 @@ export function SupportDeskView() {
     return (
       <div className="space-y-4 sm:space-y-6" aria-busy="true">
         <div className="h-8 w-64 animate-pulse rounded-lg bg-black/[0.07]" />
-        <div className="grid grid-cols-12 gap-3 sm:gap-4">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="col-span-12 h-48 animate-pulse rounded-3xl bg-black/[0.05] lg:col-span-4" />
-          ))}
-        </div>
+        <div className="h-14 animate-pulse rounded-2xl bg-black/[0.05]" />
+        <div className="h-80 animate-pulse rounded-3xl bg-black/[0.05]" />
       </div>
     );
   }
@@ -224,19 +303,50 @@ export function SupportDeskView() {
       <div>
         <h1 className="text-heading">Customer Support</h1>
         <p className="mt-2 text-[14px] text-black/55">
-          School tickets, FAQ auto-replies, and Gmail / WhatsApp channels
-          {unreadCount ? ` · ${unreadCount} unread` : ""}
+          Reply to schools, keep help answers, and set email and WhatsApp.
         </p>
       </div>
 
-      <div className="grid grid-cols-12 gap-3 sm:gap-4 lg:gap-5">
-        <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12 lg:col-span-7">
+      <div className="flex flex-wrap items-center gap-2">
+        {SECTIONS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => setSection(item.id)}
+            className={cn(
+              "inline-flex h-9 items-center gap-2 rounded-full px-3.5 text-[13px] font-semibold transition-colors",
+              section === item.id
+                ? "bg-[#0F766E] text-white"
+                : "bg-white text-black/60 ring-1 ring-[#E5E5E5] hover:text-black",
+            )}
+          >
+            {item.label}
+            {item.id === "messages" && unreadCount > 0 ? (
+              <span
+                className={cn(
+                  "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 font-mono text-[10px] font-bold",
+                  section === item.id ? "bg-white/20 text-white" : "bg-[#0F766E] text-white",
+                )}
+              >
+                {unreadCount}
+              </span>
+            ) : null}
+          </button>
+        ))}
+      </div>
+
+      {section === "messages" ? (
+        <OrganicCard tone="white" cornerSide="tr" padded>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <div className="text-[13px] font-semibold uppercase tracking-wider text-black/45">Inbox</div>
-              <p className="mt-0.5 text-[12px] text-black/55">{tickets.length} thread{tickets.length === 1 ? "" : "s"}</p>
+              <div className="text-[13px] font-semibold text-black">School messages</div>
+              <p className="mt-0.5 text-[12px] text-black/50">
+                {visibleTickets.length === 0
+                  ? "Nothing in this list"
+                  : `${visibleTickets.length} conversation${visibleTickets.length === 1 ? "" : "s"}`}
+              </p>
             </div>
-            <div className="inline-flex rounded-full border border-[#E5E5E5] bg-white p-1">
+            <div className="inline-flex flex-wrap rounded-full border border-[#E5E5E5] bg-white p-1">
               {STATUS_FILTERS.map((item) => (
                 <button
                   key={item.id}
@@ -248,20 +358,24 @@ export function SupportDeskView() {
                   )}
                 >
                   {item.label}
+                  {statusCounts[item.id] ? (
+                    <span className="ml-1 font-mono text-[10px] opacity-70">{statusCounts[item.id]}</span>
+                  ) : null}
                 </button>
               ))}
             </div>
           </div>
 
           <div className="mt-4 grid grid-cols-12 gap-3">
-            <ul className="col-span-12 max-h-[28rem] space-y-1.5 overflow-y-auto lg:col-span-5">
-              {tickets.length === 0 ? (
-                <li className="rounded-xl border border-dashed border-[#E5E5E5] px-3 py-8 text-center text-[12px] text-black/45">
-                  No tickets in this filter.
+            <ul className="mobile-scrollbar-none col-span-12 max-h-[32rem] space-y-1.5 overflow-y-auto lg:col-span-4">
+              {visibleTickets.length === 0 ? (
+                <li className="rounded-xl border border-dashed border-[#E5E5E5] px-3 py-10 text-center text-[13px] text-black/45">
+                  No messages here.
                 </li>
               ) : (
-                tickets.map((ticket) => {
+                visibleTickets.map((ticket) => {
                   const active = ticket.id === activeId;
+                  const preview = ticket.lastMessage?.body || ticket.subject;
                   return (
                     <li key={ticket.id}>
                       <button
@@ -269,18 +383,23 @@ export function SupportDeskView() {
                         onClick={() => void openTicket(ticket)}
                         className={cn(
                           "w-full rounded-xl border px-3 py-2.5 text-left",
-                          active ? "border-[#0F766E]/40 bg-[#F0FDFA]" : "border-[#EFEFEF] bg-white hover:bg-[#FAFAFA]",
+                          active
+                            ? "border-[#0F766E]/40 bg-[#F0FDFA]"
+                            : "border-[#EFEFEF] bg-white hover:bg-[#FAFAFA]",
                         )}
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <span className="truncate text-[13px] font-semibold text-black">{ticket.subject}</span>
-                          {ticket.adminUnread ? <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#0F766E]" /> : null}
+                          <span className="truncate text-[13px] font-semibold text-black">
+                            {ticket.tenantName || "School"}
+                          </span>
+                          {ticket.adminUnread ? (
+                            <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#0F766E]" />
+                          ) : null}
                         </div>
-                        <div className="mt-0.5 truncate text-[11px] text-black/50">
-                          {ticket.tenantName || ticket.tenantId || "School"}
-                        </div>
-                        <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-black/35">
-                          {ticket.id} · {ticket.status}
+                        <p className="mt-0.5 truncate text-[12px] text-black/50">{preview}</p>
+                        <div className="mt-1.5 flex items-center justify-between gap-2">
+                          <StatusPill status={ticket.status} />
+                          <span className="text-[10.5px] text-black/35">{formatStamp(ticket.updatedAt)}</span>
                         </div>
                       </button>
                     </li>
@@ -288,48 +407,65 @@ export function SupportDeskView() {
                 })
               )}
             </ul>
-            <div className="col-span-12 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3 lg:col-span-7">
+
+            <div className="col-span-12 flex min-h-[22rem] flex-col rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3 lg:col-span-8">
               {thread ? (
                 <>
-                  <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <div className="text-[15px] font-semibold text-black">{thread.subject}</div>
-                      <div className="text-[12px] text-black/50">
-                        {thread.tenantName} · {thread.createdByName || "School admin"}
+                  <div className="mb-3 flex flex-wrap items-start justify-between gap-2 border-b border-[#EFEFEF] pb-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-[16px] font-semibold text-black">
+                        {thread.tenantName || "School"}
                       </div>
-                      <div className="font-mono text-[10.5px] text-black/35">
-                        {thread.id} · {thread.status}
+                      <div className="mt-0.5 text-[12px] text-black/50">
+                        {thread.createdByName || "School admin"}
+                        {thread.subject ? ` · ${thread.subject}` : ""}
                       </div>
                     </div>
-                    {thread.status !== "closed" ? (
-                      <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={() => void closeTicket()}>
-                        Close
-                      </Button>
-                    ) : null}
+                    <div className="flex items-center gap-2">
+                      <StatusPill status={thread.status} />
+                      {thread.status !== "closed" ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 rounded-full"
+                          disabled={replyBusy}
+                          onClick={() => void closeTicket()}
+                        >
+                          Close
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
-                  <div className="max-h-72 space-y-2 overflow-y-auto">
-                    {(thread.messages ?? []).map((msg) => (
-                      <div
-                        key={msg.id}
-                        className={cn(
-                          "rounded-xl px-3 py-2 text-[13px]",
-                          msg.author === "admin" ? "bg-[#0F766E] text-white" : "bg-white text-slate-800",
-                        )}
-                      >
-                        <div className="text-[10px] font-semibold uppercase tracking-wider opacity-70">
-                          {msg.author === "admin" ? "Feezo" : msg.author === "school" ? "School" : "Assistant"}
-                          {" · "}
-                          {formatStamp(msg.createdAt)}
+                  <div className="mobile-scrollbar-none min-h-0 flex-1 space-y-2 overflow-y-auto">
+                    {(thread.messages ?? []).map((msg) => {
+                      const fromYou = msg.author === "admin";
+                      return (
+                        <div key={msg.id} className={cn("flex", fromYou ? "justify-end" : "justify-start")}>
+                          <div
+                            className={cn(
+                              "max-w-[88%] rounded-2xl px-3 py-2 text-[13px]",
+                              fromYou ? "bg-[#0F766E] text-white" : "bg-white text-slate-800 shadow-sm",
+                            )}
+                          >
+                            <div className="text-[10px] font-semibold uppercase tracking-wider opacity-70">
+                              {fromYou ? "You" : msg.author === "bot" ? "Help chat" : "School"}
+                              {" · "}
+                              {formatStamp(msg.createdAt)}
+                            </div>
+                            <div className="mt-1 whitespace-pre-wrap">{msg.body}</div>
+                          </div>
                         </div>
-                        <div className="mt-1 whitespace-pre-wrap">{msg.body}</div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   {thread.status === "closed" ? (
-                    <p className="mt-3 text-[12px] text-black/45">Closed. A school follow-up will reopen it.</p>
+                    <p className="mt-3 text-[12px] text-black/45">
+                      Closed. If the school writes again, it will reopen.
+                    </p>
                   ) : (
                     <form
-                      className="mt-3 space-y-2"
+                      className="mt-3 flex gap-2"
                       onSubmit={(e) => {
                         e.preventDefault();
                         void sendReply();
@@ -338,165 +474,218 @@ export function SupportDeskView() {
                       <Textarea
                         value={reply}
                         onChange={(e) => setReply(e.target.value)}
-                        placeholder="Reply to this school…"
-                        className="min-h-[80px] rounded-xl bg-white"
+                        placeholder="Write a reply…"
+                        className="min-h-[72px] flex-1 rounded-xl bg-white"
                       />
                       <Button
                         type="submit"
                         disabled={replyBusy || !reply.trim()}
-                        className="rounded-full bg-black text-white hover:bg-black/85"
+                        className="h-11 shrink-0 self-end rounded-full bg-[#0F766E] px-4 text-white hover:bg-[#0D9488]"
                       >
-                        {replyBusy ? "Sending…" : "Send reply"}
+                        {replyBusy ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            <Send className="mr-1.5 h-4 w-4" />
+                            Send
+                          </>
+                        )}
                       </Button>
                     </form>
                   )}
                 </>
               ) : (
-                <div className="grid min-h-[16rem] place-items-center text-center">
+                <div className="grid flex-1 place-items-center text-center">
                   <div>
                     <LifeBuoy className="mx-auto h-8 w-8 text-black/25" />
-                    <p className="mt-2 text-[13px] text-black/45">Select a ticket to read the thread.</p>
+                    <p className="mt-2 text-[13px] font-medium text-black/55">Pick a school on the left</p>
+                    <p className="mt-0.5 text-[12px] text-black/40">Read the thread and send a reply.</p>
                   </div>
                 </div>
               )}
             </div>
           </div>
         </OrganicCard>
+      ) : null}
 
-        <OrganicCard tone="white" cornerSide="bl" padded className="col-span-12 lg:col-span-5">
-          <div className="text-[13px] font-semibold uppercase tracking-wider text-black/45">Channels</div>
-          <p className="mt-0.5 text-[12px] text-black/55">Used by Settings → Customer Support in every school.</p>
-          <div className="mt-4 space-y-3">
-            <label className="block space-y-1.5">
-              <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">Gmail</Label>
-              <Input
-                value={settings.supportEmail}
-                onChange={(e) => setSettings((prev) => ({ ...prev, supportEmail: e.target.value }))}
-                className="h-9 rounded-lg"
-              />
-            </label>
-            <label className="block space-y-1.5">
-              <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">WhatsApp</Label>
-              <Input
-                value={settings.whatsappE164}
-                onChange={(e) => setSettings((prev) => ({ ...prev, whatsappE164: e.target.value }))}
-                placeholder="+91 97440 09048"
-                className="h-9 rounded-lg"
-              />
-            </label>
-            <label className="block space-y-1.5">
-              <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">Assistant greeting</Label>
-              <Textarea
-                value={settings.greeting}
-                onChange={(e) => setSettings((prev) => ({ ...prev, greeting: e.target.value }))}
-                className="min-h-[88px] rounded-lg"
-              />
-            </label>
-            <Button
-              type="button"
-              onClick={() => void saveChannels()}
-              disabled={savingChannels}
-              className="rounded-full bg-black text-white hover:bg-black/85"
-            >
-              {savingChannels ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Save className="mr-1.5 h-4 w-4" />}
-              Save channels
-            </Button>
-          </div>
-        </OrganicCard>
-
-        <OrganicCard tone="white" cornerSide="br" padded className="col-span-12">
+      {section === "help" ? (
+        <OrganicCard tone="white" cornerSide="tr" padded>
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
-              <div className="text-[13px] font-semibold uppercase tracking-wider text-black/45">FAQs</div>
-              <p className="mt-0.5 text-[12px] text-black/55">
-                Questionnaire chips and auto-replies. Keywords decide the match.
+              <div className="text-[13px] font-semibold text-black">Help answers</div>
+              <p className="mt-0.5 text-[12px] text-black/50">
+                Question and answer only. Schools see these in Settings → Customer Support.
               </p>
             </div>
-            <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={() => setFaqDraft(emptyFaq())}>
-              <Plus className="mr-1 h-3.5 w-3.5" /> New
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="rounded-full"
+              onClick={() => setFaqDraft(emptyFaq())}
+            >
+              <Plus className="mr-1 h-3.5 w-3.5" />
+              New answer
             </Button>
           </div>
 
           <div className="mt-4 grid grid-cols-12 gap-3">
-            <ul className="col-span-12 space-y-1.5 lg:col-span-5">
-              {faqs.map((faq) => (
-                <li key={faq.id}>
-                  <button
-                    type="button"
-                    onClick={() => setFaqDraft(faq)}
-                    className={cn(
-                      "flex w-full items-start justify-between gap-2 rounded-xl border px-3 py-2.5 text-left",
-                      faqDraft.id === faq.id ? "border-[#0F766E]/40 bg-[#F0FDFA]" : "border-[#EFEFEF] bg-white hover:bg-[#FAFAFA]",
-                    )}
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate text-[13px] font-semibold text-black">{faq.question}</span>
-                      <span className="block text-[10.5px] uppercase tracking-wider text-black/35">
-                        {faq.active === false ? "Off" : "Live"}
-                      </span>
-                    </span>
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-black/40 hover:bg-red-50 hover:text-red-600"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void deleteFaq(faq.id);
-                      }}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </span>
-                  </button>
+            <ul className="mobile-scrollbar-none col-span-12 max-h-[28rem] space-y-1.5 overflow-y-auto lg:col-span-5">
+              {faqs.length === 0 ? (
+                <li className="rounded-xl border border-dashed border-[#E5E5E5] px-3 py-10 text-center text-[13px] text-black/45">
+                  No help answers yet. Add the first one.
                 </li>
-              ))}
+              ) : (
+                faqs.map((faq) => (
+                  <li key={faq.id}>
+                    <button
+                      type="button"
+                      onClick={() => setFaqDraft(faq)}
+                      className={cn(
+                        "flex w-full items-start justify-between gap-2 rounded-xl border px-3 py-2.5 text-left",
+                        faqDraft.id === faq.id
+                          ? "border-[#0F766E]/40 bg-[#F0FDFA]"
+                          : "border-[#EFEFEF] bg-white hover:bg-[#FAFAFA]",
+                      )}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-[13px] font-semibold text-black">
+                          {faq.question}
+                        </span>
+                        <span className="mt-0.5 block text-[11px] text-black/40">
+                          {faq.active === false ? "Hidden from schools" : "Shown to schools"}
+                        </span>
+                      </span>
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Remove ${faq.question}`}
+                        className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-black/40 hover:bg-red-50 hover:text-red-600"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void deleteFaq(faq.id);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            void deleteFaq(faq.id);
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </span>
+                    </button>
+                  </li>
+                ))
+              )}
             </ul>
-            <div className="col-span-12 space-y-3 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3 lg:col-span-7">
+
+            <div className="col-span-12 space-y-3 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-7">
               <label className="block space-y-1.5">
-                <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">Question</Label>
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                  Question
+                </Label>
                 <Input
                   value={faqDraft.question}
                   onChange={(e) => setFaqDraft((prev) => ({ ...prev, question: e.target.value }))}
+                  placeholder="How do I admit a student?"
                   className="h-9 rounded-lg bg-white"
                 />
               </label>
               <label className="block space-y-1.5">
-                <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">Keywords</Label>
-                <Input
-                  value={faqDraft.keywords ?? ""}
-                  onChange={(e) => setFaqDraft((prev) => ({ ...prev, keywords: e.target.value }))}
-                  placeholder="student admit enrolment"
-                  className="h-9 rounded-lg bg-white"
-                />
-              </label>
-              <label className="block space-y-1.5">
-                <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">Answer</Label>
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                  Answer
+                </Label>
                 <Textarea
                   value={faqDraft.answer ?? ""}
                   onChange={(e) => setFaqDraft((prev) => ({ ...prev, answer: e.target.value }))}
-                  className="min-h-[120px] rounded-lg bg-white"
+                  placeholder="Write a short, clear answer…"
+                  className="min-h-[140px] rounded-lg bg-white"
                 />
               </label>
-              <div className="flex items-center justify-between">
-                <label className="flex items-center gap-2 text-[12px] text-black/60">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label className="flex items-center gap-2 text-[13px] text-black/65">
                   <Switch
                     checked={faqDraft.active !== false}
                     onCheckedChange={(on) => setFaqDraft((prev) => ({ ...prev, active: on }))}
                   />
-                  Live in school chatbot
+                  Show to schools
                 </label>
                 <Button
                   type="button"
                   disabled={faqBusy}
                   onClick={() => void saveFaq()}
-                  className="rounded-full bg-black text-white hover:bg-black/85"
+                  className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
                 >
-                  {faqBusy ? "Saving…" : faqDraft.id ? "Update FAQ" : "Add FAQ"}
+                  {faqBusy ? "Saving…" : faqDraft.id ? "Save answer" : "Add answer"}
                 </Button>
               </div>
             </div>
           </div>
         </OrganicCard>
-      </div>
+      ) : null}
+
+      {section === "contact" ? (
+        <OrganicCard tone="white" cornerSide="tr" padded className="max-w-xl">
+          <div className="text-[13px] font-semibold text-black">How schools reach you</div>
+          <p className="mt-0.5 text-[12px] text-black/50">
+            These details appear in every school under Settings → Customer Support.
+          </p>
+          <div className="mt-4 space-y-3">
+            <label className="block space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                Email
+              </Label>
+              <Input
+                type="email"
+                value={settings.supportEmail}
+                onChange={(e) => setSettings((prev) => ({ ...prev, supportEmail: e.target.value }))}
+                placeholder="support@schoolaccounts.in"
+                className="h-9 rounded-lg"
+              />
+              <p className="text-[11px] text-black/40">Opens Gmail when a school taps Email.</p>
+            </label>
+            <label className="block space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                WhatsApp number
+              </Label>
+              <Input
+                value={settings.whatsappE164}
+                onChange={(e) => setSettings((prev) => ({ ...prev, whatsappE164: e.target.value }))}
+                placeholder="919744009048"
+                className="h-9 rounded-lg"
+              />
+              <p className="text-[11px] text-black/40">Country code + number, no spaces. Example: 919744009048.</p>
+            </label>
+            <label className="block space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                Welcome message
+              </Label>
+              <Textarea
+                value={settings.greeting}
+                onChange={(e) => setSettings((prev) => ({ ...prev, greeting: e.target.value }))}
+                placeholder="Hi — how can we help?"
+                className="min-h-[96px] rounded-lg"
+              />
+              <p className="text-[11px] text-black/40">First line schools see in the help chat.</p>
+            </label>
+            <Button
+              type="button"
+              onClick={() => void saveChannels()}
+              disabled={savingChannels}
+              className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+            >
+              {savingChannels ? (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="mr-1.5 h-4 w-4" />
+              )}
+              Save
+            </Button>
+          </div>
+        </OrganicCard>
+      ) : null}
     </div>
   );
 }
