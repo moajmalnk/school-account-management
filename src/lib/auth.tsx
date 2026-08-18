@@ -106,10 +106,13 @@ export const INVALID_CREDENTIALS_MESSAGE =
   "Invalid email or password. Please review your credentials and try again.";
 
 export const API_UNREACHABLE_MESSAGE =
-  "Cannot reach the API (network or CORS). Confirm spi.macadz.com allows this site origin, then retry.";
+  "Cannot reach the API server. If you develop locally, run `npm run dev:local` (local PHP + MySQL). Otherwise check your network or Hostinger status for spi.macadz.com.";
 
 function loginFailureMessage(err: unknown): string {
   if (err instanceof ApiError) {
+    if (err.status >= 500 || err.status === 0) {
+      return API_UNREACHABLE_MESSAGE;
+    }
     return err.message || INVALID_CREDENTIALS_MESSAGE;
   }
   if (

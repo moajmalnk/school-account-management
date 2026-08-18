@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
+    "dev:api": "php -S 127.0.0.1:8090 -t backend",
+    "dev:local": "php -S 127.0.0.1:8090 -t backend & vite dev",
+    "setup:db": "mysql -h 127.0.0.1 -u root -e \"CREATE DATABASE IF NOT EXISTS school_spi_local CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;\" && mysql -h 127.0.0.1 -u root school_spi_local < backend/schema.sql && mysql -h 127.0.0.1 -u root school_spi_local < backend/schema_superadmin_migrate.sql",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",

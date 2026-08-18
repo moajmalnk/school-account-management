@@ -270,6 +270,7 @@ import {
   type CustomDateRange,
   type PaymentPeriod,
 } from "@/lib/payment-period";
+import { amountToIndianWords } from "@/lib/amount-words";
 import { cn, dashCardClass, glassCardClass, glassInsetClass, glassPanelClass, glassTableWrapClass, premiumCardClass, type CornerSide, type Tone } from "@/lib/utils";
 
 type PendingObligation = {
@@ -6422,7 +6423,7 @@ function FinanceOverview({
                       </SelectTrigger>
                       <SelectContent>
                         {Array.from(
-                          new Set(["Bank", "UPI", "Cash", editForm.mode].filter(Boolean)),
+                          new Set(["Bank", "Cash", "Both", editForm.mode].filter(Boolean)),
                         ).map((mode) => (
                           <SelectItem key={mode} value={mode}>
                             {mode}
@@ -6563,8 +6564,227 @@ function categorySuggestsExternal(category: string) {
   );
 }
 
+type FeeLineItem = {
+  id: string;
+  description: string;
+  customDescription: string;
+  amount: string;
+  feePeriodKind: FeePeriodKind;
+  feePeriod: string;
+};
+
+const RECEIVE_PAYMENT_MODES = ["Bank", "Cash", "Both"] as const;
+
+function newFeeLineId() {
+  return `fl-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function isOtherFeeDescription(label: string) {
+  return label.trim().toLowerCase() === "other";
+}
+
+function feeLineCategoryLabel(item: FeeLineItem) {
+  if (isOtherFeeDescription(item.description) && item.customDescription.trim()) {
+    return item.customDescription.trim();
+  }
+  return item.description.trim();
+}
+
+function createFeeLineItem(partial?: Partial<FeeLineItem>): FeeLineItem {
+  return {
+    id: newFeeLineId(),
+    description: "Tuition Fee",
+    customDescription: "",
+    amount: "",
+    feePeriodKind: "month",
+    feePeriod: currentFeeMonth(),
+    ...partial,
+  };
+}
+
+function feePeriodChoices(
+  feeTerms: FeeTerm[],
+  description: string,
+): { value: string; label: string; kind: FeePeriodKind; period: string }[] {
+  const termKind = categoryFeeTermKind(description);
+  const terms = termKind ? filterFeePeriods(feeTerms, "term", termKind) : [];
+  const months = termKind ? filterFeePeriods(feeTerms, "month", termKind) : [];
+  const monthLabels = months.length > 0 ? months.map((t) => t.label) : [...FEE_MONTHS];
+  return [
+    ...terms.map((t) => ({
+      value: `term:${t.label}`,
+      label: [t.label, t.coverage || formatFeeTermCoverage(t.startDate, t.endDate)]
+        .filter(Boolean)
+        .join(" · "),
+      kind: "term" as const,
+      period: t.label,
+    })),
+    ...monthLabels.map((label) => {
+      const monthTerm = months.find((t) => t.label === label);
+      return {
+        value: `month:${label}`,
+        label: monthTerm
+          ? [label, monthTerm.coverage || formatFeeTermCoverage(monthTerm.startDate, monthTerm.endDate)]
+              .filter(Boolean)
+              .join(" · ")
+          : label,
+        kind: "month" as const,
+        period: label,
+      };
+    }),
+  ];
+}
+
+function defaultFeePeriod(
+  feeTerms: FeeTerm[],
+  description: string,
+  billingCycle?: string,
+): { feePeriodKind: FeePeriodKind; feePeriod: string } {
+  const choices = feePeriodChoices(feeTerms, description);
+  if (billingCycle === "Term") {
+    const term = choices.find((c) => c.kind === "term");
+    if (term) return { feePeriodKind: "term", feePeriod: term.period };
+  }
+  const month = choices.find((c) => c.kind === "month");
+  if (month) return { feePeriodKind: "month", feePeriod: month.period };
+  const first = choices[0];
+  if (first) return { feePeriodKind: first.kind, feePeriod: first.period };
+  return { feePeriodKind: "month", feePeriod: currentFeeMonth() };
+}
+
+function parseFeePeriodValue(value: string): { feePeriodKind: FeePeriodKind; feePeriod: string } {
+  const sep = value.indexOf(":");
+  if (sep <= 0) return { feePeriodKind: "month", feePeriod: value };
+  const kind = value.slice(0, sep);
+  const period = value.slice(sep + 1);
+  return {
+    feePeriodKind: kind === "term" ? "term" : "month",
+    feePeriod: period,
+  };
+}
+
+function prefillAmountForFeeLine(
+  item: Pick<FeeLineItem, "description" | "feePeriodKind" | "feePeriod">,
+  matchedClass: ClassConfig | undefined,
+  feeTerms: FeeTerm[],
+  tuitionFee: number | undefined,
+  vehicleFee: number | undefined,
+): number | undefined {
+  const category = item.description;
+  const lower = category.toLowerCase();
+  const termKind = categoryFeeTermKind(category);
+  const termsForCategory = termKind ? filterFeePeriods(feeTerms, "term", termKind) : [];
+  const monthsForCategory = termKind ? filterFeePeriods(feeTerms, "month", termKind) : [];
+  const selectedTerm =
+    item.feePeriodKind === "term"
+      ? termsForCategory.find((t) => t.label === item.feePeriod)
+      : undefined;
+  const selectedMonthPeriod =
+    item.feePeriodKind === "month"
+      ? monthsForCategory.find((t) => t.label === item.feePeriod)
+      : undefined;
+
+  if (matchedClass) {
+    const scheduled = withClassFeeSchedule(matchedClass, feeTerms);
+    const periodList = item.feePeriodKind === "term" ? termsForCategory : monthsForCategory;
+    const selectedPeriod = item.feePeriodKind === "term" ? selectedTerm : selectedMonthPeriod;
+    const periodIndex = selectedPeriod
+      ? periodList.findIndex((p) => p.id === selectedPeriod.id || p.label === selectedPeriod.label)
+      : -1;
+    const fromSchedule = classFeePrefillAmount(scheduled, {
+      category,
+      periodLabel: item.feePeriod || selectedPeriod?.label,
+      periodIndex: periodIndex >= 0 ? periodIndex : undefined,
+    });
+    if (fromSchedule && fromSchedule > 0) return fromSchedule;
+  }
+  if (selectedTerm?.feeAmount && selectedTerm.feeAmount > 0) return selectedTerm.feeAmount;
+  if (selectedMonthPeriod?.feeAmount && selectedMonthPeriod.feeAmount > 0) {
+    return selectedMonthPeriod.feeAmount;
+  }
+  if (lower.includes("vehicle") || lower.includes("transport") || lower.includes("bus")) {
+    return vehicleFee;
+  }
+  if (isOtherFeeDescription(category) || categorySuggestsExternal(category)) return undefined;
+  return tuitionFee && tuitionFee > 0 ? tuitionFee : undefined;
+}
+
+function splitMatchesTotal(mode: string, bank: string, cash: string, total: number) {
+  if (mode !== "Both") return true;
+  const bankN = Number(bank);
+  const cashN = Number(cash);
+  return bankN > 0 && cashN > 0 && bankN + cashN === total;
+}
+
+function PaymentModeControls({
+  mode,
+  onModeChange,
+  bankSplitAmount,
+  cashSplitAmount,
+  onBankChange,
+  onCashChange,
+}: {
+  mode: string;
+  onModeChange: (next: string) => void;
+  bankSplitAmount: string;
+  cashSplitAmount: string;
+  onBankChange: (next: string) => void;
+  onCashChange: (next: string) => void;
+}) {
+  return (
+    <>
+      <FieldLabel>Payment Mode</FieldLabel>
+      <div className="flex h-11 gap-1 rounded-full border border-[#E5E5E5] bg-white p-1 dark:border-white/10 dark:bg-zinc-900 sm:h-10">
+        {RECEIVE_PAYMENT_MODES.map((m) => {
+          const active = mode === m;
+          return (
+            <button
+              key={m}
+              type="button"
+              onClick={() => onModeChange(m)}
+              className={cn(
+                "flex h-full flex-1 items-center justify-center rounded-full px-2 text-[12px] font-medium transition-colors sm:px-3",
+                active
+                  ? "bg-[#0F766E] text-white"
+                  : "text-black/65 hover:text-black dark:text-zinc-300 dark:hover:text-zinc-50",
+              )}
+            >
+              {m}
+            </button>
+          );
+        })}
+      </div>
+      {mode === "Both" && (
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <div>
+            <div className="mb-1 text-[10px] font-medium text-black/45">Bank (₹)</div>
+            <input
+              value={bankSplitAmount}
+              onChange={(e) => onBankChange(e.target.value.replace(/[^0-9]/g, ""))}
+              inputMode="numeric"
+              placeholder="0"
+              className="h-10 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 font-mono text-[13px] dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100"
+            />
+          </div>
+          <div>
+            <div className="mb-1 text-[10px] font-medium text-black/45">Cash (₹)</div>
+            <input
+              value={cashSplitAmount}
+              onChange={(e) => onCashChange(e.target.value.replace(/[^0-9]/g, ""))}
+              inputMode="numeric"
+              placeholder="0"
+              className="h-10 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 font-mono text-[13px] dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100"
+            />
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function ReceivePayment() {
   const { session } = useAuth();
+  const navigate = useNavigate();
   const {
     activeStudents: students,
     setStudents,
@@ -6585,16 +6805,24 @@ function ReceivePayment() {
     const fromStudents = Array.from(new Set(students.map((s) => s.cls)));
     return Array.from(new Set([...fromConfig, ...fromStudents]));
   }, [classConfigs, students]);
+  const defaultCategory = paymentCategories[0]?.label ?? "Tuition Fee";
+  const ledgerDefault =
+    paymentCategories.find((c) => /donation/i.test(c.label))?.label ??
+    paymentCategories.find((c) => categorySuggestsExternal(c.label))?.label ??
+    defaultCategory;
   const [payerSource, setPayerSource] = useState<"student" | "external">("student");
   const [externalPayer, setExternalPayer] = useState("");
+  const [externalAmount, setExternalAmount] = useState("");
+  const [ledgerCategory, setLedgerCategory] = useState(ledgerDefault);
   const [cls, setCls] = useState(classes[0] ?? "");
   const studentsInClass = useMemo(() => students.filter((s) => s.cls === cls), [students, cls]);
   const [stu, setStu] = useState(studentsInClass[0]?.name ?? students[0]?.name ?? "");
-  const [category, setCategory] = useState(paymentCategories[0]?.label ?? "Tuition Fee");
-  const [amount, setAmount] = useState("");
-  const [feePeriodKind, setFeePeriodKind] = useState<FeePeriodKind>("month");
-  const [feePeriod, setFeePeriod] = useState(() => currentFeeMonth());
+  const [feeItems, setFeeItems] = useState<FeeLineItem[]>(() => [
+    createFeeLineItem({ description: defaultCategory }),
+  ]);
   const [mode, setMode] = useState("Bank");
+  const [bankSplitAmount, setBankSplitAmount] = useState("");
+  const [cashSplitAmount, setCashSplitAmount] = useState("");
   const [narration, setNarration] = useState("");
   const [receiptTime, setReceiptTime] = useState(() => formatDisbursalTime());
   const [attachments, setAttachments] = useState<PaymentAttachment[]>([]);
@@ -6620,64 +6848,29 @@ function ReceivePayment() {
 
   const isExternal = payerSource === "external";
   const selected = !isExternal ? students.find((s) => s.name === stu) : undefined;
-  const termKindForCategory = categoryFeeTermKind(category);
-  const termsForCategory = useMemo(
-    () =>
-      termKindForCategory
-        ? filterFeePeriods(feeTerms, "term", termKindForCategory)
-        : [],
-    [feeTerms, termKindForCategory],
+  const descriptionOptions = useMemo(
+    () => paymentCategories.map((c) => ({ value: c.label, label: c.label })),
+    [paymentCategories],
   );
-  const monthsForCategory = useMemo(
-    () =>
-      termKindForCategory
-        ? filterFeePeriods(feeTerms, "month", termKindForCategory)
-        : [],
-    [feeTerms, termKindForCategory],
+  const filledFeeItems = useMemo(
+    () => feeItems.filter((item) => Number(item.amount) > 0),
+    [feeItems],
   );
-  const termOptions = useMemo(
-    () =>
-      termsForCategory.map((t) => ({
-        value: t.label,
-        label: [
-          t.label,
-          t.coverage || formatFeeTermCoverage(t.startDate, t.endDate),
-        ]
-          .filter(Boolean)
-          .join(" · "),
-      })),
-    [termsForCategory],
+  const studentTotal = useMemo(
+    () => filledFeeItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0),
+    [filledFeeItems],
   );
-  const monthOptions = useMemo(() => {
-    if (monthsForCategory.length > 0) {
-      return monthsForCategory.map((t) => ({
-        value: t.label,
-        label: [
-          t.label,
-          t.coverage || formatFeeTermCoverage(t.startDate, t.endDate),
-        ]
-          .filter(Boolean)
-          .join(" · "),
-      }));
-    }
-    return FEE_MONTHS.map((m) => ({ value: m, label: m }));
-  }, [monthsForCategory]);
-  const termsAvailable = termsForCategory.length > 0;
-  const monthsAvailable = monthsForCategory.length > 0;
-  const selectedTerm = useMemo(
-    () =>
-      feePeriodKind === "term"
-        ? termsForCategory.find((t) => t.label === feePeriod)
-        : undefined,
-    [feePeriodKind, feePeriod, termsForCategory],
-  );
-  const selectedMonthPeriod = useMemo(
-    () =>
-      feePeriodKind === "month"
-        ? monthsForCategory.find((t) => t.label === feePeriod)
-        : undefined,
-    [feePeriodKind, feePeriod, monthsForCategory],
-  );
+  const externalValue = Number(externalAmount) || 0;
+  const recordTotal = isExternal ? externalValue : studentTotal;
+  const firstFilledLine = filledFeeItems[0];
+  const primaryCategory = isExternal
+    ? ledgerCategory.trim() || "Donation"
+    : firstFilledLine
+      ? feeLineCategoryLabel(firstFilledLine)
+      : defaultCategory;
+  const primaryPeriodKind = firstFilledLine?.feePeriodKind ?? "month";
+  const primaryPeriod = firstFilledLine?.feePeriod ?? currentFeeMonth();
+  const splitOk = splitMatchesTotal(mode, bankSplitAmount, cashSplitAmount, recordTotal);
 
   useEffect(() => {
     if (classes.length && !classes.includes(cls)) {
@@ -6694,44 +6887,21 @@ function ReceivePayment() {
   }, [students, studentsInClass, stu, isExternal]);
 
   useEffect(() => {
-    if (paymentCategories.length && !paymentCategories.some((c) => c.label === category)) {
-      setCategory(paymentCategories[0].label);
+    if (!paymentCategories.length) return;
+    const labels = new Set(paymentCategories.map((c) => c.label));
+    setFeeItems((prev) => {
+      let changed = false;
+      const next = prev.map((item) => {
+        if (labels.has(item.description)) return item;
+        changed = true;
+        return { ...item, description: paymentCategories[0].label, customDescription: "" };
+      });
+      return changed ? next : prev;
+    });
+    if (!labels.has(ledgerCategory)) {
+      setLedgerCategory(ledgerDefault);
     }
-  }, [category, paymentCategories]);
-
-  useEffect(() => {
-    if (feePeriodKind === "term") {
-      if (!termsAvailable) {
-        setFeePeriodKind("month");
-        setFeePeriod(
-          monthsForCategory[0]?.label ?? currentFeeMonth(),
-        );
-        return;
-      }
-      if (!termsForCategory.some((t) => t.label === feePeriod)) {
-        setFeePeriod(termsForCategory[0].label);
-      }
-      return;
-    }
-    if (monthsAvailable) {
-      if (!monthsForCategory.some((t) => t.label === feePeriod)) {
-        setFeePeriod(monthsForCategory[0].label);
-      }
-      return;
-    }
-    if (!(FEE_MONTHS as readonly string[]).includes(feePeriod)) {
-      setFeePeriod(currentFeeMonth());
-    }
-    // Period lists are derived from feeTerms + termKindForCategory above.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    feePeriodKind,
-    feePeriod,
-    termsAvailable,
-    monthsAvailable,
-    feeTerms,
-    termKindForCategory,
-  ]);
+  }, [paymentCategories, ledgerCategory, ledgerDefault]);
 
   const matchedRouteFee = useMemo(() => {
     if (!selected) return undefined;
@@ -6759,135 +6929,122 @@ function ReceivePayment() {
     return matchedRouteFee;
   }, [matchedClass, matchedRouteFee]);
 
-  const prefill = useMemo(() => {
-    if (isExternal) return undefined;
-    const lower = category.toLowerCase();
-    if (matchedClass) {
-      const scheduled = withClassFeeSchedule(matchedClass, feeTerms);
-      const periodList = feePeriodKind === "term" ? termsForCategory : monthsForCategory;
-      const selectedPeriod = feePeriodKind === "term" ? selectedTerm : selectedMonthPeriod;
-      const periodIndex = selectedPeriod
-        ? periodList.findIndex(
-            (p) => p.id === selectedPeriod.id || p.label === selectedPeriod.label,
-          )
-        : -1;
-      const fromSchedule = classFeePrefillAmount(scheduled, {
-        category,
-        periodLabel: feePeriod || selectedPeriod?.label,
-        periodIndex: periodIndex >= 0 ? periodIndex : undefined,
+  const applyPrefillToLines = useCallback(
+    (lines: FeeLineItem[]) => {
+      let changed = false;
+      const next = lines.map((item) => {
+        if (item.amount.trim()) return item;
+        const prefill = prefillAmountForFeeLine(
+          item,
+          matchedClass,
+          feeTerms,
+          tuitionFee,
+          vehicleFee,
+        );
+        if (prefill && prefill > 0) {
+          changed = true;
+          return { ...item, amount: String(prefill) };
+        }
+        return item;
       });
-      if (fromSchedule && fromSchedule > 0) return fromSchedule;
-    }
-    if (selectedTerm?.feeAmount && selectedTerm.feeAmount > 0) return selectedTerm.feeAmount;
-    if (selectedMonthPeriod?.feeAmount && selectedMonthPeriod.feeAmount > 0) {
-      return selectedMonthPeriod.feeAmount;
-    }
-    if (lower.includes("vehicle") || lower.includes("transport") || lower.includes("bus")) {
-      return vehicleFee;
-    }
-    return tuitionFee && tuitionFee > 0 ? tuitionFee : undefined;
-  }, [
-    category,
-    tuitionFee,
-    vehicleFee,
-    matchedClass,
-    feeTerms,
-    isExternal,
-    feePeriod,
-    feePeriodKind,
-    selectedTerm,
-    selectedMonthPeriod,
-    termsForCategory,
-    monthsForCategory,
-  ]);
-
-  const prefillSource = useMemo(() => {
-    if (prefill === undefined || prefill <= 0) return null;
-    if (matchedClass) {
-      const scheduled = withClassFeeSchedule(matchedClass, feeTerms);
-      const line = scheduled.feeSchedule.find((l) => l.amount === prefill);
-      if (line) {
-        return `${matchedClass.className} · ${line.label}`;
-      }
-      return `Class schedule · ${matchedClass.className}`;
-    }
-    if (feePeriodKind === "term" && selectedTerm?.feeAmount && selectedTerm.feeAmount > 0) {
-      return `Settings · ${selectedTerm.label}`;
-    }
-    return `Settings · ${category}`;
-  }, [prefill, feePeriodKind, selectedTerm, category, matchedClass, feeTerms]);
+      return changed ? next : lines;
+    },
+    [feeTerms, matchedClass, tuitionFee, vehicleFee],
+  );
 
   useEffect(() => {
-    if (prefill !== undefined && prefill > 0) {
-      setAmount(String(prefill));
-    } else if (!isExternal) {
-      setAmount("");
-    }
-  }, [prefill, isExternal]);
+    if (isExternal) return;
+    setFeeItems((prev) => applyPrefillToLines(prev));
+  }, [applyPrefillToLines, isExternal, selected?.id]);
 
-  // Align Receive Payment period with the class billing cycle when the student changes
   useEffect(() => {
     if (isExternal || !matchedClass) return;
-    const termKind = categoryFeeTermKind(category);
-    if (matchedClass.billingCycle === "Term" && termKind && termsAvailable) {
-      setFeePeriodKind("term");
-      setFeePeriod((prev) =>
-        termsForCategory.some((t) => t.label === prev)
-          ? prev
-          : (termsForCategory[0]?.label ?? prev),
-      );
-      return;
-    }
-    if (matchedClass.billingCycle === "Monthly" && termKind) {
-      setFeePeriodKind("month");
-      setFeePeriod((prev) => {
-        if (monthsForCategory.some((t) => t.label === prev)) return prev;
-        return monthsForCategory[0]?.label ?? currentFeeMonth();
+    setFeeItems((prev) => {
+      let changed = false;
+      const next = prev.map((item) => {
+        const choices = feePeriodChoices(feeTerms, item.description);
+        const valid = choices.some(
+          (c) => c.kind === item.feePeriodKind && c.period === item.feePeriod,
+        );
+        if (matchedClass.billingCycle === "Term") {
+          const termChoice = choices.find((c) => c.kind === "term");
+          if (termChoice && item.feePeriodKind !== "term") {
+            changed = true;
+            return { ...item, feePeriodKind: "term" as const, feePeriod: termChoice.period };
+          }
+        }
+        if (matchedClass.billingCycle === "Monthly" && item.feePeriodKind === "term") {
+          const monthChoice = choices.find((c) => c.kind === "month");
+          if (monthChoice) {
+            changed = true;
+            return { ...item, feePeriodKind: "month" as const, feePeriod: monthChoice.period };
+          }
+        }
+        if (!valid) {
+          const fallback = defaultFeePeriod(feeTerms, item.description, matchedClass.billingCycle);
+          changed = true;
+          return { ...item, ...fallback };
+        }
+        return item;
       });
-      return;
-    }
-    if (
-      matchedClass.billingCycle === "Annually" &&
-      feePeriodKind === "term"
-    ) {
-      setFeePeriodKind("month");
-      setFeePeriod(monthsForCategory[0]?.label ?? currentFeeMonth());
-    }
-    // Intentional: only re-sync when class / category / availability changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    matchedClass?.id,
-    matchedClass?.billingCycle,
-    category,
-    termsAvailable,
-    monthsAvailable,
-    isExternal,
-  ]);
+      return changed ? next : prev;
+    });
+  }, [feeTerms, isExternal, matchedClass]);
 
-  const selectCategory = (label: string) => {
-    setCategory(label);
-    if (categorySuggestsExternal(label)) {
-      setPayerSource("external");
-    } else {
-      setPayerSource("student");
-    }
-    const nextTermKind = categoryFeeTermKind(label);
-    if (feePeriodKind === "term" && !nextTermKind) {
-      setFeePeriodKind("month");
-      setFeePeriod(
-        filterFeePeriods(feeTerms, "month", null)[0]?.label ?? currentFeeMonth(),
-      );
-    }
+  const updateFeeLine = (id: string, patch: Partial<FeeLineItem>) => {
+    setFeeItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        let next = { ...item, ...patch };
+        if (patch.description) {
+          const choices = feePeriodChoices(feeTerms, patch.description);
+          const stillValid = choices.some(
+            (c) => c.kind === next.feePeriodKind && c.period === next.feePeriod,
+          );
+          if (!stillValid) {
+            const period = defaultFeePeriod(feeTerms, patch.description, matchedClass?.billingCycle);
+            next = { ...next, ...period };
+          }
+          if (!isOtherFeeDescription(patch.description)) {
+            next.customDescription = "";
+          }
+        }
+        if (!("amount" in patch) && !next.amount.trim()) {
+          const prefill = prefillAmountForFeeLine(
+            next,
+            matchedClass,
+            feeTerms,
+            tuitionFee,
+            vehicleFee,
+          );
+          if (prefill && prefill > 0) next = { ...next, amount: String(prefill) };
+        }
+        return next;
+      }),
+    );
   };
 
-  const setPeriodKind = (kind: FeePeriodKind) => {
-    setFeePeriodKind(kind);
-    if (kind === "month") {
-      setFeePeriod(monthsForCategory[0]?.label ?? currentFeeMonth());
-      return;
-    }
-    if (termsForCategory[0]) {
-      setFeePeriod(termsForCategory[0].label);
+  const addFeeItem = () => {
+    const used = new Set(feeItems.map((item) => item.description));
+    const nextCat =
+      paymentCategories.find((c) => !used.has(c.label)) ??
+      paymentCategories[0] ?? { label: defaultCategory };
+    const period = defaultFeePeriod(feeTerms, nextCat.label, matchedClass?.billingCycle);
+    const line = createFeeLineItem({ description: nextCat.label, ...period });
+    const prefill = prefillAmountForFeeLine(line, matchedClass, feeTerms, tuitionFee, vehicleFee);
+    if (prefill && prefill > 0) line.amount = String(prefill);
+    setFeeItems((prev) => [...prev, line]);
+  };
+
+  const removeFeeItem = (id: string) => {
+    setFeeItems((prev) => (prev.length <= 1 ? prev : prev.filter((item) => item.id !== id)));
+  };
+
+  const handleModeChange = (next: string) => {
+    setMode(next);
+    if (next !== "Both") {
+      setBankSplitAmount("");
+      setCashSplitAmount("");
     }
   };
 
@@ -7111,30 +7268,36 @@ function ReceivePayment() {
   };
 
   const handleRecord = () => {
-    const value = Number(amount);
+    const value = recordTotal;
     if (!value || value <= 0) {
       toast.error("Enter a valid amount");
-      return;
-    }
-    if (!feePeriod.trim()) {
-      toast.error(feePeriodKind === "term" ? "Select the fee term" : "Select the fee month");
-      return;
-    }
-    if (feePeriodKind === "term" && !termsAvailable) {
-      toast.error("No fee terms configured", {
-        description: "Add tuition or vehicle terms under Settings → Fees",
-      });
       return;
     }
     if (!receiptTime.trim()) {
       toast.error("Date / time is required");
       return;
     }
+    if (!splitOk) {
+      toast.error("Bank and cash amounts must add up to the total");
+      return;
+    }
 
     const stamp = receiptTime.trim();
-    const note = narration.trim();
+    const extras: string[] = [];
+    if (!isExternal && filledFeeItems.length > 1) {
+      extras.push(
+        `Fee breakdown: ${filledFeeItems
+          .map((item) => `${feeLineCategoryLabel(item)} ₹${Number(item.amount).toLocaleString("en-IN")}`)
+          .join(" · ")}`,
+      );
+    }
+    if (mode === "Both") {
+      extras.push(
+        `Bank ₹${Number(bankSplitAmount).toLocaleString("en-IN")} · Cash ₹${Number(cashSplitAmount).toLocaleString("en-IN")}`,
+      );
+    }
+    const note = [narration.trim(), ...extras].filter(Boolean).join(" · ");
     const receiptAttachments = attachments.length ? attachments : undefined;
-    const periodLabel = feePeriod.trim();
 
     if (isExternal) {
       const payer = externalPayer.trim();
@@ -7142,15 +7305,20 @@ function ReceivePayment() {
         toast.error("Enter the donor / payer name");
         return;
       }
+      if (!primaryCategory) {
+        toast.error("Select a ledger category");
+        return;
+      }
+      const periodLabel = currentFeeMonth();
       const newPayment: Payment = {
         id: `RC-${9822 + payments.length}`,
         name: payer,
-        cat: category,
+        cat: primaryCategory,
         mode,
         amount: value,
         time: stamp,
         academicYear,
-        feePeriodKind,
+        feePeriodKind: "month",
         feePeriod: periodLabel,
         feeMonth: periodLabel,
         payerType: "external",
@@ -7162,15 +7330,17 @@ function ReceivePayment() {
         toast.error(err instanceof Error ? err.message : "Could not sync receipt"),
       );
       toast.success(`Receipt ${newPayment.id} · ₹ ${value.toLocaleString("en-IN")} captured`, {
-        description: `External · ${payer} · ${category} · ${periodLabel}${
+        description: `External · ${payer} · ${primaryCategory} · ${periodLabel}${
           receiptAttachments ? ` · ${receiptAttachments.length} file${receiptAttachments.length === 1 ? "" : "s"}` : ""
         }`,
       });
-      setAmount("");
+      setExternalAmount("");
       setExternalPayer("");
       setNarration("");
       setReceiptTime(formatDisbursalTime());
       setAttachments([]);
+      setBankSplitAmount("");
+      setCashSplitAmount("");
       return;
     }
 
@@ -7178,15 +7348,30 @@ function ReceivePayment() {
       toast.error("Select a valid student");
       return;
     }
+    if (filledFeeItems.length === 0) {
+      toast.error("Add at least one fee item with an amount");
+      return;
+    }
+    for (const item of filledFeeItems) {
+      if (!feeLineCategoryLabel(item)) {
+        toast.error("Each fee item needs a description");
+        return;
+      }
+      if (!item.feePeriod.trim()) {
+        toast.error("Each fee item needs a fee period");
+        return;
+      }
+    }
+    const periodLabel = primaryPeriod.trim();
     const newPayment: Payment = {
       id: `RC-${9822 + payments.length}`,
       name: selected.name,
-      cat: category,
+      cat: primaryCategory,
       mode,
       amount: value,
       time: stamp,
       academicYear,
-      feePeriodKind,
+      feePeriodKind: primaryPeriodKind,
       feePeriod: periodLabel,
       feeMonth: periodLabel,
       payerType: "student",
@@ -7211,10 +7396,13 @@ function ReceivePayment() {
           ? `${selected.name}'s balance is now Cleared · ${periodLabel}`
           : `${selected.name} · ${periodLabel} · balance ₹ ${remaining.toLocaleString("en-IN")}`,
     });
-    setAmount("");
+    const resetPeriod = defaultFeePeriod(feeTerms, defaultCategory, matchedClass?.billingCycle);
+    setFeeItems([createFeeLineItem({ description: defaultCategory, ...resetPeriod })]);
     setNarration("");
     setReceiptTime(formatDisbursalTime());
     setAttachments([]);
+    setBankSplitAmount("");
+    setCashSplitAmount("");
   };
 
   const todayTotal = useMemo(
@@ -7252,53 +7440,43 @@ function ReceivePayment() {
   }, [payments, historyQuery]);
 
   const summaryName = isExternal ? externalPayer.trim() || "External payer" : stu;
-  const summaryContext = isExternal ? "External" : cls;
+  const studentLinesValid =
+    filledFeeItems.length > 0 &&
+    filledFeeItems.every(
+      (item) => feeLineCategoryLabel(item).length > 0 && item.feePeriod.trim().length > 0,
+    );
   const canRecord =
-    Number(amount) > 0 &&
-    feePeriod.trim().length > 0 &&
-    !(feePeriodKind === "term" && !termsAvailable) &&
-    (isExternal ? externalPayer.trim().length > 0 : Boolean(selected));
+    recordTotal > 0 &&
+    splitOk &&
+    receiptTime.trim().length > 0 &&
+    (isExternal
+      ? externalPayer.trim().length > 0 && primaryCategory.length > 0
+      : Boolean(selected) && studentLinesValid);
 
   return (
     <div className="space-y-4 sm:space-y-5">
       <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1 pt-0.5">
-              <div className="text-[17px] font-bold leading-tight tracking-tight text-black dark:text-zinc-50 sm:text-title">
-                Inbound Fee Capture
-              </div>
-              <p className="mt-1 text-[11.5px] text-black/55 dark:text-zinc-400 sm:text-[12px]">
-                {isExternal
-                  ? `Record school income from external payers · ${academicYear}`
-                  : `Post fee receipts to student ledgers · ${academicYear}`}
-              </p>
+            <div className="text-[17px] font-bold leading-tight tracking-tight text-black dark:text-zinc-50 sm:text-title">
+              {isExternal ? "External payer" : "Fee Collection"}
+            </div>
           </div>
-          {!isExternal && selected && (
-            <span
-              className={cn(
-                "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-semibold sm:px-3.5 sm:text-[11.5px]",
-                selected.due > 0 ? "bg-[#FEF3C7] text-black" : "bg-[#CCFBF1] text-black",
-              )}
-            >
-              {selected.due > 0 ? (
-                <>
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                  Due ₹ {selected.due.toLocaleString("en-IN")}
-                </>
-              ) : (
-                "Ledger Cleared"
-              )}
-            </span>
-          )}
-          {isExternal && (
-            <span className="inline-flex items-center gap-2 rounded-full bg-[#CCFBF1] px-3 py-1.5 text-[11px] font-semibold text-black sm:px-3.5 sm:text-[11.5px]">
-              External income
-            </span>
-          )}
         </div>
 
+        <input
+          ref={attachmentInputRef}
+          type="file"
+          multiple
+          accept="image/*,.pdf,.jpg,.jpeg,.png,.webp"
+          className="hidden"
+          onChange={(e) => {
+            void addAttachments(e.target.files);
+            e.target.value = "";
+          }}
+        />
+
         <div className="mt-5 grid grid-cols-12 gap-x-4 gap-y-5 sm:gap-x-5 sm:gap-y-6">
-          {/* 1 · Received from */}
           <div className="col-span-12">
             <FieldLabel>Received From</FieldLabel>
             <div className="flex h-11 w-full gap-1 rounded-full border border-[#E5E5E5] bg-white p-1 dark:border-white/10 dark:bg-zinc-900 sm:h-10">
@@ -7328,29 +7506,135 @@ function ReceivePayment() {
             </div>
           </div>
 
-          {/* 2 · Identity (same 6+6 grid for both modes) */}
           {isExternal ? (
             <>
-              <div className="col-span-12 sm:col-span-6">
-                <FieldLabel>Donor / Payer Name</FieldLabel>
-                <Input
-                  value={externalPayer}
-                  onChange={(e) => setExternalPayer(e.target.value)}
-                  placeholder="e.g. Parent Association · Ravi Kumar"
-                  className="h-11 sm:h-10"
-                />
-                <p className="mt-1.5 min-h-[1.125rem] text-[10.5px] leading-snug text-black/45">
-                  Counted as school income only
-                </p>
-              </div>
-              <div className="col-span-12 sm:col-span-6">
-                <FieldLabel>Ledger Link</FieldLabel>
-                <div className="flex h-11 items-center rounded-lg border border-dashed border-[#E5E5E5] bg-[#FAFAFA] px-3 text-[12px] text-black/55 dark:border-white/10 dark:bg-zinc-900/50 dark:text-zinc-400 sm:h-10">
-                  Not linked to a student ledger
+              <div className="col-span-12 grid grid-cols-12 gap-x-4 gap-y-5 lg:col-span-6 lg:grid-cols-1 lg:gap-y-5">
+                <div className="col-span-12">
+                  <FieldLabel>Donor / payer</FieldLabel>
+                  <Input
+                    value={externalPayer}
+                    onChange={(e) => setExternalPayer(e.target.value)}
+                    placeholder="e.g. Parent Association · Ravi Kumar"
+                    className="h-11 sm:h-10"
+                  />
                 </div>
-                <p className="mt-1.5 min-h-[1.125rem] text-[10.5px] leading-snug text-black/45">
-                  External receipts stay on school income
-                </p>
+                <div className="col-span-12">
+                  <FieldLabel>Amount</FieldLabel>
+                  <input
+                    value={externalAmount}
+                    onChange={(e) => setExternalAmount(e.target.value.replace(/[^0-9]/g, ""))}
+                    inputMode="numeric"
+                    placeholder="0"
+                    className="h-11 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 font-mono text-[15px] font-semibold dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 sm:h-10 sm:text-[13px] sm:font-normal"
+                  />
+                </div>
+                <div className="col-span-12 flex flex-col">
+                  <FieldLabel>Narration</FieldLabel>
+                  <Textarea
+                    value={narration}
+                    onChange={(e) => setNarration(e.target.value)}
+                    placeholder="Optional note · purpose, reference, or remarks"
+                    className="min-h-[140px] w-full flex-1 resize-none rounded-lg border border-[#E5E5E5] bg-white px-3 py-2.5 text-[13px]"
+                  />
+                </div>
+              </div>
+
+              <div className="col-span-12 grid grid-cols-12 gap-x-4 gap-y-5 lg:col-span-6 lg:grid-cols-1">
+                <div className="col-span-12">
+                  <FieldLabel>Ledger Link</FieldLabel>
+                  <div className="flex gap-2">
+                    <FieldSelect
+                      className="min-w-0 flex-1"
+                      value={ledgerCategory}
+                      onValueChange={setLedgerCategory}
+                      options={descriptionOptions}
+                      placeholder="Select category"
+                      triggerClassName="h-11 sm:h-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        navigate({ to: "/tenant/settings", search: { tab: "fees" } })
+                      }
+                      className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-[#E5E5E5] bg-white text-black/70 transition-colors hover:bg-[#F4F4F5] dark:border-white/10 dark:bg-zinc-900 sm:h-10 sm:w-10"
+                      aria-label="Add ledger category"
+                      title="Add category in Settings → Fees"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+                <div className="col-span-12">
+                  <PaymentModeControls
+                    mode={mode}
+                    onModeChange={handleModeChange}
+                    bankSplitAmount={bankSplitAmount}
+                    cashSplitAmount={cashSplitAmount}
+                    onBankChange={setBankSplitAmount}
+                    onCashChange={setCashSplitAmount}
+                  />
+                  {mode === "Both" && !splitOk && recordTotal > 0 && (
+                    <p className="mt-1.5 text-[10.5px] text-red-600">
+                      Bank + Cash must equal ₹ {recordTotal.toLocaleString("en-IN")}
+                    </p>
+                  )}
+                </div>
+                <div className="col-span-12 flex flex-col">
+                  <div className="mb-1 flex min-h-[15px] items-center justify-between gap-2">
+                    <FieldLabel className="mb-0">Attachment</FieldLabel>
+                    <span className="text-[10.5px] font-medium text-black/45">
+                      {attachments.length} / {MAX_PAYMENT_ATTACHMENTS}
+                    </span>
+                  </div>
+                  <div className="flex min-h-[140px] flex-1 flex-col rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] p-3 dark:border-white/10 dark:bg-zinc-900/50">
+                    {attachments.length > 0 ? (
+                      <ul className="mb-3 max-h-28 flex-1 space-y-2 overflow-y-auto">
+                        {attachments.map((file) => (
+                          <li
+                            key={file.id}
+                            className="flex items-center gap-2 rounded-lg border border-[#EFEFEF] bg-white px-2.5 py-2 dark:border-white/10 dark:bg-zinc-900"
+                          >
+                            <FileText className="h-3.5 w-3.5 shrink-0 text-black/40" />
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-[12px] font-medium text-black">{file.name}</div>
+                              <div className="font-mono text-[10px] text-black/45">
+                                {formatAttachmentSize(file.size)}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setPreviewAttachment(file)}
+                              className="inline-flex h-7 items-center rounded-lg border border-slate-200 px-2 text-[10.5px] font-semibold text-black/60 transition-colors hover:bg-slate-50"
+                            >
+                              Open
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeAttachment(file.id)}
+                              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-red-200 text-red-600 transition-colors hover:bg-red-50"
+                              aria-label={`Remove ${file.name}`}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mb-3 flex-1 text-[12px] leading-snug text-black/45">
+                        Attach bank slips, cheques, or supporting documents.
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => attachmentInputRef.current?.click()}
+                      disabled={attachments.length >= MAX_PAYMENT_ATTACHMENTS}
+                      className="mt-auto inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3.5 text-[12px] font-semibold text-black transition-colors hover:border-black/20 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                    >
+                      <Paperclip className="h-3.5 w-3.5" />
+                      Add files
+                    </button>
+                  </div>
+                </div>
               </div>
             </>
           ) : (
@@ -7371,9 +7655,6 @@ function ReceivePayment() {
                   searchPlaceholder="Search class..."
                   triggerClassName="h-11 sm:h-10"
                 />
-                <p className="mt-1.5 min-h-[1.125rem] text-[10.5px] leading-snug text-black/45">
-                  {"\u00A0"}
-                </p>
               </div>
               <div className="col-span-12 sm:col-span-6">
                 <FieldLabel>Student</FieldLabel>
@@ -7389,300 +7670,206 @@ function ReceivePayment() {
                   searchPlaceholder="Search student..."
                   triggerClassName="h-11 sm:h-10"
                 />
-                <p className="mt-1.5 min-h-[1.125rem] text-[10.5px] leading-snug text-black/45">
-                  {"\u00A0"}
-                </p>
+              </div>
+
+              {feeItems.map((item, index) => {
+                const periodChoices = feePeriodChoices(feeTerms, item.description);
+                return (
+                  <div key={item.id} className="col-span-12 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <FieldLabel className="mb-0">Fee item-{index + 1}</FieldLabel>
+                      {feeItems.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeFeeItem(item.id)}
+                          className="inline-flex h-7 items-center rounded-lg px-2 text-[11px] font-semibold text-red-600 hover:bg-red-50"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-12 gap-3">
+                      <div className="col-span-12 sm:col-span-5">
+                        <FieldLabel>Fee description</FieldLabel>
+                        <FieldSelect
+                          value={item.description}
+                          onValueChange={(next) => updateFeeLine(item.id, { description: next })}
+                          options={
+                            descriptionOptions.length
+                              ? descriptionOptions
+                              : [{ value: item.description, label: item.description }]
+                          }
+                          placeholder="Select fee"
+                          triggerClassName="h-11 sm:h-10"
+                        />
+                        {isOtherFeeDescription(item.description) && (
+                          <Input
+                            value={item.customDescription}
+                            onChange={(e) =>
+                              updateFeeLine(item.id, { customDescription: e.target.value })
+                            }
+                            placeholder="Other"
+                            className="mt-1.5 h-9 border-red-200 text-[12px] text-red-700 placeholder:text-red-400"
+                          />
+                        )}
+                      </div>
+                      <div className="col-span-12 sm:col-span-3">
+                        <FieldLabel>Amount</FieldLabel>
+                        <input
+                          value={item.amount}
+                          onChange={(e) =>
+                            updateFeeLine(item.id, {
+                              amount: e.target.value.replace(/[^0-9]/g, ""),
+                            })
+                          }
+                          inputMode="numeric"
+                          placeholder="0"
+                          className="h-11 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 font-mono text-[15px] font-semibold dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 sm:h-10 sm:text-[13px] sm:font-normal"
+                        />
+                      </div>
+                      <div className="col-span-12 sm:col-span-4">
+                        <FieldLabel>Fee period</FieldLabel>
+                        <FieldSelect
+                          value={`${item.feePeriodKind}:${item.feePeriod}`}
+                          onValueChange={(next) =>
+                            updateFeeLine(item.id, parseFeePeriodValue(next))
+                          }
+                          options={periodChoices.map((c) => ({ value: c.value, label: c.label }))}
+                          placeholder="Select period"
+                          triggerClassName="h-11 sm:h-10"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              <div className="col-span-12">
+                <button
+                  type="button"
+                  onClick={addFeeItem}
+                  className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#E5E5E5] bg-white text-[13px] font-semibold text-black/75 transition-colors hover:border-[#0F766E]/40 hover:bg-[#F0FDFA] dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Fee Item
+                </button>
+              </div>
+
+              <div className="col-span-12 flex items-center justify-between gap-4 rounded-xl border border-[#E8E8EA] bg-[#F8F8F9] px-4 py-3 dark:border-white/10 dark:bg-zinc-900/80">
+                <div className="min-w-0">
+                  <FieldLabel className="mb-0.5">Total Amount</FieldLabel>
+                  <div className="text-[13px] text-black/65 dark:text-zinc-300">
+                    {amountToIndianWords(recordTotal)}
+                  </div>
+                </div>
+                <div className="shrink-0 rounded-lg border border-[#E5E5E5] bg-white px-3.5 py-2 font-mono text-[16px] font-semibold text-black dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-50">
+                  {recordTotal.toLocaleString("en-IN")}
+                </div>
+              </div>
+
+              <div className="col-span-12 flex flex-col lg:col-span-7">
+                <FieldLabel>Narration</FieldLabel>
+                <Textarea
+                  value={narration}
+                  onChange={(e) => setNarration(e.target.value)}
+                  placeholder="Optional note · purpose, reference, or remarks"
+                  className="min-h-[140px] w-full flex-1 resize-none rounded-lg border border-[#E5E5E5] bg-white px-3 py-2.5 text-[13px] lg:min-h-[168px]"
+                />
+              </div>
+
+              <div className="col-span-12 space-y-4 lg:col-span-5">
+                <div>
+                  <PaymentModeControls
+                    mode={mode}
+                    onModeChange={handleModeChange}
+                    bankSplitAmount={bankSplitAmount}
+                    cashSplitAmount={cashSplitAmount}
+                    onBankChange={setBankSplitAmount}
+                    onCashChange={setCashSplitAmount}
+                  />
+                  {mode === "Both" && !splitOk && recordTotal > 0 && (
+                    <p className="mt-1.5 text-[10.5px] text-red-600">
+                      Bank + Cash must equal ₹ {recordTotal.toLocaleString("en-IN")}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <FieldLabel>Date / Time</FieldLabel>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={receiptTime}
+                      onChange={(e) => setReceiptTime(e.target.value)}
+                      placeholder="e.g. Today · 10:22"
+                      className="h-11 flex-1 font-mono sm:h-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => attachmentInputRef.current?.click()}
+                      disabled={attachments.length >= MAX_PAYMENT_ATTACHMENTS}
+                      className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-[#E5E5E5] bg-white text-black/70 transition-colors hover:bg-[#F4F4F5] disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-zinc-900 sm:h-10 sm:w-10"
+                      aria-label="Add files"
+                      title="Add files"
+                    >
+                      <Paperclip className="h-4 w-4" />
+                    </button>
+                  </div>
+                  {attachments.length > 0 && (
+                    <ul className="mt-2 space-y-1.5">
+                      {attachments.map((file) => (
+                        <li
+                          key={file.id}
+                          className="flex items-center gap-2 rounded-lg border border-[#EFEFEF] bg-white px-2.5 py-1.5 dark:border-white/10 dark:bg-zinc-900"
+                        >
+                          <FileText className="h-3.5 w-3.5 shrink-0 text-black/40" />
+                          <span className="min-w-0 flex-1 truncate text-[12px]">{file.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => setPreviewAttachment(file)}
+                            className="text-[10.5px] font-semibold text-black/55 hover:text-black"
+                          >
+                            Open
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeAttachment(file.id)}
+                            className="text-red-600"
+                            aria-label={`Remove ${file.name}`}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               </div>
             </>
           )}
-
-          {/* Divider */}
-          <div className="col-span-12 border-t border-[#EFEFEF] dark:border-white/10" />
-
-          {/* 3 · Category & period */}
-          <div className="col-span-12 flex flex-col sm:col-span-6">
-            <div className="mb-1.5 flex h-8 items-center">
-              <FieldLabel className="mb-0">Fee Category</FieldLabel>
-            </div>
-            <div className="flex min-h-11 flex-wrap content-center gap-2 sm:min-h-10">
-              {paymentCategories.length === 0 ? (
-                <div className="flex h-11 w-full items-center rounded-lg border border-dashed border-[#E5E5E5] bg-[#FAFAFA] px-3 text-[12px] text-black/55 dark:border-white/10 dark:bg-zinc-900/50 dark:text-zinc-400 sm:h-10">
-                  No categories configured · add them under Settings
-                </div>
-              ) : (
-                paymentCategories.map((c) => {
-                  const active = category === c.label;
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => selectCategory(c.label)}
-                      className={cn(
-                        "inline-flex h-11 items-center rounded-full border px-3.5 text-[12px] font-medium transition-colors sm:h-10",
-                        active
-                          ? "border-transparent bg-[#0F766E] text-white"
-                          : "border-[#E5E5E5] text-black/65 hover:bg-[#F4F4F5] dark:border-white/15 dark:text-zinc-300 dark:hover:bg-white/5",
-                      )}
-                    >
-                      {c.label}
-                    </button>
-                  );
-                })
-              )}
-            </div>
-            <p className="mt-1.5 min-h-[1.125rem] text-[10.5px] leading-snug text-black/45 dark:text-zinc-400">
-              {category ? `Selected · ${category}` : "\u00A0"}
-            </p>
-          </div>
-
-          <div className="col-span-12 flex flex-col sm:col-span-6">
-            <div className="mb-1.5 flex h-8 items-center justify-between gap-2">
-              <FieldLabel className="mb-0">Fee Period</FieldLabel>
-              <div className="flex h-8 gap-1 rounded-full border border-[#E5E5E5] bg-white p-0.5 dark:border-white/10 dark:bg-zinc-900">
-                {(
-                  [
-                    { key: "month" as const, label: "Month" },
-                    { key: "term" as const, label: "Term" },
-                  ] as const
-                ).map((option) => {
-                  const active = feePeriodKind === option.key;
-                  const termDisabled = option.key === "term" && !termKindForCategory;
-                  return (
-                    <button
-                      key={option.key}
-                      type="button"
-                      disabled={termDisabled}
-                      title={
-                        termDisabled
-                          ? "Terms apply to Tuition Fee and Vehicle Fee"
-                          : undefined
-                      }
-                      onClick={() => setPeriodKind(option.key)}
-                      className={cn(
-                        "rounded-full px-3 text-[11px] font-medium transition-colors",
-                        active
-                          ? "bg-[#0F766E] text-white"
-                          : "text-black/65 hover:text-black dark:text-zinc-300 dark:hover:text-zinc-50",
-                        termDisabled &&
-                          "cursor-not-allowed opacity-40 hover:text-black/65 dark:hover:text-zinc-300",
-                      )}
-                    >
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            {feePeriodKind === "month" ? (
-              <FieldSelect
-                value={feePeriod}
-                onValueChange={setFeePeriod}
-                options={monthOptions}
-                placeholder="Select month"
-                triggerClassName="h-11 sm:h-10"
-              />
-            ) : termsAvailable ? (
-              <FieldSelect
-                value={feePeriod}
-                onValueChange={setFeePeriod}
-                options={termOptions}
-                placeholder="Select term"
-                triggerClassName="h-11 sm:h-10"
-              />
-            ) : (
-              <div className="flex h-11 items-center rounded-lg border border-dashed border-[#E5E5E5] bg-[#FAFAFA] px-3 text-[12px] text-black/55 dark:border-white/10 dark:bg-zinc-900/50 dark:text-zinc-400 sm:h-10">
-                No {termKindForCategory ? FEE_TERM_KIND_LABELS[termKindForCategory] : ""} terms
-                yet · Settings → Fees
-              </div>
-            )}
-            <p className="mt-1.5 min-h-[1.125rem] text-[10.5px] leading-snug text-black/45 dark:text-zinc-400">
-              {feePeriodKind === "term" && selectedTerm
-                ? [
-                    selectedTerm.coverage ||
-                      formatFeeTermCoverage(selectedTerm.startDate, selectedTerm.endDate),
-                    academicYear,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")
-                : feePeriodKind === "month" && selectedMonthPeriod
-                  ? [
-                      selectedMonthPeriod.coverage ||
-                        formatFeeTermCoverage(
-                          selectedMonthPeriod.startDate,
-                          selectedMonthPeriod.endDate,
-                        ),
-                      academicYear,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")
-                  : `${feePeriodKind === "term" ? "Term" : "Month"} this receipt covers · ${academicYear}`}
-            </p>
-          </div>
-
-          {/* Divider */}
-          <div className="col-span-12 border-t border-[#EFEFEF] dark:border-white/10" />
-
-          {/* 4 · Amount, mode & date */}
-          <div className="col-span-12 sm:col-span-4">
-            <FieldLabel>Amount (₹)</FieldLabel>
-            <input
-              value={amount}
-              onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ""))}
-              inputMode="numeric"
-              placeholder="0"
-              className="h-11 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 font-mono text-[15px] font-semibold dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 sm:h-10 sm:text-[13px] sm:font-normal"
-            />
-            <p className="mt-1.5 min-h-[1.125rem] text-[10.5px] leading-snug text-black/45 dark:text-zinc-400">
-              {prefill !== undefined && prefill > 0 && prefillSource
-                ? `Prefilled ₹ ${prefill.toLocaleString("en-IN")} from ${prefillSource}`
-                : "\u00A0"}
-            </p>
-          </div>
-          <div className="col-span-12 sm:col-span-4">
-            <FieldLabel>Payment Mode</FieldLabel>
-            <div className="flex h-11 gap-1 rounded-full border border-[#E5E5E5] bg-white p-1 dark:border-white/10 dark:bg-zinc-900 sm:h-10">
-              {["Bank", "UPI", "Cash"].map((m) => {
-                const active = mode === m;
-                return (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setMode(m)}
-                    className={cn(
-                      "flex h-full flex-1 items-center justify-center rounded-full px-2 text-[12px] font-medium transition-colors sm:px-3",
-                      active
-                        ? "bg-[#0F766E] text-white"
-                        : "text-black/65 hover:text-black dark:text-zinc-300 dark:hover:text-zinc-50",
-                    )}
-                  >
-                    {m}
-                  </button>
-                );
-              })}
-            </div>
-            <p className="mt-1.5 min-h-[1.125rem] text-[10.5px] leading-snug text-black/45 dark:text-zinc-400">
-              {"\u00A0"}
-            </p>
-          </div>
-          <div className="col-span-12 sm:col-span-4">
-            <FieldLabel>Date / Time</FieldLabel>
-            <Input
-              value={receiptTime}
-              onChange={(e) => setReceiptTime(e.target.value)}
-              placeholder="e.g. Today · 10:22"
-              className="h-11 font-mono sm:h-10"
-            />
-            <p className="mt-1.5 min-h-[1.125rem] text-[10.5px] leading-snug text-black/45 dark:text-zinc-400">
-              Same stamp used on edit · adjust if backdating
-            </p>
-          </div>
-
-          {/* 5 · Notes & files */}
-          <div className="col-span-12 flex flex-col lg:col-span-6">
-            <FieldLabel>Narration</FieldLabel>
-            <Textarea
-              value={narration}
-              onChange={(e) => setNarration(e.target.value)}
-              placeholder="Optional note · purpose, reference, or remarks"
-              className="min-h-[140px] w-full flex-1 resize-none rounded-lg border border-[#E5E5E5] bg-white px-3 py-2.5 text-[13px] lg:min-h-[152px]"
-            />
-          </div>
-
-          <div className="col-span-12 flex flex-col lg:col-span-6">
-            <div className="mb-1 flex min-h-[15px] items-center justify-between gap-2">
-              <FieldLabel className="mb-0">Attachments</FieldLabel>
-              <span className="text-[10.5px] font-medium text-black/45">
-                {attachments.length} / {MAX_PAYMENT_ATTACHMENTS} · max 5 MB each
-              </span>
-            </div>
-            <div className="flex min-h-[140px] flex-1 flex-col rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] p-3 dark:border-white/10 dark:bg-zinc-900/50 lg:min-h-[152px]">
-              {attachments.length > 0 ? (
-                <ul className="mb-3 max-h-28 flex-1 space-y-2 overflow-y-auto">
-                  {attachments.map((file) => (
-                    <li
-                      key={file.id}
-                      className="flex items-center gap-2 rounded-lg border border-[#EFEFEF] bg-white px-2.5 py-2 dark:border-white/10 dark:bg-zinc-900"
-                    >
-                      <FileText className="h-3.5 w-3.5 shrink-0 text-black/40" />
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-[12px] font-medium text-black">{file.name}</div>
-                        <div className="font-mono text-[10px] text-black/45">
-                          {formatAttachmentSize(file.size)}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setPreviewAttachment(file)}
-                        className="inline-flex h-7 items-center rounded-lg border border-slate-200 px-2 text-[10.5px] font-semibold text-black/60 transition-colors hover:bg-slate-50 dark:text-zinc-400"
-                      >
-                        Open
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeAttachment(file.id)}
-                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-red-200 text-red-600 transition-colors hover:bg-red-50"
-                        aria-label={`Remove ${file.name}`}
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="mb-3 flex-1 text-[12px] leading-snug text-black/45">
-                  Attach bank slips, UPI screenshots, cheques, or supporting documents.
-                </p>
-              )}
-              <input
-                ref={attachmentInputRef}
-                type="file"
-                multiple
-                accept="image/*,.pdf,.jpg,.jpeg,.png,.webp"
-                className="hidden"
-                onChange={(e) => {
-                  void addAttachments(e.target.files);
-                  e.target.value = "";
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => attachmentInputRef.current?.click()}
-                disabled={attachments.length >= MAX_PAYMENT_ATTACHMENTS}
-                className="mt-auto inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3.5 text-[12px] font-semibold text-black transition-colors hover:border-black/20 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-              >
-                <Paperclip className="h-3.5 w-3.5" />
-                Add files
-              </button>
-            </div>
-          </div>
         </div>
 
         <div className="mt-5 flex flex-col gap-3 rounded-xl border border-[#E8E8EA] bg-[#F8F8F9] p-4 dark:border-white/10 dark:bg-zinc-900/80 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:p-5">
           <div className="min-w-0 text-[13px] leading-relaxed text-black/65 dark:text-zinc-300">
             <div className="font-semibold text-black dark:text-zinc-50">{summaryName}</div>
             <div className="mt-0.5 break-words text-[12px]">
-              {summaryContext} · {category} · {feePeriod} · {mode} · {receiptTime}
-              {attachments.length > 0 && (
-                <span className="text-black/45">
-                  {" "}
-                  · {attachments.length} file{attachments.length === 1 ? "" : "s"}
-                </span>
-              )}
+              {isExternal
+                ? `External — ${primaryCategory} ${currentFeeMonth()} — ${mode}`
+                : `${cls} · ${primaryPeriod}`}
             </div>
-            {narration.trim() && (
-              <div className="mt-1 line-clamp-2 text-[12px] text-black/45">
-                “{narration.trim()}”
-              </div>
-            )}
+            <div className="mt-0.5 text-[12px] text-black/45">{receiptTime}</div>
           </div>
-          <button
-            type="button"
-            onClick={handleRecord}
-            disabled={!canRecord}
-            className="inline-flex h-12 w-full shrink-0 items-center justify-center rounded-full bg-[#0F766E] px-8 text-[14px] font-semibold tracking-tight text-white shadow-[0_8px_24px_-10px_rgba(15,118,110,0.45)] transition-all hover:bg-[#0D9488] hover:shadow-[0_10px_28px_-10px_rgba(15,118,110,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none sm:min-w-[200px] sm:w-auto"
-          >
-            Record ₹ {(Number(amount) || 0).toLocaleString("en-IN")}
-          </button>
+          <div className="flex items-center gap-3 sm:shrink-0">
+            <div className="rounded-lg border border-[#E5E5E5] bg-white px-3.5 py-2 font-mono text-[16px] font-semibold text-black dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-50">
+              {recordTotal.toLocaleString("en-IN")}
+            </div>
+            <button
+              type="button"
+              onClick={handleRecord}
+              disabled={!canRecord}
+              className="inline-flex h-12 min-w-[140px] flex-1 items-center justify-center rounded-full bg-[#0F766E] px-8 text-[14px] font-semibold tracking-tight text-white shadow-[0_8px_24px_-10px_rgba(15,118,110,0.45)] transition-all hover:bg-[#0D9488] hover:shadow-[0_10px_28px_-10px_rgba(15,118,110,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none sm:flex-none"
+            >
+              {isExternal ? "Record" : "Record Payment"}
+            </button>
+          </div>
         </div>
       </OrganicCard>
 
@@ -8191,7 +8378,7 @@ function ReceivePayment() {
                   </SelectTrigger>
                   <SelectContent>
                     {Array.from(
-                      new Set(["Bank", "UPI", "Cash", editForm.mode].filter(Boolean)),
+                      new Set(["Bank", "Cash", "Both", editForm.mode].filter(Boolean)),
                     ).map((m) => (
                       <SelectItem key={m} value={m}>
                         {m}
@@ -8199,6 +8386,11 @@ function ReceivePayment() {
                     ))}
                   </SelectContent>
                 </Select>
+                {editForm.mode === "Both" && (
+                  <p className="text-[10.5px] leading-snug text-black/45">
+                    Bank / cash split is stored in the receipt narration.
+                  </p>
+                )}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">

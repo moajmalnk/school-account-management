@@ -1,11 +1,18 @@
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import viteReact from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import tsConfigPaths from "vite-tsconfig-paths";
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), "");
+  const apiProxyTarget = (
+    env.VITE_API_PROXY_TARGET?.trim() || "https://spi.macadz.com"
+  ).replace(/\/$/, "");
+  const apiProxySecure = apiProxyTarget.startsWith("https://");
+
+  return {
   server: {
     host: "::",
     port: 8080,
@@ -18,10 +25,15 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/api\/bugricer-whatsapp/, "/wapp/api"),
       },
       // Same-origin API in DEV — avoids browser CORS + SW cross-origin issues.
+      // Default: production Hostinger API. Override in .env.local:
+      //   VITE_API_PROXY_TARGET=http://127.0.0.1:8090
+      // then run `npm run dev:api` (requires local MySQL — see README / setup:db).
       "/api": {
-        target: "https://spi.macadz.com",
+        target: apiProxyTarget,
         changeOrigin: true,
-        secure: true,
+        secure: apiProxySecure,
+        timeout: 30_000,
+        proxyTimeout: 30_000,
       },
     },
   },
@@ -143,4 +155,5 @@ export default defineConfig({
       },
     },
   },
+};
 });
