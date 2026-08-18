@@ -11146,7 +11146,7 @@ function ClassesCard({
       />
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+        <DialogContent className="mobile-scrollbar-none max-h-[90vh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>{editingId ? "Edit Class Tier" : "Add Class Tier"}</DialogTitle>
             <DialogDescription>
