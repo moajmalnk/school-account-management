@@ -4,6 +4,7 @@ import {
   Building2,
   Code2,
   LayoutDashboard,
+  LifeBuoy,
   LogOut,
   Receipt,
   Search,
@@ -47,6 +48,12 @@ const NAV: NavEntry[] = [
     label: "Subscription Plans",
     helper: "Billing matrix",
     icon: Receipt,
+  },
+  {
+    to: "/super-admin/support",
+    label: "Customer Support",
+    helper: "Tickets and FAQs",
+    icon: LifeBuoy,
   },
 ];
 

@@ -1,4 +1,13 @@
-import { apiRequest, setApiToken } from "@/lib/api/client";
+import {
+  apiBaseUrl,
+  apiRequest,
+  getAuthSessionId,
+  getOrCreateDeviceId,
+  guessDeviceName,
+  persistAuthSecrets,
+  resetUnauthorizedGate,
+} from "@/lib/api/client";
+import { ACCESS_TOKEN_KEY } from "@/lib/api/persistent-auth";
 import type { PermissionSet, PlanFlags } from "@/lib/permissions";
 
 export type ApiLoginSession = {
@@ -18,6 +27,11 @@ export type ApiLoginSession = {
 
 export type ApiLoginResponse = {
   token: string;
+  refreshToken?: string;
+  sessionId?: string;
+  deviceId?: string;
+  idleDays?: number;
+  expiresInSeconds?: number;
   session: ApiLoginSession;
 };
 
@@ -27,15 +41,48 @@ export async function apiLogin(
 ): Promise<ApiLoginResponse> {
   const data = await apiRequest<ApiLoginResponse>("/api/auth/login.php", {
     method: "POST",
-    body: { email, password },
+    body: {
+      email,
+      password,
+      deviceId: getOrCreateDeviceId(),
+      deviceName: guessDeviceName(),
+    },
     auth: false,
   });
-  setApiToken(data.token);
+  persistAuthSecrets({
+    token: data.token,
+    refreshToken: data.refreshToken ?? null,
+    sessionId: data.sessionId ?? null,
+    deviceId: data.deviceId ?? null,
+  });
+  resetUnauthorizedGate();
   return data;
 }
 
 export async function apiMe(): Promise<ApiLoginSession> {
   return apiRequest<ApiLoginSession>("/api/auth/me.php");
+}
+
+/** Revoke this browser's server session. Best-effort — local logout still proceeds. */
+export async function apiLogoutCurrentDevice(): Promise<void> {
+  if (typeof window === "undefined") return;
+  const sessionId = getAuthSessionId();
+  const token = window.localStorage.getItem(ACCESS_TOKEN_KEY);
+  if (!token) return;
+  try {
+    await fetch(`${apiBaseUrl()}/api/auth/logout-device.php`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(sessionId ? { sessionId } : {}),
+      keepalive: true,
+    });
+  } catch {
+    // Offline / already expired — local sign-out still holds.
+  }
 }
 
 export type ForgotPasswordResponse = {

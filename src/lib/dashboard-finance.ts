@@ -17,11 +17,18 @@ export type FinanceDisbursement = Pick<
   "id" | "payee" | "desc" | "amount" | "mode" | "payeeType" | "time" | "status"
 >;
 
+export type PayeeType = "Salary" | "Supplier";
+
+/** Map stored payee types, including the legacy "Vendor" label. */
+export function normalizePayeeType(value: string | undefined | null): PayeeType {
+  return /salary|payroll/i.test((value ?? "").trim()) ? "Salary" : "Supplier";
+}
+
 function asTimedPayment(row: FinanceDisbursement): Payment {
   return {
     id: row.id || `tmp-${row.payee}-${row.amount}-${row.time || ""}`,
     name: row.payee,
-    cat: row.payeeType || "Vendor",
+    cat: row.payeeType ? normalizePayeeType(row.payeeType) : "Supplier",
     mode: row.mode || "Bank",
     amount: row.amount,
     time: row.time || "",
@@ -94,7 +101,7 @@ export function expenseSegmentsFromDisbursements(
   for (const row of scoped) {
     const label = isSalaryDisbursement(row)
       ? "Salaries & Wages"
-      : row.payee?.trim() || row.payeeType || "Other";
+      : row.payee?.trim() || (row.payeeType ? normalizePayeeType(row.payeeType) : "Other");
     buckets.set(label, (buckets.get(label) ?? 0) + row.amount);
   }
   return Array.from(buckets.entries())

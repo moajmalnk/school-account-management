@@ -52,6 +52,7 @@ import {
   ArchiveRestore,
   ImagePlus,
   FileImage,
+  PenLine,
   Paperclip,
   FileText,
   ExternalLink,
@@ -112,11 +113,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DatePicker, MonthPicker } from "@/components/ui/date-picker";
+import { FinancialYearFields, resolveFinancialYearInput } from "@/components/school/FinancialYearFields";
+import { SignaturePadDialog } from "@/components/school/SignaturePadDialog";
 import { OrganicCard } from "@/components/ui/organic-card";
 import { ImageCropDialog } from "@/components/ui/image-crop-dialog";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
 import {
-  normalizeAcademicYearLabel,
+  booksYearToMonthKey,
+  monthKeyToBooksYearLabel,
+  parseBooksYearParts,
+  suggestNextBooksMonthKey,
+} from "@/lib/academic-year";
+import {
   composeClassName,
   normalizeClassConfig,
   CLASS_SCHEDULE_CYCLES,
@@ -187,7 +195,6 @@ import { AttachmentPreviewDialog } from "@/components/school/AttachmentPreviewDi
 import {
   TenantDashboardSkeleton,
   TenantDirectorySkeleton,
-  TenantFeesSkeleton,
   TenantSystemSkeleton,
 } from "@/components/school/TenantDirectorySkeleton";
 import {
@@ -196,7 +203,20 @@ import {
   isRecordDeleted,
 } from "@/components/school/ProfileAccountActions";
 import { SettingsUsersCard } from "@/components/school/SettingsUsersCard";
-import { PlatformInvoicesPanel } from "@/components/admin/PlatformInvoicesPanel";
+import { SettingsBranchesCard } from "@/components/school/SettingsBranchesCard";
+import { CustomerSupportCard } from "@/components/school/CustomerSupportCard";
+import { BRAND_PRESETS, FONT_FAMILY_OPTIONS, FONT_SIZE_OPTIONS, normalizeHexColor } from "@/lib/brand-theme";
+import {
+  DEFAULT_FILE_NAMES,
+  DOWNLOAD_KIND_LABELS,
+  DOWNLOAD_KINDS,
+  DOWNLOAD_TOKENS,
+  formatDownloadFilename,
+  previewDownloadFilename,
+  slugYear,
+  todayStamp,
+  type DownloadKind,
+} from "@/lib/download-names";
 import { PwaInstallCard } from "@/components/pwa/PwaInstallBanner";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -205,7 +225,7 @@ import {
   sessionCanAccessFinanceView,
   useAuth,
 } from "@/lib/auth";
-import type { SettingsTabId } from "@/lib/permissions";
+import { planAllowsExtraUsers, planAllowsMultipleBranches, type SettingsTabId } from "@/lib/permissions";
 import {
   sendWhatsAppNotify,
   sendPersonalizedWhatsApp,
@@ -228,7 +248,15 @@ import {
   ProfitLossReport,
   SalaryReport,
 } from "@/components/school/FinanceReports";
-import { downloadCsv, downloadReceiptPdf, downloadTablePdf } from "@/lib/finance-export";
+import {
+  downloadCsv,
+  downloadPaymentVoucherPdf,
+  downloadReceiptPdf,
+  downloadSalarySlipPdf,
+  downloadTablePdf,
+  findReceiptStudent,
+  receiptBrandingFromSchool,
+} from "@/lib/finance-export";
 import {
   apiDeleteClass,
   apiDeleteDepartment,
@@ -252,6 +280,7 @@ import {
   parseStudentCsv,
 } from "@/lib/student-csv";
 import { resolveMediaUrl } from "@/lib/media";
+import { resolveSealDisplaySrc, resolveSignatureDisplaySrc } from "@/lib/school-marks";
 import {
   bankBalance,
   cashOnHand,
@@ -261,6 +290,8 @@ import {
   queuedPayables,
   queuedSalaryPayables,
   salaryPayable,
+  normalizePayeeType,
+  type PayeeType,
 } from "@/lib/dashboard-finance";
 import { useDisbursements } from "@/lib/use-disbursements";
 import {
@@ -271,6 +302,7 @@ import {
   type PaymentPeriod,
 } from "@/lib/payment-period";
 import { amountToIndianWords } from "@/lib/amount-words";
+import { formatEventDateTime, isBlankDate, isEventToday, parseEventDate, toIsoDate, toSqlDateTime } from "@/lib/dates";
 import { cn, dashCardClass, glassCardClass, glassInsetClass, glassPanelClass, glassTableWrapClass, premiumCardClass, type CornerSide, type Tone } from "@/lib/utils";
 
 type PendingObligation = {
@@ -279,7 +311,7 @@ type PendingObligation = {
   desc: string;
   amount: number;
   due: string;
-  payeeType: "Salary" | "Vendor";
+  payeeType: PayeeType;
 };
 
 type MadePayment = {
@@ -288,7 +320,7 @@ type MadePayment = {
   desc: string;
   amount: number;
   mode: string;
-  payeeType: "Salary" | "Vendor";
+  payeeType: PayeeType;
   time: string;
   status: "Queued" | "Cleared";
   attachments?: PaymentAttachment[];
@@ -315,30 +347,11 @@ function readFileAsDataUrl(file: File): Promise<string> {
 const EXPENSE_CHART_COLORS = ["#0F766E", "#10B981", "#F59E0B", "#EF4444", "#64748B"];
 
 function formatDisbursalTime(date = new Date()) {
-  const clock = date.toLocaleTimeString("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-  const today = new Date();
-  const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const startThen = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const dayDiff = Math.round((startToday.getTime() - startThen.getTime()) / 86_400_000);
-  if (dayDiff === 0) return `Today · ${clock}`;
-  if (dayDiff === 1) return `Yesterday · ${clock}`;
-  const day = date.toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-  return `${day} · ${clock}`;
+  return formatEventDateTime(date);
 }
 
 function toIsoDateLocal(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  return toIsoDate(date);
 }
 
 function toClockLocal(date: Date): string {
@@ -347,46 +360,9 @@ function toClockLocal(date: Date): string {
 
 /** Parse stored disbursal time labels back into date + clock for the picker. */
 function parseDisbursalTimeParts(label: string): { date: string; clock: string } {
-  const now = new Date();
-  const trimmed = label.trim();
-  const clockMatch = trimmed.match(/(\d{1,2}):(\d{2})\s*(am|pm)?/i);
-  let hours = now.getHours();
-  let minutes = now.getMinutes();
-  if (clockMatch) {
-    hours = Number(clockMatch[1]);
-    minutes = Number(clockMatch[2]);
-    const meridiem = clockMatch[3]?.toLowerCase();
-    if (meridiem === "pm" && hours < 12) hours += 12;
-    if (meridiem === "am" && hours === 12) hours = 0;
-  }
-  const clock = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
-
-  if (/^today\b/i.test(trimmed)) {
-    return { date: toIsoDateLocal(now), clock };
-  }
-  if (/^yesterday\b/i.test(trimmed)) {
-    const y = new Date(now);
-    y.setDate(y.getDate() - 1);
-    return { date: toIsoDateLocal(y), clock };
-  }
-
-  const parsed = Date.parse(trimmed.replace(/\s*·\s*.*$/, "").trim());
-  if (Number.isFinite(parsed)) {
-    return { date: toIsoDateLocal(new Date(parsed)), clock };
-  }
-
-  // e.g. "15 Mar 2025 · 10:22"
-  const soft = trimmed.match(
-    /^(\d{1,2})\s+([A-Za-z]{3,})\s+(\d{4})/,
-  );
-  if (soft) {
-    const tryParse = Date.parse(`${soft[1]} ${soft[2]} ${soft[3]}`);
-    if (Number.isFinite(tryParse)) {
-      return { date: toIsoDateLocal(new Date(tryParse)), clock };
-    }
-  }
-
-  return { date: toIsoDateLocal(now), clock };
+  const parsed = parseEventDate(label);
+  const date = parsed ?? new Date();
+  return { date: toIsoDateLocal(date), clock: toClockLocal(date) };
 }
 
 function formatDisbursalTimeFromParts(dateIso: string, clock: string): string {
@@ -1179,7 +1155,7 @@ function PremiumDashboard({
                   Make payment
                 </div>
                 <p className="mt-0.5 text-[11px] leading-snug text-rose-900/65 dark:text-rose-100/60">
-                  Pay vendors and salaries
+                  Pay salaries and suppliers
                 </p>
               </div>
             </button>
@@ -1335,7 +1311,7 @@ function PremiumDashboard({
                   <div className="font-mono text-[13px] font-semibold text-white">
                     {formatInr(payment.amount)}
                   </div>
-                  <div className="mt-0.5 text-[10px] text-teal-100/60">{payment.time}</div>
+                  <div className="mt-0.5 text-[10px] text-teal-100/60">{formatEventDateTime(payment.time)}</div>
                 </div>
               </div>
             ))}
@@ -1469,8 +1445,10 @@ export function SchoolDashboard() {
     activePayments: payments,
     academicYear,
     hydrated,
+    activeBranch,
+    branches,
   } = useTenantStore();
-  const tenantScope = session?.tenantId ?? session?.tenantName ?? "tenant";
+  const tenantScope = `${session?.tenantId ?? session?.tenantName ?? "tenant"}|${academicYear}`;
   const { disbursements, loaded: disbursementsLoaded } = useDisbursements(
     tenantScope,
     hydrated,
@@ -1521,6 +1499,12 @@ export function SchoolDashboard() {
       <div className="hidden flex-wrap items-center justify-between gap-2 rounded-2xl border border-teal-500/20 bg-teal-500/5 px-3.5 py-2.5 dark:border-teal-400/20 dark:bg-teal-400/10 md:flex">
         <p className="text-[12.5px] font-medium text-slate-700 dark:text-zinc-200">
           Books open for <span className="font-semibold text-teal-800 dark:text-teal-300">{academicYear}</span>
+          {branches.length > 1 && activeBranch?.name ? (
+            <>
+              {" "}
+              · <span className="font-semibold text-teal-800 dark:text-teal-300">{activeBranch.name}</span>
+            </>
+          ) : null}
         </p>
         <p className="font-mono text-[11px] text-slate-500 dark:text-zinc-400">
           {liveStudents.length} enrolled · {payments.length} receipt{payments.length === 1 ? "" : "s"}
@@ -2823,7 +2807,11 @@ export function StudentsLedger() {
     const uri = encodeURI("data:text/csv;charset=utf-8," + rows);
     const a = document.createElement("a");
     a.href = uri;
-    a.download = `students-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = formatDownloadFilename("students", "csv", {
+      school: schoolName,
+      year: slugYear(academicYear),
+      date: todayStamp(),
+    });
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -3699,7 +3687,8 @@ function isTeachingStaff(member: Staff): boolean {
 }
 
 export function StaffRoster() {
-  const { staff, setStaff, departments, roles, hydrated } = useTenantStore();
+  const { staff, setStaff, departments, roles, hydrated, schoolDetails, academicYear } = useTenantStore();
+  const schoolName = schoolDetails.name || "School";
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/staff" }) as { id?: string; edit?: string };
   const activeStaffViewId = search.id ?? null;
@@ -4190,7 +4179,11 @@ export function StaffRoster() {
 
   const handleExport = () => {
     downloadCsv(
-      "staff-directory.csv",
+      formatDownloadFilename("staff", "csv", {
+        school: schoolName,
+        year: slugYear(academicYear),
+        date: todayStamp(),
+      }),
       ["ID", "Name", "Role", "Department", "Status"],
       filteredStaff.map((member) => [
         member.id,
@@ -5474,6 +5467,7 @@ function FinanceOverview({
     paymentCategories,
     academicYear,
     schoolDetails,
+    activeStudents: students,
   } = useTenantStore();
   const isAdmin =
     session?.role === "school_admin" || session?.role === "super_admin";
@@ -5528,8 +5522,8 @@ function FinanceOverview({
         id: item.id || `OBL-${String(index + 1).padStart(3, "0")}`,
         name: item.payee,
         amount: item.amount,
-        due: item.time || "Due",
-        type: /salary|payroll/i.test(item.payeeType || item.payee) ? "Salary" : "Vendor",
+        due: formatEventDateTime(item.time) === "—" ? "Due" : formatEventDateTime(item.time),
+        type: normalizePayeeType(item.payeeType || item.payee),
       })),
     [disbursements],
   );
@@ -5540,7 +5534,11 @@ function FinanceOverview({
       return;
     }
     downloadCsv(
-      "finance-transactions.csv",
+      formatDownloadFilename("transactions", "csv", {
+        school: schoolName,
+        year: slugYear(academicYear),
+        date: todayStamp(),
+      }),
       ["Transaction ID", "Account", "Category", "Fee Period", "Mode", "Amount (INR)", "Time", "Status", "Narration"],
       payments.map((p) => [
         p.id,
@@ -5549,7 +5547,7 @@ function FinanceOverview({
         resolvePaymentFeePeriod(p) ?? "",
         p.mode,
         p.amount,
-        p.time,
+        formatEventDateTime(p.time),
         "Complete",
         p.narration ?? "",
       ]),
@@ -5565,7 +5563,11 @@ function FinanceOverview({
       return;
     }
     downloadTablePdf({
-      filename: "finance-transactions.pdf",
+      filename: formatDownloadFilename("transactions", "pdf", {
+        school: schoolName,
+        year: slugYear(academicYear),
+        date: todayStamp(),
+      }),
       title: "Finance Transactions",
       subtitle: `${schoolName} · ${academicYear}`,
       headers: ["ID", "Account", "Category", "Period", "Mode", "Amount", "Time", "Status", "Narration"],
@@ -5576,7 +5578,7 @@ function FinanceOverview({
         resolvePaymentFeePeriod(p) ?? "—",
         p.mode,
         p.amount.toLocaleString("en-IN"),
-        p.time,
+        formatEventDateTime(p.time),
         "Complete",
         p.narration ?? "",
       ]),
@@ -5584,16 +5586,18 @@ function FinanceOverview({
     toast.success("Transactions PDF downloaded");
   };
 
-  const receiptBranding = {
-    letterheadUrl: schoolDetails.letterheadUrl,
-    address: schoolDetails.address,
-    phone: schoolDetails.phone,
-    email: schoolDetails.email,
-  };
-
-  const downloadTransaction = (payment: Payment) => {
-    downloadReceiptPdf(payment, schoolName, academicYear, receiptBranding);
-    toast.success(`Receipt ${payment.id} downloaded`);
+  const downloadTransaction = async (payment: Payment) => {
+    try {
+      await downloadReceiptPdf(
+        payment,
+        schoolName,
+        academicYear,
+        receiptBrandingFromSchool(schoolDetails, findReceiptStudent(students, payment)),
+      );
+      toast.success(`Receipt ${payment.id} downloaded`);
+    } catch {
+      toast.error(`Could not download receipt ${payment.id}`);
+    }
   };
 
   const sharePayload = async (title: string, text: string) => {
@@ -5629,7 +5633,7 @@ function FinanceOverview({
       "",
       ...payments.slice(0, 12).map(
         (p) =>
-          `• ${p.id} · ${p.name} · ₹ ${p.amount.toLocaleString("en-IN")} · ${p.time}`,
+          `• ${p.id} · ${p.name} · ₹ ${p.amount.toLocaleString("en-IN")} · ${formatEventDateTime(p.time)}`,
       ),
     ];
     if (payments.length > 12) {
@@ -5649,7 +5653,7 @@ function FinanceOverview({
         : "",
       `Mode: ${payment.mode}`,
       `Amount: ₹ ${payment.amount.toLocaleString("en-IN")}`,
-      `Time: ${payment.time}`,
+      `Time: ${formatEventDateTime(payment.time)}`,
       `AY: ${academicYear}`,
       "Status: Complete",
       payment.narration ? `Note: ${payment.narration}` : "",
@@ -5680,7 +5684,7 @@ function FinanceOverview({
       cat: payment.cat,
       mode: payment.mode,
       amount: String(payment.amount),
-      time: payment.time,
+      time: receiptTimeForForm(payment.time),
       narration: payment.narration ?? "",
       payerType: payment.payerType === "external" ? "external" : "student",
     });
@@ -5691,7 +5695,8 @@ function FinanceOverview({
     if (!isAdmin || !editingPayment) return;
     const name = editForm.name.trim();
     const amount = Number(editForm.amount);
-    const time = editForm.time.trim();
+    const rawTime = editForm.time.trim();
+    const time = toSqlDateTime(rawTime);
     const cat = editForm.cat.trim();
     const mode = editForm.mode.trim();
     if (!name) {
@@ -5710,7 +5715,7 @@ function FinanceOverview({
       toast.error("Enter a valid amount");
       return;
     }
-    if (!time) {
+    if (!rawTime || formatEventDateTime(rawTime) === "—") {
       toast.error("Date / time is required");
       return;
     }
@@ -5815,7 +5820,7 @@ function FinanceOverview({
             </span>
             <div className="min-w-0">
               <div className="text-[15px] font-bold text-slate-900">Make payment</div>
-              <p className="mt-0.5 text-[12px] text-slate-500">Pay vendors and salaries</p>
+              <p className="mt-0.5 text-[12px] text-slate-500">Pay salaries and suppliers</p>
             </div>
           </button>
         )}
@@ -6203,7 +6208,7 @@ function FinanceOverview({
 
               <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-[#F0F0F0] pt-2.5">
                 <span className="min-w-0 truncate font-mono text-[10.5px] text-black/45">
-                  {p.time}
+                  {formatEventDateTime(p.time)}
                 </span>
                 <div className="flex shrink-0 items-center gap-1.5">
                   {isAdmin && (
@@ -6290,7 +6295,7 @@ function FinanceOverview({
                         : ""}
                     </div>
                   </td>
-                  <td className="px-3 py-3 font-mono text-[11px] text-black/55 dark:text-zinc-400">{p.time}</td>
+                  <td className="px-3 py-3 font-mono text-[11px] text-black/55 dark:text-zinc-400">{formatEventDateTime(p.time)}</td>
                   <td className="px-3 py-3 font-mono font-semibold text-black">
                     ₹ {p.amount.toLocaleString("en-IN")}
                   </td>
@@ -6602,15 +6607,25 @@ function createFeeLineItem(partial?: Partial<FeeLineItem>): FeeLineItem {
   };
 }
 
+function uniqueByLabel<T extends { label: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = item.label.trim().toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function feePeriodChoices(
   feeTerms: FeeTerm[],
   description: string,
 ): { value: string; label: string; kind: FeePeriodKind; period: string }[] {
   const termKind = categoryFeeTermKind(description);
-  const terms = termKind ? filterFeePeriods(feeTerms, "term", termKind) : [];
-  const months = termKind ? filterFeePeriods(feeTerms, "month", termKind) : [];
+  const terms = uniqueByLabel(termKind ? filterFeePeriods(feeTerms, "term", termKind) : []);
+  const months = uniqueByLabel(termKind ? filterFeePeriods(feeTerms, "month", termKind) : []);
   const monthLabels = months.length > 0 ? months.map((t) => t.label) : [...FEE_MONTHS];
-  return [
+  const choices = [
     ...terms.map((t) => ({
       value: `term:${t.label}`,
       label: [t.label, t.coverage || formatFeeTermCoverage(t.startDate, t.endDate)]
@@ -6633,6 +6648,12 @@ function feePeriodChoices(
       };
     }),
   ];
+  const seen = new Set<string>();
+  return choices.filter((choice) => {
+    if (seen.has(choice.value)) return false;
+    seen.add(choice.value);
+    return true;
+  });
 }
 
 function defaultFeePeriod(
@@ -6716,6 +6737,87 @@ function splitMatchesTotal(mode: string, bank: string, cash: string, total: numb
   return bankN > 0 && cashN > 0 && bankN + cashN === total;
 }
 
+function receiptTimeForForm(raw?: string) {
+  const formatted = formatEventDateTime(raw);
+  if (!formatted || formatted === "—") return formatDisbursalTime();
+  return formatted;
+}
+
+function parseMoneyPart(part: string): { label: string; amount: number } | null {
+  const match = part.trim().match(/^(.*?)\s+(?:₹|Rs\.?)\s*([\d,]+(?:\.\d+)?)\s*$/i);
+  if (!match) return null;
+  const amount = Number(match[2].replace(/,/g, ""));
+  if (!Number.isFinite(amount) || amount < 0) return null;
+  return { label: match[1].trim(), amount };
+}
+
+function parseStoredReceiptNarration(raw?: string): {
+  note: string;
+  breakdown: { label: string; amount: number }[];
+  bankSplit: string;
+  cashSplit: string;
+} {
+  const parts = (raw ?? "")
+    .split(/\s*[·|]\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const leftover: string[] = [];
+  const breakdown: { label: string; amount: number }[] = [];
+  let bankSplit = "";
+  let cashSplit = "";
+  let inBreakdown = false;
+
+  for (const part of parts) {
+    const started = /^Fee breakdown:/i.test(part);
+    if (started) inBreakdown = true;
+    const cleaned = part.replace(/^Fee breakdown:\s*/i, "").trim();
+    const parsed = parseMoneyPart(cleaned);
+    if (parsed && /^Bank$/i.test(parsed.label)) {
+      bankSplit = String(Math.round(parsed.amount));
+      continue;
+    }
+    if (parsed && /^Cash$/i.test(parsed.label)) {
+      cashSplit = String(Math.round(parsed.amount));
+      continue;
+    }
+    if ((inBreakdown || started) && parsed) {
+      breakdown.push({ label: parsed.label, amount: parsed.amount });
+      continue;
+    }
+    leftover.push(part);
+  }
+
+  return { note: leftover.join(" · "), breakdown, bankSplit, cashSplit };
+}
+
+function feeLineFromStoredCategory(
+  label: string,
+  amount: number,
+  kind: FeePeriodKind,
+  period: string,
+  categoryLabels: string[],
+  fallbackCategory: string,
+): FeeLineItem {
+  const trimmed = label.trim() || fallbackCategory;
+  const match = categoryLabels.find((c) => c.toLowerCase() === trimmed.toLowerCase());
+  if (match) {
+    return createFeeLineItem({
+      description: match,
+      amount: String(Math.round(amount)),
+      feePeriodKind: kind,
+      feePeriod: period,
+    });
+  }
+  const other = categoryLabels.find((c) => isOtherFeeDescription(c)) ?? "Other";
+  return createFeeLineItem({
+    description: other,
+    customDescription: trimmed,
+    amount: String(Math.round(amount)),
+    feePeriodKind: kind,
+    feePeriod: period,
+  });
+}
+
 function PaymentModeControls({
   mode,
   onModeChange,
@@ -6784,7 +6886,6 @@ function PaymentModeControls({
 
 function ReceivePayment() {
   const { session } = useAuth();
-  const navigate = useNavigate();
   const {
     activeStudents: students,
     setStudents,
@@ -6828,26 +6929,17 @@ function ReceivePayment() {
   const [attachments, setAttachments] = useState<PaymentAttachment[]>([]);
   const [historyQuery, setHistoryQuery] = useState("");
   const attachmentInputRef = useRef<HTMLInputElement>(null);
-  const editAttachmentInputRef = useRef<HTMLInputElement>(null);
+  const recordCardRef = useRef<HTMLDivElement>(null);
   const [previewAttachment, setPreviewAttachment] = useState<PaymentAttachment | null>(null);
   const [viewingPayment, setViewingPayment] = useState<Payment | null>(null);
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
   const [pendingDeletePayment, setPendingDeletePayment] = useState<Payment | null>(null);
-  const [editAttachments, setEditAttachments] = useState<PaymentAttachment[]>([]);
-  const [editForm, setEditForm] = useState({
-    name: "",
-    cat: "",
-    mode: "Bank",
-    amount: "",
-    time: "",
-    feePeriodKind: "month" as FeePeriodKind,
-    feePeriod: currentFeeMonth(),
-    narration: "",
-    payerType: "student" as "student" | "external",
-  });
 
   const isExternal = payerSource === "external";
-  const selected = !isExternal ? students.find((s) => s.name === stu) : undefined;
+  const selected = !isExternal
+    ? students.find((s) => s.name === stu && s.cls === cls) ??
+      students.find((s) => s.name === stu)
+    : undefined;
   const descriptionOptions = useMemo(
     () => paymentCategories.map((c) => ({ value: c.label, label: c.label })),
     [paymentCategories],
@@ -6873,20 +6965,22 @@ function ReceivePayment() {
   const splitOk = splitMatchesTotal(mode, bankSplitAmount, cashSplitAmount, recordTotal);
 
   useEffect(() => {
+    if (editingPayment) return;
     if (classes.length && !classes.includes(cls)) {
       setCls(classes[0]);
     }
-  }, [classes, cls]);
+  }, [classes, cls, editingPayment]);
 
   useEffect(() => {
-    if (isExternal) return;
+    if (isExternal || editingPayment) return;
     const pool = studentsInClass.length ? studentsInClass : students;
     if (pool.length && !pool.some((s) => s.name === stu)) {
       setStu(pool[0].name);
     }
-  }, [students, studentsInClass, stu, isExternal]);
+  }, [students, studentsInClass, stu, isExternal, editingPayment]);
 
   useEffect(() => {
+    if (editingPayment) return;
     if (!paymentCategories.length) return;
     const labels = new Set(paymentCategories.map((c) => c.label));
     setFeeItems((prev) => {
@@ -6901,7 +6995,7 @@ function ReceivePayment() {
     if (!labels.has(ledgerCategory)) {
       setLedgerCategory(ledgerDefault);
     }
-  }, [paymentCategories, ledgerCategory, ledgerDefault]);
+  }, [paymentCategories, ledgerCategory, ledgerDefault, editingPayment]);
 
   const matchedRouteFee = useMemo(() => {
     if (!selected) return undefined;
@@ -6953,12 +7047,12 @@ function ReceivePayment() {
   );
 
   useEffect(() => {
-    if (isExternal) return;
+    if (isExternal || editingPayment) return;
     setFeeItems((prev) => applyPrefillToLines(prev));
-  }, [applyPrefillToLines, isExternal, selected?.id]);
+  }, [applyPrefillToLines, isExternal, selected?.id, editingPayment]);
 
   useEffect(() => {
-    if (isExternal || !matchedClass) return;
+    if (isExternal || !matchedClass || editingPayment) return;
     setFeeItems((prev) => {
       let changed = false;
       const next = prev.map((item) => {
@@ -6989,7 +7083,7 @@ function ReceivePayment() {
       });
       return changed ? next : prev;
     });
-  }, [feeTerms, isExternal, matchedClass]);
+  }, [feeTerms, isExternal, matchedClass, editingPayment]);
 
   const updateFeeLine = (id: string, patch: Partial<FeeLineItem>) => {
     setFeeItems((prev) =>
@@ -7048,14 +7142,9 @@ function ReceivePayment() {
     }
   };
 
-  const addAttachments = async (
-    fileList: FileList | null,
-    target: "create" | "edit" = "create",
-  ) => {
+  const addAttachments = async (fileList: FileList | null) => {
     if (!fileList?.length) return;
-    const current = target === "edit" ? editAttachments : attachments;
-    const setNext = target === "edit" ? setEditAttachments : setAttachments;
-    const room = MAX_PAYMENT_ATTACHMENTS - current.length;
+    const room = MAX_PAYMENT_ATTACHMENTS - attachments.length;
     if (room <= 0) {
       toast.error(`Maximum ${MAX_PAYMENT_ATTACHMENTS} attachments allowed`);
       return;
@@ -7088,25 +7177,28 @@ function ReceivePayment() {
     }
 
     if (!next.length) return;
-    setNext((prev) => [...prev, ...next]);
+    setAttachments((prev) => [...prev, ...next]);
     toast.success(
       next.length === 1 ? `${next[0].name} attached` : `${next.length} files attached`,
     );
   };
 
-  const removeAttachment = (id: string, target: "create" | "edit" = "create") => {
-    if (target === "edit") {
-      setEditAttachments((prev) => prev.filter((a) => a.id !== id));
-      return;
-    }
+  const removeAttachment = (id: string) => {
     setAttachments((prev) => prev.filter((a) => a.id !== id));
   };
 
-  const receiptBranding = {
-    letterheadUrl: schoolDetails.letterheadUrl,
-    address: schoolDetails.address,
-    phone: schoolDetails.phone,
-    email: schoolDetails.email,
+  const downloadHistoryReceipt = async (payment: Payment) => {
+    try {
+      await downloadReceiptPdf(
+        payment,
+        schoolName,
+        academicYear,
+        receiptBrandingFromSchool(schoolDetails, findReceiptStudent(students, payment)),
+      );
+      toast.success(`Receipt ${payment.id} downloaded`);
+    } catch {
+      toast.error(`Could not download receipt ${payment.id}`);
+    }
   };
 
   const sharePayload = async (title: string, text: string) => {
@@ -7142,11 +7234,6 @@ function ReceivePayment() {
     );
   };
 
-  const downloadHistoryReceipt = (payment: Payment) => {
-    downloadReceiptPdf(payment, schoolName, academicYear, receiptBranding);
-    toast.success(`Receipt ${payment.id} downloaded`);
-  };
-
   const shareHistoryReceipt = (payment: Payment) => {
     const period = resolvePaymentFeePeriod(payment);
     const periodKind = resolvePaymentFeePeriodKind(payment);
@@ -7158,7 +7245,7 @@ function ReceivePayment() {
       period ? `${periodKind === "term" ? "Fee term" : "Fee month"}: ${period}` : "",
       `Mode: ${payment.mode}`,
       `Amount: ₹ ${payment.amount.toLocaleString("en-IN")}`,
-      `Time: ${payment.time}`,
+      `Time: ${formatEventDateTime(payment.time)}`,
       `AY: ${academicYear}`,
       payment.narration ? `Note: ${payment.narration}` : "",
     ]
@@ -7167,80 +7254,160 @@ function ReceivePayment() {
     void sharePayload(`Receipt ${payment.id}`, text);
   };
 
+  const resetRecordForm = () => {
+    setEditingPayment(null);
+    setPayerSource("student");
+    setExternalPayer("");
+    setExternalAmount("");
+    setLedgerCategory(ledgerDefault);
+    setNarration("");
+    setReceiptTime(formatDisbursalTime());
+    setAttachments([]);
+    setBankSplitAmount("");
+    setCashSplitAmount("");
+    setMode("Bank");
+    const resetPeriod = defaultFeePeriod(feeTerms, defaultCategory, matchedClass?.billingCycle);
+    setFeeItems([createFeeLineItem({ description: defaultCategory, ...resetPeriod })]);
+  };
+
   const openEditHistoryPayment = (payment: Payment) => {
+    setViewingPayment(null);
     setEditingPayment(payment);
-    setEditAttachments(payment.attachments ? [...payment.attachments] : []);
-    setEditForm({
-      name: payment.name,
-      cat: payment.cat,
-      mode: payment.mode,
-      amount: String(payment.amount),
-      time: payment.time,
-      feePeriodKind: resolvePaymentFeePeriodKind(payment),
-      feePeriod: resolvePaymentFeePeriod(payment) || currentFeeMonth(),
-      narration: payment.narration ?? "",
-      payerType: payment.payerType === "external" ? "external" : "student",
+    const parsed = parseStoredReceiptNarration(payment.narration);
+    const isExt = payment.payerType === "external";
+    const kind = resolvePaymentFeePeriodKind(payment);
+    const period = resolvePaymentFeePeriod(payment) || currentFeeMonth();
+    const categoryLabels = paymentCategories.map((c) => c.label);
+
+    setPayerSource(isExt ? "external" : "student");
+    setMode(payment.mode || "Bank");
+    setReceiptTime(receiptTimeForForm(payment.time));
+    setNarration(parsed.note);
+    setAttachments(payment.attachments ? [...payment.attachments] : []);
+    setBankSplitAmount(payment.mode === "Both" ? parsed.bankSplit : "");
+    setCashSplitAmount(payment.mode === "Both" ? parsed.cashSplit : "");
+    setExternalPayer(payment.name);
+    setExternalAmount(String(payment.amount));
+    setLedgerCategory(payment.cat || ledgerDefault);
+
+    if (!isExt) {
+      const className =
+        payment.className ||
+        students.find((s) => s.name.trim().toLowerCase() === payment.name.trim().toLowerCase())?.cls ||
+        cls;
+      setCls(className);
+      setStu(payment.name);
+      const lines = (parsed.breakdown.length
+        ? parsed.breakdown
+        : [{ label: payment.cat || defaultCategory, amount: payment.amount }]
+      ).map((item) =>
+        feeLineFromStoredCategory(
+          item.label,
+          item.amount,
+          kind,
+          period,
+          categoryLabels,
+          defaultCategory,
+        ),
+      );
+      setFeeItems(lines.length ? lines : [createFeeLineItem({ description: defaultCategory, ...defaultFeePeriod(feeTerms, defaultCategory), amount: String(payment.amount) })]);
+    }
+
+    requestAnimationFrame(() => {
+      recordCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   };
 
-  const saveEditedHistoryPayment = (e: React.FormEvent) => {
-    e.preventDefault();
+  const saveEditedHistoryPayment = () => {
     if (!editingPayment) return;
-    const name = editForm.name.trim();
-    const nextAmount = Number(editForm.amount);
-    const time = editForm.time.trim();
-    const cat = editForm.cat.trim();
-    const nextMode = editForm.mode.trim();
-    const nextFeePeriod = editForm.feePeriod.trim();
-    if (!name) {
-      toast.error("Account name is required");
-      return;
-    }
-    if (!cat) {
-      toast.error("Category is required");
-      return;
-    }
-    if (!nextMode) {
-      toast.error("Payment mode is required");
-      return;
-    }
-    if (!nextFeePeriod) {
-      toast.error(editForm.feePeriodKind === "term" ? "Fee term is required" : "Fee month is required");
-      return;
-    }
-    if (!Number.isFinite(nextAmount) || nextAmount <= 0) {
+    const value = recordTotal;
+    if (!value || value <= 0) {
       toast.error("Enter a valid amount");
       return;
     }
-    if (!time) {
+    if (!receiptTime.trim()) {
       toast.error("Date / time is required");
       return;
     }
+    if (!splitOk) {
+      toast.error("Bank and cash amounts must add up to the total");
+      return;
+    }
 
-    const note = editForm.narration.trim();
+    const stamp = toSqlDateTime(receiptTime.trim());
+    const extras: string[] = [];
+    if (!isExternal && filledFeeItems.length > 1) {
+      extras.push(
+        `Fee breakdown: ${filledFeeItems
+          .map((item) => `${feeLineCategoryLabel(item)} ₹${Number(item.amount).toLocaleString("en-IN")}`)
+          .join(" · ")}`,
+      );
+    }
+    if (mode === "Both") {
+      extras.push(
+        `Bank ₹${Number(bankSplitAmount).toLocaleString("en-IN")} · Cash ₹${Number(cashSplitAmount).toLocaleString("en-IN")}`,
+      );
+    }
+    const note = [narration.trim(), ...extras].filter(Boolean).join(" · ");
+    const receiptAttachments = attachments.length ? attachments : undefined;
+
+    if (isExternal) {
+      const payer = externalPayer.trim();
+      if (!payer) {
+        toast.error("Enter the donor / payer name");
+        return;
+      }
+      if (!primaryCategory) {
+        toast.error("Select a ledger category");
+        return;
+      }
+    } else {
+      if (!stu.trim() && !selected) {
+        toast.error("Select a valid student");
+        return;
+      }
+      if (filledFeeItems.length === 0) {
+        toast.error("Add at least one fee item with an amount");
+        return;
+      }
+      for (const item of filledFeeItems) {
+        if (!feeLineCategoryLabel(item)) {
+          toast.error("Each fee item needs a description");
+          return;
+        }
+        if (!item.feePeriod.trim()) {
+          toast.error("Each fee item needs a fee period");
+          return;
+        }
+      }
+    }
+
+    const periodLabel = isExternal
+      ? resolvePaymentFeePeriod(editingPayment) || currentFeeMonth()
+      : primaryPeriod.trim();
     const nextPayment: Payment = {
       ...editingPayment,
-      name,
-      cat,
-      mode: nextMode,
-      amount: nextAmount,
-      time,
-      feePeriodKind: editForm.feePeriodKind,
-      feePeriod: nextFeePeriod,
-      feeMonth: nextFeePeriod,
-      payerType: editForm.payerType,
+      name: isExternal ? externalPayer.trim() : selected?.name ?? stu.trim(),
+      cat: primaryCategory,
+      mode,
+      amount: value,
+      time: stamp,
+      academicYear: editingPayment.academicYear ?? academicYear,
+      feePeriodKind: isExternal ? "month" : primaryPeriodKind,
+      feePeriod: periodLabel,
+      feeMonth: periodLabel,
+      payerType: isExternal ? "external" : "student",
+      className: isExternal ? undefined : selected?.cls ?? editingPayment.className ?? cls,
       ...(note ? { narration: note } : { narration: undefined }),
-      ...(editAttachments.length
-        ? { attachments: editAttachments }
-        : { attachments: undefined }),
+      ...(receiptAttachments ? { attachments: receiptAttachments } : { attachments: undefined }),
     };
 
     if (isStudentReceipt(editingPayment) && isStudentReceipt(nextPayment)) {
-      adjustStudentDue(editingPayment, editingPayment.amount - nextAmount);
+      adjustStudentDue(editingPayment, editingPayment.amount - value);
     } else if (isStudentReceipt(editingPayment) && !isStudentReceipt(nextPayment)) {
       adjustStudentDue(editingPayment, editingPayment.amount);
     } else if (!isStudentReceipt(editingPayment) && isStudentReceipt(nextPayment)) {
-      adjustStudentDue(nextPayment, -nextAmount);
+      adjustStudentDue(nextPayment, -value);
     }
 
     setPayments((prev) => prev.map((p) => (p.id === editingPayment.id ? nextPayment : p)));
@@ -7250,8 +7417,7 @@ function ReceivePayment() {
       }),
     );
     toast.success(`Receipt ${editingPayment.id} updated`);
-    setEditingPayment(null);
-    setEditAttachments([]);
+    resetRecordForm();
   };
 
   const confirmDeleteHistoryPayment = () => {
@@ -7264,6 +7430,9 @@ function ReceivePayment() {
       }),
     );
     toast.error(`Receipt ${pendingDeletePayment.id} deleted`);
+    if (editingPayment?.id === pendingDeletePayment.id) {
+      resetRecordForm();
+    }
     setPendingDeletePayment(null);
   };
 
@@ -7282,7 +7451,7 @@ function ReceivePayment() {
       return;
     }
 
-    const stamp = receiptTime.trim();
+    const stamp = toSqlDateTime(receiptTime.trim());
     const extras: string[] = [];
     if (!isExternal && filledFeeItems.length > 1) {
       extras.push(
@@ -7408,7 +7577,7 @@ function ReceivePayment() {
   const todayTotal = useMemo(
     () =>
       payments
-        .filter((p) => p.time.startsWith("Today"))
+        .filter((p) => isEventToday(p.time))
         .reduce((sum, p) => sum + p.amount, 0),
     [payments],
   );
@@ -7423,6 +7592,7 @@ function ReceivePayment() {
         p.cat,
         p.mode,
         p.time,
+        formatEventDateTime(p.time),
         p.feePeriod ?? "",
         p.feeMonth ?? "",
         resolvePaymentFeePeriodKind(p),
@@ -7445,23 +7615,55 @@ function ReceivePayment() {
     filledFeeItems.every(
       (item) => feeLineCategoryLabel(item).length > 0 && item.feePeriod.trim().length > 0,
     );
-  const canRecord =
+  const canSubmit =
     recordTotal > 0 &&
     splitOk &&
     receiptTime.trim().length > 0 &&
     (isExternal
       ? externalPayer.trim().length > 0 && primaryCategory.length > 0
-      : Boolean(selected) && studentLinesValid);
+      : (Boolean(selected) || Boolean(editingPayment && stu.trim())) && studentLinesValid);
+  const classOptions = useMemo(() => {
+    if (cls && !classes.includes(cls)) return [cls, ...classes];
+    return classes;
+  }, [classes, cls]);
+  const studentOptions = useMemo(() => {
+    const pool = studentsInClass.length ? studentsInClass : students;
+    const opts = pool.map((s) => ({ value: s.name, label: s.name }));
+    if (stu && !opts.some((o) => o.value === stu)) {
+      return [{ value: stu, label: stu }, ...opts];
+    }
+    return opts;
+  }, [studentsInClass, students, stu]);
 
   return (
     <div className="space-y-4 sm:space-y-5">
+      <div ref={recordCardRef}>
       <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1 pt-0.5">
             <div className="text-[17px] font-bold leading-tight tracking-tight text-black dark:text-zinc-50 sm:text-title">
-              {isExternal ? "External payer" : "Fee Collection"}
+              {editingPayment
+                ? `Edit Receipt ${editingPayment.id}`
+                : isExternal
+                  ? "External payer"
+                  : "Fee Collection"}
             </div>
+            {editingPayment && (
+              <p className="mt-1 text-[12px] leading-snug text-black/55 dark:text-zinc-400">
+                Update this receipt on the same collection form. Student ledger balance adjusts
+                automatically when the amount changes.
+              </p>
+            )}
           </div>
+          {editingPayment && (
+            <button
+              type="button"
+              onClick={resetRecordForm}
+              className="inline-flex h-9 shrink-0 items-center rounded-full border border-[#E5E5E5] bg-white px-3.5 text-[12px] font-semibold text-black/70 transition-colors hover:bg-[#F4F4F5] dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200"
+            >
+              Cancel edit
+            </button>
+          )}
         </div>
 
         <input
@@ -7542,27 +7744,14 @@ function ReceivePayment() {
               <div className="col-span-12 grid grid-cols-12 gap-x-4 gap-y-5 lg:col-span-6 lg:grid-cols-1">
                 <div className="col-span-12">
                   <FieldLabel>Ledger Link</FieldLabel>
-                  <div className="flex gap-2">
-                    <FieldSelect
-                      className="min-w-0 flex-1"
-                      value={ledgerCategory}
-                      onValueChange={setLedgerCategory}
-                      options={descriptionOptions}
-                      placeholder="Select category"
-                      triggerClassName="h-11 sm:h-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        navigate({ to: "/tenant/settings", search: { tab: "fees" } })
-                      }
-                      className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-[#E5E5E5] bg-white text-black/70 transition-colors hover:bg-[#F4F4F5] dark:border-white/10 dark:bg-zinc-900 sm:h-10 sm:w-10"
-                      aria-label="Add ledger category"
-                      title="Add category in Settings → Fees"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </button>
-                  </div>
+                  <FieldSelect
+                    className="min-w-0"
+                    value={ledgerCategory}
+                    onValueChange={setLedgerCategory}
+                    options={descriptionOptions}
+                    placeholder="Select category"
+                    triggerClassName="h-11 sm:h-10"
+                  />
                 </div>
                 <div className="col-span-12">
                   <PaymentModeControls
@@ -7645,10 +7834,11 @@ function ReceivePayment() {
                   value={cls}
                   onValueChange={(next) => {
                     setCls(next);
+                    if (editingPayment) return;
                     const first = students.find((s) => s.cls === next);
                     if (first) setStu(first.name);
                   }}
-                  options={classes.map((c) => ({ value: c, label: c }))}
+                  options={classOptions.map((c) => ({ value: c, label: c }))}
                   placeholder="Select class"
                   disabled={classes.length === 0}
                   searchable
@@ -7661,10 +7851,7 @@ function ReceivePayment() {
                 <FieldSelect
                   value={stu}
                   onValueChange={setStu}
-                  options={(studentsInClass.length ? studentsInClass : students).map((s) => ({
-                    value: s.name,
-                    label: s.name,
-                  }))}
+                  options={studentOptions}
                   placeholder="Select student"
                   searchable
                   searchPlaceholder="Search student..."
@@ -7689,7 +7876,7 @@ function ReceivePayment() {
                       )}
                     </div>
                     <div className="grid grid-cols-12 gap-3">
-                      <div className="col-span-12 sm:col-span-5">
+                      <div className="col-span-12 min-w-0 lg:col-span-5">
                         <FieldLabel>Fee description</FieldLabel>
                         <FieldSelect
                           value={item.description}
@@ -7713,7 +7900,7 @@ function ReceivePayment() {
                           />
                         )}
                       </div>
-                      <div className="col-span-12 sm:col-span-3">
+                      <div className="col-span-12 min-w-0 sm:col-span-5 lg:col-span-3">
                         <FieldLabel>Amount</FieldLabel>
                         <input
                           value={item.amount}
@@ -7727,7 +7914,7 @@ function ReceivePayment() {
                           className="h-11 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 font-mono text-[15px] font-semibold dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 sm:h-10 sm:text-[13px] sm:font-normal"
                         />
                       </div>
-                      <div className="col-span-12 sm:col-span-4">
+                      <div className="col-span-12 min-w-0 sm:col-span-7 lg:col-span-4">
                         <FieldLabel>Fee period</FieldLabel>
                         <FieldSelect
                           value={`${item.feePeriodKind}:${item.feePeriod}`}
@@ -7736,7 +7923,9 @@ function ReceivePayment() {
                           }
                           options={periodChoices.map((c) => ({ value: c.value, label: c.label }))}
                           placeholder="Select period"
-                          triggerClassName="h-11 sm:h-10"
+                          className="min-w-0"
+                          triggerClassName="h-11 min-w-0 sm:h-10"
+                          contentClassName="min-w-[min(100vw-1.5rem,20rem)]"
                         />
                       </div>
                     </div>
@@ -7849,7 +8038,9 @@ function ReceivePayment() {
 
         <div className="mt-5 flex flex-col gap-3 rounded-xl border border-[#E8E8EA] bg-[#F8F8F9] p-4 dark:border-white/10 dark:bg-zinc-900/80 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:p-5">
           <div className="min-w-0 text-[13px] leading-relaxed text-black/65 dark:text-zinc-300">
-            <div className="font-semibold text-black dark:text-zinc-50">{summaryName}</div>
+            <div className="font-semibold text-black dark:text-zinc-50">
+              {editingPayment ? `${editingPayment.id} · ${summaryName}` : summaryName}
+            </div>
             <div className="mt-0.5 break-words text-[12px]">
               {isExternal
                 ? `External — ${primaryCategory} ${currentFeeMonth()} — ${mode}`
@@ -7863,15 +8054,16 @@ function ReceivePayment() {
             </div>
             <button
               type="button"
-              onClick={handleRecord}
-              disabled={!canRecord}
+              onClick={editingPayment ? saveEditedHistoryPayment : handleRecord}
+              disabled={!canSubmit}
               className="inline-flex h-12 min-w-[140px] flex-1 items-center justify-center rounded-full bg-[#0F766E] px-8 text-[14px] font-semibold tracking-tight text-white shadow-[0_8px_24px_-10px_rgba(15,118,110,0.45)] transition-all hover:bg-[#0D9488] hover:shadow-[0_10px_28px_-10px_rgba(15,118,110,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none sm:flex-none"
             >
-              {isExternal ? "Record" : "Record Payment"}
+              {editingPayment ? "Save changes" : isExternal ? "Record" : "Record Payment"}
             </button>
           </div>
         </div>
       </OrganicCard>
+      </div>
 
       <OrganicCard tone="white" cornerSide="bl" padded className={workspacePanelClass}>
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -7925,7 +8117,12 @@ function ReceivePayment() {
           {filteredPayments.map((p) => (
             <div
               key={p.id}
-              className="rounded-xl border border-[#E5E5E5] bg-white p-3.5 shadow-sm shadow-slate-200/40"
+              className={cn(
+                "rounded-xl border bg-white p-3.5 shadow-sm shadow-slate-200/40",
+                editingPayment?.id === p.id
+                  ? "border-[#0F766E] ring-2 ring-[#0F766E]/15"
+                  : "border-[#E5E5E5]",
+              )}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -7979,7 +8176,7 @@ function ReceivePayment() {
 
               <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-[#F0F0F0] pt-2.5">
                 <span className="min-w-0 truncate font-mono text-[10.5px] text-black/45">
-                  {p.time}
+                  {formatEventDateTime(p.time)}
                 </span>
                 <div className="flex shrink-0 items-center gap-1.5">
                   <button
@@ -8061,7 +8258,13 @@ function ReceivePayment() {
                 </tr>
               )}
               {filteredPayments.map((p) => (
-                <tr key={p.id} className="border-b border-[#F0F0F0] last:border-0">
+                <tr
+                  key={p.id}
+                  className={cn(
+                    "border-b border-[#F0F0F0] last:border-0",
+                    editingPayment?.id === p.id && "bg-[#F0FDFA]",
+                  )}
+                >
                   <td className="px-3 py-3">
                     <div className="font-medium text-black">{p.name}</div>
                     <div className="text-[11px] text-black/45">
@@ -8091,7 +8294,7 @@ function ReceivePayment() {
                   <td className="px-3 py-3 font-mono font-semibold text-black">
                     +₹ {p.amount.toLocaleString("en-IN")}
                   </td>
-                  <td className="px-3 py-3 font-mono text-[11px] text-black/55 dark:text-zinc-400">{p.time}</td>
+                  <td className="px-3 py-3 font-mono text-[11px] text-black/55 dark:text-zinc-400">{formatEventDateTime(p.time)}</td>
                   <td className="px-3 py-3 text-right">
                     <div className="inline-flex items-center justify-end gap-1.5">
                       <button
@@ -8193,7 +8396,7 @@ function ReceivePayment() {
                       ₹ {viewingPayment.amount.toLocaleString("en-IN")}
                     </div>
                     <div className="mt-1 font-mono text-[10.5px] text-black/45">
-                      {viewingPayment.time}
+                      {formatEventDateTime(viewingPayment.time)}
                     </div>
                   </div>
                 </div>
@@ -8302,337 +8505,6 @@ function ReceivePayment() {
               </DialogFooter>
             </>
           )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={Boolean(editingPayment)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setEditingPayment(null);
-            setEditAttachments([]);
-          }
-        }}
-      >
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Edit Receipt</DialogTitle>
-            <DialogDescription>
-              Update receipt {editingPayment?.id}. Student ledger balance adjusts automatically when
-              the amount changes.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={saveEditedHistoryPayment} className="space-y-3">
-            <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                Account
-              </Label>
-              <Input
-                value={editForm.name}
-                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                placeholder="Payer / student name"
-                autoFocus
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                  Category
-                </Label>
-                <Select
-                  value={editForm.cat}
-                  onValueChange={(cat) =>
-                    setEditForm({
-                      ...editForm,
-                      cat,
-                      payerType: categorySuggestsExternal(cat) ? "external" : editForm.payerType,
-                    })
-                  }
-                >
-                  <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
-                    <SelectValue placeholder="Category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Array.from(
-                      new Set(
-                        [...paymentCategories.map((c) => c.label), editForm.cat].filter(Boolean),
-                      ),
-                    ).map((label) => (
-                      <SelectItem key={label} value={label}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                  Mode
-                </Label>
-                <Select
-                  value={editForm.mode}
-                  onValueChange={(nextMode) => setEditForm({ ...editForm, mode: nextMode })}
-                >
-                  <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
-                    <SelectValue placeholder="Mode" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Array.from(
-                      new Set(["Bank", "Cash", "Both", editForm.mode].filter(Boolean)),
-                    ).map((m) => (
-                      <SelectItem key={m} value={m}>
-                        {m}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {editForm.mode === "Both" && (
-                  <p className="text-[10.5px] leading-snug text-black/45">
-                    Bank / cash split is stored in the receipt narration.
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                  Amount (₹)
-                </Label>
-                <Input
-                  type="number"
-                  min={1}
-                  value={editForm.amount}
-                  onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
-                  className="font-mono"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                  Fee period
-                </Label>
-                <div className="mb-2 flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
-                  {(
-                    [
-                      { key: "month" as const, label: "Month" },
-                      { key: "term" as const, label: "Term" },
-                    ] as const
-                  ).map((option) => {
-                    const active = editForm.feePeriodKind === option.key;
-                    return (
-                      <button
-                        key={option.key}
-                        type="button"
-                        onClick={() =>
-                          setEditForm({
-                            ...editForm,
-                            feePeriodKind: option.key,
-                            feePeriod:
-                              option.key === "month"
-                                ? filterFeePeriods(
-                                    feeTerms,
-                                    "month",
-                                    categoryFeeTermKind(editForm.cat),
-                                  )[0]?.label ||
-                                  currentFeeMonth()
-                                : filterFeePeriods(
-                                    feeTerms,
-                                    "term",
-                                    categoryFeeTermKind(editForm.cat) ?? "tuition",
-                                  )[0]?.label ||
-                                  editForm.feePeriod,
-                          })
-                        }
-                        className={cn(
-                          "flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors",
-                          active ? "bg-[#0F766E] text-white" : "text-black/65 hover:text-black",
-                        )}
-                      >
-                        {option.label}
-                      </button>
-                    );
-                  })}
-                </div>
-                <Select
-                  value={editForm.feePeriod}
-                  onValueChange={(nextPeriod) =>
-                    setEditForm({ ...editForm, feePeriod: nextPeriod })
-                  }
-                >
-                  <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
-                    <SelectValue
-                      placeholder={editForm.feePeriodKind === "term" ? "Term" : "Month"}
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(editForm.feePeriodKind === "term"
-                      ? Array.from(
-                          new Set([
-                            ...filterFeePeriods(
-                              feeTerms,
-                              "term",
-                              categoryFeeTermKind(editForm.cat),
-                            ).map((t) => t.label),
-                            editForm.feePeriod,
-                          ].filter(Boolean)),
-                        )
-                      : Array.from(
-                          new Set([
-                            ...(filterFeePeriods(
-                              feeTerms,
-                              "month",
-                              categoryFeeTermKind(editForm.cat),
-                            ).map((t) => t.label).length
-                              ? filterFeePeriods(
-                                  feeTerms,
-                                  "month",
-                                  categoryFeeTermKind(editForm.cat),
-                                ).map((t) => t.label)
-                              : [...FEE_MONTHS]),
-                            editForm.feePeriod,
-                          ].filter(Boolean)),
-                        )
-                    ).map((m) => (
-                      <SelectItem key={m} value={m}>
-                        {m}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                  Payer type
-                </Label>
-                <Select
-                  value={editForm.payerType}
-                  onValueChange={(payerType) =>
-                    setEditForm({
-                      ...editForm,
-                      payerType: payerType as "student" | "external",
-                    })
-                  }
-                >
-                  <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="student">Student</SelectItem>
-                    <SelectItem value="external">External</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                  Date / Time
-                </Label>
-                <Input
-                  value={editForm.time}
-                  onChange={(e) => setEditForm({ ...editForm, time: e.target.value })}
-                  placeholder="e.g. Today · 10:22"
-                  className="font-mono"
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                Narration
-              </Label>
-              <Textarea
-                value={editForm.narration}
-                onChange={(e) => setEditForm({ ...editForm, narration: e.target.value })}
-                placeholder="Optional note"
-                className="min-h-[72px] resize-none"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                  Attachments
-                </Label>
-                <span className="text-[10.5px] font-medium text-black/45">
-                  {editAttachments.length} / {MAX_PAYMENT_ATTACHMENTS}
-                </span>
-              </div>
-              <div className="rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] p-3 dark:border-white/10 dark:bg-zinc-900/50">
-                {editAttachments.length > 0 ? (
-                  <ul className="mb-3 max-h-28 space-y-2 overflow-y-auto">
-                    {editAttachments.map((file) => (
-                      <li
-                        key={file.id}
-                        className="flex items-center gap-2 rounded-lg border border-[#EFEFEF] bg-white px-2.5 py-2 dark:border-white/10 dark:bg-zinc-900"
-                      >
-                        <FileText className="h-3.5 w-3.5 shrink-0 text-black/40" />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-[12px] font-medium text-black">
-                            {file.name}
-                          </div>
-                          <div className="font-mono text-[10px] text-black/45">
-                            {formatAttachmentSize(file.size)}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setPreviewAttachment(file)}
-                          className="inline-flex h-7 items-center rounded-lg border border-slate-200 px-2 text-[10.5px] font-semibold text-black/60 transition-colors hover:bg-slate-50"
-                        >
-                          Open
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removeAttachment(file.id, "edit")}
-                          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-red-200 text-red-600 transition-colors hover:bg-red-50"
-                          aria-label={`Remove ${file.name}`}
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="mb-3 text-[12px] leading-snug text-black/45">
-                    Attach bank slips, UPI screenshots, or supporting documents.
-                  </p>
-                )}
-                <input
-                  ref={editAttachmentInputRef}
-                  type="file"
-                  multiple
-                  accept="image/*,.pdf,.jpg,.jpeg,.png,.webp"
-                  className="hidden"
-                  onChange={(e) => {
-                    void addAttachments(e.target.files, "edit");
-                    e.target.value = "";
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => editAttachmentInputRef.current?.click()}
-                  disabled={editAttachments.length >= MAX_PAYMENT_ATTACHMENTS}
-                  className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3.5 text-[12px] font-semibold text-black transition-colors hover:border-black/20 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Paperclip className="mr-0 h-3.5 w-3.5" />
-                  Add files
-                </button>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setEditingPayment(null);
-                  setEditAttachments([]);
-                }}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
-                Save changes
-              </Button>
-            </DialogFooter>
-          </form>
         </DialogContent>
       </Dialog>
 
@@ -8774,7 +8646,8 @@ function StaffSearchSelect({
 }
 
 function MakePayment() {
-  const { staff, setStaff } = useTenantStore();
+  const { staff, setStaff, schoolDetails, academicYear } = useTenantStore();
+  const schoolName = schoolDetails.name || "School";
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/finance" });
   const [obligations, setObligations] = useState<PendingObligation[]>([]);
@@ -8782,7 +8655,7 @@ function MakePayment() {
   const [selectedObligationId, setSelectedObligationId] = useState<string | null>(
     search.staffId ? null : null,
   );
-  const [payeeType, setPayeeType] = useState<"Salary" | "Vendor">(
+  const [payeeType, setPayeeType] = useState<PayeeType>(
     search.staffId ? "Salary" : "Salary",
   );
   const [selectedStaffId, setSelectedStaffId] = useState<string>(search.staffId ?? "");
@@ -8807,7 +8680,7 @@ function MakePayment() {
     desc: "",
     amount: "",
     mode: "UPI Business",
-    payeeType: "Vendor" as "Salary" | "Vendor",
+    payeeType: "Supplier" as PayeeType,
     status: "Queued" as "Queued" | "Cleared",
     date: toIsoDateLocal(new Date()),
     clock: toClockLocal(new Date()),
@@ -8827,8 +8700,8 @@ function MakePayment() {
             desc: row.desc,
             amount: row.amount,
             mode: row.mode,
-            payeeType: (row.payeeType === "Salary" ? "Salary" : "Vendor") as "Salary" | "Vendor",
-            time: row.time || formatDisbursalTime(),
+            payeeType: normalizePayeeType(row.payeeType),
+            time: isBlankDate(row.time) ? toSqlDateTime(new Date()) : String(row.time),
             status: (row.status === "Queued" ? "Queued" : "Cleared") as "Queued" | "Cleared",
             attachments: Array.isArray(row.attachments)
               ? (row.attachments as PaymentAttachment[])
@@ -8843,8 +8716,8 @@ function MakePayment() {
               payee: row.payee,
               desc: row.desc || "",
               amount: row.amount,
-              due: row.time || "Due",
-              payeeType: (row.payeeType === "Salary" ? "Salary" : "Vendor") as "Salary" | "Vendor",
+              due: formatEventDateTime(row.time) === "—" ? "Due" : formatEventDateTime(row.time),
+              payeeType: normalizePayeeType(row.payeeType),
             })),
         );
       })
@@ -9026,10 +8899,10 @@ function MakePayment() {
     setAttachments([]);
   };
 
-  const setPayeeTypeAndClear = (next: "Salary" | "Vendor") => {
+  const setPayeeTypeAndClear = (next: PayeeType) => {
     setPayeeType(next);
     setSelectedObligationId(null);
-    if (next === "Vendor") {
+    if (next === "Supplier") {
       setSelectedStaffId("");
       if (selectedStaffId) {
         setBeneficiary("");
@@ -9111,7 +8984,7 @@ function MakePayment() {
       }
     }
     if (!beneficiary.trim()) {
-      toast.error(payeeType === "Salary" ? "Choose a staff member" : "Beneficiary name is required");
+      toast.error(payeeType === "Salary" ? "Choose a staff member" : "Supplier name is required");
       return;
     }
     if (!description.trim()) {
@@ -9157,7 +9030,7 @@ function MakePayment() {
       amount: value,
       mode,
       payeeType,
-      time: formatDisbursalTime(),
+      time: toSqlDateTime(new Date()),
       status: "Queued",
       attachments: attachments.length ? attachments : undefined,
     };
@@ -9180,10 +9053,9 @@ function MakePayment() {
                   desc: saved.desc || disbursal.desc,
                   amount: saved.amount || disbursal.amount,
                   mode: saved.mode || disbursal.mode,
-                  payeeType:
-                    saved.payeeType === "Salary" || saved.payeeType === "Vendor"
-                      ? saved.payeeType
-                      : disbursal.payeeType,
+                  payeeType: saved.payeeType
+                    ? normalizePayeeType(saved.payeeType)
+                    : disbursal.payeeType,
                   time: saved.time || disbursal.time,
                   status:
                     saved.status === "Queued" || saved.status === "Cleared"
@@ -9278,7 +9150,11 @@ function MakePayment() {
       return;
     }
     downloadCsv(
-      "made-payments.csv",
+      formatDownloadFilename("madePayments", "csv", {
+        school: schoolName,
+        year: slugYear(academicYear),
+        date: todayStamp(),
+      }),
       ["ID", "Payee", "Type", "Description", "Mode", "Amount (INR)", "Status", "Time"],
       madePayments.map((p) => [
         p.id,
@@ -9288,7 +9164,7 @@ function MakePayment() {
         p.mode,
         p.amount,
         p.status,
-        p.time,
+        formatEventDateTime(p.time),
       ]),
     );
     toast.success("Made payments exported", {
@@ -9316,23 +9192,46 @@ function MakePayment() {
     }
   };
 
-  const downloadDisbursal = (payment: MadePayment) => {
-    downloadTablePdf({
-      filename: `${payment.id}-payment.pdf`,
-      title: "Payment Voucher",
-      subtitle: `${payment.id} · ${payment.status}`,
-      headers: ["Field", "Detail"],
-      rows: [
-        ["Payee", payment.payee],
-        ["Type", payment.payeeType],
-        ["Description", payment.desc],
-        ["Mode", payment.mode],
-        ["Amount", `₹ ${payment.amount.toLocaleString("en-IN")}`],
-        ["Status", payment.status],
-        ["Time", payment.time],
-      ],
-    });
-    toast.success(`Payment ${payment.id} downloaded`);
+  const downloadDisbursal = async (payment: MadePayment) => {
+    const member =
+      staff.find((s) => s.id === payment.payee) ||
+      staff.find((s) => s.name.trim().toLowerCase() === payment.payee.trim().toLowerCase());
+    try {
+      if (payment.payeeType === "Salary") {
+        await downloadSalarySlipPdf(
+          payment,
+          schoolName,
+          receiptBrandingFromSchool(schoolDetails),
+          member
+            ? {
+                id: member.id,
+                name: member.name,
+                role: member.role,
+                dept: member.dept,
+                basicSalary: member.basicSalary,
+                additionalAllowances: member.additionalAllowances,
+              }
+            : null,
+          academicYear,
+        );
+        toast.success(`Salary slip ${payment.id} downloaded`);
+        return;
+      }
+      await downloadPaymentVoucherPdf(
+        payment,
+        schoolName,
+        receiptBrandingFromSchool(schoolDetails),
+        {
+          name: member?.name || payment.payee,
+          phone: member?.phone,
+          extra: [member?.role, member?.dept].filter(Boolean).join(" · ") || undefined,
+        },
+        academicYear,
+      );
+      toast.success(`Voucher ${payment.id} downloaded`);
+    } catch {
+      toast.error(`Could not download ${payment.id}`);
+    }
   };
 
   const shareDisbursal = (payment: MadePayment) => {
@@ -9344,7 +9243,7 @@ function MakePayment() {
       `Mode: ${payment.mode}`,
       `Amount: ₹ ${payment.amount.toLocaleString("en-IN")}`,
       `Status: ${payment.status}`,
-      `Time: ${payment.time}`,
+      `Time: ${formatEventDateTime(payment.time)}`,
     ].join("\n");
     void sharePayload(`Payment ${payment.id}`, text);
   };
@@ -9371,9 +9270,8 @@ function MakePayment() {
     const desc = disbursalEditForm.desc.trim();
     const nextAmount = Number(disbursalEditForm.amount);
     const modeValue = disbursalEditForm.mode.trim();
-    const time = formatDisbursalTimeFromParts(
-      disbursalEditForm.date,
-      disbursalEditForm.clock,
+    const time = toSqlDateTime(
+      formatDisbursalTimeFromParts(disbursalEditForm.date, disbursalEditForm.clock),
     );
     if (!payee) {
       toast.error("Payee is required");
@@ -9440,7 +9338,7 @@ function MakePayment() {
           <div>
             <FieldLabel>Payee Type</FieldLabel>
             <div className="flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
-              {(["Salary", "Vendor"] as const).map((p) => {
+              {(["Salary", "Supplier"] as const).map((p) => {
                 const active = payeeType === p;
                 return (
                   <button
@@ -9458,7 +9356,7 @@ function MakePayment() {
             </div>
           </div>
           <div>
-            <FieldLabel>{payeeType === "Salary" ? "Staff" : "Beneficiary"}</FieldLabel>
+            <FieldLabel>{payeeType === "Salary" ? "Staff" : "Supplier"}</FieldLabel>
             {payeeType === "Salary" ? (
               <StaffSearchSelect
                 staff={activeStaff}
@@ -9789,7 +9687,7 @@ function MakePayment() {
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
-                  <span className="font-mono text-[10.5px] text-black/55 dark:text-zinc-400">{payment.time}</span>
+                  <span className="font-mono text-[10.5px] text-black/55 dark:text-zinc-400">{formatEventDateTime(payment.time)}</span>
                 </div>
               </div>
               {(payment.attachments?.length ?? 0) > 0 && (
@@ -9861,7 +9759,7 @@ function MakePayment() {
                   onValueChange={(payeeType) =>
                     setDisbursalEditForm({
                       ...disbursalEditForm,
-                      payeeType: payeeType as "Salary" | "Vendor",
+                      payeeType: payeeType as PayeeType,
                     })
                   }
                 >
@@ -9870,7 +9768,7 @@ function MakePayment() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Salary">Salary</SelectItem>
-                    <SelectItem value="Vendor">Vendor</SelectItem>
+                    <SelectItem value="Supplier">Supplier</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -10131,7 +10029,6 @@ export function SchoolSettings() {
   const activeTab = (tabParam ?? "school") as SettingsTabId;
   /** Mobile: no ?tab → menu index. With ?tab → section page. Desktop always shows content. */
   const showMobileMenu = !tabParam;
-  const [viewingFeePeriod, setViewingFeePeriod] = useState(false);
 
   const {
     departments,
@@ -10146,10 +10043,6 @@ export function SchoolSettings() {
     setTransportRoutes,
     transportVehicles,
     setTransportVehicles,
-    paymentCategories,
-    setPaymentCategories,
-    feeTerms: _allFeeTerms,
-    setFeeTerms,
     activeFeeTerms,
     academicYears,
     academicYear,
@@ -10169,37 +10062,27 @@ export function SchoolSettings() {
     activeStudents: students,
     setStudents,
     hydrated,
+    branches,
+    setBranches,
+    activeBranchId,
+    activeBranch,
+    openBranch,
   } = useTenantStore();
-
-  const setActiveFeeTerms = useCallback<React.Dispatch<React.SetStateAction<FeeTerm[]>>>(
-    (action) => {
-      setFeeTerms((all) => {
-        const current = all.filter((t) => (t.academicYear ?? "") === academicYear);
-        const others = all.filter((t) => (t.academicYear ?? "") !== academicYear);
-        const next = typeof action === "function" ? action(current) : action;
-        return [
-          ...others,
-          ...next.map((t) => ({ ...t, academicYear: t.academicYear ?? academicYear })),
-        ];
-      });
-    },
-    [academicYear, setFeeTerms],
-  );
 
   const feeTerms = activeFeeTerms;
 
   const allSettingsTabs: { id: SettingsTabId; label: string }[] = useMemo(
     () => [
       { id: "school", label: "School Details" },
+      { id: "branches", label: "Branches" },
       { id: "classes", label: "Class Tier" },
       { id: "departments", label: "Departments" },
       { id: "roles", label: "Positions" },
       { id: "users", label: "Users" },
       { id: "vehicles", label: "Vehicles" },
       { id: "transport", label: "Transport" },
-      { id: "fees", label: "Fees" },
-      { id: "billing", label: "Billing" },
       { id: "system", label: "System" },
+      { id: "support", label: "Customer Support" },
     ],
     [],
   );
@@ -10249,6 +10132,14 @@ export function SchoolSettings() {
   const initials = schoolInitials(tenantName);
   const logoUrl = resolveMediaUrl(schoolDetails.logoUrl);
 
+  const campusHint =
+    branches.length > 1 && activeBranch ? (
+      <p className="mb-2 text-[12px] text-black/55 dark:text-zinc-400">
+        Configuring{" "}
+        <span className="font-semibold text-black dark:text-zinc-100">{activeBranch.name}</span>
+      </p>
+    ) : null;
+
   const renderSettingsContent = (listLayout: "cards" | "table") => (
     <>
       {activeTab === "school" && (
@@ -10258,8 +10149,20 @@ export function SchoolSettings() {
         />
       )}
 
+      {activeTab === "branches" && (
+        <SettingsBranchesCard
+          branches={branches}
+          setBranches={setBranches}
+          activeBranchId={activeBranchId}
+          openBranch={openBranch}
+          canAddBranch={planAllowsMultipleBranches(session?.planFlags)}
+        />
+      )}
+
       {activeTab === "classes" && (
-        <ClassesCard
+        <>
+          {campusHint}
+          <ClassesCard
           classes={classes}
           setClasses={setClasses}
           students={students}
@@ -10267,98 +10170,73 @@ export function SchoolSettings() {
           staff={staff}
           feeTerms={feeTerms}
         />
+        </>
       )}
 
       {activeTab === "departments" && (
-        <DepartmentsCard
-          departments={departments}
-          setDepartments={setDepartments}
-          staff={staff}
-          setStaff={setStaff}
-          roles={roles}
-        />
+        <>
+          {campusHint}
+          <DepartmentsCard
+            departments={departments}
+            setDepartments={setDepartments}
+            staff={staff}
+            setStaff={setStaff}
+            roles={roles}
+          />
+        </>
       )}
 
       {activeTab === "roles" && (
-        <RolesCard
-          roles={roles}
-          setRoles={setRoles}
-          departments={departments}
-          staff={staff}
-          setStaff={setStaff}
-        />
+        <>
+          {campusHint}
+          <RolesCard
+            roles={roles}
+            setRoles={setRoles}
+            departments={departments}
+            staff={staff}
+            setStaff={setStaff}
+          />
+        </>
       )}
 
       {activeTab === "users" && (
-        <SettingsUsersCard
-          tenantUsers={tenantUsers}
-          setTenantUsers={setTenantUsers}
-          roles={roles}
-          staff={staff}
-        />
+        <div className="space-y-3">
+          <p className="text-[12px] text-black/55 dark:text-zinc-400">
+            Users are organization-wide and can switch every campus.
+          </p>
+          <SettingsUsersCard
+            tenantUsers={tenantUsers}
+            setTenantUsers={setTenantUsers}
+            roles={roles}
+            staff={staff}
+            canAddUser={planAllowsExtraUsers(session?.planFlags)}
+          />
+        </div>
       )}
 
       {activeTab === "vehicles" && (
-        <VehicleCard
-          listLayout={listLayout}
-          transportVehicles={transportVehicles}
-          setTransportVehicles={setTransportVehicles}
-          transportRoutes={transportRoutes}
-        />
+        <>
+          {campusHint}
+          <VehicleCard
+            listLayout={listLayout}
+            transportVehicles={transportVehicles}
+            setTransportVehicles={setTransportVehicles}
+            transportRoutes={transportRoutes}
+          />
+        </>
       )}
 
       {activeTab === "transport" && (
-        <TransportCard
-          listLayout={listLayout}
-          transportRoutes={transportRoutes}
-          setTransportRoutes={setTransportRoutes}
-          transportVehicles={transportVehicles}
-          setTransportVehicles={setTransportVehicles}
-        />
-      )}
-
-      {activeTab === "fees" && (
-        hydrated ? (
-          <div className="space-y-4 sm:space-y-5">
-            {!viewingFeePeriod && (
-              <FeeCategoriesCard
-                paymentCategories={paymentCategories}
-                setPaymentCategories={setPaymentCategories}
-              />
-            )}
-            <FeeTermsCard
-              feeTerms={feeTerms}
-              setFeeTerms={setActiveFeeTerms}
-              academicYear={academicYear}
-              classes={classes}
-              onViewingChange={setViewingFeePeriod}
-            />
-          </div>
-        ) : (
-          <TenantFeesSkeleton />
-        )
-      )}
-
-      {activeTab === "billing" && (
-        <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
-          <div className="mb-4">
-            <div className="text-[17px] font-bold tracking-tight text-black dark:text-zinc-50">
-              Platform billing
-            </div>
-            <p className="mt-1 text-[12px] text-black/55 dark:text-zinc-400">
-              Subscription invoices and payment receipts for {tenantName}
-              {session?.tier ? ` · ${session.tier} plan` : ""}
-            </p>
-          </div>
-          <PlatformInvoicesPanel
-            mode="tenant"
-            tenantId={session?.tenantId}
-            tenantName={tenantName}
-            schoolHost={
-              typeof window !== "undefined" ? window.location.hostname : undefined
-            }
+        <>
+          {campusHint}
+          <TransportCard
+            listLayout={listLayout}
+            transportRoutes={transportRoutes}
+            setTransportRoutes={setTransportRoutes}
+            transportVehicles={transportVehicles}
+            setTransportVehicles={setTransportVehicles}
           />
-        </OrganicCard>
+        </>
       )}
 
       {activeTab === "system" && (
@@ -10385,6 +10263,8 @@ export function SchoolSettings() {
           <TenantSystemSkeleton />
         )
       )}
+
+      {activeTab === "support" && <CustomerSupportCard />}
     </>
   );
 
@@ -13295,8 +13175,13 @@ function SchoolDetailsCard({
   const [draft, setDraft] = useState<SchoolDetails>(schoolDetails);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const letterheadInputRef = useRef<HTMLInputElement>(null);
-  const [cropTarget, setCropTarget] = useState<"logo" | "letterhead" | null>(null);
+  const sealInputRef = useRef<HTMLInputElement>(null);
+  const signatureInputRef = useRef<HTMLInputElement>(null);
+  const [cropTarget, setCropTarget] = useState<"logo" | "letterhead" | "seal" | "signature" | null>(
+    null,
+  );
   const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [drawSignatureOpen, setDrawSignatureOpen] = useState(false);
 
   useEffect(() => {
     setDraft(schoolDetails);
@@ -13385,6 +13270,38 @@ function SchoolDetailsCard({
     }
   };
 
+  const onSeal = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const dataUrl = await readImageAsDataUrl(file, {
+        maxBytes: 2 * 1024 * 1024,
+        label: "Seal",
+      });
+      setCropTarget("seal");
+      setCropSrc(dataUrl);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not upload seal");
+    }
+  };
+
+  const onSignatureFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const dataUrl = await readImageAsDataUrl(file, {
+        maxBytes: 2 * 1024 * 1024,
+        label: "Signature",
+      });
+      setCropTarget("signature");
+      setCropSrc(dataUrl);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not upload signature");
+    }
+  };
+
   const applyCrop = (dataUrl: string) => {
     if (cropTarget === "logo") {
       patch("logoUrl", dataUrl);
@@ -13392,6 +13309,12 @@ function SchoolDetailsCard({
     } else if (cropTarget === "letterhead") {
       patch("letterheadUrl", dataUrl);
       toast.success("Letterhead ready — click Save Changes");
+    } else if (cropTarget === "seal") {
+      patch("sealUrl", dataUrl);
+      toast.success("Seal ready — click Save Changes");
+    } else if (cropTarget === "signature") {
+      patch("signatureUrl", dataUrl);
+      toast.success("Signature ready — click Save Changes");
     }
     closeCrop();
   };
@@ -13404,7 +13327,7 @@ function SchoolDetailsCard({
             School Details
           </div>
           <p className="mt-1 text-[12px] text-black/55 dark:text-zinc-400">
-            Logo, letterhead, and school identity used across the workspace
+            Logo, letterhead, signature, and seal used across the workspace
           </p>
         </div>
         {dirty && (
@@ -13512,6 +13435,116 @@ function SchoolDetailsCard({
               accept="image/jpeg,image/png,image/webp,image/gif"
               className="hidden"
               onChange={onLetterhead}
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-12 gap-3">
+          <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3 sm:col-span-6">
+            <div className="flex items-center justify-between gap-2">
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                Seal
+                {!draft.sealUrl && (
+                  <span className="rounded-full bg-[#CCFBF1] px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-[#0F766E]">
+                    Default
+                  </span>
+                )}
+              </span>
+              <div className="flex items-center gap-1">
+                {draft.sealUrl && (
+                  <button
+                    type="button"
+                    onClick={() => patch("sealUrl", undefined)}
+                    className="grid h-7 w-7 place-items-center rounded-full text-black/45 hover:bg-[#FEE2E2] hover:text-[#EF4444]"
+                    aria-label="Reset seal to default"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => sealInputRef.current?.click()}
+                  className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px] font-semibold text-black shadow-sm ring-1 ring-black/10 hover:bg-[#0F766E] hover:text-white"
+                >
+                  <ImagePlus className="h-3.5 w-3.5" />
+                  Upload
+                </button>
+              </div>
+            </div>
+            <div className="mt-3 flex items-center gap-3">
+              <img
+                src={resolveSealDisplaySrc(draft.name, draft.sealUrl)}
+                alt="School seal"
+                className="h-16 w-16 rounded-full bg-white object-contain ring-1 ring-black/10"
+              />
+              <p className="text-[11px] leading-relaxed text-black/50">
+                Official stamp on receipts and vouchers. JPG/PNG · max 2 MB.
+              </p>
+            </div>
+            <input
+              ref={sealInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="hidden"
+              onChange={onSeal}
+            />
+          </div>
+
+          <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3 sm:col-span-6">
+            <div className="flex items-center justify-between gap-2">
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                Signature
+                {!draft.signatureUrl && (
+                  <span className="rounded-full bg-[#CCFBF1] px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-[#0F766E]">
+                    Default
+                  </span>
+                )}
+              </span>
+              <div className="flex flex-wrap items-center justify-end gap-1">
+                {draft.signatureUrl && (
+                  <button
+                    type="button"
+                    onClick={() => patch("signatureUrl", undefined)}
+                    className="grid h-7 w-7 place-items-center rounded-full text-black/45 hover:bg-[#FEE2E2] hover:text-[#EF4444]"
+                    aria-label="Reset signature to default"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setDrawSignatureOpen(true)}
+                  className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px] font-semibold text-black shadow-sm ring-1 ring-black/10 hover:bg-[#0F766E] hover:text-white"
+                >
+                  <PenLine className="h-3.5 w-3.5" />
+                  Draw
+                </button>
+                <button
+                  type="button"
+                  onClick={() => signatureInputRef.current?.click()}
+                  className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px] font-semibold text-black shadow-sm ring-1 ring-black/10 hover:bg-[#0F766E] hover:text-white"
+                >
+                  <ImagePlus className="h-3.5 w-3.5" />
+                  Upload
+                </button>
+              </div>
+            </div>
+            <div className="mt-3 flex items-center gap-3">
+              <img
+                src={resolveSignatureDisplaySrc(draft.principalName, draft.signatureUrl)}
+                alt="Authorised signature"
+                className="h-14 w-[min(100%,11rem)] rounded-lg bg-white object-contain object-left px-1 ring-1 ring-black/10"
+              />
+              <p className="text-[11px] leading-relaxed text-black/50">
+                Authorised signatory on receipts. Draw or upload · max 2 MB.
+              </p>
+            </div>
+            <input
+              ref={signatureInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="hidden"
+              onChange={onSignatureFile}
             />
           </div>
         </div>
@@ -13644,1020 +13677,42 @@ function SchoolDetailsCard({
       <ImageCropDialog
         open={Boolean(cropTarget && cropSrc)}
         imageSrc={cropSrc}
-        title={cropTarget === "letterhead" ? "Adjust letterhead" : "Adjust logo"}
+        title={
+          cropTarget === "letterhead"
+            ? "Adjust letterhead"
+            : cropTarget === "seal"
+              ? "Adjust seal"
+              : cropTarget === "signature"
+                ? "Adjust signature"
+                : "Adjust logo"
+        }
         description="Drag to reposition, zoom, then confirm the crop."
-        aspect={cropTarget === "letterhead" ? 16 / 5 : 1}
-        outputSize={cropTarget === "letterhead" ? 1280 : 512}
+        aspect={
+          cropTarget === "letterhead" ? 16 / 5 : cropTarget === "signature" ? 2.4 : 1
+        }
+        outputSize={
+          cropTarget === "letterhead" ? 1280 : cropTarget === "signature" ? 960 : 512
+        }
+        outputMime={cropTarget === "seal" || cropTarget === "signature" ? "image/png" : "image/jpeg"}
         onOpenChange={(next) => {
           if (!next) closeCrop();
         }}
         onConfirm={applyCrop}
         onRetake={() => {
           if (cropTarget === "letterhead") letterheadInputRef.current?.click();
+          else if (cropTarget === "seal") sealInputRef.current?.click();
+          else if (cropTarget === "signature") signatureInputRef.current?.click();
           else logoInputRef.current?.click();
         }}
       />
-    </OrganicCard>
-  );
-}
-
-function FeeCategoriesCard({
-  paymentCategories,
-  setPaymentCategories,
-}: {
-  paymentCategories: PaymentCategory[];
-  setPaymentCategories: React.Dispatch<React.SetStateAction<PaymentCategory[]>>;
-}) {
-  const [open, setOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<PaymentCategory | null>(null);
-  const [label, setLabel] = useState("");
-
-  const startCreate = () => {
-    setEditingId(null);
-    setLabel("");
-    setOpen(true);
-  };
-
-  const startEdit = (category: PaymentCategory) => {
-    setEditingId(category.id);
-    setLabel(category.label);
-    setOpen(true);
-  };
-
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const nextLabel = label.trim();
-    if (!nextLabel) {
-      toast.error("Fee category name is required");
-      return;
-    }
-    const duplicate = paymentCategories.some(
-      (c) =>
-        c.label.toLowerCase() === nextLabel.toLowerCase() &&
-        c.id !== editingId,
-    );
-    if (duplicate) {
-      toast.error(`${nextLabel} already exists`);
-      return;
-    }
-
-    if (editingId) {
-      const updated = { id: editingId, label: nextLabel };
-      setPaymentCategories((prev) =>
-        prev.map((c) => (c.id === editingId ? updated : c)),
-      );
-      void apiUpsertPaymentCategory(updated).catch((err) =>
-        toast.error(err instanceof Error ? err.message : "Could not sync fee category"),
-      );
-      toast.success(`Fee category updated · ${nextLabel}`, {
-        description: "Shown on Receive Payment selectors",
-      });
-    } else {
-      const maxNum = paymentCategories.reduce((max, c) => {
-        const match = /^PC-(\d+)$/.exec(c.id);
-        return match ? Math.max(max, Number(match[1])) : max;
-      }, 0);
-      const nextId = `PC-${(maxNum + 1).toString().padStart(3, "0")}`;
-      const created = { id: nextId, label: nextLabel };
-      setPaymentCategories((prev) => [...prev, created]);
-      void apiUpsertPaymentCategory(created).catch((err) =>
-        toast.error(err instanceof Error ? err.message : "Could not sync fee category"),
-      );
-      toast.success(`Fee category added · ${nextLabel}`, {
-        description: "Now selectable on Receive Payment",
-      });
-    }
-    setOpen(false);
-  };
-
-  const remove = (category: PaymentCategory) => {
-    setPaymentCategories((prev) => prev.filter((c) => c.id !== category.id));
-    void apiDeletePaymentCategory(category.id).catch((err) =>
-      toast.error(err instanceof Error ? err.message : "Could not delete fee category"),
-    );
-    toast.error(`${category.label} removed`, {
-      description: "Existing receipts retain the label",
-    });
-  };
-
-  const confirmDelete = () => {
-    if (!pendingDelete) return;
-    remove(pendingDelete);
-    setPendingDelete(null);
-  };
-
-  return (
-    <OrganicCard tone="white" cornerSide="bl" padded className={workspacePanelClass}>
-      <CardHeader
-        title="Fee Categories"
-        subtitle={`${paymentCategories.length} categories · used on Receive Payment`}
-        actionLabel="Add Fee Category"
-        onAction={startCreate}
-      />
-
-      <div className="mt-4 space-y-2">
-        {paymentCategories.length === 0 && <EmptyRow label="No fee categories yet" />}
-        {paymentCategories.map((category) => (
-          <div
-            key={category.id}
-            className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5"
-          >
-            <div className="flex min-w-0 items-center gap-2.5">
-              <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[#CCFBF1] text-[10.5px] font-semibold text-[#0F766E]">
-                {category.label.slice(0, 2).toUpperCase()}
-              </div>
-              <div className="min-w-0">
-                <div className="truncate text-[13px] font-semibold text-black">{category.label}</div>
-                <div className="font-mono text-[10.5px] uppercase tracking-wider text-black/45">
-                  {category.id}
-                </div>
-              </div>
-            </div>
-            <div className="flex shrink-0 items-center gap-1">
-              <button
-                type="button"
-                onClick={() => startEdit(category)}
-                className="grid h-8 w-8 place-items-center rounded-full text-black/55 dark:text-zinc-400 transition-colors hover:bg-[#0F766E] hover:text-white"
-                aria-label={`Edit ${category.label}`}
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setPendingDelete(category)}
-                className="grid h-8 w-8 place-items-center rounded-full text-black/55 dark:text-zinc-400 transition-colors hover:bg-[#EF4444] hover:text-white"
-                aria-label={`Delete ${category.label}`}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <Dialog
-        open={open}
-        onOpenChange={(next) => {
-          setOpen(next);
-          if (!next) {
-            setEditingId(null);
-            setLabel("");
-          }
+      <SignaturePadDialog
+        open={drawSignatureOpen}
+        onOpenChange={setDrawSignatureOpen}
+        onConfirm={(dataUrl) => {
+          patch("signatureUrl", dataUrl);
+          toast.success("Signature ready — click Save Changes");
         }}
-      >
-        <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6">
-          <DialogHeader>
-            <DialogTitle className="text-[22px] font-semibold text-black">
-              {editingId ? "Edit Fee Category" : "Add Fee Category"}
-            </DialogTitle>
-            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60 dark:text-zinc-400">
-              Categories appear as chips on Receive Payment · Fee Categories.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={submit} className="mt-4 space-y-4">
-            <div>
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                Category Name
-              </Label>
-              <Input
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
-                placeholder="e.g. Lab Fee"
-                className="mt-1.5"
-                autoFocus
-              />
-            </div>
-            <DialogFooter className="flex-row justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
-                {editingId ? "Save Changes" : "Add Category"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      <DeleteConfirmDialog
-        open={Boolean(pendingDelete)}
-        onOpenChange={(next) => {
-          if (!next) setPendingDelete(null);
-        }}
-        title="Delete Fee Category"
-        description={
-          pendingDelete
-            ? `Are you sure you want to remove "${pendingDelete.label}" from fee categories? Existing receipts will keep this label.`
-            : "Are you sure you want to delete this fee category?"
-        }
-        onConfirm={confirmDelete}
       />
-    </OrganicCard>
-  );
-}
-
-function FeeTermsCard({
-  feeTerms,
-  setFeeTerms,
-  academicYear,
-  classes,
-  onViewingChange,
-}: {
-  feeTerms: FeeTerm[];
-  setFeeTerms: React.Dispatch<React.SetStateAction<FeeTerm[]>>;
-  academicYear: string;
-  classes: ClassConfig[];
-  onViewingChange?: (viewing: boolean) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<FeeTerm | null>(null);
-  const [detailId, setDetailId] = useState<string | null>(null);
-  const [periodMode, setPeriodMode] = useState<FeePeriodMode>("term");
-  const [kind, setKind] = useState<FeeTermKind>("tuition");
-  const [label, setLabel] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [filterMode, setFilterMode] = useState<FeePeriodMode | "all">("all");
-  const [filterKind, setFilterKind] = useState<FeeTermKind | "all">("all");
-
-  const coveragePreview = formatFeeTermCoverage(startDate || undefined, endDate || undefined);
-
-  const visibleTerms = useMemo(() => {
-    return feeTerms
-      .filter((t) => (filterMode === "all" ? true : resolveFeePeriodMode(t.periodMode) === filterMode))
-      .filter((t) => (filterKind === "all" ? true : t.kind === filterKind))
-      .slice()
-      .sort((a, b) => {
-        const modeA = resolveFeePeriodMode(a.periodMode);
-        const modeB = resolveFeePeriodMode(b.periodMode);
-        if (modeA !== modeB) return modeA.localeCompare(modeB);
-        if (a.kind !== b.kind) return a.kind.localeCompare(b.kind);
-        const aStart = a.startDate ?? "";
-        const bStart = b.startDate ?? "";
-        if (aStart !== bStart) return aStart.localeCompare(bStart);
-        return a.label.localeCompare(b.label);
-      });
-  }, [feeTerms, filterMode, filterKind]);
-
-  const termTuitionCount = filterFeePeriods(feeTerms, "term", "tuition").length;
-  const termVehicleCount = filterFeePeriods(feeTerms, "term", "vehicle").length;
-  const monthTuitionCount = filterFeePeriods(feeTerms, "month", "tuition").length;
-  const monthVehicleCount = filterFeePeriods(feeTerms, "month", "vehicle").length;
-  const termCount = termTuitionCount + termVehicleCount;
-  const monthCount = monthTuitionCount + monthVehicleCount;
-
-  const detailTerm = useMemo(
-    () => (detailId ? (feeTerms.find((t) => t.id === detailId) ?? null) : null),
-    [detailId, feeTerms],
-  );
-
-  useEffect(() => {
-    if (detailId && !feeTerms.some((t) => t.id === detailId)) {
-      setDetailId(null);
-    }
-  }, [detailId, feeTerms]);
-
-  useEffect(() => {
-    onViewingChange?.(Boolean(detailId));
-    return () => onViewingChange?.(false);
-  }, [detailId, onViewingChange]);
-
-  useEffect(() => {
-    if (!detailId) return;
-    const id = window.setTimeout(() => {
-      document.getElementById("fee-period-detail")?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }, 50);
-    return () => window.clearTimeout(id);
-  }, [detailId]);
-
-  const detailMeta = useMemo(() => {
-    if (!detailTerm) return null;
-    const mode = resolveFeePeriodMode(detailTerm.periodMode);
-    const orderedSameKind = filterFeePeriods(feeTerms, mode, detailTerm.kind);
-    const kindCount = orderedSameKind.length;
-    const termIndex = orderedSameKind.findIndex((t) => t.id === detailTerm.id);
-    const coverage =
-      detailTerm.coverage ||
-      formatFeeTermCoverage(detailTerm.startDate, detailTerm.endDate);
-    const needle = detailTerm.label.trim().toLowerCase();
-    const termClasses = classes
-      .map((c) => withClassFeeSchedule(normalizeClassConfig(c), feeTerms))
-      .map((c) => {
-        const line = c.feeSchedule.find(
-          (l) => l.amount > 0 && l.label.trim().toLowerCase() === needle,
-        );
-        if (!line) return null;
-        return {
-          id: c.id,
-          className: c.className,
-          total: c.tuitionFeeAmount,
-          amount: line.amount,
-          label: line.label,
-        };
-      })
-      .filter((row): row is NonNullable<typeof row> => row !== null);
-    return {
-      term: detailTerm,
-      mode,
-      unit: mode === "month" ? "month" : "term",
-      unitPlural: mode === "month" ? "months" : "terms",
-      kindCount,
-      termIndex,
-      coverage,
-      orderedSameKind,
-      termClasses,
-    };
-  }, [detailTerm, feeTerms, classes]);
-
-  const resetForm = () => {
-    setEditingId(null);
-    setLabel("");
-    setStartDate("");
-    setEndDate("");
-  };
-
-  const startCreate = () => {
-    resetForm();
-    setPeriodMode(filterMode === "month" ? "month" : "term");
-    setKind(filterKind === "vehicle" ? "vehicle" : "tuition");
-    setOpen(true);
-  };
-
-  const startEdit = (term: FeeTerm) => {
-    setEditingId(term.id);
-    setPeriodMode(resolveFeePeriodMode(term.periodMode));
-    setKind(term.kind);
-    setLabel(term.label);
-    setStartDate(term.startDate ?? "");
-    setEndDate(term.endDate ?? "");
-    setOpen(true);
-  };
-
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const nextLabel = label.trim();
-    if (!nextLabel) {
-      toast.error(`${FEE_PERIOD_MODE_LABELS[periodMode]} name is required`);
-      return;
-    }
-    if (startDate && endDate && startDate > endDate) {
-      toast.error("Coverage end must be on or after the start date");
-      return;
-    }
-    const duplicate = feeTerms.some(
-      (t) =>
-        resolveFeePeriodMode(t.periodMode) === periodMode &&
-        t.kind === kind &&
-        t.label.toLowerCase() === nextLabel.toLowerCase() &&
-        t.id !== editingId,
-    );
-    if (duplicate) {
-      toast.error(
-        `${nextLabel} already exists for ${FEE_TERM_KIND_LABELS[kind]} ${FEE_PERIOD_MODE_LABELS[periodMode].toLowerCase()}s`,
-      );
-      return;
-    }
-
-    const coverage = formatFeeTermCoverage(startDate || undefined, endDate || undefined);
-    const nextTerm: Omit<FeeTerm, "id"> = {
-      kind,
-      periodMode,
-      label: nextLabel,
-      academicYear,
-      ...(startDate ? { startDate } : {}),
-      ...(endDate ? { endDate } : {}),
-      ...(coverage ? { coverage } : {}),
-    };
-
-    if (editingId) {
-      setFeeTerms((prev) =>
-        prev.map((t) =>
-          t.id === editingId
-            ? {
-                id: editingId,
-                kind: nextTerm.kind,
-                periodMode: nextTerm.periodMode,
-                label: nextTerm.label,
-                academicYear,
-                ...(nextTerm.startDate ? { startDate: nextTerm.startDate } : {}),
-                ...(nextTerm.endDate ? { endDate: nextTerm.endDate } : {}),
-                ...(nextTerm.coverage ? { coverage: nextTerm.coverage } : {}),
-              }
-            : t,
-        ),
-      );
-      toast.success(`${FEE_PERIOD_MODE_LABELS[periodMode]} updated · ${nextLabel}`, {
-        description: [FEE_TERM_KIND_LABELS[kind], coverage].filter(Boolean).join(" · "),
-      });
-    } else {
-      const maxNum = feeTerms.reduce((max, t) => {
-        const match = /^FT-(\d+)$/.exec(t.id);
-        return match ? Math.max(max, Number(match[1])) : max;
-      }, 0);
-      const nextId = `FT-${(maxNum + 1).toString().padStart(3, "0")}`;
-      setFeeTerms((prev) => [...prev, { id: nextId, ...nextTerm }]);
-      toast.success(`${FEE_PERIOD_MODE_LABELS[periodMode]} added · ${nextLabel}`, {
-        description: `${FEE_TERM_KIND_LABELS[kind]} coverage window`,
-      });
-    }
-    setOpen(false);
-    resetForm();
-  };
-
-  const confirmDelete = () => {
-    if (!pendingDelete) return;
-    const deletedId = pendingDelete.id;
-    setFeeTerms((prev) => prev.filter((t) => t.id !== deletedId));
-    toast.error(`${pendingDelete.label} removed`, {
-      description: "Existing receipts retain the label",
-    });
-    setPendingDelete(null);
-    if (detailId === deletedId) setDetailId(null);
-  };
-
-  const editDialog = (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (!next) resetForm();
-      }}
-    >
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md rounded-xl border border-[#E5E5E5] bg-white p-6">
-        <DialogHeader>
-          <DialogTitle className="text-[22px] font-semibold text-black">
-            {editingId
-              ? `Edit Fee ${FEE_PERIOD_MODE_LABELS[periodMode]}`
-              : `Add Fee ${FEE_PERIOD_MODE_LABELS[periodMode]}`}
-          </DialogTitle>
-          <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
-            Define the billing window for this {periodMode}. Class fee amounts are set on each
-            class schedule.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={submit} className="mt-4 space-y-4">
-          <div>
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-              Period Type
-            </Label>
-            <div className="mt-1.5 flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
-              {(["term", "month"] as const).map((mode) => {
-                const active = periodMode === mode;
-                return (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => setPeriodMode(mode)}
-                    className={cn(
-                      "flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors",
-                      active ? "bg-[#0F766E] text-white" : "text-black/65 hover:text-black",
-                    )}
-                  >
-                    {FEE_PERIOD_MODE_LABELS[mode]}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <div>
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-              Applies To
-            </Label>
-            <div className="mt-1.5 flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
-              {(
-                [
-                  { key: "tuition" as const, label: "Tuition" },
-                  { key: "vehicle" as const, label: "Vehicle" },
-                ] as const
-              ).map((option) => {
-                const active = kind === option.key;
-                return (
-                  <button
-                    key={option.key}
-                    type="button"
-                    onClick={() => setKind(option.key)}
-                    className={cn(
-                      "flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors",
-                      active ? "bg-[#0F766E] text-white" : "text-black/65 hover:text-black",
-                    )}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <div>
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-              {periodMode === "month" ? "Month Name" : "Term Name"}
-            </Label>
-            <Input
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder={periodMode === "month" ? "e.g. April" : "e.g. Term 1"}
-              className="mt-1.5 h-10"
-              autoFocus
-            />
-          </div>
-          <div>
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-              Coverage
-            </Label>
-            <div className="mt-1.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <DatePicker
-                value={startDate}
-                onChange={setStartDate}
-                placeholder="From date"
-                valueFormat="iso"
-                max={endDate || undefined}
-                quickPicks={[{ label: "Today", getDate: (t) => t }]}
-                className="h-10 w-full"
-              />
-              <DatePicker
-                value={endDate}
-                onChange={setEndDate}
-                placeholder="To date"
-                valueFormat="iso"
-                min={startDate || undefined}
-                quickPicks={[{ label: "Today", getDate: (t) => t }]}
-                className="h-10 w-full"
-              />
-            </div>
-            <p className="mt-1.5 text-[10.5px] text-black/45">
-              {coveragePreview
-                ? `Covers ${coveragePreview}`
-                : `Pick start and end dates for this ${periodMode}`}
-            </p>
-          </div>
-          <div className="rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] px-3.5 py-3 text-[12px] text-black/60">
-            <p className="font-semibold text-black/80">Date window only</p>
-            <p className="mt-1 text-[11.5px] text-black/55">
-              Amounts live on each class fee schedule. This {periodMode} is a coverage date for
-              receipts and due dates.
-            </p>
-          </div>
-          <DialogFooter className="flex-row justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
-              {editingId ? "Save Changes" : `Add ${FEE_PERIOD_MODE_LABELS[periodMode]}`}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-
-  const deleteDialog = (
-    <DeleteConfirmDialog
-      open={Boolean(pendingDelete)}
-      onOpenChange={(next) => {
-        if (!next) setPendingDelete(null);
-      }}
-      title={`Delete Fee ${pendingDelete ? FEE_PERIOD_MODE_LABELS[resolveFeePeriodMode(pendingDelete.periodMode)] : "Period"}`}
-      description={
-        pendingDelete
-          ? `Remove "${pendingDelete.label}"? Class fee schedules are unchanged.`
-          : "Are you sure you want to delete this fee period?"
-      }
-      onConfirm={confirmDelete}
-    />
-  );
-
-  if (detailMeta) {
-    const { term, mode, unit, unitPlural, kindCount, termIndex, coverage, orderedSameKind, termClasses } =
-      detailMeta;
-    return (
-      <>
-        <OrganicCard
-          tone="white"
-          cornerSide="tr"
-          padded
-          className={cn(workspacePanelClass, "col-span-12")}
-        >
-          <div id="fee-period-detail" className="scroll-mt-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex min-w-0 items-start gap-2.5 sm:gap-3">
-              <button
-                type="button"
-                onClick={() => setDetailId(null)}
-                aria-label="Back to fee periods"
-                className={cn(
-                  glassInsetClass,
-                  "inline-flex h-9 w-9 shrink-0 items-center justify-center text-slate-700 transition-colors hover:text-[#0F766E] dark:text-zinc-300 dark:hover:text-[#2DD4BF] sm:h-10 sm:w-auto sm:gap-1.5 sm:px-3",
-                )}
-              >
-                <ChevronLeft className="h-4 w-4 shrink-0" />
-                <span className="hidden text-[13px] font-semibold sm:inline">Back</span>
-              </button>
-              <div className="min-w-0 pt-0.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <div
-                    className={cn(
-                      "grid h-10 w-10 shrink-0 place-items-center rounded-xl text-[12px] font-bold",
-                      term.kind === "tuition"
-                        ? "bg-[#CCFBF1] text-[#0F766E] dark:bg-[#0F766E]/30 dark:text-[#5EEAD4]"
-                        : "bg-[#FEF3C7] text-[#B45309] dark:bg-amber-950/50 dark:text-amber-200",
-                    )}
-                  >
-                    {mode === "month" ? "MO" : term.kind === "tuition" ? "TU" : "VE"}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="truncate text-[18px] font-bold leading-tight tracking-tight text-black dark:text-zinc-50 sm:text-[20px]">
-                        {term.label}
-                      </h2>
-                      <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-black/60 dark:bg-white/10 dark:text-zinc-300">
-                        {FEE_PERIOD_MODE_LABELS[mode]}
-                      </span>
-                      <span className="rounded-full bg-[#ECFDF5] px-2.5 py-0.5 text-[10px] font-semibold text-[#0F766E] dark:bg-[#0F766E]/25 dark:text-[#5EEAD4]">
-                        {termIndex >= 0 ? termIndex + 1 : "—"} of {kindCount || 1}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-[12px] text-black/50 dark:text-zinc-400">
-                      {FEE_TERM_KIND_LABELS[term.kind]}
-                      <span className="text-black/30 dark:text-zinc-600"> · </span>
-                      <span className="font-mono uppercase tracking-wider">{term.id}</span>
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-              <button
-                type="button"
-                onClick={() => startEdit(term)}
-                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 text-[12px] font-semibold text-black/70 transition-colors hover:bg-[#F4F4F5] hover:text-black dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-zinc-50"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-                Edit
-              </button>
-              <button
-                type="button"
-                onClick={() => setPendingDelete(term)}
-                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#FECACA] bg-[#FEF2F2] px-3 text-[12px] font-semibold text-[#EF4444] transition-colors hover:bg-[#FEE2E2] dark:border-rose-500/40 dark:bg-rose-950/50 dark:text-rose-300 dark:hover:bg-rose-950/80"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Delete
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-5 grid grid-cols-12 gap-3">
-            <div className="col-span-6 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4 dark:border-white/10 dark:bg-zinc-800/80 lg:col-span-3">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
-                Applies To
-              </div>
-              <div className="mt-1.5 text-[14px] font-semibold text-black dark:text-zinc-50">
-                {FEE_TERM_KIND_LABELS[term.kind]}
-              </div>
-            </div>
-            <div className="col-span-6 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4 dark:border-white/10 dark:bg-zinc-800/80 lg:col-span-3">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
-                Sequence
-              </div>
-              <div className="mt-1.5 font-mono text-[18px] font-bold text-[#0F766E] dark:text-[#2DD4BF]">
-                {termIndex >= 0 ? termIndex + 1 : "—"}/{kindCount || 1}
-              </div>
-            </div>
-            <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4 dark:border-white/10 dark:bg-zinc-800/80 sm:col-span-6 lg:col-span-6">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
-                Coverage
-              </div>
-              <div className="mt-1.5 text-[14px] font-medium text-black dark:text-zinc-100">
-                {coverage || <span className="font-normal text-black/40 dark:text-zinc-500">No dates set</span>}
-              </div>
-            </div>
-
-            <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4 dark:border-white/10 dark:bg-zinc-800/80">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
-                    Class schedules using {term.label}
-                  </div>
-                  <p className="mt-1 text-[12px] text-black/50 dark:text-zinc-400">
-                    Amounts come from each class fee structure
-                  </p>
-                </div>
-                <span className="font-mono text-[10.5px] text-black/45 dark:text-zinc-500">
-                  {termClasses.length} class{termClasses.length === 1 ? "" : "es"}
-                </span>
-              </div>
-              {termClasses.length === 0 ? (
-                <p className="mt-3 text-[13px] text-black/45 dark:text-zinc-400">
-                  No class schedules include a line named {term.label}.
-                </p>
-              ) : (
-                <ul className="mt-3 space-y-2">
-                  {termClasses.map((row) => (
-                    <li
-                      key={row.id}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-[#E8E8EA] bg-white px-3.5 py-2.5 dark:border-white/10 dark:bg-zinc-900/80"
-                    >
-                      <div className="min-w-0">
-                        <div className="truncate text-[13px] font-semibold text-black dark:text-zinc-50">
-                          {row.className}
-                        </div>
-                        <div className="mt-0.5 font-mono text-[11px] text-black/45 dark:text-zinc-400">
-                          {row.label} · class total ₹ {row.total.toLocaleString("en-IN")}
-                        </div>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <div className="font-mono text-[15px] font-bold text-[#0F766E] dark:text-[#2DD4BF]">
-                          ₹ {row.amount.toLocaleString("en-IN")}
-                        </div>
-                        <div className="text-[10px] font-medium uppercase tracking-wider text-black/40 dark:text-zinc-500">
-                          This {unit}
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4 dark:border-white/10 dark:bg-zinc-800/80">
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
-                  {FEE_TERM_KIND_LABELS[term.kind]} {unitPlural}
-                </div>
-                <span className="font-mono text-[10.5px] text-black/45 dark:text-zinc-500">
-                  {orderedSameKind.length} total
-                </span>
-              </div>
-              <ul className="mt-3 space-y-1.5">
-                {orderedSameKind.map((sibling, index) => {
-                  const active = sibling.id === term.id;
-                  const siblingCoverage =
-                    sibling.coverage ||
-                    formatFeeTermCoverage(sibling.startDate, sibling.endDate);
-                  return (
-                    <li key={sibling.id}>
-                      <button
-                        type="button"
-                        onClick={() => setDetailId(sibling.id)}
-                        className={cn(
-                          "flex w-full items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5 text-left transition-colors",
-                          active
-                            ? "border-[#0F766E]/30 bg-[#F0FDFA] dark:border-[#2DD4BF]/35 dark:bg-[#0F766E]/30"
-                            : "border-[#E8E8EA] bg-white hover:border-[#0F766E]/25 hover:bg-[#FAFAFA] dark:border-white/10 dark:bg-zinc-900/70 dark:hover:border-[#2DD4BF]/25 dark:hover:bg-white/5",
-                        )}
-                      >
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-[13px] font-semibold text-black dark:text-zinc-50">
-                              {sibling.label}
-                            </span>
-                            <span className="font-mono text-[10px] text-black/40 dark:text-zinc-500">
-                              {index + 1}/{orderedSameKind.length}
-                            </span>
-                            {active && (
-                              <span className="rounded-full bg-[#0F766E] px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-white">
-                                Viewing
-                              </span>
-                            )}
-                          </div>
-                          {siblingCoverage && (
-                            <div className="mt-0.5 truncate text-[11px] text-black/45 dark:text-zinc-400">
-                              {siblingCoverage}
-                            </div>
-                          )}
-                        </div>
-                        <ChevronLeft
-                          className={cn(
-                            "h-4 w-4 shrink-0 rotate-180 text-black/30 dark:text-zinc-600",
-                            active && "text-[#0F766E] dark:text-[#2DD4BF]",
-                          )}
-                        />
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          </div>
-          </div>
-        </OrganicCard>
-        {editDialog}
-        {deleteDialog}
-      </>
-    );
-  }
-
-  return (
-    <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
-      <CardHeader
-        title="Fee Periods"
-        subtitle={`${termCount} terms · ${monthCount} months · date windows for receipts`}
-        actionLabel="Add Period"
-        onAction={startCreate}
-      />
-
-      <div className="mt-3 rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] px-3.5 py-3 text-[12px] leading-snug text-black/65 dark:border-white/10 dark:bg-zinc-900/50 dark:text-zinc-200">
-        <p className="font-semibold text-black dark:text-zinc-100">Coverage windows</p>
-        <p className="mt-1">
-          Fee amounts are set on each class. Periods here are date ranges used on receipts and due
-          dates.
-        </p>
-      </div>
-
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 sm:gap-4">
-        <div className="min-w-0">
-          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-500">
-            Period
-          </div>
-          <div
-            role="tablist"
-            aria-label="Period type"
-            className="flex border-b border-[#E8E8EA] dark:border-white/10"
-          >
-            {(
-              [
-                { key: "all" as const, label: "All" },
-                { key: "term" as const, label: "Terms" },
-                { key: "month" as const, label: "Months" },
-              ] as const
-            ).map((option) => {
-              const active = filterMode === option.key;
-              return (
-                <button
-                  key={option.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setFilterMode(option.key)}
-                  className={cn(
-                    "relative min-w-0 flex-1 px-2 py-2.5 text-center text-[12.5px] font-semibold tracking-tight transition-colors",
-                    active
-                      ? "text-[#0F766E] dark:text-[#5EEAD4]"
-                      : "text-black/45 hover:text-black/70 dark:text-zinc-500 dark:hover:text-zinc-300",
-                  )}
-                >
-                  {option.label}
-                  {active && (
-                    <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-[#0F766E] dark:bg-[#2DD4BF]" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="min-w-0">
-          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-500">
-            Fee type
-          </div>
-          <div
-            role="tablist"
-            aria-label="Fee type"
-            className="flex border-b border-[#E8E8EA] dark:border-white/10"
-          >
-            {(
-              [
-                { key: "all" as const, label: "All" },
-                { key: "tuition" as const, label: "Tuition" },
-                { key: "vehicle" as const, label: "Vehicle" },
-              ] as const
-            ).map((option) => {
-              const active = filterKind === option.key;
-              return (
-                <button
-                  key={option.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setFilterKind(option.key)}
-                  className={cn(
-                    "relative min-w-0 flex-1 px-2 py-2.5 text-center text-[12.5px] font-semibold tracking-tight transition-colors",
-                    active
-                      ? "text-[#0F766E] dark:text-[#5EEAD4]"
-                      : "text-black/45 hover:text-black/70 dark:text-zinc-500 dark:hover:text-zinc-300",
-                  )}
-                >
-                  {option.label}
-                  {active && (
-                    <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-[#0F766E] dark:bg-[#2DD4BF]" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-4 space-y-2">
-        {visibleTerms.length === 0 && (
-          <EmptyRow
-            label={
-              filterMode === "month"
-                ? "No fee months yet · Add April–March coverage"
-                : filterMode === "term"
-                  ? "No fee terms yet"
-                  : "No fee periods yet"
-            }
-          />
-        )}
-        {visibleTerms.map((term) => {
-          const mode = resolveFeePeriodMode(term.periodMode);
-          const coverage =
-            term.coverage || formatFeeTermCoverage(term.startDate, term.endDate);
-          return (
-            <div
-              key={term.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => setDetailId(term.id)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  setDetailId(term.id);
-                }
-              }}
-              aria-label={`Open details for ${term.label}`}
-              className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5 text-left transition-colors hover:border-[#0F766E]/30 hover:bg-white active:bg-[#F4F4F5] dark:border-white/10 dark:bg-zinc-800/70 dark:hover:border-[#2DD4BF]/30 dark:hover:bg-zinc-800 dark:active:bg-zinc-700/80"
-            >
-              <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                <div
-                  className={cn(
-                    "grid h-8 w-8 shrink-0 place-items-center rounded-xl text-[10.5px] font-semibold",
-                    mode === "month"
-                      ? "bg-[#E0E7FF] text-[#3730A3] dark:bg-indigo-950/50 dark:text-indigo-200"
-                      : term.kind === "tuition"
-                        ? "bg-[#CCFBF1] text-[#0F766E] dark:bg-[#0F766E]/30 dark:text-[#5EEAD4]"
-                        : "bg-[#FEF3C7] text-[#B45309] dark:bg-amber-950/50 dark:text-amber-200",
-                  )}
-                >
-                  {mode === "month" ? "MO" : term.kind === "tuition" ? "TU" : "VE"}
-                </div>
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                    <div className="truncate text-[13px] font-semibold text-black dark:text-zinc-50">
-                      {term.label}
-                    </div>
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-black/55 dark:bg-white/10 dark:text-zinc-300">
-                      {FEE_PERIOD_MODE_LABELS[mode]}
-                    </span>
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-black/55 dark:bg-white/10 dark:text-zinc-300">
-                      {FEE_TERM_KIND_LABELS[term.kind]}
-                    </span>
-                  </div>
-                  <div className="truncate text-[11px] text-black/45 dark:text-zinc-400">
-                    {FEE_TERM_KIND_LABELS[term.kind]}
-                    {coverage ? ` · ${coverage}` : ""}
-                    <span className="text-black/30 dark:text-zinc-600"> · </span>
-                    <span className="font-mono text-[10.5px] uppercase tracking-wider">
-                      {term.id}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
-                <span
-                  className="mr-0.5 hidden text-[11px] font-medium text-[#0F766E] dark:text-[#2DD4BF] sm:inline"
-                  aria-hidden
-                >
-                  View
-                </span>
-                <ChevronLeft
-                  className="h-4 w-4 shrink-0 rotate-180 text-[#0F766E]/70 dark:text-[#2DD4BF]/80"
-                  aria-hidden
-                />
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    startEdit(term);
-                  }}
-                  className="grid h-8 w-8 place-items-center rounded-full text-black/55 transition-colors hover:bg-[#0F766E] hover:text-white dark:text-zinc-400"
-                  aria-label={`Edit ${term.label}`}
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setPendingDelete(term);
-                  }}
-                  className="grid h-8 w-8 place-items-center rounded-full text-black/55 transition-colors hover:bg-[#EF4444] hover:text-white dark:text-zinc-400"
-                  aria-label={`Delete ${term.label}`}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {editDialog}
-      {deleteDialog}
     </OrganicCard>
   );
 }
@@ -14690,7 +13745,13 @@ function CategoriesCard({
   themeSettings: ThemeSettings;
   setThemeSettings: React.Dispatch<React.SetStateAction<ThemeSettings>>;
 }) {
-  const [yearDraft, setYearDraft] = useState("");
+  const [addMonthKey, setAddMonthKey] = useState(() =>
+    suggestNextBooksMonthKey(academicYear, academicYears),
+  );
+  const [yearDraft, setYearDraft] = useState(
+    () => monthKeyToBooksYearLabel(suggestNextBooksMonthKey(academicYear, academicYears)) ?? "",
+  );
+  const [editMonthKey, setEditMonthKey] = useState("");
   const [pendingYearDelete, setPendingYearDelete] = useState<string | null>(null);
   const [editingYear, setEditingYear] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
@@ -14721,10 +13782,10 @@ function CategoriesCard({
 
   const submitAcademicYear = (e: React.FormEvent) => {
     e.preventDefault();
-    const nextLabel = normalizeAcademicYearLabel(yearDraft);
+    const nextLabel = resolveFinancialYearInput(yearDraft, addMonthKey);
     if (!nextLabel) {
-      toast.error("Use format 2026-27", {
-        description: "Financial years must look like AY 2026-27",
+      toast.error("Choose a start month and year", {
+        description: "Or type a label such as 2026 June or 2026-27",
       });
       return;
     }
@@ -14738,24 +13799,32 @@ function CategoriesCard({
         ? "Synced to server · fee periods cloned from the previous year"
         : "Fee periods cloned from the previous year · ready to enroll students",
     });
-    setYearDraft("");
+    const nextKey = suggestNextBooksMonthKey(nextLabel, academicYears);
+    setAddMonthKey(nextKey);
+    setYearDraft(monthKeyToBooksYearLabel(nextKey) ?? "");
   };
 
   const startEdit = (year: string) => {
     setEditingYear(year);
+    const parts = parseBooksYearParts(year);
+    setEditMonthKey(
+      parts
+        ? booksYearToMonthKey(parts.year, parts.month)
+        : suggestNextBooksMonthKey(year, academicYears),
+    );
     setEditDraft(year.replace(/^AY\s+/i, ""));
   };
 
   const submitEdit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingYear) return;
-    const result = renameAcademicYear(editingYear, editDraft);
+    const nextLabel = resolveFinancialYearInput(editDraft, editMonthKey);
+    const result = renameAcademicYear(editingYear, nextLabel ?? editDraft);
     if (!result.ok) {
       toast.error(result.reason ?? "Could not rename year");
       return;
     }
-    const nextLabel = normalizeAcademicYearLabel(editDraft) ?? editDraft.trim();
-    toast.success(`Renamed to ${nextLabel}`);
+    toast.success(`Renamed to ${nextLabel ?? editDraft.trim()}`);
     setEditingYear(null);
     setEditDraft("");
   };
@@ -14819,11 +13888,11 @@ function CategoriesCard({
         System Constants
       </div>
       <p className="mt-1 text-[12px] text-black/55 dark:text-zinc-400">
-        Financial year books and navigation dock placement
+        Financial year books, then how the workspace, invoices, and bills look
       </p>
 
       <div className="mt-4 grid grid-cols-12 gap-3">
-        <div className="col-span-12 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-8 dark:border-white/10 dark:bg-zinc-900/40">
+        <div className="col-span-12 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-7 dark:border-white/10 dark:bg-zinc-900/40">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
@@ -14941,40 +14010,169 @@ function CategoriesCard({
             </ul>
           </div>
 
-          <form onSubmit={submitAcademicYear} className="mt-3 flex flex-col gap-2 sm:flex-row">
-            <div className="min-w-0 flex-1">
-              <Input
-                value={yearDraft}
-                onChange={(e) => setYearDraft(e.target.value)}
-                placeholder="e.g. 2027-28"
-                className="w-full"
-              />
-              <p className="mt-1 text-[10.5px] text-black/45">
-                Format <span className="font-mono">YYYY-YY</span> (Indian FY Apr–Mar)
-              </p>
-            </div>
+          <form onSubmit={submitAcademicYear} className="mt-3 space-y-3">
+            <FinancialYearFields
+              monthKey={addMonthKey}
+              typedValue={yearDraft}
+              onMonthKeyChange={setAddMonthKey}
+              onTypedChange={setYearDraft}
+            />
             <Button
               type="submit"
-              className="shrink-0 rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+              className="w-full rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488] sm:w-auto"
             >
               <Plus className="mr-1 h-3.5 w-3.5" /> Add year
             </Button>
           </form>
         </div>
 
-        <div className="col-span-12 hidden rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-4 lg:block dark:border-white/10 dark:bg-zinc-900/40">
-          <ThemeSelect
-            label="Navigation"
-            value={themeSettings.navPlacement ?? "Left"}
-            options={THEME_NAV_PLACEMENT_OPTIONS}
-            onChange={(navPlacement) => {
-              setThemeSettings((prev) => ({ ...prev, navPlacement }));
-              notifyNavPlacementChange(navPlacement);
-              window.setTimeout(() => {
-                toast.success(`Navigation dock moved to ${navPlacement}`);
-              }, 0);
-            }}
-          />
+        <div className="col-span-12 space-y-4 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-5 dark:border-white/10 dark:bg-zinc-900/40">
+          <ThemeSection title="Colors">
+            <ThemeColorField
+              label="Primary"
+              value={themeSettings.primaryColor}
+              onChange={(primaryColor) => {
+                setThemeSettings((prev) => ({
+                  ...prev,
+                  primaryColor,
+                  iconColor: prev.iconColor === prev.primaryColor ? primaryColor : prev.iconColor,
+                  menuColor: prev.menuColor === prev.primaryColor ? primaryColor : prev.menuColor,
+                }));
+              }}
+            />
+            <ThemeColorField
+              label="Secondary"
+              value={themeSettings.secondaryColor}
+              onChange={(secondaryColor) => {
+                setThemeSettings((prev) => ({ ...prev, secondaryColor }));
+              }}
+            />
+            <div>
+              <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                Presets
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {BRAND_PRESETS.map((preset) => {
+                  const active =
+                    themeSettings.primaryColor === preset.primary &&
+                    themeSettings.secondaryColor === preset.secondary;
+                  return (
+                    <button
+                      key={preset.name}
+                      type="button"
+                      title={preset.name}
+                      onClick={() => {
+                        setThemeSettings((prev) => ({
+                          ...prev,
+                          primaryColor: preset.primary,
+                          secondaryColor: preset.secondary,
+                          iconColor: preset.primary,
+                          menuColor: preset.primary,
+                        }));
+                        toast.success(`${preset.name} palette applied`);
+                      }}
+                      className={cn(
+                        "h-7 w-7 rounded-full border-2 shadow-sm transition-transform hover:scale-105",
+                        active ? "border-black dark:border-white" : "border-white dark:border-zinc-700",
+                      )}
+                      style={{
+                        background: `linear-gradient(135deg, ${preset.primary} 50%, ${preset.secondary} 50%)`,
+                      }}
+                      aria-label={`${preset.name} brand preset`}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          </ThemeSection>
+
+          <ThemeSection title="Text">
+            <ThemeSelect
+              label="Font"
+              value={themeSettings.fontFamily || "Inter"}
+              options={FONT_FAMILY_OPTIONS}
+              onChange={(fontFamily) => {
+                setThemeSettings((prev) => ({ ...prev, fontFamily }));
+              }}
+            />
+            <ThemeColorField
+              label="Color"
+              value={themeSettings.fontColor}
+              onChange={(fontColor) => {
+                setThemeSettings((prev) => ({ ...prev, fontColor }));
+              }}
+            />
+            <ThemeSelect
+              label="Size"
+              value={themeSettings.fontSize || "Medium"}
+              options={FONT_SIZE_OPTIONS}
+              onChange={(fontSize) => {
+                setThemeSettings((prev) => ({ ...prev, fontSize }));
+              }}
+            />
+          </ThemeSection>
+
+          <ThemeSection title="Controls">
+            <ThemeColorField
+              label="Icons"
+              value={themeSettings.iconColor}
+              onChange={(iconColor) => {
+                setThemeSettings((prev) => ({ ...prev, iconColor }));
+              }}
+            />
+            <ThemeColorField
+              label="Dropdowns"
+              value={themeSettings.menuColor}
+              onChange={(menuColor) => {
+                setThemeSettings((prev) => ({ ...prev, menuColor }));
+              }}
+            />
+          </ThemeSection>
+
+          <ThemeSection title="Layout">
+            <ThemeSelect
+              label="Navigation"
+              value={themeSettings.navPlacement ?? "Left"}
+              options={THEME_NAV_PLACEMENT_OPTIONS}
+              onChange={(navPlacement) => {
+                setThemeSettings((prev) => ({ ...prev, navPlacement }));
+                notifyNavPlacementChange(navPlacement);
+                window.setTimeout(() => {
+                  toast.success(`Navigation dock moved to ${navPlacement}`);
+                }, 0);
+              }}
+            />
+          </ThemeSection>
+        </div>
+
+        <div className="col-span-12 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 dark:border-white/10 dark:bg-zinc-900/40">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-black/35 dark:text-zinc-500">
+            Downloads
+          </div>
+          <p className="mt-1.5 text-[10.5px] leading-relaxed text-black/45 dark:text-zinc-500">
+            File names for each download. Tokens: {DOWNLOAD_TOKENS.join(" ")}. Extension is added automatically.
+          </p>
+          <div className="mt-3 grid grid-cols-12 gap-3">
+            {DOWNLOAD_KINDS.map((kind) => (
+              <div key={kind} className="col-span-12 min-w-0 sm:col-span-6 lg:col-span-4 xl:col-span-3">
+                <ThemePatternField
+                  label={DOWNLOAD_KIND_LABELS[kind]}
+                  kind={kind}
+                  value={themeSettings.fileNames?.[kind] ?? DEFAULT_FILE_NAMES[kind]}
+                  onChange={(next) => {
+                    setThemeSettings((prev) => ({
+                      ...prev,
+                      fileNames: {
+                        ...DEFAULT_FILE_NAMES,
+                        ...prev.fileNames,
+                        [kind]: next,
+                      },
+                    }));
+                  }}
+                />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -14987,28 +14185,32 @@ function CategoriesCard({
           }
         }}
       >
-        <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6">
+        <DialogContent
+          className="max-w-md rounded-xl border border-[#E5E5E5] bg-white p-6"
+          onPointerDownOutside={(e) => {
+            const target = e.target as HTMLElement | null;
+            if (target?.closest("[data-radix-popper-content-wrapper]")) e.preventDefault();
+          }}
+          onInteractOutside={(e) => {
+            const target = e.target as HTMLElement | null;
+            if (target?.closest("[data-radix-popper-content-wrapper]")) e.preventDefault();
+          }}
+        >
           <DialogHeader>
             <DialogTitle className="text-[20px] font-semibold text-black">
               Edit financial year
             </DialogTitle>
             <DialogDescription className="mt-1 text-[13px] text-black/60">
-              Rename {editingYear}. Receipts, fees, and enrollments move with the label.
+              Rename {editingYear}. Pick a start month and year, or type a label. Receipts, fees, and enrollments move with it.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={submitEdit} className="mt-4 space-y-3">
-            <div>
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                Year label
-              </Label>
-              <Input
-                value={editDraft}
-                onChange={(e) => setEditDraft(e.target.value)}
-                placeholder="2026-27"
-                className="mt-1.5"
-                autoFocus
-              />
-            </div>
+            <FinancialYearFields
+              monthKey={editMonthKey}
+              typedValue={editDraft}
+              onMonthKeyChange={setEditMonthKey}
+              onTypedChange={setEditDraft}
+            />
             <DialogFooter className="flex-row justify-end gap-2">
               <Button
                 type="button"
@@ -15059,6 +14261,128 @@ function CategoriesCard({
   );
 }
 
+function ThemeSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="space-y-2.5">
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/35 dark:text-zinc-500">
+        {title}
+      </div>
+      <div className="space-y-2.5">{children}</div>
+    </div>
+  );
+}
+
+function ThemePatternField({
+  label,
+  kind,
+  value,
+  onChange,
+}: {
+  label: string;
+  kind: DownloadKind;
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const [focused, setFocused] = useState(false);
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  const commit = (raw: string) => {
+    const next = raw.trim() || DEFAULT_FILE_NAMES[kind];
+    setDraft(next);
+    if (next !== value) onChange(next);
+  };
+
+  const ext =
+    kind === "students" || kind === "staff" || kind === "transactions" || kind === "madePayments"
+      ? "csv"
+      : "pdf";
+  const example = previewDownloadFilename(kind, draft || DEFAULT_FILE_NAMES[kind], ext);
+
+  return (
+    <label className="space-y-1.5">
+      <span className="block text-[10px] font-semibold uppercase tracking-wider text-black/45">
+        {label}
+      </span>
+      <Input
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => {
+          setFocused(false);
+          commit(draft);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit(draft);
+          }
+        }}
+        spellCheck={false}
+        className="h-9 rounded-lg border-[#E5E5E5] bg-white px-2.5 font-mono text-[12px] font-medium dark:border-white/10 dark:bg-zinc-900"
+      />
+      {focused ? (
+        <span className="block font-mono text-[10px] text-black/40 dark:text-zinc-500">
+          {example}
+        </span>
+      ) : null}
+    </label>
+  );
+}
+
+function ThemeColorField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (hex: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  const commit = (raw: string) => {
+    const next = normalizeHexColor(raw, value);
+    setDraft(next);
+    if (next !== value) onChange(next);
+  };
+
+  return (
+    <label className="space-y-1.5">
+      <span className="block text-[10px] font-semibold uppercase tracking-wider text-black/45">
+        {label}
+      </span>
+      <div className="flex h-9 items-center gap-2 rounded-lg border border-[#E5E5E5] bg-white px-2 focus-within:ring-2 focus-within:ring-[#0F766E] dark:border-white/10 dark:bg-zinc-900">
+        <input
+          type="color"
+          value={normalizeHexColor(value)}
+          onChange={(e) => commit(e.target.value)}
+          className="h-6 w-6 shrink-0 cursor-pointer rounded border-0 bg-transparent p-0"
+          aria-label={label}
+        />
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => commit(draft)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commit(draft);
+            }
+          }}
+          spellCheck={false}
+          className="min-w-0 flex-1 bg-transparent font-mono text-[12px] font-medium uppercase tracking-wide text-black outline-none dark:text-zinc-100"
+        />
+      </div>
+    </label>
+  );
+}
+
 function ThemeSelect<T extends string>({
   label,
   value,
@@ -15093,6 +14417,7 @@ function FieldSelect({
   disabled,
   className,
   triggerClassName,
+  contentClassName,
   searchable = false,
   searchPlaceholder = "Search…",
 }: {
@@ -15103,36 +14428,54 @@ function FieldSelect({
   disabled?: boolean;
   className?: string;
   triggerClassName?: string;
+  contentClassName?: string;
   searchable?: boolean;
   searchPlaceholder?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const resolvedValue = options.some((o) => o.value === value) ? value : undefined;
-  const selectedLabel = options.find((o) => o.value === resolvedValue)?.label;
+  const uniqueOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return options.filter((opt) => {
+      if (!opt.value || seen.has(opt.value)) return false;
+      seen.add(opt.value);
+      return true;
+    });
+  }, [options]);
+  const resolvedValue = uniqueOptions.some((o) => o.value === value) ? value : undefined;
+  const selectedLabel = uniqueOptions.find((o) => o.value === resolvedValue)?.label;
+  const triggerOverflowClass =
+    "min-w-0 gap-2 overflow-hidden [&>span:first-child]:min-w-0 [&>span:first-child]:flex-1 [&>span:first-child]:truncate";
 
   if (!searchable) {
     return (
-      <div className={className}>
+      <div className={cn("min-w-0", className)}>
         <Select value={resolvedValue} onValueChange={onValueChange} disabled={disabled}>
           <SelectTrigger
             className={cn(
               "h-10 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 text-[13px] font-normal text-black shadow-none focus:ring-2 focus:ring-[#0F766E] focus:ring-offset-0 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100",
+              triggerOverflowClass,
               triggerClassName,
             )}
           >
-            <SelectValue placeholder={placeholder} />
+            <SelectValue placeholder={placeholder}>
+              {selectedLabel ? <span className="block truncate">{selectedLabel}</span> : null}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent
             position="popper"
-            className="z-[250] rounded-lg border border-[#E5E5E5] bg-white p-1.5 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)] dark:border-white/10 dark:bg-zinc-900"
+            className={cn(
+              "z-[250] max-h-72 overflow-y-auto rounded-lg border border-[#E5E5E5] bg-white p-1.5 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)] dark:border-white/10 dark:bg-zinc-900",
+              "min-w-[var(--radix-select-trigger-width)] max-w-[min(calc(100vw-1.5rem),24rem)]",
+              contentClassName,
+            )}
           >
-            {options.map((opt) => (
+            {uniqueOptions.map((opt) => (
               <SelectItem
                 key={opt.value}
                 value={opt.value}
                 className="cursor-pointer rounded-md py-2 pl-3 pr-8 text-[13px] text-black focus:bg-[#CCFBF1] focus:text-[#0F172A] data-[highlighted]:bg-[#CCFBF1] data-[highlighted]:text-[#0F172A] data-[state=checked]:bg-[#0F766E] data-[state=checked]:font-semibold data-[state=checked]:text-white dark:text-zinc-100 dark:focus:bg-[#0F766E]/40 dark:focus:text-white dark:data-[highlighted]:bg-[#0F766E]/40 dark:data-[highlighted]:text-white"
               >
-                {opt.label}
+                <span className="block max-w-full whitespace-normal break-words">{opt.label}</span>
               </SelectItem>
             ))}
           </SelectContent>
@@ -15142,18 +14485,18 @@ function FieldSelect({
   }
 
   return (
-    <div className={className}>
+    <div className={cn("min-w-0", className)}>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button
             type="button"
             disabled={disabled}
             className={cn(
-              "flex h-10 w-full items-center justify-between rounded-lg border border-[#E5E5E5] bg-white px-3 text-left text-[13px] font-normal text-black shadow-none transition-colors hover:bg-[#FAFAFA] focus:outline-none focus:ring-2 focus:ring-[#0F766E] focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800",
+              "flex h-10 w-full min-w-0 items-center justify-between gap-2 overflow-hidden rounded-lg border border-[#E5E5E5] bg-white px-3 text-left text-[13px] font-normal text-black shadow-none transition-colors hover:bg-[#FAFAFA] focus:outline-none focus:ring-2 focus:ring-[#0F766E] focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800",
               triggerClassName,
             )}
           >
-            <span className={cn("truncate", !selectedLabel && "text-black/45 dark:text-zinc-500")}>
+            <span className={cn("min-w-0 flex-1 truncate", !selectedLabel && "text-black/45 dark:text-zinc-500")}>
               {selectedLabel ?? placeholder}
             </span>
             <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
@@ -15161,7 +14504,10 @@ function FieldSelect({
         </PopoverTrigger>
         <PopoverContent
           align="start"
-          className="z-[250] w-[var(--radix-popover-trigger-width)] rounded-lg border border-[#E5E5E5] bg-white p-0 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)] dark:border-white/10 dark:bg-zinc-900"
+          className={cn(
+            "z-[250] w-[var(--radix-popover-trigger-width)] max-w-[min(calc(100vw-1.5rem),24rem)] rounded-lg border border-[#E5E5E5] bg-white p-0 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)] dark:border-white/10 dark:bg-zinc-900",
+            contentClassName,
+          )}
         >
           <Command className="rounded-lg bg-white dark:bg-zinc-900 dark:text-zinc-100">
             <CommandInput placeholder={searchPlaceholder} className="h-10 text-[13px] dark:text-zinc-100" />
@@ -15170,7 +14516,7 @@ function FieldSelect({
                 No matches found
               </CommandEmpty>
               <CommandGroup className="p-1.5">
-                {options.map((opt) => {
+                {uniqueOptions.map((opt) => {
                   const active = opt.value === resolvedValue;
                   return (
                     <CommandItem
@@ -15187,7 +14533,7 @@ function FieldSelect({
                           : "text-black data-[selected=true]:bg-[#CCFBF1] data-[selected=true]:text-[#0F172A] dark:text-zinc-100 dark:data-[selected=true]:bg-[#0F766E]/40 dark:data-[selected=true]:text-white",
                       )}
                     >
-                      <span className="min-w-0 flex-1 truncate">{opt.label}</span>
+                      <span className="min-w-0 flex-1 whitespace-normal break-words">{opt.label}</span>
                       {active && <Check className="h-4 w-4 shrink-0" />}
                     </CommandItem>
                   );

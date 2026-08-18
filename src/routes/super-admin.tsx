@@ -35,7 +35,7 @@ function TopNavSkeleton() {
           </div>
         </div>
         <div className="hidden items-center gap-0.5 rounded-full border border-[#E5E5E5] bg-white p-1 lg:flex xl:gap-1">
-          {Array.from({ length: 4 }).map((_, i) => (
+          {Array.from({ length: ADMIN_NAV.length }).map((_, i) => (
             <Skeleton
               key={i}
               className={`h-9 rounded-full bg-black/[0.06] ${i === 1 ? "w-16 xl:w-20" : "w-14 xl:w-16"}`}

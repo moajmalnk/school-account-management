@@ -1,3 +1,4 @@
+import { parseEventDate } from "@/lib/dates";
 import type { Payment } from "@/lib/tenant-store";
 
 export type PaymentPeriod =
@@ -24,21 +25,6 @@ export const PAYMENT_PERIOD_OPTIONS: { value: PaymentPeriod; label: string }[] =
   { value: "custom", label: "Custom" },
 ];
 
-const MONTHS: Record<string, number> = {
-  jan: 0,
-  feb: 1,
-  mar: 2,
-  apr: 3,
-  may: 4,
-  jun: 5,
-  jul: 6,
-  aug: 7,
-  sep: 8,
-  oct: 9,
-  nov: 10,
-  dec: 11,
-};
-
 function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
@@ -62,35 +48,7 @@ function endOfMonth(date: Date): Date {
 }
 
 function parsePaymentDate(time: string, reference = new Date()): Date | null {
-  const normalized = time.trim().toLowerCase();
-
-  if (normalized.startsWith("today")) {
-    return startOfDay(reference);
-  }
-  if (normalized.startsWith("yesterday")) {
-    return startOfDay(addDays(reference, -1));
-  }
-
-  const relativeMatch = normalized.match(/^(\d+)\s*d\s*ago/);
-  if (relativeMatch) {
-    return startOfDay(addDays(reference, -Number(relativeMatch[1])));
-  }
-
-  const dayMonthMatch = time.match(/(\d{1,2})\s+([A-Za-z]{3})/);
-  if (dayMonthMatch) {
-    const day = Number(dayMonthMatch[1]);
-    const month = MONTHS[dayMonthMatch[2].toLowerCase()];
-    if (month !== undefined) {
-      let year = reference.getFullYear();
-      const candidate = new Date(year, month, day);
-      if (candidate > reference) {
-        year -= 1;
-      }
-      return startOfDay(new Date(year, month, day));
-    }
-  }
-
-  return null;
+  return parseEventDate(time, reference);
 }
 
 function getPeriodRange(

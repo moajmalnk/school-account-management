@@ -8,7 +8,7 @@ export function isDataUrl(value?: string | null): boolean {
 /**
  * Resolve stored photo/logo URLs for <img src>.
  * - data: / blob: / http(s): leave as-is
- * - /uploads/... or /api/media.php?... → prefix API origin (empty in DEV proxy)
+ * - /uploads/... or /api/media.php?... → prefix production API origin
  */
 export function resolveMediaUrl(url?: string | null): string | undefined {
   if (!url) return undefined;

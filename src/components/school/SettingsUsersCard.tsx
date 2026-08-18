@@ -49,8 +49,8 @@ function CardHeader({
 }: {
   title: string;
   subtitle: string;
-  actionLabel: string;
-  onAction: () => void;
+  actionLabel?: string;
+  onAction?: () => void;
 }) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -58,13 +58,15 @@ function CardHeader({
         <div className="text-title">{title}</div>
         <p className="mt-1 text-[11.5px] text-black/55 dark:text-zinc-400">{subtitle}</p>
       </div>
-      <button
-        type="button"
-        onClick={onAction}
-        className="inline-flex h-9 shrink-0 items-center justify-center rounded-full bg-[#0F766E] px-3.5 text-[12px] font-semibold text-white transition-colors hover:bg-[#0D9488]"
-      >
-        {actionLabel}
-      </button>
+      {actionLabel && onAction ? (
+        <button
+          type="button"
+          onClick={onAction}
+          className="inline-flex h-9 shrink-0 items-center justify-center rounded-full bg-[#0F766E] px-3.5 text-[12px] font-semibold text-white transition-colors hover:bg-[#0D9488]"
+        >
+          {actionLabel}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -85,11 +87,13 @@ export function SettingsUsersCard({
   setTenantUsers,
   roles,
   staff,
+  canAddUser = true,
 }: {
   tenantUsers: TenantUser[];
   setTenantUsers: React.Dispatch<React.SetStateAction<TenantUser[]>>;
   roles: Role[];
   staff: Staff[];
+  canAddUser?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -102,6 +106,10 @@ export function SettingsUsersCard({
   );
 
   const startCreate = () => {
+    if (!canAddUser) {
+      toast.error("Extra workspace users are not included in this plan");
+      return;
+    }
     setEditingId(null);
     setForm({ ...emptyForm(), roleId: roles[0]?.id ?? "" });
     setOpen(true);
@@ -177,6 +185,10 @@ export function SettingsUsersCard({
     );
     if (duplicate) {
       toast.error("Email already used by another user");
+      return;
+    }
+    if (!editingId && !canAddUser) {
+      toast.error("Extra workspace users are not included in this plan");
       return;
     }
     if (form.staffId) {
@@ -288,15 +300,21 @@ export function SettingsUsersCard({
       <OrganicCard tone="white" cornerSide="bl" padded className="min-w-0">
         <CardHeader
           title="Users"
-          subtitle={`${tenantUsers.length} workspace logins · assign modules & finance permissions`}
-          actionLabel="Add User"
-          onAction={startCreate}
+          subtitle={
+            !canAddUser
+              ? "This plan includes the school admin login only · upgrade to Premium to add workspace users"
+              : `${tenantUsers.length} workspace logins · assign modules & finance permissions`
+          }
+          actionLabel={canAddUser ? "Add User" : undefined}
+          onAction={canAddUser ? startCreate : undefined}
         />
 
         <div className="mt-4 space-y-2">
           {tenantUsers.length === 0 && (
             <div className="rounded-lg border border-dashed border-black/15 bg-[#F4F4F5]/40 px-4 py-8 text-center text-[12px] text-black/55 dark:text-zinc-400">
-              No workspace users yet · create one to grant limited access
+              {canAddUser
+                ? "No workspace users yet · create one to grant limited access"
+                : "School admin can sign in · extra logins require Premium or Enterprise"}
             </div>
           )}
           {tenantUsers.map((user) => {

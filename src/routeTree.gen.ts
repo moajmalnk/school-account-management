@@ -26,6 +26,7 @@ import { Route as TenantFinanceRouteImport } from './routes/tenant/finance'
 import { Route as TenantDashboardRouteImport } from './routes/tenant/dashboard'
 import { Route as TenantBillingRouteImport } from './routes/tenant/billing'
 import { Route as SuperAdminTenantsRouteImport } from './routes/super-admin/tenants'
+import { Route as SuperAdminSupportRouteImport } from './routes/super-admin/support'
 import { Route as SuperAdminPlansRouteImport } from './routes/super-admin/plans'
 import { Route as SuperAdminOverviewRouteImport } from './routes/super-admin/overview'
 import { Route as TenantStudentsAdmitRouteImport } from './routes/tenant/students_.admit'
@@ -116,6 +117,11 @@ const SuperAdminTenantsRoute = SuperAdminTenantsRouteImport.update({
   path: '/tenants',
   getParentRoute: () => SuperAdminRoute,
 } as any)
+const SuperAdminSupportRoute = SuperAdminSupportRouteImport.update({
+  id: '/support',
+  path: '/support',
+  getParentRoute: () => SuperAdminRoute,
+} as any)
 const SuperAdminPlansRoute = SuperAdminPlansRouteImport.update({
   id: '/plans',
   path: '/plans',
@@ -147,6 +153,7 @@ export interface FileRoutesByFullPath {
   '/tenant': typeof TenantRouteWithChildren
   '/super-admin/overview': typeof SuperAdminOverviewRoute
   '/super-admin/plans': typeof SuperAdminPlansRoute
+  '/super-admin/support': typeof SuperAdminSupportRoute
   '/super-admin/tenants': typeof SuperAdminTenantsRoute
   '/tenant/billing': typeof TenantBillingRoute
   '/tenant/dashboard': typeof TenantDashboardRoute
@@ -168,6 +175,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/super-admin/overview': typeof SuperAdminOverviewRoute
   '/super-admin/plans': typeof SuperAdminPlansRoute
+  '/super-admin/support': typeof SuperAdminSupportRoute
   '/super-admin/tenants': typeof SuperAdminTenantsRoute
   '/tenant/billing': typeof TenantBillingRoute
   '/tenant/dashboard': typeof TenantDashboardRoute
@@ -192,6 +200,7 @@ export interface FileRoutesById {
   '/tenant': typeof TenantRouteWithChildren
   '/super-admin/overview': typeof SuperAdminOverviewRoute
   '/super-admin/plans': typeof SuperAdminPlansRoute
+  '/super-admin/support': typeof SuperAdminSupportRoute
   '/super-admin/tenants': typeof SuperAdminTenantsRoute
   '/tenant/billing': typeof TenantBillingRoute
   '/tenant/dashboard': typeof TenantDashboardRoute
@@ -217,6 +226,7 @@ export interface FileRouteTypes {
     | '/tenant'
     | '/super-admin/overview'
     | '/super-admin/plans'
+    | '/super-admin/support'
     | '/super-admin/tenants'
     | '/tenant/billing'
     | '/tenant/dashboard'
@@ -238,6 +248,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/super-admin/overview'
     | '/super-admin/plans'
+    | '/super-admin/support'
     | '/super-admin/tenants'
     | '/tenant/billing'
     | '/tenant/dashboard'
@@ -261,6 +272,7 @@ export interface FileRouteTypes {
     | '/tenant'
     | '/super-admin/overview'
     | '/super-admin/plans'
+    | '/super-admin/support'
     | '/super-admin/tenants'
     | '/tenant/billing'
     | '/tenant/dashboard'
@@ -407,6 +419,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SuperAdminTenantsRouteImport
       parentRoute: typeof SuperAdminRoute
     }
+    '/super-admin/support': {
+      id: '/super-admin/support'
+      path: '/support'
+      fullPath: '/super-admin/support'
+      preLoaderRoute: typeof SuperAdminSupportRouteImport
+      parentRoute: typeof SuperAdminRoute
+    }
     '/super-admin/plans': {
       id: '/super-admin/plans'
       path: '/plans'
@@ -441,6 +460,7 @@ declare module '@tanstack/react-router' {
 interface SuperAdminRouteChildren {
   SuperAdminOverviewRoute: typeof SuperAdminOverviewRoute
   SuperAdminPlansRoute: typeof SuperAdminPlansRoute
+  SuperAdminSupportRoute: typeof SuperAdminSupportRoute
   SuperAdminTenantsRoute: typeof SuperAdminTenantsRoute
   SuperAdminIndexRoute: typeof SuperAdminIndexRoute
 }
@@ -448,6 +468,7 @@ interface SuperAdminRouteChildren {
 const SuperAdminRouteChildren: SuperAdminRouteChildren = {
   SuperAdminOverviewRoute: SuperAdminOverviewRoute,
   SuperAdminPlansRoute: SuperAdminPlansRoute,
+  SuperAdminSupportRoute: SuperAdminSupportRoute,
   SuperAdminTenantsRoute: SuperAdminTenantsRoute,
   SuperAdminIndexRoute: SuperAdminIndexRoute,
 }

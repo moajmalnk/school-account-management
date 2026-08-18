@@ -12,25 +12,10 @@ import {
   type SuperAdminPlanFlags,
 } from "@/lib/api/super-admin";
 import { ApiError, getApiToken } from "@/lib/api/client";
+import { PLAN_FEATURE_ITEMS } from "@/lib/permissions";
 import type { Tone, CornerSide } from "@/lib/utils";
 
 type Interval = "Monthly" | "Annually";
-
-const FEATURES: { key: keyof SuperAdminPlanFlags; label: string }[] = [
-  { key: "finance", label: "Financial Module" },
-  { key: "students", label: "Student Management" },
-  { key: "classes", label: "Class Management" },
-  { key: "staff", label: "Staff Management" },
-  { key: "staffAttendance", label: "Staff Attendance" },
-  { key: "payroll", label: "Automatic Payroll" },
-  { key: "vehicle", label: "Vehicle Management" },
-  { key: "analytics", label: "Advanced Analytical Reporting" },
-  { key: "feeReminders", label: "Manual Fee Reminders" },
-  { key: "feeCollection", label: "Fee Collection" },
-  { key: "extraUsers", label: "Extra User Access" },
-  { key: "autoFeeCollection", label: "Automatic Fee Collection" },
-  { key: "whatsapp", label: "WhatsApp Integration" },
-];
 
 const EMPTY_FLAGS: SuperAdminPlanFlags = {
   finance: false,
@@ -46,6 +31,7 @@ const EMPTY_FLAGS: SuperAdminPlanFlags = {
   payroll: false,
   autoFeeCollection: false,
   whatsapp: false,
+  branches: false,
 };
 
 /** Catalog defaults — used when API is empty / offline */
@@ -84,6 +70,7 @@ const DEFAULT_PLANS: SuperAdminPlan[] = [
       feeReminders: true,
       feeCollection: true,
       extraUsers: true,
+      branches: true,
     },
   },
   {
@@ -107,6 +94,7 @@ const DEFAULT_PLANS: SuperAdminPlan[] = [
       extraUsers: true,
       autoFeeCollection: true,
       whatsapp: true,
+      branches: true,
     },
   },
 ];
@@ -341,7 +329,7 @@ export function PlansView() {
                   <div className={`text-[10.5px] font-semibold uppercase tracking-wider ${subText}`}>
                     Features Included
                   </div>
-                  {FEATURES.map((f) => {
+                  {PLAN_FEATURE_ITEMS.map((f) => {
                     const on = Boolean(t.flags[f.key]);
                     return (
                       <div

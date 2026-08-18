@@ -108,14 +108,14 @@ export function hasAnyFinance(permissions: PermissionSet | undefined | null): bo
 
 export type SettingsTabId =
   | "school"
+  | "branches"
   | "classes"
   | "departments"
   | "roles"
   | "vehicles"
   | "transport"
-  | "fees"
-  | "billing"
   | "system"
+  | "support"
   | "users";
 
 /** Subscription plan feature matrix (from Super Admin Plans). */
@@ -133,6 +133,7 @@ export type PlanFlags = {
   payroll: boolean;
   autoFeeCollection: boolean;
   whatsapp: boolean;
+  branches: boolean;
 };
 
 export const DEFAULT_PLAN_FLAGS: PlanFlags = {
@@ -149,7 +150,26 @@ export const DEFAULT_PLAN_FLAGS: PlanFlags = {
   payroll: true,
   autoFeeCollection: true,
   whatsapp: true,
+  branches: true,
 };
+
+/** Catalog labels for Super Admin Plans and tenant Subscriptions. */
+export const PLAN_FEATURE_ITEMS: { key: keyof PlanFlags; label: string }[] = [
+  { key: "finance", label: "Financial Module" },
+  { key: "students", label: "Student Management" },
+  { key: "classes", label: "Class Management" },
+  { key: "staff", label: "Staff Management" },
+  { key: "staffAttendance", label: "Staff Attendance" },
+  { key: "payroll", label: "Automatic Payroll" },
+  { key: "vehicle", label: "Vehicle Management" },
+  { key: "analytics", label: "Advanced Analytical Reporting" },
+  { key: "feeReminders", label: "Manual Fee Reminders" },
+  { key: "feeCollection", label: "Fee Collection" },
+  { key: "extraUsers", label: "Extra User Access" },
+  { key: "autoFeeCollection", label: "Automatic Fee Collection" },
+  { key: "whatsapp", label: "WhatsApp Integration" },
+  { key: "branches", label: "Multiple Branches" },
+];
 
 export function normalizePlanFlags(value: unknown): PlanFlags {
   if (!value || typeof value !== "object") return { ...DEFAULT_PLAN_FLAGS };
@@ -168,8 +188,8 @@ const SETTINGS_TAB_PLAN_FLAG: Partial<Record<SettingsTabId, keyof PlanFlags>> = 
   roles: "staff",
   vehicles: "vehicle",
   transport: "vehicle",
-  fees: "feeCollection",
   users: "extraUsers",
+  branches: "branches",
 };
 
 export function planAllowsSettingsTab(
@@ -179,13 +199,21 @@ export function planAllowsSettingsTab(
   const required = SETTINGS_TAB_PLAN_FLAG[tab];
   if (!required) return true;
   const resolved = flags ?? DEFAULT_PLAN_FLAGS;
-  // Fees can still show when finance is on but feeCollection is off.
-  if (tab === "fees") {
-    return Boolean(resolved.feeCollection || resolved.finance);
-  }
   // Core school admins always need Users tab even if extraUsers is off.
   if (tab === "users") return true;
+  // Branches tab stays visible so the main campus can be edited.
+  if (tab === "branches") return true;
   return Boolean(resolved[required]);
+}
+
+export function planAllowsMultipleBranches(flags: PlanFlags | undefined | null): boolean {
+  if (!flags) return true;
+  return Boolean(flags.branches);
+}
+
+export function planAllowsExtraUsers(flags: PlanFlags | undefined | null): boolean {
+  if (!flags) return true;
+  return Boolean(flags.extraUsers);
 }
 
 export function planAllowsModule(
@@ -205,12 +233,8 @@ export function canAccessSettingsTab(
   flags?: PlanFlags | null,
 ): boolean {
   if (!planAllowsSettingsTab(flags, tab)) return false;
+  if (tab === "users" && !planAllowsExtraUsers(flags)) return false;
   if (hasFullAccess(permissions)) return true;
-  if (tab === "fees") {
-    return (
-      hasPermission(permissions, "settings") || hasPermission(permissions, "settings.fees")
-    );
-  }
   if (tab === "users") {
     return hasPermission(permissions, "settings.users") || hasPermission(permissions, "settings");
   }

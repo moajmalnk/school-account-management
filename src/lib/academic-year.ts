@@ -18,20 +18,190 @@ export type AcademicYearBounds = {
   endDate: string;
 };
 
-/** Parse `AY 2025-26` → Apr 1 start-year … Mar 31 end-year (Indian school FY). */
+export const CALENDAR_MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+] as const;
+
+const MONTH_NAME_INDEX: Record<string, number> = {
+  jan: 1,
+  january: 1,
+  feb: 2,
+  february: 2,
+  mar: 3,
+  march: 3,
+  apr: 4,
+  april: 4,
+  may: 5,
+  jun: 6,
+  june: 6,
+  jul: 7,
+  july: 7,
+  aug: 8,
+  august: 8,
+  sep: 9,
+  sept: 9,
+  september: 9,
+  oct: 10,
+  october: 10,
+  nov: 11,
+  november: 11,
+  dec: 12,
+  december: 12,
+};
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+function lastDayOfMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate();
+}
+
+function monthIndexFromName(raw: string): number | null {
+  const key = raw.trim().toLowerCase();
+  return MONTH_NAME_INDEX[key] ?? null;
+}
+
+/** `2026 June` — start month of the 12-month books. */
+export function formatBooksYearLabel(year: number, month: number): string {
+  const name = CALENDAR_MONTHS[month - 1];
+  if (!name || !Number.isFinite(year)) return "";
+  return `${year} ${name}`;
+}
+
+export function monthKeyToBooksYearLabel(key: string): string | null {
+  const match = /^(\d{4})-(\d{2})$/.exec(key.trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (!year || month < 1 || month > 12) return null;
+  return formatBooksYearLabel(year, month);
+}
+
+export function booksYearToMonthKey(year: number, month: number): string {
+  return `${year}-${pad2(month)}`;
+}
+
+function boundsFromStartMonth(startYear: number, month: number): AcademicYearBounds | null {
+  if (!startYear || month < 1 || month > 12) return null;
+  const endMonth = month === 1 ? 12 : month - 1;
+  const endYear = month === 1 ? startYear : startYear + 1;
+  return {
+    startYear,
+    endYear,
+    startDate: `${startYear}-${pad2(month)}-01`,
+    endDate: `${endYear}-${pad2(endMonth)}-${pad2(lastDayOfMonth(endYear, endMonth))}`,
+  };
+}
+
+/** Parse `AY 2025-26`, `2026-06`, or `2026 June` into a 12-month books window. */
 export function parseAcademicYearBounds(label: string): AcademicYearBounds | null {
-  const match = label.trim().match(/^(?:AY\s*)?(\d{4})\s*[-–/]\s*(\d{2}|\d{4})$/i);
+  const trimmed = label.trim().replace(/\s+/g, " ");
+  if (!trimmed) return null;
+
+  const monthKey = trimmed.match(/^(\d{4})-(\d{2})$/);
+  if (monthKey) {
+    const month = Number(monthKey[2]);
+    if (month >= 1 && month <= 12) {
+      return boundsFromStartMonth(Number(monthKey[1]), month);
+    }
+  }
+
+  const named =
+    trimmed.match(/^(?:AY\s*)?(\d{4})\s+([A-Za-z]+)$/i) ||
+    trimmed.match(/^(?:AY\s*)?([A-Za-z]+)\s+(\d{4})$/i);
+  if (named) {
+    const yearToken = /^\d{4}$/.test(named[1]) ? named[1] : named[2];
+    const monthToken = /^\d{4}$/.test(named[1]) ? named[2] : named[1];
+    const month = monthIndexFromName(monthToken);
+    if (month) return boundsFromStartMonth(Number(yearToken), month);
+  }
+
+  const match = trimmed.match(/^(?:AY\s*)?(\d{4})\s*[-–/]\s*(\d{2}|\d{4})$/i);
   if (!match) return null;
   const startYear = Number(match[1]);
   const endRaw = match[2];
   const endYear = endRaw.length === 4 ? Number(endRaw) : 2000 + Number(endRaw);
   if (!Number.isFinite(startYear) || !Number.isFinite(endYear)) return null;
+  if (endYear !== startYear && endYear !== startYear + 1) return null;
   return {
     startYear,
     endYear,
     startDate: `${startYear}-04-01`,
     endDate: `${endYear}-03-31`,
   };
+}
+
+export function parseBooksYearParts(label: string): { year: number; month: number } | null {
+  const bounds = parseAcademicYearBounds(label);
+  if (!bounds) return null;
+  const month = Number(bounds.startDate.slice(5, 7));
+  if (!month) return null;
+  return { year: bounds.startYear, month };
+}
+
+export function suggestNextBooksMonthKey(currentLabel: string, extraYears: string[] = []): string {
+  const source = [currentLabel, ...extraYears].map(parseBooksYearParts).find(Boolean);
+  if (source) return booksYearToMonthKey(source.year + 1, source.month);
+  const now = new Date();
+  const year = now.getMonth() >= 3 ? now.getFullYear() + 1 : now.getFullYear();
+  return booksYearToMonthKey(year, 4);
+}
+
+export function academicYearCoverageCaption(label: string): string | null {
+  const bounds = parseAcademicYearBounds(label);
+  if (!bounds) return null;
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const fmt = (iso: string) => {
+    const [y, m, d] = iso.split("-").map(Number);
+    if (!y || !m || !d) return iso;
+    return `${d} ${months[m - 1]} ${y}`;
+  };
+  return `${fmt(bounds.startDate)} – ${fmt(bounds.endDate)}`;
+}
+
+/** Normalize typed or picker input into a stored books label. */
+export function normalizeAcademicYearLabel(input: string): string | null {
+  const trimmed = input.trim().replace(/\s+/g, " ");
+  if (!trimmed) return null;
+
+  const named =
+    trimmed.match(/^(?:AY\s*)?(\d{4})\s+([A-Za-z]+)$/i) ||
+    trimmed.match(/^(?:AY\s*)?([A-Za-z]+)\s+(\d{4})$/i);
+  if (named) {
+    const yearToken = /^\d{4}$/.test(named[1]) ? named[1] : named[2];
+    const monthToken = /^\d{4}$/.test(named[1]) ? named[2] : named[1];
+    const month = monthIndexFromName(monthToken);
+    if (month) return formatBooksYearLabel(Number(yearToken), month);
+  }
+
+  const monthKey = trimmed.match(/^(\d{4})-(\d{2})$/);
+  if (monthKey) {
+    const month = Number(monthKey[2]);
+    if (month >= 1 && month <= 12) {
+      return formatBooksYearLabel(Number(monthKey[1]), month);
+    }
+  }
+
+  const match = trimmed.match(/^(?:AY\s*)?(\d{4})\s*[-–/]\s*(\d{2}|\d{4})$/i);
+  if (!match) return null;
+  const start = Number(match[1]);
+  const endRaw = match[2];
+  const endYear = endRaw.length === 4 ? Number(endRaw) : 2000 + Number(endRaw);
+  if (!Number.isFinite(start) || !Number.isFinite(endYear)) return null;
+  if (endYear !== start && endYear !== start + 1) return null;
+  return `AY ${start}-${String(endYear).slice(-2)}`;
 }
 
 export function filterByAcademicYear<T extends { academicYear?: string }>(

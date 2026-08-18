@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type Dispatch,
   type ReactNode,
@@ -14,8 +15,33 @@ import { getApiToken } from "@/lib/api/client";
 import {
   apiDeleteFeeTerm,
   apiSyncAcademicYears,
+  apiSyncActiveBranch,
+  apiSyncThemeSettings,
   apiUpsertFeeTerm,
 } from "@/lib/api/settings";
+import {
+  applyWorkspaceBrand,
+  clearWorkspaceBrand,
+  DEFAULT_BRAND_PRIMARY,
+  DEFAULT_BRAND_SECONDARY,
+  DEFAULT_FONT_COLOR,
+  normalizeFontFamily,
+  normalizeFontSize,
+  normalizeHexColor,
+  type FontFamilyOption,
+  type FontSizeOption,
+} from "@/lib/brand-theme";
+import {
+  clearActiveFileNames,
+  DEFAULT_FILE_NAMES,
+  normalizeFileNames,
+  setActiveFileNames,
+  type DownloadKind,
+} from "@/lib/download-names";
+import {
+  readStoredBranchPublicId,
+  setBranchContext,
+} from "@/lib/branch-context";
 import {
   normalizePermissionSet,
   type PermissionSet,
@@ -29,6 +55,7 @@ import {
   filterByAcademicYear,
   getYearLedger,
   mergeStudentYearLedgers,
+  normalizeAcademicYearLabel,
   parseAcademicYearBounds,
   reconcileLedgersWithStudents,
   studentsForAcademicYear,
@@ -46,6 +73,7 @@ export {
   cloneFeeTermsForYear,
   filterByAcademicYear,
   getYearLedger,
+  normalizeAcademicYearLabel,
   parseAcademicYearBounds,
   studentsForAcademicYear,
   upsertStudentYearFields,
@@ -958,6 +986,40 @@ export type Department = {
   code: string;
 };
 
+/** Physical campus under a tenant (Malappuram, Kozhikode, …). */
+export type CampusBranch = {
+  id: string;
+  name: string;
+  code: string;
+  address: string;
+  phone: string;
+  email: string;
+  lat: number | null;
+  lng: number | null;
+  isActive: boolean;
+};
+
+export function normalizeCampusBranch(raw: unknown): CampusBranch | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.id !== "string" || !r.id.trim() || typeof r.name !== "string" || !r.name.trim()) {
+    return null;
+  }
+  const num = (v: unknown): number | null =>
+    typeof v === "number" && Number.isFinite(v) ? v : null;
+  return {
+    id: r.id.trim(),
+    name: r.name.trim(),
+    code: typeof r.code === "string" && r.code.trim() ? r.code.trim().toUpperCase() : "MAIN",
+    address: typeof r.address === "string" ? r.address : "",
+    phone: typeof r.phone === "string" ? r.phone : "",
+    email: typeof r.email === "string" ? r.email : "",
+    lat: num(r.lat),
+    lng: num(r.lng),
+    isActive: r.isActive !== false,
+  };
+}
+
 export type Role = {
   id: string;
   title: string;
@@ -1425,12 +1487,23 @@ export type ThemeSettings = {
   accent: "Neon Lime" | "Pale Lime" | "Ink";
   density: "Comfortable" | "Compact";
   navPlacement: "Left" | "Right" | "Top" | "Bottom";
+  /** Hex brand colors used on the workspace, invoices, and bills. */
+  primaryColor: string;
+  secondaryColor: string;
+  fontFamily: FontFamilyOption;
+  fontColor: string;
+  fontSize: FontSizeOption;
+  iconColor: string;
+  menuColor: string;
+  fileNames: Record<DownloadKind, string>;
 };
 
 export type SchoolDetails = {
   name: string;
   logoUrl?: string;
   letterheadUrl?: string;
+  sealUrl?: string;
+  signatureUrl?: string;
   tagline: string;
   address: string;
   phone: string;
@@ -2774,7 +2847,6 @@ export const SEED_ACADEMIC_YEARS = ["AY 2024-25", "AY 2025-26", "AY 2026-27"];
 export const ACADEMIC_YEAR_OPTIONS = SEED_ACADEMIC_YEARS;
 export const SEED_ACADEMIC_YEAR = "AY 2025-26";
 
-/** Year-scoped enrollment / dues. AY 2026-27 starts empty (future books). */
 export const SEED_STUDENT_YEAR_LEDGERS: StudentYearLedger[] = [
   {
     academicYear: "AY 2024-25",
@@ -2805,24 +2877,6 @@ export const SEED_STUDENT_YEAR_LEDGERS: StudentYearLedger[] = [
     byStudentId: {},
   },
 ];
-
-/** Normalize free-text into `AY YYYY-YY`. Rejects free-form labels like "demo". */
-export function normalizeAcademicYearLabel(input: string): string | null {
-  const trimmed = input.trim().replace(/\s+/g, " ");
-  if (!trimmed) return null;
-
-  const match = trimmed.match(/^(?:AY\s*)?(\d{4})\s*[-–/]\s*(\d{2}|\d{4})$/i);
-  if (!match) return null;
-
-  const start = Number(match[1]);
-  const endRaw = match[2];
-  const endYear = endRaw.length === 4 ? Number(endRaw) : 2000 + Number(endRaw);
-  if (!Number.isFinite(start) || !Number.isFinite(endYear)) return null;
-  if (endYear !== start && endYear !== start + 1) return null;
-
-  const end = String(endYear).slice(-2);
-  return `AY ${start}-${end}`;
-}
 
 function ensureAcademicYearInList(years: string[], active: string): string[] {
   const cleaned = years.map((y) => y.trim()).filter(Boolean);
@@ -2890,6 +2944,14 @@ export const SEED_THEME_SETTINGS: ThemeSettings = {
   accent: "Neon Lime",
   density: "Comfortable",
   navPlacement: "Left",
+  primaryColor: DEFAULT_BRAND_PRIMARY,
+  secondaryColor: DEFAULT_BRAND_SECONDARY,
+  fontFamily: "Inter",
+  fontColor: DEFAULT_FONT_COLOR,
+  fontSize: "Medium",
+  iconColor: DEFAULT_BRAND_PRIMARY,
+  menuColor: DEFAULT_BRAND_PRIMARY,
+  fileNames: { ...DEFAULT_FILE_NAMES },
 };
 
 export const SEED_SCHOOL_DETAILS: SchoolDetails = {
@@ -2904,6 +2966,20 @@ export const SEED_SCHOOL_DETAILS: SchoolDetails = {
   principalName: "Dr. Anitha Menon",
   establishedYear: "1998",
 };
+
+export const SEED_BRANCHES: CampusBranch[] = [
+  {
+    id: "BR-MAIN-1",
+    name: "Main Campus",
+    code: "MAIN",
+    address: SEED_SCHOOL_DETAILS.address,
+    phone: SEED_SCHOOL_DETAILS.phone,
+    email: SEED_SCHOOL_DETAILS.email,
+    lat: null,
+    lng: null,
+    isActive: true,
+  },
+];
 
 type Snapshot = {
   students: Student[];
@@ -2927,6 +3003,8 @@ type Snapshot = {
   dashboardNote: string;
   notifications: TenantNotification[];
   tenantUsers: TenantUser[];
+  branches: CampusBranch[];
+  activeBranchId: string;
 };
 
 type TenantStoreValue = {
@@ -2999,6 +3077,12 @@ type TenantStoreValue = {
   resetTenant: () => void;
   /** False until remote/local snapshot has been applied — use for page skeletons. */
   hydrated: boolean;
+  branches: CampusBranch[];
+  setBranches: Dispatch<SetStateAction<CampusBranch[]>>;
+  activeBranchId: string;
+  activeBranch: CampusBranch | null;
+  /** Open another campus workspace (refetches operational data). */
+  openBranch: (branchId: string) => Promise<{ students: number; receipts: number }>;
 };
 
 function normalizeThemeMode(value: unknown): ThemeSettings["mode"] {
@@ -3029,6 +3113,7 @@ function isThemeSettings(value: unknown): value is Omit<ThemeSettings, "navPlace
 function normalizeThemeSettings(value: unknown): ThemeSettings {
   if (!isThemeSettings(value)) return SEED_THEME_SETTINGS;
   const placement = value.navPlacement;
+  const raw = value as Partial<ThemeSettings>;
   return {
     mode: normalizeThemeMode(value.mode),
     accent: normalizeThemeAccent(value.accent),
@@ -3036,6 +3121,14 @@ function normalizeThemeSettings(value: unknown): ThemeSettings {
     navPlacement: THEME_NAV_PLACEMENT_OPTIONS.includes(placement as ThemeSettings["navPlacement"])
       ? (placement as ThemeSettings["navPlacement"])
       : "Left",
+    primaryColor: normalizeHexColor(raw.primaryColor, DEFAULT_BRAND_PRIMARY),
+    secondaryColor: normalizeHexColor(raw.secondaryColor, DEFAULT_BRAND_SECONDARY),
+    fontFamily: normalizeFontFamily(raw.fontFamily),
+    fontColor: normalizeHexColor(raw.fontColor, DEFAULT_FONT_COLOR),
+    fontSize: normalizeFontSize(raw.fontSize),
+    iconColor: normalizeHexColor(raw.iconColor, normalizeHexColor(raw.primaryColor, DEFAULT_BRAND_PRIMARY)),
+    menuColor: normalizeHexColor(raw.menuColor, normalizeHexColor(raw.primaryColor, DEFAULT_BRAND_PRIMARY)),
+    fileNames: normalizeFileNames(raw.fileNames),
   };
 }
 
@@ -3076,6 +3169,8 @@ export function normalizeSchoolDetails(value: unknown): SchoolDetails {
     name,
     logoUrl: asOptionalMediaUrl(raw.logoUrl),
     letterheadUrl: asOptionalMediaUrl(raw.letterheadUrl),
+    sealUrl: asOptionalMediaUrl(raw.sealUrl),
+    signatureUrl: asOptionalMediaUrl(raw.signatureUrl),
     tagline: asTrimmedString(raw.tagline, SEED_SCHOOL_DETAILS.tagline),
     address: asTrimmedString(raw.address, SEED_SCHOOL_DETAILS.address),
     phone: asTrimmedString(raw.phone, SEED_SCHOOL_DETAILS.phone),
@@ -3278,6 +3373,15 @@ function parseSnapshot(raw: string): Snapshot | null {
           )
           .map(normalizeTenantUser)
       : [...SEED_TENANT_USERS],
+    branches: Array.isArray((parsed as Partial<Snapshot>).branches)
+      ? ((parsed as Partial<Snapshot>).branches as unknown[])
+          .map(normalizeCampusBranch)
+          .filter((b): b is CampusBranch => Boolean(b))
+      : [...SEED_BRANCHES],
+    activeBranchId:
+      typeof (parsed as Partial<Snapshot>).activeBranchId === "string"
+        ? ((parsed as Partial<Snapshot>).activeBranchId as string)
+        : SEED_BRANCHES[0]?.id ?? "",
   };
 }
 
@@ -3588,6 +3692,7 @@ export function TenantStoreProvider({
     if (!liveApi) return SEED_THEME_SETTINGS;
     return readSnapshot(storeKey)?.themeSettings ?? SEED_THEME_SETTINGS;
   });
+  const skipThemePersist = useRef(true);
   // Live API: paint cached logo/name immediately so the dock does not flash initials
   // while the remote hydrate is in flight.
   const [schoolDetails, setSchoolDetails] = useState<SchoolDetails>(() => {
@@ -3605,6 +3710,14 @@ export function TenantStoreProvider({
   const [dashboardNote, setDashboardNote] = useState("");
   const [notifications, setNotifications] = useState<TenantNotification[]>(() =>
     liveApi ? [] : [...SEED_NOTIFICATIONS],
+  );
+  const [branches, setBranches] = useState<CampusBranch[]>(() =>
+    liveApi ? [] : [...SEED_BRANCHES],
+  );
+  const [activeBranchId, setActiveBranchIdState] = useState<string>(() =>
+    liveApi
+      ? readStoredBranchPublicId(tenantId) ?? ""
+      : SEED_BRANCHES[0]?.id ?? "",
   );
   const [hydrated, setHydrated] = useState(false);
 
@@ -3660,15 +3773,18 @@ export function TenantStoreProvider({
     setAcademicYears(snap.academicYears);
     setClosedAcademicYears(snap.closedAcademicYears ?? []);
     setAcademicYearState(snap.academicYear);
-    setThemeSettings(snap.themeSettings);
+    setThemeSettings(normalizeThemeSettings(snap.themeSettings));
     setSchoolDetails(snap.schoolDetails);
     setDashboardTodos(snap.dashboardTodos);
     setDashboardNote(snap.dashboardNote);
     setNotifications(snap.notifications);
+    setBranches(Array.isArray(snap.branches) ? snap.branches : []);
+    setActiveBranchIdState(snap.activeBranchId ?? "");
   }, [liveApi]);
 
   useEffect(() => {
     activeStoreKey = storeKey;
+    setBranchContext(tenantId ?? null, readStoredBranchPublicId(tenantId));
     let cancelled = false;
     setHydrated(false);
 
@@ -3676,7 +3792,7 @@ export function TenantStoreProvider({
       // Prefer live API data when a JWT exists (school admin / impersonation).
       if (getApiToken()) {
         try {
-          const remote = await fetchRemoteTenantBundle();
+          const remote = await fetchRemoteTenantBundle(undefined, { tenantId });
           if (!cancelled && remote) {
             // Year enrollments live in localStorage (API has no per-AY ledger yet).
             // Merge local books over the remote placeholder so hard refresh keeps
@@ -3717,7 +3833,12 @@ export function TenantStoreProvider({
               dashboardNote: remote.dashboardNote,
               notifications: remote.notifications,
               tenantUsers: remote.tenantUsers,
+              branches: remote.branches,
+              activeBranchId: remote.activeBranchId,
             });
+            if (remote.activeBranchId) {
+              setBranchContext(tenantId ?? null, remote.activeBranchId);
+            }
             setHydrated(true);
             return;
           }
@@ -3758,6 +3879,8 @@ export function TenantStoreProvider({
             dashboardNote: "",
             notifications: [],
             tenantUsers: [],
+            branches: [],
+            activeBranchId: "",
           });
         }
         setHydrated(true);
@@ -3783,11 +3906,43 @@ export function TenantStoreProvider({
     return () => {
       cancelled = true;
     };
-  }, [applySnapshot, blankSchool, storeKey, tenantName]);
+  }, [applySnapshot, blankSchool, storeKey, tenantName, tenantId]);
 
   useEffect(() => {
     applyWorkspaceThemeMode(themeSettings.mode);
-  }, [themeSettings.mode]);
+    applyWorkspaceBrand({
+      primary: themeSettings.primaryColor,
+      secondary: themeSettings.secondaryColor,
+      fontFamily: themeSettings.fontFamily,
+      fontColor: themeSettings.fontColor,
+      fontSize: themeSettings.fontSize,
+      iconColor: themeSettings.iconColor,
+      menuColor: themeSettings.menuColor,
+    });
+    setActiveFileNames(themeSettings.fileNames);
+  }, [themeSettings]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    if (skipThemePersist.current) {
+      skipThemePersist.current = false;
+      return;
+    }
+    if (!getApiToken()) return;
+    const handle = window.setTimeout(() => {
+      void apiSyncThemeSettings(themeSettings).catch(() => {
+        /* local snapshot kept */
+      });
+    }, 450);
+    return () => window.clearTimeout(handle);
+  }, [hydrated, themeSettings]);
+
+  useEffect(() => {
+    return () => {
+      clearWorkspaceBrand();
+      clearActiveFileNames();
+    };
+  }, []);
 
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
@@ -3853,6 +4008,8 @@ export function TenantStoreProvider({
         dashboardNote,
         notifications,
         tenantUsers,
+        branches,
+        activeBranchId,
       },
       storeKey,
     );
@@ -3878,6 +4035,8 @@ export function TenantStoreProvider({
     dashboardNote,
     notifications,
     tenantUsers,
+    branches,
+    activeBranchId,
     storeKey,
   ]);
 
@@ -3985,7 +4144,7 @@ export function TenantStoreProvider({
     (from: string, to: string) => {
       const nextLabel = normalizeAcademicYearLabel(to) ?? to.trim();
       if (!nextLabel) {
-        return { ok: false, reason: "Enter a valid year like 2026-27" };
+        return { ok: false, reason: "Choose a start month and year, or type 2026-27" };
       }
       if (from === nextLabel) return { ok: true };
       if (academicYears.some((y) => y.toLowerCase() === nextLabel.toLowerCase() && y !== from)) {
@@ -4190,6 +4349,8 @@ export function TenantStoreProvider({
     setDashboardTodos([...DEFAULT_DASHBOARD_TODOS]);
     setDashboardNote("");
     setNotifications([...SEED_NOTIFICATIONS]);
+    setBranches([...SEED_BRANCHES]);
+    setActiveBranchIdState(SEED_BRANCHES[0]?.id ?? "");
     writeSnapshot({
       students: SEED_STUDENTS,
       staff: SEED_STAFF,
@@ -4211,8 +4372,107 @@ export function TenantStoreProvider({
       dashboardNote: "",
       notifications: [...SEED_NOTIFICATIONS],
       tenantUsers: SEED_TENANT_USERS,
+      branches: [...SEED_BRANCHES],
+      activeBranchId: SEED_BRANCHES[0]?.id ?? "",
     });
   };
+
+  const activeBranch = useMemo(
+    () => branches.find((b) => b.id === activeBranchId) ?? branches[0] ?? null,
+    [branches, activeBranchId],
+  );
+
+  const openBranch = useCallback(
+    async (branchId: string) => {
+      const nextId = branchId.trim();
+      const target = branches.find((b) => b.id === nextId);
+      if (!nextId || !target) {
+        return { students: 0, receipts: 0 };
+      }
+      setBranchContext(tenantId ?? null, nextId);
+      setActiveBranchIdState(nextId);
+      if (getApiToken()) {
+        void apiSyncActiveBranch(nextId).catch(() => {
+          /* keep local campus; next hydrate may overwrite */
+        });
+        try {
+          const remote = await fetchRemoteTenantBundle(undefined, {
+            force: true,
+            tenantId,
+          });
+          if (remote) {
+            const localLedgers = readSnapshot(storeKey)?.studentYearLedgers ?? [];
+            const mergedLedgers = mergeStudentYearLedgers(
+              localLedgers,
+              remote.studentYearLedgers,
+            );
+            applySnapshot({
+              students: remote.students,
+              staff: remote.staff,
+              payments: remote.payments,
+              departments: remote.departments,
+              roles: remote.roles,
+              classes: remote.classes,
+              transportRoutes: remote.transportRoutes,
+              transportVehicles: remote.transportVehicles,
+              paymentCategories: remote.paymentCategories,
+              feeTerms: remote.feeTerms,
+              studentYearLedgers: reconcileLedgersWithStudents(
+                remote.students,
+                mergedLedgers,
+                remote.academicYear,
+              ),
+              academicYears: remote.academicYears,
+              closedAcademicYears: remote.closedAcademicYears ?? [],
+              academicYear: remote.academicYear,
+              themeSettings: remote.themeSettings,
+              schoolDetails: {
+                ...remote.schoolDetails,
+                name:
+                  remote.schoolDetails.name?.trim() ||
+                  tenantName?.trim() ||
+                  remote.schoolDetails.name,
+              },
+              dashboardTodos: remote.dashboardTodos,
+              dashboardNote: remote.dashboardNote,
+              notifications: remote.notifications,
+              tenantUsers: remote.tenantUsers,
+              branches: remote.branches.length ? remote.branches : branches,
+              activeBranchId: nextId,
+            });
+            return {
+              students: remote.students.filter((s) => !s.deletedAt).length,
+              receipts: academicYearBookStats({
+                payments: remote.payments,
+                ledgers: mergedLedgers,
+                year: remote.academicYear,
+              }).receipts,
+            };
+          }
+        } catch {
+          /* keep local campus data */
+        }
+      }
+      return {
+        students: students.filter((s) => !s.deletedAt).length,
+        receipts: academicYearBookStats({
+          payments,
+          ledgers: studentYearLedgers,
+          year: academicYear,
+        }).receipts,
+      };
+    },
+    [
+      academicYear,
+      applySnapshot,
+      branches,
+      payments,
+      storeKey,
+      studentYearLedgers,
+      tenantId,
+      tenantName,
+    ],
+  );
 
   const value = useMemo<TenantStoreValue>(
     () => ({
@@ -4268,6 +4528,11 @@ export function TenantStoreProvider({
       setNotifications,
       resetTenant,
       hydrated,
+      branches,
+      setBranches,
+      activeBranchId,
+      activeBranch,
+      openBranch,
     }),
     [
       students,
@@ -4303,6 +4568,10 @@ export function TenantStoreProvider({
       dashboardNote,
       notifications,
       hydrated,
+      branches,
+      activeBranchId,
+      activeBranch,
+      openBranch,
     ],
   );
 

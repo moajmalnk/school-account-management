@@ -19,7 +19,7 @@ function isDataUrl(value?: string | null): boolean {
 
 export async function apiUploadDataUrl(
   dataUrl: string,
-  kind: "logo" | "letterhead" | "photo" | "document",
+  kind: "logo" | "letterhead" | "photo" | "document" | "seal" | "signature",
   fileName?: string,
 ): Promise<string> {
   const data = await apiRequest<{ url: string }>("/api/upload.php", {
@@ -51,19 +51,45 @@ export async function apiSaveSchoolDetails(
       "letterhead.png",
     );
   }
+  if (isDataUrl(next.sealUrl)) {
+    next.sealUrl = await apiUploadDataUrl(next.sealUrl!, "seal", "seal.png");
+  }
+  if (isDataUrl(next.signatureUrl)) {
+    next.signatureUrl = await apiUploadDataUrl(
+      next.signatureUrl!,
+      "signature",
+      "signature.png",
+    );
+  }
 
   const data = await apiRequest<{
     schoolDetails: SchoolDetails;
   }>("/api/settings/school.php", {
     method: "PUT",
     body: {
-      schoolDetails: next,
+      schoolDetails: {
+        ...next,
+        logoUrl: next.logoUrl ?? null,
+        letterheadUrl: next.letterheadUrl ?? null,
+        sealUrl: next.sealUrl ?? null,
+        signatureUrl: next.signatureUrl ?? null,
+      },
       themeSettings: extras?.themeSettings,
       academicYear: extras?.academicYear,
       academicYears: extras?.academicYears,
     },
   });
   return data.schoolDetails;
+}
+
+/** Persist workspace theme (mode, dock, brand colors) without rewriting school identity. */
+export async function apiSyncThemeSettings(themeSettings: ThemeSettings): Promise<ThemeSettings> {
+  if (!hasToken()) return themeSettings;
+  const data = await apiRequest<{ themeSettings?: ThemeSettings }>("/api/settings/school.php", {
+    method: "PUT",
+    body: { themeSettings },
+  });
+  return data.themeSettings ?? themeSettings;
 }
 
 /** Persist academic / financial year list + active year to the server. */
@@ -282,6 +308,55 @@ export async function apiUpsertTenantUser(user: {
 export async function apiDeleteTenantUser(id: string): Promise<void> {
   if (!hasToken()) return;
   await apiRequest(`/api/settings/users.php?id=${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function apiSyncActiveBranch(activeBranchId: string): Promise<void> {
+  if (!hasToken() || !activeBranchId) return;
+  await apiRequest("/api/settings/school.php", {
+    method: "PUT",
+    body: { activeBranchId },
+  });
+}
+
+export type CampusBranchPayload = {
+  id?: string;
+  name: string;
+  code: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  lat?: number | null;
+  lng?: number | null;
+  isActive?: boolean;
+  copyFromId?: string;
+};
+
+export async function apiListBranches(): Promise<{
+  branches: CampusBranchPayload[];
+  activeBranchId: string | null;
+}> {
+  if (!hasToken()) {
+    return { branches: [], activeBranchId: null };
+  }
+  return apiRequest("/api/settings/branches.php");
+}
+
+export async function apiUpsertBranch(
+  branch: CampusBranchPayload,
+  isNew: boolean,
+): Promise<CampusBranchPayload> {
+  if (!hasToken()) return branch;
+  return apiRequest<CampusBranchPayload>("/api/settings/branches.php", {
+    method: isNew ? "POST" : "PUT",
+    body: branch,
+  });
+}
+
+export async function apiDeleteBranch(id: string): Promise<void> {
+  if (!hasToken()) return;
+  await apiRequest(`/api/settings/branches.php?id=${encodeURIComponent(id)}`, {
     method: "DELETE",
   });
 }

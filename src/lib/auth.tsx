@@ -8,15 +8,21 @@ import {
   type ReactNode,
 } from "react";
 
-import { apiLogin, apiMe } from "@/lib/api/auth";
+import { apiLogin, apiLogoutCurrentDevice, apiMe } from "@/lib/api/auth";
 import {
+  ACCESS_TOKEN_KEY,
   ApiError,
   clearApiTokenBackup,
   clearImpersonationApiToken,
+  clearPersistentAuthSecrets,
+  ensureFreshAccessToken,
   getApiToken,
+  hasPersistedCredentials,
+  isLocalIdleExpired,
   onUnauthorized,
   restoreApiTokenBackup,
   setApiToken,
+  touchLastActive,
 } from "@/lib/api/client";
 import {
   ALL_PERMISSIONS,
@@ -29,6 +35,7 @@ import {
   normalizePlanFlags,
   planAllowsModule,
   planAllowsSettingsTab,
+  planAllowsExtraUsers,
   type FinanceViewKey,
   type PermissionKey,
   type PermissionSet,
@@ -106,7 +113,7 @@ export const INVALID_CREDENTIALS_MESSAGE =
   "Invalid email or password. Please review your credentials and try again.";
 
 export const API_UNREACHABLE_MESSAGE =
-  "Cannot reach the API server. If you develop locally, run `npm run dev:local` (local PHP + MySQL). Otherwise check your network or Hostinger status for spi.macadz.com.";
+  "Cannot reach the API server. Check your network or Hostinger status for spi.macadz.com.";
 
 function loginFailureMessage(err: unknown): string {
   if (err instanceof ApiError) {
@@ -283,6 +290,7 @@ export function sessionCanAccessSettingsTab(
   if (!session) return false;
   if (!planAllowsSettingsTab(session.planFlags, tab)) return false;
   if (session.role === "school_admin" || session.role === "super_admin") return true;
+  if (tab === "users" && !planAllowsExtraUsers(session.planFlags)) return false;
   return canAccessSettingsTabPerm(session.permissions, tab, session.planFlags);
 }
 
@@ -322,7 +330,7 @@ const AuthContext = createContext<AuthState | null>(null);
 export function clearAllAuthState() {
   clearImpersonationSession();
   clearApiTokenBackup();
-  setApiToken(null);
+  clearPersistentAuthSecrets();
   writeSession(null);
 }
 
@@ -335,26 +343,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const bootstrap = async () => {
       const existing = readSession();
+      const impersonated = Boolean(existing?.impersonated);
       const token = getApiToken();
 
-      // JWT present → confirm it before treating the local session as valid.
-      if (existing && token) {
+      if (!impersonated && isLocalIdleExpired()) {
+        clearAllAuthState();
+        if (!cancelled) {
+          setSession(null);
+          setHydrated(true);
+        }
+        return;
+      }
+
+      if (existing && (token || (!impersonated && hasPersistedCredentials()))) {
+        if (!impersonated) {
+          const freshness = await ensureFreshAccessToken();
+          if (freshness === "invalid") {
+            clearAllAuthState();
+            if (!cancelled) {
+              setSession(null);
+              setHydrated(true);
+            }
+            return;
+          }
+        }
+
         try {
           await apiMe();
+          touchLastActive(true);
           if (!cancelled) setSession(readSession() ?? existing);
         } catch (err) {
           if (err instanceof ApiError && err.status === 401) {
-            clearAllAuthState();
-            if (!cancelled) setSession(null);
+            if (impersonated) {
+              clearImpersonationSession();
+              clearImpersonationApiToken();
+              restoreApiTokenBackup();
+              if (!cancelled) setSession(readPersistentSession());
+            } else {
+              clearAllAuthState();
+              if (!cancelled) setSession(null);
+            }
           } else if (!cancelled) {
             // Network / API down: keep the cached session so the UI can still open.
             setSession(existing);
           }
         }
       } else if (!cancelled) {
-        // Orphan JWT without a session (or session without JWT) — clean up.
+        // Orphan JWT without a session (or session without credentials) — clean up.
         if (token && !existing) setApiToken(null);
-        setSession(existing);
+        if (existing && !impersonated && !hasPersistedCredentials()) {
+          writeSession(null);
+          setSession(null);
+        } else {
+          setSession(existing);
+        }
       }
 
       if (!cancelled) setHydrated(true);
@@ -367,20 +409,73 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    return onUnauthorized(() => {
+    return onUnauthorized((reason) => {
+      if (reason === "impersonation") {
+        const source = readSession()?.impersonationSource;
+        clearImpersonationSession();
+        clearImpersonationApiToken();
+        restoreApiTokenBackup();
+        setSession(readPersistentSession());
+        if (typeof window === "undefined") return;
+        const dest =
+          source === "super_admin" ? "/super-admin/tenants" : "/tenant/settings?tab=users";
+        window.location.replace(dest);
+        return;
+      }
+
       clearImpersonationSession();
       clearApiTokenBackup();
-      setApiToken(null);
+      clearPersistentAuthSecrets();
       writeSession(null);
       setSession(null);
 
       if (typeof window === "undefined") return;
       const path = window.location.pathname;
       if (path.startsWith("/login")) return;
-      const next = `/login?reason=session_expired&from=${encodeURIComponent(path)}`;
+      const why = reason === "inactive" ? "inactive" : "session_expired";
+      const next = `/login?reason=${why}&from=${encodeURIComponent(path)}`;
       window.location.replace(next);
     });
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === STORAGE_KEY) {
+        setSession(event.newValue ? readSession() : null);
+        return;
+      }
+      if (event.key === ACCESS_TOKEN_KEY && event.newValue === null) {
+        if (readSession()?.impersonated) return;
+        setSession(null);
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  useEffect(() => {
+    if (!session || session.impersonated) return;
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      if (isLocalIdleExpired()) {
+        clearAllAuthState();
+        setSession(null);
+        if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+          window.location.replace("/login?reason=inactive");
+        }
+        return;
+      }
+      touchLastActive();
+      void ensureFreshAccessToken();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    const interval = window.setInterval(onVisible, 15 * 60 * 1000);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(interval);
+    };
+  }, [session]);
 
   const login = useCallback<AuthState["login"]>(async (email, password) => {
     const normalizedEmail = email.trim().toLowerCase();
@@ -422,7 +517,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(next);
       return { ok: true, redirect: homePathForSession(next), session: next };
     } catch (err) {
-      setApiToken(null);
       return { ok: false, error: loginFailureMessage(err) };
     }
   }, []);
@@ -442,6 +536,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // ignore
       }
     }
+    void apiLogoutCurrentDevice();
     clearAllAuthState();
     setSession(null);
   }, []);

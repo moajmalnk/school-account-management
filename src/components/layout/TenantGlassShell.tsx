@@ -1,6 +1,7 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Bell,
+  Building2,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
@@ -10,7 +11,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
-  Receipt,
   Settings,
   Sun,
   UserCog,
@@ -41,18 +41,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { FinancialYearFields, resolveFinancialYearInput } from "@/components/school/FinancialYearFields";
 import { FloatingDock, type FloatingDockItem } from "@/components/ui/floating-dock";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   sessionCanAccessSettings,
-  sessionCanAccessSettingsTab,
   sessionHasAnyFinance,
   sessionHasPermission,
   useAuth,
 } from "@/lib/auth";
+import { monthKeyToBooksYearLabel, suggestNextBooksMonthKey } from "@/lib/academic-year";
 import {
-  normalizeAcademicYearLabel,
   schoolInitials,
   useTenantStore,
   type ThemeSettings,
@@ -61,37 +59,38 @@ import { isFinanceTab } from "@/lib/finance-tabs";
 import { resolveMediaUrl } from "@/lib/media";
 import { cn, glassInsetClass, glassPanelClass } from "@/lib/utils";
 
-/** Soft fade when academic year books switch. */
+/** Soft fade when academic year books or campus switch. */
 export function AcademicYearBooksFade({ children }: { children: ReactNode }) {
-  const { academicYear, hydrated } = useTenantStore();
+  const { academicYear, activeBranchId, hydrated } = useTenantStore();
   const [visible, setVisible] = useState(true);
-  const [displayYear, setDisplayYear] = useState(academicYear);
+  const booksKey = `${academicYear}|${activeBranchId}`;
+  const [displayKey, setDisplayKey] = useState(booksKey);
   const booksReady = useRef(false);
 
   useEffect(() => {
     // Skip the fade on first hydrate so seed→API year swaps don't blink the page.
     if (!hydrated) {
-      setDisplayYear(academicYear);
+      setDisplayKey(booksKey);
       return;
     }
     if (!booksReady.current) {
       booksReady.current = true;
-      setDisplayYear(academicYear);
+      setDisplayKey(booksKey);
       setVisible(true);
       return;
     }
-    if (academicYear === displayYear) return;
+    if (booksKey === displayKey) return;
     setVisible(false);
     const t = window.setTimeout(() => {
-      setDisplayYear(academicYear);
+      setDisplayKey(booksKey);
       setVisible(true);
     }, 140);
     return () => window.clearTimeout(t);
-  }, [academicYear, displayYear, hydrated]);
+  }, [booksKey, displayKey, hydrated]);
 
   return (
     <div
-      key={displayYear || "books-loading"}
+      key={displayKey || "books-loading"}
       className={cn(
         "flex min-h-0 min-w-0 flex-1 flex-col transition-opacity duration-200 ease-out",
         visible ? "opacity-100" : "opacity-0",
@@ -99,6 +98,63 @@ export function AcademicYearBooksFade({ children }: { children: ReactNode }) {
     >
       {children}
     </div>
+  );
+}
+
+export function BranchSwitcher({ compact = false }: { compact?: boolean }) {
+  const { branches, activeBranchId, activeBranch, openBranch, hydrated } = useTenantStore();
+  const selectable = branches.filter((b) => b.isActive !== false);
+  if (!hydrated || selectable.length < 2) return null;
+
+  const label = activeBranch?.name ?? "Campus";
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "inline-flex max-w-[11rem] items-center gap-1 rounded-full border border-slate-200/80 bg-white/80 px-2.5 py-2 text-[11px] font-semibold text-slate-800 shadow-sm backdrop-blur-md transition-colors hover:border-[#0F766E]/40 hover:text-[#0F766E] dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-100 dark:hover:text-[#2DD4BF] sm:max-w-none sm:gap-1.5 sm:px-3.5 sm:text-[12px]",
+            compact && "max-w-[9rem] px-2 py-1.5 text-[10px] sm:max-w-[11rem]",
+          )}
+        >
+          <Building2 className="hidden h-3.5 w-3.5 shrink-0 sm:block" strokeWidth={2.25} />
+          <span className="truncate">{label}</span>
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        className="min-w-[12rem] rounded-lg border-white/60 bg-white/90 backdrop-blur-xl dark:border-white/10 dark:bg-zinc-900"
+      >
+        <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400">
+          Campuses
+        </DropdownMenuLabel>
+        <DropdownMenuRadioGroup
+          value={activeBranchId}
+          onValueChange={(id) => {
+            void (async () => {
+              const stats = await openBranch(id);
+              const name = selectable.find((b) => b.id === id)?.name ?? "campus";
+              toast.success(`Opened ${name}`, {
+                description: `${stats.students} student${stats.students === 1 ? "" : "s"} · ${stats.receipts} receipt${stats.receipts === 1 ? "" : "s"}`,
+              });
+            })();
+          }}
+        >
+          {selectable.map((b) => (
+            <DropdownMenuRadioItem key={b.id} value={b.id} className="rounded-md text-[13px]">
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate">{b.name}</span>
+                <span className="text-[10px] font-medium uppercase tracking-wider text-slate-400">
+                  {b.code}
+                </span>
+              </span>
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -177,8 +233,6 @@ const NAV: NavEntry[] = [
   { to: "/tenant/students", label: "Students", icon: Users },
   { to: "/tenant/staff", label: "Staff", icon: UserCog },
   { to: "/tenant/finance", label: "Finance", icon: Wallet },
-  { to: "/tenant/notifications", label: "Notifications", icon: Bell },
-  { to: "/tenant/billing", label: "Billing", icon: Receipt },
   { to: "/tenant/settings", label: "Settings", icon: Settings },
 ];
 
@@ -190,8 +244,6 @@ function navAllowed(
   if (to.startsWith("/tenant/students")) return sessionHasPermission(session, "students");
   if (to.startsWith("/tenant/staff")) return sessionHasPermission(session, "staff");
   if (to.startsWith("/tenant/finance")) return sessionHasAnyFinance(session);
-  if (to.startsWith("/tenant/notifications")) return true;
-  if (to.startsWith("/tenant/billing")) return sessionCanAccessSettingsTab(session, "billing");
   if (to.startsWith("/tenant/settings")) return sessionCanAccessSettings(session);
   return true;
 }
@@ -214,7 +266,7 @@ export function TenantMacDock({
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { session } = useAuth();
-  const { themeSettings, schoolDetails } = useTenantStore();
+  const { themeSettings, schoolDetails, activeBranch, branches } = useTenantStore();
   const placement = placementProp ?? themeSettings.navPlacement ?? "Left";
   const tenantName = schoolDetails.name || session?.tenantName || "Silver Hills Global";
   const logoUrl = resolveMediaUrl(schoolDetails.logoUrl);
@@ -337,7 +389,7 @@ export function TenantMacDock({
                 {tenantName}
               </div>
               <div className="mt-0.5 text-[9px] font-medium uppercase tracking-wider text-slate-400 xl:text-[10px] dark:text-zinc-500">
-                Tenant
+                {branches.length > 1 ? activeBranch?.name ?? "Campus" : "Tenant"}
               </div>
             </div>
           )}
@@ -512,6 +564,15 @@ export function TenantDesktopTopBar() {
   const [pendingLogout, setPendingLogout] = useState(false);
   const [addYearOpen, setAddYearOpen] = useState(false);
   const [yearDraft, setYearDraft] = useState("");
+  const [addMonthKey, setAddMonthKey] = useState(() =>
+    suggestNextBooksMonthKey(academicYear, academicYears),
+  );
+
+  const resetYearDraft = () => {
+    const next = suggestNextBooksMonthKey(academicYear, academicYears);
+    setAddMonthKey(next);
+    setYearDraft(monthKeyToBooksYearLabel(next) ?? "");
+  };
   const unreadCount = notifications.filter((n) => !n.read).length;
   const tenantName = schoolDetails.name || session?.tenantName || "Silver Hills Global";
   const selectableYears = useMemo(
@@ -529,10 +590,10 @@ export function TenantDesktopTopBar() {
 
   const submitNewYear = (e: FormEvent) => {
     e.preventDefault();
-    const label = normalizeAcademicYearLabel(yearDraft);
+    const label = resolveFinancialYearInput(yearDraft, addMonthKey);
     if (!label) {
-      toast.error("Use format 2026-27", {
-        description: "Financial years must look like AY 2026-27",
+      toast.error("Choose a start month and year", {
+        description: "Or type a label such as 2026 June or 2026-27",
       });
       return;
     }
@@ -544,7 +605,7 @@ export function TenantDesktopTopBar() {
     toast.success(`Opened books for ${label}`, {
       description: "Fee periods cloned from the previous year · ready to enroll students",
     });
-    setYearDraft("");
+    resetYearDraft();
     setAddYearOpen(false);
   };
 
@@ -580,6 +641,7 @@ export function TenantDesktopTopBar() {
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
+          <BranchSwitcher />
           {!hydrated || !academicYear ? (
             <Skeleton
               aria-label="Loading academic year"
@@ -644,7 +706,7 @@ export function TenantDesktopTopBar() {
               <DropdownMenuItem
                 className="rounded-md text-[13px]"
                 onSelect={() => {
-                  setYearDraft("");
+                  resetYearDraft();
                   setAddYearOpen(true);
                 }}
               >
@@ -693,31 +755,35 @@ export function TenantDesktopTopBar() {
         open={addYearOpen}
         onOpenChange={(open) => {
           setAddYearOpen(open);
-          if (!open) setYearDraft("");
+          if (!open) resetYearDraft();
         }}
       >
-        <DialogContent className="max-w-sm rounded-xl border border-white/60 bg-white/90 p-6 backdrop-blur-xl">
+        <DialogContent
+          className="max-w-md rounded-xl border border-white/60 bg-white/90 p-6 backdrop-blur-xl"
+          onPointerDownOutside={(e) => {
+            const target = e.target as HTMLElement | null;
+            if (target?.closest("[data-radix-popper-content-wrapper]")) e.preventDefault();
+          }}
+          onInteractOutside={(e) => {
+            const target = e.target as HTMLElement | null;
+            if (target?.closest("[data-radix-popper-content-wrapper]")) e.preventDefault();
+          }}
+        >
           <DialogHeader>
             <DialogTitle className="text-[22px] font-semibold text-slate-900">
               Add Academic Year
             </DialogTitle>
             <DialogDescription className="mt-1 text-[13px] leading-relaxed text-slate-500">
-              Enter a year range such as 2027-28. It will be normalized to AY format and set active.
+              Choose the books start month and year, or type a label such as 2027 June or 2027-28.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={submitNewYear} className="mt-4 space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="header-academic-year" className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                Academic Year
-              </Label>
-              <Input
-                id="header-academic-year"
-                value={yearDraft}
-                onChange={(e) => setYearDraft(e.target.value)}
-                placeholder="e.g. 2027-28"
-                autoFocus
-              />
-            </div>
+            <FinancialYearFields
+              monthKey={addMonthKey}
+              typedValue={yearDraft}
+              onMonthKeyChange={setAddMonthKey}
+              onTypedChange={setYearDraft}
+            />
             <DialogFooter className="flex-row justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setAddYearOpen(false)}>
                 Cancel

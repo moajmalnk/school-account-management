@@ -101,6 +101,7 @@ export type ImageCropDialogProps = {
   aspect?: number;
   /** Square output edge when aspect === 1. */
   outputSize?: number;
+  outputMime?: "image/jpeg" | "image/png";
   confirmLabel?: string;
   onOpenChange: (open: boolean) => void;
   onConfirm: (dataUrl: string) => void;
@@ -115,6 +116,7 @@ export function ImageCropDialog({
   description = "Drag to reposition, then zoom and confirm.",
   aspect = 1,
   outputSize = 512,
+  outputMime = "image/jpeg",
   onOpenChange,
   onConfirm,
   onRetake,
@@ -142,8 +144,8 @@ export function ImageCropDialog({
     try {
       const dataUrl =
         aspect === 1
-          ? await createCroppedImage(imageSrc, croppedAreaPixels, outputSize)
-          : await createCroppedImageFree(imageSrc, croppedAreaPixels, outputSize);
+          ? await createCroppedImage(imageSrc, croppedAreaPixels, outputSize, outputMime)
+          : await createCroppedImageFree(imageSrc, croppedAreaPixels, outputSize, outputMime);
       onConfirm(dataUrl);
       onOpenChange(false);
     } catch (err) {

@@ -71,6 +71,7 @@ import {
   STAFF_PROFILE_TABS,
   type ProfileDetailTabId,
 } from "@/components/school/ProfileDetailTabs";
+import { formatEventDateTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 
 const CARD_FRAME =
@@ -1553,7 +1554,7 @@ export function StaffProfileDetail({
                       ₹ {lastSalaryPayment.amount.toLocaleString("en-IN")}
                     </div>
                     <div className="font-mono text-[11px] text-black/45">
-                      {lastSalaryPayment.paidAt} · {lastSalaryPayment.mode}
+                      {formatEventDateTime(lastSalaryPayment.paidAt)} · {lastSalaryPayment.mode}
                     </div>
                   </div>
                 </div>
@@ -1788,7 +1789,7 @@ export function StaffProfileDetail({
                         return (
                           <tr key={row.id} className="border-b border-slate-50 last:border-0">
                             <td className="px-3 py-3 font-mono text-[11px] text-black/60 dark:text-zinc-400">
-                              {row.paidAt}
+                              {formatEventDateTime(row.paidAt)}
                             </td>
                             <td className="px-3 py-3 text-black/70">
                               {month ? formatPayrollMonthLabel(month) : "—"}
@@ -2511,7 +2512,7 @@ function SalaryPaymentCard({ row }: { row: StaffSalaryHistoryEntry }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="font-mono text-[11px] text-black/50 dark:text-zinc-400">
-            {row.paidAt}
+            {formatEventDateTime(row.paidAt)}
             {month ? ` · ${formatPayrollMonthLabel(month)}` : ""}
           </div>
           <p className="mt-1 text-[13px] font-medium leading-snug text-black dark:text-zinc-100">

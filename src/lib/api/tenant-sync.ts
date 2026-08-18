@@ -6,6 +6,7 @@ import {
   isUnauthorizedNotified,
 } from "@/lib/api/client";
 import {
+  SEED_BRANCHES,
   SEED_CLASSES,
   SEED_DEPARTMENTS,
   SEED_FEE_TERMS,
@@ -19,6 +20,7 @@ import {
   SEED_THEME_SETTINGS,
   SEED_TRANSPORT,
   SEED_VEHICLES,
+  type CampusBranch,
   type ClassConfig,
   type Department,
   type FeeTerm,
@@ -33,11 +35,13 @@ import {
   type ThemeSettings,
   type TransportRoute,
   type TransportVehicle,
+  normalizeCampusBranch,
 } from "@/lib/tenant-store";
 import {
   buildLedgerFromStudents,
   type StudentYearLedger,
 } from "@/lib/academic-year";
+import { readStoredBranchPublicId, setActiveBranchPublicId } from "@/lib/branch-context";
 
 export type RemoteTenantBundle = {
   students: Student[];
@@ -59,6 +63,8 @@ export type RemoteTenantBundle = {
   closedAcademicYears: string[];
   dashboardTodos: string[];
   dashboardNote: string;
+  branches: CampusBranch[];
+  activeBranchId: string;
   /** Year enrollments are client-scoped today; API returns [] so local ledgers can win. */
   studentYearLedgers: StudentYearLedger[];
 };
@@ -106,7 +112,18 @@ async function getSafe<T>(path: string, fallback: T): Promise<T> {
 
 /** Dedupe concurrent hydrates (React Strict Mode mounts twice in dev). */
 let inflightBundle: Promise<RemoteTenantBundle | null> | null = null;
-let inflightToken: string | null = null;
+let inflightKey: string | null = null;
+
+function pickActiveBranchId(
+  branches: CampusBranch[],
+  serverActive: string | null | undefined,
+  tenantId?: string,
+): string {
+  const stored = readStoredBranchPublicId(tenantId);
+  if (stored && branches.some((b) => b.id === stored)) return stored;
+  if (serverActive && branches.some((b) => b.id === serverActive)) return serverActive;
+  return branches[0]?.id ?? "";
+}
 
 /**
  * Load tenant workspace data from production API when a JWT is present.
@@ -117,16 +134,55 @@ let inflightToken: string | null = null;
  */
 export async function fetchRemoteTenantBundle(
   signal?: AbortSignal,
+  options?: { force?: boolean; tenantId?: string },
 ): Promise<RemoteTenantBundle | null> {
   const token = getApiToken();
   if (!token) return null;
-  if (inflightBundle && inflightToken === token) return inflightBundle;
+  const cacheKey = `${token}|${options?.force ? Date.now() : "hydrate"}`;
+  if (!options?.force && inflightBundle && inflightKey === token) return inflightBundle;
 
-  inflightToken = token;
+  inflightKey = token;
   inflightBundle = (async (): Promise<RemoteTenantBundle | null> => {
     void signal;
+    void cacheKey;
 
     try {
+    const school = await getSafe<{
+      schoolDetails: SchoolDetails;
+      themeSettings: ThemeSettings;
+      academicYear: string;
+      academicYears: string[];
+      closedAcademicYears?: string[];
+      activeBranchId?: string;
+      branches?: unknown[];
+    } | null>("/api/settings/school.php", null);
+
+    const fromSchool = Array.isArray(school?.branches)
+      ? school!.branches.map(normalizeCampusBranch).filter((b): b is CampusBranch => Boolean(b))
+      : [];
+    const listed =
+      fromSchool.length > 0
+        ? fromSchool
+        : (await getSafe<{ branches?: unknown[]; activeBranchId?: string }>(
+            "/api/settings/branches.php",
+            { branches: [] },
+          )).branches?.map(normalizeCampusBranch).filter((b): b is CampusBranch => Boolean(b)) ?? [];
+    const branches = listed.length ? listed : [];
+    const activeBranchId = pickActiveBranchId(
+      branches,
+      school?.activeBranchId ?? null,
+      options?.tenantId,
+    );
+    if (activeBranchId) setActiveBranchPublicId(activeBranchId);
+
+    const academicYear = school?.academicYear ?? "AY 2025-26";
+    const academicYears = school?.academicYears?.length
+      ? school.academicYears
+      : ["AY 2024-25", "AY 2025-26", "AY 2026-27"];
+    const closedAcademicYears = Array.isArray(school?.closedAcademicYears)
+      ? school.closedAcademicYears.filter((y) => typeof y === "string" && y.trim())
+      : [];
+
     // Sequential on purpose — do not Promise.all these on shared hosting.
     const students = await getSafe<Student[]>(
       "/api/students/list.php?includeDeleted=1",
@@ -143,28 +199,11 @@ export async function fetchRemoteTenantBundle(
       "/api/settings/classes.php",
       [],
     );
-    const school = await getSafe<{
-      schoolDetails: SchoolDetails;
-      themeSettings: ThemeSettings;
-      academicYear: string;
-      academicYears: string[];
-      closedAcademicYears?: string[];
-    } | null>("/api/settings/school.php", null);
 
-    const academicYear = school?.academicYear ?? "AY 2025-26";
-    const academicYears = school?.academicYears?.length
-      ? school.academicYears
-      : ["AY 2024-25", "AY 2025-26", "AY 2026-27"];
-    const closedAcademicYears = Array.isArray(school?.closedAcademicYears)
-      ? school.closedAcademicYears.filter((y) => typeof y === "string" && y.trim())
-      : [];
-
-    // Fees GET auto-seeds missing term/month defaults for the tenant's academic years.
     const feeTerms = await getSafe<FeeTerm[]>(
       `/api/settings/fees.php?academicYear=${encodeURIComponent(academicYear)}`,
       [],
     );
-    // Re-fetch unfiltered so year-switching still has every AY's periods in memory.
     const allFeeTerms =
       feeTerms.length > 0
         ? await getSafe<FeeTerm[]>("/api/settings/fees.php", feeTerms)
@@ -201,7 +240,7 @@ export async function fetchRemoteTenantBundle(
       transportRoutes: routes,
       transportVehicles: vehicles,
       paymentCategories,
-      feeTerms,
+      feeTerms: allFeeTerms,
       tenantUsers: users,
       notifications,
       schoolDetails: school?.schoolDetails ?? { ...EMPTY_SCHOOL_DETAILS },
@@ -209,13 +248,12 @@ export async function fetchRemoteTenantBundle(
       academicYear,
       academicYears,
       closedAcademicYears,
-      // Prefer live API payload (including empty strings) — do not replace with seed copy.
       dashboardTodos: Array.isArray(todos?.dashboardTodos)
         ? todos.dashboardTodos
         : ["", "", "", "", ""],
       dashboardNote: typeof todos?.dashboardNote === "string" ? todos.dashboardNote : "",
-      // Do not invent enrollments from the flat student list — that puts every
-      // student into the active year and wipes other AY books on hard refresh.
+      branches,
+      activeBranchId,
       studentYearLedgers: [],
     };
     } catch (err) {
@@ -223,9 +261,9 @@ export async function fetchRemoteTenantBundle(
       throw err;
     }
   })().finally(() => {
-    if (inflightToken === token) {
+    if (inflightKey === token) {
       inflightBundle = null;
-      inflightToken = null;
+      inflightKey = null;
     }
   });
 
@@ -255,6 +293,8 @@ export function seedTenantBundle(): RemoteTenantBundle {
     closedAcademicYears: [],
     dashboardTodos: ["", "", "", "", ""],
     dashboardNote: "",
+    branches: [...SEED_BRANCHES],
+    activeBranchId: SEED_BRANCHES[0]?.id ?? "",
     studentYearLedgers: [buildLedgerFromStudents(SEED_STUDENTS, academicYear)],
   };
 }

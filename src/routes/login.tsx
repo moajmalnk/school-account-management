@@ -30,8 +30,14 @@ function LoginPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const reason = new URLSearchParams(window.location.search).get("reason");
-    if (reason === "session_expired") {
-      toast.error("Session expired — please sign in again");
+    if (reason === "inactive") {
+      toast.message("Signed out after 14 days without use", {
+        description: "Sign in again to continue on this browser.",
+      });
+    } else if (reason === "session_expired") {
+      toast.error("Please sign in again to continue");
+    }
+    if (reason === "inactive" || reason === "session_expired") {
       const url = new URL(window.location.href);
       url.searchParams.delete("reason");
       url.searchParams.delete("from");

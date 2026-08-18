@@ -8,7 +8,7 @@ import tsConfigPaths from "vite-tsconfig-paths";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const apiProxyTarget = (
-    env.VITE_API_PROXY_TARGET?.trim() || "https://spi.macadz.com"
+    env.VITE_API_BASE_URL?.trim() || "https://spi.macadz.com"
   ).replace(/\/$/, "");
   const apiProxySecure = apiProxyTarget.startsWith("https://");
 
@@ -24,10 +24,8 @@ export default defineConfig(({ mode }) => {
         secure: true,
         rewrite: (path) => path.replace(/^\/api\/bugricer-whatsapp/, "/wapp/api"),
       },
-      // Same-origin API in DEV — avoids browser CORS + SW cross-origin issues.
-      // Default: production Hostinger API. Override in .env.local:
-      //   VITE_API_PROXY_TARGET=http://127.0.0.1:8090
-      // then run `npm run dev:api` (requires local MySQL — see README / setup:db).
+      // Leftover same-origin /api calls (e.g. WhatsApp proxy sibling) still
+      // forward to the production Hostinger API — never local PHP.
       "/api": {
         target: apiProxyTarget,
         changeOrigin: true,

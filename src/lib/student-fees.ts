@@ -1,4 +1,5 @@
 import { filterByAcademicYear } from "@/lib/academic-year";
+import { formatEventDate } from "@/lib/dates";
 import {
   categoryFeeTermKind,
   resolvePaymentFeePeriod,
@@ -44,22 +45,7 @@ function normalizeName(value: string) {
 }
 
 function formatDisplayDate(isoOrLabel?: string): string {
-  if (!isoOrLabel?.trim()) return "—";
-  const raw = isoOrLabel.trim();
-  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
-    const d = new Date(raw.slice(0, 10) + "T12:00:00");
-    if (!Number.isNaN(d.getTime())) {
-      return d.toLocaleDateString("en-IN", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "2-digit",
-      });
-    }
-  }
-  // Payment stamps like "Today · 10:22" / "12 Mar 2025"
-  if (raw.toLowerCase().startsWith("today")) return "Today";
-  if (raw.toLowerCase().startsWith("yesterday")) return "Yesterday";
-  return raw;
+  return formatEventDate(isoOrLabel);
 }
 
 function isPastDue(dueIsoOrLabel: string, now = new Date()): boolean {

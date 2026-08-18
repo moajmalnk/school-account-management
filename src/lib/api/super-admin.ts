@@ -32,6 +32,7 @@ export type SuperAdminPlanFlags = {
   payroll: boolean;
   autoFeeCollection: boolean;
   whatsapp: boolean;
+  branches: boolean;
 };
 
 export type SuperAdminPlan = {

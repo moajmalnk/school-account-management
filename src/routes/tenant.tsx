@@ -4,6 +4,7 @@ import { useEffect } from "react";
 
 import {
   AcademicYearBooksFade,
+  BranchSwitcher,
   TenantDesktopTopBar,
   TenantMacDock,
   ThemeModeToggle,
@@ -209,7 +210,7 @@ function ImpersonationBanner() {
 function TenantMobileHeader() {
   const { session } = useAuth();
   const navigate = useNavigate();
-  const { notifications, schoolDetails } = useTenantStore();
+  const { notifications, schoolDetails, activeBranch, branches } = useTenantStore();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { showBack, goBack, backLabel } = useWorkspaceSubViewBack();
   const onNotifications = pathname.startsWith("/tenant/notifications");
@@ -218,7 +219,7 @@ function TenantMobileHeader() {
     "/tenant/students": "STUDENTS",
     "/tenant/staff": "STAFF",
     "/tenant/finance": "FINANCE",
-    "/tenant/billing": "BILLING",
+    "/tenant/billing": "SUBSCRIPTION",
     "/tenant/settings": "SETTINGS",
   };
   const activeKey = Object.keys(NAV_LABELS).find((k) => pathname.startsWith(k));
@@ -262,7 +263,13 @@ function TenantMobileHeader() {
           <div className="truncate text-[11px] font-bold uppercase leading-tight tracking-[0.04em] text-slate-900 dark:text-zinc-100">
             {tenantLabel} - {sectionLabel}
           </div>
+          {branches.length > 1 && activeBranch?.name ? (
+            <div className="truncate text-[10px] font-medium text-slate-500 dark:text-zinc-400">
+              {activeBranch.name}
+            </div>
+          ) : null}
         </div>
+        <BranchSwitcher compact />
         <ThemeModeToggle className="rounded-full border border-white/80 bg-white/70 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-200" />
         <button
           type="button"

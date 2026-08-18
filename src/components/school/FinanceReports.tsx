@@ -36,12 +36,15 @@ import { OrganicCard } from "@/components/ui/organic-card";
 import {
   expenseSegmentsFromDisbursements,
   isSalaryDisbursement,
+  normalizePayeeType,
   queuedPayables,
   totalAccountsPayable,
   totalOperatingExpense,
   type FinanceDisbursement,
 } from "@/lib/dashboard-finance";
+import { formatEventDate, formatEventDateTime } from "@/lib/dates";
 import { downloadCsv, downloadTablePdf } from "@/lib/finance-export";
+import { formatDownloadFilename, slugYear, todayStamp } from "@/lib/download-names";
 import { useDisbursements } from "@/lib/use-disbursements";
 import { useTenantStore, resolvePaymentFeePeriod, currentPayrollMonth, formatPayrollMonthLabel, staffPayableSalary, salaryHistoryPayrollMonth, isSalaryMonthSettled, type Payment, type Student } from "@/lib/tenant-store";
 import { cn } from "@/lib/utils";
@@ -60,21 +63,26 @@ function inr(n: number) {
   return `₹ ${n.toLocaleString("en-IN")}`;
 }
 
+function reportDownloadName(
+  report: string,
+  ext: "pdf" | "csv",
+  schoolName: string,
+  academicYear: string,
+  extra?: { name?: string; id?: string },
+) {
+  return formatDownloadFilename("reports", ext, {
+    report,
+    school: schoolName,
+    year: slugYear(academicYear),
+    date: todayStamp(),
+    name: extra?.name,
+    id: extra?.id,
+  });
+}
+
 /** Normalize payment/disbursement timestamps for ledger display. */
 function formatLedgerDate(raw: string | undefined | null): string {
-  const value = (raw ?? "").trim();
-  if (!value) return "—";
-  if (/^0{4}-0{2}-0{2}/.test(value) || value.startsWith("0000-00-00")) return "—";
-  if (value.includes("·")) return value.split("·")[0].trim() || "—";
-  // Keep human labels like "Today" / "Yesterday"
-  if (!/^\d{4}-\d{2}-\d{2}/.test(value)) return value;
-  const parsed = Date.parse(value.replace(" ", "T"));
-  if (!Number.isFinite(parsed)) return value;
-  return new Date(parsed).toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return formatEventDate(raw);
 }
 
 function buildLedgerRows(payments: Payment[], disbursements: FinanceDisbursement[]): LedgerRow[] {
@@ -84,7 +92,7 @@ function buildLedgerRows(payments: Payment[], disbursements: FinanceDisbursement
       date: formatLedgerDate(e.time),
       voucher: e.id || "",
       particulars: `${e.payee}${e.desc ? ` · ${e.desc}` : ""}`,
-      account: e.payeeType || "Expense",
+      account: e.payeeType ? normalizePayeeType(e.payeeType) : "Expense",
       debit: e.amount,
       credit: 0,
     }));
@@ -561,7 +569,7 @@ export function GeneralLedgerReport() {
 
   const handleCsv = () => {
     downloadCsv(
-      `general-ledger-${academicYear.replace(/\s+/g, "-").toLowerCase()}.csv`,
+      reportDownloadName("general-ledger", "csv", schoolName, academicYear),
       headers,
       filteredRows.map((r) => [
         r.date,
@@ -578,7 +586,7 @@ export function GeneralLedgerReport() {
 
   const handlePdf = () => {
     downloadTablePdf({
-      filename: `general-ledger-${academicYear.replace(/\s+/g, "-").toLowerCase()}.pdf`,
+      filename: reportDownloadName("general-ledger", "pdf", schoolName, academicYear),
       title: "General Ledger",
       subtitle: exportMeta,
       headers,
@@ -714,7 +722,7 @@ export function ProfitLossReport() {
   const exportMeta = `${schoolName} · ${academicYear} · Profit & Loss`;
 
   const handleCsv = () => {
-    downloadCsv(`profit-loss-${academicYear.replace(/\s+/g, "-").toLowerCase()}.csv`, headers, [
+    downloadCsv(reportDownloadName("profit-loss", "csv", schoolName, academicYear), headers, [
       ...incomeByCategory.map((i) => [i.label, "Income", i.amount]),
       ...expenseSegments.map((e) => [e.label, "Expense", e.value]),
       ["Net Surplus / (Deficit)", "Result", netProfit],
@@ -724,7 +732,7 @@ export function ProfitLossReport() {
 
   const handlePdf = () => {
     downloadTablePdf({
-      filename: `profit-loss-${academicYear.replace(/\s+/g, "-").toLowerCase()}.pdf`,
+      filename: reportDownloadName("profit-loss", "pdf", schoolName, academicYear),
       title: "Profit & Loss Account",
       subtitle: exportMeta,
       headers,
@@ -855,7 +863,7 @@ export function BalanceSheetReport() {
   const exportMeta = `${schoolName} · ${academicYear} · Balance Sheet`;
 
   const handleCsv = () => {
-    downloadCsv(`balance-sheet-${academicYear.replace(/\s+/g, "-").toLowerCase()}.csv`, headers, [
+    downloadCsv(reportDownloadName("balance-sheet", "csv", schoolName, academicYear), headers, [
       ["Cash in Hand", cashOnHand],
       ["Bank & UPI", bankBalance],
       ["Accounts Receivable", receivables],
@@ -869,7 +877,7 @@ export function BalanceSheetReport() {
 
   const handlePdf = () => {
     downloadTablePdf({
-      filename: `balance-sheet-${academicYear.replace(/\s+/g, "-").toLowerCase()}.pdf`,
+      filename: reportDownloadName("balance-sheet", "pdf", schoolName, academicYear),
       title: "Balance Sheet",
       subtitle: exportMeta,
       headers,
@@ -1090,6 +1098,7 @@ export function FeesReport() {
         resolvePaymentFeePeriod(p) ?? "",
         p.mode,
         p.time,
+        formatEventDateTime(p.time),
         p.narration ?? "",
         String(p.amount),
         p.amount.toLocaleString("en-IN"),
@@ -1146,7 +1155,7 @@ export function FeesReport() {
     resolvePaymentFeePeriod(p) ?? "—",
     p.mode,
     inr(p.amount),
-    p.time,
+    formatEventDateTime(p.time),
   ]);
 
   const outstandingRows = filteredDues.map((s) => [
@@ -1171,7 +1180,7 @@ export function FeesReport() {
 
   const handleCsv = () => {
     downloadCsv(
-      `fees-report-${academicYear.replace(/\s+/g, "-").toLowerCase()}.csv`,
+      reportDownloadName("fees-report", "csv", schoolName, academicYear),
       ["Receipt", "Student", "Class", "Category", "Fee Period", "Mode", "Amount", "Time"],
       filteredCollections.map((p) => [
         p.id,
@@ -1181,7 +1190,7 @@ export function FeesReport() {
         resolvePaymentFeePeriod(p) ?? "",
         p.mode,
         p.amount,
-        p.time,
+        formatEventDateTime(p.time),
       ]),
     );
     toast.success("Fees report exported", { description: "CSV download started" });
@@ -1189,7 +1198,7 @@ export function FeesReport() {
 
   const handlePdf = () => {
     downloadTablePdf({
-      filename: `fees-report-${academicYear.replace(/\s+/g, "-").toLowerCase()}.pdf`,
+      filename: reportDownloadName("fees-report", "pdf", schoolName, academicYear),
       title: "Fees Report",
       subtitle: `${schoolName} · ${academicYear}`,
       headers: ["Receipt", "Student", "Class", "Category", "Period", "Mode", "Amount", "Time"],
@@ -1201,7 +1210,7 @@ export function FeesReport() {
         resolvePaymentFeePeriod(p) ?? "—",
         p.mode,
         p.amount.toLocaleString("en-IN"),
-        p.time,
+        formatEventDateTime(p.time),
       ]),
       footer: `Collected ${inr(collected)} · Outstanding ${inr(outstanding)}`,
     });
@@ -1511,7 +1520,7 @@ export function SalaryReport() {
 
   const payableRows = filteredPayables.map((item) => [item.payee, inr(item.amount)]);
   const historyRows = recentSalaryHistory.map((row) => [
-    row.paidAt,
+    formatEventDateTime(row.paidAt),
     row.staffName,
     row.month ? formatPayrollMonthLabel(row.month) : "—",
     row.mode,
@@ -1539,7 +1548,7 @@ export function SalaryReport() {
 
   const handleCsv = () => {
     downloadCsv(
-      `salary-report-${payrollMonth}-${academicYear.replace(/\s+/g, "-").toLowerCase()}.csv`,
+      reportDownloadName("salary-report", "csv", schoolName, academicYear, { name: payrollMonth }),
       [
         "Staff ID",
         "Name",
@@ -1572,7 +1581,7 @@ export function SalaryReport() {
 
   const handlePdf = () => {
     downloadTablePdf({
-      filename: `salary-report-${payrollMonth}-${academicYear.replace(/\s+/g, "-").toLowerCase()}.pdf`,
+      filename: reportDownloadName("salary-report", "pdf", schoolName, academicYear, { name: payrollMonth }),
       title: `Salary Report · ${payrollMonthLabel}`,
       subtitle: `${schoolName} · ${academicYear} · ${payrollMonth}`,
       headers: ["ID", "Name", "Role", "Dept", "Attn", "Basic", "Allow.", "Gross", "Payable", "Status"],
@@ -1928,7 +1937,7 @@ export function DayBookReport() {
   const entries = useMemo<DayBookEntry[]>(() => {
     const receipts: DayBookEntry[] = payments.map((p) => ({
       id: p.id,
-      time: p.time,
+      time: formatEventDateTime(p.time),
       particular: p.name,
       account: p.cat,
       mode: p.mode,
@@ -1941,9 +1950,9 @@ export function DayBookReport() {
       .filter((d) => (d.status || "Cleared") !== "Queued")
       .map((e) => ({
         id: e.id || "",
-        time: e.time || "",
+        time: formatEventDateTime(e.time),
         particular: e.payee,
-        account: e.payeeType || "Expense",
+        account: e.payeeType ? normalizePayeeType(e.payeeType) : "Expense",
         mode: e.mode || "Bank",
         type: "Payment" as const,
         amount: e.amount,
@@ -2008,7 +2017,7 @@ export function DayBookReport() {
 
   const handleCsv = () => {
     downloadCsv(
-      `day-book-${academicYear.replace(/\s+/g, "-").toLowerCase()}.csv`,
+      reportDownloadName("day-book", "csv", schoolName, academicYear),
       ["Voucher", "Date/Time", "Particulars", "Account", "Mode", "Type", "Receipt", "Payment", "Narration"],
       filtered.map((e) => [
         e.id,
@@ -2027,7 +2036,7 @@ export function DayBookReport() {
 
   const handlePdf = () => {
     downloadTablePdf({
-      filename: `day-book-${academicYear.replace(/\s+/g, "-").toLowerCase()}.pdf`,
+      filename: reportDownloadName("day-book", "pdf", schoolName, academicYear),
       title: "Day Book",
       subtitle: `${schoolName} · ${academicYear}`,
       headers: ["Voucher", "Date/Time", "Particulars", "Account", "Mode", "Type", "Receipt", "Payment"],
@@ -2175,7 +2184,7 @@ export function BankReconciliationReport() {
         .filter((p) => p.mode !== "Cash")
         .map((p) => ({
           id: p.id,
-          time: p.time,
+          time: formatEventDateTime(p.time),
           name: p.name,
           cat: p.cat,
           mode: p.mode,
@@ -2247,7 +2256,7 @@ export function BankReconciliationReport() {
 
   const handleCsv = () => {
     downloadCsv(
-      `bank-reconciliation-${academicYear.replace(/\s+/g, "-").toLowerCase()}.csv`,
+      reportDownloadName("bank-reconciliation", "csv", schoolName, academicYear),
       ["Voucher", "Date/Time", "Account", "Category", "Mode", "Amount (INR)", "Status"],
       bankTxns.map((t) => [
         t.id,
@@ -2264,7 +2273,7 @@ export function BankReconciliationReport() {
 
   const handlePdf = () => {
     downloadTablePdf({
-      filename: `bank-reconciliation-${academicYear.replace(/\s+/g, "-").toLowerCase()}.pdf`,
+      filename: reportDownloadName("bank-reconciliation", "pdf", schoolName, academicYear),
       title: "Bank Reconciliation Statement",
       subtitle: `${schoolName} · ${academicYear}`,
       headers: ["Voucher", "Date/Time", "Account", "Mode", "Amount", "Status"],

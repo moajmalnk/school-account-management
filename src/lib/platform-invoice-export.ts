@@ -1,6 +1,8 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
+import { formatDownloadFilename, todayStamp } from "@/lib/download-names";
+
 export type PlatformInvoiceDoc = {
   id: string;
   invoiceNumber: string;
@@ -508,7 +510,14 @@ export function downloadPlatformInvoicePdf(
   invoice: PlatformInvoiceDoc,
   opts?: { schoolHost?: string },
 ) {
-  buildInvoiceDoc(invoice, opts).save(`${pdfSafe(invoice.invoiceNumber) || "invoice"}.pdf`);
+  buildInvoiceDoc(invoice, opts).save(
+    formatDownloadFilename("platformInvoice", "pdf", {
+      id: invoice.invoiceNumber || "invoice",
+      name: invoice.tenantName || undefined,
+      school: invoice.tenantName || undefined,
+      date: todayStamp(),
+    }),
+  );
 }
 
 export function downloadPlatformReceiptPdf(
@@ -516,5 +525,12 @@ export function downloadPlatformReceiptPdf(
   opts?: { schoolHost?: string },
 ) {
   const doc = buildReceiptDoc(invoice, opts);
-  doc.save(`${pdfSafe(invoice.receiptNumber || "receipt")}.pdf`);
+  doc.save(
+    formatDownloadFilename("platformReceipt", "pdf", {
+      id: invoice.receiptNumber || invoice.invoiceNumber || "receipt",
+      name: invoice.tenantName || undefined,
+      school: invoice.tenantName || undefined,
+      date: todayStamp(),
+    }),
+  );
 }

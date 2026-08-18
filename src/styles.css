@@ -938,3 +938,181 @@
 .dark [role="dialog"] .bg-\[\#F0FDFA\] .text-black {
   color: #fafafa !important;
 }
+
+/* School brand: remap hardcoded teal utilities to Settings → System colors.
+   Use [class~="token"] so `dark:bg-[#0F766E]` and `bg-[#0F766E]/12` are not
+   treated as a solid fill (that hid nav icons and status labels). */
+html.school-brand [class~="bg-[#0F766E]"],
+html.school-brand [class~="hover:bg-[#0F766E]"]:hover,
+html.school-brand [class~="data-[state=checked]:bg-[#0F766E]"][data-state="checked"] {
+  background-color: var(--school-primary) !important;
+}
+html.school-brand [class~="bg-[#0D9488]"],
+html.school-brand [class~="hover:bg-[#0D9488]"]:hover {
+  background-color: var(--school-secondary) !important;
+}
+html.school-brand [class~="bg-[#115E59]"] {
+  background-color: var(--school-primary-dark) !important;
+}
+html.school-brand [class~="bg-[#CCFBF1]"],
+html.school-brand [class~="hover:bg-[#CCFBF1]"]:hover,
+html.school-brand [class~="focus:bg-[#CCFBF1]"]:focus,
+html.school-brand [class~="data-[highlighted]:bg-[#CCFBF1]"][data-highlighted],
+html.school-brand [class~="data-[selected=true]:bg-[#CCFBF1]"][data-selected="true"] {
+  background-color: var(--school-primary-muted) !important;
+}
+html.school-brand [class~="bg-[#F0FDFA]"],
+html.school-brand [class~="hover:bg-[#F0FDFA]"]:hover {
+  background-color: var(--school-primary-soft) !important;
+}
+
+html.school-brand [class~="bg-[#0F766E]/10"] {
+  background-color: color-mix(in srgb, var(--school-primary) 10%, transparent) !important;
+}
+html.school-brand [class~="bg-[#0F766E]/12"] {
+  background-color: color-mix(in srgb, var(--school-primary) 12%, transparent) !important;
+}
+html.school-brand [class~="bg-[#0F766E]/15"] {
+  background-color: color-mix(in srgb, var(--school-primary) 15%, transparent) !important;
+}
+html.school-brand [class~="bg-[#0F766E]/20"] {
+  background-color: color-mix(in srgb, var(--school-primary) 20%, transparent) !important;
+}
+html.school-brand [class~="bg-[#0F766E]/25"] {
+  background-color: color-mix(in srgb, var(--school-primary) 25%, transparent) !important;
+}
+html.school-brand [class~="bg-[#0F766E]/60"] {
+  background-color: color-mix(in srgb, var(--school-primary) 60%, transparent) !important;
+}
+html.school-brand [class~="bg-[#CCFBF1]/25"] {
+  background-color: color-mix(in srgb, var(--school-primary-muted) 25%, transparent) !important;
+}
+html.school-brand [class~="bg-[#CCFBF1]/40"] {
+  background-color: color-mix(in srgb, var(--school-primary-muted) 40%, transparent) !important;
+}
+html.school-brand [class~="bg-[#CCFBF1]/50"] {
+  background-color: color-mix(in srgb, var(--school-primary-muted) 50%, transparent) !important;
+}
+html.school-brand [class~="bg-[#CCFBF1]/70"] {
+  background-color: color-mix(in srgb, var(--school-primary-muted) 70%, transparent) !important;
+}
+html.school-brand [class~="bg-[#CCFBF1]/80"] {
+  background-color: color-mix(in srgb, var(--school-primary-muted) 80%, transparent) !important;
+}
+html.school-brand [class~="hover:bg-[#CCFBF1]/50"]:hover {
+  background-color: color-mix(in srgb, var(--school-primary-muted) 50%, transparent) !important;
+}
+html.school-brand [class~="bg-[#F0FDFA]/70"] {
+  background-color: color-mix(in srgb, var(--school-primary-soft) 70%, transparent) !important;
+}
+
+html.dark.school-brand [class~="dark:bg-[#0F766E]"] {
+  background-color: var(--school-primary) !important;
+}
+html.dark.school-brand [class~="dark:bg-[#0F766E]/15"] {
+  background-color: color-mix(in srgb, var(--school-primary) 15%, transparent) !important;
+}
+html.dark.school-brand [class~="dark:bg-[#0F766E]/20"] {
+  background-color: color-mix(in srgb, var(--school-primary) 20%, transparent) !important;
+}
+html.dark.school-brand [class~="dark:bg-[#0F766E]/25"] {
+  background-color: color-mix(in srgb, var(--school-primary) 25%, transparent) !important;
+}
+html.dark.school-brand [class~="dark:bg-[#0F766E]/30"] {
+  background-color: color-mix(in srgb, var(--school-primary) 30%, transparent) !important;
+}
+html.dark.school-brand [class~="dark:bg-[#0F766E]/35"] {
+  background-color: color-mix(in srgb, var(--school-primary) 35%, transparent) !important;
+}
+html.dark.school-brand [class~="dark:bg-[#0F766E]/40"],
+html.dark.school-brand [class~="dark:focus:bg-[#0F766E]/40"]:focus,
+html.dark.school-brand [class~="dark:hover:bg-[#0F766E]/25"]:hover,
+html.dark.school-brand [class~="dark:data-[highlighted]:bg-[#0F766E]/40"][data-highlighted],
+html.dark.school-brand [class~="dark:data-[selected=true]:bg-[#0F766E]/40"][data-selected="true"] {
+  background-color: color-mix(in srgb, var(--school-primary) 40%, transparent) !important;
+}
+
+html.school-brand [class~="text-[#0F766E]"],
+html.school-brand [class~="text-[#0D9488]"],
+html.school-brand [class~="hover:text-[#0F766E]"]:hover {
+  color: var(--school-primary) !important;
+}
+html.school-brand [class~="border-[#0F766E]"],
+html.school-brand [class~="border-[#99F6E4]"],
+html.school-brand [class~="border-[#CCFBF1]"],
+html.school-brand [class~="border-[#5EEAD4]"] {
+  border-color: var(--school-primary-ring) !important;
+}
+html.school-brand [class~="hover:border-[#0F766E]/40"]:hover {
+  border-color: color-mix(in srgb, var(--school-primary) 40%, transparent) !important;
+}
+html.school-brand [class~="ring-[#0F766E]"],
+html.school-brand [class~="ring-[#99F6E4]"],
+html.school-brand [class~="ring-[#0F766E]/25"],
+html.school-brand [class~="ring-[#0F766E]/40"] {
+  --tw-ring-color: var(--school-primary);
+}
+html.school-brand [class~="from-[#0F766E]"],
+html.school-brand [class~="from-[#0D9488]"] {
+  --tw-gradient-from: var(--school-primary);
+  --tw-gradient-to: color-mix(in srgb, var(--school-primary) 0%, transparent);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+html.school-brand [class~="via-[#0D9488]"],
+html.school-brand [class~="via-[#0F766E]"],
+html.school-brand [class~="via-[#115E59]"] {
+  --tw-gradient-via: var(--school-secondary);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--school-secondary), var(--tw-gradient-to);
+}
+html.school-brand [class~="to-[#0F766E]"],
+html.school-brand [class~="to-[#115E59]"],
+html.school-brand [class~="to-[#0D9488]"] {
+  --tw-gradient-to: var(--school-secondary);
+}
+html.school-brand [class~="accent-[#0F766E]"] {
+  accent-color: var(--school-primary);
+}
+html.dark.school-brand [role="dialog"] [class~="bg-[#CCFBF1]"],
+html.dark.school-brand [role="dialog"] [class~="bg-[#F0FDFA]"] {
+  background-color: color-mix(in srgb, var(--school-primary) 40%, transparent) !important;
+}
+
+html.school-brand {
+  font-family: var(--school-font-stack, "Inter", ui-sans-serif, system-ui, sans-serif);
+  font-size: var(--school-font-size, 16px);
+}
+html.school-brand:not(.dark) {
+  color: var(--school-font, #0f172a);
+}
+html.school-brand:not(.dark) body,
+html.school-brand:not(.dark) .text-heading,
+html.school-brand:not(.dark) .text-title,
+html.school-brand:not(.dark) .text-black {
+  color: var(--school-font, #0f172a);
+}
+html.school-brand svg.lucide {
+  color: var(--school-icon, var(--school-primary));
+}
+html.school-brand [class~="text-white"] svg.lucide,
+html.school-brand [class~="bg-[#0F766E]"] svg.lucide,
+html.school-brand [class~="hover:text-white"]:hover svg.lucide,
+html.school-brand [class~="hover:bg-[#0F766E]"]:hover svg.lucide,
+html.school-brand.dark [class~="dark:text-white"] svg.lucide,
+html.school-brand.dark [class~="dark:bg-[#0F766E]"] svg.lucide,
+html.school-brand [class*="bg-gradient-to-"] svg.lucide,
+html.school-brand [role="dialog"] button svg.lucide {
+  color: currentColor;
+}
+html.school-brand [role="option"][data-state="checked"],
+html.school-brand [role="option"][data-highlighted],
+html.school-brand [cmdk-item][data-selected="true"],
+html.school-brand [data-slot="select-item"][data-state="checked"] {
+  background-color: var(--school-menu, var(--school-primary)) !important;
+  color: var(--school-menu-fg, #ffffff) !important;
+}
+html.school-brand [role="option"][data-state="checked"] svg.lucide,
+html.school-brand [role="option"][data-highlighted] svg.lucide,
+html.school-brand [cmdk-item][data-selected="true"] svg.lucide {
+  color: var(--school-menu-fg, #ffffff);
+}
+

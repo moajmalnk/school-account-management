@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import {
   CreditCard,
   LayoutDashboard,
+  LifeBuoy,
   Search,
   Users,
   type LucideIcon,
@@ -38,6 +39,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   overview: LayoutDashboard,
   tenants: Users,
   plans: CreditCard,
+  support: LifeBuoy,
 };
 
 function isMacPlatform() {

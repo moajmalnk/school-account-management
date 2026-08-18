@@ -5,15 +5,15 @@ import { useRequirePermission } from "@/hooks/useRequirePermission";
 
 export const SETTINGS_TABS = [
   "school",
+  "branches",
   "classes",
   "departments",
   "roles",
   "users",
   "vehicles",
   "transport",
-  "fees",
-  "billing",
   "system",
+  "support",
 ] as const;
 
 export type SettingsTab = (typeof SETTINGS_TABS)[number];

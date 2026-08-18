@@ -60,7 +60,7 @@ import {
   type StudentReceipt as Receipt,
 } from "@/lib/student-fees";
 import { ShareParentLinkDialog } from "@/components/school/ShareParentLinkDialog";
-import { downloadReceiptPdf } from "@/lib/finance-export";
+import { downloadReceiptPdf, receiptBrandingFromSchool } from "@/lib/finance-export";
 import { sendWhatsAppNotify, toNotifyWhatsAppNumber } from "@/lib/whatsapp-notify";
 import { apiDeleteStudent, apiUpsertStudent } from "@/lib/api/records";
 import { useAuth } from "@/lib/auth";
@@ -1871,25 +1871,23 @@ function ReceiptsList({
   const { schoolDetails } = useTenantStore();
   const [sendingId, setSendingId] = useState<string | null>(null);
 
-  const handleDownload = (r: Receipt) => {
+  const handleDownload = async (r: Receipt) => {
     try {
-      downloadReceiptPdf(
+      await downloadReceiptPdf(
         {
           id: r.id,
           name: student.name,
-          cat: r.cat ? `${r.cat}${r.period ? ` · ${r.period}` : ""}` : `Fee Payment · ${student.cls}`,
+          cat: r.cat || "Fee Payment",
           mode: r.mode,
           amount: r.amount,
           time: r.date,
+          className: student.cls,
+          feePeriod: r.period,
+          payerType: "student",
         },
         schoolName,
         academicYear,
-        {
-          letterheadUrl: schoolDetails.letterheadUrl,
-          address: schoolDetails.address,
-          phone: schoolDetails.phone,
-          email: schoolDetails.email,
-        },
+        receiptBrandingFromSchool(schoolDetails, student),
       );
       toast.success(`Receipt ${r.id} downloaded`, {
         description: `PDF saved · ${inr(r.amount)}`,
