@@ -1,71 +1,67 @@
 import { MonthPicker } from "@/components/ui/date-picker";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   academicYearCoverageCaption,
-  booksYearToMonthKey,
-  monthKeyToBooksYearLabel,
-  normalizeAcademicYearLabel,
-  parseBooksYearParts,
+  defaultClosingMonthKey,
+  formatBooksRangeLabel,
 } from "@/lib/academic-year";
 import { cn } from "@/lib/utils";
 
 export function FinancialYearFields({
-  monthKey,
-  typedValue,
-  onMonthKeyChange,
-  onTypedChange,
+  startMonthKey,
+  endMonthKey,
+  onStartMonthKeyChange,
+  onEndMonthKeyChange,
   className,
-  typedPlaceholder = "or type 2027-28 / 2027 June",
 }: {
-  monthKey: string;
-  typedValue: string;
-  onMonthKeyChange: (key: string) => void;
-  onTypedChange: (value: string) => void;
+  startMonthKey: string;
+  endMonthKey: string;
+  onStartMonthKeyChange: (key: string) => void;
+  onEndMonthKeyChange: (key: string) => void;
   className?: string;
-  typedPlaceholder?: string;
 }) {
-  const pickerLabel = monthKeyToBooksYearLabel(monthKey);
-  const preview = normalizeAcademicYearLabel(typedValue) ?? pickerLabel ?? "";
+  const preview = formatBooksRangeLabel(startMonthKey, endMonthKey);
   const caption = preview ? academicYearCoverageCaption(preview) : null;
+  const invalid = Boolean(startMonthKey && endMonthKey && endMonthKey < startMonthKey);
 
   return (
     <div className={cn("space-y-2", className)}>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <div className="min-w-0">
+      <div className="grid grid-cols-12 gap-2">
+        <div className="col-span-12 min-w-0 sm:col-span-6">
           <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-            Start month
+            Start month & year
           </Label>
           <MonthPicker
-            value={monthKey}
+            value={startMonthKey}
             onChange={(key) => {
-              onMonthKeyChange(key);
-              const next = monthKeyToBooksYearLabel(key);
-              if (next) onTypedChange(next);
+              const prevDefault = defaultClosingMonthKey(startMonthKey);
+              onStartMonthKeyChange(key);
+              if (!endMonthKey || endMonthKey === prevDefault || endMonthKey < key) {
+                onEndMonthKeyChange(defaultClosingMonthKey(key));
+              }
             }}
-            placeholder="Choose month & year"
+            placeholder="Start month"
             allowClear={false}
-            className="mt-1.5"
+            className="mt-1.5 h-9"
           />
         </div>
-        <div className="min-w-0">
+        <div className="col-span-12 min-w-0 sm:col-span-6">
           <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-            Label
+            Closing month & year
           </Label>
-          <Input
-            value={typedValue}
-            onChange={(e) => {
-              const value = e.target.value;
-              onTypedChange(value);
-              const parts = parseBooksYearParts(value);
-              if (parts) onMonthKeyChange(booksYearToMonthKey(parts.year, parts.month));
-            }}
-            placeholder={typedPlaceholder}
-            className="mt-1.5"
+          <MonthPicker
+            value={endMonthKey}
+            onChange={onEndMonthKeyChange}
+            placeholder="Closing month"
+            min={startMonthKey || undefined}
+            allowClear={false}
+            className="mt-1.5 h-9"
           />
         </div>
       </div>
-      {caption && (
+      {invalid ? (
+        <p className="text-[10.5px] text-[#DC2626]">Closing month must be on or after the start month.</p>
+      ) : caption ? (
         <p className="text-[10.5px] text-black/45 dark:text-zinc-500">
           Books run <span className="font-medium text-black/65 dark:text-zinc-300">{caption}</span>
           {preview ? (
@@ -75,11 +71,15 @@ export function FinancialYearFields({
             </>
           ) : null}
         </p>
+      ) : (
+        <p className="text-[10.5px] text-black/45 dark:text-zinc-500">
+          Choose the first month and the last month of these books.
+        </p>
       )}
     </div>
   );
 }
 
-export function resolveFinancialYearInput(typedValue: string, monthKey: string): string | null {
-  return normalizeAcademicYearLabel(typedValue) ?? monthKeyToBooksYearLabel(monthKey);
+export function resolveFinancialYearInput(startMonthKey: string, endMonthKey: string): string | null {
+  return formatBooksRangeLabel(startMonthKey, endMonthKey);
 }

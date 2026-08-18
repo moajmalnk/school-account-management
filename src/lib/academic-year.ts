@@ -93,22 +93,102 @@ export function booksYearToMonthKey(year: number, month: number): string {
   return `${year}-${pad2(month)}`;
 }
 
-function boundsFromStartMonth(startYear: number, month: number): AcademicYearBounds | null {
-  if (!startYear || month < 1 || month > 12) return null;
-  const endMonth = month === 1 ? 12 : month - 1;
-  const endYear = month === 1 ? startYear : startYear + 1;
+export function parseMonthKey(key: string): { year: number; month: number } | null {
+  const match = /^(\d{4})-(\d{2})$/.exec(key.trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (!year || month < 1 || month > 12) return null;
+  return { year, month };
+}
+
+export function addMonthsToMonthKey(key: string, delta: number): string | null {
+  const parts = parseMonthKey(key);
+  if (!parts) return null;
+  const abs = parts.year * 12 + (parts.month - 1) + delta;
+  const year = Math.floor(abs / 12);
+  const month = (abs % 12) + 1;
+  return booksYearToMonthKey(year, month);
+}
+
+/** Default closing month: 11 months after start (12-month books). */
+export function defaultClosingMonthKey(startKey: string): string {
+  return addMonthsToMonthKey(startKey, 11) ?? startKey;
+}
+
+export function boundsFromMonthKeys(startKey: string, endKey: string): AcademicYearBounds | null {
+  const start = parseMonthKey(startKey);
+  const end = parseMonthKey(endKey);
+  if (!start || !end) return null;
+  if (endKey < startKey) return null;
   return {
-    startYear,
-    endYear,
-    startDate: `${startYear}-${pad2(month)}-01`,
-    endDate: `${endYear}-${pad2(endMonth)}-${pad2(lastDayOfMonth(endYear, endMonth))}`,
+    startYear: start.year,
+    endYear: end.year,
+    startDate: `${start.year}-${pad2(start.month)}-01`,
+    endDate: `${end.year}-${pad2(end.month)}-${pad2(lastDayOfMonth(end.year, end.month))}`,
   };
 }
 
-/** Parse `AY 2025-26`, `2026-06`, or `2026 June` into a 12-month books window. */
+export function formatBooksRangeLabel(startKey: string, endKey: string): string | null {
+  const startLabel = monthKeyToBooksYearLabel(startKey);
+  const endLabel = monthKeyToBooksYearLabel(endKey);
+  if (!startLabel || !endLabel) return null;
+  if (endKey < startKey) return null;
+  return `${startLabel} – ${endLabel}`;
+}
+
+export function booksRangeKeysFromLabel(label: string): { start: string; end: string } | null {
+  const bounds = parseAcademicYearBounds(label);
+  if (!bounds) return null;
+  return {
+    start: bounds.startDate.slice(0, 7),
+    end: bounds.endDate.slice(0, 7),
+  };
+}
+
+function boundsFromStartMonth(startYear: number, month: number): AcademicYearBounds | null {
+  if (!startYear || month < 1 || month > 12) return null;
+  const startKey = booksYearToMonthKey(startYear, month);
+  return boundsFromMonthKeys(startKey, defaultClosingMonthKey(startKey));
+}
+
+function namedMonthYear(yearToken: string, monthToken: string): { year: number; month: number } | null {
+  const month = monthIndexFromName(monthToken);
+  const year = Number(yearToken);
+  if (!month || !Number.isFinite(year)) return null;
+  return { year, month };
+}
+
+function parseNamedMonthYear(raw: string): { year: number; month: number } | null {
+  const trimmed = raw.trim();
+  const named =
+    trimmed.match(/^(?:AY\s*)?(\d{4})\s+([A-Za-z]+)$/i) ||
+    trimmed.match(/^(?:AY\s*)?([A-Za-z]+)\s+(\d{4})$/i);
+  if (!named) return null;
+  const yearToken = /^\d{4}$/.test(named[1]) ? named[1] : named[2];
+  const monthToken = /^\d{4}$/.test(named[1]) ? named[2] : named[1];
+  return namedMonthYear(yearToken, monthToken);
+}
+
+/** Parse `AY 2025-26`, `2026-06`, `2026 June`, or `2026 June – 2027 May`. */
 export function parseAcademicYearBounds(label: string): AcademicYearBounds | null {
   const trimmed = label.trim().replace(/\s+/g, " ");
   if (!trimmed) return null;
+
+  const range =
+    trimmed.match(
+      /^(?:AY\s*)?(\d{4}\s+[A-Za-z]+|[A-Za-z]+\s+\d{4})\s*[–-]\s*(\d{4}\s+[A-Za-z]+|[A-Za-z]+\s+\d{4})$/i,
+    );
+  if (range) {
+    const start = parseNamedMonthYear(range[1]);
+    const end = parseNamedMonthYear(range[2]);
+    if (start && end) {
+      return boundsFromMonthKeys(
+        booksYearToMonthKey(start.year, start.month),
+        booksYearToMonthKey(end.year, end.month),
+      );
+    }
+  }
 
   const monthKey = trimmed.match(/^(\d{4})-(\d{2})$/);
   if (monthKey) {
@@ -118,15 +198,8 @@ export function parseAcademicYearBounds(label: string): AcademicYearBounds | nul
     }
   }
 
-  const named =
-    trimmed.match(/^(?:AY\s*)?(\d{4})\s+([A-Za-z]+)$/i) ||
-    trimmed.match(/^(?:AY\s*)?([A-Za-z]+)\s+(\d{4})$/i);
-  if (named) {
-    const yearToken = /^\d{4}$/.test(named[1]) ? named[1] : named[2];
-    const monthToken = /^\d{4}$/.test(named[1]) ? named[2] : named[1];
-    const month = monthIndexFromName(monthToken);
-    if (month) return boundsFromStartMonth(Number(yearToken), month);
-  }
+  const named = parseNamedMonthYear(trimmed);
+  if (named) return boundsFromStartMonth(named.year, named.month);
 
   const match = trimmed.match(/^(?:AY\s*)?(\d{4})\s*[-–/]\s*(\d{2}|\d{4})$/i);
   if (!match) return null;
@@ -152,8 +225,11 @@ export function parseBooksYearParts(label: string): { year: number; month: numbe
 }
 
 export function suggestNextBooksMonthKey(currentLabel: string, extraYears: string[] = []): string {
-  const source = [currentLabel, ...extraYears].map(parseBooksYearParts).find(Boolean);
-  if (source) return booksYearToMonthKey(source.year + 1, source.month);
+  const bounds = [currentLabel, ...extraYears].map(parseAcademicYearBounds).find(Boolean);
+  if (bounds) {
+    const endKey = bounds.endDate.slice(0, 7);
+    return addMonthsToMonthKey(endKey, 1) ?? booksYearToMonthKey(bounds.startYear + 1, 4);
+  }
   const now = new Date();
   const year = now.getMonth() >= 3 ? now.getFullYear() + 1 : now.getFullYear();
   return booksYearToMonthKey(year, 4);
@@ -176,15 +252,15 @@ export function normalizeAcademicYearLabel(input: string): string | null {
   const trimmed = input.trim().replace(/\s+/g, " ");
   if (!trimmed) return null;
 
-  const named =
-    trimmed.match(/^(?:AY\s*)?(\d{4})\s+([A-Za-z]+)$/i) ||
-    trimmed.match(/^(?:AY\s*)?([A-Za-z]+)\s+(\d{4})$/i);
-  if (named) {
-    const yearToken = /^\d{4}$/.test(named[1]) ? named[1] : named[2];
-    const monthToken = /^\d{4}$/.test(named[1]) ? named[2] : named[1];
-    const month = monthIndexFromName(monthToken);
-    if (month) return formatBooksYearLabel(Number(yearToken), month);
+  const rangeBounds = parseAcademicYearBounds(trimmed);
+  if (trimmed.includes("–") || /[A-Za-z]+\s+\d{4}\s*-\s*\d{4}\s+[A-Za-z]+/i.test(trimmed) || /\d{4}\s+[A-Za-z]+\s*-\s*\d{4}\s+[A-Za-z]+/i.test(trimmed)) {
+    if (rangeBounds) {
+      return formatBooksRangeLabel(rangeBounds.startDate.slice(0, 7), rangeBounds.endDate.slice(0, 7));
+    }
   }
+
+  const named = parseNamedMonthYear(trimmed);
+  if (named) return formatBooksYearLabel(named.year, named.month);
 
   const monthKey = trimmed.match(/^(\d{4})-(\d{2})$/);
   if (monthKey) {

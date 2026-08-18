@@ -50,7 +50,7 @@ import {
   sessionHasPermission,
   useAuth,
 } from "@/lib/auth";
-import { monthKeyToBooksYearLabel, suggestNextBooksMonthKey } from "@/lib/academic-year";
+import { defaultClosingMonthKey, suggestNextBooksMonthKey } from "@/lib/academic-year";
 import {
   schoolInitials,
   useTenantStore,
@@ -566,15 +566,17 @@ export function TenantDesktopTopBar() {
   const { showBack, goBack, backLabel } = useWorkspaceSubViewBack();
   const [pendingLogout, setPendingLogout] = useState(false);
   const [addYearOpen, setAddYearOpen] = useState(false);
-  const [yearDraft, setYearDraft] = useState("");
   const [addMonthKey, setAddMonthKey] = useState(() =>
     suggestNextBooksMonthKey(academicYear, academicYears),
+  );
+  const [addEndMonthKey, setAddEndMonthKey] = useState(() =>
+    defaultClosingMonthKey(suggestNextBooksMonthKey(academicYear, academicYears)),
   );
 
   const resetYearDraft = () => {
     const next = suggestNextBooksMonthKey(academicYear, academicYears);
     setAddMonthKey(next);
-    setYearDraft(monthKeyToBooksYearLabel(next) ?? "");
+    setAddEndMonthKey(defaultClosingMonthKey(next));
   };
   const unreadCount = notifications.filter((n) => !n.read).length;
   const tenantName = schoolDetails.name || session?.tenantName || "Silver Hills Global";
@@ -593,10 +595,10 @@ export function TenantDesktopTopBar() {
 
   const submitNewYear = (e: FormEvent) => {
     e.preventDefault();
-    const label = resolveFinancialYearInput(yearDraft, addMonthKey);
+    const label = resolveFinancialYearInput(addMonthKey, addEndMonthKey);
     if (!label) {
-      toast.error("Choose a start month and year", {
-        description: "Or type a label such as 2026 June or 2026-27",
+      toast.error("Choose start and closing months", {
+        description: "Closing month must be on or after the start month",
       });
       return;
     }
@@ -777,15 +779,15 @@ export function TenantDesktopTopBar() {
               Add Academic Year
             </DialogTitle>
             <DialogDescription className="mt-1 text-[13px] leading-relaxed text-slate-500">
-              Choose the books start month and year, or type a label such as 2027 June or 2027-28.
+              Choose the first month and the last month of these books.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={submitNewYear} className="mt-4 space-y-4">
             <FinancialYearFields
-              monthKey={addMonthKey}
-              typedValue={yearDraft}
-              onMonthKeyChange={setAddMonthKey}
-              onTypedChange={setYearDraft}
+              startMonthKey={addMonthKey}
+              endMonthKey={addEndMonthKey}
+              onStartMonthKeyChange={setAddMonthKey}
+              onEndMonthKeyChange={setAddEndMonthKey}
             />
             <DialogFooter className="flex-row justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setAddYearOpen(false)}>

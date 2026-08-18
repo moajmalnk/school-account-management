@@ -119,9 +119,9 @@ import { OrganicCard } from "@/components/ui/organic-card";
 import { ImageCropDialog } from "@/components/ui/image-crop-dialog";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
 import {
-  booksYearToMonthKey,
-  monthKeyToBooksYearLabel,
-  parseBooksYearParts,
+  academicYearCoverageCaption,
+  booksRangeKeysFromLabel,
+  defaultClosingMonthKey,
   suggestNextBooksMonthKey,
 } from "@/lib/academic-year";
 import {
@@ -13748,13 +13748,13 @@ function CategoriesCard({
   const [addMonthKey, setAddMonthKey] = useState(() =>
     suggestNextBooksMonthKey(academicYear, academicYears),
   );
-  const [yearDraft, setYearDraft] = useState(
-    () => monthKeyToBooksYearLabel(suggestNextBooksMonthKey(academicYear, academicYears)) ?? "",
+  const [addEndMonthKey, setAddEndMonthKey] = useState(() =>
+    defaultClosingMonthKey(suggestNextBooksMonthKey(academicYear, academicYears)),
   );
   const [editMonthKey, setEditMonthKey] = useState("");
+  const [editEndMonthKey, setEditEndMonthKey] = useState("");
   const [pendingYearDelete, setPendingYearDelete] = useState<string | null>(null);
   const [editingYear, setEditingYear] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState("");
   const { payments, studentYearLedgers, feeTerms } = useTenantStore();
 
   const sortedYears = useMemo(
@@ -13782,10 +13782,10 @@ function CategoriesCard({
 
   const submitAcademicYear = (e: React.FormEvent) => {
     e.preventDefault();
-    const nextLabel = resolveFinancialYearInput(yearDraft, addMonthKey);
+    const nextLabel = resolveFinancialYearInput(addMonthKey, addEndMonthKey);
     if (!nextLabel) {
-      toast.error("Choose a start month and year", {
-        description: "Or type a label such as 2026 June or 2026-27",
+      toast.error("Choose start and closing months", {
+        description: "Closing month must be on or after the start month",
       });
       return;
     }
@@ -13801,32 +13801,35 @@ function CategoriesCard({
     });
     const nextKey = suggestNextBooksMonthKey(nextLabel, academicYears);
     setAddMonthKey(nextKey);
-    setYearDraft(monthKeyToBooksYearLabel(nextKey) ?? "");
+    setAddEndMonthKey(defaultClosingMonthKey(nextKey));
   };
 
   const startEdit = (year: string) => {
     setEditingYear(year);
-    const parts = parseBooksYearParts(year);
-    setEditMonthKey(
-      parts
-        ? booksYearToMonthKey(parts.year, parts.month)
-        : suggestNextBooksMonthKey(year, academicYears),
-    );
-    setEditDraft(year.replace(/^AY\s+/i, ""));
+    const range = booksRangeKeysFromLabel(year);
+    const start = range?.start ?? suggestNextBooksMonthKey(year, academicYears);
+    setEditMonthKey(start);
+    setEditEndMonthKey(range?.end ?? defaultClosingMonthKey(start));
   };
 
   const submitEdit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingYear) return;
-    const nextLabel = resolveFinancialYearInput(editDraft, editMonthKey);
-    const result = renameAcademicYear(editingYear, nextLabel ?? editDraft);
+    const nextLabel = resolveFinancialYearInput(editMonthKey, editEndMonthKey);
+    if (!nextLabel) {
+      toast.error("Choose start and closing months", {
+        description: "Closing month must be on or after the start month",
+      });
+      return;
+    }
+    const result = renameAcademicYear(editingYear, nextLabel);
     if (!result.ok) {
       toast.error(result.reason ?? "Could not rename year");
       return;
     }
-    toast.success(`Renamed to ${nextLabel ?? editDraft.trim()}`);
+    toast.success(`Renamed to ${nextLabel}`);
     setEditingYear(null);
-    setEditDraft("");
+    setEditEndMonthKey("");
   };
 
   const activateYear = (year: string) => {
@@ -13899,7 +13902,7 @@ function CategoriesCard({
                 Financial Year
               </Label>
               <p className="mt-0.5 text-[11px] text-black/45">
-                Open books · close finished years · edit labels · hard-delete years and their data
+                Open books · close finished years · edit start and closing months · hard-delete years and their data
               </p>
             </div>
             <span className="font-mono text-[10.5px] text-black/45">
@@ -13917,6 +13920,7 @@ function CategoriesCard({
               {sortedYears.map((y) => {
                 const isOpen = y === academicYear;
                 const isClosed = closedAcademicYears.includes(y);
+                const coverage = academicYearCoverageCaption(y);
                 return (
                   <li
                     key={y}
@@ -13926,6 +13930,11 @@ function CategoriesCard({
                       <div className="truncate text-[13px] font-semibold text-black dark:text-zinc-100">
                         {y}
                       </div>
+                      {coverage ? (
+                        <p className="mt-0.5 truncate text-[10.5px] text-black/45 dark:text-zinc-500">
+                          {coverage}
+                        </p>
+                      ) : null}
                       <p className="mt-0.5 text-[11px] text-black/45 sm:hidden">
                         {isOpen ? "Open books" : isClosed ? "Closed" : "Available"}
                       </p>
@@ -14012,10 +14021,10 @@ function CategoriesCard({
 
           <form onSubmit={submitAcademicYear} className="mt-3 space-y-3">
             <FinancialYearFields
-              monthKey={addMonthKey}
-              typedValue={yearDraft}
-              onMonthKeyChange={setAddMonthKey}
-              onTypedChange={setYearDraft}
+              startMonthKey={addMonthKey}
+              endMonthKey={addEndMonthKey}
+              onStartMonthKeyChange={setAddMonthKey}
+              onEndMonthKeyChange={setAddEndMonthKey}
             />
             <Button
               type="submit"
@@ -14181,7 +14190,7 @@ function CategoriesCard({
         onOpenChange={(next) => {
           if (!next) {
             setEditingYear(null);
-            setEditDraft("");
+            setEditEndMonthKey("");
           }
         }}
       >
@@ -14201,15 +14210,15 @@ function CategoriesCard({
               Edit financial year
             </DialogTitle>
             <DialogDescription className="mt-1 text-[13px] text-black/60">
-              Rename {editingYear}. Pick a start month and year, or type a label. Receipts, fees, and enrollments move with it.
+              Set the start and closing month for {editingYear}. Receipts, fees, and enrollments move with the new label.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={submitEdit} className="mt-4 space-y-3">
             <FinancialYearFields
-              monthKey={editMonthKey}
-              typedValue={editDraft}
-              onMonthKeyChange={setEditMonthKey}
-              onTypedChange={setEditDraft}
+              startMonthKey={editMonthKey}
+              endMonthKey={editEndMonthKey}
+              onStartMonthKeyChange={setEditMonthKey}
+              onEndMonthKeyChange={setEditEndMonthKey}
             />
             <DialogFooter className="flex-row justify-end gap-2">
               <Button
@@ -14217,7 +14226,7 @@ function CategoriesCard({
                 variant="outline"
                 onClick={() => {
                   setEditingYear(null);
-                  setEditDraft("");
+                  setEditEndMonthKey("");
                 }}
               >
                 Cancel

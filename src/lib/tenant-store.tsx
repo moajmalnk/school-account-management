@@ -4144,7 +4144,7 @@ export function TenantStoreProvider({
     (from: string, to: string) => {
       const nextLabel = normalizeAcademicYearLabel(to) ?? to.trim();
       if (!nextLabel) {
-        return { ok: false, reason: "Choose a start month and year, or type 2026-27" };
+        return { ok: false, reason: "Choose start and closing months" };
       }
       if (from === nextLabel) return { ok: true };
       if (academicYears.some((y) => y.toLowerCase() === nextLabel.toLowerCase() && y !== from)) {
