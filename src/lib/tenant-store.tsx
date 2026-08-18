@@ -997,7 +997,18 @@ export type CampusBranch = {
   lat: number | null;
   lng: number | null;
   isActive: boolean;
+  isMain?: boolean;
 };
+
+/** First campus / code MAIN — tenants cannot delete this branch. */
+export function isMainCampusBranch(
+  branch: Pick<CampusBranch, "code" | "isMain">,
+  all: CampusBranch[] = [],
+): boolean {
+  if (branch.isMain) return true;
+  if (branch.code.trim().toUpperCase() === "MAIN") return true;
+  return all.length <= 1;
+}
 
 export function normalizeCampusBranch(raw: unknown): CampusBranch | null {
   if (!raw || typeof raw !== "object") return null;
@@ -1007,16 +1018,18 @@ export function normalizeCampusBranch(raw: unknown): CampusBranch | null {
   }
   const num = (v: unknown): number | null =>
     typeof v === "number" && Number.isFinite(v) ? v : null;
+  const code = typeof r.code === "string" && r.code.trim() ? r.code.trim().toUpperCase() : "MAIN";
   return {
     id: r.id.trim(),
     name: r.name.trim(),
-    code: typeof r.code === "string" && r.code.trim() ? r.code.trim().toUpperCase() : "MAIN",
+    code,
     address: typeof r.address === "string" ? r.address : "",
     phone: typeof r.phone === "string" ? r.phone : "",
     email: typeof r.email === "string" ? r.email : "",
     lat: num(r.lat),
     lng: num(r.lng),
     isActive: r.isActive !== false,
+    isMain: r.isMain === true || code === "MAIN",
   };
 }
 
@@ -2978,6 +2991,7 @@ export const SEED_BRANCHES: CampusBranch[] = [
     lat: null,
     lng: null,
     isActive: true,
+    isMain: true,
   },
 ];
 

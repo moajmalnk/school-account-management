@@ -24,6 +24,7 @@ import {
 import { apiDeleteBranch, apiUpsertBranch } from "@/lib/api/settings";
 import { getApiToken } from "@/lib/api/client";
 import {
+  isMainCampusBranch,
   normalizeCampusBranch,
   type CampusBranch,
 } from "@/lib/tenant-store";
@@ -198,6 +199,11 @@ export function SettingsBranchesCard({
 
   const confirmDelete = async () => {
     if (!pendingDelete) return;
+    if (isMainCampusBranch(pendingDelete, branches)) {
+      toast.error("The main campus cannot be deleted");
+      setPendingDelete(null);
+      return;
+    }
     if (branches.length < 2) {
       toast.error("Keep at least one campus");
       setPendingDelete(null);
@@ -272,14 +278,16 @@ export function SettingsBranchesCard({
               >
                 <Pencil className="h-3.5 w-3.5" />
               </button>
-              <button
-                type="button"
-                onClick={() => setPendingDelete(b)}
-                aria-label={`Delete ${b.name}`}
-                className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2] dark:border-rose-500/40 dark:bg-rose-950/50 dark:text-rose-300 dark:hover:bg-rose-950/80"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
+              {isMainCampusBranch(b, branches) ? null : (
+                <button
+                  type="button"
+                  onClick={() => setPendingDelete(b)}
+                  aria-label={`Delete ${b.name}`}
+                  className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2] dark:border-rose-500/40 dark:bg-rose-950/50 dark:text-rose-300 dark:hover:bg-rose-950/80"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           </div>
         ))}

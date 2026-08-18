@@ -330,6 +330,7 @@ export type CampusBranchPayload = {
   lat?: number | null;
   lng?: number | null;
   isActive?: boolean;
+  isMain?: boolean;
   copyFromId?: string;
 };
 
