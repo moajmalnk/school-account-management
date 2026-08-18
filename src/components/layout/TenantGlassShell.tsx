@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
+  Crown,
   LayoutDashboard,
   LogOut,
   Moon,
@@ -233,6 +234,7 @@ const NAV: NavEntry[] = [
   { to: "/tenant/students", label: "Students", icon: Users },
   { to: "/tenant/staff", label: "Staff", icon: UserCog },
   { to: "/tenant/finance", label: "Finance", icon: Wallet },
+  { to: "/tenant/billing", label: "Subscription", icon: Crown },
   { to: "/tenant/settings", label: "Settings", icon: Settings },
 ];
 
@@ -244,6 +246,7 @@ function navAllowed(
   if (to.startsWith("/tenant/students")) return sessionHasPermission(session, "students");
   if (to.startsWith("/tenant/staff")) return sessionHasPermission(session, "staff");
   if (to.startsWith("/tenant/finance")) return sessionHasAnyFinance(session);
+  if (to.startsWith("/tenant/billing")) return sessionCanAccessSettings(session);
   if (to.startsWith("/tenant/settings")) return sessionCanAccessSettings(session);
   return true;
 }
