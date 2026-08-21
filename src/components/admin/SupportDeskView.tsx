@@ -290,24 +290,24 @@ export function SupportDeskView() {
 
   if (loading) {
     return (
-      <div className="space-y-4 sm:space-y-6" aria-busy="true">
-        <div className="h-8 w-64 animate-pulse rounded-lg bg-black/[0.07]" />
-        <div className="h-14 animate-pulse rounded-2xl bg-black/[0.05]" />
-        <div className="h-80 animate-pulse rounded-3xl bg-black/[0.05]" />
+      <div className="grid grid-cols-12 gap-3 sm:gap-4 lg:gap-5" aria-busy="true">
+        <div className="col-span-12 h-8 w-64 animate-pulse rounded-lg bg-black/[0.07]" />
+        <div className="col-span-12 h-9 animate-pulse rounded-full bg-black/[0.05] sm:col-span-6 lg:col-span-4" />
+        <div className="col-span-12 h-80 animate-pulse rounded-3xl bg-black/[0.05]" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <div>
+    <div className="grid grid-cols-12 gap-3 sm:gap-4 lg:gap-5">
+      <div className="col-span-12">
         <h1 className="text-heading">Customer Support</h1>
         <p className="mt-2 text-[14px] text-black/55">
           Reply to schools, keep help answers, and set email and WhatsApp.
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="col-span-12 flex flex-wrap items-center gap-2">
         {SECTIONS.map((item) => (
           <button
             key={item.id}
@@ -336,7 +336,7 @@ export function SupportDeskView() {
       </div>
 
       {section === "messages" ? (
-        <OrganicCard tone="white" cornerSide="tr" padded>
+        <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <div className="text-[13px] font-semibold text-black">School messages</div>
@@ -509,7 +509,7 @@ export function SupportDeskView() {
       ) : null}
 
       {section === "help" ? (
-        <OrganicCard tone="white" cornerSide="tr" padded>
+        <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
               <div className="text-[13px] font-semibold text-black">Help answers</div>
@@ -627,13 +627,13 @@ export function SupportDeskView() {
       ) : null}
 
       {section === "contact" ? (
-        <OrganicCard tone="white" cornerSide="tr" padded className="max-w-xl">
+        <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12">
           <div className="text-[13px] font-semibold text-black">How schools reach you</div>
           <p className="mt-0.5 text-[12px] text-black/50">
             These details appear in every school under Settings → Customer Support.
           </p>
-          <div className="mt-4 space-y-3">
-            <label className="block space-y-1.5">
+          <div className="mt-4 grid grid-cols-12 gap-3">
+            <label className="col-span-12 space-y-1.5 sm:col-span-6">
               <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
                 Email
               </Label>
@@ -646,7 +646,7 @@ export function SupportDeskView() {
               />
               <p className="text-[11px] text-black/40">Opens Gmail when a school taps Email.</p>
             </label>
-            <label className="block space-y-1.5">
+            <label className="col-span-12 space-y-1.5 sm:col-span-6">
               <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
                 WhatsApp number
               </Label>
@@ -658,7 +658,7 @@ export function SupportDeskView() {
               />
               <p className="text-[11px] text-black/40">Country code + number, no spaces. Example: 919744009048.</p>
             </label>
-            <label className="block space-y-1.5">
+            <label className="col-span-12 space-y-1.5">
               <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
                 Welcome message
               </Label>
@@ -670,19 +670,21 @@ export function SupportDeskView() {
               />
               <p className="text-[11px] text-black/40">First line schools see in the help chat.</p>
             </label>
-            <Button
-              type="button"
-              onClick={() => void saveChannels()}
-              disabled={savingChannels}
-              className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
-            >
-              {savingChannels ? (
-                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-              ) : (
-                <Save className="mr-1.5 h-4 w-4" />
-              )}
-              Save
-            </Button>
+            <div className="col-span-12">
+              <Button
+                type="button"
+                onClick={() => void saveChannels()}
+                disabled={savingChannels}
+                className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+              >
+                {savingChannels ? (
+                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="mr-1.5 h-4 w-4" />
+                )}
+                Save
+              </Button>
+            </div>
           </div>
         </OrganicCard>
       ) : null}
