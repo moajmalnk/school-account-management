@@ -10,6 +10,7 @@ import {
   Paperclip,
   Pencil,
   Phone,
+  Printer,
   AlertTriangle,
   CheckCircle2,
   Send,
@@ -1565,6 +1566,33 @@ function ReceiptsList({
     }
   };
 
+  const handlePrint = async (r: Receipt) => {
+    try {
+      await downloadReceiptPdf(
+        {
+          id: r.id,
+          name: student.name,
+          cat: r.cat || "Fee Payment",
+          mode: r.mode,
+          amount: r.amount,
+          time: r.date,
+          className: student.cls,
+          feePeriod: r.period,
+          payerType: "student",
+        },
+        schoolName,
+        academicYear,
+        receiptBrandingFromSchool(schoolDetails, student),
+        "print",
+      );
+      toast.success("Print dialog opened");
+    } catch {
+      toast.error(`Could not print receipt ${r.id}`, {
+        description: "Try again or check your browser print settings",
+      });
+    }
+  };
+
   const handleSend = async (r: Receipt) => {
     const number = toNotifyWhatsAppNumber(phone);
     if (!number) {
@@ -1689,6 +1717,15 @@ function ReceiptsList({
                   className="grid h-10 w-10 place-items-center rounded-lg border border-[#E5E5E5] bg-white text-black/55 shadow-sm transition-colors hover:bg-[#0F766E] hover:text-white"
                 >
                   <Download className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePrint(r)}
+                  aria-label={`Print receipt ${r.id}`}
+                  title="Print receipt"
+                  className="grid h-10 w-10 place-items-center rounded-lg border border-[#E5E5E5] bg-white text-black/55 shadow-sm transition-colors hover:bg-[#0F766E] hover:text-white"
+                >
+                  <Printer className="h-3.5 w-3.5" />
                 </button>
               </div>
             </li>

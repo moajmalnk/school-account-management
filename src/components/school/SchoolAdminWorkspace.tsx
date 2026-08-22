@@ -123,7 +123,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { DatePicker, MonthPicker, ReceiptDateTimePicker } from "@/components/ui/date-picker";
+import { DatePicker, MonthPicker, ReceiptDateTimePicker, TimePicker24 } from "@/components/ui/date-picker";
 import { FinancialYearFields, resolveFinancialYearInput } from "@/components/school/FinancialYearFields";
 import { SignaturePadDialog } from "@/components/school/SignaturePadDialog";
 import { OrganicCard } from "@/components/ui/organic-card";
@@ -3470,7 +3470,7 @@ export function StudentsLedger() {
                     className="cursor-pointer gap-2 rounded-xl text-[13px]"
                   >
                     <Printer className="h-3.5 w-3.5" />
-                    Download PDF
+                    Print
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={exportCsv}
@@ -5757,6 +5757,36 @@ function FinanceOverview({
     toast.success("Transactions PDF downloaded");
   };
 
+  const printTransactionsPdf = () => {
+    if (!payments.length) {
+      toast.error("Nothing to print · no transactions yet");
+      return;
+    }
+    downloadTablePdf({
+      filename: formatDownloadFilename("transactions", "pdf", {
+        school: schoolName,
+        year: slugYear(academicYear),
+        date: todayStamp(),
+      }),
+      title: "Finance Transactions",
+      subtitle: `${schoolName} · ${academicYear}`,
+      headers: ["ID", "Account", "Category", "Period", "Mode", "Amount", "Time", "Status", "Narration"],
+      rows: payments.map((p) => [
+        p.id,
+        p.name,
+        p.cat,
+        resolvePaymentFeePeriod(p) ?? "—",
+        p.mode,
+        p.amount.toLocaleString("en-IN"),
+        formatEventDateTime(p.time),
+        "Complete",
+        p.narration ?? "",
+      ]),
+      action: "print",
+    });
+    toast.success("Print dialog opened");
+  };
+
   const downloadTransaction = async (payment: Payment) => {
     try {
       await downloadReceiptPdf(
@@ -5768,6 +5798,21 @@ function FinanceOverview({
       toast.success(`Receipt ${payment.id} downloaded`);
     } catch {
       toast.error(`Could not download receipt ${payment.id}`);
+    }
+  };
+
+  const printTransaction = async (payment: Payment) => {
+    try {
+      await downloadReceiptPdf(
+        payment,
+        schoolName,
+        academicYear,
+        receiptBrandingFromSchool(schoolDetails, findReceiptStudent(students, payment)),
+        "print",
+      );
+      toast.success("Print dialog opened");
+    } catch {
+      toast.error(`Could not print receipt ${payment.id}`);
     }
   };
 
@@ -6291,8 +6336,15 @@ function FinanceOverview({
                   onClick={exportTransactionsPdf}
                   className="cursor-pointer gap-2 rounded-xl text-[13px]"
                 >
-                  <Printer className="h-3.5 w-3.5" />
+                  <Download className="h-3.5 w-3.5" />
                   Download PDF
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={printTransactionsPdf}
+                  className="cursor-pointer gap-2 rounded-xl text-[13px]"
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  Print PDF
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={exportTransactionsCsv}
@@ -6413,6 +6465,16 @@ function FinanceOverview({
                   </button>
                   <button
                     type="button"
+                    aria-label={`Print receipt ${p.id}`}
+                    title="Print"
+                    onClick={() => printTransaction(p)}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#E5E5E5] px-2.5 text-[11px] font-semibold text-black/65 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                  >
+                    <Printer className="h-3.5 w-3.5" />
+                    Print
+                  </button>
+                  <button
+                    type="button"
                     aria-label={`Share receipt ${p.id}`}
                     onClick={() => shareTransaction(p)}
                     className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#CCFBF1] bg-[#F0FDFA] px-2.5 text-[11px] font-semibold text-[#0F766E] transition-colors hover:bg-[#CCFBF1]"
@@ -6507,6 +6569,15 @@ function FinanceOverview({
                         className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
                       >
                         <Download className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Print receipt ${p.id}`}
+                        title="Print"
+                        onClick={() => printTransaction(p)}
+                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                      >
+                        <Printer className="h-3.5 w-3.5" />
                       </button>
                       <button
                         type="button"
@@ -8099,6 +8170,21 @@ function ReceivePayment() {
     }
   };
 
+  const printHistoryReceipt = async (payment: Payment) => {
+    try {
+      await downloadReceiptPdf(
+        payment,
+        schoolName,
+        academicYear,
+        receiptBrandingFromSchool(schoolDetails, findReceiptStudent(students, payment)),
+        "print",
+      );
+      toast.success("Print dialog opened");
+    } catch {
+      toast.error(`Could not print receipt ${payment.id}`);
+    }
+  };
+
   const sharePayload = async (title: string, text: string) => {
     if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
       try {
@@ -9200,6 +9286,15 @@ function ReceivePayment() {
                   </button>
                   <button
                     type="button"
+                    aria-label={`Print receipt ${p.id}`}
+                    title="Print"
+                    onClick={() => printHistoryReceipt(p)}
+                    className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                  >
+                    <Printer className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
                     aria-label={`Share receipt ${p.id}`}
                     onClick={() => shareHistoryReceipt(p)}
                     className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#CCFBF1] bg-[#F0FDFA] text-[#0F766E] transition-colors hover:bg-[#CCFBF1]"
@@ -9316,6 +9411,15 @@ function ReceivePayment() {
                         className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
                       >
                         <Download className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Print receipt ${p.id}`}
+                        title="Print"
+                        onClick={() => printHistoryReceipt(p)}
+                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                      >
+                        <Printer className="h-3.5 w-3.5" />
                       </button>
                       <button
                         type="button"
@@ -9522,14 +9626,25 @@ function ReceivePayment() {
                 >
                   Close
                 </Button>
-                <Button
-                  type="button"
-                  onClick={() => downloadHistoryReceipt(viewingPayment)}
-                  className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
-                >
-                  <Download className="mr-1.5 h-3.5 w-3.5" />
-                  Download receipt
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => printHistoryReceipt(viewingPayment)}
+                    className="rounded-full"
+                  >
+                    <Printer className="mr-1.5 h-3.5 w-3.5" />
+                    Print receipt
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => downloadHistoryReceipt(viewingPayment)}
+                    className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+                  >
+                    <Download className="mr-1.5 h-3.5 w-3.5" />
+                    Download receipt
+                  </Button>
+                </div>
               </DialogFooter>
             </>
           )}
@@ -10321,6 +10436,50 @@ function MakePayment() {
     }
   };
 
+  const printDisbursal = async (payment: MadePayment) => {
+    const member =
+      staff.find((s) => s.id === payment.payee) ||
+      staff.find((s) => s.name.trim().toLowerCase() === payment.payee.trim().toLowerCase());
+    try {
+      if (payment.payeeType === "Salary") {
+        await downloadSalarySlipPdf(
+          payment,
+          schoolName,
+          receiptBrandingFromSchool(schoolDetails),
+          member
+            ? {
+                id: member.id,
+                name: member.name,
+                role: member.role,
+                dept: member.dept,
+                basicSalary: member.basicSalary,
+                additionalAllowances: member.additionalAllowances,
+              }
+            : null,
+          academicYear,
+          "print",
+        );
+        toast.success("Print dialog opened");
+        return;
+      }
+      await downloadPaymentVoucherPdf(
+        payment,
+        schoolName,
+        receiptBrandingFromSchool(schoolDetails),
+        {
+          name: member?.name || payment.payee,
+          phone: member?.phone,
+          extra: [member?.role, member?.dept].filter(Boolean).join(" · ") || undefined,
+        },
+        academicYear,
+        "print",
+      );
+      toast.success("Print dialog opened");
+    } catch {
+      toast.error(`Could not print ${payment.id}`);
+    }
+  };
+
   const shareDisbursal = (payment: MadePayment) => {
     const text = [
       `Payment Voucher · ${payment.id}`,
@@ -10959,17 +11118,19 @@ function MakePayment() {
                 <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                   Time
                 </Label>
-                <Input
-                  type="time"
-                  value={disbursalEditForm.clock}
-                  onChange={(e) =>
-                    setDisbursalEditForm({
-                      ...disbursalEditForm,
-                      clock: e.target.value || toClockLocal(new Date()),
-                    })
-                  }
-                  className="h-10 font-mono"
-                />
+                <div className="flex h-10 items-stretch overflow-hidden rounded-lg border border-[#E5E5E5] bg-white dark:border-white/10 dark:bg-zinc-900">
+                  <TimePicker24
+                    value={disbursalEditForm.clock}
+                    onChange={(clock) =>
+                      setDisbursalEditForm({
+                        ...disbursalEditForm,
+                        clock: clock || toClockLocal(new Date()),
+                      })
+                    }
+                    className="h-full w-full justify-center px-3"
+                    align="start"
+                  />
+                </div>
               </div>
             </div>
             <p className="text-[11px] text-black/45">

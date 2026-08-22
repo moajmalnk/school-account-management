@@ -5,6 +5,7 @@ import {
   Download,
   FileSpreadsheet,
   Landmark,
+  Printer,
   RotateCcw,
   Search,
   X,
@@ -126,10 +127,12 @@ function ExportBar({
   title,
   onCsv,
   onPdf,
+  onPrint,
 }: {
   title: string;
   onCsv: () => void;
   onPdf: () => void;
+  onPrint: () => void;
 }) {
   const [pendingExport, setPendingExport] = useState<"csv" | "pdf" | null>(null);
 
@@ -158,7 +161,7 @@ function ExportBar({
         <div className="col-span-12 lg:col-span-7">
           <div className="text-title text-slate-900 dark:text-zinc-50">{title}</div>
         </div>
-        <div className="col-span-12 grid grid-cols-2 gap-2 lg:col-span-5">
+        <div className="col-span-12 grid grid-cols-3 gap-2 lg:col-span-5">
           <button
             type="button"
             onClick={() => setPendingExport("csv")}
@@ -172,6 +175,13 @@ function ExportBar({
             className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full bg-[#0F766E] px-3 py-1.5 text-[11.5px] font-semibold text-white transition-colors hover:bg-[#0D9488] sm:text-[12px]"
           >
             <Download className="h-3.5 w-3.5 shrink-0" /> Export PDF
+          </button>
+          <button
+            type="button"
+            onClick={onPrint}
+            className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 py-1.5 text-[11.5px] font-medium text-black transition-colors hover:bg-[#F4F4F5] dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 sm:text-[12px]"
+          >
+            <Printer className="h-3.5 w-3.5 shrink-0" /> Print PDF
           </button>
         </div>
       </div>
@@ -596,10 +606,23 @@ export function GeneralLedgerReport() {
     toast.success("Ledger exported as PDF");
   };
 
+  const handlePrint = () => {
+    downloadTablePdf({
+      filename: reportDownloadName("general-ledger", "pdf", schoolName, academicYear),
+      title: "General Ledger",
+      subtitle: exportMeta,
+      headers,
+      rows: tableRows,
+      footer: `Total Debit ${inr(totalDebit)} · Total Credit ${inr(totalCredit)} · Closing ${inr(closing)}`,
+      action: "print",
+    });
+    toast.success("Print dialog opened");
+  };
+
   return (
     <div className="grid grid-cols-12 gap-4 sm:gap-5">
       <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12">
-        <ExportBar title="General Ledger" onCsv={handleCsv} onPdf={handlePdf} />
+        <ExportBar title="General Ledger" onCsv={handleCsv} onPdf={handlePdf} onPrint={handlePrint} />
         <p className="mt-1 text-[12px] text-black/55">
           Chronological double-entry view · {filteredRows.length}
           {filtersActive ? ` of ${allRows.length}` : ""} postings · {academicYear}
@@ -742,10 +765,23 @@ export function ProfitLossReport() {
     toast.success("P&L exported as PDF");
   };
 
+  const handlePrint = () => {
+    downloadTablePdf({
+      filename: reportDownloadName("profit-loss", "pdf", schoolName, academicYear),
+      title: "Profit & Loss Account",
+      subtitle: exportMeta,
+      headers,
+      rows: tableRows,
+      footer: `Total Income ${inr(totalIncome)} · Total Expense ${inr(totalExpense)} · Net ${inr(netProfit)}`,
+      action: "print",
+    });
+    toast.success("Print dialog opened");
+  };
+
   return (
     <div className="grid grid-cols-12 gap-4 sm:gap-5">
       <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12 lg:col-span-8">
-        <ExportBar title="Profit & Loss Account" onCsv={handleCsv} onPdf={handlePdf} />
+        <ExportBar title="Profit & Loss Account" onCsv={handleCsv} onPdf={handlePdf} onPrint={handlePrint} />
         <p className="mt-1 text-[12px] text-black/55">
           Income from fee receipts vs operating expenditure · {academicYear}
         </p>
@@ -887,10 +923,23 @@ export function BalanceSheetReport() {
     toast.success("Balance sheet exported as PDF");
   };
 
+  const handlePrint = () => {
+    downloadTablePdf({
+      filename: reportDownloadName("balance-sheet", "pdf", schoolName, academicYear),
+      title: "Balance Sheet",
+      subtitle: exportMeta,
+      headers,
+      rows: tableRows,
+      footer: `Assets ${inr(totalAssets)} · Liabilities & Equity ${inr(payables + equity)}`,
+      action: "print",
+    });
+    toast.success("Print dialog opened");
+  };
+
   return (
     <div className="grid grid-cols-12 gap-4 sm:gap-5">
       <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12 lg:col-span-6">
-        <ExportBar title="Balance Sheet" onCsv={handleCsv} onPdf={handlePdf} />
+        <ExportBar title="Balance Sheet" onCsv={handleCsv} onPdf={handlePdf} onPrint={handlePrint} />
         <p className="mt-1 text-[12px] text-black/55">
           Position statement as at today · {academicYear}
         </p>
@@ -1218,10 +1267,32 @@ export function FeesReport() {
     toast.success("Fees report PDF downloaded");
   };
 
+  const handlePrint = () => {
+    downloadTablePdf({
+      filename: reportDownloadName("fees-report", "pdf", schoolName, academicYear),
+      title: "Fees Report",
+      subtitle: `${schoolName} · ${academicYear}`,
+      headers: ["Receipt", "Student", "Class", "Category", "Period", "Mode", "Amount", "Time"],
+      rows: filteredCollections.map((p) => [
+        p.id,
+        p.name,
+        p.resolvedClass,
+        p.cat,
+        resolvePaymentFeePeriod(p) ?? "—",
+        p.mode,
+        p.amount.toLocaleString("en-IN"),
+        formatEventDateTime(p.time),
+      ]),
+      footer: `Collected ${inr(collected)} · Outstanding ${inr(outstanding)}`,
+      action: "print",
+    });
+    toast.success("Print dialog opened");
+  };
+
   return (
     <div className="grid grid-cols-12 gap-4 sm:gap-5">
       <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12">
-        <ExportBar title="Fees Report" onCsv={handleCsv} onPdf={handlePdf} />
+        <ExportBar title="Fees Report" onCsv={handleCsv} onPdf={handlePdf} onPrint={handlePrint} />
         <p className="mt-1 text-[12px] text-black/55">
           Student fee collections and outstanding dues · {academicYear}
         </p>
@@ -1603,13 +1674,37 @@ export function SalaryReport() {
     toast.success("Salary report PDF downloaded");
   };
 
+  const handlePrint = () => {
+    downloadTablePdf({
+      filename: reportDownloadName("salary-report", "pdf", schoolName, academicYear, { name: payrollMonth }),
+      title: `Salary Report · ${payrollMonthLabel}`,
+      subtitle: `${schoolName} · ${academicYear} · ${payrollMonth}`,
+      headers: ["ID", "Name", "Role", "Dept", "Attn", "Basic", "Allow.", "Gross", "Payable", "Status"],
+      rows: payrollRows.map(({ staff: s, gross, payable, attendanceLabel }) => [
+        s.id,
+        s.name,
+        s.role,
+        s.dept,
+        attendanceLabel,
+        s.basicSalary.toLocaleString("en-IN"),
+        s.additionalAllowances.toLocaleString("en-IN"),
+        gross.toLocaleString("en-IN"),
+        payable.toLocaleString("en-IN"),
+        isSalaryMonthSettled(s.salaryHistory, payrollMonth, payable) ? "Paid" : "Due",
+      ]),
+      footer: `Gross ${inr(totalGross)} · Attendance payable ${inr(totalPayable)} · Ledger payable ${inr(salaryPayableAmount)}`,
+      action: "print",
+    });
+    toast.success("Print dialog opened");
+  };
+
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 sm:gap-5">
       <OrganicCard tone="white" cornerSide="tr" padded className="shrink-0">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 flex-1">
-            <ExportBar title="Salary Report" onCsv={handleCsv} onPdf={handlePdf} />
+            <ExportBar title="Salary Report" onCsv={handleCsv} onPdf={handlePdf} onPrint={handlePrint} />
             <p className="mt-1 text-[12px] text-black/55">
               Monthly payroll · attendance adjusts payable · {academicYear}
             </p>
@@ -2056,10 +2151,32 @@ export function DayBookReport() {
     toast.success("Day book PDF downloaded");
   };
 
+  const handlePrint = () => {
+    downloadTablePdf({
+      filename: reportDownloadName("day-book", "pdf", schoolName, academicYear),
+      title: "Day Book",
+      subtitle: `${schoolName} · ${academicYear}`,
+      headers: ["Voucher", "Date/Time", "Particulars", "Account", "Mode", "Type", "Receipt", "Payment"],
+      rows: filtered.map((e) => [
+        e.id,
+        e.time,
+        e.particular,
+        e.account,
+        e.mode,
+        e.type,
+        e.type === "Receipt" ? e.amount.toLocaleString("en-IN") : "—",
+        e.type === "Payment" ? e.amount.toLocaleString("en-IN") : "—",
+      ]),
+      footer: `Receipts ${inr(totalReceipts)} · Payments ${inr(totalPayments)} · Net ${inr(net)}`,
+      action: "print",
+    });
+    toast.success("Print dialog opened");
+  };
+
   return (
     <div className="grid grid-cols-12 gap-4 sm:gap-5">
       <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12">
-        <ExportBar title="Day Book" onCsv={handleCsv} onPdf={handlePdf} />
+        <ExportBar title="Day Book" onCsv={handleCsv} onPdf={handlePdf} onPrint={handlePrint} />
         <p className="mt-1 text-[12px] text-black/55">
           Chronological cash book of receipts and payments · {academicYear}
         </p>
@@ -2291,10 +2408,30 @@ export function BankReconciliationReport() {
     toast.success("Bank reconciliation PDF downloaded");
   };
 
+  const handlePrint = () => {
+    downloadTablePdf({
+      filename: reportDownloadName("bank-reconciliation", "pdf", schoolName, academicYear),
+      title: "Bank Reconciliation Statement",
+      subtitle: `${schoolName} · ${academicYear}`,
+      headers: ["Voucher", "Date/Time", "Account", "Mode", "Amount", "Status"],
+      rows: bankTxns.map((t) => [
+        t.id,
+        t.time,
+        t.name,
+        t.mode,
+        t.amount.toLocaleString("en-IN"),
+        isCleared(t.id) ? "Cleared" : "Uncleared",
+      ]),
+      footer: `Statement ${inr(statementBalance)} · Cleared ${inr(clearedTotal)} · Uncleared ${inr(unclearedTotal)} · Difference ${inr(difference)}`,
+      action: "print",
+    });
+    toast.success("Print dialog opened");
+  };
+
   return (
     <div className="grid grid-cols-12 gap-4 sm:gap-5">
       <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12 lg:col-span-7">
-        <ExportBar title="Bank Reconciliation" onCsv={handleCsv} onPdf={handlePdf} />
+        <ExportBar title="Bank Reconciliation" onCsv={handleCsv} onPdf={handlePdf} onPrint={handlePrint} />
         <p className="mt-1 text-[12px] text-black/55">
           Match recorded bank &amp; UPI receipts against the bank statement · {academicYear}
         </p>

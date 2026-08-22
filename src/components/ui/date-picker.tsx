@@ -2,11 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock3 } from "lucide-react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
 import {
   formatEventDate,
   formatEventDateTime,
   formatReceiptDateTimeFromParts,
   parseReceiptDateTimeParts,
+  toClockLocal,
 } from "@/lib/dates";
 import {
   Select,
@@ -361,6 +363,168 @@ const RECEIPT_TIME_QUICK_PICKS: NonNullable<DatePickerProps["quickPicks"]> = [
   },
 ];
 
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => i);
+const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, i) => i);
+
+function parseClock24(value: string): { hour: number; minute: number } {
+  const [hh, mm] = (value || "00:00").split(":");
+  const hour = Number(hh);
+  const minute = Number(mm);
+  return {
+    hour: Number.isFinite(hour) ? Math.min(23, Math.max(0, hour)) : 0,
+    minute: Number.isFinite(minute) ? Math.min(59, Math.max(0, minute)) : 0,
+  };
+}
+
+function formatClock24(hour: number, minute: number): string {
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function TimeScrollColumn({
+  label,
+  items,
+  value,
+  onChange,
+  active,
+}: {
+  label: string;
+  items: number[];
+  value: number;
+  onChange: (next: number) => void;
+  active: boolean;
+}) {
+  const listRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!active || !listRef.current) return;
+    const selected = listRef.current.querySelector(`[data-value="${value}"]`);
+    selected?.scrollIntoView({ block: "center" });
+  }, [active, value]);
+
+  return (
+    <div className="min-w-0 flex-1">
+      <div className="mb-1 text-center text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-500">
+        {label}
+      </div>
+      <div
+        ref={listRef}
+        className="h-[11.5rem] overflow-y-auto overscroll-contain rounded-lg border border-[#EEEEEE] bg-[#FAFAFA] py-1 dark:border-white/10 dark:bg-zinc-900/80"
+      >
+        {items.map((item) => {
+          const selected = item === value;
+          return (
+            <button
+              key={item}
+              type="button"
+              data-value={item}
+              onClick={() => onChange(item)}
+              className={cn(
+                "mx-1 block w-[calc(100%-0.5rem)] rounded-md py-1.5 text-center font-mono text-[13px] tabular-nums transition-colors",
+                selected
+                  ? "bg-[#0F766E] font-semibold text-white shadow-sm"
+                  : "text-black/75 hover:bg-white dark:text-zinc-200 dark:hover:bg-zinc-800",
+              )}
+            >
+              {String(item).padStart(2, "0")}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export type TimePicker24Props = {
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  className?: string;
+  align?: "start" | "center" | "end";
+};
+
+/** 24-hour time picker · HH:mm without native browser UI quirks. */
+export function TimePicker24({
+  value,
+  onChange,
+  disabled,
+  className,
+  align = "end",
+}: TimePicker24Props) {
+  const [open, setOpen] = useState(false);
+  const { hour, minute } = useMemo(() => parseClock24(value), [value]);
+
+  const setHour = (next: number) => onChange(formatClock24(next, minute));
+  const setMinute = (next: number) => onChange(formatClock24(hour, next));
+  const setNow = () => onChange(toClockLocal(new Date()));
+
+  return (
+    <Popover open={open} onOpenChange={(next) => !disabled && setOpen(next)}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          disabled={disabled}
+          className={cn(
+            "inline-flex h-full min-w-[4.75rem] items-center gap-1.5 border-0 bg-transparent px-2.5 font-mono text-[13px] tabular-nums text-black transition-colors hover:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]/30 disabled:cursor-not-allowed dark:text-zinc-100 dark:hover:bg-zinc-800",
+            className,
+          )}
+          aria-label="Receipt time"
+        >
+          <Clock3 className="h-3.5 w-3.5 shrink-0 text-black/35 dark:text-zinc-500" />
+          <span>{formatClock24(hour, minute)}</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align={align}
+        sideOffset={6}
+        collisionPadding={12}
+        className="z-[260] w-[min(15rem,calc(100vw-1.5rem))] rounded-xl border border-[#E5E5E5] bg-white p-3 shadow-[0_24px_60px_-24px_rgba(0,0,0,0.25)] dark:border-white/10 dark:bg-zinc-900"
+      >
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-500">
+            Time · 24h
+          </span>
+          <span className="font-mono text-[14px] font-semibold tabular-nums text-[#0F766E]">
+            {formatClock24(hour, minute)}
+          </span>
+        </div>
+        <div className="flex gap-2">
+          <TimeScrollColumn
+            label="Hour"
+            items={HOUR_OPTIONS}
+            value={hour}
+            onChange={setHour}
+            active={open}
+          />
+          <TimeScrollColumn
+            label="Min"
+            items={MINUTE_OPTIONS}
+            value={minute}
+            onChange={setMinute}
+            active={open}
+          />
+        </div>
+        <div className="mt-3 flex items-center justify-between gap-2 border-t border-[#EEEEEE] pt-3 dark:border-white/10">
+          <button
+            type="button"
+            onClick={setNow}
+            className="rounded-full px-2.5 py-1 text-[11px] font-semibold text-[#0F766E] transition hover:bg-[#CCFBF1]/50 dark:hover:bg-[#0F766E]/20"
+          >
+            Now
+          </button>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => setOpen(false)}
+            className="h-8 rounded-full bg-[#0F766E] px-3 text-white hover:bg-[#0D9488]"
+          >
+            Done
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export type ReceiptDateTimePickerProps = {
   value: string;
   onChange: (value: string) => void;
@@ -413,17 +577,12 @@ export function ReceiptDateTimePicker({
       >
         ·
       </span>
-      <div className="relative flex w-[5.75rem] shrink-0 items-center sm:w-[6.25rem]">
-        <Clock3 className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-black/35 dark:text-zinc-500" />
-        <input
-          type="time"
-          value={parts.clock}
-          disabled={disabled}
-          onChange={(e) => setClock(e.target.value)}
-          className="h-full w-full border-0 bg-transparent py-0 pl-8 pr-2 font-mono text-[13px] text-black focus:outline-none disabled:cursor-not-allowed dark:text-zinc-100 [&::-webkit-calendar-picker-indicator]:opacity-0"
-          aria-label="Receipt time"
-        />
-      </div>
+      <TimePicker24
+        value={parts.clock}
+        onChange={setClock}
+        disabled={disabled}
+        className="shrink-0 sm:min-w-[5.25rem]"
+      />
       <button
         type="button"
         disabled={disabled}

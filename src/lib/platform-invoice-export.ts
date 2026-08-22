@@ -2,6 +2,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
 import { formatDownloadFilename, todayStamp } from "@/lib/download-names";
+import { emitPdf } from "@/lib/finance-export";
 
 export type PlatformInvoiceDoc = {
   id: string;
@@ -510,27 +511,50 @@ export function downloadPlatformInvoicePdf(
   invoice: PlatformInvoiceDoc,
   opts?: { schoolHost?: string },
 ) {
-  buildInvoiceDoc(invoice, opts).save(
-    formatDownloadFilename("platformInvoice", "pdf", {
-      id: invoice.invoiceNumber || "invoice",
-      name: invoice.tenantName || undefined,
-      school: invoice.tenantName || undefined,
-      date: todayStamp(),
-    }),
-  );
+  const filename = formatDownloadFilename("platformInvoice", "pdf", {
+    id: invoice.invoiceNumber || "invoice",
+    name: invoice.tenantName || undefined,
+    school: invoice.tenantName || undefined,
+    date: todayStamp(),
+  });
+  emitPdf(buildInvoiceDoc(invoice, opts), filename, "download");
+}
+
+export function printPlatformInvoicePdf(
+  invoice: PlatformInvoiceDoc,
+  opts?: { schoolHost?: string },
+) {
+  const filename = formatDownloadFilename("platformInvoice", "pdf", {
+    id: invoice.invoiceNumber || "invoice",
+    name: invoice.tenantName || undefined,
+    school: invoice.tenantName || undefined,
+    date: todayStamp(),
+  });
+  emitPdf(buildInvoiceDoc(invoice, opts), filename, "print");
 }
 
 export function downloadPlatformReceiptPdf(
   invoice: PlatformInvoiceDoc,
   opts?: { schoolHost?: string },
 ) {
-  const doc = buildReceiptDoc(invoice, opts);
-  doc.save(
-    formatDownloadFilename("platformReceipt", "pdf", {
-      id: invoice.receiptNumber || invoice.invoiceNumber || "receipt",
-      name: invoice.tenantName || undefined,
-      school: invoice.tenantName || undefined,
-      date: todayStamp(),
-    }),
-  );
+  const filename = formatDownloadFilename("platformReceipt", "pdf", {
+    id: invoice.receiptNumber || invoice.invoiceNumber || "receipt",
+    name: invoice.tenantName || undefined,
+    school: invoice.tenantName || undefined,
+    date: todayStamp(),
+  });
+  emitPdf(buildReceiptDoc(invoice, opts), filename, "download");
+}
+
+export function printPlatformReceiptPdf(
+  invoice: PlatformInvoiceDoc,
+  opts?: { schoolHost?: string },
+) {
+  const filename = formatDownloadFilename("platformReceipt", "pdf", {
+    id: invoice.receiptNumber || invoice.invoiceNumber || "receipt",
+    name: invoice.tenantName || undefined,
+    school: invoice.tenantName || undefined,
+    date: todayStamp(),
+  });
+  emitPdf(buildReceiptDoc(invoice, opts), filename, "print");
 }
