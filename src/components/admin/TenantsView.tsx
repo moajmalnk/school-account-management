@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Plus,
   Search,
@@ -24,14 +24,20 @@ import {
   Activity,
   Shield,
   ExternalLink,
+  GitBranch,
+  GraduationCap,
+  Users,
+  Receipt,
 } from "lucide-react";
 import { toast } from "sonner";
 import { type Tenant, type Tier, type Status } from "./data";
 import {
   deleteSuperAdminTenant,
   fetchSuperAdminTenants,
+  fetchSuperAdminTenantSnapshot,
   provisionSuperAdminTenant,
   updateSuperAdminTenant,
+  type TenantWorkspaceSnapshot,
 } from "@/lib/api/super-admin";
 import { ApiError, getApiToken } from "@/lib/api/client";
 import { TenantsViewSkeleton } from "@/components/admin/TenantsViewSkeleton";
@@ -958,6 +964,48 @@ function TenantFormDrawer({
   );
 }
 
+const TENANT_DETAIL_TABS = [
+  { id: "overview", label: "Overview", icon: Building2 },
+  { id: "branches", label: "Branches", icon: GitBranch },
+  { id: "students", label: "Students", icon: GraduationCap },
+  { id: "staff", label: "Staff", icon: Users },
+  { id: "payments", label: "Payments", icon: Receipt },
+  { id: "billing", label: "Billing", icon: Wallet },
+  { id: "activity", label: "Activity", icon: Activity },
+  { id: "access", label: "Access", icon: Shield },
+] as const;
+
+function formatSnapshotInr(amount: number) {
+  return `₹ ${amount.toLocaleString("en-IN")}`;
+}
+
+function WorkspaceSnapshotState({
+  loading,
+  error,
+  children,
+}: {
+  loading: boolean;
+  error: string | null;
+  children: ReactNode;
+}) {
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center gap-2 rounded-2xl border border-[#E5E5E5] bg-white px-4 py-14 text-[13px] text-black/55">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading workspace data…
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="rounded-2xl border border-[#FEE2E2] bg-[#FEF2F2] px-4 py-10 text-center text-[13px] text-[#B91C1C]">
+        {error}
+      </div>
+    );
+  }
+  return <>{children}</>;
+}
+
 function TenantDetailDrawer({
   tenant,
   tab,
@@ -983,6 +1031,9 @@ function TenantDetailDrawer({
 }) {
   const [billingDraft, setBillingDraft] = useState<BillingRule | null>(null);
   const [activity, setActivity] = useState<AuditEvent[]>([]);
+  const [snapshot, setSnapshot] = useState<TenantWorkspaceSnapshot | null>(null);
+  const [snapshotLoading, setSnapshotLoading] = useState(false);
+  const [snapshotError, setSnapshotError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!tenant || !billing) {
@@ -993,6 +1044,36 @@ function TenantDetailDrawer({
     setBillingDraft(billing);
     setActivity(buildAuditLog(tenant, 8));
   }, [tenant, billing]);
+
+  useEffect(() => {
+    if (!tenant) {
+      setSnapshot(null);
+      setSnapshotError(null);
+      setSnapshotLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setSnapshotLoading(true);
+    setSnapshotError(null);
+    fetchSuperAdminTenantSnapshot(tenant.id)
+      .then((data) => {
+        if (!cancelled) setSnapshot(data);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setSnapshot(null);
+          setSnapshotError(
+            err instanceof ApiError ? err.message : "Failed to load workspace data",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSnapshotLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tenant?.id]);
 
   if (!tenant) return null;
   const draft = billingDraft ?? billing;
@@ -1050,31 +1131,26 @@ function TenantDetailDrawer({
           className="flex min-h-0 flex-1 flex-col"
         >
           <div className="shrink-0 border-b border-[#E5E5E5] bg-white px-3 pt-3 sm:px-6">
-            <TabsList className="grid h-auto w-full grid-cols-12 gap-1.5 rounded-none bg-transparent p-0 pb-3">
-              {(
-                [
-                  { id: "overview", label: "Overview", icon: Building2 },
-                  { id: "billing", label: "Billing", icon: Wallet },
-                  { id: "activity", label: "Activity", icon: Activity },
-                  { id: "access", label: "Access", icon: Shield },
-                ] as const
-              ).map((item) => {
-                const Icon = item.icon;
-                return (
-                  <TabsTrigger
-                    key={item.id}
-                    value={item.id}
-                    className={cn(
-                      "col-span-6 w-full gap-1.5 rounded-xl border border-transparent px-2 py-2.5 text-[12px] text-black/55 sm:col-span-3",
-                      "data-[state=active]:border-[#E5E5E5] data-[state=active]:bg-[#F4F4F5] data-[state=active]:font-semibold data-[state=active]:text-black data-[state=active]:shadow-none",
-                    )}
-                  >
-                    <Icon className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">{item.label}</span>
-                  </TabsTrigger>
-                );
-              })}
-            </TabsList>
+            <div className="-mx-1 overflow-x-auto px-1 pb-1">
+              <TabsList className="inline-flex h-auto min-w-full gap-1.5 rounded-none bg-transparent p-0 pb-3">
+                {TENANT_DETAIL_TABS.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <TabsTrigger
+                      key={item.id}
+                      value={item.id}
+                      className={cn(
+                        "shrink-0 gap-1.5 rounded-xl border border-transparent px-3 py-2.5 text-[12px] text-black/55",
+                        "data-[state=active]:border-[#E5E5E5] data-[state=active]:bg-[#F4F4F5] data-[state=active]:font-semibold data-[state=active]:text-black data-[state=active]:shadow-none",
+                      )}
+                    >
+                      <Icon className="h-3.5 w-3.5 shrink-0" />
+                      <span className="whitespace-nowrap">{item.label}</span>
+                    </TabsTrigger>
+                  );
+                })}
+              </TabsList>
+            </div>
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 sm:px-6 sm:py-5">
@@ -1155,6 +1231,237 @@ function TenantDetailDrawer({
                   </Button>
                 </div>
               </div>
+            </TabsContent>
+
+            <TabsContent value="branches" className="mt-0">
+              <WorkspaceSnapshotState loading={snapshotLoading} error={snapshotError}>
+                <div className="grid grid-cols-12 gap-3">
+                  <div className="col-span-12 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-[13px] text-black/55">
+                      {snapshot?.totals.branches ?? 0} branch
+                      {(snapshot?.totals.branches ?? 0) === 1 ? "" : "es"} in this workspace
+                    </p>
+                  </div>
+                  <div className="col-span-12 divide-y divide-[#F0F0F0] rounded-2xl border border-[#E5E5E5] bg-white">
+                    {(snapshot?.branches ?? []).length === 0 ? (
+                      <div className="px-4 py-10 text-center text-[13px] text-black/45">
+                        No branches found.
+                      </div>
+                    ) : (
+                      snapshot?.branches.map((branch) => (
+                        <div key={branch.id} className="grid grid-cols-12 gap-3 px-4 py-3">
+                          <div className="col-span-12 sm:col-span-7">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="text-[13px] font-semibold text-black">{branch.name}</div>
+                              <span className="rounded-full bg-[#F4F4F5] px-2 py-0.5 font-mono text-[10px] text-black/55">
+                                {branch.code || branch.id}
+                              </span>
+                              {branch.isMain ? (
+                                <span className="rounded-full bg-[#CCFBF1] px-2 py-0.5 text-[10px] font-semibold text-black">
+                                  Main
+                                </span>
+                              ) : null}
+                              {!branch.isActive ? (
+                                <span className="rounded-full bg-[#FEE2E2] px-2 py-0.5 text-[10px] font-semibold text-[#B91C1C]">
+                                  Inactive
+                                </span>
+                              ) : null}
+                            </div>
+                            {branch.address ? (
+                              <div className="mt-1 text-[12px] text-black/55">{branch.address}</div>
+                            ) : null}
+                            <div className="mt-1 text-[12px] text-black/45">
+                              {[branch.phone, branch.email].filter(Boolean).join(" · ") || "No contact on file"}
+                            </div>
+                          </div>
+                          <div className="col-span-12 grid grid-cols-3 gap-2 sm:col-span-5">
+                            <DetailStat label="Students" value={branch.students.toLocaleString()} />
+                            <DetailStat label="Staff" value={branch.staff.toLocaleString()} />
+                            <DetailStat label="Payments" value={branch.payments.toLocaleString()} />
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </WorkspaceSnapshotState>
+            </TabsContent>
+
+            <TabsContent value="students" className="mt-0">
+              <WorkspaceSnapshotState loading={snapshotLoading} error={snapshotError}>
+                <div className="grid grid-cols-12 gap-3">
+                  <div className="col-span-12">
+                    <p className="text-[13px] text-black/55">
+                      {snapshot?.totals.students.toLocaleString() ?? 0} enrolled
+                      {(snapshot?.students.length ?? 0) > 0 &&
+                      (snapshot?.totals.students ?? 0) > (snapshot?.students.length ?? 0)
+                        ? ` · showing latest ${snapshot?.students.length}`
+                        : ""}
+                    </p>
+                  </div>
+                  <div className="col-span-12 divide-y divide-[#F0F0F0] rounded-2xl border border-[#E5E5E5] bg-white">
+                    {(snapshot?.students ?? []).length === 0 ? (
+                      <div className="px-4 py-10 text-center text-[13px] text-black/45">
+                        No students found.
+                      </div>
+                    ) : (
+                      snapshot?.students.map((student) => (
+                        <div key={student.id} className="grid grid-cols-12 gap-2 px-4 py-3">
+                          <div className="col-span-12 sm:col-span-5">
+                            <div className="text-[13px] font-semibold text-black">{student.name}</div>
+                            <div className="mt-0.5 font-mono text-[10px] text-black/45">{student.id}</div>
+                          </div>
+                          <div className="col-span-6 sm:col-span-2">
+                            <div className="text-[10px] uppercase tracking-wider text-black/40">Class</div>
+                            <div className="text-[12px] text-black/70">{student.className || "—"}</div>
+                          </div>
+                          <div className="col-span-6 sm:col-span-2">
+                            <div className="text-[10px] uppercase tracking-wider text-black/40">Branch</div>
+                            <div className="text-[12px] text-black/70">{student.branchName || "—"}</div>
+                          </div>
+                          <div className="col-span-6 sm:col-span-2">
+                            <div className="text-[10px] uppercase tracking-wider text-black/40">Due</div>
+                            <div className="font-mono text-[12px] text-black/70">
+                              {formatSnapshotInr(student.due)}
+                            </div>
+                          </div>
+                          <div className="col-span-6 sm:col-span-1 sm:text-right">
+                            <div className="text-[10px] uppercase tracking-wider text-black/40">Status</div>
+                            <div
+                              className={cn(
+                                "text-[12px] font-semibold",
+                                student.active ? "text-[#0F766E]" : "text-[#B91C1C]",
+                              )}
+                            >
+                              {student.active ? "Active" : "Inactive"}
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </WorkspaceSnapshotState>
+            </TabsContent>
+
+            <TabsContent value="staff" className="mt-0">
+              <WorkspaceSnapshotState loading={snapshotLoading} error={snapshotError}>
+                <div className="grid grid-cols-12 gap-3">
+                  <div className="col-span-12">
+                    <p className="text-[13px] text-black/55">
+                      {snapshot?.totals.staff.toLocaleString() ?? 0} staff member
+                      {(snapshot?.totals.staff ?? 0) === 1 ? "" : "s"}
+                      {(snapshot?.staff.length ?? 0) > 0 &&
+                      (snapshot?.totals.staff ?? 0) > (snapshot?.staff.length ?? 0)
+                        ? ` · showing latest ${snapshot?.staff.length}`
+                        : ""}
+                    </p>
+                  </div>
+                  <div className="col-span-12 divide-y divide-[#F0F0F0] rounded-2xl border border-[#E5E5E5] bg-white">
+                    {(snapshot?.staff ?? []).length === 0 ? (
+                      <div className="px-4 py-10 text-center text-[13px] text-black/45">
+                        No staff found.
+                      </div>
+                    ) : (
+                      snapshot?.staff.map((member) => (
+                        <div key={member.id} className="grid grid-cols-12 gap-2 px-4 py-3">
+                          <div className="col-span-12 sm:col-span-4">
+                            <div className="text-[13px] font-semibold text-black">{member.name}</div>
+                            <div className="mt-0.5 font-mono text-[10px] text-black/45">{member.id}</div>
+                          </div>
+                          <div className="col-span-6 sm:col-span-2">
+                            <div className="text-[10px] uppercase tracking-wider text-black/40">Role</div>
+                            <div className="text-[12px] text-black/70">{member.role || "—"}</div>
+                          </div>
+                          <div className="col-span-6 sm:col-span-2">
+                            <div className="text-[10px] uppercase tracking-wider text-black/40">Department</div>
+                            <div className="text-[12px] text-black/70">{member.department || "—"}</div>
+                          </div>
+                          <div className="col-span-6 sm:col-span-2">
+                            <div className="text-[10px] uppercase tracking-wider text-black/40">Branch</div>
+                            <div className="text-[12px] text-black/70">{member.branchName || "—"}</div>
+                          </div>
+                          <div className="col-span-6 sm:col-span-2 sm:text-right">
+                            <div className="text-[10px] uppercase tracking-wider text-black/40">Status</div>
+                            <div
+                              className={cn(
+                                "text-[12px] font-semibold",
+                                member.active ? "text-[#0F766E]" : "text-[#B91C1C]",
+                              )}
+                            >
+                              {member.active ? "Active" : "Inactive"}
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </WorkspaceSnapshotState>
+            </TabsContent>
+
+            <TabsContent value="payments" className="mt-0">
+              <WorkspaceSnapshotState loading={snapshotLoading} error={snapshotError}>
+                <div className="grid grid-cols-12 gap-3">
+                  <div className="col-span-12 sm:col-span-6">
+                    <div className="rounded-2xl border border-[#E5E5E5] bg-[#F4F4F5] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                        Total payment volume
+                      </div>
+                      <div className="mt-2 font-mono text-[22px] font-semibold text-black">
+                        {formatSnapshotInr(snapshot?.totals.paymentVolume ?? 0)}
+                      </div>
+                      <div className="mt-1 text-[12px] text-black/55">
+                        {snapshot?.totals.payments.toLocaleString() ?? 0} payment
+                        {(snapshot?.totals.payments ?? 0) === 1 ? "" : "s"} recorded
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-span-12 sm:col-span-6 flex items-center">
+                    <p className="text-[13px] text-black/55">
+                      {(snapshot?.payments.length ?? 0) > 0 &&
+                      (snapshot?.totals.payments ?? 0) > (snapshot?.payments.length ?? 0)
+                        ? `Showing latest ${snapshot?.payments.length} payments`
+                        : "Recent payments across all branches"}
+                    </p>
+                  </div>
+                  <div className="col-span-12 divide-y divide-[#F0F0F0] rounded-2xl border border-[#E5E5E5] bg-white">
+                    {(snapshot?.payments ?? []).length === 0 ? (
+                      <div className="px-4 py-10 text-center text-[13px] text-black/45">
+                        No payments found.
+                      </div>
+                    ) : (
+                      snapshot?.payments.map((payment) => (
+                        <div key={payment.id} className="grid grid-cols-12 gap-2 px-4 py-3">
+                          <div className="col-span-12 sm:col-span-4">
+                            <div className="text-[13px] font-semibold text-black">{payment.name}</div>
+                            <div className="mt-0.5 font-mono text-[10px] text-black/45">{payment.id}</div>
+                          </div>
+                          <div className="col-span-6 sm:col-span-2">
+                            <div className="text-[10px] uppercase tracking-wider text-black/40">Category</div>
+                            <div className="text-[12px] text-black/70">{payment.cat || "—"}</div>
+                          </div>
+                          <div className="col-span-6 sm:col-span-2">
+                            <div className="text-[10px] uppercase tracking-wider text-black/40">Mode</div>
+                            <div className="text-[12px] text-black/70">{payment.mode || "—"}</div>
+                          </div>
+                          <div className="col-span-6 sm:col-span-2">
+                            <div className="text-[10px] uppercase tracking-wider text-black/40">Branch</div>
+                            <div className="text-[12px] text-black/70">{payment.branchName || "—"}</div>
+                          </div>
+                          <div className="col-span-6 sm:col-span-2 sm:text-right">
+                            <div className="text-[10px] uppercase tracking-wider text-black/40">Amount</div>
+                            <div className="font-mono text-[12px] font-semibold text-black">
+                              {formatSnapshotInr(payment.amount)}
+                            </div>
+                            <div className="mt-0.5 font-mono text-[10px] text-black/45">{payment.time}</div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </WorkspaceSnapshotState>
             </TabsContent>
 
             <TabsContent value="billing" className="mt-0">

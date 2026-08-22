@@ -136,6 +136,75 @@ export async function fetchSuperAdminTenants(params?: {
   return apiRequest<Tenant[]>(`/api/super-admin/tenants.php${suffix}`);
 }
 
+export type TenantBranchSnapshot = {
+  id: string;
+  name: string;
+  code: string;
+  address: string;
+  phone: string;
+  email: string;
+  isActive: boolean;
+  isMain: boolean;
+  students: number;
+  staff: number;
+  payments: number;
+};
+
+export type TenantStudentSnapshot = {
+  id: string;
+  name: string;
+  className: string;
+  branchName: string;
+  guardian: string;
+  phone: string | null;
+  due: number;
+  active: boolean;
+};
+
+export type TenantStaffSnapshot = {
+  id: string;
+  name: string;
+  role: string;
+  department: string;
+  branchName: string;
+  phone: string | null;
+  active: boolean;
+};
+
+export type TenantPaymentSnapshot = {
+  id: string;
+  name: string;
+  cat: string;
+  mode: string;
+  amount: number;
+  time: string;
+  branchName: string;
+  payerType?: string;
+  className?: string | null;
+};
+
+export type TenantWorkspaceSnapshot = {
+  branches: TenantBranchSnapshot[];
+  students: TenantStudentSnapshot[];
+  staff: TenantStaffSnapshot[];
+  payments: TenantPaymentSnapshot[];
+  totals: {
+    branches: number;
+    students: number;
+    staff: number;
+    payments: number;
+    paymentVolume: number;
+  };
+};
+
+export async function fetchSuperAdminTenantSnapshot(
+  tenantId: string,
+): Promise<TenantWorkspaceSnapshot> {
+  return apiRequest<TenantWorkspaceSnapshot>(
+    `/api/super-admin/tenants.php?view=snapshot&tenantId=${encodeURIComponent(tenantId)}`,
+  );
+}
+
 export async function provisionSuperAdminTenant(
   input: ProvisionInput,
 ): Promise<ProvisionResult> {

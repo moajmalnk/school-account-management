@@ -6,6 +6,16 @@ import { toast } from "sonner";
 import { SupportChatBubble, SupportChatShell, ConversationMeta } from "@/components/support/SupportChatBubble";
 import { SupportComposer } from "@/components/support/SupportComposer";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OrganicCard } from "@/components/ui/organic-card";
@@ -13,12 +23,16 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, getApiToken } from "@/lib/api/client";
 import {
+  deleteSuperAdminSupportMessage,
+  editSuperAdminSupportMessage,
   fetchSuperAdminSupport,
   fetchSuperAdminSupportTicket,
   postSuperAdminSupport,
   SUPPORT_DEFAULT_WHATSAPP_E164,
+  SUPPORT_MESSAGE_EDIT_WINDOW_MS,
   type SupportAttachment,
   type SupportFaq,
+  type SupportMessage,
   type SupportSettings,
   type SupportTicket,
   type SupportTicketStatus,
@@ -114,7 +128,28 @@ export function SupportDeskView() {
   const [faqBusy, setFaqBusy] = useState(false);
   const [thread, setThread] = useState<SupportTicket | null>(null);
   const [replyBusy, setReplyBusy] = useState(false);
+  const [editingMessage, setEditingMessage] = useState<SupportMessage | null>(null);
+  const [deletingMessage, setDeletingMessage] = useState<SupportMessage | null>(null);
+  const [pendingStatusChange, setPendingStatusChange] = useState<"closed" | "open" | null>(null);
   const threadScrollRef = useRef<HTMLDivElement>(null);
+
+  const canEditMessage = useCallback((msg: SupportMessage) => {
+    if (msg.author !== "admin") return false;
+    if (!(msg.body || "").trim()) return false;
+    const age = Date.now() - new Date(msg.createdAt).getTime();
+    return age >= 0 && age <= SUPPORT_MESSAGE_EDIT_WINDOW_MS;
+  }, []);
+
+  const canDeleteMessage = useCallback((msg: SupportMessage) => msg.author === "admin", []);
+
+  const applyThreadUpdate = useCallback((ticket: SupportTicket) => {
+    setThread(ticket);
+    setTickets((prev) =>
+      prev.map((item) =>
+        item.id === ticket.id ? { ...item, ...ticket, messages: undefined } : item,
+      ),
+    );
+  }, []);
 
   useEffect(() => {
     const el = threadScrollRef.current;
@@ -201,6 +236,12 @@ export function SupportDeskView() {
     };
   }, [ticketId, navigate]);
 
+  useEffect(() => {
+    setEditingMessage(null);
+    setDeletingMessage(null);
+    setPendingStatusChange(null);
+  }, [ticketId]);
+
   const sendReply = async (input: { body: string; attachments: SupportAttachment[] }) => {
     if (!thread) return;
     if (!input.body.trim() && input.attachments.length === 0) return;
@@ -212,16 +253,55 @@ export function SupportDeskView() {
         body: input.body.trim(),
         attachments: input.attachments,
       });
-      setThread(data.ticket);
-      setTickets((prev) =>
-        prev.map((item) =>
-          item.id === data.ticket.id ? { ...item, ...data.ticket, messages: undefined } : item,
-        ),
-      );
+      applyThreadUpdate(data.ticket);
       toast.success("Reply sent");
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Reply failed";
       throw err instanceof Error ? err : new Error(msg);
+    } finally {
+      setReplyBusy(false);
+    }
+  };
+
+  const saveEditedMessage = async (input: { body: string; attachments: SupportAttachment[] }) => {
+    if (!thread || !editingMessage) return;
+    if (!input.body.trim()) return;
+    setReplyBusy(true);
+    try {
+      const next = await editSuperAdminSupportMessage({
+        ticketId: thread.id,
+        messageId: editingMessage.id,
+        body: input.body.trim(),
+      });
+      applyThreadUpdate(next);
+      setEditingMessage(null);
+      toast.success("Message updated");
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Could not edit message";
+      toast.error("Could not edit", { description: msg });
+      throw err instanceof Error ? err : new Error(msg);
+    } finally {
+      setReplyBusy(false);
+    }
+  };
+
+  const confirmDeleteMessage = async () => {
+    if (!thread || !deletingMessage) return;
+    setReplyBusy(true);
+    try {
+      const next = await deleteSuperAdminSupportMessage({
+        ticketId: thread.id,
+        messageId: deletingMessage.id,
+      });
+      applyThreadUpdate(next);
+      if (editingMessage?.id === deletingMessage.id) {
+        setEditingMessage(null);
+      }
+      setDeletingMessage(null);
+      toast.success("Message deleted");
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Could not delete message";
+      toast.error("Could not delete", { description: msg });
     } finally {
       setReplyBusy(false);
     }
@@ -235,10 +315,8 @@ export function SupportDeskView() {
         action: "ticket.close",
         ticketId: thread.id,
       });
-      setThread(data.ticket);
-      setTickets((prev) =>
-        prev.map((item) => (item.id === data.ticket.id ? { ...item, status: "closed" } : item)),
-      );
+      applyThreadUpdate(data.ticket);
+      setPendingStatusChange(null);
       toast.success("Marked as closed");
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Close failed";
@@ -256,10 +334,8 @@ export function SupportDeskView() {
         action: "ticket.reopen",
         ticketId: thread.id,
       });
-      setThread(data.ticket);
-      setTickets((prev) =>
-        prev.map((item) => (item.id === data.ticket.id ? { ...item, status: "open" } : item)),
-      );
+      applyThreadUpdate(data.ticket);
+      setPendingStatusChange(null);
       toast.success("Chat reopened");
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Reopen failed";
@@ -267,6 +343,15 @@ export function SupportDeskView() {
     } finally {
       setReplyBusy(false);
     }
+  };
+
+  const confirmStatusChange = () => {
+    if (!pendingStatusChange) return;
+    if (pendingStatusChange === "closed") {
+      void closeTicket();
+      return;
+    }
+    void reopenTicket();
   };
 
   const saveChannels = async () => {
@@ -345,6 +430,7 @@ export function SupportDeskView() {
   }
 
   return (
+    <>
     <div className="grid grid-cols-12 gap-3 sm:gap-4 lg:gap-5">
       <div className="col-span-12">
         <h1 className="text-heading">Customer Support</h1>
@@ -532,7 +618,7 @@ export function SupportDeskView() {
                         size="sm"
                         className="h-8 rounded-full"
                         disabled={replyBusy}
-                        onClick={() => void closeTicket()}
+                        onClick={() => setPendingStatusChange("closed")}
                       >
                         Close
                       </Button>
@@ -542,7 +628,7 @@ export function SupportDeskView() {
                         size="sm"
                         className="h-8 rounded-full bg-[#0F766E] px-3 text-white hover:bg-[#0D9488]"
                         disabled={replyBusy}
-                        onClick={() => void reopenTicket()}
+                        onClick={() => setPendingStatusChange("open")}
                       >
                         Reopen
                       </Button>
@@ -558,26 +644,42 @@ export function SupportDeskView() {
                           key={msg.id}
                           fromYou={msg.author === "admin"}
                           createdAt={msg.createdAt}
+                          updatedAt={msg.updatedAt}
                           body={msg.body}
                           attachments={msg.attachments}
+                          canEdit={
+                            thread.status !== "closed" && canEditMessage(msg)
+                          }
+                          canDelete={canDeleteMessage(msg)}
+                          onEdit={
+                            thread.status !== "closed" && canEditMessage(msg)
+                              ? () => setEditingMessage(msg)
+                              : undefined
+                          }
+                          onDelete={
+                            canDeleteMessage(msg) ? () => setDeletingMessage(msg) : undefined
+                          }
                         />
                       ))}
                     </div>
                   </div>
                   <div className="shrink-0 px-1.5 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1 sm:px-2">
                     {thread.status === "closed" ? (
-                      <p className="rounded-2xl bg-white/80 px-3 py-2 text-center text-[12px] text-black/50">
+                      <p className="rounded-2xl bg-white/80 px-3 py-2 text-center text-[12px] text-black/50 dark:bg-zinc-900/80 dark:text-zinc-400">
                         Closed. Reopen from the header, or the school can write again.
                       </p>
                     ) : (
                       <SupportComposer
-                        key={thread.id}
+                        key={`${thread.id}-${editingMessage?.id ?? "new"}`}
                         ticketId={thread.id}
-                        placeholder="Message"
+                        placeholder={editingMessage ? "Edit message" : "Message"}
                         autoFocus
                         disabled={replyBusy}
                         busy={replyBusy}
-                        onSend={sendReply}
+                        initialDraft={editingMessage?.body ?? ""}
+                        editingMessageId={editingMessage?.id ?? null}
+                        onCancelEdit={() => setEditingMessage(null)}
+                        onSend={editingMessage ? saveEditedMessage : sendReply}
                       />
                     )}
                   </div>
@@ -785,5 +887,72 @@ export function SupportDeskView() {
         </OrganicCard>
       ) : null}
     </div>
+
+    <AlertDialog
+      open={pendingStatusChange !== null}
+      onOpenChange={(open) => {
+        if (!open && !replyBusy) setPendingStatusChange(null);
+      }}
+    >
+      <AlertDialogContent className="max-w-sm rounded-2xl border border-[#E5E5E5] bg-white dark:border-white/10 dark:bg-zinc-900">
+        <AlertDialogHeader>
+          <AlertDialogTitle className="text-black dark:text-zinc-50">
+            {pendingStatusChange === "closed" ? "Close this chat?" : "Reopen this chat?"}
+          </AlertDialogTitle>
+          <AlertDialogDescription className="text-black/60 dark:text-zinc-400">
+            {pendingStatusChange === "closed"
+              ? "The school will not be able to send new messages until this chat is reopened."
+              : "Reopening lets you and the school continue this conversation."}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={replyBusy} className="rounded-full">
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            disabled={replyBusy}
+            className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+            onClick={(event) => {
+              event.preventDefault();
+              confirmStatusChange();
+            }}
+          >
+            {pendingStatusChange === "closed" ? "Close chat" : "Reopen chat"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    <AlertDialog
+      open={Boolean(deletingMessage)}
+      onOpenChange={(open) => {
+        if (!open && !replyBusy) setDeletingMessage(null);
+      }}
+    >
+      <AlertDialogContent className="max-w-sm rounded-2xl border border-[#E5E5E5] bg-white dark:border-white/10 dark:bg-zinc-900">
+        <AlertDialogHeader>
+          <AlertDialogTitle className="text-black dark:text-zinc-50">Delete message?</AlertDialogTitle>
+          <AlertDialogDescription className="text-black/60 dark:text-zinc-400">
+            This message will be removed for you and the school. This cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={replyBusy} className="rounded-full">
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            disabled={replyBusy}
+            className="rounded-full bg-[#EF4444] text-white hover:bg-[#DC2626]"
+            onClick={(event) => {
+              event.preventDefault();
+              void confirmDeleteMessage();
+            }}
+          >
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }

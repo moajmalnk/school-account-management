@@ -246,6 +246,32 @@ export async function postSuperAdminSupport<T>(body: Record<string, unknown>): P
   return apiRequest<T>("/api/super-admin/support.php", { method: "POST", body });
 }
 
+export async function editSuperAdminSupportMessage(input: {
+  ticketId: string;
+  messageId: string;
+  body: string;
+}): Promise<SupportTicket> {
+  const data = await postSuperAdminSupport<{ ticket: SupportTicket }>({
+    action: "ticket.editMessage",
+    ticketId: input.ticketId,
+    messageId: input.messageId,
+    body: input.body,
+  });
+  return data.ticket;
+}
+
+export async function deleteSuperAdminSupportMessage(input: {
+  ticketId: string;
+  messageId: string;
+}): Promise<SupportTicket> {
+  const data = await postSuperAdminSupport<{ ticket: SupportTicket }>({
+    action: "ticket.deleteMessage",
+    ticketId: input.ticketId,
+    messageId: input.messageId,
+  });
+  return data.ticket;
+}
+
 export const SUPPORT_MAX_ATTACHMENTS = 5;
 export const SUPPORT_MAX_BYTES = 8 * 1024 * 1024;
 export const SUPPORT_VOICE_MAX_MS = 120_000;
