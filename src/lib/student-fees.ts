@@ -32,9 +32,10 @@ export type StudentReceipt = {
 };
 
 export type StudentFeeStatement = {
-  totalDue: number;
+  totalFee: number;
   totalPaid: number;
-  balance: number;
+  /** Outstanding balance still due from the parent. */
+  totalDue: number;
   overdue: boolean;
   ledger: StudentLedgerRow[];
   receipts: StudentReceipt[];
@@ -260,17 +261,22 @@ export function buildStudentFeeStatement(input: {
   }));
 
   const totalPaid = receipts.reduce((s, r) => s + r.amount, 0);
-  const balance = Math.max(0, student.due);
-  const totalDue = Math.max(
+  const totalFee = Math.max(
     ledger.reduce((s, r) => s + r.charge, 0),
-    totalPaid + balance,
+    totalPaid,
+  );
+  const ledgerOutstanding = ledger.reduce((s, r) => s + r.balance, 0);
+  const totalDue = Math.max(
+    ledgerOutstanding,
+    Math.max(0, student.due),
+    Math.max(0, totalFee - totalPaid),
   );
 
   return {
-    totalDue,
+    totalFee,
     totalPaid,
-    balance,
-    overdue: balance > 0,
+    totalDue,
+    overdue: totalDue > 0 && ledger.some((r) => r.status === "Overdue"),
     ledger,
     receipts,
   };

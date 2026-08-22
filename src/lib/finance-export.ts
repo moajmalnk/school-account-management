@@ -1597,3 +1597,214 @@ export async function printPaymentVoucherPdf(
 ) {
   return downloadPaymentVoucherPdf(payment, schoolName, branding, billTo, academicYear, "print");
 }
+
+export type StudentFeeReportInput = {
+  student: Pick<Student, "id" | "name" | "cls" | "phone" | "guardian" | "address">;
+  guardian?: string;
+  schoolName: string;
+  academicYear: string;
+  statement: {
+    totalFee: number;
+    totalPaid: number;
+    totalDue: number;
+    ledger: {
+      date: string;
+      desc: string;
+      due: string;
+      charge: number;
+      paid: number;
+      balance: number;
+      status: string;
+    }[];
+    receipts: {
+      id: string;
+      date: string;
+      amount: number;
+      mode: string;
+      cat?: string;
+      period?: string;
+    }[];
+  };
+  branding?: ReceiptBranding;
+};
+
+export async function downloadStudentFeeReportPdf(
+  input: StudentFeeReportInput,
+  action: PdfEmitAction = "download",
+) {
+  const { student, schoolName, academicYear, statement, branding } = input;
+  const guardian = input.guardian?.trim() || student.guardian?.trim() || "—";
+  const [logo, letterhead] = await Promise.all([
+    loadLogoForPdf(branding?.logoUrl),
+    loadLetterheadForPdf(branding?.letterheadUrl),
+  ]);
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 16;
+  const contentWidth = pageWidth - margin * 2;
+  const generatedAt = formatNow();
+  const displayName = pdfSafe(schoolName || "School");
+
+  doc.setFillColor(...receiptInk().white);
+  doc.rect(0, 0, pageWidth, pageHeight, "F");
+
+  const headerBottom = letterhead
+    ? drawUploadedLetterheadBanner(doc, pageWidth, letterhead, margin)
+    : drawReceiptLetterheadHeader(doc, pageWidth, displayName, branding, logo);
+
+  const barY = drawDocumentTitleBar(doc, pageWidth, contentWidth, "Student Fee Statement", headerBottom + 2) + 6;
+  doc.setFont(pdfFontName(), "normal");
+  doc.setFontSize(8.5);
+  doc.setTextColor(...receiptInk().muted);
+  doc.text(`Academic Year: ${pdfSafe(academicYear)}`, pageWidth / 2, barY, { align: "center" });
+
+  const metaTop = barY + 8;
+  const leftRows: [string, string][] = [
+    ["Student Name", pdfSafe(student.name)],
+    ["Student ID", pdfSafe(student.id)],
+    ["Class", pdfSafe(student.cls || "—")],
+    ["Guardian", pdfSafe(guardian)],
+    ["Contact", pdfSafe(student.phone?.trim() || branding?.studentContact || "—")],
+  ];
+  const leftEnd = drawMetaPairs(doc, leftRows, metaTop, margin, contentWidth * 0.52);
+
+  const rightX = pageWidth - margin;
+  doc.setFont(pdfFontName(), "normal");
+  doc.setFontSize(8.5);
+  doc.setTextColor(...receiptInk().muted);
+  doc.text(`Generated ${generatedAt}`, rightX, metaTop, { align: "right" });
+
+  const summaryTop = leftEnd + 6;
+  const colGap = 4;
+  const colW = (contentWidth - colGap * 2) / 3;
+  const summaryItems = [
+    { label: "Total Fee", value: formatInrPdf(statement.totalFee) },
+    { label: "Total Paid", value: formatInrPdf(statement.totalPaid) },
+    { label: "Total Due", value: formatInrPdf(statement.totalDue) },
+  ];
+  summaryItems.forEach((item, index) => {
+    const x = margin + index * (colW + colGap);
+    doc.setDrawColor(...receiptInk().line);
+    doc.setLineWidth(0.22);
+    doc.roundedRect(x, summaryTop, colW, 22, 2, 2, "S");
+    doc.setFont(pdfFontName(), "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(...receiptInk().muted);
+    doc.text(item.label.toUpperCase(), x + 4, summaryTop + 6);
+    doc.setFont(pdfFontName(), "bold");
+    doc.setFontSize(12);
+    if (index === 2 && statement.totalDue > 0) {
+      doc.setTextColor(185, 28, 28);
+    } else {
+      doc.setTextColor(...receiptInk().ink);
+    }
+    doc.text(item.value, x + 4, summaryTop + 14.5);
+  });
+
+  let tableStart = summaryTop + 28;
+  if (statement.ledger.length > 0) {
+    autoTable(doc, {
+      startY: tableStart,
+      margin: { left: margin, right: margin },
+      tableWidth: contentWidth,
+      head: [["Date", "Description", "Due Date", "Charge", "Paid", "Balance", "Status"]],
+      body: statement.ledger.map((row) => [
+        pdfSafe(row.date),
+        pdfSafe(row.desc),
+        pdfSafe(row.due),
+        row.charge.toLocaleString("en-IN"),
+        row.paid.toLocaleString("en-IN"),
+        row.balance.toLocaleString("en-IN"),
+        pdfSafe(row.status),
+      ]),
+      theme: "grid",
+      styles: {
+        fontSize: 8.5,
+        cellPadding: { top: 2.8, right: 3, bottom: 2.8, left: 3 },
+        lineColor: receiptInk().line,
+        lineWidth: 0.18,
+        textColor: receiptInk().ink,
+        valign: "middle",
+      },
+      headStyles: {
+        fillColor: receiptInk().teal,
+        textColor: receiptInk().white,
+        fontStyle: "bold",
+        fontSize: 8,
+      },
+      alternateRowStyles: { fillColor: receiptInk().zebra },
+      columnStyles: {
+        3: { halign: "right" },
+        4: { halign: "right" },
+        5: { halign: "right" },
+      },
+    });
+    tableStart = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
+  }
+
+  if (statement.receipts.length > 0) {
+    doc.setFont(pdfFontName(), "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(...receiptInk().tealDeep);
+    doc.text("Payment History", margin, tableStart);
+    tableStart += 5;
+    autoTable(doc, {
+      startY: tableStart,
+      margin: { left: margin, right: margin },
+      tableWidth: contentWidth,
+      head: [["Receipt", "Date", "Category", "Mode", "Amount"]],
+      body: statement.receipts.map((row) => [
+        pdfSafe(row.id),
+        pdfSafe(row.date),
+        pdfSafe(row.period ? `${row.cat || "Fee"} · ${row.period}` : row.cat || "Fee"),
+        pdfSafe(row.mode),
+        row.amount.toLocaleString("en-IN"),
+      ]),
+      theme: "grid",
+      styles: {
+        fontSize: 8.5,
+        cellPadding: { top: 2.8, right: 3, bottom: 2.8, left: 3 },
+        lineColor: receiptInk().line,
+        textColor: receiptInk().ink,
+      },
+      headStyles: {
+        fillColor: receiptInk().headerTint,
+        textColor: receiptInk().tealDeep,
+        fontStyle: "bold",
+        fontSize: 8,
+      },
+      alternateRowStyles: { fillColor: receiptInk().zebra },
+      columnStyles: {
+        4: { halign: "right", fontStyle: "bold" },
+      },
+    });
+    tableStart = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
+  }
+
+  await drawSealFooter(
+    doc,
+    pageWidth,
+    pageHeight,
+    margin,
+    Math.min(tableStart, pageHeight - 42),
+    generatedAt,
+    displayName,
+    `This statement is issued for parent reference. For fee queries, contact ${displayName}.`,
+    true,
+    branding,
+  );
+
+  emitPdf(
+    doc,
+    formatDownloadFilename("reports", "pdf", {
+      report: "student-fee",
+      id: student.id,
+      name: student.name,
+      school: schoolName,
+      year: slugYear(academicYear),
+      date: todayStamp(),
+    }),
+    action,
+  );
+}

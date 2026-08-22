@@ -58,7 +58,7 @@ import {
   type StudentReceipt as Receipt,
 } from "@/lib/student-fees";
 import { ShareParentLinkDialog } from "@/components/school/ShareParentLinkDialog";
-import { downloadReceiptPdf, receiptBrandingFromSchool } from "@/lib/finance-export";
+import { downloadReceiptPdf, downloadStudentFeeReportPdf, receiptBrandingFromSchool } from "@/lib/finance-export";
 import { sendWhatsAppNotify, toNotifyWhatsAppNumber } from "@/lib/whatsapp-notify";
 import { apiDeleteStudent, apiUpsertStudent } from "@/lib/api/records";
 import { useAuth } from "@/lib/auth";
@@ -466,6 +466,26 @@ export function StudentProfileDetail({
       upsertStudentInSnapshot(next);
     });
   }, [student, setStudents]);
+
+  const handleDownloadParentFeeReport = async () => {
+    try {
+      await downloadStudentFeeReportPdf({
+        student,
+        guardian: student.guardian,
+        schoolName,
+        academicYear,
+        statement: feeStatement,
+        branding: receiptBrandingFromSchool(schoolDetails, student),
+      });
+      toast.success("Fee report downloaded", {
+        description: "PDF ready to share with parents",
+      });
+    } catch (err) {
+      toast.error("Could not generate fee report", {
+        description: err instanceof Error ? err.message : "Download failed",
+      });
+    }
+  };
 
   const syncStudent = async (updated: Student) => {
     setStudents((prev) => prev.map((s) => (s.id === student.id ? updated : s)));
@@ -943,15 +963,26 @@ export function StudentProfileDetail({
 
         <ProfileTabPanel value="payments" className="space-y-4 sm:space-y-6">
           <section className={CARD_FRAME}>
-            <h2 className="text-base font-semibold text-black">Fees Overview</h2>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <h2 className="text-base font-semibold text-black">Fees Overview</h2>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full shrink-0 rounded-full sm:w-auto"
+                onClick={() => void handleDownloadParentFeeReport()}
+              >
+                <Download className="h-3.5 w-3.5" />
+                Download report for parents
+              </Button>
+            </div>
             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <FeeStatBox label="Total Due" value={inr(fees.totalDue)} />
+              <FeeStatBox label="Total Fee" value={inr(fees.totalFee)} />
               <FeeStatBox
                 label="Total Paid"
                 value={inr(fees.totalPaid)}
                 valueClassName="text-[#10B981]"
               />
-              <FeeBalanceBox balance={fees.balance} overdue={fees.overdue} />
+              <FeeDueBox totalDue={fees.totalDue} overdue={fees.overdue} />
             </div>
           </section>
 
@@ -1016,22 +1047,23 @@ function FeeStatBox({
   );
 }
 
-function FeeBalanceBox({ balance, overdue }: { balance: number; overdue: boolean }) {
+function FeeDueBox({ totalDue, overdue }: { totalDue: number; overdue: boolean }) {
+  const cleared = totalDue <= 0;
   return (
     <div
       className={cn(
         "rounded-lg p-4",
-        overdue ? "bg-[#0F766E]" : "bg-slate-50 dark:bg-zinc-900/70",
+        !cleared && overdue ? "bg-[#0F766E]" : "bg-slate-50 dark:bg-zinc-900/70",
       )}
     >
       <div
         className={cn(
           "flex items-start justify-between",
-          overdue ? "text-white/75" : "text-black/55 dark:text-zinc-400",
+          !cleared && overdue ? "text-white/75" : "text-black/55 dark:text-zinc-400",
         )}
       >
-        <div className="text-[11px] font-semibold uppercase tracking-wider">Current Balance</div>
-        {overdue ? (
+        <div className="text-[11px] font-semibold uppercase tracking-wider">Total Due</div>
+        {!cleared && overdue ? (
           <AlertTriangle className="h-4 w-4 text-[#EF4444]" />
         ) : (
           <CheckCircle2 className="h-4 w-4 text-black" />
@@ -1040,18 +1072,18 @@ function FeeBalanceBox({ balance, overdue }: { balance: number; overdue: boolean
       <div
         className={cn(
           "mt-2 font-mono text-xl font-semibold tracking-tight",
-          overdue ? "text-white" : "text-black",
+          !cleared && overdue ? "text-white" : "text-black dark:text-zinc-100",
         )}
       >
-        {inr(balance)}
+        {inr(totalDue)}
       </div>
       <span
         className={cn(
           "mt-2 inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider",
-          overdue ? "bg-[#0F172A] text-[#EF4444]" : "bg-[#0F172A] text-[#10B981]",
+          cleared ? "bg-[#0F172A] text-[#10B981]" : overdue ? "bg-[#0F172A] text-[#EF4444]" : "bg-[#0F172A] text-[#F59E0B]",
         )}
       >
-        {overdue ? "[ OVERDUE ]" : "[ CLEARED ]"}
+        {cleared ? "[ CLEARED ]" : overdue ? "[ OVERDUE ]" : "[ PENDING ]"}
       </span>
     </div>
   );
