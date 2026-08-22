@@ -8190,7 +8190,7 @@ function ReceivePayment() {
                       </div>
 
                       <div className="mt-3 grid grid-cols-12 gap-3">
-                        <div className="col-span-12 min-w-0">
+                        <div className="col-span-12 min-w-0 sm:col-span-5">
                           <FieldLabel>Fee description</FieldLabel>
                           <FieldSelect
                             value={item.description}
@@ -8201,32 +8201,8 @@ function ReceivePayment() {
                             onAddNew={() => openAddCategoryDialog({ type: "feeLine", id: item.id })}
                             addNewLabel="Add new description"
                           />
-                          {isOtherFeeDescription(item.description) && (
-                            <Input
-                              value={item.customDescription}
-                              onChange={(e) =>
-                                updateFeeLine(item.id, { customDescription: e.target.value })
-                              }
-                              placeholder="Describe this fee"
-                              className="mt-1.5 h-10 border-red-200 text-[12px] text-red-700 placeholder:text-red-400"
-                            />
-                          )}
                         </div>
-                        <div className="col-span-12 min-w-0 sm:col-span-5">
-                          <FieldLabel>Amount</FieldLabel>
-                          <input
-                            value={item.amount}
-                            onChange={(e) =>
-                              updateFeeLine(item.id, {
-                                amount: e.target.value.replace(/[^0-9]/g, ""),
-                              })
-                            }
-                            inputMode="numeric"
-                            placeholder="0"
-                            className="h-11 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 font-mono text-[15px] font-semibold dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 sm:h-10 sm:text-[13px] sm:font-normal"
-                          />
-                        </div>
-                        <div className="col-span-12 min-w-0 sm:col-span-7">
+                        <div className="col-span-12 min-w-0 sm:col-span-4">
                           <FieldLabel>Fee period</FieldLabel>
                           <FieldSelect
                             value={`${item.feePeriodKind}:${item.feePeriod}`}
@@ -8240,6 +8216,32 @@ function ReceivePayment() {
                             contentClassName="min-w-[min(100vw-1.5rem,20rem)]"
                           />
                         </div>
+                        <div className="col-span-12 min-w-0 sm:col-span-3">
+                          <FieldLabel>Amount</FieldLabel>
+                          <input
+                            value={item.amount}
+                            onChange={(e) =>
+                              updateFeeLine(item.id, {
+                                amount: e.target.value.replace(/[^0-9]/g, ""),
+                              })
+                            }
+                            inputMode="numeric"
+                            placeholder="0"
+                            className="h-11 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 font-mono text-[15px] font-semibold dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 sm:h-10 sm:text-[13px] sm:font-normal"
+                          />
+                        </div>
+                        {isOtherFeeDescription(item.description) ? (
+                          <div className="col-span-12 min-w-0">
+                            <Input
+                              value={item.customDescription}
+                              onChange={(e) =>
+                                updateFeeLine(item.id, { customDescription: e.target.value })
+                              }
+                              placeholder="Describe this fee"
+                              className="h-10 border-red-200 text-[12px] text-red-700 placeholder:text-red-400"
+                            />
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   </div>
