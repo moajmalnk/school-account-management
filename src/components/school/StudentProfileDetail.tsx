@@ -441,12 +441,14 @@ export function StudentProfileDetail({
         payments: activePayments,
         classes: classConfigs,
         feeTerms: activeFeeTerms,
+        transportRoutes,
         academicYear,
       }),
-    [student, activePayments, classConfigs, activeFeeTerms, academicYear],
+    [student, activePayments, classConfigs, activeFeeTerms, transportRoutes, academicYear],
   );
   const fees = feeStatement;
-  const ledger = feeStatement.ledger;
+  const ledger = feeStatement.tuition.ledger;
+  const vehicleFees = feeStatement.vehicle;
   const receipts = feeStatement.receipts;
   const documents = useMemo(() => ensureStudentDocuments(student), [student]);
   const docsNormalizedForId = useRef<string | null>(null);
@@ -984,10 +986,63 @@ export function StudentProfileDetail({
               />
               <FeeDueBox totalDue={fees.totalDue} overdue={fees.overdue} />
             </div>
+            {vehicleFees.applicable ? (
+              <div className="mt-4 rounded-lg border border-[#D1FAE5] bg-[#F0FDFA] px-4 py-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-[#0F766E]">
+                      Vehicle / Transport
+                    </div>
+                    <p className="mt-1 text-[13px] font-medium text-black">
+                      {vehicleFees.routeLabel ||
+                        [vehicleFees.pickup, vehicleFees.drop].filter(Boolean).join(" → ") ||
+                        "School bus assigned"}
+                    </p>
+                    <p className="mt-0.5 text-[12px] text-black/55">
+                      {vehicleFees.shift === "morning"
+                        ? "Morning shift"
+                        : vehicleFees.shift === "evening"
+                          ? "Evening shift"
+                          : "Both shifts"}
+                      {vehicleFees.pickup ? ` · Pickup: ${vehicleFees.pickup}` : ""}
+                      {vehicleFees.drop ? ` · Drop: ${vehicleFees.drop}` : ""}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 sm:min-w-[320px]">
+                    <div className="rounded-lg bg-white/80 px-3 py-2 text-center dark:bg-zinc-900/50">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                        Payable
+                      </div>
+                      <div className="mt-0.5 font-mono text-[13px] font-semibold text-black">
+                        {inr(vehicleFees.totalFee)}
+                      </div>
+                    </div>
+                    <div className="rounded-lg bg-white/80 px-3 py-2 text-center dark:bg-zinc-900/50">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                        Paid
+                      </div>
+                      <div className="mt-0.5 font-mono text-[13px] font-semibold text-[#10B981]">
+                        {inr(vehicleFees.totalPaid)}
+                      </div>
+                    </div>
+                    <div className="rounded-lg bg-white/80 px-3 py-2 text-center dark:bg-zinc-900/50">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                        Due
+                      </div>
+                      <div className="mt-0.5 font-mono text-[13px] font-semibold text-black">
+                        {inr(vehicleFees.totalDue)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </section>
 
           <section className={CARD_FRAME}>
             <FeesTable
+              title="Academic Fees"
+              subtitle="Tuition and school fee schedule"
               ledger={ledger}
               student={student}
               guardian={student.guardian}
@@ -996,6 +1051,25 @@ export function StudentProfileDetail({
               academicYear={academicYear}
             />
           </section>
+
+          {vehicleFees.applicable ? (
+            <section className={CARD_FRAME}>
+              <FeesTable
+                title="Vehicle / Transport Fees"
+                subtitle={
+                  vehicleFees.routeLabel
+                    ? `Route ${vehicleFees.routeLabel} · attendance-based transport charges`
+                    : "Transport fee schedule for this student"
+                }
+                ledger={vehicleFees.ledger}
+                student={student}
+                guardian={student.guardian}
+                phone={student.phone ?? ""}
+                schoolName={schoolName}
+                academicYear={academicYear}
+              />
+            </section>
+          ) : null}
 
           <section className={CARD_FRAME}>
             <ReceiptsList
@@ -1302,6 +1376,8 @@ function FeesTable({
   phone,
   schoolName,
   academicYear,
+  title = "Fees Details",
+  subtitle,
 }: {
   ledger: LedgerRow[];
   student: Student;
@@ -1309,6 +1385,8 @@ function FeesTable({
   phone: string;
   schoolName: string;
   academicYear: string;
+  title?: string;
+  subtitle?: string;
 }) {
   const [selectedRow, setSelectedRow] = useState<LedgerRow | null>(null);
   const paidPct =
@@ -1332,9 +1410,9 @@ function FeesTable({
       <div>
         <div className="mb-4 flex items-end justify-between gap-4">
           <div>
-            <h2 className="text-base font-semibold text-black">Fees Details</h2>
+            <h2 className="text-base font-semibold text-black">{title}</h2>
             <div className="mt-1 text-[12px] text-black/55">
-              Statement ledger sheet · {ledger.length} line items on file
+              {subtitle ?? `Statement ledger sheet · ${ledger.length} line items on file`}
             </div>
           </div>
           <span className="rounded-full border border-[#E5E5E5] bg-[#F4F4F5] px-2.5 py-1 font-mono text-[10.5px] font-medium text-black/65">

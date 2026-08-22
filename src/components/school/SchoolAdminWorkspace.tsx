@@ -11685,18 +11685,18 @@ function MakePayment() {
                     : "bg-[#CCFBF1] text-[#0F172A] hover:bg-[#99F6E4] dark:hover:bg-[#5EEAD4]"
                 }`}
               >
-                <div className="flex items-center justify-between text-[12.5px]">
-                  <span className="font-semibold">{p.payee}</span>
-                  <span className="font-mono">₹ {p.amount.toLocaleString("en-IN")}</span>
+                <div className="flex items-start justify-between gap-2 text-[12.5px]">
+                  <span className="min-w-0 break-words font-semibold">{p.payee}</span>
+                  <span className="shrink-0 font-mono">₹ {p.amount.toLocaleString("en-IN")}</span>
                 </div>
                 <div
-                  className={`mt-0.5 flex items-center justify-between text-[10.5px] ${
+                  className={`mt-1 flex flex-col gap-1.5 text-[10.5px] sm:flex-row sm:items-start sm:justify-between sm:gap-2 ${
                     isSelected ? "text-[#991B1B]/75" : "text-black/55 dark:text-zinc-400"
                   }`}
                 >
-                  <span>{p.desc}</span>
+                  <span className="min-w-0 break-words leading-snug">{p.desc}</span>
                   <span
-                    className={`rounded-full px-2 py-0.5 ${
+                    className={`inline-flex w-fit shrink-0 rounded-full px-2 py-0.5 whitespace-nowrap ${
                       isSelected ? "bg-[#EF4444] text-white" : "bg-black/10 text-black/65"
                     }`}
                   >

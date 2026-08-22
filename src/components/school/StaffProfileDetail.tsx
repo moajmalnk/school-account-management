@@ -12,6 +12,9 @@ import {
   Wallet,
   CalendarDays,
   Plus,
+  Download,
+  CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,7 +45,6 @@ import {
   salaryHistoryPayrollMonth,
   salaryPaidAmountForMonth,
   isSalaryMonthSettled,
-  totalSalaryDisbursed,
   type StaffSalaryHistoryEntry,
 } from "@/lib/tenant-store";
 import { sessionHasPermission, useAuth } from "@/lib/auth";
@@ -66,6 +68,8 @@ import {
 } from "@/components/school/ProfileDetailTabs";
 import { formatEventDateTime, formatInAppZone } from "@/lib/dates";
 import { cn } from "@/lib/utils";
+import { buildStaffPayrollStatement } from "@/lib/staff-payroll";
+import { downloadStaffPayrollReportPdf, receiptBrandingFromSchool } from "@/lib/finance-export";
 
 const CARD_FRAME =
   "rounded-xl border border-slate-100 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#171717] dark:text-zinc-100 dark:shadow-black/40";
@@ -290,8 +294,9 @@ export function StaffProfileDetail({
 }) {
   const navigate = useNavigate();
   const { session } = useAuth();
-  const { setStaff, departments, roles, tenantUsers, setTenantUsers } =
+  const { setStaff, departments, roles, tenantUsers, setTenantUsers, schoolDetails } =
     useTenantStore();
+  const schoolName = schoolDetails.name || session?.tenantName || "School";
 
   const syncStaff = async (updated: Staff) => {
     setStaff((prev) => prev.map((s) => (s.id === staff.id ? updated : s)));
@@ -525,6 +530,10 @@ export function StaffProfileDetail({
     [staff.basicSalary, staff.additionalAllowances],
   );
   const payrollMonth = currentPayrollMonth();
+  const payrollStatement = useMemo(
+    () => buildStaffPayrollStatement(staff, payrollMonth),
+    [staff, payrollMonth],
+  );
   const attendancePay = useMemo(
     () => staffPayableSalary(staff, payrollMonth),
     [staff, payrollMonth],
@@ -535,64 +544,31 @@ export function StaffProfileDetail({
     [staff.attendanceByMonth],
   );
 
-  const totalPaidSalary = useMemo(
-    () => totalSalaryDisbursed(salaryHistory),
-    [salaryHistory],
-  );
   const lastSalaryPayment = salaryHistory[0] ?? null;
-  const currentMonthPaid = useMemo(
-    () => salaryPaidAmountForMonth(salaryHistory, payrollMonth),
-    [salaryHistory, payrollMonth],
-  );
-  const currentMonthSettled = useMemo(
-    () => isSalaryMonthSettled(salaryHistory, payrollMonth, attendancePay.payable),
-    [salaryHistory, payrollMonth, attendancePay.payable],
-  );
-  const currentMonthOutstanding = Math.max(0, attendancePay.payable - currentMonthPaid);
 
-  const monthlyPayrollLedger = useMemo(() => {
-    const monthSet = new Set<string>();
-    for (const row of staff.attendanceByMonth ?? []) monthSet.add(row.month);
-    for (const entry of salaryHistory) {
-      const month = salaryHistoryPayrollMonth(entry);
-      if (month) monthSet.add(month);
-    }
-    monthSet.add(payrollMonth);
-    return Array.from(monthSet)
-      .sort((a, b) => b.localeCompare(a))
-      .map((month) => {
-        const pay = staffPayableSalary(staff, month);
-        const payments = salaryHistory.filter(
-          (entry) => salaryHistoryPayrollMonth(entry) === month,
-        );
-        const paid = payments.reduce((sum, entry) => sum + entry.amount, 0);
-        const outstanding = Math.max(0, pay.payable - paid);
-        const settled = pay.payable <= 0 || paid >= pay.payable;
-        const hasQueued = payments.some((entry) => entry.status === "Queued");
-        const hasCleared = payments.some(
-          (entry) => entry.status === "Cleared" || entry.status === "Paid",
-        );
-        const status: "Paid" | "Queued" | "Partial" | "Due" | "No due" =
-          pay.payable <= 0
-            ? "No due"
-            : settled
-              ? hasQueued && !hasCleared
-                ? "Queued"
-                : "Paid"
-              : paid > 0
-                ? "Partial"
-                : "Due";
-        return {
-          month,
-          pay,
-          paid,
-          outstanding,
-          settled,
-          status,
-          payments,
-        };
+  const handleDownloadPayrollReport = async () => {
+    try {
+      await downloadStaffPayrollReportPdf({
+        staff,
+        schoolName,
+        payrollMonth,
+        payrollMonthLabel: formatPayrollMonthLabel(payrollMonth),
+        statement: payrollStatement,
+        branding: receiptBrandingFromSchool(schoolDetails),
       });
-  }, [staff, salaryHistory, payrollMonth]);
+      toast.success("Payroll report downloaded", {
+        description: "PDF ready to share with the employee",
+      });
+    } catch (err) {
+      toast.error("Could not generate payroll report", {
+        description: err instanceof Error ? err.message : "Download failed",
+      });
+    }
+  };
+
+  const monthlyPayrollLedger = payrollStatement.ledger;
+  const currentMonthSettled = payrollStatement.currentMonthSettled;
+  const currentMonthOutstanding = payrollStatement.currentMonthDue;
 
   const [attendanceForm, setAttendanceForm] = useState({
     month: payrollMonth,
@@ -1349,84 +1325,62 @@ export function StaffProfileDetail({
                   Payroll summary for {staff.name} · {formatPayrollMonthLabel(payrollMonth)}
                 </p>
               </div>
-              {!currentMonthSettled && attendancePay.payable > 0 && (
+              <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
                 <Button
                   type="button"
-                  className="h-9 shrink-0 rounded-full bg-[#0F766E] px-4 text-[12.5px] font-semibold text-white hover:bg-[#0D9488]"
-                  onClick={() =>
-                    navigate({
-                      to: "/tenant/finance",
-                      search: {
-                        tab: "make",
-                        staffId: staff.id,
-                        amount: String(currentMonthOutstanding || attendancePay.payable),
-                        month: payrollMonth,
-                      },
-                    })
-                  }
+                  variant="outline"
+                  className="h-9 w-full rounded-full text-[12.5px] font-semibold sm:w-auto"
+                  onClick={() => void handleDownloadPayrollReport()}
                 >
-                  <Wallet className="mr-1.5 h-3.5 w-3.5" />
-                  Pay outstanding
+                  <Download className="mr-1.5 h-3.5 w-3.5" />
+                  Download payroll report
                 </Button>
-              )}
+                {!currentMonthSettled && payrollStatement.currentMonthPayable > 0 && (
+                  <Button
+                    type="button"
+                    className="h-9 w-full shrink-0 rounded-full bg-[#0F766E] px-4 text-[12.5px] font-semibold text-white hover:bg-[#0D9488] sm:w-auto"
+                    onClick={() =>
+                      navigate({
+                        to: "/tenant/finance",
+                        search: {
+                          tab: "make",
+                          staffId: staff.id,
+                          amount: String(currentMonthOutstanding || payrollStatement.currentMonthPayable),
+                          month: payrollMonth,
+                        },
+                      })
+                    }
+                  >
+                    <Wallet className="mr-1.5 h-3.5 w-3.5" />
+                    Pay outstanding
+                  </Button>
+                )}
+              </div>
             </div>
 
             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="rounded-lg bg-slate-50 p-4 dark:bg-zinc-900/70">
-                <div className={META_LABEL}>Total Paid</div>
-                <div className="mt-2 font-mono text-xl font-semibold tracking-tight text-[#059669]">
-                  ₹ {totalPaidSalary.toLocaleString("en-IN")}
-                </div>
-                <p className="mt-1 text-[11px] text-black/45">
-                  {salaryHistory.length} payment{salaryHistory.length === 1 ? "" : "s"} recorded
-                </p>
-              </div>
-              <div className="rounded-lg bg-slate-50 p-4 dark:bg-zinc-900/70">
-                <div className={META_LABEL}>This Month Payable</div>
-                <div className="mt-2 font-mono text-xl font-semibold tracking-tight text-black dark:text-zinc-100">
-                  ₹ {attendancePay.payable.toLocaleString("en-IN")}
-                </div>
-                <p className="mt-1 text-[11px] text-black/45">
-                  {attendancePay.attendance
-                    ? `${attendancePay.attendance.daysPresent}/${attendancePay.attendance.workingDays} days · ${Math.round(attendancePay.ratio * 100)}%`
-                    : "Full gross · no attendance yet"}
-                </p>
-              </div>
-              <div
-                className={cn(
-                  "rounded-lg p-4",
-                  currentMonthOutstanding > 0 ? "bg-[#0F766E]" : "bg-slate-50 dark:bg-zinc-900/70",
-                )}
-              >
-                <div
-                  className={cn(
-                    "text-[11px] font-semibold uppercase tracking-wider",
-                    currentMonthOutstanding > 0 ? "text-white/75" : "text-black/45 dark:text-zinc-400",
-                  )}
-                >
-                  Outstanding
-                </div>
-                <div
-                  className={cn(
-                    "mt-2 font-mono text-xl font-semibold tracking-tight",
-                    currentMonthOutstanding > 0 ? "text-white" : "text-black dark:text-zinc-100",
-                  )}
-                >
-                  ₹ {currentMonthOutstanding.toLocaleString("en-IN")}
-                </div>
-                <p
-                  className={cn(
-                    "mt-1 text-[11px]",
-                    currentMonthOutstanding > 0 ? "text-white/70" : "text-black/45",
-                  )}
-                >
-                  {currentMonthSettled
+              <PayrollStatBox
+                label="Total Payable"
+                value={`₹ ${payrollStatement.totalPayable.toLocaleString("en-IN")}`}
+                hint={`${monthlyPayrollLedger.length} payroll month${monthlyPayrollLedger.length === 1 ? "" : "s"} on record`}
+              />
+              <PayrollStatBox
+                label="Total Paid"
+                value={`₹ ${payrollStatement.totalPaid.toLocaleString("en-IN")}`}
+                valueClassName="text-[#059669]"
+                hint={`${salaryHistory.length} payment${salaryHistory.length === 1 ? "" : "s"} recorded`}
+              />
+              <PayrollDueBox
+                totalDue={payrollStatement.totalDue}
+                overdue={payrollStatement.overdue}
+                hint={
+                  currentMonthSettled
                     ? "Settled for this payroll month"
-                    : currentMonthPaid > 0
-                      ? `₹ ${currentMonthPaid.toLocaleString("en-IN")} already paid`
-                      : "No payment yet this month"}
-                </p>
-              </div>
+                    : currentMonthOutstanding > 0
+                      ? `₹ ${currentMonthOutstanding.toLocaleString("en-IN")} due this month`
+                      : "No outstanding balance"
+                }
+              />
             </div>
 
             {lastSalaryPayment && (
@@ -1483,7 +1437,7 @@ export function StaffProfileDetail({
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <div className="text-[13px] font-semibold text-black">
-                            {formatPayrollMonthLabel(row.month)}
+                            {row.monthLabel}
                           </div>
                           <div className="mt-0.5 font-mono text-[10.5px] text-black/40">
                             {row.month}
@@ -1498,7 +1452,7 @@ export function StaffProfileDetail({
                             Payable
                           </div>
                           <div className="mt-0.5 font-mono text-[12.5px] font-semibold text-black">
-                            ₹ {row.pay.payable.toLocaleString("en-IN")}
+                            ₹ {row.payable.toLocaleString("en-IN")}
                           </div>
                         </div>
                         <div>
@@ -1568,21 +1522,17 @@ export function StaffProfileDetail({
                           )}
                         >
                           <td className="px-3 py-3">
-                            <div className="font-medium text-black">
-                              {formatPayrollMonthLabel(row.month)}
-                            </div>
+                            <div className="font-medium text-black">{row.monthLabel}</div>
                             <div className="font-mono text-[10.5px] text-black/40">
                               {row.month}
                               {row.month === payrollMonth ? " · current" : ""}
                             </div>
                           </td>
                           <td className="px-3 py-3 font-mono text-black/70">
-                            {row.pay.attendance
-                              ? `${row.pay.attendance.daysPresent}/${row.pay.attendance.workingDays} · ${Math.round(row.pay.ratio * 100)}%`
-                              : "—"}
+                            {row.attendanceLabel}
                           </td>
                           <td className="px-3 py-3 font-mono font-semibold text-black">
-                            ₹ {row.pay.payable.toLocaleString("en-IN")}
+                            ₹ {row.payable.toLocaleString("en-IN")}
                           </td>
                           <td className="px-3 py-3 font-mono font-semibold text-[#059669]">
                             ₹ {row.paid.toLocaleString("en-IN")}
@@ -2178,6 +2128,93 @@ function MetaRow({
       <div className={cn("mt-1.5 text-[14px] font-medium text-black", mono && "font-mono")}>
         {children}
       </div>
+    </div>
+  );
+}
+
+function PayrollStatBox({
+  label,
+  value,
+  hint,
+  valueClassName,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="rounded-lg bg-slate-50 p-4 dark:bg-zinc-900/70">
+      <div className={META_LABEL}>{label}</div>
+      <div
+        className={cn(
+          "mt-2 font-mono text-xl font-semibold tracking-tight text-black dark:text-zinc-100",
+          valueClassName,
+        )}
+      >
+        {value}
+      </div>
+      {hint ? <p className="mt-1 text-[11px] text-black/45">{hint}</p> : null}
+    </div>
+  );
+}
+
+function PayrollDueBox({
+  totalDue,
+  overdue,
+  hint,
+}: {
+  totalDue: number;
+  overdue: boolean;
+  hint?: string;
+}) {
+  const cleared = totalDue <= 0;
+  return (
+    <div
+      className={cn(
+        "rounded-lg p-4",
+        !cleared && overdue ? "bg-[#0F766E]" : "bg-slate-50 dark:bg-zinc-900/70",
+      )}
+    >
+      <div
+        className={cn(
+          "flex items-start justify-between",
+          !cleared && overdue ? "text-white/75" : "text-black/55 dark:text-zinc-400",
+        )}
+      >
+        <div className="text-[11px] font-semibold uppercase tracking-wider">Total Due</div>
+        {!cleared && overdue ? (
+          <AlertTriangle className="h-4 w-4 text-[#EF4444]" />
+        ) : (
+          <CheckCircle2 className="h-4 w-4 text-black" />
+        )}
+      </div>
+      <div
+        className={cn(
+          "mt-2 font-mono text-xl font-semibold tracking-tight",
+          !cleared && overdue ? "text-white" : "text-black dark:text-zinc-100",
+        )}
+      >
+        ₹ {totalDue.toLocaleString("en-IN")}
+      </div>
+      <span
+        className={cn(
+          "mt-2 inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider",
+          cleared ? "bg-[#0F172A] text-[#10B981]" : overdue ? "bg-[#0F172A] text-[#EF4444]" : "bg-[#0F172A] text-[#F59E0B]",
+        )}
+      >
+        {cleared ? "[ CLEARED ]" : overdue ? "[ OVERDUE ]" : "[ PENDING ]"}
+      </span>
+      {hint ? (
+        <p
+          className={cn(
+            "mt-2 text-[11px]",
+            !cleared && overdue ? "text-white/70" : "text-black/45",
+          )}
+        >
+          {hint}
+        </p>
+      ) : null}
     </div>
   );
 }

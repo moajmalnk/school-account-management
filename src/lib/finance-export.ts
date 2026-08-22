@@ -11,6 +11,7 @@ import {
   schoolInitials,
   type Payment,
   type SchoolDetails,
+  type Staff,
   type Student,
 } from "@/lib/tenant-store";
 import { getActiveBrandPalette, pdfFontName } from "@/lib/brand-theme";
@@ -1624,9 +1625,79 @@ export type StudentFeeReportInput = {
       cat?: string;
       period?: string;
     }[];
+    tuition?: {
+      totalFee: number;
+      totalPaid: number;
+      totalDue: number;
+      ledger: StudentFeeReportInput["statement"]["ledger"];
+    };
+    vehicle?: {
+      applicable: boolean;
+      routeLabel?: string;
+      pickup?: string;
+      drop?: string;
+      shift?: string;
+      totalFee: number;
+      totalPaid: number;
+      totalDue: number;
+      ledger: StudentFeeReportInput["statement"]["ledger"];
+    };
   };
   branding?: ReceiptBranding;
 };
+
+function appendFeeLedgerTable(
+  doc: jsPDF,
+  margin: number,
+  contentWidth: number,
+  title: string,
+  rows: StudentFeeReportInput["statement"]["ledger"],
+  startY: number,
+): number {
+  doc.setFont(pdfFontName(), "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(...receiptInk().tealDeep);
+  doc.text(title, margin, startY);
+  let tableStart = startY + 5;
+  if (rows.length === 0) return tableStart;
+  autoTable(doc, {
+    startY: tableStart,
+    margin: { left: margin, right: margin },
+    tableWidth: contentWidth,
+    head: [["Date", "Description", "Due Date", "Charge", "Paid", "Balance", "Status"]],
+    body: rows.map((row) => [
+      pdfSafe(row.date),
+      pdfSafe(row.desc),
+      pdfSafe(row.due),
+      row.charge.toLocaleString("en-IN"),
+      row.paid.toLocaleString("en-IN"),
+      row.balance.toLocaleString("en-IN"),
+      pdfSafe(row.status),
+    ]),
+    theme: "grid",
+    styles: {
+      fontSize: 8.5,
+      cellPadding: { top: 2.8, right: 3, bottom: 2.8, left: 3 },
+      lineColor: receiptInk().line,
+      lineWidth: 0.18,
+      textColor: receiptInk().ink,
+      valign: "middle",
+    },
+    headStyles: {
+      fillColor: receiptInk().teal,
+      textColor: receiptInk().white,
+      fontStyle: "bold",
+      fontSize: 8,
+    },
+    alternateRowStyles: { fillColor: receiptInk().zebra },
+    columnStyles: {
+      3: { halign: "right" },
+      4: { halign: "right" },
+      5: { halign: "right" },
+    },
+  });
+  return (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
+}
 
 export async function downloadStudentFeeReportPdf(
   input: StudentFeeReportInput,
@@ -1667,6 +1738,28 @@ export async function downloadStudentFeeReportPdf(
     ["Guardian", pdfSafe(guardian)],
     ["Contact", pdfSafe(student.phone?.trim() || branding?.studentContact || "—")],
   ];
+  if (statement.vehicle?.applicable) {
+    leftRows.push([
+      "Transport Route",
+      pdfSafe(
+        statement.vehicle.routeLabel ||
+          [statement.vehicle.pickup, statement.vehicle.drop].filter(Boolean).join(" → ") ||
+          "School bus",
+      ),
+    ]);
+    if (statement.vehicle.shift) {
+      leftRows.push([
+        "Transport Shift",
+        pdfSafe(
+          statement.vehicle.shift === "morning"
+            ? "Morning"
+            : statement.vehicle.shift === "evening"
+              ? "Evening"
+              : "Both shifts",
+        ),
+      ]);
+    }
+  }
   const leftEnd = drawMetaPairs(doc, leftRows, metaTop, margin, contentWidth * 0.52);
 
   const rightX = pageWidth - margin;
@@ -1703,44 +1796,25 @@ export async function downloadStudentFeeReportPdf(
   });
 
   let tableStart = summaryTop + 28;
-  if (statement.ledger.length > 0) {
-    autoTable(doc, {
-      startY: tableStart,
-      margin: { left: margin, right: margin },
-      tableWidth: contentWidth,
-      head: [["Date", "Description", "Due Date", "Charge", "Paid", "Balance", "Status"]],
-      body: statement.ledger.map((row) => [
-        pdfSafe(row.date),
-        pdfSafe(row.desc),
-        pdfSafe(row.due),
-        row.charge.toLocaleString("en-IN"),
-        row.paid.toLocaleString("en-IN"),
-        row.balance.toLocaleString("en-IN"),
-        pdfSafe(row.status),
-      ]),
-      theme: "grid",
-      styles: {
-        fontSize: 8.5,
-        cellPadding: { top: 2.8, right: 3, bottom: 2.8, left: 3 },
-        lineColor: receiptInk().line,
-        lineWidth: 0.18,
-        textColor: receiptInk().ink,
-        valign: "middle",
-      },
-      headStyles: {
-        fillColor: receiptInk().teal,
-        textColor: receiptInk().white,
-        fontStyle: "bold",
-        fontSize: 8,
-      },
-      alternateRowStyles: { fillColor: receiptInk().zebra },
-      columnStyles: {
-        3: { halign: "right" },
-        4: { halign: "right" },
-        5: { halign: "right" },
-      },
-    });
-    tableStart = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
+  const tuitionLedger = statement.tuition?.ledger ?? statement.ledger;
+  tableStart = appendFeeLedgerTable(
+    doc,
+    margin,
+    contentWidth,
+    "Academic Fees",
+    tuitionLedger,
+    tableStart,
+  );
+
+  if (statement.vehicle?.applicable) {
+    tableStart = appendFeeLedgerTable(
+      doc,
+      margin,
+      contentWidth,
+      "Vehicle / Transport Fees",
+      statement.vehicle.ledger,
+      tableStart,
+    );
   }
 
   if (statement.receipts.length > 0) {
@@ -1803,6 +1877,215 @@ export async function downloadStudentFeeReportPdf(
       name: student.name,
       school: schoolName,
       year: slugYear(academicYear),
+      date: todayStamp(),
+    }),
+    action,
+  );
+}
+
+export type StaffPayrollReportInput = {
+  staff: Pick<Staff, "id" | "name" | "role" | "dept"> & { phone?: string };
+  schoolName: string;
+  payrollMonth: string;
+  payrollMonthLabel: string;
+  statement: {
+    totalPayable: number;
+    totalPaid: number;
+    totalDue: number;
+    ledger: {
+      monthLabel: string;
+      attendanceLabel: string;
+      payable: number;
+      paid: number;
+      outstanding: number;
+      status: string;
+    }[];
+    payments: {
+      id: string;
+      date: string;
+      amount: number;
+      mode: string;
+      description: string;
+      status: string;
+      month: string | null;
+    }[];
+  };
+  branding?: ReceiptBranding;
+};
+
+export async function downloadStaffPayrollReportPdf(
+  input: StaffPayrollReportInput,
+  action: PdfEmitAction = "download",
+) {
+  const { staff, schoolName, payrollMonthLabel, statement, branding } = input;
+  const [logo, letterhead] = await Promise.all([
+    loadLogoForPdf(branding?.logoUrl),
+    loadLetterheadForPdf(branding?.letterheadUrl),
+  ]);
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 16;
+  const contentWidth = pageWidth - margin * 2;
+  const generatedAt = formatNow();
+  const displayName = pdfSafe(schoolName || "School");
+
+  doc.setFillColor(...receiptInk().white);
+  doc.rect(0, 0, pageWidth, pageHeight, "F");
+
+  const headerBottom = letterhead
+    ? drawUploadedLetterheadBanner(doc, pageWidth, letterhead, margin)
+    : drawReceiptLetterheadHeader(doc, pageWidth, displayName, branding, logo);
+
+  const barY = drawDocumentTitleBar(doc, pageWidth, contentWidth, "Staff Payroll Statement", headerBottom + 2) + 6;
+  doc.setFont(pdfFontName(), "normal");
+  doc.setFontSize(8.5);
+  doc.setTextColor(...receiptInk().muted);
+  doc.text(`Payroll period: ${pdfSafe(payrollMonthLabel)}`, pageWidth / 2, barY, { align: "center" });
+
+  const metaTop = barY + 8;
+  const leftRows: [string, string][] = [
+    ["Employee Name", pdfSafe(staff.name)],
+    ["Employee ID", pdfSafe(staff.id)],
+    ["Designation", pdfSafe(staff.role || "—")],
+    ["Department", pdfSafe(staff.dept || "—")],
+    ["Contact", pdfSafe(staff.phone?.trim() || "—")],
+  ];
+  const leftEnd = drawMetaPairs(doc, leftRows, metaTop, margin, contentWidth * 0.52);
+
+  const rightX = pageWidth - margin;
+  doc.setFont(pdfFontName(), "normal");
+  doc.setFontSize(8.5);
+  doc.setTextColor(...receiptInk().muted);
+  doc.text(`Generated ${generatedAt}`, rightX, metaTop, { align: "right" });
+
+  const summaryTop = leftEnd + 6;
+  const colGap = 4;
+  const colW = (contentWidth - colGap * 2) / 3;
+  const summaryItems = [
+    { label: "Total Payable", value: formatInrPdf(statement.totalPayable) },
+    { label: "Total Paid", value: formatInrPdf(statement.totalPaid) },
+    { label: "Total Due", value: formatInrPdf(statement.totalDue) },
+  ];
+  summaryItems.forEach((item, index) => {
+    const x = margin + index * (colW + colGap);
+    doc.setDrawColor(...receiptInk().line);
+    doc.setLineWidth(0.22);
+    doc.roundedRect(x, summaryTop, colW, 22, 2, 2, "S");
+    doc.setFont(pdfFontName(), "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(...receiptInk().muted);
+    doc.text(item.label.toUpperCase(), x + 4, summaryTop + 6);
+    doc.setFont(pdfFontName(), "bold");
+    doc.setFontSize(12);
+    if (index === 2 && statement.totalDue > 0) {
+      doc.setTextColor(185, 28, 28);
+    } else {
+      doc.setTextColor(...receiptInk().ink);
+    }
+    doc.text(item.value, x + 4, summaryTop + 14.5);
+  });
+
+  let tableStart = summaryTop + 28;
+  if (statement.ledger.length > 0) {
+    autoTable(doc, {
+      startY: tableStart,
+      margin: { left: margin, right: margin },
+      tableWidth: contentWidth,
+      head: [["Month", "Attendance", "Payable", "Paid", "Outstanding", "Status"]],
+      body: statement.ledger.map((row) => [
+        pdfSafe(row.monthLabel),
+        pdfSafe(row.attendanceLabel),
+        row.payable.toLocaleString("en-IN"),
+        row.paid.toLocaleString("en-IN"),
+        row.outstanding.toLocaleString("en-IN"),
+        pdfSafe(row.status),
+      ]),
+      theme: "grid",
+      styles: {
+        fontSize: 8.5,
+        cellPadding: { top: 2.8, right: 3, bottom: 2.8, left: 3 },
+        lineColor: receiptInk().line,
+        lineWidth: 0.18,
+        textColor: receiptInk().ink,
+        valign: "middle",
+      },
+      headStyles: {
+        fillColor: receiptInk().teal,
+        textColor: receiptInk().white,
+        fontStyle: "bold",
+        fontSize: 8,
+      },
+      alternateRowStyles: { fillColor: receiptInk().zebra },
+      columnStyles: {
+        2: { halign: "right" },
+        3: { halign: "right" },
+        4: { halign: "right" },
+      },
+    });
+    tableStart = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
+  }
+
+  if (statement.payments.length > 0) {
+    doc.setFont(pdfFontName(), "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(...receiptInk().tealDeep);
+    doc.text("Salary Payment History", margin, tableStart);
+    tableStart += 5;
+    autoTable(doc, {
+      startY: tableStart,
+      margin: { left: margin, right: margin },
+      tableWidth: contentWidth,
+      head: [["Receipt", "Date", "Description", "Mode", "Status", "Amount"]],
+      body: statement.payments.map((row) => [
+        pdfSafe(row.id),
+        pdfSafe(row.date),
+        pdfSafe(row.description),
+        pdfSafe(row.mode),
+        pdfSafe(row.status),
+        row.amount.toLocaleString("en-IN"),
+      ]),
+      theme: "grid",
+      styles: {
+        fontSize: 8.5,
+        cellPadding: { top: 2.8, right: 3, bottom: 2.8, left: 3 },
+        lineColor: receiptInk().line,
+        textColor: receiptInk().ink,
+      },
+      headStyles: {
+        fillColor: receiptInk().headerTint,
+        textColor: receiptInk().tealDeep,
+        fontStyle: "bold",
+        fontSize: 8,
+      },
+      alternateRowStyles: { fillColor: receiptInk().zebra },
+      columnStyles: {
+        5: { halign: "right", fontStyle: "bold" },
+      },
+    });
+    tableStart = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
+  }
+
+  await drawSealFooter(
+    doc,
+    pageWidth,
+    pageHeight,
+    margin,
+    Math.min(tableStart, pageHeight - 42),
+    generatedAt,
+    displayName,
+    `This payroll statement is issued for employee records. For salary queries, contact ${displayName}.`,
+    true,
+    branding,
+  );
+
+  emitPdf(
+    doc,
+    formatDownloadFilename("reports", "pdf", {
+      report: "staff-payroll",
+      id: staff.id,
+      name: staff.name,
+      school: schoolName,
       date: todayStamp(),
     }),
     action,

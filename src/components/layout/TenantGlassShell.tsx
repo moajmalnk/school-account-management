@@ -317,7 +317,7 @@ type NavEntry = {
 };
 
 const NAV: NavEntry[] = [
-  { to: "/tenant/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/tenant/dashboard", label: "Home", icon: LayoutDashboard },
   { to: "/tenant/students", label: "Students", icon: Users },
   { to: "/tenant/staff", label: "Staff", icon: UserCog },
   { to: "/tenant/finance", label: "Finance", icon: Wallet },

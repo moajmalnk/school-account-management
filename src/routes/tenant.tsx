@@ -215,7 +215,7 @@ function TenantMobileHeader() {
   const { showBack, goBack, backLabel } = useWorkspaceSubViewBack();
   const onNotifications = pathname.startsWith("/tenant/notifications");
   const NAV_LABELS: Record<string, string> = {
-    "/tenant/dashboard": "DASHBOARD",
+    "/tenant/dashboard": "HOME",
     "/tenant/students": "STUDENTS",
     "/tenant/staff": "STAFF",
     "/tenant/finance": "FINANCE",
@@ -226,7 +226,7 @@ function TenantMobileHeader() {
   const unreadCount = notifications.filter((n) => !n.read).length;
   const tenantName = schoolDetails.name || session?.tenantName || "Silver Hills Global";
   const tenantLabel = tenantName.toUpperCase();
-  const sectionLabel = onNotifications ? "NOTIFICATIONS" : activeKey ? NAV_LABELS[activeKey] : "DASHBOARD";
+  const sectionLabel = onNotifications ? "NOTIFICATIONS" : activeKey ? NAV_LABELS[activeKey] : "HOME";
   const logoUrl = resolveMediaUrl(schoolDetails.logoUrl);
   const initials = schoolInitials(tenantName);
 
