@@ -32,10 +32,23 @@ export type SupportFaq = {
   active?: boolean;
 };
 
+export type SupportAttachmentKind = "file" | "image" | "screenshot" | "voice";
+
+export type SupportAttachment = {
+  id: string;
+  kind: SupportAttachmentKind;
+  name: string;
+  mimeType: string;
+  size: number;
+  path: string;
+  durationMs?: number | null;
+};
+
 export type SupportMessage = {
   id: string;
   author: "school" | "bot" | "admin";
   body: string;
+  attachments?: SupportAttachment[];
   createdAt: string;
 };
 
@@ -106,10 +119,16 @@ export async function fetchSupportTickets(): Promise<SupportTicket[]> {
 export async function createSupportTicket(input: {
   subject?: string;
   body: string;
+  attachments?: SupportAttachment[];
 }): Promise<SupportTicket> {
   const data = await apiRequest<{ ticket: SupportTicket }>("/api/support/tickets.php", {
     method: "POST",
-    body: { action: "create", subject: input.subject ?? "", body: input.body },
+    body: {
+      action: "create",
+      subject: input.subject ?? "",
+      body: input.body,
+      attachments: input.attachments ?? [],
+    },
   });
   return data.ticket;
 }
@@ -117,10 +136,16 @@ export async function createSupportTicket(input: {
 export async function replySupportTicket(input: {
   ticketId: string;
   body: string;
+  attachments?: SupportAttachment[];
 }): Promise<SupportTicket> {
   const data = await apiRequest<{ ticket: SupportTicket }>("/api/support/tickets.php", {
     method: "POST",
-    body: { action: "reply", ticketId: input.ticketId, body: input.body },
+    body: {
+      action: "reply",
+      ticketId: input.ticketId,
+      body: input.body,
+      attachments: input.attachments ?? [],
+    },
   });
   return data.ticket;
 }
@@ -164,4 +189,81 @@ export async function fetchSuperAdminSupportTicket(ticketId: string): Promise<Su
 
 export async function postSuperAdminSupport<T>(body: Record<string, unknown>): Promise<T> {
   return apiRequest<T>("/api/super-admin/support.php", { method: "POST", body });
+}
+
+export const SUPPORT_MAX_ATTACHMENTS = 5;
+export const SUPPORT_MAX_BYTES = 8 * 1024 * 1024;
+export const SUPPORT_VOICE_MAX_MS = 120_000;
+
+export async function uploadSupportAttachment(input: {
+  file: File;
+  kind: SupportAttachmentKind;
+  ticketId?: string;
+  durationMs?: number;
+}): Promise<SupportAttachment> {
+  const form = new FormData();
+  form.append("file", input.file, input.file.name);
+  form.append("kind", input.kind);
+  if (input.ticketId) form.append("ticketId", input.ticketId);
+  if (input.durationMs && input.durationMs > 0) {
+    form.append("durationMs", String(Math.round(input.durationMs)));
+  }
+  const data = await apiRequest<SupportAttachment>("/api/support/upload.php", {
+    method: "POST",
+    body: form,
+  });
+  return {
+    id: data.id,
+    kind: data.kind,
+    name: data.name,
+    mimeType: data.mimeType,
+    size: data.size,
+    path: data.path,
+    durationMs: data.durationMs ?? input.durationMs ?? null,
+  };
+}
+
+export function supportPreviewLabel(body?: string | null, attachments?: SupportAttachment[] | null): string {
+  const text = (body || "").trim();
+  if (text) return text;
+  const items = attachments ?? [];
+  if (items.some((item) => item.kind === "voice")) return "Voice message";
+  if (items.some((item) => item.kind === "screenshot")) return "Screenshot";
+  if (items.some((item) => item.kind === "image" || item.mimeType.startsWith("image/"))) return "Photo";
+  if (items[0]?.name) return items[0].name;
+  if (items.length) return "Attachment";
+  return "";
+}
+
+export function formatSupportBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export function formatSupportDuration(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+export function isSupportImage(att: Pick<SupportAttachment, "kind" | "mimeType" | "name">): boolean {
+  return (
+    att.kind === "image" ||
+    att.kind === "screenshot" ||
+    att.mimeType.startsWith("image/") ||
+    /\.(png|jpe?g|gif|webp)$/i.test(att.name)
+  );
+}
+
+export function isSupportVoice(att: Pick<SupportAttachment, "kind" | "mimeType">): boolean {
+  return att.kind === "voice" || att.mimeType.startsWith("audio/");
+}
+
+export function classifySupportFile(file: File, requested?: SupportAttachmentKind): SupportAttachmentKind {
+  if (requested === "voice" || requested === "screenshot") return requested;
+  if (file.type.startsWith("image/")) return "image";
+  if (file.type.startsWith("audio/")) return "voice";
+  return "file";
 }

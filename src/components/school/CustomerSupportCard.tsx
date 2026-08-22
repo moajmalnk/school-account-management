@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Mail, Send } from "lucide-react";
 import { toast } from "sonner";
 
+import { SupportComposer } from "@/components/support/SupportComposer";
+import { SupportMessageContent } from "@/components/support/SupportMessageContent";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { OrganicCard } from "@/components/ui/organic-card";
-import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/auth";
 import { ApiError, getApiToken } from "@/lib/api/client";
 import {
@@ -17,6 +18,7 @@ import {
   matchSupportFaq,
   replySupportTicket,
   whatsappDigits,
+  type SupportAttachment,
   type SupportFaq,
   type SupportSettings,
   type SupportTicket,
@@ -91,8 +93,8 @@ export function CustomerSupportCard() {
   const [sending, setSending] = useState(false);
   const [chat, setChat] = useState<ChatLine[]>([]);
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
-  const [ticketDraft, setTicketDraft] = useState("");
   const [ticketBusy, setTicketBusy] = useState(false);
+  const threadEndRef = useRef<HTMLDivElement>(null);
 
   const lastUserLine = useMemo(
     () => [...chat].reverse().find((line) => line.role === "you")?.body ?? "",
@@ -205,16 +207,44 @@ export function CustomerSupportCard() {
     if (!activeTicketId && tickets[0]) setActiveTicketId(tickets[0].id);
   }, [tickets, activeTicketId]);
 
-  const sendTicketReply = async () => {
-    if (!activeTicket || !ticketDraft.trim()) return;
+  useEffect(() => {
+    threadEndRef.current?.scrollIntoView({ block: "end" });
+  }, [activeTicketId, activeTicket?.messages?.length]);
+
+  const sendTicketReply = async (input: { body: string; attachments: SupportAttachment[] }) => {
+    if (!activeTicket) return;
+    if (!input.body.trim() && input.attachments.length === 0) return;
     setTicketBusy(true);
     try {
-      const next = await replySupportTicket({ ticketId: activeTicket.id, body: ticketDraft.trim() });
-      setTicketDraft("");
+      const next = await replySupportTicket({
+        ticketId: activeTicket.id,
+        body: input.body.trim(),
+        attachments: input.attachments,
+      });
       setTickets((prev) => prev.map((t) => (t.id === next.id ? next : t)));
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Reply failed";
-      toast.error("Could not send reply", { description: msg });
+      throw err instanceof Error ? err : new Error(msg);
+    } finally {
+      setTicketBusy(false);
+    }
+  };
+
+  const startTicket = async (input: { body: string; attachments: SupportAttachment[] }) => {
+    if (!input.body.trim() && input.attachments.length === 0) return;
+    setTicketBusy(true);
+    try {
+      const ticket = await createSupportTicket({
+        subject: input.body.trim() || undefined,
+        body: input.body.trim(),
+        attachments: input.attachments,
+      });
+      setTickets((prev) => [ticket, ...prev.filter((item) => item.id !== ticket.id)]);
+      setActiveTicketId(ticket.id);
+      toast.success("Sent to Feezo", { description: "The team will reply in Your messages" });
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Could not open a ticket";
+      throw err instanceof Error ? err : new Error(msg);
     } finally {
       setTicketBusy(false);
     }
@@ -367,8 +397,16 @@ export function CustomerSupportCard() {
         <div className="text-[13px] font-semibold text-black">Your messages</div>
         <p className="mt-1 text-[12px] text-black/55">Feezo replies here.</p>
         {tickets.length === 0 ? (
-          <div className="mt-4 rounded-xl border border-dashed border-black/15 px-4 py-8 text-center text-[13px] text-black/45">
-            No messages yet. If help chat cannot answer, send it to Feezo.
+          <div className="mt-4 space-y-3">
+            <div className="rounded-xl border border-dashed border-black/15 px-4 py-6 text-center text-[13px] text-black/45">
+              No messages yet. Write below, or send a screenshot or voice note to Feezo.
+            </div>
+            <SupportComposer
+              placeholder="Describe the issue, or attach a screenshot…"
+              disabled={ticketBusy}
+              busy={ticketBusy}
+              onSend={startTicket}
+            />
           </div>
         ) : (
           <div className="mt-4 grid grid-cols-12 gap-3">
@@ -436,43 +474,31 @@ export function CustomerSupportCard() {
                               {" · "}
                               {formatStamp(msg.createdAt)}
                             </div>
-                            <div className="mt-1 whitespace-pre-wrap">{msg.body}</div>
+                            <div className="mt-1">
+                              <SupportMessageContent
+                                body={msg.body}
+                                attachments={msg.attachments}
+                                inverted={fromYou}
+                              />
+                            </div>
                           </div>
                         </div>
                       );
                     })}
+                    <div ref={threadEndRef} />
                   </div>
                   {activeTicket.status === "closed" ? (
                     <p className="mt-3 text-[12px] text-black/45">Closed. Send a new message to start again.</p>
                   ) : (
-                    <form
-                      className="mt-3 flex gap-2"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        void sendTicketReply();
-                      }}
-                    >
-                      <Textarea
-                        value={ticketDraft}
-                        onChange={(e) => setTicketDraft(e.target.value)}
-                        placeholder="Write a reply…"
-                        className="min-h-[72px] flex-1 rounded-xl bg-white"
+                    <div className="mt-3">
+                      <SupportComposer
+                        key={activeTicket.id}
+                        ticketId={activeTicket.id}
+                        disabled={ticketBusy}
+                        busy={ticketBusy}
+                        onSend={sendTicketReply}
                       />
-                      <Button
-                        type="submit"
-                        disabled={ticketBusy || !ticketDraft.trim()}
-                        className="h-11 shrink-0 self-end rounded-full bg-[#0F766E] px-4 text-white hover:bg-[#0D9488]"
-                      >
-                        {ticketBusy ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <>
-                            <Send className="mr-1.5 h-4 w-4" />
-                            Send
-                          </>
-                        )}
-                      </Button>
-                    </form>
+                    </div>
                   )}
                 </>
               ) : (

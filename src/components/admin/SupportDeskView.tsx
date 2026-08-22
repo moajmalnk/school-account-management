@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { LifeBuoy, Loader2, Plus, Save, Send, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { LifeBuoy, Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
+import { SupportComposer } from "@/components/support/SupportComposer";
+import { SupportMessageContent } from "@/components/support/SupportMessageContent";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +16,7 @@ import {
   fetchSuperAdminSupportTicket,
   postSuperAdminSupport,
   SUPPORT_DEFAULT_WHATSAPP_E164,
+  type SupportAttachment,
   type SupportFaq,
   type SupportSettings,
   type SupportTicket,
@@ -123,8 +126,12 @@ export function SupportDeskView() {
   const [faqBusy, setFaqBusy] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [thread, setThread] = useState<SupportTicket | null>(null);
-  const [reply, setReply] = useState("");
   const [replyBusy, setReplyBusy] = useState(false);
+  const threadEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    threadEndRef.current?.scrollIntoView({ block: "end" });
+  }, [thread?.id, thread?.messages?.length]);
 
   const visibleTickets = useMemo(() => {
     if (status === "all") return tickets;
@@ -177,16 +184,17 @@ export function SupportDeskView() {
     }
   };
 
-  const sendReply = async () => {
-    if (!thread || !reply.trim()) return;
+  const sendReply = async (input: { body: string; attachments: SupportAttachment[] }) => {
+    if (!thread) return;
+    if (!input.body.trim() && input.attachments.length === 0) return;
     setReplyBusy(true);
     try {
       const data = await postSuperAdminSupport<{ ticket: SupportTicket }>({
         action: "ticket.reply",
         ticketId: thread.id,
-        body: reply.trim(),
+        body: input.body.trim(),
+        attachments: input.attachments,
       });
-      setReply("");
       setThread(data.ticket);
       setTickets((prev) =>
         prev.map((item) =>
@@ -196,7 +204,7 @@ export function SupportDeskView() {
       toast.success("Reply sent");
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Reply failed";
-      toast.error("Could not send reply", { description: msg });
+      throw err instanceof Error ? err : new Error(msg);
     } finally {
       setReplyBusy(false);
     }
@@ -453,45 +461,33 @@ export function SupportDeskView() {
                               {" · "}
                               {formatStamp(msg.createdAt)}
                             </div>
-                            <div className="mt-1 whitespace-pre-wrap">{msg.body}</div>
+                            <div className="mt-1">
+                              <SupportMessageContent
+                                body={msg.body}
+                                attachments={msg.attachments}
+                                inverted={fromYou}
+                              />
+                            </div>
                           </div>
                         </div>
                       );
                     })}
+                    <div ref={threadEndRef} />
                   </div>
                   {thread.status === "closed" ? (
                     <p className="mt-3 text-[12px] text-black/45">
                       Closed. If the school writes again, it will reopen.
                     </p>
                   ) : (
-                    <form
-                      className="mt-3 flex gap-2"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        void sendReply();
-                      }}
-                    >
-                      <Textarea
-                        value={reply}
-                        onChange={(e) => setReply(e.target.value)}
-                        placeholder="Write a reply…"
-                        className="min-h-[72px] flex-1 rounded-xl bg-white"
+                    <div className="mt-3">
+                      <SupportComposer
+                        key={thread.id}
+                        ticketId={thread.id}
+                        disabled={replyBusy}
+                        busy={replyBusy}
+                        onSend={sendReply}
                       />
-                      <Button
-                        type="submit"
-                        disabled={replyBusy || !reply.trim()}
-                        className="h-11 shrink-0 self-end rounded-full bg-[#0F766E] px-4 text-white hover:bg-[#0D9488]"
-                      >
-                        {replyBusy ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <>
-                            <Send className="mr-1.5 h-4 w-4" />
-                            Send
-                          </>
-                        )}
-                      </Button>
-                    </form>
+                    </div>
                   )}
                 </>
               ) : (
