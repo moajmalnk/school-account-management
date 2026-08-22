@@ -1843,9 +1843,9 @@ export function withRouteFeeSchedule(
 ): TransportRoute {
   const billingCycle = normalizeClassBillingCycle(route.billingCycle);
   const feeAmountMode = normalizeClassFeeAmountMode(route.feeAmountMode);
-  let bothFeeSchedule = route.bothFeeSchedule.filter((line) => line.amount > 0);
-  let morningFeeSchedule = route.morningFeeSchedule.filter((line) => line.amount > 0);
-  let eveningFeeSchedule = route.eveningFeeSchedule.filter((line) => line.amount > 0);
+  let bothFeeSchedule = (route.bothFeeSchedule ?? []).filter((line) => line.amount > 0);
+  let morningFeeSchedule = (route.morningFeeSchedule ?? []).filter((line) => line.amount > 0);
+  let eveningFeeSchedule = (route.eveningFeeSchedule ?? []).filter((line) => line.amount > 0);
 
   if (bothFeeSchedule.length === 0 && route.bothFee > 0) {
     bothFeeSchedule = migrateRouteFeeSchedule({ ...route, billingCycle }, feeTerms, route.bothFee);
@@ -1884,6 +1884,14 @@ export function withRouteFeeSchedule(
     morningFeeSchedule,
     eveningFeeSchedule,
   };
+}
+
+function normalizeTransportRoutes(raw: unknown, feeTerms: FeeTerm[] = []): TransportRoute[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map(normalizeTransportRoute)
+    .filter((r): r is TransportRoute => r !== null)
+    .map((r) => withRouteFeeSchedule(r, feeTerms));
 }
 
 export function routeScheduleForShift(
@@ -3709,9 +3717,7 @@ function parseSnapshot(raw: string): Snapshot | null {
           ),
         )
       : [...SEED_CLASSES],
-    transportRoutes: (parsed.transportRoutes ?? [])
-      .map(normalizeTransportRoute)
-      .filter((r): r is TransportRoute => r !== null),
+    transportRoutes: normalizeTransportRoutes(parsed.transportRoutes, migratedFeeTerms),
     transportVehicles: Array.isArray(parsed.transportVehicles)
       ? parsed.transportVehicles
           .map(normalizeTransportVehicle)
@@ -4153,45 +4159,55 @@ export function TenantStoreProvider({
     [tenantName],
   );
 
+  const cachedSnapshot = useMemo(() => readSnapshot(storeKey), [storeKey]);
+
   const [students, setStudents] = useState<Student[]>(() =>
-    liveApi ? [] : SEED_STUDENTS,
+    liveApi ? (cachedSnapshot?.students ?? []) : SEED_STUDENTS,
   );
-  const [staff, setStaff] = useState<Staff[]>(() => (liveApi ? [] : SEED_STAFF));
+  const [staff, setStaff] = useState<Staff[]>(() =>
+    liveApi ? (cachedSnapshot?.staff ?? []) : SEED_STAFF,
+  );
   const [payments, setPayments] = useState<Payment[]>(() =>
-    liveApi ? [] : SEED_PAYMENTS,
+    liveApi ? (cachedSnapshot?.payments ?? []) : SEED_PAYMENTS,
   );
   const [departments, setDepartments] = useState<Department[]>(() =>
-    liveApi ? [] : SEED_DEPARTMENTS,
+    liveApi ? (cachedSnapshot?.departments ?? []) : SEED_DEPARTMENTS,
   );
-  const [roles, setRoles] = useState<Role[]>(() => (liveApi ? [] : SEED_ROLES));
+  const [roles, setRoles] = useState<Role[]>(() =>
+    liveApi ? (cachedSnapshot?.roles ?? []) : SEED_ROLES,
+  );
   const [tenantUsers, setTenantUsers] = useState<TenantUser[]>(() =>
-    liveApi ? [] : SEED_TENANT_USERS,
+    liveApi ? (cachedSnapshot?.tenantUsers ?? []) : SEED_TENANT_USERS,
   );
   const [classes, setClasses] = useState<ClassConfig[]>(() =>
-    liveApi ? [] : SEED_CLASSES,
+    liveApi ? (cachedSnapshot?.classes ?? []) : SEED_CLASSES,
   );
   const [transportRoutes, setTransportRoutes] = useState<TransportRoute[]>(() =>
-    liveApi ? [] : SEED_TRANSPORT,
+    liveApi
+      ? normalizeTransportRoutes(cachedSnapshot?.transportRoutes, cachedSnapshot?.feeTerms ?? [])
+      : SEED_TRANSPORT,
   );
-  const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>(
-    () => (liveApi ? [] : SEED_VEHICLES),
+  const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>(() =>
+    liveApi ? (cachedSnapshot?.transportVehicles ?? []) : SEED_VEHICLES,
   );
-  const [paymentCategories, setPaymentCategories] = useState<PaymentCategory[]>(
-    () => (liveApi ? [] : SEED_PAYMENT_CATEGORIES),
+  const [paymentCategories, setPaymentCategories] = useState<PaymentCategory[]>(() =>
+    liveApi ? (cachedSnapshot?.paymentCategories ?? []) : SEED_PAYMENT_CATEGORIES,
   );
   const [feeTerms, setFeeTerms] = useState<FeeTerm[]>(() =>
-    liveApi ? [] : SEED_FEE_TERMS,
+    liveApi ? (cachedSnapshot?.feeTerms ?? []) : SEED_FEE_TERMS,
   );
-  const [studentYearLedgers, setStudentYearLedgers] = useState<StudentYearLedger[]>(
-    () => (liveApi ? [] : SEED_STUDENT_YEAR_LEDGERS),
+  const [studentYearLedgers, setStudentYearLedgers] = useState<StudentYearLedger[]>(() =>
+    liveApi ? (cachedSnapshot?.studentYearLedgers ?? []) : SEED_STUDENT_YEAR_LEDGERS,
   );
   // Live API: start empty so seed years never flash before hydrate finishes.
   const [academicYears, setAcademicYears] = useState<string[]>(() =>
-    liveApi ? [] : [...SEED_ACADEMIC_YEARS],
+    liveApi ? (cachedSnapshot?.academicYears ?? []) : [...SEED_ACADEMIC_YEARS],
   );
-  const [closedAcademicYears, setClosedAcademicYears] = useState<string[]>([]);
+  const [closedAcademicYears, setClosedAcademicYears] = useState<string[]>(
+    () => (liveApi ? (cachedSnapshot?.closedAcademicYears ?? []) : []),
+  );
   const [academicYear, setAcademicYearState] = useState<string>(() =>
-    liveApi ? "" : SEED_ACADEMIC_YEAR,
+    liveApi ? (cachedSnapshot?.academicYear ?? "") : SEED_ACADEMIC_YEAR,
   );
   const [themeSettings, setThemeSettings] = useState<ThemeSettings>(() => {
     if (!liveApi) return SEED_THEME_SETTINGS;
@@ -4214,17 +4230,19 @@ export function TenantStoreProvider({
   const [dashboardTodos, setDashboardTodos] = useState<string[]>([...DEFAULT_DASHBOARD_TODOS]);
   const [dashboardNote, setDashboardNote] = useState("");
   const [notifications, setNotifications] = useState<TenantNotification[]>(() =>
-    liveApi ? [] : [...SEED_NOTIFICATIONS],
+    liveApi ? (cachedSnapshot?.notifications ?? []) : [...SEED_NOTIFICATIONS],
   );
   const [branches, setBranches] = useState<CampusBranch[]>(() =>
-    liveApi ? [] : [...SEED_BRANCHES],
+    liveApi ? (cachedSnapshot?.branches ?? []) : [...SEED_BRANCHES],
   );
   const [activeBranchId, setActiveBranchIdState] = useState<string>(() =>
     liveApi
-      ? readStoredBranchPublicId(tenantId) ?? ""
+      ? cachedSnapshot?.activeBranchId ||
+          readStoredBranchPublicId(tenantId) ||
+          ""
       : SEED_BRANCHES[0]?.id ?? "",
   );
-  const [hydrated, setHydrated] = useState(false);
+  const [hydrated, setHydrated] = useState(() => !liveApi || cachedSnapshot !== null);
   const [branchSyncing, setBranchSyncing] = useState(false);
   const branchSwitchSeq = useRef(0);
 
@@ -4256,7 +4274,7 @@ export function TenantStoreProvider({
           ? []
           : SEED_CLASSES,
     );
-    setTransportRoutes(snap.transportRoutes);
+    setTransportRoutes(normalizeTransportRoutes(snap.transportRoutes, snap.feeTerms ?? []));
     setTransportVehicles(snap.transportVehicles);
     setPaymentCategories(snap.paymentCategories);
     setFeeTerms(
@@ -4326,7 +4344,20 @@ export function TenantStoreProvider({
     activeStoreKey = storeKey;
     setBranchContext(tenantId ?? null, readStoredBranchPublicId(tenantId));
     let cancelled = false;
-    setHydrated(false);
+    const localSnap = readSnapshot(storeKey);
+    if (localSnap) {
+      applySnapshot({
+        ...localSnap,
+        studentYearLedgers: reconcileLedgersWithStudents(
+          localSnap.students,
+          localSnap.studentYearLedgers,
+          localSnap.academicYear,
+        ),
+      });
+      setHydrated(true);
+    } else {
+      setHydrated(false);
+    }
 
     const hydrate = async () => {
       // Prefer live API data when a JWT exists (school admin / impersonation).

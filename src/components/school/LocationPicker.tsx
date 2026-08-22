@@ -350,7 +350,7 @@ export function LocationPicker({
         </button>
       </div>
 
-      <div className="relative">
+      <div className="relative z-20 isolate">
         <Input
           value={value}
           onChange={(e) => {
@@ -363,6 +363,9 @@ export function LocationPicker({
           onBlur={() => {
             window.setTimeout(() => setOpenSuggestions(false), 150);
           }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setOpenSuggestions(false);
+          }}
           placeholder={placeholder}
           autoFocus={autoFocus}
           autoComplete="off"
@@ -370,26 +373,31 @@ export function LocationPicker({
           aria-expanded={openSuggestions}
           aria-controls={listId}
           aria-autocomplete="list"
+          className={cn(
+            openSuggestions &&
+              (suggestions.length > 0 || searching) &&
+              "rounded-b-none border-b-0",
+          )}
         />
 
         {openSuggestions && (suggestions.length > 0 || searching) ? (
           <ul
             id={listId}
             role="listbox"
-            className="absolute left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-[#E5E5E5] bg-white py-1 shadow-lg"
+            className="absolute left-0 right-0 top-full z-50 max-h-52 overflow-y-auto rounded-b-xl rounded-t-none border border-t-0 border-[#E5E5E5] bg-white py-1 shadow-[0_16px_40px_-12px_rgba(15,23,42,0.28)] ring-1 ring-black/[0.04] dark:border-white/10 dark:bg-zinc-950 dark:ring-white/10"
           >
             {searching && suggestions.length === 0 ? (
-              <li className="px-3 py-2 text-[12px] text-black/45">Searching…</li>
+              <li className="px-3 py-2.5 text-[12px] text-black/45 dark:text-zinc-400">Searching…</li>
             ) : (
               suggestions.map((item) => (
                 <li key={item.place_id} role="option">
                   <button
                     type="button"
-                    className="flex w-full items-start gap-2 px-3 py-2 text-left text-[12.5px] text-black hover:bg-[#F4F4F5]"
+                    className="flex w-full items-start gap-2 px-3 py-2.5 text-left text-[12.5px] text-black transition-colors hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none dark:text-zinc-100 dark:hover:bg-white/10 dark:focus-visible:bg-white/10"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => pickSuggestion(item)}
                   >
-                    <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-black/40" />
+                    <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#0F766E]" />
                     <span className="line-clamp-2 leading-snug">{item.display_name}</span>
                   </button>
                 </li>
@@ -419,13 +427,13 @@ export function LocationPicker({
       ) : null}
 
       {mapOpen ? (
-        <div className="overflow-hidden rounded-lg border border-[#E5E5E5]">
+        <div className="relative z-0 overflow-hidden rounded-lg border border-[#E5E5E5] dark:border-white/10">
           <div
             ref={mapContainerRef}
-            className="h-[180px] w-full bg-[#F4F4F5]"
+            className="h-[180px] w-full bg-[#F4F4F5] dark:bg-zinc-900"
             aria-label={`${label} map`}
           />
-          <div className="border-t border-[#EFEFEF] px-3 py-1.5 text-[10px] text-black/40">
+          <div className="border-t border-[#EFEFEF] px-3 py-1.5 text-[10px] text-black/40 dark:border-white/10 dark:text-zinc-500">
             {mapReady ? "Click the map or drag the pin to set location" : "Loading map…"}
           </div>
         </div>

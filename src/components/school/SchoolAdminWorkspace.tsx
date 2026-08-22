@@ -222,6 +222,7 @@ import { AttachmentPreviewDialog } from "@/components/school/AttachmentPreviewDi
 import {
   TenantDashboardSkeleton,
   TenantDirectorySkeleton,
+  TenantSettingsListSkeleton,
   TenantSystemSkeleton,
 } from "@/components/school/TenantDirectorySkeleton";
 import {
@@ -11082,6 +11083,7 @@ export function SchoolSettings() {
     activeStudents: students,
     setStudents,
     hydrated,
+    branchSyncing,
     branches,
     setBranches,
     activeBranchId,
@@ -11215,6 +11217,19 @@ export function SchoolSettings() {
       </p>
     ) : null;
 
+  const settingsDataLoading = !hydrated || branchSyncing;
+
+  const renderSettingsPanel = (
+    content: React.ReactNode,
+    loadingLabel: string,
+    listLayout: "cards" | "table",
+  ) =>
+    settingsDataLoading ? (
+      <TenantSettingsListSkeleton label={loadingLabel} layout={listLayout} />
+    ) : (
+      content
+    );
+
   const renderSettingsContent = (listLayout: "cards" | "table") => (
     <>
       {activeTab === "school" && (
@@ -11231,99 +11246,125 @@ export function SchoolSettings() {
         />
       )}
 
-      {activeTab === "branches" && (
-        <SettingsBranchesCard
-          branches={branches}
-          setBranches={setBranches}
-          activeBranchId={activeBranchId}
-          openBranch={openBranch}
-          canAddBranch={planAllowsMultipleBranches(session?.planFlags)}
-        />
-      )}
+      {activeTab === "branches" &&
+        renderSettingsPanel(
+          <SettingsBranchesCard
+            branches={branches}
+            setBranches={setBranches}
+            activeBranchId={activeBranchId}
+            openBranch={openBranch}
+            canAddBranch={planAllowsMultipleBranches(session?.planFlags)}
+          />,
+          "Loading campuses",
+          listLayout,
+        )}
 
       {activeTab === "classes" && (
         <>
           {campusHint}
-          <ClassesCard
-          classes={classes}
-          setClasses={setClasses}
-          students={students}
-          setStudents={setStudents}
-          staff={staff}
-          feeTerms={feeTerms}
-        />
+          {renderSettingsPanel(
+            <ClassesCard
+              classes={classes}
+              setClasses={setClasses}
+              students={students}
+              setStudents={setStudents}
+              staff={staff}
+              feeTerms={feeTerms}
+            />,
+            "Loading class tiers",
+            listLayout,
+          )}
         </>
       )}
 
       {activeTab === "departments" && (
         <>
           {campusHint}
-          <DepartmentsCard
-            departments={departments}
-            setDepartments={setDepartments}
-            staff={staff}
-            setStaff={setStaff}
-            roles={roles}
-          />
+          {renderSettingsPanel(
+            <DepartmentsCard
+              departments={departments}
+              setDepartments={setDepartments}
+              staff={staff}
+              setStaff={setStaff}
+              roles={roles}
+            />,
+            "Loading departments",
+            listLayout,
+          )}
         </>
       )}
 
       {activeTab === "roles" && (
         <>
           {campusHint}
-          <RolesCard
-            roles={roles}
-            setRoles={setRoles}
-            departments={departments}
-            staff={staff}
-            setStaff={setStaff}
-          />
+          {renderSettingsPanel(
+            <RolesCard
+              roles={roles}
+              setRoles={setRoles}
+              departments={departments}
+              staff={staff}
+              setStaff={setStaff}
+            />,
+            "Loading positions",
+            listLayout,
+          )}
         </>
       )}
 
-      {activeTab === "users" && (
-        <div className="space-y-3">
-          <p className="text-[12px] text-black/55 dark:text-zinc-400">
-            Users are organization-wide and can switch every campus.
-          </p>
-          <SettingsUsersCard
-            tenantUsers={tenantUsers}
-            setTenantUsers={setTenantUsers}
-            roles={roles}
-            staff={staff}
-            canAddUser={planAllowsExtraUsers(session?.planFlags)}
-          />
-        </div>
-      )}
+      {activeTab === "users" &&
+        renderSettingsPanel(
+          <div className="space-y-3">
+            <p className="text-[12px] text-black/55 dark:text-zinc-400">
+              Users are organization-wide and can switch every campus.
+            </p>
+            <SettingsUsersCard
+              tenantUsers={tenantUsers}
+              setTenantUsers={setTenantUsers}
+              roles={roles}
+              staff={staff}
+              canAddUser={planAllowsExtraUsers(session?.planFlags)}
+            />
+          </div>,
+          "Loading users",
+          listLayout,
+        )}
 
       {activeTab === "vehicles" && (
         <>
           {campusHint}
-          <VehicleCard
-            listLayout={listLayout}
-            transportVehicles={transportVehicles}
-            setTransportVehicles={setTransportVehicles}
-            transportRoutes={transportRoutes}
-          />
+          {renderSettingsPanel(
+            <VehicleCard
+              listLayout={listLayout}
+              transportVehicles={transportVehicles}
+              setTransportVehicles={setTransportVehicles}
+              transportRoutes={transportRoutes}
+            />,
+            "Loading vehicles",
+            listLayout,
+          )}
         </>
       )}
 
       {activeTab === "transport" && (
         <>
           {campusHint}
-          <TransportCard
-            listLayout={listLayout}
-            transportRoutes={transportRoutes}
-            setTransportRoutes={setTransportRoutes}
-            transportVehicles={transportVehicles}
-            setTransportVehicles={setTransportVehicles}
-            feeTerms={feeTerms}
-          />
+          {renderSettingsPanel(
+            <TransportCard
+              listLayout={listLayout}
+              transportRoutes={transportRoutes}
+              setTransportRoutes={setTransportRoutes}
+              transportVehicles={transportVehicles}
+              setTransportVehicles={setTransportVehicles}
+              feeTerms={feeTerms}
+            />,
+            "Loading transport routes",
+            listLayout,
+          )}
         </>
       )}
 
       {activeTab === "system" && (
-        hydrated ? (
+        hydrated && !branchSyncing ? (
           <div className="grid grid-cols-12 gap-3 sm:gap-4 lg:gap-5">
             <CategoriesCard
               academicYears={academicYears}
