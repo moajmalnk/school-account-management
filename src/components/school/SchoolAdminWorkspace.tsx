@@ -165,11 +165,17 @@ import {
   FEE_PERIOD_MODE_LABELS,
   currentFeeMonth,
   categoryFeeTermKind,
+  defaultFeeCollectionStartMonth,
+  feeMonthsFromStart,
   formatFeeTermCoverage,
   filterFeePeriods,
   resolveFeePeriodMode,
   resolvePaymentFeePeriod,
   resolvePaymentFeePeriodKind,
+  resolvePaymentFeeLines,
+  paymentFeePeriods,
+  formatPaymentPeriodsLabel,
+  type PaymentFeeLine,
   currentPayrollMonth,
   formatPayrollMonthLabel,
   staffPayableSalary,
@@ -6825,11 +6831,27 @@ function uniqueByLabel<T extends { label: string }>(items: T[]): T[] {
 function feePeriodChoices(
   feeTerms: FeeTerm[],
   description: string,
+  opts?: {
+    startMonth?: string;
+    installmentCount?: number;
+    billingCycle?: ClassBillingCycle;
+  },
 ): { value: string; label: string; kind: FeePeriodKind; period: string }[] {
   const termKind = categoryFeeTermKind(description);
   const terms = uniqueByLabel(termKind ? filterFeePeriods(feeTerms, "term", termKind) : []);
   const months = uniqueByLabel(termKind ? filterFeePeriods(feeTerms, "month", termKind) : []);
-  const monthLabels = months.length > 0 ? months.map((t) => t.label) : [...FEE_MONTHS];
+  let monthLabels = months.length > 0 ? months.map((t) => t.label) : [...FEE_MONTHS];
+  const useInstallmentWindow =
+    opts?.billingCycle === "Monthly" &&
+    Boolean(opts.startMonth?.trim()) &&
+    (opts.installmentCount ?? 0) > 0 &&
+    termKind === "tuition";
+  if (useInstallmentWindow && opts?.startMonth) {
+    const allowed = feeMonthsFromStart(opts.startMonth, opts.installmentCount ?? 0);
+    const allowedSet = new Set(allowed);
+    monthLabels = monthLabels.filter((label) => allowedSet.has(label));
+    if (monthLabels.length === 0) monthLabels = allowed;
+  }
   const choices = [
     ...terms.map((t) => ({
       value: `term:${t.label}`,
@@ -6865,8 +6887,13 @@ function defaultFeePeriod(
   feeTerms: FeeTerm[],
   description: string,
   billingCycle?: string,
+  periodOpts?: {
+    startMonth?: string;
+    installmentCount?: number;
+    billingCycle?: ClassBillingCycle;
+  },
 ): { feePeriodKind: FeePeriodKind; feePeriod: string } {
-  const choices = feePeriodChoices(feeTerms, description);
+  const choices = feePeriodChoices(feeTerms, description, periodOpts);
   if (billingCycle === "Term") {
     const term = choices.find((c) => c.kind === "term");
     if (term) return { feePeriodKind: "term", feePeriod: term.period };
@@ -6895,6 +6922,7 @@ function prefillAmountForFeeLine(
   feeTerms: FeeTerm[],
   tuitionFee: number | undefined,
   vehicleFee: number | undefined,
+  collectionStartMonth?: string,
 ): number | undefined {
   const category = item.description;
   const lower = category.toLowerCase();
@@ -6921,6 +6949,10 @@ function prefillAmountForFeeLine(
       category,
       periodLabel: item.feePeriod || selectedPeriod?.label,
       periodIndex: periodIndex >= 0 ? periodIndex : undefined,
+      collectionStartMonth:
+        collectionStartMonth?.trim() ||
+        matchedClass.feeCollectionStartMonth?.trim() ||
+        undefined,
     });
     if (fromSchedule && fromSchedule > 0) return fromSchedule;
   }
@@ -6948,7 +6980,13 @@ function receiptTimeForForm(raw?: string) {
   return formatted;
 }
 
-function parseMoneyPart(part: string): { label: string; amount: number } | null {
+function parseMoneyPart(part: string): { label: string; amount: number; period?: string } | null {
+  const withPeriod = part.trim().match(/^(.*?)\s+\(([^)]+)\)\s+(?:₹|Rs\.?)\s*([\d,]+(?:\.\d+)?)\s*$/i);
+  if (withPeriod) {
+    const amount = Number(withPeriod[3].replace(/,/g, ""));
+    if (!Number.isFinite(amount) || amount < 0) return null;
+    return { label: withPeriod[1].trim(), period: withPeriod[2].trim(), amount };
+  }
   const match = part.trim().match(/^(.*?)\s+(?:₹|Rs\.?)\s*([\d,]+(?:\.\d+)?)\s*$/i);
   if (!match) return null;
   const amount = Number(match[2].replace(/,/g, ""));
@@ -6956,9 +6994,64 @@ function parseMoneyPart(part: string): { label: string; amount: number } | null 
   return { label: match[1].trim(), amount };
 }
 
+function buildPaymentFeeLines(items: FeeLineItem[]): PaymentFeeLine[] {
+  return items.map((item) => ({
+    description: feeLineCategoryLabel(item),
+    amount: Math.max(0, Math.round(Number(item.amount) || 0)),
+    feePeriodKind: item.feePeriodKind,
+    feePeriod: item.feePeriod.trim(),
+  }));
+}
+
+function formatFeeBreakdownNarration(items: FeeLineItem[]): string {
+  return `Fee breakdown: ${items
+    .map((item) => {
+      const label = feeLineCategoryLabel(item);
+      const period = item.feePeriod.trim();
+      const amount = Number(item.amount).toLocaleString("en-IN");
+      return period ? `${label} (${period}) ₹${amount}` : `${label} ₹${amount}`;
+    })
+    .join(" · ")}`;
+}
+
+function paymentPeriodLabelFromItems(items: FeeLineItem[]): string {
+  const periods = items.map((item) => item.feePeriod.trim()).filter(Boolean);
+  const unique = [...new Set(periods)];
+  if (unique.length === 0) return currentFeeMonth();
+  return unique.join(" · ");
+}
+
+function PaymentPeriodDisplay({ payment }: { payment: Payment }) {
+  const periods = paymentFeePeriods(payment);
+  if (periods.length === 0) {
+    const fallback = resolvePaymentFeePeriod(payment);
+    return <span>{fallback || "—"}</span>;
+  }
+  if (periods.length === 1) {
+    return (
+      <span>
+        {resolvePaymentFeePeriodKind(payment) === "term" ? "Term · " : ""}
+        {periods[0]}
+      </span>
+    );
+  }
+  return (
+    <div className="flex max-w-[11rem] flex-col gap-1">
+      {periods.map((period) => (
+        <span
+          key={period}
+          className="inline-flex w-fit rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[10px] font-semibold leading-tight text-[#92400E] dark:bg-amber-950/40 dark:text-amber-200"
+        >
+          {period}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function parseStoredReceiptNarration(raw?: string): {
   note: string;
-  breakdown: { label: string; amount: number }[];
+  breakdown: { label: string; amount: number; period?: string }[];
   bankSplit: string;
   cashSplit: string;
 } {
@@ -6986,7 +7079,11 @@ function parseStoredReceiptNarration(raw?: string): {
       continue;
     }
     if ((inBreakdown || started) && parsed) {
-      breakdown.push({ label: parsed.label, amount: parsed.amount });
+      breakdown.push({
+        label: parsed.label,
+        amount: parsed.amount,
+        ...(parsed.period ? { period: parsed.period } : {}),
+      });
       continue;
     }
     leftover.push(part);
@@ -7002,15 +7099,17 @@ function feeLineFromStoredCategory(
   period: string,
   categoryLabels: string[],
   fallbackCategory: string,
+  linePeriod?: string,
 ): FeeLineItem {
   const trimmed = label.trim() || fallbackCategory;
+  const resolvedPeriod = linePeriod?.trim() || period;
   const match = categoryLabels.find((c) => c.toLowerCase() === trimmed.toLowerCase());
   if (match) {
     return createFeeLineItem({
       description: match,
       amount: String(Math.round(amount)),
       feePeriodKind: kind,
-      feePeriod: period,
+      feePeriod: resolvedPeriod,
     });
   }
   const other = categoryLabels.find((c) => isOtherFeeDescription(c)) ?? "Other";
@@ -7019,7 +7118,7 @@ function feeLineFromStoredCategory(
     customDescription: trimmed,
     amount: String(Math.round(amount)),
     feePeriodKind: kind,
-    feePeriod: period,
+    feePeriod: resolvedPeriod,
   });
 }
 
@@ -7131,6 +7230,9 @@ function ReceivePayment() {
     [students, cls],
   );
   const [stu, setStu] = useState(studentsInClass[0]?.name ?? "");
+  const [collectionStartMonth, setCollectionStartMonth] = useState(() =>
+    defaultFeeCollectionStartMonth(feeTerms),
+  );
   const [feeItems, setFeeItems] = useState<FeeLineItem[]>(() => [
     createFeeLineItem({ description: defaultCategory }),
   ]);
@@ -7238,6 +7340,22 @@ function ReceivePayment() {
 
   const tuitionFee = matchedClass?.tuitionFeeAmount;
 
+  const periodOpts = useMemo(() => {
+    if (!matchedClass || isExternal) return undefined;
+    const scheduled = withClassFeeSchedule(matchedClass, feeTerms);
+    const count = scheduled.feeSchedule.filter(
+      (line) => line.kind === "installment" && line.amount > 0,
+    ).length;
+    if (matchedClass.billingCycle !== "Monthly" || count <= 0) return undefined;
+    return {
+      startMonth: collectionStartMonth,
+      installmentCount: count,
+      billingCycle: "Monthly" as const,
+    };
+  }, [matchedClass, feeTerms, collectionStartMonth, isExternal]);
+
+  const showCollectionStart = Boolean(periodOpts);
+
   const vehicleFee = useMemo(() => {
     if (matchedClass && matchedClass.vehicleFeeAmount > 0) {
       return matchedClass.vehicleFeeAmount;
@@ -7256,6 +7374,7 @@ function ReceivePayment() {
           feeTerms,
           tuitionFee,
           vehicleFee,
+          collectionStartMonth,
         );
         if (prefill && prefill > 0) {
           changed = true;
@@ -7265,8 +7384,16 @@ function ReceivePayment() {
       });
       return changed ? next : lines;
     },
-    [feeTerms, matchedClass, tuitionFee, vehicleFee],
+    [feeTerms, matchedClass, tuitionFee, vehicleFee, collectionStartMonth],
   );
+
+  useEffect(() => {
+    if (editingPayment || isExternal || !matchedClass) return;
+    const start =
+      matchedClass.feeCollectionStartMonth?.trim() ||
+      defaultFeeCollectionStartMonth(feeTerms);
+    setCollectionStartMonth(start);
+  }, [matchedClass?.id, matchedClass?.feeCollectionStartMonth, feeTerms, editingPayment, isExternal]);
 
   useEffect(() => {
     if (isExternal || editingPayment) return;
@@ -7278,7 +7405,7 @@ function ReceivePayment() {
     setFeeItems((prev) => {
       let changed = false;
       const next = prev.map((item) => {
-        const choices = feePeriodChoices(feeTerms, item.description);
+        const choices = feePeriodChoices(feeTerms, item.description, periodOpts);
         const valid = choices.some(
           (c) => c.kind === item.feePeriodKind && c.period === item.feePeriod,
         );
@@ -7297,15 +7424,55 @@ function ReceivePayment() {
           }
         }
         if (!valid) {
-          const fallback = defaultFeePeriod(feeTerms, item.description, matchedClass.billingCycle);
+          const fallback = defaultFeePeriod(
+            feeTerms,
+            item.description,
+            matchedClass.billingCycle,
+            periodOpts,
+          );
           changed = true;
-          return { ...item, ...fallback };
+          const updated = { ...item, ...fallback };
+          const prefill = prefillAmountForFeeLine(
+            updated,
+            matchedClass,
+            feeTerms,
+            tuitionFee,
+            vehicleFee,
+            collectionStartMonth,
+          );
+          if (prefill && prefill > 0) {
+            return { ...updated, amount: String(prefill) };
+          }
+          return updated;
+        }
+        if (periodOpts && categoryFeeTermKind(item.description) === "tuition") {
+          const prefill = prefillAmountForFeeLine(
+            item,
+            matchedClass,
+            feeTerms,
+            tuitionFee,
+            vehicleFee,
+            collectionStartMonth,
+          );
+          if (prefill && prefill > 0 && String(prefill) !== item.amount) {
+            changed = true;
+            return { ...item, amount: String(prefill) };
+          }
         }
         return item;
       });
       return changed ? next : prev;
     });
-  }, [feeTerms, isExternal, matchedClass, editingPayment]);
+  }, [
+    feeTerms,
+    isExternal,
+    matchedClass,
+    editingPayment,
+    periodOpts,
+    collectionStartMonth,
+    tuitionFee,
+    vehicleFee,
+  ]);
 
   const updateFeeLine = (id: string, patch: Partial<FeeLineItem>) => {
     setFeeItems((prev) =>
@@ -7313,25 +7480,43 @@ function ReceivePayment() {
         if (item.id !== id) return item;
         let next = { ...item, ...patch };
         if (patch.description) {
-          const choices = feePeriodChoices(feeTerms, patch.description);
+          const choices = feePeriodChoices(feeTerms, patch.description, periodOpts);
           const stillValid = choices.some(
             (c) => c.kind === next.feePeriodKind && c.period === next.feePeriod,
           );
           if (!stillValid) {
-            const period = defaultFeePeriod(feeTerms, patch.description, matchedClass?.billingCycle);
+            const period = defaultFeePeriod(
+              feeTerms,
+              patch.description,
+              matchedClass?.billingCycle,
+              periodOpts,
+            );
             next = { ...next, ...period };
           }
           if (!isOtherFeeDescription(patch.description)) {
             next.customDescription = "";
           }
         }
-        if (!("amount" in patch) && !next.amount.trim()) {
+        const periodChanged =
+          patch.feePeriodKind !== undefined || patch.feePeriod !== undefined;
+        if (periodChanged || patch.description) {
           const prefill = prefillAmountForFeeLine(
             next,
             matchedClass,
             feeTerms,
             tuitionFee,
             vehicleFee,
+            collectionStartMonth,
+          );
+          if (prefill && prefill > 0) next = { ...next, amount: String(prefill) };
+        } else if (!("amount" in patch) && !next.amount.trim()) {
+          const prefill = prefillAmountForFeeLine(
+            next,
+            matchedClass,
+            feeTerms,
+            tuitionFee,
+            vehicleFee,
+            collectionStartMonth,
           );
           if (prefill && prefill > 0) next = { ...next, amount: String(prefill) };
         }
@@ -7345,9 +7530,21 @@ function ReceivePayment() {
     const nextCat =
       paymentCategories.find((c) => !used.has(c.label)) ??
       paymentCategories[0] ?? { label: defaultCategory };
-    const period = defaultFeePeriod(feeTerms, nextCat.label, matchedClass?.billingCycle);
+    const period = defaultFeePeriod(
+      feeTerms,
+      nextCat.label,
+      matchedClass?.billingCycle,
+      periodOpts,
+    );
     const line = createFeeLineItem({ description: nextCat.label, ...period });
-    const prefill = prefillAmountForFeeLine(line, matchedClass, feeTerms, tuitionFee, vehicleFee);
+    const prefill = prefillAmountForFeeLine(
+      line,
+      matchedClass,
+      feeTerms,
+      tuitionFee,
+      vehicleFee,
+      collectionStartMonth,
+    );
     if (prefill && prefill > 0) line.amount = String(prefill);
     setFeeItems((prev) => [...prev, line]);
   };
@@ -7501,19 +7698,23 @@ function ReceivePayment() {
   };
 
   const shareHistoryReceipt = (payment: Payment) => {
-    const period = resolvePaymentFeePeriod(payment);
+    const periodLabel = formatPaymentPeriodsLabel(payment);
     const periodKind = resolvePaymentFeePeriodKind(payment);
     const text = [
       `${schoolName} · Fee Receipt`,
       `Receipt: ${payment.id}`,
       `Account: ${payment.name}`,
       `Category: ${payment.cat}`,
-      period ? `${periodKind === "term" ? "Fee term" : "Fee month"}: ${period}` : "",
+      periodLabel !== "—"
+        ? `${periodKind === "term" ? "Fee term" : "Fee period"}: ${periodLabel}`
+        : "",
       `Mode: ${payment.mode}`,
       `Amount: ₹ ${payment.amount.toLocaleString("en-IN")}`,
       `Time: ${formatEventDateTime(payment.time)}`,
       `AY: ${academicYear}`,
-      payment.narration ? `Note: ${payment.narration}` : "",
+      parseStoredReceiptNarration(payment.narration).note
+        ? `Note: ${parseStoredReceiptNarration(payment.narration).note}`
+        : "",
     ]
       .filter(Boolean)
       .join("\n");
@@ -7563,20 +7764,52 @@ function ReceivePayment() {
         cls;
       setCls(className);
       setStu(payment.name);
-      const lines = (parsed.breakdown.length
-        ? parsed.breakdown
-        : [{ label: payment.cat || defaultCategory, amount: payment.amount }]
-      ).map((item) =>
-        feeLineFromStoredCategory(
-          item.label,
-          item.amount,
-          kind,
-          period,
-          categoryLabels,
-          defaultCategory,
-        ),
+      const storedLines = resolvePaymentFeeLines(payment);
+      const lines = (storedLines.length
+        ? storedLines.map((line) =>
+            feeLineFromStoredCategory(
+              line.description,
+              line.amount,
+              line.feePeriodKind ?? kind,
+              line.feePeriod || period,
+              categoryLabels,
+              defaultCategory,
+              line.feePeriod,
+            ),
+          )
+        : parsed.breakdown.length
+          ? parsed.breakdown.map((item) =>
+              feeLineFromStoredCategory(
+                item.label,
+                item.amount,
+                kind,
+                item.period || period,
+                categoryLabels,
+                defaultCategory,
+                item.period,
+              ),
+            )
+          : [
+              feeLineFromStoredCategory(
+                payment.cat || defaultCategory,
+                payment.amount,
+                kind,
+                period,
+                categoryLabels,
+                defaultCategory,
+              ),
+            ]);
+      setFeeItems(
+        lines.length
+          ? lines
+          : [
+              createFeeLineItem({
+                description: defaultCategory,
+                ...defaultFeePeriod(feeTerms, defaultCategory),
+                amount: String(payment.amount),
+              }),
+            ],
       );
-      setFeeItems(lines.length ? lines : [createFeeLineItem({ description: defaultCategory, ...defaultFeePeriod(feeTerms, defaultCategory), amount: String(payment.amount) })]);
     }
 
     requestAnimationFrame(() => {
@@ -7602,12 +7835,8 @@ function ReceivePayment() {
 
     const stamp = toSqlDateTime(receiptTime.trim());
     const extras: string[] = [];
-    if (!isExternal && filledFeeItems.length > 1) {
-      extras.push(
-        `Fee breakdown: ${filledFeeItems
-          .map((item) => `${feeLineCategoryLabel(item)} ₹${Number(item.amount).toLocaleString("en-IN")}`)
-          .join(" · ")}`,
-      );
+    if (!isExternal && filledFeeItems.length > 0) {
+      extras.push(formatFeeBreakdownNarration(filledFeeItems));
     }
     if (mode === "Both") {
       extras.push(
@@ -7650,7 +7879,8 @@ function ReceivePayment() {
 
     const periodLabel = isExternal
       ? resolvePaymentFeePeriod(editingPayment) || currentFeeMonth()
-      : primaryPeriod.trim();
+      : paymentPeriodLabelFromItems(filledFeeItems);
+    const feeLines = !isExternal ? buildPaymentFeeLines(filledFeeItems) : undefined;
     const nextPayment: Payment = {
       ...editingPayment,
       name: isExternal ? externalPayer.trim() : selected?.name ?? stu.trim(),
@@ -7664,6 +7894,7 @@ function ReceivePayment() {
       feeMonth: periodLabel,
       payerType: isExternal ? "external" : "student",
       className: isExternal ? undefined : selected?.cls ?? editingPayment.className ?? cls,
+      ...(feeLines?.length ? { feeLines } : { feeLines: undefined }),
       ...(note ? { narration: note } : { narration: undefined }),
       ...(receiptAttachments ? { attachments: receiptAttachments } : { attachments: undefined }),
     };
@@ -7720,12 +7951,8 @@ function ReceivePayment() {
 
     const stamp = toSqlDateTime(receiptTime.trim());
     const extras: string[] = [];
-    if (!isExternal && filledFeeItems.length > 1) {
-      extras.push(
-        `Fee breakdown: ${filledFeeItems
-          .map((item) => `${feeLineCategoryLabel(item)} ₹${Number(item.amount).toLocaleString("en-IN")}`)
-          .join(" · ")}`,
-      );
+    if (!isExternal && filledFeeItems.length > 0) {
+      extras.push(formatFeeBreakdownNarration(filledFeeItems));
     }
     if (mode === "Both") {
       extras.push(
@@ -7803,7 +8030,8 @@ function ReceivePayment() {
         return;
       }
     }
-    const periodLabel = primaryPeriod.trim();
+    const periodLabel = paymentPeriodLabelFromItems(filledFeeItems);
+    const feeLines = buildPaymentFeeLines(filledFeeItems);
     const draft: Payment = {
       id: "",
       name: selected.name,
@@ -7817,6 +8045,7 @@ function ReceivePayment() {
       feeMonth: periodLabel,
       payerType: "student",
       className: selected.cls,
+      feeLines,
       ...(note ? { narration: note } : {}),
       ...(receiptAttachments ? { attachments: receiptAttachments } : {}),
     };
@@ -7872,6 +8101,7 @@ function ReceivePayment() {
         formatEventDateTime(p.time),
         p.feePeriod ?? "",
         p.feeMonth ?? "",
+        ...paymentFeePeriods(p),
         resolvePaymentFeePeriodKind(p),
         p.className ?? "",
         p.narration ?? "",
@@ -8146,8 +8376,25 @@ function ReceivePayment() {
                 />
               </div>
 
+              {showCollectionStart ? (
+                <div className="col-span-12 sm:col-span-6">
+                  <FieldLabel>Fee collection starts from</FieldLabel>
+                  <FieldSelect
+                    value={collectionStartMonth}
+                    onValueChange={setCollectionStartMonth}
+                    options={FEE_MONTHS.map((month) => ({ value: month, label: month }))}
+                    placeholder="Select month"
+                    triggerClassName="h-11 sm:h-10"
+                  />
+                  <p className="mt-1 text-[11px] text-black/45 dark:text-zinc-500">
+                    Fee periods and amounts follow this class&apos;s installment schedule (
+                    {periodOpts?.installmentCount ?? 0} months).
+                  </p>
+                </div>
+              ) : null}
+
               {feeItems.map((item, index) => {
-                const periodChoices = feePeriodChoices(feeTerms, item.description);
+                const periodChoices = feePeriodChoices(feeTerms, item.description, periodOpts);
                 const selectedPeriodLabel =
                   periodChoices.find(
                     (c) => c.kind === item.feePeriodKind && c.period === item.feePeriod,
@@ -8474,12 +8721,9 @@ function ReceivePayment() {
                 <span className="inline-flex max-w-full truncate rounded-full bg-[#CCFBF1] px-2 py-0.5 text-[10px] font-semibold text-[#0F172A]">
                   {p.cat}
                 </span>
-                {resolvePaymentFeePeriod(p) && (
-                  <span className="inline-flex max-w-full truncate rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[10px] font-semibold text-[#92400E]">
-                    {resolvePaymentFeePeriodKind(p) === "term" ? "Term · " : ""}
-                    {resolvePaymentFeePeriod(p)}
-                  </span>
-                )}
+                {paymentFeePeriods(p).length > 0 || resolvePaymentFeePeriod(p) ? (
+                  <PaymentPeriodDisplay payment={p} />
+                ) : null}
                 <span className="inline-flex max-w-full truncate rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-medium text-black/70">
                   {p.mode}
                 </span>
@@ -8598,7 +8842,9 @@ function ReceivePayment() {
                           : "Student"}
                     </div>
                     {p.narration && (
-                      <div className="mt-0.5 line-clamp-1 text-[11px] text-black/40">{p.narration}</div>
+                      <div className="mt-0.5 line-clamp-1 text-[11px] text-black/40">
+                        {parseStoredReceiptNarration(p.narration).note || p.narration}
+                      </div>
                     )}
                     {(p.attachments?.length ?? 0) > 0 && (
                       <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-medium text-black/55 dark:text-zinc-400">
@@ -8609,9 +8855,7 @@ function ReceivePayment() {
                   </td>
                   <td className="px-3 py-3 text-black/70 dark:text-zinc-300">{p.cat}</td>
                   <td className="px-3 py-3 text-black/70 dark:text-zinc-300">
-                    {resolvePaymentFeePeriod(p)
-                      ? `${resolvePaymentFeePeriodKind(p) === "term" ? "Term · " : ""}${resolvePaymentFeePeriod(p)}`
-                      : "—"}
+                    <PaymentPeriodDisplay payment={p} />
                   </td>
                   <td className="px-3 py-3 text-black/70 dark:text-zinc-300">{p.mode}</td>
                   <td className="px-3 py-3 font-mono font-semibold text-black">
@@ -8729,10 +8973,8 @@ function ReceivePayment() {
                 {[
                   ["Category", viewingPayment.cat],
                   [
-                    resolvePaymentFeePeriodKind(viewingPayment) === "term"
-                      ? "Fee term"
-                      : "Fee month",
-                    resolvePaymentFeePeriod(viewingPayment) || "—",
+                    paymentFeePeriods(viewingPayment).length > 1 ? "Fee periods" : "Fee period",
+                    formatPaymentPeriodsLabel(viewingPayment),
                   ],
                   ["Payment mode", viewingPayment.mode],
                   [
@@ -8750,13 +8992,41 @@ function ReceivePayment() {
                 ))}
               </div>
 
-              {viewingPayment.narration && (
+              {resolvePaymentFeeLines(viewingPayment).length > 1 ? (
+                <div className="rounded-xl border border-slate-100 bg-white p-3.5">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    Fee breakdown
+                  </div>
+                  <ul className="mt-2 space-y-2">
+                    {resolvePaymentFeeLines(viewingPayment).map((line, index) => (
+                      <li
+                        key={`${line.description}-${line.feePeriod}-${index}`}
+                        className="flex items-center justify-between gap-3 rounded-lg bg-[#FAFAFA] px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate text-[12.5px] font-semibold text-black">
+                            {line.description}
+                          </div>
+                          {line.feePeriod ? (
+                            <div className="mt-0.5 text-[11px] text-black/45">{line.feePeriod}</div>
+                          ) : null}
+                        </div>
+                        <div className="shrink-0 font-mono text-[12.5px] font-semibold text-[#059669]">
+                          ₹ {line.amount.toLocaleString("en-IN")}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {parseStoredReceiptNarration(viewingPayment.narration).note && (
                 <div className="rounded-xl border border-slate-100 bg-white p-3.5">
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
                     Narration
                   </div>
                   <p className="mt-1.5 text-[12.5px] leading-relaxed text-black/65">
-                    {viewingPayment.narration}
+                    {parseStoredReceiptNarration(viewingPayment.narration).note}
                   </p>
                 </div>
               )}
@@ -11371,6 +11641,7 @@ function ClassesCard({
     section: string;
     billingCycle: Extract<ClassBillingCycle, "Monthly" | "Term">;
     feeAmountMode: ClassFeeAmountMode;
+    feeCollectionStartMonth: string;
     installmentCount: string;
     fixedAmount: string;
     installments: FeeDraftRow[];
@@ -11381,6 +11652,7 @@ function ClassesCard({
     section: "",
     billingCycle: "Monthly",
     feeAmountMode: "fixed",
+    feeCollectionStartMonth: defaultFeeCollectionStartMonth(feeTerms),
     installmentCount: "12",
     fixedAmount: "",
     installments: [],
@@ -11438,6 +11710,7 @@ function ClassesCard({
     section: "",
     billingCycle: "Monthly" as Extract<ClassBillingCycle, "Monthly" | "Term">,
     feeAmountMode: "fixed" as ClassFeeAmountMode,
+    feeCollectionStartMonth: defaultFeeCollectionStartMonth(feeTerms),
     installmentCount: defaultInstallmentCount("Monthly"),
     fixedAmount: "",
     installments: [],
@@ -11464,6 +11737,9 @@ function ClassesCard({
       billingCycle: cycle,
       feeAmountMode:
         normalized.feeAmountMode === "custom" || uniqueAmounts.length > 1 ? "custom" : "fixed",
+      feeCollectionStartMonth:
+        normalized.feeCollectionStartMonth?.trim() ||
+        defaultFeeCollectionStartMonth(feeTerms),
       installmentCount: String(installments.length || defaultInstallmentCount(cycle)),
       fixedAmount: String(installments[0]?.amount || ""),
       installments: installments.map((line) => ({
@@ -11515,6 +11791,8 @@ function ClassesCard({
       billingCycle: form.billingCycle,
       feeAmountMode: form.feeAmountMode,
       feeSchedule,
+      feeCollectionStartMonth:
+        form.billingCycle === "Monthly" ? form.feeCollectionStartMonth : undefined,
       classTeacherId,
     };
     if (editingId) {
@@ -11800,7 +12078,7 @@ function ClassesCard({
               </div>
 
               {form.feeAmountMode === "fixed" ? (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                       {form.billingCycle === "Term" ? "Terms" : "Installments"}
@@ -11923,6 +12201,24 @@ function ClassesCard({
                   </button>
                 </div>
               )}
+
+              {form.billingCycle === "Monthly" ? (
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                    Fee collection starts from
+                  </Label>
+                  <FieldSelect
+                    value={form.feeCollectionStartMonth}
+                    onValueChange={(month) => setForm({ ...form, feeCollectionStartMonth: month })}
+                    options={FEE_MONTHS.map((month) => ({ value: month, label: month }))}
+                    placeholder="Select month"
+                    triggerClassName="h-10 bg-white"
+                  />
+                  <p className="text-[11px] text-black/45 dark:text-zinc-500">
+                    Installment 1 maps to this month when recording fee receipts.
+                  </p>
+                </div>
+              ) : null}
 
               <div className="space-y-2 border-t border-[#E8E8EA] pt-3">
                 <div className="flex items-center justify-between gap-2">

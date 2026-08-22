@@ -774,6 +774,15 @@ export type Payment = {
   narration?: string;
   /** Supporting files · bank slips, UPI screenshots, vouchers */
   attachments?: PaymentAttachment[];
+  /** Itemized fee lines when a receipt covers multiple periods or categories */
+  feeLines?: PaymentFeeLine[];
+};
+
+export type PaymentFeeLine = {
+  description: string;
+  amount: number;
+  feePeriodKind?: FeePeriodKind;
+  feePeriod: string;
 };
 
 /** Academic-year fee months · April–March (Indian school / FY order) */
@@ -892,6 +901,34 @@ export function currentFeeMonth(date = new Date()): string {
   return date.toLocaleString("en-IN", { month: "long" });
 }
 
+export function feeMonthIndex(month: string): number {
+  const needle = month.trim().toLowerCase();
+  const idx = FEE_MONTHS.findIndex((m) => m.toLowerCase() === needle);
+  return idx >= 0 ? idx : 0;
+}
+
+/** Calendar months for N installments beginning at startMonth (wraps within AY order). */
+export function feeMonthsFromStart(startMonth: string, count: number): string[] {
+  const start = feeMonthIndex(startMonth);
+  const n = Math.max(0, Math.floor(count));
+  return Array.from({ length: n }, (_, i) => FEE_MONTHS[(start + i) % FEE_MONTHS.length]);
+}
+
+/** Zero-based installment index for a fee month relative to collection start. */
+export function installmentIndexForFeeMonth(startMonth: string, feeMonth: string): number {
+  const start = feeMonthIndex(startMonth);
+  const target = feeMonthIndex(feeMonth);
+  let diff = target - start;
+  if (diff < 0) diff += FEE_MONTHS.length;
+  return diff;
+}
+
+export function defaultFeeCollectionStartMonth(feeTerms: FeeTerm[]): string {
+  const months = filterFeePeriods(feeTerms, "month", "tuition");
+  if (months[0]?.label) return months[0].label;
+  return FEE_MONTHS[0];
+}
+
 function parseIsoDateParts(iso?: string): { y: number; m: number; d: number } | null {
   if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
   const [y, m, d] = iso.split("-").map(Number);
@@ -923,6 +960,117 @@ export function formatFeeTermCoverage(
 export function resolvePaymentFeePeriod(payment: Payment): string | undefined {
   const next = payment.feePeriod?.trim() || payment.feeMonth?.trim();
   return next || undefined;
+}
+
+/** Unique fee periods on a receipt, in order. */
+export function paymentFeePeriods(payment: Payment): string[] {
+  const fromLines = (payment.feeLines ?? [])
+    .map((line) => line.feePeriod?.trim())
+    .filter((p): p is string => Boolean(p));
+  if (fromLines.length) {
+    const seen = new Set<string>();
+    return fromLines.filter((p) => {
+      const key = p.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+  const parsed = parsePaymentFeeLinesFromNarration(payment.narration);
+  if (parsed.length) {
+    const seen = new Set<string>();
+    return parsed
+      .map((line) => line.feePeriod?.trim())
+      .filter((p): p is string => Boolean(p))
+      .filter((p) => {
+        const key = p.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  }
+  const single = resolvePaymentFeePeriod(payment);
+  return single ? [single] : [];
+}
+
+/** Compact label for history tables — one period or joined list. */
+export function formatPaymentPeriodsLabel(payment: Payment): string {
+  const periods = paymentFeePeriods(payment);
+  if (periods.length === 0) return "—";
+  if (periods.length === 1) return periods[0];
+  if (periods.length <= 4) return periods.join(" · ");
+  return `${periods.slice(0, 3).join(" · ")} +${periods.length - 3}`;
+}
+
+/** Parse itemized lines from receipt narration (backward compatible). */
+export function parsePaymentFeeLinesFromNarration(
+  narration?: string,
+): PaymentFeeLine[] {
+  const parts = (narration ?? "")
+    .split(/\s*[·|]\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const lines: PaymentFeeLine[] = [];
+  let inBreakdown = false;
+
+  for (const part of parts) {
+    if (/^Fee breakdown:/i.test(part)) {
+      inBreakdown = true;
+    }
+    const cleaned = part.replace(/^Fee breakdown:\s*/i, "").trim();
+    const withPeriod = cleaned.match(
+      /^(.*?)\s+\(([^)]+)\)\s+(?:₹|Rs\.?)\s*([\d,]+(?:\.\d+)?)\s*$/i,
+    );
+    if (withPeriod) {
+      const amount = Number(withPeriod[3].replace(/,/g, ""));
+      if (Number.isFinite(amount) && amount >= 0) {
+        lines.push({
+          description: withPeriod[1].trim(),
+          feePeriod: withPeriod[2].trim(),
+          feePeriodKind: "month",
+          amount: Math.round(amount),
+        });
+      }
+      continue;
+    }
+    const plain = cleaned.match(/^(.*?)\s+(?:₹|Rs\.?)\s*([\d,]+(?:\.\d+)?)\s*$/i);
+    if ((inBreakdown || /^Fee breakdown:/i.test(part)) && plain) {
+      const amount = Number(plain[2].replace(/,/g, ""));
+      if (Number.isFinite(amount) && amount >= 0) {
+        lines.push({
+          description: plain[1].trim(),
+          feePeriod: "",
+          feePeriodKind: "month",
+          amount: Math.round(amount),
+        });
+      }
+    }
+  }
+
+  return lines;
+}
+
+export function resolvePaymentFeeLines(payment: Payment): PaymentFeeLine[] {
+  if (payment.feeLines?.length) {
+    return payment.feeLines.map((line) => ({
+      description: line.description,
+      amount: Math.max(0, Math.round(line.amount) || 0),
+      feePeriodKind: line.feePeriodKind ?? "month",
+      feePeriod: line.feePeriod?.trim() ?? "",
+    }));
+  }
+  const fromNarration = parsePaymentFeeLinesFromNarration(payment.narration);
+  if (fromNarration.length) return fromNarration;
+  const period = resolvePaymentFeePeriod(payment);
+  if (!period) return [];
+  return [
+    {
+      description: payment.cat,
+      amount: payment.amount,
+      feePeriodKind: resolvePaymentFeePeriodKind(payment),
+      feePeriod: period,
+    },
+  ];
 }
 
 export function resolvePaymentFeePeriodKind(payment: Payment): FeePeriodKind {
@@ -1124,6 +1272,8 @@ export type ClassConfig = {
   billingCycle: ClassBillingCycle;
   feeAmountMode: ClassFeeAmountMode;
   feeSchedule: ClassFeeLine[];
+  /** First calendar month mapped to installment 1 · Monthly billing */
+  feeCollectionStartMonth?: string;
   /** Optional class teacher from staff roster */
   classTeacherId?: string;
 };
@@ -1308,6 +1458,7 @@ export function classFeePrefillAmount(
     category: string;
     periodLabel?: string;
     periodIndex?: number;
+    collectionStartMonth?: string;
   },
 ): number | undefined {
   const lines = cls.feeSchedule.filter((line) => line.amount > 0);
@@ -1331,6 +1482,19 @@ export function classFeePrefillAmount(
   if (oneTime) return oneTime.amount;
 
   const installments = lines.filter((line) => line.kind === "installment");
+  if (
+    opts.periodLabel &&
+    opts.collectionStartMonth &&
+    cls.billingCycle === "Monthly"
+  ) {
+    const monthIndex = installmentIndexForFeeMonth(
+      opts.collectionStartMonth,
+      opts.periodLabel,
+    );
+    if (monthIndex >= 0 && installments[monthIndex]) {
+      return installments[monthIndex].amount;
+    }
+  }
   if (opts.periodLabel) {
     const needle = opts.periodLabel.trim().toLowerCase();
     const exact = installments.find((line) => line.label.trim().toLowerCase() === needle);
@@ -1410,6 +1574,14 @@ export function normalizeClassConfig(
         (raw as { fee_amount_mode?: unknown }).fee_amount_mode,
     ),
     feeSchedule,
+    feeCollectionStartMonth:
+      typeof raw.feeCollectionStartMonth === "string" && raw.feeCollectionStartMonth.trim()
+        ? raw.feeCollectionStartMonth.trim()
+        : typeof (raw as { fee_collection_start_month?: unknown }).fee_collection_start_month ===
+              "string" &&
+            (raw as { fee_collection_start_month: string }).fee_collection_start_month.trim()
+          ? (raw as { fee_collection_start_month: string }).fee_collection_start_month.trim()
+          : undefined,
     classTeacherId:
       typeof raw.classTeacherId === "string" && raw.classTeacherId.trim()
         ? raw.classTeacherId.trim()
