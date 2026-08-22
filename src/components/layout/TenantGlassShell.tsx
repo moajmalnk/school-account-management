@@ -261,11 +261,21 @@ export function useWorkspaceSubViewBack() {
   const financeTab = isFinanceTab(search.tab) ? search.tab : null;
   const onFinanceSubView = pathname.startsWith("/tenant/finance") && Boolean(financeTab);
   const onAdmitStudent = pathname.startsWith("/tenant/students/admit");
+  const onEditStudent = pathname.startsWith("/tenant/students/edit");
   const onStudentProfile = pathname === "/tenant/students" && Boolean(detailId);
   const onStaffDetail = pathname === "/tenant/staff" && Boolean(detailId);
-  const showBack = onFinanceSubView || onAdmitStudent || onStudentProfile || onStaffDetail;
+  const showBack = onFinanceSubView || onAdmitStudent || onEditStudent || onStudentProfile || onStaffDetail;
 
   const goBack = () => {
+    if (onEditStudent) {
+      const id = typeof search.id === "string" && search.id ? search.id : undefined;
+      navigate({
+        to: "/tenant/students",
+        search: id ? { id } : {},
+        replace: true,
+      });
+      return;
+    }
     if (onAdmitStudent || onStudentProfile) {
       navigate({ to: "/tenant/students", search: {}, replace: true });
       return;
@@ -279,6 +289,8 @@ export function useWorkspaceSubViewBack() {
 
   const backLabel = onStaffDetail
     ? "Back to staff directory"
+    : onEditStudent
+      ? "Back to student profile"
     : onAdmitStudent || onStudentProfile
       ? "Back to students directory"
       : "Back to finance overview";

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, startTransition, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, startTransition, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
@@ -29,8 +29,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
 import { ImageCropDialog } from "@/components/ui/image-crop-dialog";
 import {
@@ -41,16 +39,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  BLOOD_GROUPS,
   createStudentShareToken,
   DEFAULT_STUDENT_DOCUMENTS,
-  GUARDIAN_RELATIONS,
-  STUDENT_CATEGORIES,
-  STUDENT_RELIGIONS,
+  transportBusPointOptions,
+  resolveTransportFeeForStudent,
+  studentNeedsTransport,
   upsertStudentInSnapshot,
   useTenantStore,
-  transportBusPointOptions,
-  type GuardianRelation,
   type StaffDocument,
   type StaffDocumentAttachment,
   type Student,
@@ -78,59 +73,7 @@ import {
   type ProfileDetailTabId,
 } from "@/components/school/ProfileDetailTabs";
 import { cn } from "@/lib/utils";
-import { formatDobDisplay, toDobIso } from "@/lib/dates";
-
-type StudentDraft = {
-  name: string;
-  gender: "" | "M" | "F";
-  cls: string;
-  guardian: string;
-  phone: string;
-  dob: string;
-  email: string;
-  address: string;
-  motherName: string;
-  fatherOccupation: string;
-  guardianRelation: "" | GuardianRelation;
-  guardianOccupation: string;
-  aadhaar: string;
-  admissionNumber: string;
-  placeOfBirth: string;
-  nationality: string;
-  religion: string;
-  studentCategory: string;
-  bloodGroup: string;
-  needsBus: boolean;
-  busPoint1: string;
-  busPoint2: string;
-};
-
-function draftFromStudent(student: Student): StudentDraft {
-  return {
-    name: student.name,
-    gender: student.gender ?? "",
-    cls: student.cls,
-    guardian: student.guardian,
-    phone: student.phone ?? "",
-    dob: student.dob ?? "",
-    email: student.email ?? "",
-    address: student.address ?? "",
-    motherName: student.motherName ?? "",
-    fatherOccupation: student.fatherOccupation ?? "",
-    guardianRelation: student.guardianRelation ?? "",
-    guardianOccupation: student.guardianOccupation ?? "",
-    aadhaar: student.aadhaar ?? "",
-    admissionNumber: student.admissionNumber ?? "",
-    placeOfBirth: student.placeOfBirth ?? "",
-    nationality: student.nationality ?? "",
-    religion: student.religion ?? "",
-    studentCategory: student.studentCategory ?? "",
-    bloodGroup: student.bloodGroup ?? "",
-    needsBus: student.needsBus === true || Boolean(student.busPoint1 || student.busPoint2),
-    busPoint1: student.busPoint1 ?? "",
-    busPoint2: student.busPoint2 ?? "",
-  };
-}
+import { formatDobDisplay } from "@/lib/dates";
 
 function emptyToUndefined(value: string): string | undefined {
   const trimmed = value.trim();
@@ -144,17 +87,6 @@ const todayISO = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
-
-function EditFormField({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-        {label}
-      </Label>
-      {children}
-    </div>
-  );
-}
 
 const CARD_FRAME =
   "rounded-xl border border-slate-100 bg-white p-4 shadow-sm sm:p-6 dark:border-white/10 dark:bg-[#171717] dark:text-zinc-100 dark:shadow-black/40";
@@ -450,31 +382,18 @@ function StudentPhotoAvatar({
 export function StudentProfileDetail({
   student,
   onBack,
-  initialEdit = false,
 }: {
   student: Student;
   onBack: () => void;
-  initialEdit?: boolean;
 }) {
   const navigate = useNavigate();
   const { setStudents, academicYear, schoolDetails, classes: classConfigs, activePayments, activeFeeTerms, transportRoutes } =
     useTenantStore();
   const { session } = useAuth();
   const schoolName = schoolDetails.name || session?.tenantName || "Silver Hills Global";
-  const [editOpen, setEditOpen] = useState(initialEdit);
   const [shareOpen, setShareOpen] = useState(false);
   const [shareToken, setShareToken] = useState(student.shareToken ?? "");
   const [activeTab, setActiveTab] = useState<ProfileDetailTabId>("profile");
-  const [draft, setDraft] = useState<StudentDraft>(() => draftFromStudent(student));
-
-  const resetDraft = () => {
-    setDraft(draftFromStudent(student));
-  };
-
-  const classOptions = useMemo(() => {
-    const fromConfig = classConfigs.map((c) => c.className);
-    return Array.from(new Set([...fromConfig, student.cls, draft.cls].filter(Boolean)));
-  }, [classConfigs, draft.cls, student.cls]);
 
   const busPointOptions = useMemo(() => {
     const { pickups, drops } = transportBusPointOptions(transportRoutes);
@@ -485,33 +404,34 @@ export function StudentProfileDetail({
     };
     const dropPool = drops.length > 0 ? drops : pickups;
     return {
-      point1: withCurrent(draft.busPoint1 || student.busPoint1 || "", pickups),
-      point2: withCurrent(draft.busPoint2 || student.busPoint2 || "", dropPool),
+      point1: withCurrent(student.busPoint1 ?? "", pickups),
+      point2: withCurrent(student.busPoint2 ?? "", dropPool),
     };
-  }, [
-    draft.busPoint1,
-    draft.busPoint2,
-    student.busPoint1,
-    student.busPoint2,
-    transportRoutes,
-  ]);
+  }, [student.busPoint1, student.busPoint2, transportRoutes]);
+
+  const matchedClass = useMemo(
+    () => classConfigs.find((c) => c.className === student.cls),
+    [classConfigs, student.cls],
+  );
+
+  const studentTransportFee = useMemo(
+    () => resolveTransportFeeForStudent(student, transportRoutes, matchedClass),
+    [student, transportRoutes, matchedClass],
+  );
+
+  const openCollectVehicleFee = (target: Student) => {
+    navigate({
+      to: "/tenant/finance",
+      search: { tab: "receive", studentId: target.id },
+    });
+  };
 
   const studentNeedsBus =
     student.needsBus === true || Boolean(student.busPoint1 || student.busPoint2);
 
   useEffect(() => {
     setShareToken(student.shareToken ?? "");
-    if (!editOpen) {
-      setDraft(draftFromStudent(student));
-    }
-  }, [student, editOpen]);
-
-  useEffect(() => {
-    if (initialEdit) {
-      setEditOpen(true);
-      navigate({ to: "/tenant/students", search: { id: student.id }, replace: true });
-    }
-  }, [initialEdit, navigate, student.id]);
+  }, [student]);
 
   const feeStatement = useMemo(
     () =>
@@ -574,12 +494,24 @@ export function StudentProfileDetail({
       busPoint1: patch.needsBus ? emptyToUndefined(patch.busPoint1 ?? "") : undefined,
       busPoint2: patch.needsBus ? emptyToUndefined(patch.busPoint2 ?? "") : undefined,
     };
+    const fee = resolveTransportFeeForStudent(updated, transportRoutes, matchedClass);
     syncStudent(updated);
+    const points = [updated.busPoint1, updated.busPoint2].filter(Boolean).join(" · ");
+    const canCollect = studentNeedsTransport(updated) && Boolean(fee.amount && fee.amount > 0);
     toast.success("Transport route updated", {
-      description: patch.needsBus
-        ? [updated.busPoint1, updated.busPoint2].filter(Boolean).join(" · ") ||
-          "School bus required · pick points below"
-        : "School bus not required",
+      description: canCollect
+        ? `Vehicle fee ₹${fee.amount!.toLocaleString("en-IN")}${points ? ` · ${points}` : ""}`
+        : patch.needsBus
+          ? points || "School bus required · pick points below"
+          : "School bus not required",
+      ...(canCollect
+        ? {
+            action: {
+              label: "Collect fee",
+              onClick: () => openCollectVehicleFee(updated),
+            },
+          }
+        : {}),
     });
   };
 
@@ -669,10 +601,6 @@ export function StudentProfileDetail({
     ? `https://wa.me/${phoneDigits.length === 10 ? "91" : ""}${phoneDigits}`
     : undefined;
 
-  const patchDraft = <K extends keyof StudentDraft>(key: K, value: StudentDraft[K]) => {
-    setDraft((prev) => ({ ...prev, [key]: value }));
-  };
-
   const openShare = () => {
     let token = student.shareToken ?? shareToken;
     if (!token) {
@@ -682,56 +610,6 @@ export function StudentProfileDetail({
     }
     setShareToken(token);
     setShareOpen(true);
-  };
-
-  const handleSaveProfile = (e: FormEvent) => {
-    e.preventDefault();
-    if (!draft.name.trim()) {
-      toast.error("Student name is required");
-      return;
-    }
-    if (!draft.guardian.trim()) {
-      toast.error("Guardian name is required");
-      return;
-    }
-    if (!draft.cls.trim()) {
-      toast.error("Class is required");
-      return;
-    }
-    const nextDocs = ensureStudentDocuments(student).map((d) =>
-      d.id === "doc-aadhaar" ? { ...d, number: draft.aadhaar.trim() } : d,
-    );
-    const updated: Student = {
-      ...student,
-      name: draft.name.trim(),
-      gender: draft.gender || undefined,
-      cls: draft.cls.trim(),
-      guardian: draft.guardian.trim(),
-      phone: emptyToUndefined(draft.phone),
-      dob: toDobIso(draft.dob),
-      email: emptyToUndefined(draft.email),
-      address: emptyToUndefined(draft.address),
-      motherName: emptyToUndefined(draft.motherName),
-      fatherOccupation: emptyToUndefined(draft.fatherOccupation),
-      guardianRelation: draft.guardianRelation || undefined,
-      guardianOccupation: emptyToUndefined(draft.guardianOccupation),
-      aadhaar: emptyToUndefined(draft.aadhaar),
-      admissionNumber: emptyToUndefined(draft.admissionNumber),
-      placeOfBirth: emptyToUndefined(draft.placeOfBirth),
-      nationality: emptyToUndefined(draft.nationality),
-      religion: emptyToUndefined(draft.religion),
-      studentCategory: emptyToUndefined(draft.studentCategory),
-      bloodGroup: emptyToUndefined(draft.bloodGroup),
-      needsBus: draft.needsBus,
-      busPoint1: draft.needsBus ? emptyToUndefined(draft.busPoint1) : undefined,
-      busPoint2: draft.needsBus ? emptyToUndefined(draft.busPoint2) : undefined,
-      documents: nextDocs,
-    };
-    syncStudent(updated);
-    toast.success(`${updated.name}'s profile updated`, {
-      description: `${updated.id} · all profile fields saved`,
-    });
-    setEditOpen(false);
   };
 
   const updatePhoto = async (photoUrl: string | undefined) => {
@@ -821,10 +699,9 @@ export function StudentProfileDetail({
             </button>
             <button
               type="button"
-              onClick={() => {
-                resetDraft();
-                setEditOpen(true);
-              }}
+              onClick={() =>
+                navigate({ to: "/tenant/students/edit", search: { id: student.id } })
+              }
               className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#0F766E] px-4 text-[13px] font-semibold text-white shadow-sm transition-colors hover:bg-[#0D9488]"
             >
               <Pencil className="h-4 w-4" />
@@ -955,39 +832,64 @@ export function StudentProfileDetail({
                 </label>
 
                 {studentNeedsBus ? (
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <MetaSelect
-                      label="Bus Point 1"
-                      value={student.busPoint1 ?? ""}
-                      editing
-                      onChange={(v) =>
-                        updateTransport({
-                          needsBus: true,
-                          busPoint1: v === "__none__" ? "" : v,
-                          busPoint2: student.busPoint2 ?? "",
-                        })
-                      }
-                      options={busPointOptions.point1}
-                      placeholder="Select pickup point"
-                      allowNone
-                      noneLabel="No pickup point"
-                    />
-                    <MetaSelect
-                      label="Bus Point 2"
-                      value={student.busPoint2 ?? ""}
-                      editing
-                      onChange={(v) =>
-                        updateTransport({
-                          needsBus: true,
-                          busPoint1: student.busPoint1 ?? "",
-                          busPoint2: v === "__none__" ? "" : v,
-                        })
-                      }
-                      options={busPointOptions.point2}
-                      placeholder="Select drop point"
-                      allowNone
-                      noneLabel="No drop point"
-                    />
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <MetaSelect
+                        label="Bus Point 1"
+                        value={student.busPoint1 ?? ""}
+                        editing
+                        onChange={(v) =>
+                          updateTransport({
+                            needsBus: true,
+                            busPoint1: v === "__none__" ? "" : v,
+                            busPoint2: student.busPoint2 ?? "",
+                          })
+                        }
+                        options={busPointOptions.point1}
+                        placeholder="Select pickup point"
+                        allowNone
+                        noneLabel="No pickup point"
+                      />
+                      <MetaSelect
+                        label="Bus Point 2"
+                        value={student.busPoint2 ?? ""}
+                        editing
+                        onChange={(v) =>
+                          updateTransport({
+                            needsBus: true,
+                            busPoint1: student.busPoint1 ?? "",
+                            busPoint2: v === "__none__" ? "" : v,
+                          })
+                        }
+                        options={busPointOptions.point2}
+                        placeholder="Select drop point"
+                        allowNone
+                        noneLabel="No drop point"
+                      />
+                    </div>
+                    {studentTransportFee.amount && studentTransportFee.amount > 0 ? (
+                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#CCFBF1] bg-[#F0FDFA]/70 px-3.5 py-3">
+                        <div>
+                          <div className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                            Vehicle fee
+                          </div>
+                          <div className="mt-0.5 font-mono text-[15px] font-bold text-black">
+                            ₹ {studentTransportFee.amount.toLocaleString("en-IN")}
+                          </div>
+                          <div className="mt-0.5 text-[12px] text-black/50">
+                            Based on assigned pickup / drop route
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+                          onClick={() => openCollectVehicleFee(student)}
+                        >
+                          Collect fee
+                        </Button>
+                      </div>
+                    ) : null}
                   </div>
                 ) : (
                   <p className="text-[12.5px] text-black/50 dark:text-zinc-400">
@@ -1085,368 +987,6 @@ export function StudentProfileDetail({
         onDelete={deleteStudent}
       />
 
-      <Dialog
-        open={editOpen}
-        onOpenChange={(open) => {
-          setEditOpen(open);
-          if (!open) resetDraft();
-        }}
-      >
-        <DialogContent className="max-h-[min(90dvh,720px)] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Edit Student Profile</DialogTitle>
-            <DialogDescription>Update core details for {student.name}.</DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSaveProfile} className="space-y-4">
-            <EditFormField label="Student Name">
-              <Input
-                value={draft.name}
-                onChange={(e) => patchDraft("name", e.target.value)}
-                placeholder="Student full name"
-              />
-            </EditFormField>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <EditFormField label="Class">
-                <Select
-                  value={draft.cls || undefined}
-                  onValueChange={(cls) => patchDraft("cls", cls)}
-                >
-                  <SelectTrigger className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white text-[13px]">
-                    <SelectValue placeholder="Select class" />
-                  </SelectTrigger>
-                  <SelectContent
-                    position="popper"
-                    className="z-[250] rounded-lg border border-[#E5E5E5] bg-white"
-                  >
-                    {classOptions.map((cls) => (
-                      <SelectItem key={cls} value={cls}>
-                        {cls}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </EditFormField>
-              <EditFormField label="Admission Number">
-                <Input
-                  value={draft.admissionNumber}
-                  onChange={(e) => patchDraft("admissionNumber", e.target.value)}
-                  placeholder="e.g. ADM-2841"
-                  className="font-mono"
-                />
-              </EditFormField>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                Gender
-              </Label>
-              <div className="inline-flex w-full items-center rounded-full border border-black/10 bg-white p-1">
-                {(
-                  [
-                    { key: "M" as const, label: "Male" },
-                    { key: "F" as const, label: "Female" },
-                  ] as const
-                ).map((g) => (
-                  <button
-                    key={g.key}
-                    type="button"
-                    onClick={() => patchDraft("gender", g.key)}
-                    className={cn(
-                      "min-h-9 flex-1 rounded-full text-[12px] font-semibold transition-colors",
-                      draft.gender === g.key
-                        ? "bg-[#0F766E] text-white"
-                        : "text-black/55 hover:bg-black/5",
-                    )}
-                  >
-                    {g.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <EditFormField label="Mother Name">
-                <Input
-                  value={draft.motherName}
-                  onChange={(e) => patchDraft("motherName", e.target.value)}
-                  placeholder="e.g. Anita Verma"
-                />
-              </EditFormField>
-              <EditFormField label="Father Occupation">
-                <Input
-                  value={draft.fatherOccupation}
-                  onChange={(e) => patchDraft("fatherOccupation", e.target.value)}
-                  placeholder="e.g. Engineer"
-                />
-              </EditFormField>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                If Guardian Is
-              </Label>
-              <div className="inline-flex w-full items-center rounded-full border border-black/10 bg-white p-1">
-                {GUARDIAN_RELATIONS.map((relation) => (
-                  <button
-                    key={relation}
-                    type="button"
-                    onClick={() => patchDraft("guardianRelation", relation)}
-                    className={cn(
-                      "min-h-9 flex-1 rounded-full text-[12px] font-semibold transition-colors",
-                      draft.guardianRelation === relation
-                        ? "bg-[#0F766E] text-white"
-                        : "text-black/55 hover:bg-black/5",
-                    )}
-                  >
-                    {relation}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <EditFormField label="Guardian Name">
-                <Input
-                  value={draft.guardian}
-                  onChange={(e) => patchDraft("guardian", e.target.value)}
-                  placeholder="e.g. Anita Verma"
-                />
-              </EditFormField>
-              <EditFormField label="Guardian Occupation">
-                <Input
-                  value={draft.guardianOccupation}
-                  onChange={(e) => patchDraft("guardianOccupation", e.target.value)}
-                  placeholder="e.g. Teacher"
-                />
-              </EditFormField>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <EditFormField label="Guardian Mobile">
-                <Input
-                  value={draft.phone}
-                  onChange={(e) => patchDraft("phone", e.target.value)}
-                  placeholder="9810045221"
-                  className="font-mono"
-                />
-              </EditFormField>
-              <EditFormField label="Aadhaar">
-                <Input
-                  value={draft.aadhaar}
-                  onChange={(e) =>
-                    patchDraft("aadhaar", e.target.value.replace(/\D/g, "").slice(0, 12))
-                  }
-                  placeholder="12-digit Aadhaar"
-                  className="font-mono"
-                  inputMode="numeric"
-                />
-              </EditFormField>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <EditFormField label="Date of Birth">
-                <DatePicker
-                  value={draft.dob ?? ""}
-                  onChange={(dob) => patchDraft("dob", dob)}
-                  placeholder="14 Mar 2012"
-                  valueFormat="iso"
-                  variant="pill"
-                  quickPicks={[]}
-                  min="1990-01-01"
-                  max={todayISO()}
-                  className="h-9 w-full"
-                />
-              </EditFormField>
-              <EditFormField label="Place of Birth">
-                <Input
-                  value={draft.placeOfBirth}
-                  onChange={(e) => patchDraft("placeOfBirth", e.target.value)}
-                  placeholder="e.g. Kozhikode"
-                />
-              </EditFormField>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <EditFormField label="Nationality">
-                <Input
-                  value={draft.nationality}
-                  onChange={(e) => patchDraft("nationality", e.target.value)}
-                  placeholder="e.g. Indian"
-                />
-              </EditFormField>
-              <EditFormField label="Religion">
-                <Select
-                  value={draft.religion || undefined}
-                  onValueChange={(religion) => patchDraft("religion", religion)}
-                >
-                  <SelectTrigger className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white text-[13px]">
-                    <SelectValue placeholder="Select religion" />
-                  </SelectTrigger>
-                  <SelectContent
-                    position="popper"
-                    className="z-[250] rounded-lg border border-[#E5E5E5] bg-white"
-                  >
-                    {STUDENT_RELIGIONS.map((religion) => (
-                      <SelectItem key={religion} value={religion}>
-                        {religion}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </EditFormField>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <EditFormField label="Student Category">
-                <Select
-                  value={draft.studentCategory || undefined}
-                  onValueChange={(studentCategory) => patchDraft("studentCategory", studentCategory)}
-                >
-                  <SelectTrigger className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white text-[13px]">
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent
-                    position="popper"
-                    className="z-[250] rounded-lg border border-[#E5E5E5] bg-white"
-                  >
-                    {STUDENT_CATEGORIES.map((category) => (
-                      <SelectItem key={category} value={category}>
-                        {category}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </EditFormField>
-              <EditFormField label="Blood Group">
-                <Select
-                  value={draft.bloodGroup || undefined}
-                  onValueChange={(bloodGroup) => patchDraft("bloodGroup", bloodGroup)}
-                >
-                  <SelectTrigger className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white text-[13px]">
-                    <SelectValue placeholder="Select blood group" />
-                  </SelectTrigger>
-                  <SelectContent
-                    position="popper"
-                    className="z-[250] rounded-lg border border-[#E5E5E5] bg-white"
-                  >
-                    {BLOOD_GROUPS.map((group) => (
-                      <SelectItem key={group} value={group}>
-                        {group}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </EditFormField>
-            </div>
-
-            <EditFormField label="Email Address">
-              <Input
-                type="email"
-                value={draft.email}
-                onChange={(e) => patchDraft("email", e.target.value)}
-                placeholder="guardian@email.com"
-                className="font-mono text-[13px]"
-              />
-            </EditFormField>
-
-            <EditFormField label="Residential Mailing Address">
-              <Textarea
-                value={draft.address}
-                onChange={(e) => patchDraft("address", e.target.value)}
-                placeholder="House / Flat, Street, City, PIN"
-                className="min-h-[72px] resize-none rounded-2xl text-[13px]"
-              />
-            </EditFormField>
-
-            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-[#E5E5E5] bg-[#FAFAFA] px-3.5 py-3">
-              <Checkbox
-                checked={draft.needsBus === true}
-                onCheckedChange={(checked) =>
-                  setDraft((prev) => ({
-                    ...prev,
-                    needsBus: checked === true,
-                    ...(checked === true ? {} : { busPoint1: "", busPoint2: "" }),
-                  }))
-                }
-                className="mt-0.5 h-5 w-5 rounded-md border-slate-300"
-              />
-              <span className="min-w-0">
-                <span className="block text-[13px] font-semibold text-slate-900">
-                  Requires school bus
-                </span>
-                <span className="mt-0.5 block text-[12px] text-slate-500">
-                  Check if your child needs transport · then pick pickup points
-                </span>
-              </span>
-            </label>
-
-            {draft.needsBus && (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <EditFormField label="Bus Point 1">
-                  <Select
-                    value={draft.busPoint1 || "__none__"}
-                    onValueChange={(busPoint1) =>
-                      patchDraft("busPoint1", busPoint1 === "__none__" ? "" : busPoint1)
-                    }
-                  >
-                    <SelectTrigger className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white text-[13px]">
-                      <SelectValue placeholder="Select pickup point" />
-                    </SelectTrigger>
-                    <SelectContent
-                      position="popper"
-                      className="z-[250] rounded-lg border border-[#E5E5E5] bg-white"
-                    >
-                      <SelectItem value="__none__" className="text-slate-500">
-                        No pickup point
-                      </SelectItem>
-                      {busPointOptions.point1.map((point) => (
-                        <SelectItem key={point} value={point}>
-                          {point}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </EditFormField>
-                <EditFormField label="Bus Point 2">
-                  <Select
-                    value={draft.busPoint2 || "__none__"}
-                    onValueChange={(busPoint2) =>
-                      patchDraft("busPoint2", busPoint2 === "__none__" ? "" : busPoint2)
-                    }
-                  >
-                    <SelectTrigger className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white text-[13px]">
-                      <SelectValue placeholder="Select drop point" />
-                    </SelectTrigger>
-                    <SelectContent
-                      position="popper"
-                      className="z-[250] rounded-lg border border-[#E5E5E5] bg-white"
-                    >
-                      <SelectItem value="__none__" className="text-slate-500">
-                        No drop point
-                      </SelectItem>
-                      {busPointOptions.point2.map((point) => (
-                        <SelectItem key={point} value={point}>
-                          {point}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </EditFormField>
-              </div>
-            )}
-
-            <DialogFooter className="flex-row justify-end gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => setEditOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
-                Save Changes
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

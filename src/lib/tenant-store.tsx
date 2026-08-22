@@ -1083,7 +1083,7 @@ export function resolvePaymentFeePeriodKind(payment: Payment): FeePeriodKind {
 /** Map a fee category label to the term group it uses (if any). */
 export function categoryFeeTermKind(categoryLabel: string): FeeTermKind | null {
   const lower = categoryLabel.toLowerCase();
-  if (lower.includes("tuition")) return "tuition";
+  if (lower.includes("tuition") || lower.includes("tution")) return "tuition";
   if (lower.includes("vehicle") || lower.includes("transport") || lower.includes("bus")) {
     return "vehicle";
   }
@@ -3696,6 +3696,114 @@ export function transportBusPointOptions(routes: TransportRoute[]): {
     pickups: Array.from(pickups).sort((a, b) => a.localeCompare(b, "en")),
     drops: Array.from(drops).sort((a, b) => a.localeCompare(b, "en")),
   };
+}
+
+function normalizeBusPointLabel(value: string | undefined): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function busPointsMatch(a: string | undefined, b: string | undefined): boolean {
+  const left = normalizeBusPointLabel(a);
+  const right = normalizeBusPointLabel(b);
+  if (!left || !right) return false;
+  return left === right || left.includes(right) || right.includes(left);
+}
+
+export function studentNeedsTransport(
+  student: Pick<Student, "needsBus" | "busPoint1" | "busPoint2">,
+): boolean {
+  return (
+    student.needsBus === true ||
+    Boolean(student.busPoint1?.trim() || student.busPoint2?.trim())
+  );
+}
+
+export type TransportFeeShift = "morning" | "evening" | "both";
+
+export function resolveTransportFeeShift(
+  student: Pick<Student, "busPoint1" | "busPoint2">,
+): TransportFeeShift {
+  const hasPickup = Boolean(student.busPoint1?.trim());
+  const hasDrop = Boolean(student.busPoint2?.trim());
+  if (hasPickup && hasDrop) return "both";
+  if (hasPickup) return "morning";
+  if (hasDrop) return "evening";
+  return "both";
+}
+
+export function findTransportRouteForStudent(
+  student: Pick<Student, "needsBus" | "busPoint1" | "busPoint2">,
+  routes: TransportRoute[],
+): TransportRoute | undefined {
+  if (!studentNeedsTransport(student)) return undefined;
+  const pickup = student.busPoint1?.trim();
+  const drop = student.busPoint2?.trim();
+
+  if (pickup && drop) {
+    const matched = routes.find(
+      (route) => busPointsMatch(route.mapFrom, pickup) && busPointsMatch(route.mapTo, drop),
+    );
+    if (matched) return matched;
+  }
+  if (pickup) {
+    const matched = routes.find((route) => busPointsMatch(route.mapFrom, pickup));
+    if (matched) return matched;
+  }
+  if (drop) {
+    const matched = routes.find((route) => busPointsMatch(route.mapTo, drop));
+    if (matched) return matched;
+  }
+  return undefined;
+}
+
+export function resolveTransportFeeForStudent(
+  student: Pick<Student, "needsBus" | "busPoint1" | "busPoint2" | "cls">,
+  routes: TransportRoute[],
+  classConfig?: Pick<ClassConfig, "vehicleFeeAmount">,
+): { amount: number | undefined; shift: TransportFeeShift; route?: TransportRoute } {
+  if (!studentNeedsTransport(student)) {
+    return { amount: undefined, shift: "both" };
+  }
+
+  const shift = resolveTransportFeeShift(student);
+  const route = findTransportRouteForStudent(student, routes);
+
+  if (route) {
+    const raw =
+      shift === "morning"
+        ? route.morningFee
+        : shift === "evening"
+          ? route.eveningFee
+          : route.bothFee;
+    if (raw > 0) {
+      return { amount: Math.round(raw), shift, route };
+    }
+  }
+
+  if (classConfig && classConfig.vehicleFeeAmount > 0) {
+    return { amount: classConfig.vehicleFeeAmount, shift, route };
+  }
+
+  const fallback = routes[0];
+  if (fallback?.bothFee > 0) {
+    return { amount: Math.round(fallback.bothFee), shift: "both", route: fallback };
+  }
+
+  return { amount: undefined, shift, route };
+}
+
+export function vehicleFeeCategoryLabel(
+  categories: readonly Pick<PaymentCategory, "label">[],
+): string {
+  const match = categories.find((category) =>
+    /vehicle|transport|bus/i.test(category.label),
+  );
+  return match?.label ?? "Vehicle Fee";
+}
+
+export function isVehicleFeeCategory(label: string): boolean {
+  const lower = label.trim().toLowerCase();
+  return lower.includes("vehicle") || lower.includes("transport") || lower.includes("bus");
 }
 
 /**

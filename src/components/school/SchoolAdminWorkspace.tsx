@@ -175,6 +175,10 @@ import {
   resolvePaymentFeeLines,
   paymentFeePeriods,
   formatPaymentPeriodsLabel,
+  resolveTransportFeeForStudent,
+  studentNeedsTransport,
+  vehicleFeeCategoryLabel,
+  isVehicleFeeCategory,
   type PaymentFeeLine,
   currentPayrollMonth,
   formatPayrollMonthLabel,
@@ -2587,16 +2591,14 @@ export function StudentsLedger() {
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/students" }) as {
     id?: string;
-    edit?: string;
   };
   const activeStudentViewId = search.id ?? null;
-  const initialEdit = search.edit === "1";
   const defaultClass = classes[0]?.className ?? "";
   const schoolName = schoolDetails.name || "Silver Hills Global";
 
   const openStudent = (id: string) => navigate({ to: "/tenant/students", search: { id } });
   const openStudentEdit = (id: string) =>
-    navigate({ to: "/tenant/students", search: { id, edit: "1" } });
+    navigate({ to: "/tenant/students/edit", search: { id } });
   const closeStudent = () => navigate({ to: "/tenant/students", search: {} });
 
   const [gradeFilter, setGradeFilter] = useState<string>("all");
@@ -3311,7 +3313,6 @@ export function StudentsLedger() {
       <StudentProfileDetail
         student={activeStudent}
         onBack={closeStudent}
-        initialEdit={initialEdit}
       />
     );
   }
@@ -6784,7 +6785,7 @@ function feeDescriptionSelectOptions(
   return options;
 }
 
-function classSelectOptions(classes: ClassConfig[], currentClass: string) {
+export function classSelectOptions(classes: ClassConfig[], currentClass: string) {
   const options = classes.map((c) => ({ value: c.className, label: c.className }));
   if (
     currentClass.trim() &&
@@ -6836,8 +6837,48 @@ function feePeriodChoices(
     installmentCount?: number;
     billingCycle?: ClassBillingCycle;
   },
+  matchedClass?: ClassConfig,
 ): { value: string; label: string; kind: FeePeriodKind; period: string }[] {
   const termKind = categoryFeeTermKind(description);
+  const scheduled = matchedClass ? withClassFeeSchedule(matchedClass, feeTerms) : undefined;
+  const classInstallments =
+    scheduled?.feeSchedule.filter((line) => line.kind === "installment" && line.amount > 0) ?? [];
+
+  if (termKind === "tuition" && matchedClass?.billingCycle === "Term" && classInstallments.length > 0) {
+    return classInstallments.map((line) => ({
+      value: `term:${line.label}`,
+      label: line.label,
+      kind: "term" as const,
+      period: line.label,
+    }));
+  }
+
+  if (
+    termKind === "tuition" &&
+    matchedClass?.billingCycle === "Monthly" &&
+    classInstallments.length > 0
+  ) {
+    let labels = classInstallments.map((line) => line.label);
+    const useInstallmentWindow =
+      Boolean(opts?.startMonth?.trim()) && (opts?.installmentCount ?? 0) > 0;
+    if (useInstallmentWindow && opts?.startMonth) {
+      const allowed = feeMonthsFromStart(opts.startMonth, opts.installmentCount ?? labels.length);
+      const allowedSet = new Set(allowed.map((m) => m.toLowerCase()));
+      const monthLike = labels.filter((label) => allowedSet.has(label.trim().toLowerCase()));
+      if (monthLike.length > 0) {
+        labels = monthLike;
+      } else if (allowed.length > 0) {
+        labels = allowed.slice(0, labels.length);
+      }
+    }
+    return labels.map((label) => ({
+      value: `month:${label}`,
+      label,
+      kind: "month" as const,
+      period: label,
+    }));
+  }
+
   const terms = uniqueByLabel(termKind ? filterFeePeriods(feeTerms, "term", termKind) : []);
   const months = uniqueByLabel(termKind ? filterFeePeriods(feeTerms, "month", termKind) : []);
   let monthLabels = months.length > 0 ? months.map((t) => t.label) : [...FEE_MONTHS];
@@ -6861,19 +6902,21 @@ function feePeriodChoices(
       kind: "term" as const,
       period: t.label,
     })),
-    ...monthLabels.map((label) => {
-      const monthTerm = months.find((t) => t.label === label);
-      return {
-        value: `month:${label}`,
-        label: monthTerm
-          ? [label, monthTerm.coverage || formatFeeTermCoverage(monthTerm.startDate, monthTerm.endDate)]
-              .filter(Boolean)
-              .join(" · ")
-          : label,
-        kind: "month" as const,
-        period: label,
-      };
-    }),
+    ...(matchedClass?.billingCycle === "Term" && termKind === "tuition"
+      ? []
+      : monthLabels.map((label) => {
+          const monthTerm = months.find((t) => t.label === label);
+          return {
+            value: `month:${label}`,
+            label: monthTerm
+              ? [label, monthTerm.coverage || formatFeeTermCoverage(monthTerm.startDate, monthTerm.endDate)]
+                  .filter(Boolean)
+                  .join(" · ")
+              : label,
+            kind: "month" as const,
+            period: label,
+          };
+        })),
   ];
   const seen = new Set<string>();
   return choices.filter((choice) => {
@@ -6892,8 +6935,9 @@ function defaultFeePeriod(
     installmentCount?: number;
     billingCycle?: ClassBillingCycle;
   },
+  matchedClass?: ClassConfig,
 ): { feePeriodKind: FeePeriodKind; feePeriod: string } {
-  const choices = feePeriodChoices(feeTerms, description, periodOpts);
+  const choices = feePeriodChoices(feeTerms, description, periodOpts, matchedClass);
   if (billingCycle === "Term") {
     const term = choices.find((c) => c.kind === "term");
     if (term) return { feePeriodKind: "term", feePeriod: term.period };
@@ -6940,11 +6984,20 @@ function prefillAmountForFeeLine(
 
   if (matchedClass) {
     const scheduled = withClassFeeSchedule(matchedClass, feeTerms);
+    const installments = scheduled.feeSchedule.filter((line) => line.kind === "installment");
+    const scheduleIndex = installments.findIndex(
+      (line) => line.label.trim().toLowerCase() === item.feePeriod.trim().toLowerCase(),
+    );
     const periodList = item.feePeriodKind === "term" ? termsForCategory : monthsForCategory;
     const selectedPeriod = item.feePeriodKind === "term" ? selectedTerm : selectedMonthPeriod;
-    const periodIndex = selectedPeriod
-      ? periodList.findIndex((p) => p.id === selectedPeriod.id || p.label === selectedPeriod.label)
-      : -1;
+    const periodIndex =
+      scheduleIndex >= 0
+        ? scheduleIndex
+        : selectedPeriod
+          ? periodList.findIndex(
+              (p) => p.id === selectedPeriod.id || p.label === selectedPeriod.label,
+            )
+          : -1;
     const fromSchedule = classFeePrefillAmount(scheduled, {
       category,
       periodLabel: item.feePeriod || selectedPeriod?.label,
@@ -7190,6 +7243,8 @@ function PaymentModeControls({
 
 function ReceivePayment() {
   const { session } = useAuth();
+  const navigate = useNavigate();
+  const search = useSearch({ from: "/tenant/finance" });
   const {
     activeStudents: students,
     setStudents,
@@ -7321,22 +7376,30 @@ function ReceivePayment() {
     }
   }, [paymentCategories, ledgerCategory, ledgerDefault, editingPayment]);
 
-  const matchedRouteFee = useMemo(() => {
-    if (!selected) return undefined;
-    const haystack = `${selected.address ?? ""} ${selected.cls}`.toLowerCase();
-    const matched = transportRoutes.find((r) =>
-      r.mapFrom
-        .toLowerCase()
-        .split(/[ ,]+/)
-        .some((token) => token.length > 3 && haystack.includes(token)),
-    );
-    return matched?.bothFee ?? transportRoutes[0]?.bothFee;
-  }, [selected, transportRoutes]);
-
   const matchedClass = useMemo(
     () => classConfigs.find((c) => c.className === selected?.cls),
     [classConfigs, selected],
   );
+
+  const transportFeeResolved = useMemo(() => {
+    if (!selected) return undefined;
+    return resolveTransportFeeForStudent(selected, transportRoutes, matchedClass);
+  }, [selected, transportRoutes, matchedClass]);
+
+  const vehicleCategoryLabel = useMemo(
+    () => vehicleFeeCategoryLabel(paymentCategories),
+    [paymentCategories],
+  );
+
+  const vehicleFee = useMemo(() => {
+    if (transportFeeResolved?.amount && transportFeeResolved.amount > 0) {
+      return transportFeeResolved.amount;
+    }
+    if (matchedClass && matchedClass.vehicleFeeAmount > 0) {
+      return matchedClass.vehicleFeeAmount;
+    }
+    return undefined;
+  }, [transportFeeResolved, matchedClass]);
 
   const tuitionFee = matchedClass?.tuitionFeeAmount;
 
@@ -7355,13 +7418,6 @@ function ReceivePayment() {
   }, [matchedClass, feeTerms, collectionStartMonth, isExternal]);
 
   const showCollectionStart = Boolean(periodOpts);
-
-  const vehicleFee = useMemo(() => {
-    if (matchedClass && matchedClass.vehicleFeeAmount > 0) {
-      return matchedClass.vehicleFeeAmount;
-    }
-    return matchedRouteFee;
-  }, [matchedClass, matchedRouteFee]);
 
   const applyPrefillToLines = useCallback(
     (lines: FeeLineItem[]) => {
@@ -7396,6 +7452,108 @@ function ReceivePayment() {
   }, [matchedClass?.id, matchedClass?.feeCollectionStartMonth, feeTerms, editingPayment, isExternal]);
 
   useEffect(() => {
+    if (editingPayment || !search.studentId) return;
+    const student = students.find((s) => s.id === search.studentId);
+    if (!student) return;
+    setPayerSource("student");
+    setCls(student.cls);
+    setStu(student.name);
+    navigate({ to: "/tenant/finance", search: { tab: "receive" }, replace: true });
+  }, [search.studentId, students, editingPayment, navigate]);
+
+  useEffect(() => {
+    if (isExternal || editingPayment || !selected) return;
+
+    setFeeItems((prev) => {
+      const nonVehicle = prev.filter((item) => !isVehicleFeeCategory(item.description));
+      const existingVehicle = prev.find((item) => isVehicleFeeCategory(item.description));
+      const needsTransport = studentNeedsTransport(selected);
+
+      if (!needsTransport) {
+        if (!existingVehicle) return prev;
+        return nonVehicle.length > 0
+          ? nonVehicle
+          : [createFeeLineItem({ description: defaultCategory })];
+      }
+
+      const period = defaultFeePeriod(
+        feeTerms,
+        vehicleCategoryLabel,
+        matchedClass?.billingCycle,
+        periodOpts,
+        matchedClass,
+      );
+      let vehicleLine =
+        existingVehicle ??
+        createFeeLineItem({ description: vehicleCategoryLabel, ...period });
+
+      const vehiclePeriod = defaultFeePeriod(
+        feeTerms,
+        vehicleLine.description,
+        matchedClass?.billingCycle,
+        periodOpts,
+        matchedClass,
+      );
+      vehicleLine = {
+        ...vehicleLine,
+        feePeriodKind: vehiclePeriod.feePeriodKind,
+        feePeriod: vehicleLine.feePeriod.trim() ? vehicleLine.feePeriod : vehiclePeriod.feePeriod,
+      };
+
+      if (vehicleFee && vehicleFee > 0) {
+        vehicleLine = { ...vehicleLine, amount: String(vehicleFee) };
+      } else if (!vehicleLine.amount.trim()) {
+        const prefill = prefillAmountForFeeLine(
+          vehicleLine,
+          matchedClass,
+          feeTerms,
+          tuitionFee,
+          vehicleFee,
+          collectionStartMonth,
+        );
+        if (prefill && prefill > 0) {
+          vehicleLine = { ...vehicleLine, amount: String(prefill) };
+        }
+      }
+
+      const tuitionLines =
+        nonVehicle.length > 0
+          ? nonVehicle
+          : [createFeeLineItem({ description: defaultCategory })];
+
+      const next = [...tuitionLines, vehicleLine];
+      const unchanged =
+        next.length === prev.length &&
+        next.every((line, index) => {
+          const prior = prev[index];
+          return (
+            prior?.id === line.id &&
+            prior.description === line.description &&
+            prior.amount === line.amount &&
+            prior.feePeriodKind === line.feePeriodKind &&
+            prior.feePeriod === line.feePeriod
+          );
+        });
+      return unchanged ? prev : next;
+    });
+  }, [
+    selected?.id,
+    selected?.needsBus,
+    selected?.busPoint1,
+    selected?.busPoint2,
+    isExternal,
+    editingPayment,
+    vehicleFee,
+    vehicleCategoryLabel,
+    feeTerms,
+    matchedClass,
+    periodOpts,
+    collectionStartMonth,
+    tuitionFee,
+    defaultCategory,
+  ]);
+
+  useEffect(() => {
     if (isExternal || editingPayment) return;
     setFeeItems((prev) => applyPrefillToLines(prev));
   }, [applyPrefillToLines, isExternal, selected?.id, editingPayment]);
@@ -7405,15 +7563,35 @@ function ReceivePayment() {
     setFeeItems((prev) => {
       let changed = false;
       const next = prev.map((item) => {
-        const choices = feePeriodChoices(feeTerms, item.description, periodOpts);
+        const choices = feePeriodChoices(feeTerms, item.description, periodOpts, matchedClass);
         const valid = choices.some(
           (c) => c.kind === item.feePeriodKind && c.period === item.feePeriod,
         );
         if (matchedClass.billingCycle === "Term") {
           const termChoice = choices.find((c) => c.kind === "term");
-          if (termChoice && item.feePeriodKind !== "term") {
+          if (
+            termChoice &&
+            categoryFeeTermKind(item.description) === "tuition" &&
+            (item.feePeriodKind !== "term" || item.feePeriod !== termChoice.period)
+          ) {
             changed = true;
-            return { ...item, feePeriodKind: "term" as const, feePeriod: termChoice.period };
+            const updated = {
+              ...item,
+              feePeriodKind: "term" as const,
+              feePeriod: termChoice.period,
+            };
+            const prefill = prefillAmountForFeeLine(
+              updated,
+              matchedClass,
+              feeTerms,
+              tuitionFee,
+              vehicleFee,
+              collectionStartMonth,
+            );
+            return {
+              ...updated,
+              ...(prefill && prefill > 0 ? { amount: String(prefill) } : {}),
+            };
           }
         }
         if (matchedClass.billingCycle === "Monthly" && item.feePeriodKind === "term") {
@@ -7429,6 +7607,7 @@ function ReceivePayment() {
             item.description,
             matchedClass.billingCycle,
             periodOpts,
+            matchedClass,
           );
           changed = true;
           const updated = { ...item, ...fallback };
@@ -7445,7 +7624,7 @@ function ReceivePayment() {
           }
           return updated;
         }
-        if (periodOpts && categoryFeeTermKind(item.description) === "tuition") {
+        if (categoryFeeTermKind(item.description) === "tuition") {
           const prefill = prefillAmountForFeeLine(
             item,
             matchedClass,
@@ -7480,7 +7659,7 @@ function ReceivePayment() {
         if (item.id !== id) return item;
         let next = { ...item, ...patch };
         if (patch.description) {
-          const choices = feePeriodChoices(feeTerms, patch.description, periodOpts);
+          const choices = feePeriodChoices(feeTerms, patch.description, periodOpts, matchedClass);
           const stillValid = choices.some(
             (c) => c.kind === next.feePeriodKind && c.period === next.feePeriod,
           );
@@ -7490,6 +7669,7 @@ function ReceivePayment() {
               patch.description,
               matchedClass?.billingCycle,
               periodOpts,
+              matchedClass,
             );
             next = { ...next, ...period };
           }
@@ -7535,6 +7715,7 @@ function ReceivePayment() {
       nextCat.label,
       matchedClass?.billingCycle,
       periodOpts,
+      matchedClass,
     );
     const line = createFeeLineItem({ description: nextCat.label, ...period });
     const prefill = prefillAmountForFeeLine(
@@ -7733,7 +7914,13 @@ function ReceivePayment() {
     setBankSplitAmount("");
     setCashSplitAmount("");
     setMode("Bank");
-    const resetPeriod = defaultFeePeriod(feeTerms, defaultCategory, matchedClass?.billingCycle);
+    const resetPeriod = defaultFeePeriod(
+      feeTerms,
+      defaultCategory,
+      matchedClass?.billingCycle,
+      periodOpts,
+      matchedClass,
+    );
     setFeeItems([createFeeLineItem({ description: defaultCategory, ...resetPeriod })]);
   };
 
@@ -8066,7 +8253,13 @@ function ReceivePayment() {
             ? `${selected.name}'s balance is now Cleared · ${periodLabel}`
             : `${selected.name} · ${periodLabel} · balance ₹ ${remaining.toLocaleString("en-IN")}`,
       });
-      const resetPeriod = defaultFeePeriod(feeTerms, defaultCategory, matchedClass?.billingCycle);
+      const resetPeriod = defaultFeePeriod(
+      feeTerms,
+      defaultCategory,
+      matchedClass?.billingCycle,
+      periodOpts,
+      matchedClass,
+    );
       setFeeItems([createFeeLineItem({ description: defaultCategory, ...resetPeriod })]);
       setNarration("");
       setReceiptTime(formatDisbursalTime());
@@ -8394,7 +8587,12 @@ function ReceivePayment() {
               ) : null}
 
               {feeItems.map((item, index) => {
-                const periodChoices = feePeriodChoices(feeTerms, item.description, periodOpts);
+                const periodChoices = feePeriodChoices(
+                  feeTerms,
+                  item.description,
+                  periodOpts,
+                  matchedClass,
+                );
                 const selectedPeriodLabel =
                   periodChoices.find(
                     (c) => c.kind === item.feePeriodKind && c.period === item.feePeriod,
@@ -15399,7 +15597,7 @@ function ThemeSelect<T extends string>({
   );
 }
 
-function FieldSelect({
+export function FieldSelect({
   value,
   onValueChange,
   options,

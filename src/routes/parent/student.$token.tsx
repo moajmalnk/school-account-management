@@ -23,6 +23,8 @@ import {
   getTransportRoutesForParent,
   GUARDIAN_RELATIONS,
   parentFieldsFromStudent,
+  resolveTransportFeeForStudent,
+  studentNeedsTransport,
   STUDENT_CATEGORIES,
   STUDENT_RELIGIONS,
   transportBusPointOptions,
@@ -102,17 +104,33 @@ function ParentStudentPage() {
   );
 
   const busPointOptions = useMemo(() => {
-    const { pickups } = transportBusPointOptions(getTransportRoutesForParent());
-    const withCurrent = (current?: string) => {
+    const routes = getTransportRoutesForParent();
+    const { pickups, drops } = transportBusPointOptions(routes);
+    const withCurrent = (current: string | undefined, pool: string[]) => {
       const value = current?.trim();
-      if (value && !pickups.includes(value)) return [value, ...pickups];
-      return pickups;
+      if (value && !pool.includes(value)) return [value, ...pool];
+      return pool;
     };
+    const dropPool = drops.length > 0 ? drops : pickups;
     return {
-      point1: withCurrent(form.busPoint1),
-      point2: withCurrent(form.busPoint2),
+      point1: withCurrent(form.busPoint1, pickups),
+      point2: withCurrent(form.busPoint2, dropPool),
     };
   }, [form.busPoint1, form.busPoint2]);
+
+  const formTransportFee = useMemo(
+    () =>
+      resolveTransportFeeForStudent(
+        {
+          needsBus: form.needsBus,
+          busPoint1: form.busPoint1,
+          busPoint2: form.busPoint2,
+          cls: student?.cls ?? "",
+        },
+        getTransportRoutesForParent(),
+      ),
+    [form.busPoint1, form.busPoint2, form.needsBus, student?.cls],
+  );
 
   const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -159,8 +177,13 @@ function ParentStudentPage() {
     setStudent(updated);
     setForm(parentFieldsFromStudent(updated));
     setSaved(true);
+    const fee = resolveTransportFeeForStudent(updated, getTransportRoutesForParent());
+    const transportNote =
+      studentNeedsTransport(updated) && fee.amount && fee.amount > 0
+        ? `Vehicle fee ₹${fee.amount.toLocaleString("en-IN")} · school will collect separately`
+        : "School records have been synced with your changes";
     toast.success("Profile updated", {
-      description: "School records have been synced with your changes",
+      description: transportNote,
     });
   };
 
@@ -513,6 +536,16 @@ function ParentStudentPage() {
                 </FormField>
               </div>
             )}
+
+            {form.needsBus === true && formTransportFee.amount && formTransportFee.amount > 0 ? (
+              <div className="rounded-xl border border-[#CCFBF1] bg-[#F0FDFA]/70 px-3.5 py-3 text-[12px] text-slate-600">
+                Estimated vehicle fee:{" "}
+                <span className="font-mono font-semibold text-slate-900">
+                  ₹ {formTransportFee.amount.toLocaleString("en-IN")}
+                </span>
+                . The school will collect this in Finance after route confirmation.
+              </div>
+            ) : null}
 
             <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
               {saved && (
