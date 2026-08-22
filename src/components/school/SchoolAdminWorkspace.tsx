@@ -1447,13 +1447,14 @@ export function SchoolDashboard() {
     activePayments: payments,
     academicYear,
     hydrated,
+    branchSyncing,
     activeBranch,
     branches,
   } = useTenantStore();
   const tenantScope = `${session?.tenantId ?? session?.tenantName ?? "tenant"}|${academicYear}`;
   const { disbursements, loaded: disbursementsLoaded } = useDisbursements(
     tenantScope,
-    hydrated,
+    hydrated && !branchSyncing,
   );
 
   const [period, setPeriod] = useState<PaymentPeriod>("this_month");
@@ -1492,7 +1493,7 @@ export function SchoolDashboard() {
 
   const recentReceipts = useMemo(() => filteredPayments.slice(0, 5), [filteredPayments]);
 
-  if (!hydrated || !disbursementsLoaded) {
+  if (!hydrated || branchSyncing || !disbursementsLoaded) {
     return <TenantDashboardSkeleton />;
   }
 
@@ -2574,6 +2575,7 @@ export function StudentsLedger() {
     admitStudentToActiveYear,
     academicYear,
     hydrated,
+    branchSyncing,
   } =
     useTenantStore();
   const navigate = useNavigate();
@@ -3294,7 +3296,7 @@ export function StudentsLedger() {
       />
     ) : undefined;
 
-  if (!hydrated) {
+  if (!hydrated || branchSyncing) {
     return <TenantDirectorySkeleton label="Loading students directory" />;
   }
 
@@ -3855,7 +3857,7 @@ function isTeachingStaff(member: Staff): boolean {
 }
 
 export function StaffRoster() {
-  const { staff, setStaff, departments, roles, hydrated, schoolDetails, academicYear } = useTenantStore();
+  const { staff, setStaff, departments, roles, hydrated, branchSyncing, schoolDetails, academicYear } = useTenantStore();
   const schoolName = schoolDetails.name || "School";
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/staff" }) as { id?: string; edit?: string };
@@ -4582,7 +4584,7 @@ export function StaffRoster() {
     reader.readAsText(file);
   };
 
-  if (!hydrated) {
+  if (!hydrated || branchSyncing) {
     return <TenantDirectorySkeleton label="Loading staff directory" />;
   }
 
@@ -15142,20 +15144,24 @@ function FieldSelect({
 
   const handleValueChange = (next: string) => {
     if (next === FIELD_SELECT_ADD_NEW) {
+      setOpen(false);
       onAddNew?.();
       return;
     }
     onValueChange(next);
+    setOpen(false);
+  };
+
+  const handleAddNew = () => {
+    setOpen(false);
+    onAddNew?.();
   };
 
   const addNewRow = onAddNew ? (
     <button
       type="button"
       onPointerDown={(event) => event.preventDefault()}
-      onClick={() => {
-        setOpen(false);
-        onAddNew();
-      }}
+      onClick={handleAddNew}
       className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-left text-[13px] font-semibold text-[#0F766E] transition-colors hover:bg-[#F0FDFA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]/30 dark:text-[#2DD4BF] dark:hover:bg-teal-950/40"
     >
       <Plus className="h-3.5 w-3.5 shrink-0" />
@@ -15166,7 +15172,13 @@ function FieldSelect({
   if (!searchable) {
     return (
       <div className={cn("min-w-0", className)}>
-        <Select value={resolvedValue} onValueChange={handleValueChange} disabled={disabled}>
+        <Select
+          open={open}
+          onOpenChange={setOpen}
+          value={resolvedValue}
+          onValueChange={handleValueChange}
+          disabled={disabled}
+        >
           <SelectTrigger
             className={cn(
               "h-10 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 text-[13px] font-normal text-black shadow-none focus:ring-2 focus:ring-[#0F766E] focus:ring-offset-0 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100",
@@ -15180,9 +15192,10 @@ function FieldSelect({
           </SelectTrigger>
           <SelectContent
             position="popper"
+            sideOffset={4}
             className={cn(
-              "z-[250] max-h-72 overflow-y-auto rounded-lg border border-[#E5E5E5] bg-white p-1.5 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)] dark:border-white/10 dark:bg-zinc-900",
-              "min-w-[var(--radix-select-trigger-width)] max-w-[min(calc(100vw-1.5rem),24rem)]",
+              "z-[100] max-h-72 overflow-y-auto rounded-lg border border-[#E5E5E5] bg-white p-1.5 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)] dark:border-white/10 dark:bg-zinc-900",
+              "w-[var(--radix-select-trigger-width)] min-w-[var(--radix-select-trigger-width)] max-w-[min(calc(100vw-1.5rem),24rem)]",
               contentClassName,
             )}
           >
@@ -15224,8 +15237,9 @@ function FieldSelect({
         </PopoverTrigger>
         <PopoverContent
           align="start"
+          sideOffset={4}
           className={cn(
-            "z-[250] w-[var(--radix-popover-trigger-width)] max-w-[min(calc(100vw-1.5rem),24rem)] rounded-lg border border-[#E5E5E5] bg-white p-0 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)] dark:border-white/10 dark:bg-zinc-900",
+            "z-[100] w-[var(--radix-popover-trigger-width)] max-w-[min(calc(100vw-1.5rem),24rem)] rounded-lg border border-[#E5E5E5] bg-white p-0 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)] dark:border-white/10 dark:bg-zinc-900",
             contentClassName,
           )}
         >

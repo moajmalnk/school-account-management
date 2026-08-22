@@ -10,7 +10,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
-import { fetchRemoteTenantBundle } from "@/lib/api/tenant-sync";
+import { fetchBranchOperationalBundle, fetchRemoteTenantBundle } from "@/lib/api/tenant-sync";
 import { getApiToken } from "@/lib/api/client";
 import {
   apiDeleteFeeTerm,
@@ -3091,6 +3091,8 @@ type TenantStoreValue = {
   resetTenant: () => void;
   /** False until remote/local snapshot has been applied — use for page skeletons. */
   hydrated: boolean;
+  /** True while campus switch is loading branch-scoped operational data. */
+  branchSyncing: boolean;
   branches: CampusBranch[];
   setBranches: Dispatch<SetStateAction<CampusBranch[]>>;
   activeBranchId: string;
@@ -3734,6 +3736,8 @@ export function TenantStoreProvider({
       : SEED_BRANCHES[0]?.id ?? "",
   );
   const [hydrated, setHydrated] = useState(false);
+  const [branchSyncing, setBranchSyncing] = useState(false);
+  const branchSwitchSeq = useRef(0);
 
   const applySnapshot = useCallback((snap: Snapshot) => {
     setStudents(Array.isArray(snap.students) ? snap.students : []);
@@ -3795,6 +3799,39 @@ export function TenantStoreProvider({
     setBranches(Array.isArray(snap.branches) ? snap.branches : []);
     setActiveBranchIdState(snap.activeBranchId ?? "");
   }, [liveApi]);
+
+  const applyBranchOperationalData = useCallback(
+    (data: {
+      students: Student[];
+      staff: Staff[];
+      payments: Payment[];
+      studentYearLedgers: StudentYearLedger[];
+      dashboardTodos: string[];
+      dashboardNote: string;
+      activeBranchId: string;
+    }) => {
+      setStudents(Array.isArray(data.students) ? data.students : []);
+      setStaff(
+        Array.isArray(data.staff)
+          ? data.staff
+              .filter((s): s is Staff => Boolean(s && typeof s.id === "string" && s.id))
+              .map((s) => normalizeStaff(s))
+          : [],
+      );
+      setPayments(data.payments);
+      setStudentYearLedgers(
+        data.studentYearLedgers?.length
+          ? data.studentYearLedgers
+          : liveApi
+            ? []
+            : SEED_STUDENT_YEAR_LEDGERS,
+      );
+      setDashboardTodos(data.dashboardTodos);
+      setDashboardNote(data.dashboardNote);
+      setActiveBranchIdState(data.activeBranchId);
+    },
+    [liveApi],
+  );
 
   useEffect(() => {
     activeStoreKey = storeKey;
@@ -4403,86 +4440,126 @@ export function TenantStoreProvider({
       if (!nextId || !target) {
         return { students: 0, receipts: 0 };
       }
+
+      const thisSwitch = ++branchSwitchSeq.current;
       setBranchContext(tenantId ?? null, nextId);
       setActiveBranchIdState(nextId);
-      if (getApiToken()) {
-        void apiSyncActiveBranch(nextId).catch(() => {
-          /* keep local campus; next hydrate may overwrite */
-        });
-        try {
-          const remote = await fetchRemoteTenantBundle(undefined, {
-            force: true,
-            tenantId,
+      setBranchSyncing(true);
+      setStudents([]);
+      setStaff([]);
+      setPayments([]);
+      setStudentYearLedgers([]);
+      setDashboardTodos([...DEFAULT_DASHBOARD_TODOS]);
+      setDashboardNote("");
+
+      if (!getApiToken()) {
+        setBranchSyncing(false);
+        return { students: 0, receipts: 0 };
+      }
+
+      void apiSyncActiveBranch(nextId).catch(() => {
+        /* keep local campus; next hydrate may overwrite */
+      });
+
+      try {
+        const operational = await fetchBranchOperationalBundle();
+        if (thisSwitch !== branchSwitchSeq.current) {
+          return { students: 0, receipts: 0 };
+        }
+
+        if (operational) {
+          const ledgers = reconcileLedgersWithStudents(
+            operational.students,
+            operational.studentYearLedgers,
+            academicYear,
+          );
+          applyBranchOperationalData({
+            students: operational.students,
+            staff: operational.staff,
+            payments: operational.payments,
+            studentYearLedgers: ledgers,
+            dashboardTodos: operational.dashboardTodos,
+            dashboardNote: operational.dashboardNote,
+            activeBranchId: nextId,
           });
-          if (remote) {
-            const localLedgers = readSnapshot(storeKey)?.studentYearLedgers ?? [];
-            const mergedLedgers = mergeStudentYearLedgers(
-              localLedgers,
-              remote.studentYearLedgers,
-            );
-            applySnapshot({
-              students: remote.students,
-              staff: remote.staff,
-              payments: remote.payments,
-              departments: remote.departments,
-              roles: remote.roles,
-              classes: remote.classes,
-              transportRoutes: remote.transportRoutes,
-              transportVehicles: remote.transportVehicles,
-              paymentCategories: remote.paymentCategories,
-              feeTerms: remote.feeTerms,
-              studentYearLedgers: reconcileLedgersWithStudents(
-                remote.students,
-                mergedLedgers,
-                remote.academicYear,
-              ),
-              academicYears: remote.academicYears,
-              closedAcademicYears: remote.closedAcademicYears ?? [],
-              academicYear: remote.academicYear,
-              themeSettings: remote.themeSettings,
-              schoolDetails: {
-                ...remote.schoolDetails,
-                name:
-                  remote.schoolDetails.name?.trim() ||
-                  tenantName?.trim() ||
-                  remote.schoolDetails.name,
-              },
-              dashboardTodos: remote.dashboardTodos,
-              dashboardNote: remote.dashboardNote,
-              notifications: remote.notifications,
-              tenantUsers: remote.tenantUsers,
-              branches: remote.branches.length ? remote.branches : branches,
-              activeBranchId: nextId,
-            });
-            return {
-              students: remote.students.filter((s) => !s.deletedAt).length,
-              receipts: academicYearBookStats({
-                payments: remote.payments,
-                ledgers: mergedLedgers,
-                year: remote.academicYear,
-              }).receipts,
-            };
+
+          const stats = {
+            students: operational.students.filter((s) => !s.deletedAt).length,
+            receipts: academicYearBookStats({
+              payments: operational.payments,
+              ledgers,
+              year: academicYear,
+            }).receipts,
+          };
+
+          if (thisSwitch === branchSwitchSeq.current) {
+            setBranchSyncing(false);
           }
-        } catch {
-          /* keep local campus data */
+
+          void (async () => {
+            try {
+              const remote = await fetchRemoteTenantBundle(undefined, {
+                force: true,
+                tenantId,
+              });
+              if (thisSwitch !== branchSwitchSeq.current || !remote) return;
+
+              applySnapshot({
+                students: remote.students,
+                staff: remote.staff,
+                payments: remote.payments,
+                departments: remote.departments,
+                roles: remote.roles,
+                classes: remote.classes,
+                transportRoutes: remote.transportRoutes,
+                transportVehicles: remote.transportVehicles,
+                paymentCategories: remote.paymentCategories,
+                feeTerms: remote.feeTerms,
+                studentYearLedgers: reconcileLedgersWithStudents(
+                  remote.students,
+                  remote.studentYearLedgers,
+                  remote.academicYear,
+                ),
+                academicYears: remote.academicYears,
+                closedAcademicYears: remote.closedAcademicYears ?? [],
+                academicYear: remote.academicYear,
+                themeSettings: remote.themeSettings,
+                schoolDetails: {
+                  ...remote.schoolDetails,
+                  name:
+                    remote.schoolDetails.name?.trim() ||
+                    tenantName?.trim() ||
+                    remote.schoolDetails.name,
+                },
+                dashboardTodos: remote.dashboardTodos,
+                dashboardNote: remote.dashboardNote,
+                notifications: remote.notifications,
+                tenantUsers: remote.tenantUsers,
+                branches: remote.branches.length ? remote.branches : branches,
+                activeBranchId: nextId,
+              });
+            } catch {
+              /* keep phase 1 operational data */
+            }
+          })();
+
+          return stats;
+        }
+      } catch {
+        /* keep cleared campus data */
+      } finally {
+        if (thisSwitch === branchSwitchSeq.current) {
+          setBranchSyncing(false);
         }
       }
-      return {
-        students: students.filter((s) => !s.deletedAt).length,
-        receipts: academicYearBookStats({
-          payments,
-          ledgers: studentYearLedgers,
-          year: academicYear,
-        }).receipts,
-      };
+
+      return { students: 0, receipts: 0 };
     },
     [
       academicYear,
+      applyBranchOperationalData,
       applySnapshot,
       branches,
-      payments,
-      storeKey,
-      studentYearLedgers,
       tenantId,
       tenantName,
     ],
@@ -4542,6 +4619,7 @@ export function TenantStoreProvider({
       setNotifications,
       resetTenant,
       hydrated,
+      branchSyncing,
       branches,
       setBranches,
       activeBranchId,
@@ -4582,6 +4660,7 @@ export function TenantStoreProvider({
       dashboardNote,
       notifications,
       hydrated,
+      branchSyncing,
       branches,
       activeBranchId,
       activeBranch,

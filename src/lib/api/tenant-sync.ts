@@ -43,6 +43,15 @@ import {
 } from "@/lib/academic-year";
 import { readStoredBranchPublicId, setActiveBranchPublicId } from "@/lib/branch-context";
 
+export type BranchOperationalBundle = {
+  students: Student[];
+  staff: Staff[];
+  payments: Payment[];
+  dashboardTodos: string[];
+  dashboardNote: string;
+  studentYearLedgers: StudentYearLedger[];
+};
+
 export type RemoteTenantBundle = {
   students: Student[];
   staff: Staff[];
@@ -123,6 +132,41 @@ function pickActiveBranchId(
   if (stored && branches.some((b) => b.id === stored)) return stored;
   if (serverActive && branches.some((b) => b.id === serverActive)) return serverActive;
   return branches[0]?.id ?? "";
+}
+
+/**
+ * Fast branch-scoped operational data for campus switches.
+ * Four parallel calls — students, staff, payments, dashboard todos.
+ */
+export async function fetchBranchOperationalBundle(): Promise<BranchOperationalBundle | null> {
+  const token = getApiToken();
+  if (!token) return null;
+
+  try {
+    const [students, staff, payments, todos] = await Promise.all([
+      getSafe<Student[]>("/api/students/list.php?includeDeleted=1", []),
+      getSafe<Staff[]>("/api/staff/list.php?includeDeleted=1", []),
+      getSafe<Payment[]>("/api/finance/payments.php", []),
+      getSafe<{ dashboardTodos: string[]; dashboardNote: string } | null>(
+        "/api/dashboard/todos.php",
+        null,
+      ),
+    ]);
+
+    return {
+      students,
+      staff,
+      payments,
+      dashboardTodos: Array.isArray(todos?.dashboardTodos)
+        ? todos.dashboardTodos
+        : ["", "", "", "", ""],
+      dashboardNote: typeof todos?.dashboardNote === "string" ? todos.dashboardNote : "",
+      studentYearLedgers: [],
+    };
+  } catch (err) {
+    if (isAuthExpiredError(err)) return null;
+    throw err;
+  }
 }
 
 /**

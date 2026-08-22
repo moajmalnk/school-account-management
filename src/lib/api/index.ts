@@ -9,7 +9,10 @@ export {
   isAuthExpiredError,
 } from "@/lib/api/client";
 export { apiLogin, apiMe, apiLogoutCurrentDevice, apiForgotPassword, apiResetPassword } from "@/lib/api/auth";
-export { fetchRemoteTenantBundle } from "@/lib/api/tenant-sync";
+export {
+  fetchBranchOperationalBundle,
+  fetchRemoteTenantBundle,
+} from "@/lib/api/tenant-sync";
 export { fetchTenantSubscription } from "@/lib/api/subscription";
 export type { TenantSubscription } from "@/lib/api/subscription";
 export {

@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   Crown,
   LayoutDashboard,
+  Loader2,
   LogOut,
   Moon,
   PanelLeftClose,
@@ -107,7 +108,8 @@ export function AcademicYearBooksFade({ children }: { children: ReactNode }) {
 
 export function BranchSwitcher({ compact = false }: { compact?: boolean }) {
   const { session } = useAuth();
-  const { branches, activeBranchId, activeBranch, openBranch, hydrated } = useTenantStore();
+  const { branches, activeBranchId, activeBranch, openBranch, hydrated, branchSyncing } =
+    useTenantStore();
   const [addOpen, setAddOpen] = useState(false);
   const selectable = branches.filter((b) => b.isActive !== false);
   const canManage = sessionCanAccessSettings(session);
@@ -143,15 +145,21 @@ export function BranchSwitcher({ compact = false }: { compact?: boolean }) {
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
+        <DropdownMenuTrigger asChild disabled={branchSyncing}>
           <button
             type="button"
+            disabled={branchSyncing}
+            aria-busy={branchSyncing}
             className={cn(
-              "inline-flex max-w-[11rem] items-center gap-1 rounded-full border border-slate-200/80 bg-white/80 px-2.5 py-2 text-[11px] font-semibold text-slate-800 shadow-sm backdrop-blur-md transition-colors hover:border-[#0F766E]/40 hover:text-[#0F766E] dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-100 dark:hover:text-[#2DD4BF] sm:max-w-none sm:gap-1.5 sm:px-3.5 sm:text-[12px]",
+              "inline-flex max-w-[11rem] items-center gap-1 rounded-full border border-slate-200/80 bg-white/80 px-2.5 py-2 text-[11px] font-semibold text-slate-800 shadow-sm backdrop-blur-md transition-colors hover:border-[#0F766E]/40 hover:text-[#0F766E] disabled:cursor-wait disabled:opacity-70 dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-100 dark:hover:text-[#2DD4BF] sm:max-w-none sm:gap-1.5 sm:px-3.5 sm:text-[12px]",
               compact && "max-w-[9rem] px-2 py-1.5 text-[10px] sm:max-w-[11rem]",
             )}
           >
-            <Building2 className="hidden h-3.5 w-3.5 shrink-0 sm:block" strokeWidth={2.25} />
+            {branchSyncing ? (
+              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" strokeWidth={2.25} />
+            ) : (
+              <Building2 className="hidden h-3.5 w-3.5 shrink-0 sm:block" strokeWidth={2.25} />
+            )}
             <span className="truncate">{label}</span>
             <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" />
           </button>
@@ -169,6 +177,7 @@ export function BranchSwitcher({ compact = false }: { compact?: boolean }) {
             <DropdownMenuRadioGroup
               value={activeBranchId}
               onValueChange={(id) => {
+                if (branchSyncing) return;
                 void (async () => {
                   const stats = await openBranch(id);
                   const name = selectable.find((b) => b.id === id)?.name ?? "campus";
