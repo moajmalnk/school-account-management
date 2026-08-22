@@ -1,22 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { Loader2, Mail, Send } from "lucide-react";
+import { ArrowLeft, Loader2, Mail, Plus } from "lucide-react";
 import { toast } from "sonner";
 
+import { SupportChatBubble, SupportChatShell } from "@/components/support/SupportChatBubble";
 import { SupportComposer } from "@/components/support/SupportComposer";
-import { SupportMessageContent } from "@/components/support/SupportMessageContent";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { OrganicCard } from "@/components/ui/organic-card";
 import { useAuth } from "@/lib/auth";
 import { ApiError, getApiToken } from "@/lib/api/client";
 import {
+  closeSupportTicket,
   createSupportTicket,
   fetchSupportDesk,
   fetchSupportTickets,
   formatWhatsAppDisplay,
   markSupportTicketRead,
   matchSupportFaq,
+  reopenSupportTicket,
   replySupportTicket,
   whatsappDigits,
   type SupportAttachment,
@@ -65,21 +66,6 @@ function formatStamp(raw: string): string {
   });
 }
 
-function StatusPill({ status }: { status: SupportTicketStatus }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
-        status === "open" && "bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-zinc-300",
-        status === "answered" && "bg-[#CCFBF1] text-[#0F766E]",
-        status === "closed" && "bg-black/5 text-black/45 dark:bg-white/10 dark:text-zinc-500",
-      )}
-    >
-      {STATUS_LABEL[status]}
-    </span>
-  );
-}
-
 export function CustomerSupportCard() {
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/settings" });
@@ -93,7 +79,6 @@ export function CustomerSupportCard() {
   const [faqs, setFaqs] = useState<SupportFaq[]>([]);
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [loading, setLoading] = useState(true);
-  const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [chat, setChat] = useState<ChatLine[]>([]);
   const [ticketBusy, setTicketBusy] = useState(false);
@@ -153,7 +138,6 @@ export function CustomerSupportCard() {
     const question = text.trim();
     if (!question || sending) return;
     setSending(true);
-    setDraft("");
     const youId = `you-${Date.now()}`;
     setChat((prev) => [...prev, { id: youId, role: "you", body: question }]);
     try {
@@ -198,7 +182,7 @@ export function CustomerSupportCard() {
             : line,
         ),
       );
-      toast.success("Sent to Feezo", { description: "The team will reply in Your messages" });
+      toast.success("Sent", { description: "Feezo will reply in this chat" });
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Could not open a ticket";
       toast.error("Could not send to Feezo", { description: msg });
@@ -207,7 +191,9 @@ export function CustomerSupportCard() {
     }
   };
 
-  const activeTicket = tickets.find((t) => t.id === chatId) ?? null;
+  const composing = chatId === "new" || (!chatId && tickets.length === 0);
+  const activeTicket = chatId && chatId !== "new" ? tickets.find((t) => t.id === chatId) ?? null : null;
+  const onMobileThread = Boolean(activeTicket) || composing;
 
   useEffect(() => {
     const el = threadScrollRef.current;
@@ -218,7 +204,7 @@ export function CustomerSupportCard() {
     pin();
     const frame = requestAnimationFrame(pin);
     return () => cancelAnimationFrame(frame);
-  }, [chatId, activeTicket?.messages?.length]);
+  }, [chatId, activeTicket?.messages?.length, chat.length]);
 
   const sendTicketReply = async (input: { body: string; attachments: SupportAttachment[] }) => {
     if (!activeTicket) return;
@@ -253,7 +239,7 @@ export function CustomerSupportCard() {
         to: "/tenant/settings",
         search: (prev) => ({ ...prev, tab: "support", chat: ticket.id }),
       });
-      toast.success("Sent to Feezo", { description: "The team will reply in Your messages" });
+      toast.success("Sent", { description: "Feezo will reply in this chat" });
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Could not open a ticket";
       throw err instanceof Error ? err : new Error(msg);
@@ -262,8 +248,28 @@ export function CustomerSupportCard() {
     }
   };
 
+  const setTicketStatus = async (next: "closed" | "open") => {
+    if (!activeTicket || ticketBusy) return;
+    setTicketBusy(true);
+    try {
+      const updated =
+        next === "closed"
+          ? await closeSupportTicket(activeTicket.id)
+          : await reopenSupportTicket(activeTicket.id);
+      setTickets((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+      toast.success(next === "closed" ? "Chat closed" : "Chat reopened");
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Could not update chat";
+      toast.error(next === "closed" ? "Could not close" : "Could not reopen", {
+        description: msg,
+      });
+    } finally {
+      setTicketBusy(false);
+    }
+  };
+
   useEffect(() => {
-    if (!chatId) return;
+    if (!chatId || chatId === "new") return;
     const ticket = tickets.find((item) => item.id === chatId);
     if (!ticket?.schoolUnread) return;
     void markSupportTicketRead(chatId)
@@ -277,260 +283,279 @@ export function CustomerSupportCard() {
 
   if (loading) {
     return (
-      <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
-        <div className="flex items-center gap-2 text-[13px] text-black/45">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading support…
+      <OrganicCard tone="white" cornerSide="tr" padded={false} className={cn(workspacePanelClass, "overflow-hidden p-0")}>
+        <div className="flex h-[min(calc(100dvh-10rem),720px)] min-h-[22rem] items-center justify-center gap-2 text-[13px] text-black/45">
+          <Loader2 className="h-4 w-4 animate-spin" /> Opening chat…
         </div>
       </OrganicCard>
     );
   }
 
   return (
-    <div className="grid grid-cols-12 items-start gap-3 sm:gap-4 lg:gap-5">
-      <OrganicCard
-        tone="white"
-        cornerSide="tr"
-        padded
-        className={cn(workspacePanelClass, "col-span-12")}
-      >
-        <div className="text-[18px] font-bold leading-tight tracking-tight text-black">Customer Support</div>
-        <p className="mt-1 text-[12px] text-black/55 dark:text-zinc-400">
-          Email, WhatsApp, or a message to Feezo — for the whole school, not one campus.
-        </p>
-        <div className="mt-4 grid grid-cols-1 overflow-hidden rounded-xl border border-[#EFEFEF] bg-white sm:grid-cols-2 dark:border-white/10 dark:bg-zinc-950/40">
-          <button
-            type="button"
-            onClick={openGmail}
-            className="flex w-full items-center justify-between gap-3 border-b border-[#EFEFEF] px-4 py-3.5 text-left transition-colors hover:bg-[#FAFAFA] sm:border-b-0 sm:border-r dark:border-white/10 dark:hover:bg-white/5"
+    <OrganicCard
+      tone="white"
+      cornerSide="br"
+      padded={false}
+      className={cn(workspacePanelClass, "col-span-12 overflow-hidden p-0")}
+    >
+      <div className="flex h-[min(calc(100dvh-9.5rem),760px)] min-h-[22rem] flex-col lg:h-[min(calc(100dvh-11rem),760px)] lg:flex-row">
+          <div
+            className={cn(
+              "flex w-full shrink-0 flex-col border-[#EFEFEF] bg-white dark:border-white/10 dark:bg-zinc-950 lg:w-[300px] lg:border-r",
+              onMobileThread ? "hidden lg:flex" : "flex",
+            )}
           >
-            <span className="min-w-0">
-              <span className="block text-[14px] font-medium text-slate-900 dark:text-zinc-100">Email</span>
-              <span className="mt-0.5 block truncate text-[11px] font-normal text-black/40 dark:text-zinc-500">
-                {settings?.supportEmail || "support@schoolaccounts.in"}
-              </span>
-            </span>
-            <Mail className="h-4 w-4 shrink-0 text-slate-500" />
-          </button>
-          <button
-            type="button"
-            onClick={openWhatsApp}
-            className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left transition-colors hover:bg-[#FAFAFA] dark:hover:bg-white/5"
-          >
-            <span className="min-w-0">
-              <span className="block text-[14px] font-medium text-slate-900 dark:text-zinc-100">WhatsApp</span>
-              <span className="mt-0.5 block text-[11px] font-normal text-black/40 dark:text-zinc-500">
-                {formatWhatsAppDisplay(settings?.whatsappE164)}
-              </span>
-            </span>
-            <WhatsAppMark className="h-4 w-4 shrink-0 text-slate-700 dark:text-zinc-200" />
-          </button>
-        </div>
-      </OrganicCard>
-
-      <OrganicCard
-        tone="white"
-        cornerSide="bl"
-        padded
-        className={cn(workspacePanelClass, "col-span-12")}
-      >
-        <div className="text-[13px] font-semibold text-black">Help answers</div>
-        <p className="mt-1 text-[12px] text-black/55">Pick a question or type your own. If we do not have an answer, send it to Feezo.</p>
-        <div className="mt-3 min-h-[140px] space-y-2.5 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3 dark:border-white/10 dark:bg-zinc-950/40">
-          {chat.map((line) => (
-            <div
-              key={line.id}
-              className={cn("flex", line.role === "you" ? "justify-end" : "justify-start")}
-            >
-              <div
-                className={cn(
-                  "max-w-[92%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-[13px] leading-relaxed",
-                  line.role === "you"
-                    ? "bg-[#0F766E] text-white"
-                    : "bg-white text-slate-800 shadow-sm dark:bg-zinc-900 dark:text-zinc-100",
-                )}
-              >
-                {line.body}
-                {line.pendingTicket ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="mt-2 h-8 rounded-full bg-black px-3 text-[11px] text-white hover:bg-black/85"
-                    disabled={sending}
-                    onClick={() => void sendToFeezo(line.pendingTicket!, line.id)}
-                  >
-                    Send to Feezo
-                  </Button>
-                ) : null}
+            <div className="flex items-center justify-between gap-1 border-b border-[#EFEFEF] px-2 py-2 dark:border-white/10">
+              <div className="min-w-0 px-1">
+                <div className="text-[16px] font-semibold text-black dark:text-zinc-100">Chats</div>
+              </div>
+              <div className="flex items-center">
+                <button
+                  type="button"
+                  onClick={openGmail}
+                  className="grid h-9 w-9 place-items-center rounded-full text-black/45 hover:bg-black/5 hover:text-[#0F766E]"
+                  aria-label={`Email ${settings?.supportEmail || "support"}`}
+                  title={settings?.supportEmail || "Email"}
+                >
+                  <Mail className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={openWhatsApp}
+                  className="grid h-9 w-9 place-items-center rounded-full text-black/45 hover:bg-black/5 hover:text-[#0F766E]"
+                  aria-label={`WhatsApp ${formatWhatsAppDisplay(settings?.whatsappE164)}`}
+                  title={formatWhatsAppDisplay(settings?.whatsappE164)}
+                >
+                  <WhatsAppMark className="h-4 w-4" />
+                </button>
+                <Link
+                  to="/tenant/settings"
+                  search={{ tab: "support", chat: "new" }}
+                  className="grid h-9 w-9 place-items-center rounded-full text-[#0F766E] hover:bg-[#0F766E]/10"
+                  aria-label="New chat"
+                >
+                  <Plus className="h-5 w-5" />
+                </Link>
               </div>
             </div>
-          ))}
-        </div>
-        {faqs.length ? (
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {faqs.slice(0, 8).map((faq) => (
-              <button
-                key={faq.id}
-                type="button"
-                onClick={() => void ask(faq.question, faq.id)}
-                className="rounded-full border border-[#E5E5E5] bg-white px-2.5 py-1 text-[11px] font-medium text-black/70 hover:border-[#0F766E]/40 hover:text-[#0F766E] dark:border-white/10 dark:bg-zinc-900"
-              >
-                {faq.question}
-              </button>
-            ))}
-          </div>
-        ) : null}
-        <form
-          className="mt-3 flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void ask(draft);
-          }}
-        >
-          <Input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="Ask a question…"
-            className="h-10 rounded-xl"
-          />
-          <Button
-            type="submit"
-            disabled={sending || !draft.trim()}
-            className="h-10 rounded-full bg-[#0F766E] px-4 text-white hover:bg-[#0D9488]"
-          >
-            {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          </Button>
-        </form>
-      </OrganicCard>
-
-      <OrganicCard
-        tone="white"
-        cornerSide="br"
-        padded
-        className={cn(workspacePanelClass, "col-span-12")}
-      >
-        <div className="text-[13px] font-semibold text-black">Your messages</div>
-        <p className="mt-1 text-[12px] text-black/55">Feezo replies here.</p>
-        {tickets.length === 0 ? (
-          <div className="mt-4 space-y-3">
-            <div className="rounded-xl border border-dashed border-black/15 px-4 py-6 text-center text-[13px] text-black/45">
-              No messages yet. Write below, or send a screenshot or voice note to Feezo.
-            </div>
-            <SupportComposer
-              placeholder="Describe the issue, or attach a screenshot…"
-              disabled={ticketBusy}
-              busy={ticketBusy}
-              onSend={startTicket}
-            />
-          </div>
-        ) : (
-          <div className="mt-4 grid grid-cols-12 gap-3">
-            <ul className="mobile-scrollbar-none col-span-12 max-h-[28rem] space-y-1.5 overflow-y-auto lg:col-span-4">
-              {tickets.map((ticket) => {
-                const active = ticket.id === chatId;
-                const preview = ticket.lastMessage?.body || ticket.subject;
-                return (
-                  <li key={ticket.id}>
-                    <Link
-                      to="/tenant/settings"
-                      search={{ tab: "support", chat: ticket.id }}
-                      className={cn(
-                        "block w-full rounded-xl border px-3 py-2.5 text-left transition-colors",
-                        active
-                          ? "border-[#0F766E]/40 bg-[#F0FDFA]"
-                          : "border-[#EFEFEF] bg-white hover:bg-[#FAFAFA] dark:border-white/10 dark:bg-zinc-900",
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="min-w-0">
-                          <span className="block truncate text-[13px] font-semibold text-black dark:text-zinc-100">
-                            {ticket.subject}
-                          </span>
-                          <span className="mt-0.5 block font-mono text-[10px] text-black/35">{ticket.id}</span>
+            <ul className="mobile-scrollbar-none min-h-0 flex-1 overflow-y-auto">
+              {tickets.length === 0 ? (
+                <li className="px-4 py-10 text-center text-[13px] text-black/40">
+                  No chats yet. Type a message to start.
+                </li>
+              ) : (
+                tickets.map((ticket) => {
+                  const active = ticket.id === chatId;
+                  const preview = ticket.lastMessage?.body || ticket.subject;
+                  return (
+                    <li key={ticket.id}>
+                      <Link
+                        to="/tenant/settings"
+                        search={{ tab: "support", chat: ticket.id }}
+                        className={cn(
+                          "flex w-full items-start gap-3 px-3 py-2.5 text-left hover:bg-black/[0.03] dark:hover:bg-white/5",
+                          active && "bg-[#E6F4F1] dark:bg-[#0F766E]/20",
+                        )}
+                      >
+                        <span className="mt-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#0F766E] text-[13px] font-bold text-white">
+                          F
                         </span>
-                        {ticket.schoolUnread ? (
-                          <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#0F766E]" />
-                        ) : null}
-                      </div>
-                      <p className="mt-0.5 truncate text-[12px] text-black/50">{preview}</p>
-                      <div className="mt-1.5 flex items-center justify-between gap-2">
-                        <StatusPill status={ticket.status} />
-                        <span className="text-[10.5px] text-black/35">{formatStamp(ticket.updatedAt)}</span>
-                      </div>
-                    </Link>
-                  </li>
-                );
-              })}
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-baseline justify-between gap-2">
+                            <span className="truncate text-[15px] font-semibold text-black dark:text-zinc-100">
+                              {ticket.subject || "Feezo"}
+                            </span>
+                            <span className="shrink-0 text-[11px] text-black/35">
+                              {formatStamp(ticket.updatedAt)}
+                            </span>
+                          </span>
+                          <span className="mt-0.5 flex items-center gap-1.5">
+                            <span className="min-w-0 flex-1 truncate text-[13px] text-black/50">{preview}</span>
+                            {ticket.schoolUnread ? (
+                              <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-[#0F766E]" />
+                            ) : null}
+                          </span>
+                        </span>
+                      </Link>
+                    </li>
+                  );
+                })
+              )}
             </ul>
-            <div className="col-span-12 flex min-h-[18rem] flex-col rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3 lg:col-span-8 lg:min-h-[28rem] dark:border-white/10 dark:bg-zinc-950/40">
-              {activeTicket ? (
-                <>
-                  <div className="mb-3 flex shrink-0 flex-wrap items-start justify-between gap-2 border-b border-[#EFEFEF] pb-3 dark:border-white/10">
-                    <div className="min-w-0">
-                      <div className="truncate text-[15px] font-semibold text-black dark:text-zinc-100">
-                        {activeTicket.subject}
-                      </div>
-                      <div className="mt-0.5 font-mono text-[11px] text-black/40">{activeTicket.id}</div>
-                    </div>
-                    <StatusPill status={activeTicket.status} />
-                  </div>
-                  <div
-                    ref={threadScrollRef}
-                    className="mobile-scrollbar-none flex min-h-0 flex-1 flex-col overflow-y-auto"
+          </div>
+
+          <SupportChatShell className={cn(onMobileThread ? "flex" : "hidden lg:flex")}>
+            {activeTicket ? (
+              <>
+                <div className="flex shrink-0 items-center gap-2 border-b border-black/5 bg-white/90 px-1.5 py-1.5 backdrop-blur-sm dark:bg-zinc-950/90">
+                  <Link
+                    to="/tenant/settings"
+                    search={{ tab: "support" }}
+                    className="grid h-10 w-10 place-items-center rounded-full text-black/55 hover:bg-black/5 lg:hidden"
+                    aria-label="Back to chats"
                   >
-                    <div className="flex min-h-full flex-col justify-end gap-2">
-                    {(activeTicket.messages ?? []).map((msg) => {
-                      const fromYou = msg.author === "school";
-                      return (
-                        <div key={msg.id} className={cn("flex", fromYou ? "justify-end" : "justify-start")}>
-                          <div
-                            className={cn(
-                              "max-w-[88%] rounded-2xl px-3 py-2 text-[13px]",
-                              fromYou
-                                ? "bg-[#0F766E] text-white"
-                                : "bg-white text-slate-800 shadow-sm dark:bg-zinc-900 dark:text-zinc-100",
-                            )}
-                          >
-                            <div className="text-[10px] font-semibold uppercase tracking-wider opacity-70">
-                              {fromYou ? "You" : msg.author === "admin" ? "Feezo" : "Help chat"}
-                              {" · "}
-                              {formatStamp(msg.createdAt)}
-                            </div>
-                            <div className="mt-1">
-                              <SupportMessageContent
-                                body={msg.body}
-                                attachments={msg.attachments}
-                                inverted={fromYou}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
+                    <ArrowLeft className="h-5 w-5" />
+                  </Link>
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#0F766E] text-[11px] font-bold text-white">
+                    F
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[15px] font-semibold text-black dark:text-zinc-100">
+                      {activeTicket.subject || "Feezo"}
                     </div>
+                    <div className="text-[12px] text-black/45">{STATUS_LABEL[activeTicket.status]}</div>
                   </div>
                   {activeTicket.status === "closed" ? (
-                    <p className="mt-3 shrink-0 text-[12px] text-black/45">Closed. Send a new message to start again.</p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-8 shrink-0 rounded-full bg-[#0F766E] px-3 text-[12px] text-white hover:bg-[#0D9488]"
+                      disabled={ticketBusy}
+                      onClick={() => void setTicketStatus("open")}
+                    >
+                      Reopen
+                    </Button>
                   ) : (
-                    <div className="mt-3 shrink-0">
-                      <SupportComposer
-                        key={activeTicket.id}
-                        ticketId={activeTicket.id}
-                        disabled={ticketBusy}
-                        busy={ticketBusy}
-                        onSend={sendTicketReply}
-                      />
-                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 shrink-0 rounded-full px-3 text-[12px]"
+                      disabled={ticketBusy}
+                      onClick={() => void setTicketStatus("closed")}
+                    >
+                      Close
+                    </Button>
                   )}
-                </>
-              ) : (
-                <div className="grid flex-1 place-items-center text-center text-[13px] text-black/45">
-                  Pick a message on the left.
                 </div>
-              )}
-            </div>
-          </div>
-        )}
+                <div
+                  ref={threadScrollRef}
+                  className="mobile-scrollbar-none min-h-0 flex-1 overflow-y-auto px-2 py-3 sm:px-3"
+                >
+                  <div className="flex min-h-full flex-col justify-end gap-1">
+                    {(activeTicket.messages ?? []).map((msg) => (
+                      <SupportChatBubble
+                        key={msg.id}
+                        fromYou={msg.author === "school"}
+                        createdAt={msg.createdAt}
+                        body={msg.body}
+                        attachments={msg.attachments}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div className="shrink-0 px-1.5 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1 sm:px-2">
+                  {activeTicket.status === "closed" ? (
+                    <p className="rounded-2xl bg-white/80 px-3 py-2 text-center text-[12px] text-black/50">
+                      Chat closed. Reopen it from the header, or start a new one from the list.
+                    </p>
+                  ) : (
+                    <SupportComposer
+                      key={activeTicket.id}
+                      ticketId={activeTicket.id}
+                      placeholder="Message"
+                      autoFocus
+                      disabled={ticketBusy}
+                      busy={ticketBusy}
+                      onSend={sendTicketReply}
+                    />
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex shrink-0 items-center gap-2 border-b border-black/5 bg-white/90 px-1.5 py-1.5">
+                  {tickets.length > 0 ? (
+                    <Link
+                      to="/tenant/settings"
+                      search={{ tab: "support" }}
+                      className="grid h-10 w-10 place-items-center rounded-full text-black/55 hover:bg-black/5 lg:hidden"
+                      aria-label="Back to chats"
+                    >
+                      <ArrowLeft className="h-5 w-5" />
+                    </Link>
+                  ) : null}
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#0F766E] text-[11px] font-bold text-white">
+                    F
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[15px] font-semibold text-black">Feezo</div>
+                    <div className="text-[12px] text-black/45">Tap to type — or use Email / WhatsApp</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={openGmail}
+                    className="grid h-9 w-9 place-items-center rounded-full text-black/45 hover:bg-black/5 lg:hidden"
+                    aria-label="Email"
+                  >
+                    <Mail className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openWhatsApp}
+                    className="grid h-9 w-9 place-items-center rounded-full text-black/45 hover:bg-black/5 lg:hidden"
+                    aria-label="WhatsApp"
+                  >
+                    <WhatsAppMark className="h-4 w-4" />
+                  </button>
+                </div>
+                <div
+                  ref={threadScrollRef}
+                  className="mobile-scrollbar-none min-h-0 flex-1 overflow-y-auto px-2 py-3 sm:px-3"
+                >
+                  <div className="flex min-h-full flex-col justify-end gap-1">
+                    {chat.map((line) => (
+                      <div key={line.id}>
+                        <SupportChatBubble
+                          fromYou={line.role === "you"}
+                          createdAt={new Date().toISOString()}
+                          body={line.body}
+                        />
+                        {line.pendingTicket ? (
+                          <div className="mt-1 flex justify-start px-1">
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="h-8 rounded-full bg-[#0F766E] px-3 text-[12px] text-white hover:bg-[#0D9488]"
+                              disabled={sending}
+                              onClick={() => void sendToFeezo(line.pendingTicket!, line.id)}
+                            >
+                              Send to Feezo
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                    {faqs.length ? (
+                      <div className="mt-2 flex flex-wrap gap-1.5 px-1">
+                        {faqs.slice(0, 6).map((faq) => (
+                          <button
+                            key={faq.id}
+                            type="button"
+                            disabled={sending}
+                            onClick={() => void ask(faq.question, faq.id)}
+                            className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[12px] text-black/70 hover:border-[#0F766E]/40 hover:text-[#0F766E]"
+                          >
+                            {faq.question}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="shrink-0 px-1.5 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1 sm:px-2">
+                  <SupportComposer
+                    placeholder="Message"
+                    autoFocus={composing}
+                    disabled={ticketBusy}
+                    busy={ticketBusy}
+                    onSend={startTicket}
+                  />
+                </div>
+              </>
+            )}
+          </SupportChatShell>
+        </div>
       </OrganicCard>
-    </div>
   );
 }

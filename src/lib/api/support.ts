@@ -158,6 +158,22 @@ export async function markSupportTicketRead(ticketId: string): Promise<SupportTi
   return data.ticket;
 }
 
+export async function closeSupportTicket(ticketId: string): Promise<SupportTicket> {
+  const data = await apiRequest<{ ticket: SupportTicket }>("/api/support/tickets.php", {
+    method: "POST",
+    body: { action: "close", ticketId },
+  });
+  return data.ticket;
+}
+
+export async function reopenSupportTicket(ticketId: string): Promise<SupportTicket> {
+  const data = await apiRequest<{ ticket: SupportTicket }>("/api/support/tickets.php", {
+    method: "POST",
+    body: { action: "reopen", ticketId },
+  });
+  return data.ticket;
+}
+
 export type SuperAdminSupportDesk = {
   settings: SupportSettings;
   faqs: SupportFaq[];

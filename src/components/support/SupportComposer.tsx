@@ -13,9 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
@@ -123,16 +121,18 @@ function recorderExtension(mime: string): string {
 }
 
 export function SupportComposer({
-  placeholder = "Write a reply…",
+  placeholder = "Message",
   disabled = false,
   busy = false,
   ticketId,
+  autoFocus = false,
   onSend,
 }: {
   placeholder?: string;
   disabled?: boolean;
   busy?: boolean;
   ticketId?: string;
+  autoFocus?: boolean;
   onSend: (input: { body: string; attachments: SupportAttachment[] }) => Promise<void>;
 }) {
   const [draft, setDraft] = useState("");
@@ -326,6 +326,18 @@ export function SupportComposer({
 
   const sending = busy || uploading;
   const canSend = !disabled && !sending && !recording && (draft.trim() !== "" || pending.length > 0);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const fitInput = () => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 112)}px`;
+  };
+
+  useEffect(() => {
+    fitInput();
+  }, [draft]);
 
   const submit = async () => {
     if (!canSend) return;
@@ -366,11 +378,7 @@ export function SupportComposer({
   return (
     <TooltipProvider delayDuration={250}>
       <form
-        className={cn(
-          "relative rounded-2xl border bg-white shadow-sm transition-colors dark:bg-zinc-950",
-          dragOver ? "border-[#0F766E] bg-[#F0FDFA]" : "border-[#E5E5E5] dark:border-white/10",
-          disabled && "opacity-60",
-        )}
+        className={cn("relative flex flex-col gap-2", disabled && "opacity-60")}
         onSubmit={(e) => {
           e.preventDefault();
           void submit();
@@ -384,19 +392,19 @@ export function SupportComposer({
         onPaste={onPaste}
       >
         {pending.length ? (
-          <div className="flex flex-wrap gap-2 border-b border-[#EFEFEF] px-3 pt-3 pb-2 dark:border-white/10">
+          <div className="flex flex-wrap gap-2 px-0.5">
             {pending.map((item) => (
               <div
                 key={item.localId}
-                className="relative flex items-center gap-2 rounded-xl bg-[#F4F6F9] px-2 py-1.5 dark:bg-white/5"
+                className="relative flex items-center gap-2 rounded-2xl bg-white px-2 py-1.5 shadow-sm dark:bg-zinc-900"
               >
                 {item.previewUrl && isSupportImage(item) ? (
-                  <img src={item.previewUrl} alt="" className="h-12 w-12 rounded-lg object-cover" />
+                  <img src={item.previewUrl} alt="" className="h-11 w-11 rounded-lg object-cover" />
                 ) : item.previewUrl && isSupportVoice(item) ? (
                   <VoiceNotePlayer src={item.previewUrl} durationMs={item.durationMs} />
                 ) : (
                   <div className="flex items-center gap-2">
-                    <span className="grid h-10 w-10 place-items-center rounded-lg bg-white text-[#0F766E] dark:bg-zinc-900">
+                    <span className="grid h-9 w-9 place-items-center rounded-lg bg-[#F4F6F9] text-[#0F766E] dark:bg-white/10">
                       {item.kind === "screenshot" ? (
                         <ImageIcon className="h-4 w-4" />
                       ) : (
@@ -424,130 +432,124 @@ export function SupportComposer({
           </div>
         ) : null}
 
-        {recording ? (
-          <div className="flex items-center gap-3 px-3 py-3">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
-              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="text-[13px] font-semibold text-black dark:text-zinc-100">Recording</div>
-              <div className="font-mono text-[12px] tabular-nums text-black/50">
-                {formatSupportDuration(recordMs)} · max {formatSupportDuration(SUPPORT_VOICE_MAX_MS)}
-              </div>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 rounded-full"
-              onClick={() => stopRecording(true)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              className="h-8 rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
-              onClick={() => stopRecording()}
-            >
-              <Square className="mr-1 h-3 w-3 fill-current" />
-              Stop
-            </Button>
-          </div>
-        ) : (
-          <Textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                void submit();
-              }
-            }}
-            placeholder={placeholder}
-            disabled={disabled || sending}
-            className="min-h-[72px] resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
-          />
-        )}
-
-        <div className="flex items-center justify-between gap-2 px-2 pb-2">
-          <div className="flex items-center gap-0.5">
-            <ToolHint label="Attach a file or photo">
-              <button
-                type="button"
-                disabled={disabled || sending || recording}
-                onClick={() => fileRef.current?.click()}
-                className="grid h-9 w-9 place-items-center rounded-full text-black/45 hover:bg-black/5 hover:text-[#0F766E] disabled:opacity-40 dark:text-zinc-400 dark:hover:bg-white/10"
-                aria-label="Attach file"
-              >
-                <Paperclip className="h-4 w-4" />
-              </button>
-            </ToolHint>
-            <Popover open={shotOpen} onOpenChange={setShotOpen}>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  disabled={disabled || sending || recording || shotBusy}
-                  className="grid h-9 w-9 place-items-center rounded-full text-black/45 hover:bg-black/5 hover:text-[#0F766E] disabled:opacity-40 dark:text-zinc-400 dark:hover:bg-white/10"
-                  aria-label="Screenshot"
-                  title="Screenshot"
-                >
-                  {shotBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
-                </button>
-              </PopoverTrigger>
-              <PopoverContent align="start" className="w-56 p-1.5">
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] hover:bg-black/5 dark:hover:bg-white/10"
-                  onClick={() => void captureScreenshot()}
-                >
-                  <Monitor className="h-4 w-4 text-[#0F766E]" />
-                  Capture this screen
-                </button>
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] hover:bg-black/5 dark:hover:bg-white/10"
-                  onClick={() => {
-                    setShotOpen(false);
-                    imageRef.current?.click();
-                  }}
-                >
-                  <ImageIcon className="h-4 w-4 text-[#0F766E]" />
-                  Upload an image
-                </button>
-                <p className="px-2.5 pb-1.5 pt-1 text-[11px] text-black/40">You can also paste a screenshot.</p>
-              </PopoverContent>
-            </Popover>
-            <ToolHint label={recording ? "Stop recording" : "Voice message"}>
-              <button
-                type="button"
-                disabled={disabled || sending}
-                onClick={() => (recording ? stopRecording() : void startRecording())}
-                className={cn(
-                  "grid h-9 w-9 place-items-center rounded-full hover:bg-black/5 disabled:opacity-40 dark:hover:bg-white/10",
-                  recording ? "bg-red-50 text-red-600" : "text-black/45 hover:text-[#0F766E] dark:text-zinc-400",
-                )}
-                aria-label="Voice message"
-              >
-                <Mic className="h-4 w-4" />
-              </button>
-            </ToolHint>
-          </div>
-          <Button
-            type="submit"
-            disabled={!canSend}
-            className="h-10 rounded-full bg-[#0F766E] px-4 text-white hover:bg-[#0D9488]"
+        <div className="flex items-end gap-1.5">
+          <div
+            className={cn(
+              "flex min-h-11 min-w-0 flex-1 items-end rounded-[26px] border bg-white py-0.5 pl-0.5 pr-2 shadow-sm dark:bg-zinc-950",
+              dragOver ? "border-[#0F766E] bg-[#F0FDFA]" : "border-black/10 dark:border-white/10",
+            )}
           >
-            {sending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+            {recording ? (
+              <div className="flex min-h-10 w-full items-center gap-2 px-3">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
+                </span>
+                <span className="min-w-0 flex-1 font-mono text-[13px] tabular-nums text-black/60 dark:text-zinc-300">
+                  {formatSupportDuration(recordMs)}
+                </span>
+                <button
+                  type="button"
+                  className="text-[12px] font-semibold text-black/45"
+                  onClick={() => stopRecording(true)}
+                >
+                  Cancel
+                </button>
+              </div>
             ) : (
               <>
-                <Send className="mr-1.5 h-4 w-4" />
-                Send
+                <ToolHint label="Photo or file">
+                  <button
+                    type="button"
+                    disabled={disabled || sending}
+                    onClick={() => fileRef.current?.click()}
+                    className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-black/40 hover:bg-black/5 hover:text-[#0F766E] disabled:opacity-40"
+                    aria-label="Attach"
+                  >
+                    <Paperclip className="h-[18px] w-[18px]" />
+                  </button>
+                </ToolHint>
+                <Popover open={shotOpen} onOpenChange={setShotOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={disabled || sending || shotBusy}
+                      className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-black/40 hover:bg-black/5 hover:text-[#0F766E] disabled:opacity-40"
+                      aria-label="Photo"
+                    >
+                      {shotBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-[18px] w-[18px]" />}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-52 p-1.5">
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] hover:bg-black/5"
+                      onClick={() => void captureScreenshot()}
+                    >
+                      <Monitor className="h-4 w-4 text-[#0F766E]" />
+                      Capture screen
+                    </button>
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] hover:bg-black/5"
+                      onClick={() => {
+                        setShotOpen(false);
+                        imageRef.current?.click();
+                      }}
+                    >
+                      <ImageIcon className="h-4 w-4 text-[#0F766E]" />
+                      Choose photo
+                    </button>
+                  </PopoverContent>
+                </Popover>
+                <textarea
+                  ref={inputRef}
+                  value={draft}
+                  rows={1}
+                  autoFocus={autoFocus}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                      e.preventDefault();
+                      void submit();
+                    }
+                  }}
+                  placeholder={placeholder}
+                  disabled={disabled || sending}
+                  className="max-h-28 min-h-10 min-w-0 flex-1 resize-none bg-transparent py-2.5 text-[15px] leading-5 text-black outline-none placeholder:text-black/35 disabled:opacity-50 dark:text-zinc-100"
+                />
               </>
             )}
-          </Button>
+          </div>
+          {recording ? (
+            <button
+              type="button"
+              onClick={() => stopRecording()}
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-red-500 text-white shadow-sm hover:bg-red-600"
+              aria-label="Stop recording"
+            >
+              <Square className="h-3.5 w-3.5 fill-current" />
+            </button>
+          ) : canSend ? (
+            <button
+              type="submit"
+              disabled={!canSend}
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#0F766E] text-white shadow-sm hover:bg-[#0D9488] disabled:opacity-40"
+              aria-label="Send"
+            >
+              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={disabled || sending}
+              onClick={() => void startRecording()}
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#0F766E] text-white shadow-sm hover:bg-[#0D9488] disabled:opacity-40"
+              aria-label="Voice message"
+            >
+              <Mic className="h-[18px] w-[18px]" />
+            </button>
+          )}
         </div>
 
         <input

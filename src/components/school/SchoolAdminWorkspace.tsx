@@ -13153,36 +13153,19 @@ function TransportCard({
   );
 }
 
-function readImageAsDataUrl(
+function readImageForCrop(
   file: File,
   opts: { maxBytes: number; label: string },
-): Promise<string> {
-  return new Promise((resolve, reject) => {
-    if (!file.type.startsWith("image/")) {
-      reject(new Error(`Please choose a JPG, PNG, or WebP ${opts.label}`));
-      return;
-    }
-    if (file.size > opts.maxBytes) {
-      reject(
-        new Error(
-          `${opts.label} must be ${Math.round(opts.maxBytes / (1024 * 1024))} MB or smaller`,
-        ),
-      );
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = String(reader.result ?? "");
-      if (!dataUrl) {
-        reject(new Error(`Could not read the selected ${opts.label.toLowerCase()}`));
-        return;
-      }
-      resolve(dataUrl);
-    };
-    reader.onerror = () =>
-      reject(new Error(`Could not read the selected ${opts.label.toLowerCase()}`));
-    reader.readAsDataURL(file);
-  });
+): string {
+  if (!file.type.startsWith("image/")) {
+    throw new Error(`Please choose a JPG, PNG, or WebP ${opts.label}`);
+  }
+  if (file.size > opts.maxBytes) {
+    throw new Error(
+      `${opts.label} must be ${Math.round(opts.maxBytes / (1024 * 1024))} MB or smaller`,
+    );
+  }
+  return URL.createObjectURL(file);
 }
 
 function SchoolDetailsCard({
@@ -13216,8 +13199,11 @@ function SchoolDetailsCard({
   };
 
   const closeCrop = () => {
+    setCropSrc((prev) => {
+      if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+      return null;
+    });
     setCropTarget(null);
-    setCropSrc(null);
   };
 
   const save = async (e: React.FormEvent) => {
@@ -13259,65 +13245,71 @@ function SchoolDetailsCard({
     }
   };
 
-  const onLogo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onLogo = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
     try {
-      const dataUrl = await readImageAsDataUrl(file, {
-        maxBytes: 2 * 1024 * 1024,
-        label: "Logo",
+      const url = readImageForCrop(file, { maxBytes: 2 * 1024 * 1024, label: "Logo" });
+      setCropSrc((prev) => {
+        if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+        return url;
       });
       setCropTarget("logo");
-      setCropSrc(dataUrl);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not upload logo");
     }
   };
 
-  const onLetterhead = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onLetterhead = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
     try {
-      const dataUrl = await readImageAsDataUrl(file, {
+      const url = readImageForCrop(file, {
         maxBytes: 3 * 1024 * 1024,
         label: "Letterhead",
       });
+      setCropSrc((prev) => {
+        if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+        return url;
+      });
       setCropTarget("letterhead");
-      setCropSrc(dataUrl);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not upload letterhead");
     }
   };
 
-  const onSeal = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onSeal = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
     try {
-      const dataUrl = await readImageAsDataUrl(file, {
-        maxBytes: 2 * 1024 * 1024,
-        label: "Seal",
+      const url = readImageForCrop(file, { maxBytes: 2 * 1024 * 1024, label: "Seal" });
+      setCropSrc((prev) => {
+        if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+        return url;
       });
       setCropTarget("seal");
-      setCropSrc(dataUrl);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not upload seal");
     }
   };
 
-  const onSignatureFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onSignatureFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
     try {
-      const dataUrl = await readImageAsDataUrl(file, {
+      const url = readImageForCrop(file, {
         maxBytes: 2 * 1024 * 1024,
         label: "Signature",
       });
+      setCropSrc((prev) => {
+        if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+        return url;
+      });
       setCropTarget("signature");
-      setCropSrc(dataUrl);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not upload signature");
     }

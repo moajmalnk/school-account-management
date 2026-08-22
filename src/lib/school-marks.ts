@@ -11,8 +11,8 @@ function markInitials(name: string): string {
 }
 
 const DEFAULT_INK = "#1E293B";
-/** Official stamp ink — matches the circular rubber-seal reference. */
-export const DEFAULT_SEAL_INK = "#111111";
+/** Official stamp ink — blue by default, like a rubber seal. */
+export const DEFAULT_SEAL_INK = "#1D4ED8";
 
 const SEAL_SIZE = 320;
 const SEAL_CX = 160;

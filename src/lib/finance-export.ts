@@ -948,7 +948,6 @@ async function drawSealFooter(
   doc.setTextColor(...receiptInk().muted);
   const labelY = startY + markH + 5;
   doc.setFontSize(compact ? 8 : 8.5);
-  doc.text("Seal", margin + sealSize / 2, labelY, { align: "center" });
   doc.text("Signature", pageWidth - margin - signW / 2, labelY, { align: "center" });
   if (!compact) {
     doc.setFontSize(7.5);

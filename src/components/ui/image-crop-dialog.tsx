@@ -11,6 +11,8 @@ import { cn } from "@/lib/utils";
 
 const FALLBACK_MIN_ZOOM = 0.15;
 const MAX_ZOOM = 4;
+/** Used until the dialog finishes layout so the cropper can mount immediately. */
+const FALLBACK_STAGE: Size = { width: 472, height: 340 };
 
 function loadImage(src: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
@@ -153,12 +155,16 @@ export function ImageCropDialog({
   const [mediaSize, setMediaSize] = useState<MediaSize | null>(null);
   const [stage, setStage] = useState<Size>({ width: 0, height: 0 });
   const stageRef = useRef<HTMLDivElement>(null);
+  const stageObserverRef = useRef<ResizeObserver | null>(null);
   const didFitRef = useRef(false);
   const fitZoomRef = useRef(1);
 
   const fill = background ?? (outputMime === "image/png" ? "transparent" : "#FFFFFF");
 
-  const cropSize = useMemo(() => cropSizeForStage(stage, aspect), [stage, aspect]);
+  const cropSize = useMemo(
+    () => cropSizeForStage(stage, aspect) ?? cropSizeForStage(FALLBACK_STAGE, aspect),
+    [stage, aspect],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -172,12 +178,14 @@ export function ImageCropDialog({
     setMediaSize(null);
   }, [open, imageSrc, fit]);
 
-  useEffect(() => {
-    if (!open) return;
-    const el = stageRef.current;
+  const attachStage = useCallback((el: HTMLDivElement | null) => {
+    stageObserverRef.current?.disconnect();
+    stageObserverRef.current = null;
+    stageRef.current = el;
     if (!el) return;
     const measure = () => {
       const rect = el.getBoundingClientRect();
+      if (rect.width < 8 || rect.height < 8) return;
       setStage((prev) =>
         prev.width === rect.width && prev.height === rect.height
           ? prev
@@ -185,10 +193,18 @@ export function ImageCropDialog({
       );
     };
     measure();
+    const raf = window.requestAnimationFrame(measure);
     const observer = new ResizeObserver(measure);
     observer.observe(el);
-    return () => observer.disconnect();
-  }, [open, imageSrc]);
+    stageObserverRef.current = observer;
+    const prevDisconnect = observer.disconnect.bind(observer);
+    observer.disconnect = () => {
+      window.cancelAnimationFrame(raf);
+      prevDisconnect();
+    };
+  }, []);
+
+  useEffect(() => () => stageObserverRef.current?.disconnect(), []);
 
   const onMediaLoaded = useCallback((media: MediaSize) => {
     setMediaSize((prev) =>
@@ -233,6 +249,12 @@ export function ImageCropDialog({
     }
     setReady(true);
   }, [mediaSize, cropSize, fit]);
+
+  useEffect(() => {
+    if (!open || !imageSrc || ready) return;
+    const t = window.setTimeout(() => setReady(true), 800);
+    return () => window.clearTimeout(t);
+  }, [open, imageSrc, ready]);
 
   const onCropComplete = useCallback((_area: Area, pixels: Area) => {
     setCroppedAreaPixels(pixels);
@@ -320,8 +342,8 @@ export function ImageCropDialog({
         </div>
 
         <div className="relative mx-5 overflow-hidden rounded-xl bg-[#111827]">
-          <div ref={stageRef} className="relative h-[min(52vh,340px)] w-full">
-            {imageSrc && cropSize ? (
+          <div ref={attachStage} className="relative h-[min(52vh,340px)] w-full">
+            {imageSrc ? (
               <Cropper
                 image={imageSrc}
                 crop={crop}

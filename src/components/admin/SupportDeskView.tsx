@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { LifeBuoy, Loader2, Plus, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, LifeBuoy, Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
+import { SupportChatBubble, SupportChatShell } from "@/components/support/SupportChatBubble";
 import { SupportComposer } from "@/components/support/SupportComposer";
-import { SupportMessageContent } from "@/components/support/SupportMessageContent";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -39,12 +39,6 @@ const STATUS_FILTERS: { id: "all" | SupportTicketStatus; label: string }[] = [
   { id: "answered", label: "Replied" },
   { id: "closed", label: "Closed" },
 ];
-
-const STATUS_LABEL: Record<SupportTicketStatus, string> = {
-  open: "Needs reply",
-  answered: "Replied",
-  closed: "Closed",
-};
 
 function formatStamp(raw: string): string {
   const parsed = Date.parse(String(raw).replace(" ", "T"));
@@ -93,21 +87,6 @@ function keywordsFromQuestion(question: string): string {
     .split(/\s+/)
     .filter((word) => word.length > 2 && !skip.has(word))
     .join(" ");
-}
-
-function StatusPill({ status }: { status: SupportTicketStatus }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
-        status === "open" && "bg-[#CCFBF1] text-[#0F766E]",
-        status === "answered" && "bg-slate-100 text-slate-600",
-        status === "closed" && "bg-black/5 text-black/45",
-      )}
-    >
-      {STATUS_LABEL[status]}
-    </span>
-  );
 }
 
 function supportLocation(pathname: string): { section: Section; ticketId?: string } {
@@ -261,6 +240,27 @@ export function SupportDeskView() {
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Close failed";
       toast.error("Could not close", { description: msg });
+    } finally {
+      setReplyBusy(false);
+    }
+  };
+
+  const reopenTicket = async () => {
+    if (!thread) return;
+    setReplyBusy(true);
+    try {
+      const data = await postSuperAdminSupport<{ ticket: SupportTicket }>({
+        action: "ticket.reopen",
+        ticketId: thread.id,
+      });
+      setThread(data.ticket);
+      setTickets((prev) =>
+        prev.map((item) => (item.id === data.ticket.id ? { ...item, status: "open" } : item)),
+      );
+      toast.success("Chat reopened");
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Reopen failed";
+      toast.error("Could not reopen", { description: msg });
     } finally {
       setReplyBusy(false);
     }
@@ -423,8 +423,14 @@ export function SupportDeskView() {
             </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-12 gap-3">
-            <ul className="mobile-scrollbar-none col-span-12 max-h-[32rem] space-y-1.5 overflow-y-auto lg:col-span-4">
+          <div className="mt-4 overflow-hidden rounded-2xl border border-[#EFEFEF]">
+            <div className="grid h-[min(calc(100dvh-16rem),720px)] min-h-[22rem] grid-cols-12">
+            <ul
+              className={cn(
+                "mobile-scrollbar-none col-span-12 space-y-0 overflow-y-auto border-[#EFEFEF] bg-white lg:col-span-4 lg:border-r",
+                ticketId ? "hidden lg:block" : "block",
+              )}
+            >
               {visibleTickets.length === 0 ? (
                 <li className="rounded-xl border border-dashed border-[#E5E5E5] px-3 py-10 text-center text-[13px] text-black/45">
                   No messages here.
@@ -439,28 +445,29 @@ export function SupportDeskView() {
                         to="/super-admin/support/$ticketId"
                         params={{ ticketId: ticket.id }}
                         className={cn(
-                          "block w-full rounded-xl border px-3 py-2.5 text-left",
-                          active
-                            ? "border-[#0F766E]/40 bg-[#F0FDFA]"
-                            : "border-[#EFEFEF] bg-white hover:bg-[#FAFAFA]",
+                          "flex w-full items-start gap-3 px-3 py-2.5 text-left hover:bg-black/[0.03]",
+                          active && "bg-[#E6F4F1]",
                         )}
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <span className="min-w-0">
-                            <span className="block truncate text-[13px] font-semibold text-black">
+                        <span className="mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#0F766E] text-[11px] font-bold text-white">
+                          {(ticket.tenantName || "S").slice(0, 1).toUpperCase()}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-baseline justify-between gap-2">
+                            <span className="truncate text-[14px] font-semibold text-black">
                               {ticket.tenantName || "School"}
                             </span>
-                            <span className="mt-0.5 block font-mono text-[10px] text-black/35">{ticket.id}</span>
+                            <span className="shrink-0 text-[10px] text-black/35">
+                              {formatStamp(ticket.updatedAt)}
+                            </span>
                           </span>
-                          {ticket.adminUnread ? (
-                            <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#0F766E]" />
-                          ) : null}
-                        </div>
-                        <p className="mt-0.5 truncate text-[12px] text-black/50">{preview}</p>
-                        <div className="mt-1.5 flex items-center justify-between gap-2">
-                          <StatusPill status={ticket.status} />
-                          <span className="text-[10.5px] text-black/35">{formatStamp(ticket.updatedAt)}</span>
-                        </div>
+                          <span className="mt-0.5 flex items-center gap-1.5">
+                            <span className="min-w-0 flex-1 truncate text-[12px] text-black/50">{preview}</span>
+                            {ticket.adminUnread ? (
+                              <span className="h-2 w-2 shrink-0 rounded-full bg-[#0F766E]" />
+                            ) : null}
+                          </span>
+                        </span>
                       </Link>
                     </li>
                   );
@@ -468,101 +475,108 @@ export function SupportDeskView() {
               )}
             </ul>
 
-            <div className="col-span-12 flex min-h-[22rem] flex-col rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3 lg:col-span-8 lg:min-h-[32rem]">
+            <SupportChatShell
+              className={cn(
+                "col-span-12 min-h-0 lg:col-span-8",
+                ticketId ? "flex" : "hidden lg:flex",
+              )}
+            >
               {thread && thread.id === ticketId ? (
                 <>
-                  <div className="mb-3 flex shrink-0 flex-wrap items-start justify-between gap-2 border-b border-[#EFEFEF] pb-3">
-                    <div className="min-w-0">
-                      <div className="truncate text-[16px] font-semibold text-black">
+                  <div className="flex shrink-0 items-center gap-2 border-b border-black/5 bg-white/90 px-1.5 py-1.5">
+                    <Link
+                      to="/super-admin/support"
+                      className="grid h-10 w-10 place-items-center rounded-full text-black/55 hover:bg-black/5 lg:hidden"
+                      aria-label="Back to chats"
+                    >
+                      <ArrowLeft className="h-5 w-5" />
+                    </Link>
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#0F766E] text-[11px] font-bold text-white">
+                      {(thread.tenantName || "S").slice(0, 1).toUpperCase()}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[14px] font-semibold text-black">
                         {thread.tenantName || "School"}
                       </div>
-                      <div className="mt-0.5 text-[12px] text-black/50">
-                        <span className="font-mono text-[11px] text-black/40">{thread.id}</span>
-                        {thread.createdByName ? ` · ${thread.createdByName}` : ""}
+                      <div className="truncate text-[11px] text-black/45">
+                        {thread.createdByName || "School admin"}
                         {thread.subject ? ` · ${thread.subject}` : ""}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <StatusPill status={thread.status} />
-                      {thread.status !== "closed" ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-8 rounded-full"
-                          disabled={replyBusy}
-                          onClick={() => void closeTicket()}
-                        >
-                          Close
-                        </Button>
-                      ) : null}
-                    </div>
+                    {thread.status !== "closed" ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-full"
+                        disabled={replyBusy}
+                        onClick={() => void closeTicket()}
+                      >
+                        Close
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-8 rounded-full bg-[#0F766E] px-3 text-white hover:bg-[#0D9488]"
+                        disabled={replyBusy}
+                        onClick={() => void reopenTicket()}
+                      >
+                        Reopen
+                      </Button>
+                    )}
                   </div>
                   <div
                     ref={threadScrollRef}
-                    className="mobile-scrollbar-none flex min-h-0 flex-1 flex-col overflow-y-auto"
+                    className="mobile-scrollbar-none min-h-0 flex-1 overflow-y-auto px-2 py-3 sm:px-3"
                   >
-                    <div className="flex min-h-full flex-col justify-end gap-2">
-                    {(thread.messages ?? []).map((msg) => {
-                      const fromYou = msg.author === "admin";
-                      return (
-                        <div key={msg.id} className={cn("flex", fromYou ? "justify-end" : "justify-start")}>
-                          <div
-                            className={cn(
-                              "max-w-[88%] rounded-2xl px-3 py-2 text-[13px]",
-                              fromYou ? "bg-[#0F766E] text-white" : "bg-white text-slate-800 shadow-sm",
-                            )}
-                          >
-                            <div className="text-[10px] font-semibold uppercase tracking-wider opacity-70">
-                              {fromYou ? "You" : msg.author === "bot" ? "Help chat" : "School"}
-                              {" · "}
-                              {formatStamp(msg.createdAt)}
-                            </div>
-                            <div className="mt-1">
-                              <SupportMessageContent
-                                body={msg.body}
-                                attachments={msg.attachments}
-                                inverted={fromYou}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
+                    <div className="flex min-h-full flex-col justify-end gap-1.5">
+                      {(thread.messages ?? []).map((msg) => (
+                        <SupportChatBubble
+                          key={msg.id}
+                          fromYou={msg.author === "admin"}
+                          createdAt={msg.createdAt}
+                          body={msg.body}
+                          attachments={msg.attachments}
+                        />
+                      ))}
                     </div>
                   </div>
-                  {thread.status === "closed" ? (
-                    <p className="mt-3 shrink-0 text-[12px] text-black/45">
-                      Closed. If the school writes again, it will reopen.
-                    </p>
-                  ) : (
-                    <div className="mt-3 shrink-0">
+                  <div className="shrink-0 px-1.5 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1 sm:px-2">
+                    {thread.status === "closed" ? (
+                      <p className="rounded-2xl bg-white/80 px-3 py-2 text-center text-[12px] text-black/50">
+                        Closed. Reopen from the header, or the school can write again.
+                      </p>
+                    ) : (
                       <SupportComposer
                         key={thread.id}
                         ticketId={thread.id}
+                        placeholder="Message"
+                        autoFocus
                         disabled={replyBusy}
                         busy={replyBusy}
                         onSend={sendReply}
                       />
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </>
               ) : ticketId ? (
                 <div className="grid flex-1 place-items-center text-center">
                   <div className="flex items-center gap-2 text-[13px] text-black/45">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Opening {ticketId}…
+                    Opening…
                   </div>
                 </div>
               ) : (
                 <div className="grid flex-1 place-items-center text-center">
                   <div>
                     <LifeBuoy className="mx-auto h-8 w-8 text-black/25" />
-                    <p className="mt-2 text-[13px] font-medium text-black/55">Pick a conversation</p>
-                    <p className="mt-0.5 text-[12px] text-black/40">Each chat has its own URL so you can reopen it.</p>
+                    <p className="mt-2 text-[13px] font-medium text-black/55">Pick a chat</p>
+                    <p className="mt-0.5 text-[12px] text-black/40">Reply from here like WhatsApp.</p>
                   </div>
                 </div>
               )}
+            </SupportChatShell>
             </div>
           </div>
         </OrganicCard>
