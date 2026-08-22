@@ -1081,8 +1081,49 @@ export function resolvePaymentFeePeriodKind(payment: Payment): FeePeriodKind {
 }
 
 /** Map a fee category label to the term group it uses (if any). */
+export function normalizePaymentCategoryLabel(label: string): string {
+  const trimmed = label.trim();
+  if (!trimmed) return trimmed;
+  const key = trimmed.toLowerCase().replace(/\s+/g, " ");
+  const aliases: Record<string, string> = {
+    "tution fee": "Tuition Fee",
+    "tution fees": "Tuition Fee",
+    tution: "Tuition Fee",
+    tuition: "Tuition Fee",
+    "tuition fees": "Tuition Fee",
+    transport: "Vehicle Fee",
+    vehicle: "Vehicle Fee",
+    "bus fee": "Vehicle Fee",
+  };
+  if (aliases[key]) return aliases[key];
+  if (/\btution\b/i.test(trimmed) && !/\btuition\b/i.test(trimmed)) {
+    return trimmed.replace(/\btution\b/gi, "Tuition");
+  }
+  return trimmed;
+}
+
+export function normalizePaymentCategory(
+  raw: Partial<PaymentCategory> & Pick<PaymentCategory, "id">,
+): PaymentCategory {
+  return {
+    id: raw.id.trim(),
+    label: normalizePaymentCategoryLabel(typeof raw.label === "string" ? raw.label : ""),
+  };
+}
+
+function normalizePaymentCategories(raw: unknown): PaymentCategory[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter(
+      (c): c is Partial<PaymentCategory> & Pick<PaymentCategory, "id"> =>
+        Boolean(c && typeof c === "object" && typeof (c as PaymentCategory).id === "string"),
+    )
+    .map((c) => normalizePaymentCategory(c))
+    .filter((c) => c.id && c.label);
+}
+
 export function categoryFeeTermKind(categoryLabel: string): FeeTermKind | null {
-  const lower = categoryLabel.toLowerCase();
+  const lower = normalizePaymentCategoryLabel(categoryLabel).toLowerCase();
   if (lower.includes("tuition") || lower.includes("tution")) return "tuition";
   if (lower.includes("vehicle") || lower.includes("transport") || lower.includes("bus")) {
     return "vehicle";
@@ -3582,6 +3623,7 @@ function normalizePayment(
 ): Payment {
   return {
     ...raw,
+    cat: normalizePaymentCategoryLabel(raw.cat ?? ""),
     academicYear:
       typeof raw.academicYear === "string" && raw.academicYear.trim()
         ? raw.academicYear.trim()
@@ -3723,7 +3765,7 @@ function parseSnapshot(raw: string): Snapshot | null {
           .map(normalizeTransportVehicle)
           .filter((v): v is TransportVehicle => v !== null)
       : [...SEED_VEHICLES],
-    paymentCategories: parsed.paymentCategories,
+    paymentCategories: normalizePaymentCategories(parsed.paymentCategories),
     feeTerms: migratedFeeTerms,
     studentYearLedgers,
     academicYears: ensureAcademicYearInList(
@@ -4191,7 +4233,9 @@ export function TenantStoreProvider({
     liveApi ? (cachedSnapshot?.transportVehicles ?? []) : SEED_VEHICLES,
   );
   const [paymentCategories, setPaymentCategories] = useState<PaymentCategory[]>(() =>
-    liveApi ? (cachedSnapshot?.paymentCategories ?? []) : SEED_PAYMENT_CATEGORIES,
+    liveApi
+      ? normalizePaymentCategories(cachedSnapshot?.paymentCategories)
+      : SEED_PAYMENT_CATEGORIES,
   );
   const [feeTerms, setFeeTerms] = useState<FeeTerm[]>(() =>
     liveApi ? (cachedSnapshot?.feeTerms ?? []) : SEED_FEE_TERMS,
@@ -4276,7 +4320,7 @@ export function TenantStoreProvider({
     );
     setTransportRoutes(normalizeTransportRoutes(snap.transportRoutes, snap.feeTerms ?? []));
     setTransportVehicles(snap.transportVehicles);
-    setPaymentCategories(snap.paymentCategories);
+    setPaymentCategories(normalizePaymentCategories(snap.paymentCategories));
     setFeeTerms(
       Array.isArray(snap.feeTerms)
         ? snap.feeTerms

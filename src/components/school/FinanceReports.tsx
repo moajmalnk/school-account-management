@@ -46,7 +46,7 @@ import { formatEventDate, formatEventDateTime } from "@/lib/dates";
 import { downloadCsv, downloadTablePdf } from "@/lib/finance-export";
 import { formatDownloadFilename, slugYear, todayStamp } from "@/lib/download-names";
 import { useDisbursements } from "@/lib/use-disbursements";
-import { useTenantStore, resolvePaymentFeePeriod, currentPayrollMonth, formatPayrollMonthLabel, staffPayableSalary, salaryHistoryPayrollMonth, isSalaryMonthSettled, type Payment, type Student } from "@/lib/tenant-store";
+import { useTenantStore, normalizePaymentCategoryLabel, resolvePaymentFeePeriod, currentPayrollMonth, formatPayrollMonthLabel, staffPayableSalary, salaryHistoryPayrollMonth, isSalaryMonthSettled, type Payment, type Student } from "@/lib/tenant-store";
 import { cn } from "@/lib/utils";
 
 export type LedgerRow = {
@@ -961,9 +961,10 @@ export function BalanceSheetReport() {
 }
 
 function isFeeCategory(cat: string) {
-  const lower = cat.toLowerCase();
+  const lower = normalizePaymentCategoryLabel(cat).toLowerCase();
   return (
     lower.includes("tuition") ||
+    lower.includes("tution") ||
     lower.includes("vehicle") ||
     lower.includes("transport") ||
     lower.includes("bus") ||
