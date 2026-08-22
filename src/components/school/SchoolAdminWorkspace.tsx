@@ -7539,8 +7539,6 @@ function ReceivePayment() {
     [periodOpts, vehiclePeriodOpts],
   );
 
-  const showCollectionStart = Boolean(periodOpts);
-
   const applyPrefillToLines = useCallback(
     (lines: FeeLineItem[]) => {
       let changed = false;
@@ -8744,23 +8742,6 @@ function ReceivePayment() {
                   triggerClassName="h-11 sm:h-10"
                 />
               </div>
-
-              {showCollectionStart ? (
-                <div className="col-span-12 sm:col-span-6">
-                  <FieldLabel>Fee collection starts from</FieldLabel>
-                  <FieldSelect
-                    value={collectionStartMonth}
-                    onValueChange={setCollectionStartMonth}
-                    options={FEE_MONTHS.map((month) => ({ value: month, label: month }))}
-                    placeholder="Select month"
-                    triggerClassName="h-11 sm:h-10"
-                  />
-                  <p className="mt-1 text-[11px] text-black/45 dark:text-zinc-500">
-                    Fee periods and amounts follow this class&apos;s installment schedule (
-                    {periodOpts?.installmentCount ?? 0} months).
-                  </p>
-                </div>
-              ) : null}
 
               {feeItems.map((item, index) => {
                 const linePeriodOpts = periodOptsForDescription(item.description);

@@ -7,7 +7,7 @@ import { resolveMediaUrl } from "@/lib/media";
 import {
   currentPayrollMonth,
   formatPayrollMonthLabel,
-  resolvePaymentFeePeriod,
+  resolvePaymentFeeLines,
   schoolInitials,
   type Payment,
   type SchoolDetails,
@@ -295,39 +295,27 @@ async function loadLetterheadForPdf(url?: string) {
   return loadMediaForPdf(url, 1400);
 }
 
-function isBankCashSplitLabel(label: string): boolean {
-  return /^(bank|cash)$/i.test(label.trim());
-}
-
-function withFeePeriodLabel(label: string, period?: string | null) {
-  const cat = pdfSafe(label || "Fee Payment");
-  const p = pdfSafe(period || "").trim();
-  if (!p) return cat;
-  if (cat.toLowerCase().includes(p.toLowerCase())) return cat;
-  return `${cat} - ${p}`;
+function receiptLineDescription(line: { description: string; feePeriod?: string }): string {
+  const label = pdfSafe(line.description || "Fee Payment");
+  const period = pdfSafe(line.feePeriod ?? "").trim();
+  if (!period || label.toLowerCase().includes(period.toLowerCase())) {
+    return label;
+  }
+  return `${label} (${period})`;
 }
 
 function receiptLineItems(payment: Payment): { description: string; amount: number }[] {
-  const period = resolvePaymentFeePeriod(payment);
-  const narration = payment.narration ?? "";
-  const breakdown = narration.match(/Fee breakdown:\s*(.+)/i);
-  if (breakdown) {
-    const items: { description: string; amount: number }[] = [];
-    for (const part of breakdown[1].split(/\s*[·|]\s*/)) {
-      const match = part.trim().match(/^(.*?)\s+(?:Rs\.?|₹)\s*([\d,]+(?:\.\d+)?)\s*$/i);
-      if (!match) continue;
-      const description = pdfSafe(match[1].trim());
-      if (isBankCashSplitLabel(description)) continue;
-      const amount = Number(match[2].replace(/,/g, ""));
-      if (!Number.isFinite(amount) || amount <= 0) continue;
-      items.push({ description: withFeePeriodLabel(description, period), amount });
-    }
-    if (items.length) return items;
+  const lines = resolvePaymentFeeLines(payment);
+  if (lines.length) {
+    return lines.map((line) => ({
+      description: receiptLineDescription(line),
+      amount: line.amount,
+    }));
   }
 
   return [
     {
-      description: withFeePeriodLabel(payment.cat || "Fee Payment", period),
+      description: pdfSafe(payment.cat || "Fee Payment"),
       amount: payment.amount,
     },
   ];
