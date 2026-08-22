@@ -29,6 +29,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
 import { ImageCropDialog } from "@/components/ui/image-crop-dialog";
 import {
@@ -137,6 +139,23 @@ function emptyToUndefined(value: string): string | undefined {
 
 const META_LABEL =
   "text-[11px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400";
+
+const todayISO = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+function EditFormField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+        {label}
+      </Label>
+      {children}
+    </div>
+  );
+}
+
 const CARD_FRAME =
   "rounded-xl border border-slate-100 bg-white p-4 shadow-sm sm:p-6 dark:border-white/10 dark:bg-[#171717] dark:text-zinc-100 dark:shadow-black/40";
 const profileBottomPad = "pb-[calc(5.75rem+env(safe-area-inset-bottom))] md:pb-0";
@@ -1073,239 +1092,351 @@ export function StudentProfileDetail({
           if (!open) resetDraft();
         }}
       >
-        <DialogContent className="max-h-[min(90dvh,720px)] overflow-y-auto sm:max-w-lg">
+        <DialogContent className="max-h-[min(90dvh,720px)] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Edit Student Profile</DialogTitle>
             <DialogDescription>Update core details for {student.name}.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSaveProfile} className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="sm:col-span-2">
-                <MetaField
-                  label="Student Name"
-                  value={draft.name}
-                  editing
-                  onChange={(v) => patchDraft("name", v)}
-                  placeholder="Student full name"
+            <EditFormField label="Student Name">
+              <Input
+                value={draft.name}
+                onChange={(e) => patchDraft("name", e.target.value)}
+                placeholder="Student full name"
+              />
+            </EditFormField>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <EditFormField label="Class">
+                <Select
+                  value={draft.cls || undefined}
+                  onValueChange={(cls) => patchDraft("cls", cls)}
+                >
+                  <SelectTrigger className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white text-[13px]">
+                    <SelectValue placeholder="Select class" />
+                  </SelectTrigger>
+                  <SelectContent
+                    position="popper"
+                    className="z-[250] rounded-lg border border-[#E5E5E5] bg-white"
+                  >
+                    {classOptions.map((cls) => (
+                      <SelectItem key={cls} value={cls}>
+                        {cls}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </EditFormField>
+              <EditFormField label="Admission Number">
+                <Input
+                  value={draft.admissionNumber}
+                  onChange={(e) => patchDraft("admissionNumber", e.target.value)}
+                  placeholder="e.g. ADM-2841"
+                  className="font-mono"
                 />
+              </EditFormField>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                Gender
+              </Label>
+              <div className="inline-flex w-full items-center rounded-full border border-black/10 bg-white p-1">
+                {(
+                  [
+                    { key: "M" as const, label: "Male" },
+                    { key: "F" as const, label: "Female" },
+                  ] as const
+                ).map((g) => (
+                  <button
+                    key={g.key}
+                    type="button"
+                    onClick={() => patchDraft("gender", g.key)}
+                    className={cn(
+                      "min-h-9 flex-1 rounded-full text-[12px] font-semibold transition-colors",
+                      draft.gender === g.key
+                        ? "bg-[#0F766E] text-white"
+                        : "text-black/55 hover:bg-black/5",
+                    )}
+                  >
+                    {g.label}
+                  </button>
+                ))}
               </div>
-              <div className="sm:col-span-2">
-                <div className={META_LABEL}>Gender</div>
-                <div className="mt-1.5 inline-flex items-center rounded-full border border-black/10 bg-white p-1">
-                  {(["M", "F"] as const).map((g) => (
-                    <button
-                      key={g}
-                      type="button"
-                      onClick={() => patchDraft("gender", g)}
-                      className={cn(
-                        "min-h-8 rounded-full px-3 text-[11px] font-semibold transition-colors",
-                        draft.gender === g
-                          ? g === "F"
-                            ? "bg-black text-[#0F766E]"
-                            : "bg-[#0F766E] text-white"
-                          : "text-black/55 hover:bg-black/5",
-                      )}
-                    >
-                      {g === "M" ? "Male" : "Female"}
-                    </button>
-                  ))}
-                </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <EditFormField label="Mother Name">
+                <Input
+                  value={draft.motherName}
+                  onChange={(e) => patchDraft("motherName", e.target.value)}
+                  placeholder="e.g. Anita Verma"
+                />
+              </EditFormField>
+              <EditFormField label="Father Occupation">
+                <Input
+                  value={draft.fatherOccupation}
+                  onChange={(e) => patchDraft("fatherOccupation", e.target.value)}
+                  placeholder="e.g. Engineer"
+                />
+              </EditFormField>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                If Guardian Is
+              </Label>
+              <div className="inline-flex w-full items-center rounded-full border border-black/10 bg-white p-1">
+                {GUARDIAN_RELATIONS.map((relation) => (
+                  <button
+                    key={relation}
+                    type="button"
+                    onClick={() => patchDraft("guardianRelation", relation)}
+                    className={cn(
+                      "min-h-9 flex-1 rounded-full text-[12px] font-semibold transition-colors",
+                      draft.guardianRelation === relation
+                        ? "bg-[#0F766E] text-white"
+                        : "text-black/55 hover:bg-black/5",
+                    )}
+                  >
+                    {relation}
+                  </button>
+                ))}
               </div>
-              <MetaField
-                label="Guardian"
-                value={draft.guardian}
-                editing
-                onChange={(v) => patchDraft("guardian", v)}
-                placeholder="Guardian full name"
-              />
-              <MetaField
-                label="Contact Phone"
-                value={draft.phone}
-                editing
-                onChange={(v) => patchDraft("phone", v)}
-                placeholder="9810045221"
-                mono
-              />
-              <MetaField
-                label="Date of Birth"
-                value={draft.dob}
-                editing
-                onChange={(v) => patchDraft("dob", v)}
-                placeholder="14 Mar 2012"
-                date
-              />
-              <MetaField
-                label="Email Address"
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <EditFormField label="Guardian Name">
+                <Input
+                  value={draft.guardian}
+                  onChange={(e) => patchDraft("guardian", e.target.value)}
+                  placeholder="e.g. Anita Verma"
+                />
+              </EditFormField>
+              <EditFormField label="Guardian Occupation">
+                <Input
+                  value={draft.guardianOccupation}
+                  onChange={(e) => patchDraft("guardianOccupation", e.target.value)}
+                  placeholder="e.g. Teacher"
+                />
+              </EditFormField>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <EditFormField label="Guardian Mobile">
+                <Input
+                  value={draft.phone}
+                  onChange={(e) => patchDraft("phone", e.target.value)}
+                  placeholder="9810045221"
+                  className="font-mono"
+                />
+              </EditFormField>
+              <EditFormField label="Aadhaar">
+                <Input
+                  value={draft.aadhaar}
+                  onChange={(e) =>
+                    patchDraft("aadhaar", e.target.value.replace(/\D/g, "").slice(0, 12))
+                  }
+                  placeholder="12-digit Aadhaar"
+                  className="font-mono"
+                  inputMode="numeric"
+                />
+              </EditFormField>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <EditFormField label="Date of Birth">
+                <DatePicker
+                  value={draft.dob ?? ""}
+                  onChange={(dob) => patchDraft("dob", dob)}
+                  placeholder="14 Mar 2012"
+                  valueFormat="iso"
+                  variant="pill"
+                  quickPicks={[]}
+                  min="1990-01-01"
+                  max={todayISO()}
+                  className="h-9 w-full"
+                />
+              </EditFormField>
+              <EditFormField label="Place of Birth">
+                <Input
+                  value={draft.placeOfBirth}
+                  onChange={(e) => patchDraft("placeOfBirth", e.target.value)}
+                  placeholder="e.g. Kozhikode"
+                />
+              </EditFormField>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <EditFormField label="Nationality">
+                <Input
+                  value={draft.nationality}
+                  onChange={(e) => patchDraft("nationality", e.target.value)}
+                  placeholder="e.g. Indian"
+                />
+              </EditFormField>
+              <EditFormField label="Religion">
+                <Select
+                  value={draft.religion || undefined}
+                  onValueChange={(religion) => patchDraft("religion", religion)}
+                >
+                  <SelectTrigger className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white text-[13px]">
+                    <SelectValue placeholder="Select religion" />
+                  </SelectTrigger>
+                  <SelectContent
+                    position="popper"
+                    className="z-[250] rounded-lg border border-[#E5E5E5] bg-white"
+                  >
+                    {STUDENT_RELIGIONS.map((religion) => (
+                      <SelectItem key={religion} value={religion}>
+                        {religion}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </EditFormField>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <EditFormField label="Student Category">
+                <Select
+                  value={draft.studentCategory || undefined}
+                  onValueChange={(studentCategory) => patchDraft("studentCategory", studentCategory)}
+                >
+                  <SelectTrigger className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white text-[13px]">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent
+                    position="popper"
+                    className="z-[250] rounded-lg border border-[#E5E5E5] bg-white"
+                  >
+                    {STUDENT_CATEGORIES.map((category) => (
+                      <SelectItem key={category} value={category}>
+                        {category}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </EditFormField>
+              <EditFormField label="Blood Group">
+                <Select
+                  value={draft.bloodGroup || undefined}
+                  onValueChange={(bloodGroup) => patchDraft("bloodGroup", bloodGroup)}
+                >
+                  <SelectTrigger className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white text-[13px]">
+                    <SelectValue placeholder="Select blood group" />
+                  </SelectTrigger>
+                  <SelectContent
+                    position="popper"
+                    className="z-[250] rounded-lg border border-[#E5E5E5] bg-white"
+                  >
+                    {BLOOD_GROUPS.map((group) => (
+                      <SelectItem key={group} value={group}>
+                        {group}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </EditFormField>
+            </div>
+
+            <EditFormField label="Email Address">
+              <Input
+                type="email"
                 value={draft.email}
-                editing
-                onChange={(v) => patchDraft("email", v)}
-                placeholder="student@school.in"
-                mono
+                onChange={(e) => patchDraft("email", e.target.value)}
+                placeholder="guardian@email.com"
+                className="font-mono text-[13px]"
               />
-              <div>
-                <div className={META_LABEL}>Class</div>
-                <div className="mt-1.5">
+            </EditFormField>
+
+            <EditFormField label="Residential Mailing Address">
+              <Textarea
+                value={draft.address}
+                onChange={(e) => patchDraft("address", e.target.value)}
+                placeholder="House / Flat, Street, City, PIN"
+                className="min-h-[72px] resize-none rounded-2xl text-[13px]"
+              />
+            </EditFormField>
+
+            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-[#E5E5E5] bg-[#FAFAFA] px-3.5 py-3">
+              <Checkbox
+                checked={draft.needsBus === true}
+                onCheckedChange={(checked) =>
+                  setDraft((prev) => ({
+                    ...prev,
+                    needsBus: checked === true,
+                    ...(checked === true ? {} : { busPoint1: "", busPoint2: "" }),
+                  }))
+                }
+                className="mt-0.5 h-5 w-5 rounded-md border-slate-300"
+              />
+              <span className="min-w-0">
+                <span className="block text-[13px] font-semibold text-slate-900">
+                  Requires school bus
+                </span>
+                <span className="mt-0.5 block text-[12px] text-slate-500">
+                  Check if your child needs transport · then pick pickup points
+                </span>
+              </span>
+            </label>
+
+            {draft.needsBus && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <EditFormField label="Bus Point 1">
                   <Select
-                    value={draft.cls || undefined}
-                    onValueChange={(cls) => patchDraft("cls", cls)}
+                    value={draft.busPoint1 || "__none__"}
+                    onValueChange={(busPoint1) =>
+                      patchDraft("busPoint1", busPoint1 === "__none__" ? "" : busPoint1)
+                    }
                   >
                     <SelectTrigger className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white text-[13px]">
-                      <SelectValue placeholder="Select class" />
+                      <SelectValue placeholder="Select pickup point" />
                     </SelectTrigger>
                     <SelectContent
                       position="popper"
                       className="z-[250] rounded-lg border border-[#E5E5E5] bg-white"
                     >
-                      {classOptions.map((cls) => (
-                        <SelectItem key={cls} value={cls}>
-                          {cls}
+                      <SelectItem value="__none__" className="text-slate-500">
+                        No pickup point
+                      </SelectItem>
+                      {busPointOptions.point1.map((point) => (
+                        <SelectItem key={point} value={point}>
+                          {point}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-              </div>
-              <MetaField
-                label="Admission Number"
-                value={draft.admissionNumber}
-                editing
-                onChange={(v) => patchDraft("admissionNumber", v)}
-                placeholder="e.g. ADM-2841"
-                mono
-              />
-              <div className="sm:col-span-2">
-                <MetaField
-                  label="Residential Mailing Address"
-                  value={draft.address}
-                  editing
-                  onChange={(v) => patchDraft("address", v)}
-                  placeholder="Full mailing address"
-                  multiline
-                />
-              </div>
-              <MetaField
-                label="Mother Name"
-                value={draft.motherName}
-                editing
-                onChange={(v) => patchDraft("motherName", v)}
-                placeholder="e.g. Anita Verma"
-              />
-              <MetaField
-                label="Father Occupation"
-                value={draft.fatherOccupation}
-                editing
-                onChange={(v) => patchDraft("fatherOccupation", v)}
-                placeholder="e.g. Engineer"
-              />
-              <div>
-                <div className={META_LABEL}>If Guardian Is</div>
-                <div className="mt-1.5 inline-flex w-full items-center rounded-full border border-black/10 bg-white p-1">
-                  {GUARDIAN_RELATIONS.map((relation) => (
-                    <button
-                      key={relation}
-                      type="button"
-                      onClick={() => patchDraft("guardianRelation", relation)}
-                      className={cn(
-                        "min-h-8 flex-1 cursor-pointer rounded-full px-1 text-[11px] font-semibold transition-colors",
-                        draft.guardianRelation === relation
-                          ? "bg-[#0F766E] text-white"
-                          : "text-black/55 hover:bg-black/5",
-                      )}
+                </EditFormField>
+                <EditFormField label="Bus Point 2">
+                  <Select
+                    value={draft.busPoint2 || "__none__"}
+                    onValueChange={(busPoint2) =>
+                      patchDraft("busPoint2", busPoint2 === "__none__" ? "" : busPoint2)
+                    }
+                  >
+                    <SelectTrigger className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white text-[13px]">
+                      <SelectValue placeholder="Select drop point" />
+                    </SelectTrigger>
+                    <SelectContent
+                      position="popper"
+                      className="z-[250] rounded-lg border border-[#E5E5E5] bg-white"
                     >
-                      {relation}
-                    </button>
-                  ))}
-                </div>
+                      <SelectItem value="__none__" className="text-slate-500">
+                        No drop point
+                      </SelectItem>
+                      {busPointOptions.point2.map((point) => (
+                        <SelectItem key={point} value={point}>
+                          {point}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </EditFormField>
               </div>
-              <MetaField
-                label="Guardian Occupation"
-                value={draft.guardianOccupation}
-                editing
-                onChange={(v) => patchDraft("guardianOccupation", v)}
-                placeholder="e.g. Teacher"
-              />
-              <MetaField
-                label="Aadhaar"
-                value={draft.aadhaar}
-                editing
-                onChange={(v) => patchDraft("aadhaar", v.replace(/\D/g, "").slice(0, 12))}
-                placeholder="12-digit Aadhaar"
-                mono
-              />
-              <MetaField
-                label="Place of Birth"
-                value={draft.placeOfBirth}
-                editing
-                onChange={(v) => patchDraft("placeOfBirth", v)}
-                placeholder="e.g. Kozhikode"
-              />
-              <MetaField
-                label="Nationality"
-                value={draft.nationality}
-                editing
-                onChange={(v) => patchDraft("nationality", v)}
-                placeholder="e.g. Indian"
-              />
-              <MetaSelect
-                label="Religion"
-                value={draft.religion}
-                editing
-                onChange={(v) => patchDraft("religion", v)}
-                options={[...STUDENT_RELIGIONS]}
-                placeholder="Select religion"
-              />
-              <MetaSelect
-                label="Student Category"
-                value={draft.studentCategory}
-                editing
-                onChange={(v) => patchDraft("studentCategory", v)}
-                options={[...STUDENT_CATEGORIES]}
-                placeholder="Select category"
-              />
-              <MetaSelect
-                label="Blood Group"
-                value={draft.bloodGroup}
-                editing
-                onChange={(v) => patchDraft("bloodGroup", v)}
-                options={[...BLOOD_GROUPS]}
-                placeholder="Select blood group"
-              />
-              <div className="sm:col-span-2">
-                <div className={META_LABEL}>School Bus</div>
-                <label className="mt-1.5 flex items-center gap-2.5 rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] px-3 py-2.5 text-[13px] font-medium text-black">
-                  <Checkbox
-                    checked={draft.needsBus}
-                    onCheckedChange={(checked) => patchDraft("needsBus", checked === true)}
-                  />
-                  Requires school bus transport
-                </label>
-              </div>
-              {draft.needsBus && (
-                <>
-                  <MetaSelect
-                    label="Bus Point 1"
-                    value={draft.busPoint1}
-                    editing
-                    onChange={(v) => patchDraft("busPoint1", v === "__none__" ? "" : v)}
-                    options={busPointOptions.point1}
-                    placeholder="Select pickup point"
-                    allowNone
-                    noneLabel="No pickup point"
-                  />
-                  <MetaSelect
-                    label="Bus Point 2"
-                    value={draft.busPoint2}
-                    editing
-                    onChange={(v) => patchDraft("busPoint2", v === "__none__" ? "" : v)}
-                    options={busPointOptions.point2}
-                    placeholder="Select drop point"
-                    allowNone
-                    noneLabel="No drop point"
-                  />
-                </>
-              )}
-            </div>
-            <DialogFooter className="flex-row justify-end gap-2">
+            )}
+
+            <DialogFooter className="flex-row justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setEditOpen(false)}>
                 Cancel
               </Button>
@@ -1384,11 +1515,6 @@ function FeeBalanceBox({ balance, overdue }: { balance: number; overdue: boolean
     </div>
   );
 }
-
-const todayISO = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
 
 function MetaSelect({
   label,
