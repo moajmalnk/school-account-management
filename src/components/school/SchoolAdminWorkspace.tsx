@@ -110,6 +110,16 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -281,7 +291,7 @@ import {
   nextPrefixedId,
   parseStudentCsv,
 } from "@/lib/student-csv";
-import { resolveMediaUrl } from "@/lib/media";
+import { resolveMediaUrl, fetchMediaBlob } from "@/lib/media";
 import { defaultSealToPng, resolveSealDisplaySrc, resolveSignatureDisplaySrc } from "@/lib/school-marks";
 import {
   bankBalance,
@@ -10196,22 +10206,77 @@ export function SchoolSettings() {
     allSettingsTabs.find((tab) => tab.id === activeTab)?.label ??
     "School Details";
 
+  const [schoolDirty, setSchoolDirty] = useState(false);
+  const [unsavedDialogOpen, setUnsavedDialogOpen] = useState(false);
+  const [unsavedSaving, setUnsavedSaving] = useState(false);
+  const schoolActionsRef = useRef<{
+    save: () => Promise<boolean>;
+    discard: () => void;
+  } | null>(null);
+  const pendingNavRef = useRef<(() => void) | null>(null);
+
+  const runOrConfirmLeave = useCallback(
+    (action: () => void) => {
+      if (activeTab === "school" && schoolDirty) {
+        pendingNavRef.current = action;
+        setUnsavedDialogOpen(true);
+        return;
+      }
+      action();
+    },
+    [activeTab, schoolDirty],
+  );
+
+  const handleUnsavedCancel = () => {
+    setUnsavedDialogOpen(false);
+    pendingNavRef.current = null;
+  };
+
+  const handleUnsavedDiscard = () => {
+    schoolActionsRef.current?.discard();
+    setUnsavedDialogOpen(false);
+    const action = pendingNavRef.current;
+    pendingNavRef.current = null;
+    action?.();
+  };
+
+  const handleUnsavedSave = async () => {
+    if (!schoolActionsRef.current) return;
+    setUnsavedSaving(true);
+    try {
+      const ok = await schoolActionsRef.current.save();
+      if (!ok) return;
+      setUnsavedDialogOpen(false);
+      const action = pendingNavRef.current;
+      pendingNavRef.current = null;
+      action?.();
+    } finally {
+      setUnsavedSaving(false);
+    }
+  };
+
   const setTab = (tab: SettingsTabId) => {
-    navigate({
-      to: "/tenant/settings",
-      search: { tab },
+    runOrConfirmLeave(() => {
+      navigate({
+        to: "/tenant/settings",
+        search: { tab },
+      });
     });
   };
 
   const backToMenu = () => {
-    navigate({ to: "/tenant/settings", search: {} });
+    runOrConfirmLeave(() => {
+      navigate({ to: "/tenant/settings", search: {} });
+    });
   };
 
   const handleLogout = () => {
-    const name = session?.displayName ?? "Admin";
-    logout();
-    toast.success("Signed out · session cleared", { description: `Goodbye, ${name}` });
-    navigate({ to: "/login", replace: true });
+    runOrConfirmLeave(() => {
+      const name = session?.displayName ?? "Admin";
+      logout();
+      toast.success("Signed out · session cleared", { description: `Goodbye, ${name}` });
+      navigate({ to: "/login", replace: true });
+    });
   };
 
   const tenantName = schoolDetails.name || session?.tenantName || "School";
@@ -10232,6 +10297,13 @@ export function SchoolSettings() {
         <SchoolDetailsCard
           schoolDetails={schoolDetails}
           setSchoolDetails={setSchoolDetails}
+          onDirtyChange={setSchoolDirty}
+          onBindActions={(actions: {
+            save: () => Promise<boolean>;
+            discard: () => void;
+          }) => {
+            schoolActionsRef.current = actions;
+          }}
         />
       )}
 
@@ -10456,6 +10528,59 @@ export function SchoolSettings() {
       </div>
 
       <div className="col-span-12 hidden min-w-0 lg:block">{renderSettingsContent("table")}</div>
+
+      <AlertDialog
+        open={unsavedDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) handleUnsavedCancel();
+        }}
+      >
+        <AlertDialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6 dark:border-white/10 dark:bg-zinc-900">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-[20px] font-semibold text-black dark:text-zinc-50">
+              Unsaved school details
+            </AlertDialogTitle>
+            <AlertDialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60 dark:text-zinc-400">
+              You have changes that are not saved yet. Save them before leaving, or discard to
+              revert.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-5 flex-col gap-2 sm:flex-row sm:justify-end sm:space-x-0">
+            <AlertDialogCancel
+              disabled={unsavedSaving}
+              className="mt-0 w-full rounded-full sm:w-auto"
+            >
+              Keep editing
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={unsavedSaving}
+              onClick={handleUnsavedDiscard}
+              className="w-full rounded-full sm:w-auto"
+            >
+              Discard
+            </Button>
+            <AlertDialogAction
+              disabled={unsavedSaving}
+              onClick={(e) => {
+                e.preventDefault();
+                void handleUnsavedSave();
+              }}
+              className="w-full rounded-full bg-[#0F766E] hover:bg-[#0D9488] sm:w-auto"
+            >
+              {unsavedSaving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                "Save changes"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -13237,10 +13362,7 @@ async function prepareImageForCrop(src: string): Promise<string> {
   const trimmed = src.trim();
   if (!trimmed) throw new Error("No image to adjust");
   if (trimmed.startsWith("data:") || trimmed.startsWith("blob:")) return trimmed;
-  const resolved = resolveMediaUrl(trimmed) ?? trimmed;
-  const res = await fetch(resolved, { credentials: "include" });
-  if (!res.ok) throw new Error("Could not load image for editing");
-  const blob = await res.blob();
+  const blob = await fetchMediaBlob(trimmed);
   if (!blob.type.startsWith("image/")) throw new Error("Could not load image for editing");
   return URL.createObjectURL(blob);
 }
@@ -13378,12 +13500,20 @@ function SchoolDetailsMediaField({
 function SchoolDetailsCard({
   schoolDetails,
   setSchoolDetails,
+  onDirtyChange,
+  onBindActions,
 }: {
   schoolDetails: SchoolDetails;
   setSchoolDetails: React.Dispatch<React.SetStateAction<SchoolDetails>>;
+  onDirtyChange?: (dirty: boolean) => void;
+  onBindActions?: (actions: {
+    save: () => Promise<boolean>;
+    discard: () => void;
+  }) => void;
 }) {
   const { updateSession } = useAuth();
   const [draft, setDraft] = useState<SchoolDetails>(schoolDetails);
+  const [saving, setSaving] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const letterheadInputRef = useRef<HTMLInputElement>(null);
   const sealInputRef = useRef<HTMLInputElement>(null);
@@ -13404,6 +13534,20 @@ function SchoolDetailsCard({
   const dirty = JSON.stringify(draft) !== JSON.stringify(schoolDetails);
   const initials = schoolInitials(draft.name || "School");
 
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [dirty]);
+
   const patch = <K extends keyof SchoolDetails>(key: K, value: SchoolDetails[K]) => {
     setDraft((prev) => ({ ...prev, [key]: value }));
   };
@@ -13416,12 +13560,11 @@ function SchoolDetailsCard({
     setCropTarget(null);
   };
 
-  const save = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const performSave = useCallback(async (): Promise<boolean> => {
     const name = draft.name.trim();
     if (!name) {
       toast.error("School name is required");
-      return;
+      return false;
     }
     const next: SchoolDetails = {
       ...draft,
@@ -13436,10 +13579,9 @@ function SchoolDetailsCard({
       principalName: draft.principalName.trim(),
       establishedYear: draft.establishedYear.trim(),
     };
+    setSaving(true);
     try {
-      const saved = getApiToken()
-        ? await apiSaveSchoolDetails(next)
-        : next;
+      const saved = getApiToken() ? await apiSaveSchoolDetails(next) : next;
       setSchoolDetails(saved);
       setDraft(saved);
       updateSession({ tenantName: saved.name });
@@ -13448,11 +13590,26 @@ function SchoolDetailsCard({
           ? `${saved.name} · synced to spi.macadz.com`
           : saved.name,
       });
+      return true;
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Could not save school details",
-      );
+      toast.error(err instanceof Error ? err.message : "Could not save school details");
+      return false;
+    } finally {
+      setSaving(false);
     }
+  }, [draft, setSchoolDetails, updateSession]);
+
+  const discardChanges = useCallback(() => {
+    setDraft(schoolDetails);
+  }, [schoolDetails]);
+
+  useEffect(() => {
+    onBindActions?.({ save: performSave, discard: discardChanges });
+  }, [onBindActions, performSave, discardChanges]);
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await performSave();
   };
 
   const onLogo = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -13606,23 +13763,40 @@ function SchoolDetailsCard({
 
   return (
     <OrganicCard tone="white" cornerSide="br" padded className={workspacePanelClass}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <div className="text-[18px] font-bold leading-tight tracking-tight text-black">
-            School Details
+      <form onSubmit={save}>
+        <div className="flex flex-col gap-3 border-b border-black/[0.06] pb-4 dark:border-white/10 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="text-[18px] font-bold leading-tight tracking-tight text-black dark:text-zinc-50">
+              School Details
+            </div>
+            <p className="mt-1 text-[12px] text-black/55 dark:text-zinc-400">
+              Logo, letterhead, signature, and seal used across the workspace
+            </p>
           </div>
-          <p className="mt-1 text-[12px] text-black/55 dark:text-zinc-400">
-            Logo, letterhead, signature, and seal used across the workspace
-          </p>
+          <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto sm:justify-end">
+            {dirty && (
+              <span className="rounded-full bg-[#FEF3C7] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#B45309]">
+                Unsaved
+              </span>
+            )}
+            <Button
+              type="submit"
+              disabled={!dirty || saving}
+              className="w-full rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488] disabled:opacity-40 sm:w-auto"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                "Save Changes"
+              )}
+            </Button>
+          </div>
         </div>
-        {dirty && (
-          <span className="w-fit shrink-0 rounded-full bg-[#FEF3C7] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#B45309]">
-            Unsaved
-          </span>
-        )}
-      </div>
 
-      <form onSubmit={save} className="mt-4 space-y-5">
+        <div className="mt-4 space-y-5">
         <div className="grid grid-cols-12 gap-3">
           <SchoolDetailsMediaField
             label="Logo"
@@ -13885,15 +14059,6 @@ function SchoolDetailsCard({
             />
           </div>
         </div>
-
-        <div className="flex justify-end pt-1">
-          <Button
-            type="submit"
-            disabled={!dirty}
-            className="w-full rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488] disabled:opacity-40 sm:w-auto"
-          >
-            Save Changes
-          </Button>
         </div>
       </form>
 

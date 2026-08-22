@@ -204,12 +204,11 @@ function loadHtmlImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-function canvasPng(img: HTMLImageElement) {
+function canvasPng(img: HTMLImageElement, maxDim = 960) {
   const canvas = document.createElement("canvas");
   const srcW = img.naturalWidth || img.width;
   const srcH = img.naturalHeight || img.height;
   if (!srcW || !srcH) throw new Error("empty image");
-  const maxDim = 640;
   const scale = Math.min(1, maxDim / Math.max(srcW, srcH));
   const width = Math.max(1, Math.round(srcW * scale));
   const height = Math.max(1, Math.round(srcH * scale));
@@ -221,22 +220,35 @@ function canvasPng(img: HTMLImageElement) {
   return { dataUrl: canvas.toDataURL("image/png"), width, height };
 }
 
-async function fetchLogoAsPng(src: string) {
+async function fetchLogoAsPng(src: string, maxDim = 960) {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), 6000);
   try {
     const headers: Record<string, string> = {};
     const token = getApiToken();
     const base = apiBaseUrl();
-    if (token && (src.startsWith("/") || src.startsWith(base))) {
+    const crossOrigin =
+      typeof window !== "undefined" &&
+      (() => {
+        try {
+          return new URL(src, window.location.href).origin !== window.location.origin;
+        } catch {
+          return false;
+        }
+      })();
+    if (token && !crossOrigin && (src.startsWith("/") || src.startsWith(base))) {
       headers.Authorization = `Bearer ${token}`;
     }
-    const res = await fetch(src, { signal: controller.signal, headers });
+    const res = await fetch(src, {
+      signal: controller.signal,
+      credentials: "omit",
+      headers,
+    });
     if (!res.ok) throw new Error(`logo ${res.status}`);
     const blob = await res.blob();
     const objectUrl = URL.createObjectURL(blob);
     try {
-      return canvasPng(await loadHtmlImage(objectUrl));
+      return canvasPng(await loadHtmlImage(objectUrl), maxDim);
     } finally {
       URL.revokeObjectURL(objectUrl);
     }
@@ -245,7 +257,7 @@ async function fetchLogoAsPng(src: string) {
   }
 }
 
-async function loadLogoForPdf(url?: string) {
+async function loadMediaForPdf(url?: string, maxDim = 960) {
   const original = url?.trim();
   if (!original) return null;
   const resolved = resolveMediaUrl(original);
@@ -261,8 +273,8 @@ async function loadLogoForPdf(url?: string) {
 
   for (const src of candidates) {
     try {
-      if (src.startsWith("data:")) return canvasPng(await loadHtmlImage(src));
-      return await fetchLogoAsPng(src);
+      if (src.startsWith("data:")) return canvasPng(await loadHtmlImage(src), maxDim);
+      return await fetchLogoAsPng(src, maxDim);
     } catch {
       // try the next candidate
     }
@@ -277,12 +289,20 @@ async function loadLogoForPdf(url?: string) {
         img.onerror = () => reject(new Error("cors image failed"));
         img.src = resolved;
       });
-      return canvasPng(loaded);
+      return canvasPng(loaded, maxDim);
     } catch {
       return null;
     }
   }
   return null;
+}
+
+async function loadLogoForPdf(url?: string) {
+  return loadMediaForPdf(url, 960);
+}
+
+async function loadLetterheadForPdf(url?: string) {
+  return loadMediaForPdf(url, 1400);
 }
 
 function isBankCashSplitLabel(label: string): boolean {
@@ -409,7 +429,10 @@ export async function downloadReceiptPdf(
   academicYear: string,
   branding?: ReceiptBranding,
 ) {
-  const logo = await loadLogoForPdf(branding?.logoUrl);
+  const [logo, letterhead] = await Promise.all([
+    loadLogoForPdf(branding?.logoUrl),
+    loadLetterheadForPdf(branding?.letterheadUrl),
+  ]);
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -423,84 +446,18 @@ export async function downloadReceiptPdf(
   const amountFormatted = formatInrPdf(payment.amount);
   const isExternal = payment.payerType === "external";
   const displayName = pdfSafe(schoolName || "School");
-  const initials = schoolInitials(displayName) || "SC";
-
-  const logoBox = 28;
-  const logoX = margin;
-  const logoY = 12;
-  const textX = margin + logoBox + 8;
-  const textWidth = pageWidth - margin - textX;
-
-  doc.setFont(pdfFontName(), "bold");
-  doc.setFontSize(displayName.length > 32 ? 15 : 20);
-  const nameLines = doc.splitTextToSize(displayName, textWidth) as string[];
-  const address = pdfSafe(branding?.address || "").toUpperCase();
-  doc.setFont(pdfFontName(), "normal");
-  doc.setFontSize(8.5);
-  const addressLines = address ? (doc.splitTextToSize(address, textWidth) as string[]) : [];
-  const contactLine = [branding?.phone, branding?.email]
-    .map((v) => pdfSafe(v || "").trim())
-    .filter(Boolean)
-    .join("  |  ");
-
-  let textBottom = logoY + 6;
-  textBottom += nameLines.length * 7.2;
-  if (addressLines.length) textBottom += addressLines.length * 4.2 + 1;
-  if (contactLine) textBottom += 5;
-  const headerBottom = Math.max(logoY + logoBox, textBottom) + 6;
 
   doc.setFillColor(...receiptInk().white);
-  doc.rect(0, 0, pageWidth, headerBottom, "F");
+  doc.rect(0, 0, pageWidth, pageHeight, "F");
 
-  if (logo) {
-    const pad = 0.4;
-    const boxInner = logoBox - pad * 2;
-    const scale = Math.min(boxInner / logo.width, boxInner / logo.height);
-    const drawW = logo.width * scale;
-    const drawH = logo.height * scale;
-    doc.addImage(
-      logo.dataUrl,
-      "PNG",
-      logoX + (logoBox - drawW) / 2,
-      logoY + (logoBox - drawH) / 2,
-      drawW,
-      drawH,
-    );
-  } else {
-    doc.setFillColor(...receiptInk().teal);
-    doc.roundedRect(logoX, logoY, logoBox, logoBox, 2.2, 2.2, "F");
-    doc.setFont(pdfFontName(), "bold");
-    doc.setFontSize(initials.length > 2 ? 9 : 12);
-    doc.setTextColor(...receiptInk().white);
-    doc.text(initials, logoX + logoBox / 2, logoY + logoBox / 2 + 1.5, { align: "center" });
-  }
-
-  let cursorY = logoY + 7;
-  doc.setFont(pdfFontName(), "bold");
-  doc.setFontSize(displayName.length > 32 ? 15 : 20);
-  doc.setTextColor(...receiptInk().tealDeep);
-  doc.text(nameLines, textX, cursorY);
-  cursorY += nameLines.length * 7.2;
-
-  if (addressLines.length) {
-    doc.setFont(pdfFontName(), "normal");
-    doc.setFontSize(8.5);
-    doc.setTextColor(...receiptInk().muted);
-    doc.text(addressLines, textX, cursorY);
-    cursorY += addressLines.length * 4.2 + 1.2;
-  }
-
-  if (contactLine) {
-    doc.setFont(pdfFontName(), "normal");
-    doc.setFontSize(8.5);
-    doc.setTextColor(...receiptInk().tealDeep);
-    doc.text(contactLine, textX, cursorY);
-  }
+  const headerBottom = letterhead
+    ? drawUploadedLetterheadBanner(doc, pageWidth, letterhead, margin)
+    : drawReceiptLetterheadHeader(doc, pageWidth, displayName, branding, logo);
 
   const barW = Math.min(contentWidth, 92);
   const barH = 10;
   const barX = (pageWidth - barW) / 2;
-  const barY = headerBottom + 4;
+  const barY = headerBottom + 2;
   doc.setFillColor(...receiptInk().teal);
   doc.roundedRect(barX, barY, barW, barH, 2.4, 2.4, "F");
   doc.setFont(pdfFontName(), "bold");
@@ -736,6 +693,195 @@ function padSlipRows(
 
 type PdfLogo = { dataUrl: string; width: number; height: number };
 
+type LogoSlot = {
+  width: number;
+  height: number;
+  drawW: number;
+  drawH: number;
+  offsetX: number;
+  offsetY: number;
+};
+
+function pickLogoBounds(logo: PdfLogo | null): { maxW: number; maxH: number } {
+  if (!logo) return { maxW: 24, maxH: 24 };
+  const aspect = logo.width / Math.max(1, logo.height);
+  if (aspect >= 1.35) return { maxW: 58, maxH: 18 };
+  if (aspect <= 0.75) return { maxW: 20, maxH: 28 };
+  return { maxW: 26, maxH: 26 };
+}
+
+function logoSlotMetrics(logo: PdfLogo | null, maxW: number, maxH: number, pad = 1.8): LogoSlot {
+  const innerW = Math.max(1, maxW - pad * 2);
+  const innerH = Math.max(1, maxH - pad * 2);
+  if (!logo) {
+    return { width: maxW, height: maxH, drawW: 0, drawH: 0, offsetX: pad, offsetY: pad };
+  }
+  const scale = Math.min(innerW / logo.width, innerH / logo.height);
+  const drawW = logo.width * scale;
+  const drawH = logo.height * scale;
+  return {
+    width: maxW,
+    height: maxH,
+    drawW,
+    drawH,
+    offsetX: pad + (innerW - drawW) / 2,
+    offsetY: pad + (innerH - drawH) / 2,
+  };
+}
+
+function drawLogoPlate(
+  doc: jsPDF,
+  x: number,
+  y: number,
+  logo: PdfLogo | null,
+  initials: string,
+  maxW: number,
+  maxH: number,
+  opts?: {
+    plateFill?: [number, number, number];
+    stroke?: boolean;
+    fallbackFill?: [number, number, number];
+  },
+): LogoSlot {
+  const slot = logoSlotMetrics(logo, maxW, maxH);
+  const plateFill = opts?.plateFill ?? receiptInk().white;
+  doc.setFillColor(...plateFill);
+  if (opts?.stroke !== false) {
+    doc.setDrawColor(...receiptInk().line);
+    doc.setLineWidth(0.22);
+    doc.roundedRect(x, y, slot.width, slot.height, 2.2, 2.2, "FD");
+  } else {
+    doc.roundedRect(x, y, slot.width, slot.height, 2.2, 2.2, "F");
+  }
+
+  if (logo) {
+    doc.addImage(
+      logo.dataUrl,
+      "PNG",
+      x + slot.offsetX,
+      y + slot.offsetY,
+      slot.drawW,
+      slot.drawH,
+    );
+  } else {
+    const inset = 1.6;
+    doc.setFillColor(...(opts?.fallbackFill ?? receiptInk().teal));
+    doc.roundedRect(
+      x + inset,
+      y + inset,
+      slot.width - inset * 2,
+      slot.height - inset * 2,
+      1.8,
+      1.8,
+      "F",
+    );
+    doc.setFont(pdfFontName(), "bold");
+    doc.setFontSize(initials.length > 2 ? 9 : 11);
+    doc.setTextColor(...receiptInk().white);
+    doc.text(initials, x + slot.width / 2, y + slot.height / 2 + 1.2, { align: "center" });
+  }
+  return slot;
+}
+
+function drawUploadedLetterheadBanner(
+  doc: jsPDF,
+  pageWidth: number,
+  letterhead: PdfLogo,
+  margin: number,
+): number {
+  const contentWidth = pageWidth - margin * 2;
+  const maxH = 46;
+  const aspect = letterhead.width / Math.max(1, letterhead.height);
+  let drawW = contentWidth;
+  let drawH = drawW / aspect;
+  if (drawH > maxH) {
+    drawH = maxH;
+    drawW = drawH * aspect;
+  }
+  const x = (pageWidth - drawW) / 2;
+  const y = 9;
+  doc.addImage(letterhead.dataUrl, "PNG", x, y, drawW, drawH);
+  const bottom = y + drawH + 3.5;
+  doc.setDrawColor(...receiptInk().line);
+  doc.setLineWidth(0.28);
+  doc.line(margin, bottom, pageWidth - margin, bottom);
+  return bottom + 4.5;
+}
+
+function drawDocumentTitleBar(
+  doc: jsPDF,
+  pageWidth: number,
+  contentWidth: number,
+  title: string,
+  startY: number,
+): number {
+  const barW = Math.min(contentWidth, Math.max(88, title.length * 4.5 + 30));
+  const barH = 10;
+  const barX = (pageWidth - barW) / 2;
+  doc.setFillColor(...receiptInk().teal);
+  doc.roundedRect(barX, startY, barW, barH, 2.4, 2.4, "F");
+  doc.setFont(pdfFontName(), "bold");
+  doc.setFontSize(12);
+  doc.setTextColor(...receiptInk().white);
+  doc.text(title, pageWidth / 2, startY + 6.7, { align: "center" });
+  return startY + barH;
+}
+
+function drawReceiptLetterheadHeader(
+  doc: jsPDF,
+  pageWidth: number,
+  schoolName: string,
+  branding: ReceiptBranding | undefined,
+  logo: PdfLogo | null,
+): number {
+  const margin = 16;
+  const contentWidth = pageWidth - margin * 2;
+  const displayName = pdfSafe(schoolName || "School");
+  const initials = schoolInitials(displayName) || "SC";
+  const { maxW, maxH } = pickLogoBounds(logo);
+  const logoW = Math.min(maxW, contentWidth * 0.78);
+  const logoX = (pageWidth - logoW) / 2;
+  let cursorY = 10;
+
+  drawLogoPlate(doc, logoX, cursorY, logo, initials, logoW, maxH);
+  cursorY += maxH + 5.5;
+
+  doc.setFont(pdfFontName(), "bold");
+  doc.setFontSize(displayName.length > 34 ? 14 : 18);
+  doc.setTextColor(...receiptInk().tealDeep);
+  const nameLines = doc.splitTextToSize(displayName, contentWidth * 0.92) as string[];
+  doc.text(nameLines, pageWidth / 2, cursorY, { align: "center" });
+  cursorY += nameLines.length * 6.6 + 2.2;
+
+  const address = pdfSafe(branding?.address || "").toUpperCase();
+  if (address) {
+    doc.setFont(pdfFontName(), "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(...receiptInk().muted);
+    const addressLines = doc.splitTextToSize(address, contentWidth * 0.9) as string[];
+    doc.text(addressLines, pageWidth / 2, cursorY, { align: "center" });
+    cursorY += addressLines.length * 3.7 + 1.4;
+  }
+
+  const contactLine = [branding?.phone, branding?.email]
+    .map((v) => pdfSafe(v || "").trim())
+    .filter(Boolean)
+    .join("  |  ");
+  if (contactLine) {
+    doc.setFont(pdfFontName(), "normal");
+    doc.setFontSize(8.2);
+    doc.setTextColor(...receiptInk().tealDeep);
+    doc.text(contactLine, pageWidth / 2, cursorY, { align: "center" });
+    cursorY += 5.5;
+  }
+
+  cursorY += 2.5;
+  doc.setDrawColor(...receiptInk().line);
+  doc.setLineWidth(0.25);
+  doc.line(margin, cursorY, pageWidth - margin, cursorY);
+  return cursorY + 5;
+}
+
 function drawOfficialDocHeader(
   doc: jsPDF,
   pageWidth: number,
@@ -745,13 +891,12 @@ function drawOfficialDocHeader(
   badge: string,
 ): number {
   const margin = 16;
-  const logoBox = 28;
-  const logoX = margin;
-  const logoY = 11;
-  const textX = margin + logoBox + 8;
-  const textWidth = pageWidth - margin - textX;
   const displayName = pdfSafe(schoolName || "School");
   const initials = schoolInitials(displayName) || "SC";
+  const { maxW, maxH } = pickLogoBounds(logo);
+  const logoX = margin;
+  const textX = margin + maxW + 8;
+  const textWidth = pageWidth - margin - textX;
 
   doc.setFont(pdfFontName(), "bold");
   doc.setFontSize(displayName.length > 32 ? 15 : 20);
@@ -765,41 +910,23 @@ function drawOfficialDocHeader(
     .filter(Boolean)
     .join("  |  ");
 
-  let textBottom = logoY + 7;
+  let textBottom = 11 + 7;
   textBottom += nameLines.length * 7.2;
   if (addressLines.length) textBottom += addressLines.length * 4.2 + 1.2;
   if (contactLine) textBottom += 5;
-  const headerH = Math.max(logoY + logoBox + 12, textBottom + 12);
+  const textBlockH = textBottom - 11;
+  const logoY = 11 + Math.max(0, (textBlockH - maxH) / 2);
+  const headerH = Math.max(logoY + maxH + 12, textBottom + 12);
 
   doc.setFillColor(...receiptInk().teal);
   doc.roundedRect(0, -10, pageWidth, headerH + 10, 6, 6, "F");
   doc.setFillColor(...receiptInk().tealDeep);
   doc.rect(0, headerH - 1.2, pageWidth, 1.2, "F");
 
-  doc.setFillColor(...receiptInk().white);
-  doc.roundedRect(logoX, logoY, logoBox, logoBox, 4, 4, "F");
-  if (logo) {
-    const pad = 1.6;
-    const inner = logoBox - pad * 2;
-    const scale = Math.min(inner / logo.width, inner / logo.height);
-    const drawW = logo.width * scale;
-    const drawH = logo.height * scale;
-    doc.addImage(
-      logo.dataUrl,
-      "PNG",
-      logoX + (logoBox - drawW) / 2,
-      logoY + (logoBox - drawH) / 2,
-      drawW,
-      drawH,
-    );
-  } else {
-    doc.setFillColor(...receiptInk().tealDeep);
-    doc.roundedRect(logoX + 2, logoY + 2, logoBox - 4, logoBox - 4, 3, 3, "F");
-    doc.setFont(pdfFontName(), "bold");
-    doc.setFontSize(initials.length > 2 ? 9 : 12);
-    doc.setTextColor(...receiptInk().white);
-    doc.text(initials, logoX + logoBox / 2, logoY + logoBox / 2 + 1.4, { align: "center" });
-  }
+  drawLogoPlate(doc, logoX, logoY, logo, initials, maxW, maxH, {
+    stroke: false,
+    fallbackFill: receiptInk().tealDeep,
+  });
 
   let cursorY = logoY + 7;
   doc.setFont(pdfFontName(), "bold");
@@ -1012,7 +1139,10 @@ export async function downloadSalarySlipPdf(
   staff?: SalarySlipStaff | null,
   academicYear?: string,
 ) {
-  const logo = await loadLogoForPdf(branding?.logoUrl);
+  const [logo, letterhead] = await Promise.all([
+    loadLogoForPdf(branding?.logoUrl),
+    loadLetterheadForPdf(branding?.letterheadUrl),
+  ]);
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -1028,14 +1158,18 @@ export async function downloadSalarySlipPdf(
   const components = buildSalaryComponents(staff, payment.amount);
   const displayName = pdfSafe(schoolName || "School");
 
-  const metaTop = drawOfficialDocHeader(
-    doc,
-    pageWidth,
-    displayName,
-    branding,
-    logo,
-    "Salary Slip",
-  );
+  doc.setFillColor(...receiptInk().white);
+  doc.rect(0, 0, pageWidth, pageHeight, "F");
+
+  const metaTop = letterhead
+    ? drawDocumentTitleBar(
+        doc,
+        pageWidth,
+        contentWidth,
+        "Salary Slip",
+        drawUploadedLetterheadBanner(doc, pageWidth, letterhead, margin) + 3,
+      ) + 8
+    : drawOfficialDocHeader(doc, pageWidth, displayName, branding, logo, "Salary Slip");
 
   const leftRows: [string, string][] = [
     ["Employee Name", pdfSafe(staff?.name || payment.payee)],
@@ -1231,7 +1365,10 @@ export async function downloadPaymentVoucherPdf(
   billTo?: VoucherBillTo | null,
   academicYear?: string,
 ) {
-  const logo = await loadLogoForPdf(branding?.logoUrl);
+  const [logo, letterhead] = await Promise.all([
+    loadLogoForPdf(branding?.logoUrl),
+    loadLetterheadForPdf(branding?.letterheadUrl),
+  ]);
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -1249,14 +1386,18 @@ export async function downloadPaymentVoucherPdf(
   const payeeAddress = pdfSafe(billTo?.address || "").trim() || "—";
   const payeePhone = pdfSafe(billTo?.phone || "").trim() || "—";
 
-  const metaTop = drawOfficialDocHeader(
-    doc,
-    pageWidth,
-    displayName,
-    branding,
-    logo,
-    "Payment Voucher",
-  );
+  doc.setFillColor(...receiptInk().white);
+  doc.rect(0, 0, pageWidth, pageHeight, "F");
+
+  const metaTop = letterhead
+    ? drawDocumentTitleBar(
+        doc,
+        pageWidth,
+        contentWidth,
+        "Payment Voucher",
+        drawUploadedLetterheadBanner(doc, pageWidth, letterhead, margin) + 3,
+      ) + 8
+    : drawOfficialDocHeader(doc, pageWidth, displayName, branding, logo, "Payment Voucher");
 
   doc.setFont(pdfFontName(), "bold");
   doc.setFontSize(10);
