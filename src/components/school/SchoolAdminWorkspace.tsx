@@ -16182,6 +16182,18 @@ export function FieldSelect({
   onAddNew?: () => void;
   addNewLabel?: string;
 }) {
+  const fieldSelectItemClass = (chosen: boolean) =>
+    cn(
+      "relative flex w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-3 py-2.5 my-0.5 text-[13px] transition-colors outline-none",
+      "text-slate-900 dark:text-zinc-100",
+      "data-[highlighted]:bg-slate-100 data-[highlighted]:text-slate-900",
+      "aria-selected:bg-slate-100 aria-selected:text-slate-900",
+      "dark:data-[highlighted]:bg-zinc-800 dark:data-[highlighted]:text-zinc-50",
+      "dark:aria-selected:bg-zinc-800 dark:aria-selected:text-zinc-50",
+      chosen &&
+        "font-medium text-[#0F766E] data-[highlighted]:bg-[#ECFDF5] data-[highlighted]:text-[#0F766E] aria-selected:bg-[#ECFDF5] aria-selected:text-[#0F766E] dark:text-[#2DD4BF] dark:data-[highlighted]:bg-teal-950/40 dark:aria-selected:bg-teal-950/40",
+    );
+
   const [open, setOpen] = useState(false);
   const uniqueOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -16269,15 +16281,23 @@ export function FieldSelect({
             {addNewRow ? (
               <div className="mb-1 border-b border-[#E5E5E5] pb-1 dark:border-white/10">{addNewRow}</div>
             ) : null}
-            {displayOptions.map((opt) => (
-              <SelectItem
-                key={opt.value}
-                value={opt.value}
-                className="cursor-pointer rounded-md py-2 pl-3 pr-8 text-[13px] text-black focus:bg-[#CCFBF1] focus:text-[#0F172A] data-[highlighted]:bg-[#CCFBF1] data-[highlighted]:text-[#0F172A] data-[state=checked]:bg-[#0F766E] data-[state=checked]:font-semibold data-[state=checked]:text-white dark:text-zinc-100 dark:focus:bg-[#0F766E]/40 dark:focus:text-white dark:data-[highlighted]:bg-[#0F766E]/40 dark:data-[highlighted]:text-white"
-              >
-                <span className="block max-w-full whitespace-normal break-words">{opt.label}</span>
-              </SelectItem>
-            ))}
+            {displayOptions.map((opt) => {
+              const chosen = opt.value === value;
+              return (
+                <SelectItem
+                  key={opt.value}
+                  value={opt.value}
+                  className={cn(
+                    fieldSelectItemClass(chosen),
+                    "pr-9",
+                    chosen &&
+                      "data-[state=checked]:bg-transparent data-[state=checked]:text-[#0F766E] data-[state=checked]:font-medium dark:data-[state=checked]:text-[#2DD4BF]",
+                  )}
+                >
+                  <span className="block min-w-0 flex-1 whitespace-normal break-words">{opt.label}</span>
+                </SelectItem>
+              );
+            })}
           </SelectContent>
         </Select>
       </div>
@@ -16325,9 +16345,9 @@ export function FieldSelect({
               <CommandEmpty className="py-4 text-center text-[12px] text-slate-500 dark:text-zinc-400">
                 No matches found
               </CommandEmpty>
-              <CommandGroup className="p-1.5">
+              <CommandGroup className="gap-0.5 p-1.5">
                 {displayOptions.map((opt) => {
-                  const active = opt.value === value;
+                  const chosen = opt.value === value;
                   return (
                     <CommandItem
                       key={opt.value}
@@ -16335,15 +16355,12 @@ export function FieldSelect({
                       onSelect={() => {
                         handleValueChange(opt.value);
                       }}
-                      className={cn(
-                        "cursor-pointer rounded-md px-3 py-2 text-[13px]",
-                        active
-                          ? "bg-[#0F766E] font-semibold text-white data-[selected=true]:bg-[#0F766E] data-[selected=true]:text-white"
-                          : "text-black data-[selected=true]:bg-[#CCFBF1] data-[selected=true]:text-[#0F172A] dark:text-zinc-100 dark:data-[selected=true]:bg-[#0F766E]/40 dark:data-[selected=true]:text-white",
-                      )}
+                      className={fieldSelectItemClass(chosen)}
                     >
                       <span className="min-w-0 flex-1 whitespace-normal break-words">{opt.label}</span>
-                      {active && <Check className="h-4 w-4 shrink-0" />}
+                      {chosen ? (
+                        <Check className="h-4 w-4 shrink-0 text-[#0F766E] dark:text-[#2DD4BF]" aria-hidden />
+                      ) : null}
                     </CommandItem>
                   );
                 })}
