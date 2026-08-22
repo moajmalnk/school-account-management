@@ -1561,6 +1561,8 @@ export function normalizeClassConfig(
     typeof raw.vehicleFeeAmount === "number" && Number.isFinite(raw.vehicleFeeAmount)
       ? Math.max(0, Math.round(raw.vehicleFeeAmount))
       : 0;
+  const feeCollectionStartMonthFromSnake = (raw as { fee_collection_start_month?: unknown })
+    .fee_collection_start_month;
   return {
     id: raw.id,
     className,
@@ -1577,10 +1579,9 @@ export function normalizeClassConfig(
     feeCollectionStartMonth:
       typeof raw.feeCollectionStartMonth === "string" && raw.feeCollectionStartMonth.trim()
         ? raw.feeCollectionStartMonth.trim()
-        : typeof (raw as { fee_collection_start_month?: unknown }).fee_collection_start_month ===
-              "string" &&
-            (raw as { fee_collection_start_month: string }).fee_collection_start_month.trim()
-          ? (raw as { fee_collection_start_month: string }).fee_collection_start_month.trim()
+        : typeof feeCollectionStartMonthFromSnake === "string" &&
+            feeCollectionStartMonthFromSnake.trim()
+          ? feeCollectionStartMonthFromSnake.trim()
           : undefined,
     classTeacherId:
       typeof raw.classTeacherId === "string" && raw.classTeacherId.trim()
