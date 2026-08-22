@@ -818,7 +818,7 @@ function DashboardTodoNotesPanel() {
               type="button"
               onClick={() => removeTodo(index)}
               aria-label={`Remove task ${index + 1}`}
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-xl text-slate-400 transition-colors hover:bg-[#FEE2E2] hover:text-[#EF4444]"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-xl text-slate-400 transition-colors hover:bg-[#FEE2E2] hover:text-[#EF4444] dark:text-zinc-400 dark:hover:bg-rose-950/50 dark:hover:text-rose-300"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
@@ -976,8 +976,8 @@ function PremiumDashboard({
               >
                 <div className="flex items-start justify-between gap-2 text-left">
                   <span className="text-[12px] font-medium text-slate-600 dark:text-zinc-300">Total Students</span>
-                  <span className="grid h-8 w-8 place-items-center rounded-full bg-[#99F6E4]/80">
-                    <GraduationCap className="h-4 w-4 text-[#0F766E]" />
+                  <span className="grid h-8 w-8 place-items-center rounded-full bg-[#99F6E4]/80 text-[#0F766E] dark:text-teal-300">
+                    <GraduationCap className="h-4 w-4" />
                   </span>
                 </div>
                 <div className="flex flex-1 flex-col items-center justify-center">
@@ -995,9 +995,9 @@ function PremiumDashboard({
                 className="flex min-h-[120px] min-w-0 flex-col overflow-hidden rounded-2xl bg-white/55 p-3 text-center shadow-sm shadow-sky-200/40 transition-colors hover:bg-white/75 sm:min-h-[128px] sm:p-4"
               >
                 <div className="flex items-start justify-between gap-2 text-left">
-                  <span className="text-[12px] font-medium text-slate-600">Total Staff</span>
-                  <span className="grid h-8 w-8 place-items-center rounded-full bg-orange-100">
-                    <Briefcase className="h-4 w-4 text-orange-500" />
+                  <span className="text-[12px] font-medium text-slate-600 dark:text-zinc-300">Total Staff</span>
+                  <span className="grid h-8 w-8 place-items-center rounded-full bg-orange-100 text-orange-500 dark:bg-orange-950/45 dark:text-orange-300">
+                    <Briefcase className="h-4 w-4" />
                   </span>
                 </div>
                 <div className="flex flex-1 flex-col items-center justify-center">
@@ -1053,11 +1053,11 @@ function PremiumDashboard({
           <section className={cn(dashCardClass, DASH.outstanding, "flex min-w-0 flex-col p-4 sm:p-5")}>
             <DashboardPanelHeading icon={HandCoins} title="Outstanding Payments" />
             <div className="mt-4 grid min-w-0 flex-1 grid-cols-1 gap-3">
-              <div className="flex min-h-[96px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl bg-white/55 p-3.5 shadow-sm shadow-orange-200/30 sm:min-h-[100px] sm:p-4">
+              <div className="flex min-h-[96px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl bg-white/55 p-3.5 shadow-sm shadow-orange-200/30 dark:ring-1 dark:ring-white/10 sm:min-h-[100px] sm:p-4">
                 <div className="flex items-start justify-between gap-2">
-                  <span className="min-w-0 text-[12px] font-medium text-slate-600">Fee Outstanding</span>
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#FED7AA]/80">
-                    <HandCoins className="h-4 w-4 text-orange-600" />
+                  <span className="min-w-0 text-[12px] font-medium text-slate-600 dark:text-zinc-300">Fee Outstanding</span>
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#FED7AA]/80 text-orange-600 dark:text-amber-300">
+                    <HandCoins className="h-4 w-4" />
                   </span>
                 </div>
                 <div className="min-w-0">
@@ -1067,11 +1067,11 @@ function PremiumDashboard({
                   <DashboardAmount value={totalDue} className="mt-1 text-slate-900" />
                 </div>
               </div>
-              <div className="flex min-h-[96px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl bg-white/55 p-3.5 shadow-sm shadow-orange-200/30 sm:min-h-[100px] sm:p-4">
+              <div className="flex min-h-[96px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl bg-white/55 p-3.5 shadow-sm shadow-orange-200/30 dark:ring-1 dark:ring-white/10 sm:min-h-[100px] sm:p-4">
                 <div className="flex items-start justify-between gap-2">
-                  <span className="min-w-0 text-[12px] font-medium text-slate-600">Salary Outstanding</span>
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-amber-100">
-                    <Banknote className="h-4 w-4 text-amber-600" />
+                  <span className="min-w-0 text-[12px] font-medium text-slate-600 dark:text-zinc-300">Salary Outstanding</span>
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300">
+                    <Banknote className="h-4 w-4" />
                   </span>
                 </div>
                 <div className="min-w-0">
@@ -1090,29 +1090,29 @@ function PremiumDashboard({
           <section className={cn(dashCardClass, DASH.cash, "flex min-w-0 flex-col p-4 sm:p-5")}>
             <DashboardPanelHeading icon={Landmark} title="Cash Position" />
             <div className="mt-4 grid min-w-0 flex-1 grid-cols-2 gap-2 sm:gap-3">
-              <div className="flex min-h-[84px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl bg-white/55 p-2.5 shadow-sm shadow-violet-200/30 sm:p-3.5">
-                <div className="flex items-center justify-between gap-1.5">
-                  <span className="min-w-0 truncate text-[11px] font-medium text-slate-600 sm:text-[12px]">
+              <div className="flex min-h-[84px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl bg-white/55 p-2.5 shadow-sm shadow-violet-200/30 dark:ring-1 dark:ring-white/10 sm:p-3.5">
+                <div className="flex items-center justify-between gap-1.5 text-emerald-600 dark:text-emerald-400">
+                  <span className="min-w-0 truncate text-[11px] font-medium text-slate-600 sm:text-[12px] dark:text-zinc-300">
                     Cash In Hand
                   </span>
-                  <Banknote className="h-3.5 w-3.5 shrink-0 text-[#10B981]" />
+                  <Banknote className="h-3.5 w-3.5 shrink-0" />
                 </div>
                 <DashboardAmount value={inHand} compact className="text-slate-900" />
               </div>
-              <div className="flex min-h-[84px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl bg-white/55 p-2.5 shadow-sm shadow-violet-200/30 sm:p-3.5">
-                <div className="flex items-center justify-between gap-1.5">
-                  <span className="min-w-0 truncate text-[11px] font-medium text-slate-600 sm:text-[12px]">
+              <div className="flex min-h-[84px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl bg-white/55 p-2.5 shadow-sm shadow-violet-200/30 dark:ring-1 dark:ring-white/10 sm:p-3.5">
+                <div className="flex items-center justify-between gap-1.5 text-violet-600 dark:text-violet-400">
+                  <span className="min-w-0 truncate text-[11px] font-medium text-slate-600 sm:text-[12px] dark:text-zinc-300">
                     Bank Balance
                   </span>
-                  <Landmark className="h-3.5 w-3.5 shrink-0 text-violet-600" />
+                  <Landmark className="h-3.5 w-3.5 shrink-0" />
                 </div>
                 <DashboardAmount value={inBank} compact className="text-slate-900" />
               </div>
               <div className="col-span-2 flex min-h-[84px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-r from-[#6366F1]/20 via-[#A78BFA]/25 to-[#818CF8]/20 p-3.5 ring-1 ring-violet-200/40 dark:from-violet-950/50 dark:via-zinc-900 dark:to-indigo-950/40 dark:ring-violet-800/30 sm:p-4">
                 <div className="flex items-start justify-between gap-2">
                   <span className="text-[12px] font-semibold text-slate-700 dark:text-zinc-200">Total Balance</span>
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/80 dark:bg-white/10">
-                    <Wallet className="h-4 w-4 text-[#4F46E5] dark:text-violet-300" />
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/80 text-[#4F46E5] dark:bg-white/10 dark:text-violet-300">
+                    <Wallet className="h-4 w-4" />
                   </span>
                 </div>
                 <DashboardAmount value={totalBalance} className="text-slate-900 dark:text-zinc-50" />
@@ -1133,8 +1133,8 @@ function PremiumDashboard({
                 "flex min-h-[96px] flex-col items-start gap-3 p-4 text-left transition-transform hover:-translate-y-0.5",
               )}
             >
-              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/80 shadow-sm dark:bg-white/10">
-                <ArrowDownToLine className="h-5 w-5 text-[#047857] dark:text-[#34D399]" />
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/80 text-[#047857] shadow-sm dark:bg-white/10 dark:text-emerald-300">
+                <ArrowDownToLine className="h-5 w-5" />
               </span>
               <div className="min-w-0">
                 <div className="text-[13px] font-bold leading-snug text-emerald-950 dark:text-emerald-50">
@@ -1154,8 +1154,8 @@ function PremiumDashboard({
                 "flex min-h-[96px] flex-col items-start gap-3 p-4 text-left transition-transform hover:-translate-y-0.5",
               )}
             >
-              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/80 shadow-sm dark:bg-white/10">
-                <ArrowUpFromLine className="h-5 w-5 text-[#BE123C] dark:text-[#FB7185]" />
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/80 text-[#BE123C] shadow-sm dark:bg-white/10 dark:text-rose-300">
+                <ArrowUpFromLine className="h-5 w-5" />
               </span>
               <div className="min-w-0">
                 <div className="text-[13px] font-bold leading-snug text-rose-950 dark:text-rose-50">
@@ -1284,8 +1284,8 @@ function PremiumDashboard({
         <section className={cn(dashCardClass, DASH.transactions, "flex flex-col p-4 sm:p-5 xl:col-span-4")}>
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <span className="grid h-8 w-8 place-items-center rounded-xl bg-white/15">
-                <ArrowDownToLine className="h-4 w-4 text-teal-100" strokeWidth={2} />
+              <span className="grid h-8 w-8 place-items-center rounded-xl bg-white/15 text-teal-100">
+                <ArrowDownToLine className="h-4 w-4" strokeWidth={2} />
               </span>
               <h3 className="text-[12px] font-bold uppercase tracking-wider text-white">
                 Recent Transactions
@@ -1305,8 +1305,8 @@ function PremiumDashboard({
             )}
             {recentReceipts.map((payment) => (
               <div key={payment.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/15">
-                  <ArrowUpRight className="h-4 w-4 text-emerald-300" />
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/15 text-emerald-300">
+                  <ArrowUpRight className="h-4 w-4" />
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[13px] font-semibold text-white">{payment.name}</div>
@@ -1338,8 +1338,8 @@ function DashboardPanelHeading({
 }) {
   return (
     <div className="flex items-center gap-2.5">
-      <span className="grid h-8 w-8 place-items-center rounded-xl bg-white/75 shadow-sm shadow-slate-200/50 dark:bg-white/10 dark:shadow-none">
-        <Icon className="h-4 w-4 text-slate-700 dark:text-zinc-200" strokeWidth={2} />
+      <span className="grid h-8 w-8 place-items-center rounded-xl bg-white/75 text-slate-700 shadow-sm shadow-slate-200/50 dark:bg-white/10 dark:text-zinc-200 dark:shadow-none">
+        <Icon className="h-4 w-4" strokeWidth={2} />
       </span>
       <h3 className="text-[12px] font-bold uppercase tracking-wider text-slate-900 dark:text-zinc-100">
         {title}
@@ -5613,6 +5613,109 @@ export function FinanceModule() {
   return <FinanceOverview onOpenView={openView} />;
 }
 
+const financeReceiveActionClass =
+  "group relative flex min-h-[96px] items-center gap-4 overflow-hidden rounded-2xl border border-emerald-300/40 bg-gradient-to-br from-emerald-500 via-teal-600 to-teal-700 p-4 text-left shadow-[0_10px_30px_-12px_rgba(16,185,129,0.42)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_16px_40px_-12px_rgba(16,185,129,0.52)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/45 dark:border-emerald-500/25 dark:from-emerald-800/95 dark:via-teal-900 dark:to-zinc-950 dark:shadow-[0_12px_36px_-14px_rgba(16,185,129,0.32)] dark:hover:shadow-[0_18px_44px_-12px_rgba(16,185,129,0.4)] sm:p-5";
+
+const financeMakeActionClass =
+  "group relative flex min-h-[96px] items-center gap-4 overflow-hidden rounded-2xl border border-rose-300/40 bg-gradient-to-br from-rose-500 via-red-500 to-red-600 p-4 text-left shadow-[0_10px_30px_-12px_rgba(239,68,68,0.38)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_16px_40px_-12px_rgba(239,68,68,0.48)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/45 dark:border-rose-500/25 dark:from-rose-900/95 dark:via-red-950 dark:to-zinc-950 dark:shadow-[0_12px_36px_-14px_rgba(239,68,68,0.28)] dark:hover:shadow-[0_18px_44px_-12px_rgba(239,68,68,0.36)] sm:p-5";
+
+const financeActionIconShell =
+  "grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-white/20 text-white ring-1 ring-white/35 backdrop-blur-md transition-transform duration-300 group-hover:scale-[1.03] dark:bg-white/10 dark:ring-white/20";
+
+const financeReportTileShell =
+  "group relative flex min-h-[118px] min-w-0 flex-col items-start justify-between gap-3 overflow-hidden rounded-2xl border p-3.5 text-left backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/35 sm:min-h-[128px] sm:p-4 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_8px_26px_-10px_rgba(15,23,42,0.1)] hover:shadow-[0_12px_32px_-12px_rgba(15,23,42,0.14)] dark:shadow-[0_1px_0_rgba(255,255,255,0.05),0_10px_34px_-12px_rgba(0,0,0,0.55)] dark:hover:shadow-[0_14px_38px_-10px_rgba(0,0,0,0.62)]";
+
+const FINANCE_REPORT_TILES = [
+  {
+    k: "fees" as const,
+    l: "Fees Report",
+    d: "Collections & dues",
+    icon: GraduationCap,
+    surface:
+      "border-teal-200/55 bg-gradient-to-br from-teal-50/95 via-teal-50/35 to-white hover:border-teal-300/60 dark:border-teal-500/20 dark:from-teal-500/[0.14] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-teal-400/30",
+    iconWrap:
+      "bg-white/95 text-teal-700 ring-1 ring-teal-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-teal-300 dark:ring-teal-500/25",
+    arrowHover: "group-hover:text-teal-600 dark:group-hover:text-teal-400 dark:group-hover:ring-teal-500/30",
+  },
+  {
+    k: "daybook" as const,
+    l: "Day Book",
+    d: "Daily cash activity",
+    icon: BookOpen,
+    surface:
+      "border-sky-200/55 bg-gradient-to-br from-sky-50/95 via-sky-50/35 to-white hover:border-sky-300/60 dark:border-sky-500/20 dark:from-sky-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-sky-400/30",
+    iconWrap:
+      "bg-white/95 text-sky-700 ring-1 ring-sky-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-sky-300 dark:ring-sky-500/25",
+    arrowHover: "group-hover:text-sky-600 dark:group-hover:text-sky-400 dark:group-hover:ring-sky-500/30",
+  },
+  {
+    k: "analytics" as const,
+    l: "Analytics",
+    d: "Financial insights",
+    icon: ChartPie,
+    surface:
+      "border-amber-200/55 bg-gradient-to-br from-amber-50/95 via-amber-50/35 to-white hover:border-amber-300/60 dark:border-amber-500/20 dark:from-amber-500/[0.11] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-amber-400/30",
+    iconWrap:
+      "bg-white/95 text-amber-700 ring-1 ring-amber-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-amber-300 dark:ring-amber-500/25",
+    arrowHover: "group-hover:text-amber-600 dark:group-hover:text-amber-400 dark:group-hover:ring-amber-500/30",
+  },
+  {
+    k: "ledger" as const,
+    l: "Ledger",
+    d: "Account entries",
+    icon: ListTodo,
+    surface:
+      "border-indigo-200/55 bg-gradient-to-br from-indigo-50/95 via-indigo-50/35 to-white hover:border-indigo-300/60 dark:border-indigo-500/20 dark:from-indigo-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-indigo-400/30",
+    iconWrap:
+      "bg-white/95 text-indigo-600 ring-1 ring-indigo-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-indigo-300 dark:ring-indigo-500/25",
+    arrowHover: "group-hover:text-indigo-600 dark:group-hover:text-indigo-400 dark:group-hover:ring-indigo-500/30",
+  },
+  {
+    k: "pl" as const,
+    l: "Profit & Loss",
+    d: "Income vs expense",
+    icon: TrendingUp,
+    surface:
+      "border-emerald-200/55 bg-gradient-to-br from-emerald-50/95 via-emerald-50/35 to-white hover:border-emerald-300/60 dark:border-emerald-500/20 dark:from-emerald-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-emerald-400/30",
+    iconWrap:
+      "bg-white/95 text-emerald-700 ring-1 ring-emerald-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-emerald-300 dark:ring-emerald-500/25",
+    arrowHover: "group-hover:text-emerald-600 dark:group-hover:text-emerald-400 dark:group-hover:ring-emerald-500/30",
+  },
+  {
+    k: "balance" as const,
+    l: "Balance Sheet",
+    d: "Assets & liabilities",
+    icon: Scale,
+    surface:
+      "border-rose-200/55 bg-gradient-to-br from-rose-50/95 via-rose-50/35 to-white hover:border-rose-300/60 dark:border-rose-500/20 dark:from-rose-500/[0.11] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-rose-400/30",
+    iconWrap:
+      "bg-white/95 text-rose-600 ring-1 ring-rose-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-rose-300 dark:ring-rose-500/25",
+    arrowHover: "group-hover:text-rose-600 dark:group-hover:text-rose-400 dark:group-hover:ring-rose-500/30",
+  },
+  {
+    k: "reconciliation" as const,
+    l: "Bank Reconciliation",
+    d: "Match statement & books",
+    icon: Landmark,
+    surface:
+      "border-cyan-200/55 bg-gradient-to-br from-cyan-50/95 via-cyan-50/35 to-white hover:border-cyan-300/60 dark:border-cyan-500/20 dark:from-cyan-500/[0.11] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-cyan-400/30",
+    iconWrap:
+      "bg-white/95 text-cyan-700 ring-1 ring-cyan-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-cyan-300 dark:ring-cyan-500/25",
+    arrowHover: "group-hover:text-cyan-600 dark:group-hover:text-cyan-400 dark:group-hover:ring-cyan-500/30",
+  },
+  {
+    k: "salary" as const,
+    l: "Salary Report",
+    d: "Payroll & staff payables",
+    icon: Users,
+    surface:
+      "border-violet-200/55 bg-gradient-to-br from-violet-50/95 via-violet-50/35 to-white hover:border-violet-300/60 dark:border-violet-500/20 dark:from-violet-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-violet-400/30",
+    iconWrap:
+      "bg-white/95 text-violet-600 ring-1 ring-violet-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-violet-300 dark:ring-violet-500/25",
+    arrowHover: "group-hover:text-violet-600 dark:group-hover:text-violet-400 dark:group-hover:ring-violet-500/30",
+  },
+] as const;
+
 function FinanceOverview({
   onOpenView,
 }: {
@@ -6008,14 +6111,15 @@ function FinanceOverview({
           <button
             type="button"
             onClick={() => onOpenView("receive")}
-            className="group flex min-h-[96px] items-center gap-4 rounded-2xl border border-[#6EE7B7]/40 bg-gradient-to-br from-[#10B981] via-[#0D9488] to-[#0F766E] p-4 text-left shadow-[0_8px_24px_-10px_rgba(16,185,129,0.55)] transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_32px_-10px_rgba(16,185,129,0.65)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#10B981]/50 sm:p-5"
+            className={financeReceiveActionClass}
           >
-            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-white/20 ring-1 ring-white/30 backdrop-blur-sm">
+            <span aria-hidden className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-white/20 blur-2xl dark:bg-white/[0.07]" />
+            <span className={financeActionIconShell}>
               <ArrowDownToLine className="h-5 w-5 text-white" strokeWidth={2.25} />
             </span>
-            <div className="min-w-0">
-              <div className="text-[15px] font-bold text-white">Receive payment</div>
-              <p className="mt-0.5 text-[12px] text-white/80">Capture inbound fee receipts</p>
+            <div className="relative min-w-0">
+              <div className="text-[15px] font-bold tracking-tight text-white">Receive payment</div>
+              <p className="mt-0.5 text-[12px] text-white/85">Capture inbound fee receipts</p>
             </div>
           </button>
         )}
@@ -6023,103 +6127,30 @@ function FinanceOverview({
           <button
             type="button"
             onClick={() => onOpenView("make")}
-            className="group flex min-h-[96px] items-center gap-4 rounded-2xl border border-[#FCA5A5]/40 bg-gradient-to-br from-[#F87171] via-[#EF4444] to-[#DC2626] p-4 text-left shadow-[0_8px_24px_-10px_rgba(239,68,68,0.5)] transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_32px_-10px_rgba(239,68,68,0.6)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EF4444]/50 sm:p-5"
+            className={financeMakeActionClass}
           >
-            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-white/20 ring-1 ring-white/30 backdrop-blur-sm">
+            <span aria-hidden className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-white/20 blur-2xl dark:bg-white/[0.07]" />
+            <span className={financeActionIconShell}>
               <ArrowUpFromLine className="h-5 w-5 text-white" strokeWidth={2.25} />
             </span>
-            <div className="min-w-0">
-              <div className="text-[15px] font-bold text-white">Make payment</div>
-              <p className="mt-0.5 text-[12px] text-white/80">Pay salaries and suppliers</p>
+            <div className="relative min-w-0">
+              <div className="text-[15px] font-bold tracking-tight text-white">Make payment</div>
+              <p className="mt-0.5 text-[12px] text-white/85">Pay salaries and suppliers</p>
             </div>
           </button>
         )}
       </div>
 
       <section className={cn(glassCardClass, "p-4 sm:p-5")}>
-        <h3 className="text-[15px] font-bold text-slate-900 dark:text-zinc-50">Reports</h3>
+        <h3 className="text-[15px] font-bold tracking-tight text-slate-900 dark:text-zinc-50">
+          Reports
+        </h3>
         <p className="mt-0.5 text-[12px] text-slate-500 dark:text-zinc-400">
           Financial statements and analytics
         </p>
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-3.5 xl:grid-cols-4">
-          {(
-            [
-              {
-                k: "fees" as const,
-                l: "Fees Report",
-                d: "Collections & dues",
-                icon: GraduationCap,
-                surface:
-                  "border-[#99F6E4]/50 bg-gradient-to-br from-[#CCFBF1]/90 via-[#F0FDFA] to-white dark:from-[#0F766E]/20 dark:via-zinc-900 dark:to-zinc-900",
-                iconWrap: "bg-white/95 text-[#0F766E] ring-1 ring-[#0F766E]/10",
-              },
-              {
-                k: "daybook" as const,
-                l: "Day Book",
-                d: "Daily cash activity",
-                icon: BookOpen,
-                surface:
-                  "border-[#BAE6FD]/50 bg-gradient-to-br from-[#E0F2FE]/90 via-[#F0F9FF] to-white dark:from-sky-950/30 dark:via-zinc-900 dark:to-zinc-900",
-                iconWrap: "bg-white/95 text-sky-700 ring-1 ring-sky-200/80",
-              },
-              {
-                k: "analytics" as const,
-                l: "Analytics",
-                d: "Financial insights",
-                icon: ChartPie,
-                surface:
-                  "border-[#FDE68A]/55 bg-gradient-to-br from-[#FEF3C7]/90 via-[#FFFBEB] to-white dark:from-amber-950/25 dark:via-zinc-900 dark:to-zinc-900",
-                iconWrap: "bg-white/95 text-amber-700 ring-1 ring-amber-200/80",
-              },
-              {
-                k: "ledger" as const,
-                l: "Ledger",
-                d: "Account entries",
-                icon: ListTodo,
-                surface:
-                  "border-[#C7D2FE]/50 bg-gradient-to-br from-[#E0E7FF]/90 via-[#EEF2FF] to-white dark:from-indigo-950/25 dark:via-zinc-900 dark:to-zinc-900",
-                iconWrap: "bg-white/95 text-indigo-600 ring-1 ring-indigo-200/80",
-              },
-              {
-                k: "pl" as const,
-                l: "Profit & Loss",
-                d: "Income vs expense",
-                icon: TrendingUp,
-                surface:
-                  "border-[#BBF7D0]/50 bg-gradient-to-br from-[#DCFCE7]/90 via-[#F0FDF4] to-white dark:from-emerald-950/25 dark:via-zinc-900 dark:to-zinc-900",
-                iconWrap: "bg-white/95 text-emerald-700 ring-1 ring-emerald-200/80",
-              },
-              {
-                k: "balance" as const,
-                l: "Balance Sheet",
-                d: "Assets & liabilities",
-                icon: Scale,
-                surface:
-                  "border-[#FBCFE8]/50 bg-gradient-to-br from-[#FCE7F3]/90 via-[#FDF2F8] to-white dark:from-rose-950/25 dark:via-zinc-900 dark:to-zinc-900",
-                iconWrap: "bg-white/95 text-rose-600 ring-1 ring-rose-200/80",
-              },
-              {
-                k: "reconciliation" as const,
-                l: "Bank Reconciliation",
-                d: "Match statement & books",
-                icon: Landmark,
-                surface:
-                  "border-[#A5F3FC]/50 bg-gradient-to-br from-[#CFFAFE]/90 via-[#ECFEFF] to-white dark:from-cyan-950/25 dark:via-zinc-900 dark:to-zinc-900",
-                iconWrap: "bg-white/95 text-cyan-700 ring-1 ring-cyan-200/80",
-              },
-              {
-                k: "salary" as const,
-                l: "Salary Report",
-                d: "Payroll & staff payables",
-                icon: Users,
-                surface:
-                  "border-[#DDD6FE]/50 bg-gradient-to-br from-[#EDE9FE]/90 via-[#F5F3FF] to-white dark:from-violet-950/25 dark:via-zinc-900 dark:to-zinc-900",
-                iconWrap: "bg-white/95 text-violet-600 ring-1 ring-violet-200/80",
-              },
-            ] as const
-          )
-            .filter((item) => sessionCanAccessFinanceView(session, item.k))
-            .map((item, index, items) => {
+          {FINANCE_REPORT_TILES.filter((item) => sessionCanAccessFinanceView(session, item.k)).map(
+            (item, index, items) => {
               const Icon = item.icon;
               return (
                 <button
@@ -6127,37 +6158,47 @@ function FinanceOverview({
                   type="button"
                   onClick={() => onOpenView(item.k)}
                   className={cn(
-                    "group relative flex min-h-[118px] min-w-0 flex-col items-start justify-between gap-3 overflow-hidden rounded-2xl border p-3.5 text-left shadow-[0_2px_14px_-6px_rgba(15,23,42,0.12)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_28px_-10px_rgba(15,23,42,0.18)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]/35 sm:min-h-[128px] sm:p-4",
+                    financeReportTileShell,
                     item.surface,
                     items.length % 2 === 1 &&
                       index === items.length - 1 &&
                       "col-span-2 sm:col-span-1",
                   )}
                 >
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-x-3 top-0 h-px bg-gradient-to-r from-transparent via-white/90 to-transparent dark:via-white/10"
+                  />
                   <div className="flex w-full items-start justify-between gap-2">
                     <span
                       className={cn(
-                        "grid h-9 w-9 shrink-0 place-items-center rounded-xl shadow-sm sm:h-10 sm:w-10",
+                        "grid h-9 w-9 shrink-0 place-items-center rounded-xl sm:h-10 sm:w-10",
                         item.iconWrap,
                       )}
                     >
                       <Icon className="h-4 w-4 sm:h-[18px] sm:w-[18px]" strokeWidth={2.25} />
                     </span>
-                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/70 text-slate-400 ring-1 ring-black/[0.04] transition-all group-hover:bg-white group-hover:text-[#0F766E] group-hover:ring-[#0F766E]/15 dark:bg-zinc-800/80 dark:ring-white/10">
+                    <span
+                      className={cn(
+                        "grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/80 text-slate-400 ring-1 ring-black/[0.05] transition-all duration-300 group-hover:bg-white dark:bg-zinc-900/90 dark:text-zinc-500 dark:ring-white/10",
+                        item.arrowHover,
+                      )}
+                    >
                       <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:-translate-y-px group-hover:translate-x-px" />
                     </span>
                   </div>
-                  <div className="min-w-0">
+                  <div className="relative min-w-0">
                     <div className="text-[13px] font-bold leading-snug tracking-tight text-slate-900 dark:text-zinc-50 sm:text-[14px]">
                       {item.l}
                     </div>
-                    <p className="mt-1 text-[11px] leading-snug text-slate-500/90 dark:text-zinc-400">
+                    <p className="mt-1 text-[11px] leading-snug text-slate-500 dark:text-zinc-400">
                       {item.d}
                     </p>
                   </div>
                 </button>
               );
-            })}
+            },
+          )}
         </div>
       </section>
 
@@ -6165,8 +6206,10 @@ function FinanceOverview({
         <section className={cn(glassCardClass, "col-span-12 flex flex-col p-5 lg:col-span-4")}>
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h3 className="text-[15px] font-bold text-slate-900">Income</h3>
-              <p className="mt-0.5 text-[12px] text-slate-500">Category share</p>
+              <h3 className="text-[15px] font-bold tracking-tight text-slate-900 dark:text-zinc-50">
+                Income
+              </h3>
+              <p className="mt-0.5 text-[12px] text-slate-500 dark:text-zinc-400">Category share</p>
             </div>
             <div className="w-[140px] shrink-0">
               <DashboardPeriodFilter
@@ -6179,7 +6222,12 @@ function FinanceOverview({
           </div>
           <div className="mt-4 space-y-3">
             {incomeSegments.length === 0 ? (
-              <div className={cn(glassInsetClass, "px-3 py-6 text-center text-[12px] text-slate-500")}>
+              <div
+                className={cn(
+                  glassInsetClass,
+                  "px-3 py-6 text-center text-[12px] text-slate-500 dark:text-zinc-400",
+                )}
+              >
                 No income recorded for this period
               </div>
             ) : (
@@ -6188,12 +6236,12 @@ function FinanceOverview({
               return (
                 <div key={segment.label}>
                   <div className="mb-1.5 flex items-center justify-between gap-2 text-[12px]">
-                    <span className="font-medium text-slate-700">{segment.label}</span>
-                    <span className="font-mono text-slate-500">{pct}%</span>
+                    <span className="font-medium text-slate-700 dark:text-zinc-300">{segment.label}</span>
+                    <span className="font-mono text-slate-500 dark:text-zinc-400">{pct}%</span>
                   </div>
-                  <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
+                  <div className="h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-zinc-800">
                     <div
-                      className="h-full rounded-full bg-[#0F766E]"
+                      className="h-full rounded-full bg-[#0F766E] dark:bg-teal-500"
                       style={{ width: `${pct}%` }}
                     />
                   </div>
@@ -6207,17 +6255,19 @@ function FinanceOverview({
         <section className={cn(glassCardClass, "col-span-12 flex flex-col p-5 lg:col-span-4")}>
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h3 className="text-[15px] font-bold text-slate-900">Expense</h3>
-              <p className="mt-0.5 text-[12px] text-slate-500">Operating outflow</p>
+              <h3 className="text-[15px] font-bold tracking-tight text-slate-900 dark:text-zinc-50">
+                Expense
+              </h3>
+              <p className="mt-0.5 text-[12px] text-slate-500 dark:text-zinc-400">Operating outflow</p>
             </div>
-            <span className="inline-flex items-center gap-1 rounded-full bg-white/60 px-2.5 py-1 text-[10px] font-semibold text-slate-600">
+            <span className="inline-flex items-center gap-1 rounded-full border border-white/60 bg-white/60 px-2.5 py-1 text-[10px] font-semibold text-slate-600 dark:border-white/10 dark:bg-zinc-900/60 dark:text-zinc-400">
               <Filter className="h-3 w-3" />
               Filter
             </span>
           </div>
           <ChartContainer config={expenseChartConfig} className="mx-auto mt-2 h-[180px] w-full max-w-[220px]">
             {expenseSegments.length === 0 ? (
-              <div className="flex h-full items-center justify-center text-center text-[12px] text-slate-500">
+              <div className="flex h-full items-center justify-center text-center text-[12px] text-slate-500 dark:text-zinc-400">
                 No expenses recorded yet
               </div>
             ) : (
@@ -6250,14 +6300,21 @@ function FinanceOverview({
           </ChartContainer>
           <div className="mt-2 grid grid-cols-2 gap-2">
             {expenseSegments.length === 0 ? (
-              <div className={cn(glassInsetClass, "col-span-2 px-2.5 py-3 text-center text-[11px] text-slate-500")}>
+              <div
+                className={cn(
+                  glassInsetClass,
+                  "col-span-2 px-2.5 py-3 text-center text-[11px] text-slate-500 dark:text-zinc-400",
+                )}
+              >
                 Make a payment to see outflow here
               </div>
             ) : (
               expenseSegments.slice(0, 4).map((segment) => (
               <div key={segment.label} className={cn(glassInsetClass, "px-2.5 py-2")}>
-                <div className="truncate text-[10px] font-medium text-slate-500">{segment.label}</div>
-                <div className="mt-0.5 truncate font-mono text-[11px] font-semibold text-slate-900">
+                <div className="truncate text-[10px] font-medium text-slate-500 dark:text-zinc-400">
+                  {segment.label}
+                </div>
+                <div className="mt-0.5 truncate font-mono text-[11px] font-semibold text-slate-900 dark:text-zinc-100">
                   {formatInr(segment.value)}
                 </div>
               </div>
@@ -6267,13 +6324,20 @@ function FinanceOverview({
         </section>
 
         <section className={cn(glassCardClass, "col-span-12 flex flex-col p-5 lg:col-span-4")}>
-          <h3 className="text-[15px] font-bold text-slate-900">Overdue Bills</h3>
-          <p className="mt-0.5 text-[12px] text-slate-500">
+          <h3 className="text-[15px] font-bold tracking-tight text-slate-900 dark:text-zinc-50">
+            Overdue Bills
+          </h3>
+          <p className="mt-0.5 text-[12px] text-slate-500 dark:text-zinc-400">
             {overdueBills.length} open obligation{overdueBills.length === 1 ? "" : "s"}
           </p>
           <div className="mt-4 flex-1 space-y-2.5">
             {overdueBills.length === 0 ? (
-              <div className={cn(glassInsetClass, "px-3.5 py-6 text-center text-[12px] text-slate-500")}>
+              <div
+                className={cn(
+                  glassInsetClass,
+                  "px-3.5 py-6 text-center text-[12px] text-slate-500 dark:text-zinc-400",
+                )}
+              >
                 No open obligations
               </div>
             ) : (
@@ -6284,14 +6348,14 @@ function FinanceOverview({
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="truncate text-[13px] font-semibold text-slate-900">
+                    <div className="truncate text-[13px] font-semibold text-slate-900 dark:text-zinc-50">
                       {index + 1}. {bill.name}
                     </div>
-                    <div className="mt-0.5 text-[11px] text-slate-500">
+                    <div className="mt-0.5 text-[11px] text-slate-500 dark:text-zinc-400">
                       Due {bill.due} · {bill.type}
                     </div>
                   </div>
-                  <div className="shrink-0 font-mono text-[13px] font-semibold text-slate-900">
+                  <div className="shrink-0 font-mono text-[13px] font-semibold text-slate-900 dark:text-zinc-50">
                     {formatInr(bill.amount)}
                   </div>
                 </div>
@@ -6299,7 +6363,7 @@ function FinanceOverview({
                   <button
                     type="button"
                     onClick={() => payOverdueBill(bill)}
-                    className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-full bg-[#0F766E] px-3 text-[11.5px] font-semibold text-white transition-colors hover:bg-[#0D9488]"
+                    className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-full bg-[#0F766E] px-3 text-[11.5px] font-semibold text-white transition-colors hover:bg-[#0D9488] dark:bg-teal-600 dark:hover:bg-teal-500"
                   >
                     <HandCoins className="h-3.5 w-3.5" />
                     Pay
@@ -6307,7 +6371,7 @@ function FinanceOverview({
                   <button
                     type="button"
                     onClick={() => shareOverdueBill(bill)}
-                    className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 text-[11.5px] font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+                    className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 text-[11.5px] font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-white/20 dark:hover:bg-zinc-800"
                   >
                     <Share2 className="h-3.5 w-3.5" />
                     Share

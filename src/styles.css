@@ -674,6 +674,14 @@
   color: #fde68a !important;
   border-color: rgba(245, 158, 11, 0.35);
 }
+.dark .bg-orange-100 {
+  background-color: rgba(146, 64, 14, 0.35) !important;
+  color: #fdba74 !important;
+}
+.dark .bg-amber-100 {
+  background-color: rgba(146, 64, 14, 0.3) !important;
+  color: #fcd34d !important;
+}
 .dark .bg-\[\#FEF3C7\] .text-black,
 .dark .bg-\[\#FEF3C7\] .text-\[\#B45309\],
 .dark .bg-\[\#FEF3C7\] .text-amber-700 {
@@ -1164,14 +1172,24 @@ html.school-brand svg.lucide {
   color: var(--school-icon, var(--school-primary));
 }
 html.school-brand [class~="text-white"] svg.lucide,
+html.school-brand svg.lucide[class~="text-white"],
 html.school-brand [class~="bg-[#0F766E]"] svg.lucide,
 html.school-brand [class~="hover:text-white"]:hover svg.lucide,
 html.school-brand [class~="hover:bg-[#0F766E]"]:hover svg.lucide,
-html.school-brand.dark [class~="dark:text-white"] svg.lucide,
-html.school-brand.dark [class~="dark:bg-[#0F766E]"] svg.lucide,
 html.school-brand [class*="bg-gradient-to-"] svg.lucide,
 html.school-brand [role="dialog"] button svg.lucide {
   color: currentColor;
+}
+html.dark.school-brand [class~="dark:text-white"] svg.lucide,
+html.dark.school-brand [class~="dark:bg-[#0F766E]"] svg.lucide {
+  color: #ffffff !important;
+}
+html.dark.school-brand [class~="dark:text-[#5EEAD4]"] svg.lucide {
+  color: #5eead4 !important;
+}
+/* Dashboard cards: inherit icon color from parent wrappers (avoids brand teal override) */
+html.dark.school-brand .dash-card svg.lucide {
+  color: inherit !important;
 }
 html.school-brand [role="option"][data-state="checked"],
 html.school-brand [role="option"][data-highlighted],

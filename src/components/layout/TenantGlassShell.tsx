@@ -520,12 +520,15 @@ export function TenantMacDock({
                     className={cn(
                       "grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/70 dark:border-white/10 xl:h-11 xl:w-11",
                       active
-                        ? "bg-white text-[#0F766E] dark:bg-[#0F766E] dark:text-white"
+                        ? "bg-white text-[#0F766E] shadow-sm ring-1 ring-[#0F766E]/15 dark:bg-white/12 dark:text-[#5EEAD4] dark:ring-[#2DD4BF]/25"
                         : "bg-white/70 text-slate-700 dark:bg-white/5 dark:text-zinc-300",
                     )}
                   >
                     <Icon
-                      className="h-5 w-5 xl:h-6 xl:w-6"
+                      className={cn(
+                        "h-5 w-5 xl:h-6 xl:w-6",
+                        active && "dark:text-[#5EEAD4]",
+                      )}
                       strokeWidth={active ? 2.35 : 2}
                     />
                   </span>
@@ -573,7 +576,9 @@ export function TenantMacDock({
                     <Icon
                       className={cn(
                         "h-6 w-6 xl:h-7 xl:w-7",
-                        active ? "text-[#0F766E]" : "text-slate-700",
+                        active
+                          ? "text-[#0F766E] dark:text-[#5EEAD4]"
+                          : "text-slate-700 dark:text-zinc-300",
                       )}
                       strokeWidth={active ? 2.35 : 2}
                     />
