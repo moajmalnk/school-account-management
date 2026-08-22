@@ -351,7 +351,7 @@ export function ImageCropDialog({
                 minZoom={minZoom}
                 maxZoom={MAX_ZOOM}
                 aspect={aspect}
-                cropSize={cropSize}
+                cropSize={cropSize ?? undefined}
                 onCropChange={setCrop}
                 onZoomChange={setZoom}
                 onCropComplete={onCropComplete}

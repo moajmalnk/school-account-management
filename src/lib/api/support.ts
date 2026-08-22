@@ -50,6 +50,7 @@ export type SupportMessage = {
   body: string;
   attachments?: SupportAttachment[];
   createdAt: string;
+  updatedAt?: string | null;
 };
 
 export type SupportTicketStatus = "open" | "answered" | "closed";
@@ -177,6 +178,41 @@ export async function reopenSupportTicket(ticketId: string): Promise<SupportTick
   return data.ticket;
 }
 
+export async function editSupportMessage(input: {
+  ticketId: string;
+  messageId: string;
+  body: string;
+}): Promise<SupportTicket> {
+  const data = await apiRequest<{ ticket: SupportTicket }>("/api/support/tickets.php", {
+    method: "POST",
+    body: {
+      action: "editMessage",
+      ticketId: input.ticketId,
+      messageId: input.messageId,
+      body: input.body,
+    },
+  });
+  return data.ticket;
+}
+
+export async function deleteSupportMessage(input: {
+  ticketId: string;
+  messageId: string;
+}): Promise<SupportTicket> {
+  const data = await apiRequest<{ ticket: SupportTicket }>("/api/support/tickets.php", {
+    method: "POST",
+    body: {
+      action: "deleteMessage",
+      ticketId: input.ticketId,
+      messageId: input.messageId,
+    },
+  });
+  return data.ticket;
+}
+
+/** WhatsApp-style edit window for school-sent messages. */
+export const SUPPORT_MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
+
 export type SuperAdminSupportDesk = {
   settings: SupportSettings;
   faqs: SupportFaq[];
@@ -231,7 +267,7 @@ export async function uploadSupportAttachment(input: {
     method: "POST",
     body: form,
   });
-  const path = decodeURIComponent(String(data.path || data.url || ""));
+  const path = decodeURIComponent(String(data.path || ""));
   return {
     id: data.id,
     kind: data.kind,

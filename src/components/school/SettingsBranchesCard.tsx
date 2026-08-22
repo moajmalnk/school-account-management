@@ -19,6 +19,7 @@ import {
   type CampusBranch,
 } from "@/lib/tenant-store";
 import { cn, glassCardClass } from "@/lib/utils";
+import { SettingsResponsiveCardHeader } from "@/components/school/SettingsMobileNav";
 
 const workspacePanelClass = cn(glassCardClass, "rounded-2xl");
 
@@ -33,22 +34,25 @@ function CardHeader({
   actionLabel?: string;
   onAction?: () => void;
 }) {
+  const action =
+    actionLabel && onAction ? (
+      <button
+        type="button"
+        onClick={onAction}
+        className="inline-flex h-9 shrink-0 items-center justify-center rounded-full bg-[#0F766E] px-3.5 text-[12px] font-semibold text-white transition-colors hover:bg-[#0D9488]"
+      >
+        {actionLabel}
+      </button>
+    ) : undefined;
+
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <div className="text-title">{title}</div>
-        <p className="mt-1 text-[11.5px] text-black/55 dark:text-zinc-400">{subtitle}</p>
-      </div>
-      {actionLabel && onAction ? (
-        <button
-          type="button"
-          onClick={onAction}
-          className="inline-flex h-9 shrink-0 items-center justify-center rounded-full bg-[#0F766E] px-3.5 text-[12px] font-semibold text-white transition-colors hover:bg-[#0D9488]"
-        >
-          {actionLabel}
-        </button>
-      ) : null}
-    </div>
+    <SettingsResponsiveCardHeader
+      title={title}
+      subtitle={subtitle}
+      action={action}
+      titleClassName="text-title font-bold"
+      subtitleClassName="text-[11.5px]"
+    />
   );
 }
 

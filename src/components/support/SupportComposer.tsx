@@ -126,6 +126,9 @@ export function SupportComposer({
   busy = false,
   ticketId,
   autoFocus = false,
+  initialDraft = "",
+  editingMessageId = null,
+  onCancelEdit,
   onSend,
 }: {
   placeholder?: string;
@@ -133,9 +136,12 @@ export function SupportComposer({
   busy?: boolean;
   ticketId?: string;
   autoFocus?: boolean;
+  initialDraft?: string;
+  editingMessageId?: string | null;
+  onCancelEdit?: () => void;
   onSend: (input: { body: string; attachments: SupportAttachment[] }) => Promise<void>;
 }) {
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(initialDraft);
   const [pending, setPending] = useState<PendingAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -326,6 +332,7 @@ export function SupportComposer({
 
   const sending = busy || uploading;
   const canSend = !disabled && !sending && !recording && (draft.trim() !== "" || pending.length > 0);
+  const showSend = editingMessageId ? draft.trim() !== "" : canSend;
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const fitInput = () => {
@@ -336,10 +343,29 @@ export function SupportComposer({
   };
 
   useEffect(() => {
+    setDraft(initialDraft);
+  }, [initialDraft, editingMessageId]);
+
+  useEffect(() => {
     fitInput();
   }, [draft]);
 
   const submit = async () => {
+    if (editingMessageId) {
+      if (!draft.trim() || disabled || sending || recording) return;
+      setUploading(true);
+      try {
+        await onSend({ body: draft.trim(), attachments: [] });
+        setDraft("");
+        onCancelEdit?.();
+      } catch (err) {
+        const msg = err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Could not save";
+        toast.error("Could not save", { description: msg });
+      } finally {
+        setUploading(false);
+      }
+      return;
+    }
     if (!canSend) return;
     setUploading(true);
     try {
@@ -367,6 +393,7 @@ export function SupportComposer({
       });
       setPending([]);
       setDraft("");
+      onCancelEdit?.();
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Could not send";
       toast.error("Could not send", { description: msg });
@@ -391,6 +418,22 @@ export function SupportComposer({
         onDrop={onDrop}
         onPaste={onPaste}
       >
+        {editingMessageId ? (
+          <div className="flex items-center justify-between gap-2 rounded-xl bg-[#F0FDFA]/80 px-3 py-2 text-[12px] dark:bg-teal-950/40">
+            <span className="font-medium text-[#0F766E] dark:text-teal-300">Editing message</span>
+            <button
+              type="button"
+              onClick={() => {
+                setDraft("");
+                setPending([]);
+                onCancelEdit?.();
+              }}
+              className="font-semibold text-black/55 hover:text-black dark:text-zinc-400 dark:hover:text-zinc-200"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : null}
         {pending.length ? (
           <div className="flex flex-wrap gap-2 px-0.5">
             {pending.map((item) => (
@@ -415,7 +458,7 @@ export function SupportComposer({
                       <span className="block truncate text-[12px] font-medium text-black dark:text-zinc-100">
                         {item.name}
                       </span>
-                      <span className="block text-[10px] text-black/45">{formatSupportBytes(item.size)}</span>
+                      <span className="block text-[10px] text-black/45 dark:text-zinc-400">{formatSupportBytes(item.size)}</span>
                     </span>
                   </div>
                 )}
@@ -436,7 +479,9 @@ export function SupportComposer({
           <div
             className={cn(
               "flex min-h-11 min-w-0 flex-1 items-end rounded-[26px] border bg-white py-0.5 pl-0.5 pr-2 shadow-sm dark:bg-zinc-950",
-              dragOver ? "border-[#0F766E] bg-[#F0FDFA]" : "border-black/10 dark:border-white/10",
+              dragOver
+                ? "border-[#0F766E] bg-[#F0FDFA] dark:bg-teal-950/30"
+                : "border-black/10 dark:border-white/10",
             )}
           >
             {recording ? (
@@ -450,7 +495,7 @@ export function SupportComposer({
                 </span>
                 <button
                   type="button"
-                  className="text-[12px] font-semibold text-black/45"
+                  className="text-[12px] font-semibold text-black/45 dark:text-zinc-400"
                   onClick={() => stopRecording(true)}
                 >
                   Cancel
@@ -461,9 +506,9 @@ export function SupportComposer({
                 <ToolHint label="Photo or file">
                   <button
                     type="button"
-                    disabled={disabled || sending}
+                    disabled={disabled || sending || Boolean(editingMessageId)}
                     onClick={() => fileRef.current?.click()}
-                    className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-black/40 hover:bg-black/5 hover:text-[#0F766E] disabled:opacity-40"
+                    className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-black/40 hover:bg-black/5 hover:text-[#0F766E] disabled:opacity-40 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-teal-300"
                     aria-label="Attach"
                   >
                     <Paperclip className="h-[18px] w-[18px]" />
@@ -473,8 +518,8 @@ export function SupportComposer({
                   <PopoverTrigger asChild>
                     <button
                       type="button"
-                      disabled={disabled || sending || shotBusy}
-                      className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-black/40 hover:bg-black/5 hover:text-[#0F766E] disabled:opacity-40"
+                      disabled={disabled || sending || shotBusy || Boolean(editingMessageId)}
+                      className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-black/40 hover:bg-black/5 hover:text-[#0F766E] disabled:opacity-40 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-teal-300"
                       aria-label="Photo"
                     >
                       {shotBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-[18px] w-[18px]" />}
@@ -483,7 +528,7 @@ export function SupportComposer({
                   <PopoverContent align="start" className="w-52 p-1.5">
                     <button
                       type="button"
-                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] hover:bg-black/5"
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] hover:bg-black/5 dark:hover:bg-white/10"
                       onClick={() => void captureScreenshot()}
                     >
                       <Monitor className="h-4 w-4 text-[#0F766E]" />
@@ -491,7 +536,7 @@ export function SupportComposer({
                     </button>
                     <button
                       type="button"
-                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] hover:bg-black/5"
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] hover:bg-black/5 dark:hover:bg-white/10"
                       onClick={() => {
                         setShotOpen(false);
                         imageRef.current?.click();
@@ -516,7 +561,7 @@ export function SupportComposer({
                   }}
                   placeholder={placeholder}
                   disabled={disabled || sending}
-                  className="max-h-28 min-h-10 min-w-0 flex-1 resize-none bg-transparent py-2.5 text-[15px] leading-5 text-black outline-none placeholder:text-black/35 disabled:opacity-50 dark:text-zinc-100"
+                  className="max-h-28 min-h-10 min-w-0 flex-1 resize-none bg-transparent py-2.5 text-[15px] leading-5 text-black outline-none placeholder:text-black/35 disabled:opacity-50 dark:text-zinc-100 dark:placeholder:text-zinc-500"
                 />
               </>
             )}
@@ -530,12 +575,12 @@ export function SupportComposer({
             >
               <Square className="h-3.5 w-3.5 fill-current" />
             </button>
-          ) : canSend ? (
+          ) : showSend ? (
             <button
               type="submit"
-              disabled={!canSend}
+              disabled={!showSend}
               className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#0F766E] text-white shadow-sm hover:bg-[#0D9488] disabled:opacity-40"
-              aria-label="Send"
+              aria-label={editingMessageId ? "Save edit" : "Send"}
             >
               {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </button>

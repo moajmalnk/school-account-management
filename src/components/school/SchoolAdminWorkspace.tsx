@@ -233,6 +233,12 @@ import {
   isRecordDeleted,
 } from "@/components/school/ProfileAccountActions";
 import { SettingsUsersCard } from "@/components/school/SettingsUsersCard";
+import {
+  SettingsMobileNavProvider,
+  SettingsMobileBackButton,
+  SettingsResponsiveCardHeader,
+  useSettingsMobileBack,
+} from "@/components/school/SettingsMobileNav";
 import { SettingsBranchesCard } from "@/components/school/SettingsBranchesCard";
 import { CustomerSupportCard } from "@/components/school/CustomerSupportCard";
 import { DefaultSchoolSeal } from "@/components/school/DefaultSchoolSeal";
@@ -287,7 +293,6 @@ import {
   downloadTablePdf,
   findReceiptStudent,
   receiptBrandingFromSchool,
-  showReceiptPdf,
 } from "@/lib/finance-export";
 import {
   apiDeleteClass,
@@ -423,7 +428,7 @@ function DashboardPeriodFilter({
         </SelectContent>
       </Select>
       {period === "custom" && (
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <DatePicker
             value={customRange.from}
             onChange={(from) => onCustomRangeChange({ ...customRange, from })}
@@ -492,6 +497,12 @@ const directoryToolbarBtn = cn(
 
 const mobilePrimaryBtn =
   "inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-gradient-to-r from-teal-700 to-teal-800 px-4 text-[12.5px] font-semibold text-white shadow-md shadow-teal-200/40 transition-all duration-200 hover:opacity-95";
+
+const admitFormInputClass =
+  "rounded-lg border-[#E5E5E5] bg-white text-[13px] text-slate-900 shadow-none focus-visible:ring-2 focus-visible:ring-[#0F766E] focus-visible:ring-offset-0 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-500";
+
+const admitFormOutlineBtnClass =
+  "dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800";
 
 const directoryToolbarRow =
   "flex w-full min-w-0 items-center gap-1.5 sm:w-auto sm:flex-wrap sm:justify-end sm:gap-2";
@@ -678,11 +689,11 @@ function IncomeExpenseSummaryTiles({
   compact?: boolean;
 }) {
   const tileClass = compact
-    ? "flex min-h-[92px] min-w-0 flex-col items-center justify-center overflow-hidden rounded-2xl px-2.5 py-3 text-center sm:min-h-[96px] sm:px-3"
-    : "flex min-h-[104px] min-w-0 flex-col items-center justify-center overflow-hidden rounded-2xl px-2.5 py-3.5 text-center sm:min-h-[112px] sm:px-3.5 sm:py-4";
+    ? "flex min-h-[84px] min-w-0 flex-col items-center justify-center overflow-hidden rounded-2xl px-2 py-2.5 text-center sm:min-h-[96px] sm:px-3 sm:py-3"
+    : "flex min-h-[96px] min-w-0 flex-col items-center justify-center overflow-hidden rounded-2xl px-2 py-3 text-center sm:min-h-[112px] sm:px-3.5 sm:py-4";
 
   return (
-    <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
+    <div className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3">
       <div className={cn(dashIncomeTileClass, tileClass)}>
         <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-100">
           Total Income
@@ -1133,7 +1144,7 @@ function PremiumDashboard({
           <section className={cn(dashCardClass, DASH.finance, "flex min-w-0 flex-col p-4 sm:p-5")}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <DashboardPanelHeading icon={Wallet} title="Financial Summary" />
-              <div className="w-full max-w-[148px] shrink-0 sm:w-[148px]">
+              <div className="w-full min-w-0 sm:w-auto sm:max-w-[11rem] sm:shrink-0">
                 <DashboardPeriodFilter
                   period={period}
                   onPeriodChange={setPeriod}
@@ -1604,20 +1615,22 @@ export function SchoolDashboard() {
     schoolDetails,
   } = useTenantStore();
   const schoolName = schoolDetails.name || "School";
+  const [viewingPayment, setViewingPayment] = useState<Payment | null>(null);
+  const [previewAttachment, setPreviewAttachment] = useState<PaymentAttachment | null>(null);
 
-  const showRecentReceipt = useCallback(
+  const printRecentReceipt = useCallback(
     async (payment: Payment) => {
       try {
-        await showReceiptPdf(
+        await downloadReceiptPdf(
           payment,
           schoolName,
           academicYear,
           receiptBrandingFromSchool(schoolDetails, findReceiptStudent(students, payment)),
+          "print",
         );
+        toast.success("Print dialog opened");
       } catch {
-        toast.error(`Could not show receipt ${payment.id}`, {
-          description: "Allow pop-ups for this site and try again",
-        });
+        toast.error(`Could not print receipt ${payment.id}`);
       }
     },
     [academicYear, schoolDetails, schoolName, students],
@@ -1732,8 +1745,23 @@ export function SchoolDashboard() {
         onViewStudents={() => navigate({ to: "/tenant/students" })}
         onAdmitStudent={() => navigate({ to: "/tenant/students/admit" })}
         onViewStaff={() => navigate({ to: "/tenant/staff" })}
-        onShowReceipt={(payment) => void showRecentReceipt(payment)}
+        onShowReceipt={setViewingPayment}
         onDownloadReceipt={(payment) => void downloadRecentReceipt(payment)}
+      />
+      <ReceiptDetailsDialog
+        payment={viewingPayment}
+        academicYear={academicYear}
+        onClose={() => setViewingPayment(null)}
+        onPrint={(payment) => void printRecentReceipt(payment)}
+        onDownload={(payment) => void downloadRecentReceipt(payment)}
+        onPreviewAttachment={setPreviewAttachment}
+      />
+      <AttachmentPreviewDialog
+        file={previewAttachment}
+        open={Boolean(previewAttachment)}
+        onOpenChange={(open) => {
+          if (!open) setPreviewAttachment(null);
+        }}
       />
     </div>
   );
@@ -2566,15 +2594,15 @@ export function AdmitStudentPage() {
       <section className={cn(glassCardClass, "w-full p-5 md:p-6")}>
         <form onSubmit={handleAdmit} className="space-y-4">
           <div>
-            <div className="text-[17px] font-bold leading-tight tracking-tight text-slate-900 sm:text-title">
+            <div className="text-[17px] font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50 sm:text-title">
               Admit New Student
             </div>
-            <p className="mt-1 text-[12px] text-slate-500">
+            <p className="mt-1 text-[12px] text-slate-500 dark:text-zinc-400">
               Fill school details, then send a collection link so parents can complete the rest.
             </p>
           </div>
 
-          <div className="rounded-lg border border-[#CCFBF1] bg-[#F0FDFA]/70 px-3.5 py-3 text-[12px] text-slate-600">
+          <div className="rounded-lg border border-[#CCFBF1] bg-[#F0FDFA]/70 px-3.5 py-3 text-[12px] leading-relaxed text-slate-600 dark:border-teal-500/25 dark:bg-teal-950/40 dark:text-teal-100/90">
             Administrators enter name, class, guardian, and contact. Parents complete
             photo, gender, date of birth, email, and address via the collection link.
           </div>
@@ -2588,6 +2616,7 @@ export function AdmitStudentPage() {
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               placeholder="e.g. Ishaan Verma"
               autoFocus
+              className={admitFormInputClass}
             />
           </div>
 
@@ -2619,6 +2648,7 @@ export function AdmitStudentPage() {
                 value={form.guardian}
                 onChange={(e) => setForm({ ...form, guardian: e.target.value })}
                 placeholder="e.g. Anita Verma"
+                className={admitFormInputClass}
               />
             </div>
             <div className="space-y-1.5">
@@ -2629,7 +2659,7 @@ export function AdmitStudentPage() {
                 value={form.phone}
                 onChange={(e) => setForm({ ...form, phone: e.target.value })}
                 placeholder="9810045221"
-                className="font-mono"
+                className={cn(admitFormInputClass, "font-mono")}
               />
             </div>
           </div>
@@ -2639,7 +2669,10 @@ export function AdmitStudentPage() {
               type="button"
               variant="outline"
               onClick={backToStudents}
-              className="h-9 shrink-0 px-2.5 text-[12px] sm:h-10 sm:px-4 sm:text-sm"
+              className={cn(
+                "h-9 shrink-0 px-2.5 text-[12px] sm:h-10 sm:px-4 sm:text-sm",
+                admitFormOutlineBtnClass,
+              )}
             >
               Cancel
             </Button>
@@ -2647,7 +2680,10 @@ export function AdmitStudentPage() {
               type="button"
               variant="outline"
               onClick={handleAdmitAndShare}
-              className="h-9 min-w-0 flex-1 rounded-full px-2 text-[11px] sm:h-10 sm:flex-none sm:px-4 sm:text-sm"
+              className={cn(
+                "h-9 min-w-0 flex-1 rounded-full px-2 text-[11px] sm:h-10 sm:flex-none sm:px-4 sm:text-sm",
+                admitFormOutlineBtnClass,
+              )}
             >
               <ClipboardList className="mr-1 h-3.5 w-3.5 shrink-0 sm:mr-1.5" />
               <span className="truncate">Admit & Collect</span>
@@ -6299,7 +6335,7 @@ function FinanceOverview({
   return (
     <div className="w-full space-y-5 pb-24 md:pb-0">
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+      <div className="hidden md:grid md:grid-cols-2 md:gap-4">
         {sessionCanAccessFinanceView(session, "receive") && (
           <button
             type="button"
@@ -6396,15 +6432,15 @@ function FinanceOverview({
       </section>
 
       <div className="grid grid-cols-12 gap-5">
-        <section className={cn(glassCardClass, "col-span-12 flex flex-col p-5 lg:col-span-4")}>
-          <div className="flex items-start justify-between gap-3">
-            <div>
+        <section className={cn(glassCardClass, "col-span-12 flex flex-col p-4 sm:p-5 lg:col-span-4")}>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
               <h3 className="text-[15px] font-bold tracking-tight text-slate-900 dark:text-zinc-50">
                 Income
               </h3>
               <p className="mt-0.5 text-[12px] text-slate-500 dark:text-zinc-400">Category share</p>
             </div>
-            <div className="w-[140px] shrink-0">
+            <div className="w-full min-w-0 sm:w-auto sm:max-w-[11rem] sm:shrink-0">
               <DashboardPeriodFilter
                 period={incomePeriod}
                 onPeriodChange={setIncomePeriod}
@@ -7788,6 +7824,223 @@ function parseStoredReceiptNarration(raw?: string): {
   }
 
   return { note: leftover.join(" · "), breakdown, bankSplit, cashSplit };
+}
+
+function ReceiptDetailsDialog({
+  payment,
+  academicYear,
+  onClose,
+  onPrint,
+  onDownload,
+  onPreviewAttachment,
+}: {
+  payment: Payment | null;
+  academicYear: string;
+  onClose: () => void;
+  onPrint: (payment: Payment) => void;
+  onDownload: (payment: Payment) => void;
+  onPreviewAttachment: (file: PaymentAttachment) => void;
+}) {
+  return (
+    <Dialog
+      open={Boolean(payment)}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+        {payment && (
+          <>
+            <div className="mobile-scrollbar-none min-h-0 flex-1 overflow-y-auto overscroll-contain p-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <DialogHeader>
+                <div className="flex items-start justify-between gap-3 pr-7">
+                  <div>
+                    <DialogTitle>Receipt Details</DialogTitle>
+                    <DialogDescription className="mt-1">
+                      Complete transaction record and supporting documents.
+                    </DialogDescription>
+                  </div>
+                  <span className="inline-flex shrink-0 rounded-full bg-[#D1F2E1] px-2.5 py-1 text-[10px] font-semibold text-[#059669]">
+                    Complete
+                  </span>
+                </div>
+              </DialogHeader>
+
+              <div className="mt-4 space-y-4">
+                <div className="rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-4 dark:border-white/10 dark:bg-zinc-900/50">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="font-mono text-[11px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
+                        {payment.id}
+                      </div>
+                      <div className="mt-1 truncate text-[17px] font-bold text-black dark:text-zinc-100">
+                        {payment.name}
+                      </div>
+                      <div className="mt-0.5 text-[12px] text-black/50 dark:text-zinc-400">
+                        {payment.payerType === "external"
+                          ? "External payer"
+                          : payment.className || "Student"}
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className="font-mono text-[20px] font-bold text-black dark:text-zinc-100">
+                        ₹ {payment.amount.toLocaleString("en-IN")}
+                      </div>
+                      <div className="mt-1 font-mono text-[10.5px] text-black/45 dark:text-zinc-400">
+                        {formatEventDateTime(payment.time)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    ["Category", payment.cat],
+                    [
+                      paymentFeePeriods(payment).length > 1 ? "Fee periods" : "Fee period",
+                      formatPaymentPeriodsLabel(payment),
+                    ],
+                    ["Payment mode", payment.mode],
+                    ["Payer type", payment.payerType === "external" ? "External" : "Student"],
+                    ["Academic year", academicYear],
+                  ].map(([label, value]) => (
+                    <div
+                      key={label}
+                      className="rounded-xl border border-slate-100 bg-white p-3 dark:border-white/10 dark:bg-zinc-900/40"
+                    >
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
+                        {label}
+                      </div>
+                      <div className="mt-1 text-[13px] font-semibold text-black dark:text-zinc-100">
+                        {value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {resolvePaymentFeeLines(payment).length > 1 ? (
+                  <div className="rounded-xl border border-slate-100 bg-white p-3.5 dark:border-white/10 dark:bg-zinc-900/40">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
+                      Fee breakdown
+                    </div>
+                    <ul className="mt-2 space-y-2">
+                      {resolvePaymentFeeLines(payment).map((line, index) => (
+                        <li
+                          key={`${line.description}-${line.feePeriod}-${index}`}
+                          className="flex items-center justify-between gap-3 rounded-lg bg-[#FAFAFA] px-3 py-2 dark:bg-zinc-800/60"
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate text-[12.5px] font-semibold text-black dark:text-zinc-100">
+                              {line.description}
+                            </div>
+                            {line.feePeriod ? (
+                              <div className="mt-0.5 text-[11px] text-black/45 dark:text-zinc-400">
+                                {line.feePeriod}
+                              </div>
+                            ) : null}
+                          </div>
+                          <div className="shrink-0 font-mono text-[12.5px] font-semibold text-[#059669]">
+                            ₹ {line.amount.toLocaleString("en-IN")}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+
+                {parseStoredReceiptNarration(payment.narration).note && (
+                  <div className="rounded-xl border border-slate-100 bg-white p-3.5 dark:border-white/10 dark:bg-zinc-900/40">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
+                      Narration
+                    </div>
+                    <p className="mt-1.5 text-[12.5px] leading-relaxed text-black/65 dark:text-zinc-300">
+                      {parseStoredReceiptNarration(payment.narration).note}
+                    </p>
+                  </div>
+                )}
+
+                <div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                      <Paperclip className="h-3.5 w-3.5" />
+                      Attachments
+                    </div>
+                    <span className="font-mono text-[10.5px] text-black/45 dark:text-zinc-400">
+                      {payment.attachments?.length ?? 0} file
+                      {(payment.attachments?.length ?? 0) === 1 ? "" : "s"}
+                    </span>
+                  </div>
+
+                  {(payment.attachments?.length ?? 0) > 0 ? (
+                    <ul className="mt-2 space-y-2">
+                      {payment.attachments!.map((file) => (
+                        <li
+                          key={file.id}
+                          className="flex min-w-0 items-center gap-2.5 rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-3 dark:border-white/10 dark:bg-zinc-900/40"
+                        >
+                          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white text-black/45 dark:bg-zinc-800 dark:text-zinc-400">
+                            <FileText className="h-4 w-4" />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-[12px] font-semibold text-black dark:text-zinc-100">
+                              {file.name}
+                            </div>
+                            <div className="mt-0.5 font-mono text-[10px] text-black/45 dark:text-zinc-400">
+                              {formatAttachmentSize(file.size)}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => onPreviewAttachment(file)}
+                            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 text-[11px] font-semibold text-black/65 transition-colors hover:border-black/20 hover:text-black dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:text-zinc-100"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            Open
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="mt-2 rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-4 py-6 text-center text-[12px] text-black/45 dark:border-white/10 dark:bg-zinc-900/30 dark:text-zinc-400">
+                      No supporting documents attached to this receipt.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="flex-row flex-nowrap gap-2 border-t border-[#E5E5E5] p-4 sm:p-6 dark:border-white/10">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onClose}
+                className="min-w-0 flex-1 rounded-full px-2 text-[12px] sm:px-4 sm:text-sm"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onPrint(payment)}
+                className="min-w-0 flex-1 rounded-full px-2 text-[12px] sm:px-4 sm:text-sm"
+              >
+                <Printer className="h-3.5 w-3.5 shrink-0 sm:mr-1.5" />
+                Print
+              </Button>
+              <Button
+                type="button"
+                onClick={() => onDownload(payment)}
+                className="min-w-0 flex-1 rounded-full bg-[#0F766E] px-2 text-[12px] text-white hover:bg-[#0D9488] sm:px-4 sm:text-sm"
+              >
+                <Download className="h-3.5 w-3.5 shrink-0 sm:mr-1.5" />
+                Download
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function feeLineFromStoredCategory(
@@ -10260,197 +10513,14 @@ function ReceivePayment() {
         </div>
       </OrganicCard>
 
-      <Dialog
-        open={Boolean(viewingPayment)}
-        onOpenChange={(open) => {
-          if (!open) setViewingPayment(null);
-        }}
-      >
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-          {viewingPayment && (
-            <>
-              <DialogHeader>
-                <div className="flex items-start justify-between gap-3 pr-7">
-                  <div>
-                    <DialogTitle>Receipt Details</DialogTitle>
-                    <DialogDescription className="mt-1">
-                      Complete transaction record and supporting documents.
-                    </DialogDescription>
-                  </div>
-                  <span className="inline-flex shrink-0 rounded-full bg-[#D1F2E1] px-2.5 py-1 text-[10px] font-semibold text-[#059669]">
-                    Complete
-                  </span>
-                </div>
-              </DialogHeader>
-
-              <div className="rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="font-mono text-[11px] font-semibold uppercase tracking-wider text-black/45">
-                      {viewingPayment.id}
-                    </div>
-                    <div className="mt-1 truncate text-[17px] font-bold text-black">
-                      {viewingPayment.name}
-                    </div>
-                    <div className="mt-0.5 text-[12px] text-black/50">
-                      {viewingPayment.payerType === "external"
-                        ? "External payer"
-                        : viewingPayment.className || "Student"}
-                    </div>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <div className="font-mono text-[20px] font-bold text-black">
-                      ₹ {viewingPayment.amount.toLocaleString("en-IN")}
-                    </div>
-                    <div className="mt-1 font-mono text-[10.5px] text-black/45">
-                      {formatEventDateTime(viewingPayment.time)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  ["Category", viewingPayment.cat],
-                  [
-                    paymentFeePeriods(viewingPayment).length > 1 ? "Fee periods" : "Fee period",
-                    formatPaymentPeriodsLabel(viewingPayment),
-                  ],
-                  ["Payment mode", viewingPayment.mode],
-                  [
-                    "Payer type",
-                    viewingPayment.payerType === "external" ? "External" : "Student",
-                  ],
-                  ["Academic year", academicYear],
-                ].map(([label, value]) => (
-                  <div key={label} className="rounded-xl border border-slate-100 bg-white p-3">
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                      {label}
-                    </div>
-                    <div className="mt-1 text-[13px] font-semibold text-black">{value}</div>
-                  </div>
-                ))}
-              </div>
-
-              {resolvePaymentFeeLines(viewingPayment).length > 1 ? (
-                <div className="rounded-xl border border-slate-100 bg-white p-3.5">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                    Fee breakdown
-                  </div>
-                  <ul className="mt-2 space-y-2">
-                    {resolvePaymentFeeLines(viewingPayment).map((line, index) => (
-                      <li
-                        key={`${line.description}-${line.feePeriod}-${index}`}
-                        className="flex items-center justify-between gap-3 rounded-lg bg-[#FAFAFA] px-3 py-2"
-                      >
-                        <div className="min-w-0">
-                          <div className="truncate text-[12.5px] font-semibold text-black">
-                            {line.description}
-                          </div>
-                          {line.feePeriod ? (
-                            <div className="mt-0.5 text-[11px] text-black/45">{line.feePeriod}</div>
-                          ) : null}
-                        </div>
-                        <div className="shrink-0 font-mono text-[12.5px] font-semibold text-[#059669]">
-                          ₹ {line.amount.toLocaleString("en-IN")}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-
-              {parseStoredReceiptNarration(viewingPayment.narration).note && (
-                <div className="rounded-xl border border-slate-100 bg-white p-3.5">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                    Narration
-                  </div>
-                  <p className="mt-1.5 text-[12.5px] leading-relaxed text-black/65">
-                    {parseStoredReceiptNarration(viewingPayment.narration).note}
-                  </p>
-                </div>
-              )}
-
-              <div>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                    <Paperclip className="h-3.5 w-3.5" />
-                    Attachments
-                  </div>
-                  <span className="font-mono text-[10.5px] text-black/45">
-                    {viewingPayment.attachments?.length ?? 0} file
-                    {(viewingPayment.attachments?.length ?? 0) === 1 ? "" : "s"}
-                  </span>
-                </div>
-
-                {(viewingPayment.attachments?.length ?? 0) > 0 ? (
-                  <ul className="mt-2 space-y-2">
-                    {viewingPayment.attachments!.map((file) => (
-                      <li
-                        key={file.id}
-                        className="flex min-w-0 items-center gap-2.5 rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-3"
-                      >
-                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white text-black/45">
-                          <FileText className="h-4 w-4" />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-[12px] font-semibold text-black">
-                            {file.name}
-                          </div>
-                          <div className="mt-0.5 font-mono text-[10px] text-black/45">
-                            {formatAttachmentSize(file.size)}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setPreviewAttachment(file)}
-                          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 text-[11px] font-semibold text-black/65 transition-colors hover:border-black/20 hover:text-black"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                          Open
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <div className="mt-2 rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-4 py-6 text-center text-[12px] text-black/45">
-                    No supporting documents attached to this receipt.
-                  </div>
-                )}
-              </div>
-
-              <DialogFooter className="gap-2 sm:justify-between">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setViewingPayment(null)}
-                >
-                  Close
-                </Button>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => printHistoryReceipt(viewingPayment)}
-                    className="rounded-full"
-                  >
-                    <Printer className="mr-1.5 h-3.5 w-3.5" />
-                    Print receipt
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={() => downloadHistoryReceipt(viewingPayment)}
-                    className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
-                  >
-                    <Download className="mr-1.5 h-3.5 w-3.5" />
-                    Download receipt
-                  </Button>
-                </div>
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+      <ReceiptDetailsDialog
+        payment={viewingPayment}
+        academicYear={academicYear}
+        onClose={() => setViewingPayment(null)}
+        onPrint={printHistoryReceipt}
+        onDownload={downloadHistoryReceipt}
+        onPreviewAttachment={setPreviewAttachment}
+      />
 
       <Dialog
         open={addCategoryOpen}
@@ -12132,7 +12202,7 @@ export function SchoolSettings() {
       { id: "vehicles", label: "Vehicles" },
       { id: "transport", label: "Transport" },
       { id: "system", label: "System" },
-      { id: "support", label: "Customer Support" },
+      { id: "support", label: "Support" },
     ],
     [],
   );
@@ -12154,11 +12224,6 @@ export function SchoolSettings() {
       navigate({ to: "/tenant/settings", search: {}, replace: true });
     }
   }, [session, activeTab, navigate, tabParam]);
-
-  const activeTabLabel =
-    settingsTabs.find((tab) => tab.id === activeTab)?.label ??
-    allSettingsTabs.find((tab) => tab.id === activeTab)?.label ??
-    "School Details";
 
   const [schoolDirty, setSchoolDirty] = useState(false);
   const [unsavedDialogOpen, setUnsavedDialogOpen] = useState(false);
@@ -12416,7 +12481,7 @@ export function SchoolSettings() {
         )
       )}
 
-      {activeTab === "support" && <CustomerSupportCard />}
+      {activeTab === "support" && <CustomerSupportCard onBackToSettings={backToMenu} />}
     </>
   );
 
@@ -12479,20 +12544,17 @@ export function SchoolSettings() {
         </div>
       </div>
 
-      {/* Mobile: section page with back to menu */}
-      <div className={cn("col-span-12 min-w-0 space-y-3 lg:hidden", showMobileMenu && "hidden")}>
-        <button
-          type="button"
-          onClick={backToMenu}
-          className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-slate-600 transition-colors hover:text-slate-900 dark:text-zinc-300 dark:hover:text-zinc-50"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Settings
-        </button>
-        <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-zinc-500">
-          {activeTabLabel}
-        </div>
-        {renderSettingsContent("cards")}
+      {/* Mobile: section page */}
+      <div
+        className={cn(
+          "col-span-12 min-w-0 lg:hidden",
+          showMobileMenu && "hidden",
+          !showMobileMenu && "-mt-1",
+        )}
+      >
+        <SettingsMobileNavProvider onBack={backToMenu}>
+          {renderSettingsContent("cards")}
+        </SettingsMobileNavProvider>
       </div>
 
       {/* Desktop: horizontal tabs + content */}
@@ -12590,22 +12652,23 @@ function CardHeader({
   actionLabel: string;
   onAction: () => void;
 }) {
+  const addButton = (
+    <button
+      onClick={onAction}
+      className="inline-flex shrink-0 items-center gap-1 rounded-full bg-gradient-to-r from-[#0F766E] to-[#115E59] px-3 py-2 text-[11.5px] font-semibold text-white shadow-md shadow-teal-900/15 transition-all hover:opacity-95"
+      aria-label={actionLabel}
+    >
+      <Plus className="h-3.5 w-3.5" /> Add
+    </button>
+  );
+
   return (
-    <div className="flex items-start justify-between gap-3">
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-[18px] font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50 lg:text-black dark:lg:text-zinc-50">
-          {title}
-        </div>
-        <p className="mt-1 text-[12px] text-slate-500 lg:text-black/55 dark:text-zinc-400">{subtitle}</p>
-      </div>
-      <button
-        onClick={onAction}
-        className="inline-flex shrink-0 items-center gap-1 rounded-full bg-gradient-to-r from-[#0F766E] to-[#115E59] px-3 py-2 text-[11.5px] font-semibold text-white shadow-md shadow-teal-900/15 transition-all hover:opacity-95"
-        aria-label={actionLabel}
-      >
-        <Plus className="h-3.5 w-3.5" /> Add
-      </button>
-    </div>
+    <SettingsResponsiveCardHeader
+      title={title}
+      subtitle={subtitle}
+      action={addButton}
+      subtitleClassName="lg:text-black/55"
+    />
   );
 }
 
@@ -15823,14 +15886,14 @@ function SchoolBrandMediaSpecs({ specs }: { specs: SchoolBrandMediaSpec }) {
   ];
   return (
     <div className="min-w-0 flex-1 space-y-2">
-      <p className="text-[11px] leading-relaxed text-black/55">{specs.usage}</p>
-      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-lg border border-black/[0.06] bg-white/80 px-2.5 py-2 text-[10.5px] dark:border-white/10 dark:bg-zinc-900/60">
+      <p className="text-[11px] leading-relaxed text-black/55 dark:text-zinc-400">{specs.usage}</p>
+      <dl className="space-y-1.5 rounded-lg border border-black/[0.06] bg-white/80 px-2.5 py-2 text-[10.5px] dark:border-white/10 dark:bg-zinc-900/60">
         {rows.map((row) => (
-          <div key={row.label} className="contents">
-            <dt className="font-semibold uppercase tracking-wide text-black/40 dark:text-zinc-500">
+          <div key={row.label} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+            <dt className="shrink-0 font-semibold uppercase tracking-wide text-black/40 dark:text-zinc-500">
               {row.label}
             </dt>
-            <dd className="font-mono text-black/75 dark:text-zinc-200">{row.value}</dd>
+            <dd className="min-w-0 text-right font-mono text-black/75 dark:text-zinc-200">{row.value}</dd>
           </div>
         ))}
       </dl>
@@ -15885,9 +15948,9 @@ function SchoolDetailsMediaField({
   );
 
   return (
-    <div className="col-span-12 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3 sm:col-span-6">
-      <div className="flex items-start justify-between gap-2">
-        <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/45">
+    <div className="col-span-12 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3 dark:border-white/10 dark:bg-zinc-900/40 lg:col-span-6">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
           {label}
           {badge}
         </span>
@@ -15926,20 +15989,22 @@ function SchoolDetailsMediaField({
           )}
         </div>
       </div>
-      <div className="mt-3 flex items-start gap-3">
-        {showAdjust ? (
-          <button
-            type="button"
-            onClick={onAdjust}
-            disabled={adjustLoading}
-            className="group rounded-xl outline-none transition-transform active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-[#0F766E]/40"
-            aria-label={`Adjust ${label.toLowerCase()}`}
-          >
-            {previewShell}
-          </button>
-        ) : (
-          previewShell
-        )}
+      <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-start">
+        <div className="w-full shrink-0 lg:w-auto">
+          {showAdjust ? (
+            <button
+              type="button"
+              onClick={onAdjust}
+              disabled={adjustLoading}
+              className="group w-full rounded-xl outline-none transition-transform active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-[#0F766E]/40 lg:w-auto"
+              aria-label={`Adjust ${label.toLowerCase()}`}
+            >
+              {previewShell}
+            </button>
+          ) : (
+            previewShell
+          )}
+        </div>
         <SchoolBrandMediaSpecs specs={specs} />
       </div>
     </div>
@@ -15982,6 +16047,7 @@ function SchoolDetailsCard({
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(schoolDetails);
   const initials = schoolInitials(draft.name || "School");
+  const onBackToSettings = useSettingsMobileBack();
 
   useEffect(() => {
     onDirtyChange?.(dirty);
@@ -16213,8 +16279,16 @@ function SchoolDetailsCard({
   return (
     <OrganicCard tone="white" cornerSide="br" padded className={workspacePanelClass}>
       <form onSubmit={save}>
+        {onBackToSettings ? (
+          <div className="mb-3 flex items-center gap-1 border-b border-[#EFEFEF] pb-2.5 dark:border-white/10 lg:hidden">
+            <SettingsMobileBackButton />
+            <div className="min-w-0 flex-1 px-1">
+              <div className="text-[16px] font-semibold text-black dark:text-zinc-100">School Details</div>
+            </div>
+          </div>
+        ) : null}
         <div className="flex flex-col gap-3 border-b border-black/[0.06] pb-4 dark:border-white/10 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0 flex-1">
+          <div className={cn("min-w-0 flex-1", onBackToSettings && "hidden lg:block")}>
             <div className="text-[18px] font-bold leading-tight tracking-tight text-black dark:text-zinc-50">
               School Details
             </div>
@@ -16244,6 +16318,11 @@ function SchoolDetailsCard({
             </Button>
           </div>
         </div>
+        {onBackToSettings ? (
+          <p className="mt-2 text-[12px] text-black/55 lg:hidden dark:text-zinc-400">
+            Logo, letterhead, signature, and seal used across the workspace
+          </p>
+        ) : null}
 
         <div className="mt-4 space-y-5">
         <div className="grid grid-cols-12 gap-3">
@@ -16286,10 +16365,10 @@ function SchoolDetailsCard({
                 <img
                   src={resolveMediaUrl(draft.letterheadUrl) ?? draft.letterheadUrl}
                   alt="School letterhead"
-                  className="h-16 w-[min(100%,12rem)] object-cover object-top sm:w-48"
+                  className="h-16 w-full object-cover object-top lg:h-16 lg:w-48"
                 />
               ) : (
-                <div className="flex h-16 w-[min(100%,12rem)] items-center justify-center border border-dashed border-black/10 px-3 text-center text-[10px] text-black/45 sm:w-48">
+                <div className="flex h-16 w-full items-center justify-center border border-dashed border-black/10 px-3 text-center text-[10px] text-black/45 dark:border-white/15 dark:text-zinc-400 lg:w-48">
                   No letterhead
                 </div>
               )
@@ -16360,7 +16439,7 @@ function SchoolDetailsCard({
               <img
                 src={resolveSignatureDisplaySrc(draft.principalName, draft.signatureUrl)}
                 alt="Authorised signature"
-                className="h-14 w-[min(100%,11rem)] object-contain object-left px-2"
+                className="h-14 w-full max-w-xs object-contain object-left px-2 lg:w-44"
               />
             }
           />
@@ -16742,12 +16821,12 @@ function CategoriesCard({
       padded
       className={cn(workspacePanelClass, "col-span-12")}
     >
-      <div className="text-[18px] font-bold leading-tight tracking-tight text-black">
-        System Constants
-      </div>
-      <p className="mt-1 text-[12px] text-black/55 dark:text-zinc-400">
-        Financial year books, then how the workspace, invoices, and bills look
-      </p>
+      <SettingsResponsiveCardHeader
+        title="System Constants"
+        subtitle="Financial year books, then how the workspace, invoices, and bills look"
+        titleClassName="text-black dark:text-zinc-50"
+        subtitleClassName="text-black/55"
+      />
 
       <div className="mt-4 grid grid-cols-12 gap-3">
         <div className="col-span-12 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-7 dark:border-white/10 dark:bg-zinc-900/40">

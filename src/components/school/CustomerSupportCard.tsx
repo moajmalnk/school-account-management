@@ -6,12 +6,24 @@ import { toast } from "sonner";
 import { SupportChatBubble, SupportChatShell, ConversationMeta } from "@/components/support/SupportChatBubble";
 import { SupportComposer } from "@/components/support/SupportComposer";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { OrganicCard } from "@/components/ui/organic-card";
 import { useAuth } from "@/lib/auth";
 import { ApiError, getApiToken } from "@/lib/api/client";
 import {
   closeSupportTicket,
   createSupportTicket,
+  deleteSupportMessage,
+  editSupportMessage,
   fetchSupportDesk,
   fetchSupportTickets,
   formatWhatsAppDisplay,
@@ -19,9 +31,11 @@ import {
   matchSupportFaq,
   reopenSupportTicket,
   replySupportTicket,
+  SUPPORT_MESSAGE_EDIT_WINDOW_MS,
   whatsappDigits,
   type SupportAttachment,
   type SupportFaq,
+  type SupportMessage,
   type SupportSettings,
   type SupportTicket,
   type SupportTicketStatus,
@@ -60,7 +74,7 @@ function formatStamp(raw: string): string {
   return formatChatStamp(raw, "list");
 }
 
-export function CustomerSupportCard() {
+export function CustomerSupportCard({ onBackToSettings }: { onBackToSettings?: () => void }) {
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/settings" });
   const chatId = search.chat;
@@ -76,7 +90,19 @@ export function CustomerSupportCard() {
   const [sending, setSending] = useState(false);
   const [chat, setChat] = useState<ChatLine[]>([]);
   const [ticketBusy, setTicketBusy] = useState(false);
+  const [editingMessage, setEditingMessage] = useState<SupportMessage | null>(null);
+  const [deletingMessage, setDeletingMessage] = useState<SupportMessage | null>(null);
+  const [pendingStatusChange, setPendingStatusChange] = useState<"closed" | "open" | null>(null);
   const threadScrollRef = useRef<HTMLDivElement>(null);
+
+  const canEditMessage = useCallback((msg: SupportMessage) => {
+    if (msg.author !== "school") return false;
+    if (!(msg.body || "").trim()) return false;
+    const age = Date.now() - new Date(msg.createdAt).getTime();
+    return age >= 0 && age <= SUPPORT_MESSAGE_EDIT_WINDOW_MS;
+  }, []);
+
+  const canDeleteMessage = useCallback((msg: SupportMessage) => msg.author === "school", []);
 
   const lastUserLine = useMemo(
     () => [...chat].reverse().find((line) => line.role === "you")?.body ?? "",
@@ -190,6 +216,11 @@ export function CustomerSupportCard() {
   const onMobileThread = Boolean(activeTicket) || composing;
 
   useEffect(() => {
+    setEditingMessage(null);
+    setDeletingMessage(null);
+  }, [chatId]);
+
+  useEffect(() => {
     const el = threadScrollRef.current;
     if (!el) return;
     const pin = () => {
@@ -214,6 +245,50 @@ export function CustomerSupportCard() {
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Reply failed";
       throw err instanceof Error ? err : new Error(msg);
+    } finally {
+      setTicketBusy(false);
+    }
+  };
+
+  const saveEditedMessage = async (input: { body: string; attachments: SupportAttachment[] }) => {
+    if (!activeTicket || !editingMessage) return;
+    if (!input.body.trim()) return;
+    setTicketBusy(true);
+    try {
+      const next = await editSupportMessage({
+        ticketId: activeTicket.id,
+        messageId: editingMessage.id,
+        body: input.body.trim(),
+      });
+      setTickets((prev) => prev.map((t) => (t.id === next.id ? next : t)));
+      setEditingMessage(null);
+      toast.success("Message updated");
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Could not edit message";
+      toast.error("Could not edit", { description: msg });
+      throw err instanceof Error ? err : new Error(msg);
+    } finally {
+      setTicketBusy(false);
+    }
+  };
+
+  const confirmDeleteMessage = async () => {
+    if (!activeTicket || !deletingMessage) return;
+    setTicketBusy(true);
+    try {
+      const next = await deleteSupportMessage({
+        ticketId: activeTicket.id,
+        messageId: deletingMessage.id,
+      });
+      setTickets((prev) => prev.map((t) => (t.id === next.id ? next : t)));
+      if (editingMessage?.id === deletingMessage.id) {
+        setEditingMessage(null);
+      }
+      setDeletingMessage(null);
+      toast.success("Message deleted");
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Could not delete message";
+      toast.error("Could not delete", { description: msg });
     } finally {
       setTicketBusy(false);
     }
@@ -251,6 +326,7 @@ export function CustomerSupportCard() {
           ? await closeSupportTicket(activeTicket.id)
           : await reopenSupportTicket(activeTicket.id);
       setTickets((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+      setPendingStatusChange(null);
       toast.success(next === "closed" ? "Chat closed" : "Chat reopened");
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Could not update chat";
@@ -262,10 +338,16 @@ export function CustomerSupportCard() {
     }
   };
 
+  const confirmStatusChange = () => {
+    if (!pendingStatusChange) return;
+    void setTicketStatus(pendingStatusChange);
+  };
+
   useEffect(() => {
     if (!chatId || chatId === "new") return;
     const ticket = tickets.find((item) => item.id === chatId);
-    if (!ticket?.schoolUnread && !(ticket.schoolUnreadCount ?? 0)) return;
+    if (!ticket) return;
+    if (!ticket.schoolUnread && !(ticket.schoolUnreadCount ?? 0)) return;
     void markSupportTicketRead(chatId)
       .then((next) => {
         setTickets((prev) => prev.map((item) => (item.id === next.id ? { ...item, ...next } : item)));
@@ -275,10 +357,19 @@ export function CustomerSupportCard() {
       });
   }, [chatId, tickets]);
 
+  const mobileShellHeight = onBackToSettings
+    ? "max-lg:h-[min(calc(100dvh-4.75rem),760px)]"
+    : "max-lg:h-[min(calc(100dvh-9.5rem),760px)]";
+
   if (loading) {
     return (
       <OrganicCard tone="white" cornerSide="tr" padded={false} className={cn(workspacePanelClass, "overflow-hidden p-0")}>
-        <div className="flex h-[min(calc(100dvh-10rem),720px)] min-h-[22rem] items-center justify-center gap-2 text-[13px] text-black/45">
+        <div
+          className={cn(
+            "flex min-h-[22rem] items-center justify-center gap-2 text-[13px] text-black/45 dark:text-zinc-400",
+            mobileShellHeight,
+          )}
+        >
           <Loader2 className="h-4 w-4 animate-spin" /> Opening chat…
         </div>
       </OrganicCard>
@@ -286,28 +377,44 @@ export function CustomerSupportCard() {
   }
 
   return (
-    <OrganicCard
+    <>
+      <OrganicCard
       tone="white"
       cornerSide="br"
       padded={false}
       className={cn(workspacePanelClass, "col-span-12 overflow-hidden p-0")}
     >
-      <div className="flex h-[min(calc(100dvh-9.5rem),760px)] min-h-[22rem] flex-col lg:h-[min(calc(100dvh-11rem),760px)] lg:flex-row">
+      <div
+        className={cn(
+          "flex min-h-[22rem] flex-col lg:h-[min(calc(100dvh-11rem),760px)] lg:flex-row",
+          mobileShellHeight,
+        )}
+      >
           <div
             className={cn(
               "flex w-full shrink-0 flex-col border-[#EFEFEF] bg-white dark:border-white/10 dark:bg-zinc-950 lg:w-[300px] lg:border-r",
               onMobileThread ? "hidden lg:flex" : "flex",
             )}
           >
-            <div className="flex items-center justify-between gap-1 border-b border-[#EFEFEF] px-2 py-2 dark:border-white/10">
-              <div className="min-w-0 px-1">
+            <div className="flex items-center gap-1 border-b border-[#EFEFEF] px-2 py-2 dark:border-white/10">
+              {onBackToSettings ? (
+                <button
+                  type="button"
+                  onClick={onBackToSettings}
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-black/55 transition-colors hover:bg-black/5 dark:text-zinc-300 dark:hover:bg-white/10 lg:hidden"
+                  aria-label="Back to settings"
+                >
+                  <ArrowLeft className="h-5 w-5" />
+                </button>
+              ) : null}
+              <div className="min-w-0 flex-1 px-1">
                 <div className="text-[16px] font-semibold text-black dark:text-zinc-100">Chats</div>
               </div>
-              <div className="flex items-center">
+              <div className="flex shrink-0 items-center">
                 <button
                   type="button"
                   onClick={openGmail}
-                  className="grid h-9 w-9 place-items-center rounded-full text-black/45 hover:bg-black/5 hover:text-[#0F766E]"
+                  className="grid h-9 w-9 place-items-center rounded-full text-black/45 hover:bg-black/5 hover:text-[#0F766E] dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-teal-300"
                   aria-label={`Email ${settings?.supportEmail || "support"}`}
                   title={settings?.supportEmail || "Email"}
                 >
@@ -316,7 +423,7 @@ export function CustomerSupportCard() {
                 <button
                   type="button"
                   onClick={openWhatsApp}
-                  className="grid h-9 w-9 place-items-center rounded-full text-black/45 hover:bg-black/5 hover:text-[#0F766E]"
+                  className="grid h-9 w-9 place-items-center rounded-full text-black/45 hover:bg-black/5 hover:text-[#0F766E] dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-teal-300"
                   aria-label={`WhatsApp ${formatWhatsAppDisplay(settings?.whatsappE164)}`}
                   title={formatWhatsAppDisplay(settings?.whatsappE164)}
                 >
@@ -334,7 +441,7 @@ export function CustomerSupportCard() {
             </div>
             <ul className="mobile-scrollbar-none min-h-0 flex-1 overflow-y-auto">
               {tickets.length === 0 ? (
-                <li className="px-4 py-10 text-center text-[13px] text-black/40">
+                <li className="px-4 py-10 text-center text-[13px] text-black/40 dark:text-zinc-500">
                   No chats yet. Type a message to start.
                 </li>
               ) : (
@@ -370,7 +477,9 @@ export function CustomerSupportCard() {
                             <span
                               className={cn(
                                 "shrink-0 text-[11px]",
-                                unread > 0 ? "font-semibold text-[#0F766E]" : "text-black/35",
+                                unread > 0
+                                  ? "font-semibold text-[#0F766E] dark:text-teal-300"
+                                  : "text-black/35 dark:text-zinc-500",
                               )}
                             >
                               {formatStamp(ticket.updatedAt)}
@@ -380,7 +489,9 @@ export function CustomerSupportCard() {
                             <span
                               className={cn(
                                 "min-w-0 flex-1 truncate text-[13px]",
-                                unread > 0 ? "font-medium text-black/70" : "text-black/50",
+                                unread > 0
+                                  ? "font-medium text-black/70 dark:text-zinc-300"
+                                  : "text-black/50 dark:text-zinc-400",
                               )}
                             >
                               {preview}
@@ -399,11 +510,11 @@ export function CustomerSupportCard() {
           <SupportChatShell className={cn(onMobileThread ? "flex" : "hidden lg:flex")}>
             {activeTicket ? (
               <>
-                <div className="flex shrink-0 items-center gap-2 border-b border-black/5 bg-white/90 px-1.5 py-1.5 backdrop-blur-sm dark:bg-zinc-950/90">
+                <div className="flex shrink-0 items-center gap-2 border-b border-black/5 bg-white/90 px-1.5 py-1.5 backdrop-blur-sm dark:border-white/10 dark:bg-zinc-950/90">
                   <Link
                     to="/tenant/settings"
                     search={{ tab: "support" }}
-                    className="grid h-10 w-10 place-items-center rounded-full text-black/55 hover:bg-black/5 lg:hidden"
+                    className="grid h-10 w-10 place-items-center rounded-full text-black/55 hover:bg-black/5 dark:text-zinc-400 dark:hover:bg-white/10 lg:hidden"
                     aria-label="Back to chats"
                   >
                     <ArrowLeft className="h-5 w-5" />
@@ -415,7 +526,7 @@ export function CustomerSupportCard() {
                     <div className="truncate text-[15px] font-semibold text-black dark:text-zinc-100">
                       {activeTicket.subject || "Feezo"}
                     </div>
-                    <div className="text-[12px] text-black/45">{STATUS_LABEL[activeTicket.status]}</div>
+                    <div className="text-[12px] text-black/45 dark:text-zinc-400">{STATUS_LABEL[activeTicket.status]}</div>
                   </div>
                   {activeTicket.status === "closed" ? (
                     <Button
@@ -423,7 +534,7 @@ export function CustomerSupportCard() {
                       size="sm"
                       className="h-8 shrink-0 rounded-full bg-[#0F766E] px-3 text-[12px] text-white hover:bg-[#0D9488]"
                       disabled={ticketBusy}
-                      onClick={() => void setTicketStatus("open")}
+                      onClick={() => setPendingStatusChange("open")}
                     >
                       Reopen
                     </Button>
@@ -434,7 +545,7 @@ export function CustomerSupportCard() {
                       size="sm"
                       className="h-8 shrink-0 rounded-full px-3 text-[12px]"
                       disabled={ticketBusy}
-                      onClick={() => void setTicketStatus("closed")}
+                      onClick={() => setPendingStatusChange("closed")}
                     >
                       Close
                     </Button>
@@ -450,38 +561,54 @@ export function CustomerSupportCard() {
                         key={msg.id}
                         fromYou={msg.author === "school"}
                         createdAt={msg.createdAt}
+                        updatedAt={msg.updatedAt}
                         body={msg.body}
                         attachments={msg.attachments}
+                        canEdit={
+                          activeTicket.status !== "closed" && canEditMessage(msg)
+                        }
+                        canDelete={canDeleteMessage(msg)}
+                        onEdit={
+                          activeTicket.status !== "closed" && canEditMessage(msg)
+                            ? () => setEditingMessage(msg)
+                            : undefined
+                        }
+                        onDelete={
+                          canDeleteMessage(msg) ? () => setDeletingMessage(msg) : undefined
+                        }
                       />
                     ))}
                   </div>
                 </div>
                 <div className="shrink-0 px-1.5 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1 sm:px-2">
                   {activeTicket.status === "closed" ? (
-                    <p className="rounded-2xl bg-white/80 px-3 py-2 text-center text-[12px] text-black/50">
+                    <p className="rounded-2xl bg-white/80 px-3 py-2 text-center text-[12px] text-black/50 dark:bg-zinc-900/80 dark:text-zinc-400">
                       Chat closed. Reopen it from the header, or start a new one from the list.
                     </p>
                   ) : (
                     <SupportComposer
-                      key={activeTicket.id}
+                      key={`${activeTicket.id}-${editingMessage?.id ?? "new"}`}
                       ticketId={activeTicket.id}
-                      placeholder="Message"
+                      placeholder={editingMessage ? "Edit message" : "Message"}
                       autoFocus
                       disabled={ticketBusy}
                       busy={ticketBusy}
-                      onSend={sendTicketReply}
+                      initialDraft={editingMessage?.body ?? ""}
+                      editingMessageId={editingMessage?.id ?? null}
+                      onCancelEdit={() => setEditingMessage(null)}
+                      onSend={editingMessage ? saveEditedMessage : sendTicketReply}
                     />
                   )}
                 </div>
               </>
             ) : (
               <>
-                <div className="flex shrink-0 items-center gap-2 border-b border-black/5 bg-white/90 px-1.5 py-1.5">
+                <div className="flex shrink-0 items-center gap-2 border-b border-black/5 bg-white/90 px-1.5 py-1.5 backdrop-blur-sm dark:border-white/10 dark:bg-zinc-950/90">
                   {tickets.length > 0 ? (
                     <Link
                       to="/tenant/settings"
                       search={{ tab: "support" }}
-                      className="grid h-10 w-10 place-items-center rounded-full text-black/55 hover:bg-black/5 lg:hidden"
+                      className="grid h-10 w-10 place-items-center rounded-full text-black/55 hover:bg-black/5 dark:text-zinc-400 dark:hover:bg-white/10 lg:hidden"
                       aria-label="Back to chats"
                     >
                       <ArrowLeft className="h-5 w-5" />
@@ -491,13 +618,15 @@ export function CustomerSupportCard() {
                     F
                   </span>
                   <div className="min-w-0 flex-1">
-                    <div className="text-[15px] font-semibold text-black">Feezo</div>
-                    <div className="text-[12px] text-black/45">Tap to type — or use Email / WhatsApp</div>
+                    <div className="text-[15px] font-semibold text-black dark:text-zinc-100">Feezo</div>
+                    <div className="text-[12px] text-black/45 dark:text-zinc-400">
+                      Tap to type — or use Email / WhatsApp
+                    </div>
                   </div>
                   <button
                     type="button"
                     onClick={openGmail}
-                    className="grid h-9 w-9 place-items-center rounded-full text-black/45 hover:bg-black/5 lg:hidden"
+                    className="grid h-9 w-9 place-items-center rounded-full text-black/45 hover:bg-black/5 dark:text-zinc-400 dark:hover:bg-white/10 lg:hidden"
                     aria-label="Email"
                   >
                     <Mail className="h-4 w-4" />
@@ -505,7 +634,7 @@ export function CustomerSupportCard() {
                   <button
                     type="button"
                     onClick={openWhatsApp}
-                    className="grid h-9 w-9 place-items-center rounded-full text-black/45 hover:bg-black/5 lg:hidden"
+                    className="grid h-9 w-9 place-items-center rounded-full text-black/45 hover:bg-black/5 dark:text-zinc-400 dark:hover:bg-white/10 lg:hidden"
                     aria-label="WhatsApp"
                   >
                     <WhatsAppMark className="h-4 w-4" />
@@ -546,7 +675,7 @@ export function CustomerSupportCard() {
                             type="button"
                             disabled={sending}
                             onClick={() => void ask(faq.question, faq.id)}
-                            className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[12px] text-black/70 hover:border-[#0F766E]/40 hover:text-[#0F766E]"
+                            className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[12px] text-black/70 hover:border-[#0F766E]/40 hover:text-[#0F766E] dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-teal-500/40 dark:hover:text-teal-300"
                           >
                             {faq.question}
                           </button>
@@ -569,5 +698,70 @@ export function CustomerSupportCard() {
           </SupportChatShell>
         </div>
       </OrganicCard>
+
+      <AlertDialog
+        open={pendingStatusChange !== null}
+        onOpenChange={(open) => {
+          if (!open && !ticketBusy) setPendingStatusChange(null);
+        }}
+      >
+        <AlertDialogContent className="max-w-sm rounded-2xl border border-[#E5E5E5] bg-white dark:border-white/10 dark:bg-zinc-900">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-black dark:text-zinc-50">
+              {pendingStatusChange === "closed" ? "Close this chat?" : "Reopen this chat?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-black/60 dark:text-zinc-400">
+              {pendingStatusChange === "closed"
+                ? "You will not be able to send new messages until the chat is reopened."
+                : "Reopening lets you and Feezo support continue this conversation."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={ticketBusy} className="rounded-full">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={ticketBusy}
+              className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+              onClick={(event) => {
+                event.preventDefault();
+                confirmStatusChange();
+              }}
+            >
+              {pendingStatusChange === "closed" ? "Close chat" : "Reopen chat"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={Boolean(deletingMessage)}
+        onOpenChange={(open) => {
+          if (!open) setDeletingMessage(null);
+        }}
+      >
+        <AlertDialogContent className="max-w-sm rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete message?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This message will be removed for you and Feezo support. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={ticketBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={ticketBusy}
+              className="bg-[#EF4444] text-white hover:bg-[#DC2626]"
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmDeleteMessage();
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

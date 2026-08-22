@@ -83,7 +83,7 @@ export function SupportMessageContent({
             <FileText className="h-4 w-4 shrink-0 opacity-80" />
             <span className="min-w-0 flex-1">
               <span className="block truncate font-medium">{item.name}</span>
-              <span className={cn("block text-[10px]", inverted ? "text-white/70" : "text-black/45")}>
+              <span className={cn("block text-[10px]", inverted ? "text-white/70" : "text-black/45 dark:text-zinc-400")}>
                 {formatSupportBytes(item.size)}
               </span>
             </span>
