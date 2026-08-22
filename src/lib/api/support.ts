@@ -212,13 +212,14 @@ export async function uploadSupportAttachment(input: {
     method: "POST",
     body: form,
   });
+  const path = decodeURIComponent(String(data.path || data.url || ""));
   return {
     id: data.id,
     kind: data.kind,
     name: data.name,
     mimeType: data.mimeType,
     size: data.size,
-    path: data.path,
+    path,
     durationMs: data.durationMs ?? input.durationMs ?? null,
   };
 }

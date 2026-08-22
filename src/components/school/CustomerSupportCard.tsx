@@ -97,7 +97,7 @@ export function CustomerSupportCard() {
   const [sending, setSending] = useState(false);
   const [chat, setChat] = useState<ChatLine[]>([]);
   const [ticketBusy, setTicketBusy] = useState(false);
-  const threadEndRef = useRef<HTMLDivElement>(null);
+  const threadScrollRef = useRef<HTMLDivElement>(null);
 
   const lastUserLine = useMemo(
     () => [...chat].reverse().find((line) => line.role === "you")?.body ?? "",
@@ -210,7 +210,14 @@ export function CustomerSupportCard() {
   const activeTicket = tickets.find((t) => t.id === chatId) ?? null;
 
   useEffect(() => {
-    threadEndRef.current?.scrollIntoView({ block: "end" });
+    const el = threadScrollRef.current;
+    if (!el) return;
+    const pin = () => {
+      el.scrollTop = el.scrollHeight;
+    };
+    pin();
+    const frame = requestAnimationFrame(pin);
+    return () => cancelAnimationFrame(frame);
   }, [chatId, activeTicket?.messages?.length]);
 
   const sendTicketReply = async (input: { body: string; attachments: SupportAttachment[] }) => {
@@ -454,10 +461,10 @@ export function CustomerSupportCard() {
                 );
               })}
             </ul>
-            <div className="col-span-12 flex min-h-[18rem] flex-col rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3 lg:col-span-8 dark:border-white/10 dark:bg-zinc-950/40">
+            <div className="col-span-12 flex min-h-[18rem] flex-col rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3 lg:col-span-8 lg:min-h-[28rem] dark:border-white/10 dark:bg-zinc-950/40">
               {activeTicket ? (
                 <>
-                  <div className="mb-3 flex flex-wrap items-start justify-between gap-2 border-b border-[#EFEFEF] pb-3 dark:border-white/10">
+                  <div className="mb-3 flex shrink-0 flex-wrap items-start justify-between gap-2 border-b border-[#EFEFEF] pb-3 dark:border-white/10">
                     <div className="min-w-0">
                       <div className="truncate text-[15px] font-semibold text-black dark:text-zinc-100">
                         {activeTicket.subject}
@@ -466,7 +473,11 @@ export function CustomerSupportCard() {
                     </div>
                     <StatusPill status={activeTicket.status} />
                   </div>
-                  <div className="mobile-scrollbar-none min-h-0 flex-1 space-y-2 overflow-y-auto">
+                  <div
+                    ref={threadScrollRef}
+                    className="mobile-scrollbar-none flex min-h-0 flex-1 flex-col overflow-y-auto"
+                  >
+                    <div className="flex min-h-full flex-col justify-end gap-2">
                     {(activeTicket.messages ?? []).map((msg) => {
                       const fromYou = msg.author === "school";
                       return (
@@ -495,12 +506,12 @@ export function CustomerSupportCard() {
                         </div>
                       );
                     })}
-                    <div ref={threadEndRef} />
+                    </div>
                   </div>
                   {activeTicket.status === "closed" ? (
-                    <p className="mt-3 text-[12px] text-black/45">Closed. Send a new message to start again.</p>
+                    <p className="mt-3 shrink-0 text-[12px] text-black/45">Closed. Send a new message to start again.</p>
                   ) : (
-                    <div className="mt-3">
+                    <div className="mt-3 shrink-0">
                       <SupportComposer
                         key={activeTicket.id}
                         ticketId={activeTicket.id}

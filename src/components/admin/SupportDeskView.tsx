@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { LifeBuoy, Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -110,19 +110,21 @@ function StatusPill({ status }: { status: SupportTicketStatus }) {
   );
 }
 
+function supportLocation(pathname: string): { section: Section; ticketId?: string } {
+  if (pathname.endsWith("/help")) return { section: "help" };
+  if (pathname.endsWith("/contact")) return { section: "contact" };
+  const prefix = "/super-admin/support/";
+  if (pathname.startsWith(prefix)) {
+    const slug = decodeURIComponent(pathname.slice(prefix.length).replace(/\/$/, ""));
+    if (slug) return { section: "messages", ticketId: slug };
+  }
+  return { section: "messages" };
+}
+
 export function SupportDeskView() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const params = useParams({ strict: false }) as { ticketId?: string };
-  const section: Section = pathname.endsWith("/help")
-    ? "help"
-    : pathname.endsWith("/contact")
-      ? "contact"
-      : "messages";
-  const ticketId =
-    section === "messages" && params.ticketId && params.ticketId !== "help" && params.ticketId !== "contact"
-      ? params.ticketId
-      : undefined;
+  const { section, ticketId } = supportLocation(pathname);
 
   const [settings, setSettings] = useState<SupportSettings>({
     supportEmail: "support@schoolaccounts.in",
@@ -139,10 +141,17 @@ export function SupportDeskView() {
   const [faqBusy, setFaqBusy] = useState(false);
   const [thread, setThread] = useState<SupportTicket | null>(null);
   const [replyBusy, setReplyBusy] = useState(false);
-  const threadEndRef = useRef<HTMLDivElement>(null);
+  const threadScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    threadEndRef.current?.scrollIntoView({ block: "end" });
+    const el = threadScrollRef.current;
+    if (!el) return;
+    const pin = () => {
+      el.scrollTop = el.scrollHeight;
+    };
+    pin();
+    const frame = requestAnimationFrame(pin);
+    return () => cancelAnimationFrame(frame);
   }, [thread?.id, thread?.messages?.length]);
 
   const visibleTickets = useMemo(() => {
@@ -343,18 +352,24 @@ export function SupportDeskView() {
 
       <div className="col-span-12 flex flex-wrap items-center gap-2">
         {SECTIONS.map((item) => (
-          <Link
+          <button
             key={item.id}
-            to={
-              item.id === "help"
-                ? "/super-admin/support/help"
-                : item.id === "contact"
-                  ? "/super-admin/support/contact"
-                  : ticketId
-                    ? "/super-admin/support/$ticketId"
-                    : "/super-admin/support"
-            }
-            params={item.id === "messages" && ticketId ? { ticketId } : undefined}
+            type="button"
+            onClick={() => {
+              if (item.id === "help") {
+                void navigate({ to: "/super-admin/support/help" });
+                return;
+              }
+              if (item.id === "contact") {
+                void navigate({ to: "/super-admin/support/contact" });
+                return;
+              }
+              if (ticketId) {
+                void navigate({ to: "/super-admin/support/$ticketId", params: { ticketId } });
+                return;
+              }
+              void navigate({ to: "/super-admin/support" });
+            }}
             className={cn(
               "inline-flex h-9 items-center gap-2 rounded-full px-3.5 text-[13px] font-semibold transition-colors",
               section === item.id
@@ -373,7 +388,7 @@ export function SupportDeskView() {
                 {unreadCount}
               </span>
             ) : null}
-          </Link>
+          </button>
         ))}
       </div>
 
@@ -453,10 +468,10 @@ export function SupportDeskView() {
               )}
             </ul>
 
-            <div className="col-span-12 flex min-h-[22rem] flex-col rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3 lg:col-span-8">
+            <div className="col-span-12 flex min-h-[22rem] flex-col rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3 lg:col-span-8 lg:min-h-[32rem]">
               {thread && thread.id === ticketId ? (
                 <>
-                  <div className="mb-3 flex flex-wrap items-start justify-between gap-2 border-b border-[#EFEFEF] pb-3">
+                  <div className="mb-3 flex shrink-0 flex-wrap items-start justify-between gap-2 border-b border-[#EFEFEF] pb-3">
                     <div className="min-w-0">
                       <div className="truncate text-[16px] font-semibold text-black">
                         {thread.tenantName || "School"}
@@ -483,7 +498,11 @@ export function SupportDeskView() {
                       ) : null}
                     </div>
                   </div>
-                  <div className="mobile-scrollbar-none min-h-0 flex-1 space-y-2 overflow-y-auto">
+                  <div
+                    ref={threadScrollRef}
+                    className="mobile-scrollbar-none flex min-h-0 flex-1 flex-col overflow-y-auto"
+                  >
+                    <div className="flex min-h-full flex-col justify-end gap-2">
                     {(thread.messages ?? []).map((msg) => {
                       const fromYou = msg.author === "admin";
                       return (
@@ -510,14 +529,14 @@ export function SupportDeskView() {
                         </div>
                       );
                     })}
-                    <div ref={threadEndRef} />
+                    </div>
                   </div>
                   {thread.status === "closed" ? (
-                    <p className="mt-3 text-[12px] text-black/45">
+                    <p className="mt-3 shrink-0 text-[12px] text-black/45">
                       Closed. If the school writes again, it will reopen.
                     </p>
                   ) : (
-                    <div className="mt-3">
+                    <div className="mt-3 shrink-0">
                       <SupportComposer
                         key={thread.id}
                         ticketId={thread.id}
