@@ -1002,6 +1002,17 @@ export function formatPaymentPeriodsLabel(payment: Payment): string {
   return `${periods.slice(0, 3).join(" · ")} +${periods.length - 3}`;
 }
 
+/** Infer month vs term from a period label and optional fee category. */
+export function inferFeePeriodKind(periodLabel: string, categoryLabel?: string): FeePeriodKind {
+  const period = periodLabel.trim();
+  if (!period) return "month";
+  if (/^term\s*\d+/i.test(period)) return "term";
+  if (FEE_MONTHS.some((m) => m.toLowerCase() === period.toLowerCase())) return "month";
+  const catKind = categoryLabel ? categoryFeeTermKind(categoryLabel) : null;
+  if (catKind === "tuition" && /term/i.test(period)) return "term";
+  return "month";
+}
+
 /** Parse itemized lines from receipt narration (backward compatible). */
 export function parsePaymentFeeLinesFromNarration(
   narration?: string,
@@ -1024,10 +1035,12 @@ export function parsePaymentFeeLinesFromNarration(
     if (withPeriod) {
       const amount = Number(withPeriod[3].replace(/,/g, ""));
       if (Number.isFinite(amount) && amount >= 0) {
+        const description = withPeriod[1].trim();
+        const feePeriod = withPeriod[2].trim();
         lines.push({
-          description: withPeriod[1].trim(),
-          feePeriod: withPeriod[2].trim(),
-          feePeriodKind: "month",
+          description,
+          feePeriod,
+          feePeriodKind: inferFeePeriodKind(feePeriod, description),
           amount: Math.round(amount),
         });
       }
@@ -1037,10 +1050,11 @@ export function parsePaymentFeeLinesFromNarration(
     if ((inBreakdown || /^Fee breakdown:/i.test(part)) && plain) {
       const amount = Number(plain[2].replace(/,/g, ""));
       if (Number.isFinite(amount) && amount >= 0) {
+        const description = plain[1].trim();
         lines.push({
-          description: plain[1].trim(),
+          description,
           feePeriod: "",
-          feePeriodKind: "month",
+          feePeriodKind: inferFeePeriodKind("", description),
           amount: Math.round(amount),
         });
       }
@@ -1055,7 +1069,9 @@ export function resolvePaymentFeeLines(payment: Payment): PaymentFeeLine[] {
     return payment.feeLines.map((line) => ({
       description: line.description,
       amount: Math.max(0, Math.round(line.amount) || 0),
-      feePeriodKind: line.feePeriodKind ?? "month",
+      feePeriodKind:
+        line.feePeriodKind ??
+        inferFeePeriodKind(line.feePeriod?.trim() ?? "", line.description),
       feePeriod: line.feePeriod?.trim() ?? "",
     }));
   }
@@ -1067,7 +1083,7 @@ export function resolvePaymentFeeLines(payment: Payment): PaymentFeeLine[] {
     {
       description: payment.cat,
       amount: payment.amount,
-      feePeriodKind: resolvePaymentFeePeriodKind(payment),
+      feePeriodKind: inferFeePeriodKind(period, payment.cat),
       feePeriod: period,
     },
   ];
@@ -1089,7 +1105,13 @@ function feePeriodsMatchForBalance(
   const periodA = aPeriod.trim().toLowerCase();
   const periodB = bPeriod.trim().toLowerCase();
   if (!periodA || !periodB || periodA !== periodB) return false;
-  if (aKind && aKind !== bKind) return false;
+  // Period label is authoritative · legacy narration rows often default kind to "month"
+  if (aKind && bKind && aKind !== bKind) {
+    const termLike = /^term\s*\d+/i.test(periodA);
+    const monthLike = FEE_MONTHS.some((m) => m.toLowerCase() === periodA);
+    if (termLike || monthLike) return true;
+    return false;
+  }
   return true;
 }
 

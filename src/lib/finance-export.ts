@@ -30,6 +30,45 @@ function triggerDownload(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+export type PdfEmitAction = "download" | "print";
+
+export function printJsPdf(doc: jsPDF) {
+  const blob = doc.output("blob");
+  const url = URL.createObjectURL(blob);
+  const iframe = document.createElement("iframe");
+  iframe.style.position = "fixed";
+  iframe.style.right = "0";
+  iframe.style.bottom = "0";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.border = "none";
+  iframe.src = url;
+  document.body.appendChild(iframe);
+
+  const cleanup = () => {
+    if (iframe.parentNode) document.body.removeChild(iframe);
+    URL.revokeObjectURL(url);
+  };
+
+  iframe.onload = () => {
+    setTimeout(() => {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+    }, 250);
+  };
+
+  iframe.contentWindow?.addEventListener("afterprint", cleanup, { once: true });
+  setTimeout(cleanup, 60_000);
+}
+
+export function emitPdf(doc: jsPDF, filename: string, action: PdfEmitAction = "download") {
+  if (action === "print") {
+    printJsPdf(doc);
+  } else {
+    doc.save(filename);
+  }
+}
+
 function escapeCsvCell(value: string | number) {
   const text = String(value);
   if (text.includes(",") || text.includes('"') || text.includes("\n")) {
@@ -54,6 +93,7 @@ type TablePdfOptions = {
   headers: string[];
   rows: (string | number)[][];
   footer?: string;
+  action?: PdfEmitAction;
 };
 
 export function downloadTablePdf({
@@ -63,6 +103,7 @@ export function downloadTablePdf({
   headers,
   rows,
   footer,
+  action = "download",
 }: TablePdfOptions) {
   const brand = getActiveBrandPalette();
   const doc = new jsPDF({ orientation: rows[0]?.length > 6 ? "landscape" : "portrait" });
@@ -92,7 +133,11 @@ export function downloadTablePdf({
     doc.setTextColor(80, 80, 80);
     doc.text(footer, 14, finalY);
   }
-  doc.save(filename);
+  emitPdf(doc, filename, action);
+}
+
+export function printTablePdf(options: Omit<TablePdfOptions, "action">) {
+  downloadTablePdf({ ...options, action: "print" });
 }
 
 function formatInrPdf(amount: number) {
@@ -406,6 +451,7 @@ export async function downloadReceiptPdf(
   schoolName: string,
   academicYear: string,
   branding?: ReceiptBranding,
+  action: PdfEmitAction = "download",
 ) {
   const [logo, letterhead] = await Promise.all([
     loadLogoForPdf(branding?.logoUrl),
@@ -594,7 +640,8 @@ export async function downloadReceiptPdf(
     branding,
   );
 
-  doc.save(
+  emitPdf(
+    doc,
     formatDownloadFilename("receipt", "pdf", {
       id: payment.id,
       name: payment.name,
@@ -602,7 +649,17 @@ export async function downloadReceiptPdf(
       year: slugYear(academicYear),
       date: todayStamp(),
     }),
+    action,
   );
+}
+
+export async function printReceiptPdf(
+  payment: Payment,
+  schoolName: string,
+  academicYear: string,
+  branding?: ReceiptBranding,
+) {
+  return downloadReceiptPdf(payment, schoolName, academicYear, branding, "print");
 }
 
 const MONTH_ABBR = [
@@ -1113,6 +1170,7 @@ export async function downloadSalarySlipPdf(
   branding?: ReceiptBranding,
   staff?: SalarySlipStaff | null,
   academicYear?: string,
+  action: PdfEmitAction = "download",
 ) {
   const [logo, letterhead] = await Promise.all([
     loadLogoForPdf(branding?.logoUrl),
@@ -1312,7 +1370,8 @@ export async function downloadSalarySlipPdf(
     branding,
   );
 
-  doc.save(
+  emitPdf(
+    doc,
     formatDownloadFilename("salarySlip", "pdf", {
       id: payment.id,
       name: staff?.name || payment.payee,
@@ -1320,7 +1379,18 @@ export async function downloadSalarySlipPdf(
       year: academicYear ? slugYear(academicYear) : undefined,
       date: todayStamp(),
     }),
+    action,
   );
+}
+
+export async function printSalarySlipPdf(
+  payment: DisbursalDoc,
+  schoolName: string,
+  branding?: ReceiptBranding,
+  staff?: SalarySlipStaff | null,
+  academicYear?: string,
+) {
+  return downloadSalarySlipPdf(payment, schoolName, branding, staff, academicYear, "print");
 }
 
 export type VoucherBillTo = {
@@ -1336,6 +1406,7 @@ export async function downloadPaymentVoucherPdf(
   branding?: ReceiptBranding,
   billTo?: VoucherBillTo | null,
   academicYear?: string,
+  action: PdfEmitAction = "download",
 ) {
   const [logo, letterhead] = await Promise.all([
     loadLogoForPdf(branding?.logoUrl),
@@ -1481,7 +1552,8 @@ export async function downloadPaymentVoucherPdf(
     branding,
   );
 
-  doc.save(
+  emitPdf(
+    doc,
     formatDownloadFilename("voucher", "pdf", {
       id: payment.id,
       name: billTo?.name || payment.payee,
@@ -1489,5 +1561,16 @@ export async function downloadPaymentVoucherPdf(
       year: academicYear ? slugYear(academicYear) : undefined,
       date: todayStamp(),
     }),
+    action,
   );
+}
+
+export async function printPaymentVoucherPdf(
+  payment: DisbursalDoc,
+  schoolName: string,
+  branding?: ReceiptBranding,
+  billTo?: VoucherBillTo | null,
+  academicYear?: string,
+) {
+  return downloadPaymentVoucherPdf(payment, schoolName, branding, billTo, academicYear, "print");
 }

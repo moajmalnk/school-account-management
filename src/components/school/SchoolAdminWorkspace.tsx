@@ -7603,8 +7603,18 @@ function ReceivePayment() {
   const applyPrefillToLines = useCallback(
     (lines: FeeLineItem[]) => {
       let changed = false;
+      const balanceCtx = getPrefillBalanceContext(lines);
       const next = lines.map((item) => {
-        if (item.amount.trim()) return item;
+        const scheduled = prefillScheduledAmountForFeeLine(
+          item,
+          matchedClass,
+          feeTerms,
+          tuitionFee,
+          vehicleFee,
+          collectionStartMonth,
+          matchedRoute,
+          transportShift,
+        );
         const prefill = prefillAmountForFeeLine(
           item,
           matchedClass,
@@ -7614,13 +7624,17 @@ function ReceivePayment() {
           collectionStartMonth,
           matchedRoute,
           transportShift,
-          getPrefillBalanceContext(lines),
+          balanceCtx,
         );
-        if (prefill !== undefined) {
-          changed = true;
-          return { ...item, amount: String(prefill) };
-        }
-        return item;
+        if (prefill === undefined) return item;
+        const current = Math.max(0, Math.round(Number(item.amount) || 0));
+        const looksAutoFilled =
+          !item.amount.trim() ||
+          (scheduled != null && scheduled > 0 && current === scheduled);
+        if (!looksAutoFilled) return item;
+        if (String(prefill) === item.amount) return item;
+        changed = true;
+        return { ...item, amount: String(prefill) };
       });
       return changed ? next : lines;
     },
@@ -7758,7 +7772,7 @@ function ReceivePayment() {
   useEffect(() => {
     if (isExternal || editingPayment) return;
     setFeeItems((prev) => applyPrefillToLines(prev));
-  }, [applyPrefillToLines, isExternal, selected?.id, editingPayment]);
+  }, [applyPrefillToLines, isExternal, selected?.id, editingPayment, payments]);
 
   useEffect(() => {
     if (isExternal || editingPayment) return;
@@ -14794,10 +14808,81 @@ async function toRasterDataUrl(src: string): Promise<string> {
 const schoolBrandActionBtn =
   "inline-flex h-8 items-center gap-1 rounded-full bg-white px-2.5 text-[11px] font-semibold text-slate-700 shadow-sm ring-1 ring-black/10 transition-colors hover:bg-[#0F766E] hover:text-white disabled:pointer-events-none disabled:opacity-45";
 
+type SchoolBrandMediaSpec = {
+  outputWidth: number;
+  outputHeight: number;
+  aspectLabel: string;
+  formats: string;
+  maxMb: number;
+  usage: string;
+};
+
+const SCHOOL_BRAND_MEDIA_SPECS = {
+  logo: {
+    outputWidth: 512,
+    outputHeight: 512,
+    aspectLabel: "1:1 · square",
+    formats: "PNG, JPG, WebP",
+    maxMb: 2,
+    usage: "Dock, sidebar header, and receipt logo",
+  },
+  letterhead: {
+    outputWidth: 1280,
+    outputHeight: 400,
+    aspectLabel: "16:5 · wide banner",
+    formats: "JPG, PNG",
+    maxMb: 3,
+    usage: "Top banner on receipts and PDF exports",
+  },
+  seal: {
+    outputWidth: 512,
+    outputHeight: 512,
+    aspectLabel: "1:1 · circle",
+    formats: "PNG · transparent",
+    maxMb: 2,
+    usage: "Official stamp on fee receipts",
+  },
+  signature: {
+    outputWidth: 960,
+    outputHeight: 400,
+    aspectLabel: "2.4:1 · wide",
+    formats: "PNG · transparent",
+    maxMb: 2,
+    usage: "Principal / authorised signatory on receipts",
+  },
+} satisfies Record<"logo" | "letterhead" | "seal" | "signature", SchoolBrandMediaSpec>;
+
+function SchoolBrandMediaSpecs({ specs }: { specs: SchoolBrandMediaSpec }) {
+  const rows: { label: string; value: string }[] = [
+    { label: "Output", value: `${specs.outputWidth} × ${specs.outputHeight} px` },
+    { label: "Aspect", value: specs.aspectLabel },
+    { label: "Format", value: specs.formats },
+    { label: "Max size", value: `${specs.maxMb} MB` },
+  ];
+  return (
+    <div className="min-w-0 flex-1 space-y-2">
+      <p className="text-[11px] leading-relaxed text-black/55">{specs.usage}</p>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-lg border border-black/[0.06] bg-white/80 px-2.5 py-2 text-[10.5px] dark:border-white/10 dark:bg-zinc-900/60">
+        {rows.map((row) => (
+          <div key={row.label} className="contents">
+            <dt className="font-semibold uppercase tracking-wide text-black/40 dark:text-zinc-500">
+              {row.label}
+            </dt>
+            <dd className="font-mono text-black/75 dark:text-zinc-200">{row.value}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="text-[10px] text-black/40 dark:text-zinc-500">
+        Click preview or Adjust to reposition · zoom · and scale before saving
+      </p>
+    </div>
+  );
+}
+
 function SchoolDetailsMediaField({
   label,
   badge,
-  hint,
+  specs,
   preview,
   onAdjust,
   canAdjust = true,
@@ -14811,7 +14896,7 @@ function SchoolDetailsMediaField({
 }: {
   label: string;
   badge?: ReactNode;
-  hint: string;
+  specs: SchoolBrandMediaSpec;
   preview: ReactNode;
   onAdjust?: () => void;
   canAdjust?: boolean;
@@ -14893,7 +14978,7 @@ function SchoolDetailsMediaField({
         ) : (
           previewShell
         )}
-        <p className="min-w-0 pt-0.5 text-[11px] leading-relaxed text-black/50">{hint}</p>
+        <SchoolBrandMediaSpecs specs={specs} />
       </div>
     </div>
   );
@@ -15202,7 +15287,7 @@ function SchoolDetailsCard({
         <div className="grid grid-cols-12 gap-3">
           <SchoolDetailsMediaField
             label="Logo"
-            hint="Dock & headers · square · click preview or Adjust to reposition and scale · PNG/JPG · max 2 MB"
+            specs={SCHOOL_BRAND_MEDIA_SPECS.logo}
             canAdjust={Boolean(draft.logoUrl)}
             adjustLoading={cropLoading === "logo"}
             onAdjust={() => void openAdjust("logo")}
@@ -15226,7 +15311,7 @@ function SchoolDetailsCard({
 
           <SchoolDetailsMediaField
             label="Letterhead"
-            hint="Wide banner for receipts & PDFs · Adjust to crop and scale · max 3 MB"
+            specs={SCHOOL_BRAND_MEDIA_SPECS.letterhead}
             canAdjust={Boolean(draft.letterheadUrl)}
             adjustLoading={cropLoading === "letterhead"}
             onAdjust={() => void openAdjust("letterhead")}
@@ -15253,6 +15338,7 @@ function SchoolDetailsCard({
         <div className="grid grid-cols-12 gap-3">
           <SchoolDetailsMediaField
             label="Seal"
+            specs={SCHOOL_BRAND_MEDIA_SPECS.seal}
             badge={
               !draft.sealUrl ? (
                 <span className="rounded-full bg-[#CCFBF1] px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-[#0F766E]">
@@ -15260,7 +15346,6 @@ function SchoolDetailsCard({
                 </span>
               ) : undefined
             }
-            hint="Official stamp on receipts · Adjust default or uploaded seal · PNG/JPG · max 2 MB"
             adjustLoading={cropLoading === "seal"}
             onAdjust={() => void openAdjust("seal")}
             onUpload={() => sealInputRef.current?.click()}
@@ -15286,6 +15371,7 @@ function SchoolDetailsCard({
 
           <SchoolDetailsMediaField
             label="Signature"
+            specs={SCHOOL_BRAND_MEDIA_SPECS.signature}
             badge={
               !draft.signatureUrl ? (
                 <span className="rounded-full bg-[#CCFBF1] px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-[#0F766E]">
@@ -15293,7 +15379,6 @@ function SchoolDetailsCard({
                 </span>
               ) : undefined
             }
-            hint="Authorised signatory · Draw, upload, or Adjust to reposition · max 2 MB"
             adjustLoading={cropLoading === "signature"}
             onAdjust={() => void openAdjust("signature")}
             onUpload={() => signatureInputRef.current?.click()}
@@ -15477,19 +15562,26 @@ function SchoolDetailsCard({
                 : "Adjust logo"
         }
         description={
-          cropTarget === "logo"
-            ? "Drag to reposition, zoom out to fit wide logos, then confirm."
-            : cropTarget === "seal"
-              ? "Reposition and scale the seal within the square frame."
-              : cropTarget === "signature"
-                ? "Reposition and scale the signature within the frame."
-                : "Drag to reposition, zoom, then confirm."
+          cropTarget
+            ? `Output ${SCHOOL_BRAND_MEDIA_SPECS[cropTarget].outputWidth} × ${SCHOOL_BRAND_MEDIA_SPECS[cropTarget].outputHeight} px · ${SCHOOL_BRAND_MEDIA_SPECS[cropTarget].aspectLabel}. Drag to reposition, zoom, then confirm.`
+            : "Drag to reposition, zoom, then confirm."
         }
         aspect={
-          cropTarget === "letterhead" ? 16 / 5 : cropTarget === "signature" ? 2.4 : 1
+          cropTarget === "letterhead"
+            ? SCHOOL_BRAND_MEDIA_SPECS.letterhead.outputWidth /
+              SCHOOL_BRAND_MEDIA_SPECS.letterhead.outputHeight
+            : cropTarget === "signature"
+              ? SCHOOL_BRAND_MEDIA_SPECS.signature.outputWidth /
+                SCHOOL_BRAND_MEDIA_SPECS.signature.outputHeight
+              : 1
         }
         outputSize={
-          cropTarget === "letterhead" ? 1280 : cropTarget === "signature" ? 960 : 512
+          cropTarget
+            ? Math.max(
+                SCHOOL_BRAND_MEDIA_SPECS[cropTarget].outputWidth,
+                SCHOOL_BRAND_MEDIA_SPECS[cropTarget].outputHeight,
+              )
+            : 512
         }
         outputMime={cropTarget === "letterhead" ? "image/jpeg" : "image/png"}
         fit="contain"
