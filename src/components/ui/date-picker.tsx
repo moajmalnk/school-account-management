@@ -408,7 +408,7 @@ function TimeScrollColumn({
       </div>
       <div
         ref={listRef}
-        className="h-[11.5rem] overflow-y-auto overscroll-contain rounded-lg border border-[#EEEEEE] bg-[#FAFAFA] py-1 dark:border-white/10 dark:bg-zinc-900/80"
+        className="mobile-scrollbar-none h-[11.5rem] overflow-y-auto overscroll-contain rounded-lg border border-[#EEEEEE] bg-[#FAFAFA] py-1 dark:border-white/10 dark:bg-zinc-900/80"
       >
         {items.map((item) => {
           const selected = item === value;

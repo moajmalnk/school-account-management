@@ -6008,17 +6008,14 @@ function FinanceOverview({
           <button
             type="button"
             onClick={() => onOpenView("receive")}
-            className={cn(
-              glassCardClass,
-              "flex min-h-[96px] items-center gap-4 p-4 text-left transition-colors hover:bg-white/70 sm:p-5",
-            )}
+            className="group flex min-h-[96px] items-center gap-4 rounded-2xl border border-[#6EE7B7]/40 bg-gradient-to-br from-[#10B981] via-[#0D9488] to-[#0F766E] p-4 text-left shadow-[0_8px_24px_-10px_rgba(16,185,129,0.55)] transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_32px_-10px_rgba(16,185,129,0.65)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#10B981]/50 sm:p-5"
           >
-            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#D1F2E1]">
-              <ArrowDownToLine className="h-5 w-5 text-[#10B981]" />
+            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-white/20 ring-1 ring-white/30 backdrop-blur-sm">
+              <ArrowDownToLine className="h-5 w-5 text-white" strokeWidth={2.25} />
             </span>
             <div className="min-w-0">
-              <div className="text-[15px] font-bold text-slate-900">Receive payment</div>
-              <p className="mt-0.5 text-[12px] text-slate-500">Capture inbound fee receipts</p>
+              <div className="text-[15px] font-bold text-white">Receive payment</div>
+              <p className="mt-0.5 text-[12px] text-white/80">Capture inbound fee receipts</p>
             </div>
           </button>
         )}
@@ -6026,26 +6023,25 @@ function FinanceOverview({
           <button
             type="button"
             onClick={() => onOpenView("make")}
-            className={cn(
-              glassCardClass,
-              "flex min-h-[96px] items-center gap-4 p-4 text-left transition-colors hover:bg-white/70 sm:p-5",
-            )}
+            className="group flex min-h-[96px] items-center gap-4 rounded-2xl border border-[#FCA5A5]/40 bg-gradient-to-br from-[#F87171] via-[#EF4444] to-[#DC2626] p-4 text-left shadow-[0_8px_24px_-10px_rgba(239,68,68,0.5)] transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_32px_-10px_rgba(239,68,68,0.6)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EF4444]/50 sm:p-5"
           >
-            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#CCFBF1]">
-              <ArrowUpFromLine className="h-5 w-5 text-[#0F766E]" />
+            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-white/20 ring-1 ring-white/30 backdrop-blur-sm">
+              <ArrowUpFromLine className="h-5 w-5 text-white" strokeWidth={2.25} />
             </span>
             <div className="min-w-0">
-              <div className="text-[15px] font-bold text-slate-900">Make payment</div>
-              <p className="mt-0.5 text-[12px] text-slate-500">Pay salaries and suppliers</p>
+              <div className="text-[15px] font-bold text-white">Make payment</div>
+              <p className="mt-0.5 text-[12px] text-white/80">Pay salaries and suppliers</p>
             </div>
           </button>
         )}
       </div>
 
       <section className={cn(glassCardClass, "p-4 sm:p-5")}>
-        <h3 className="text-[15px] font-bold text-slate-900">Reports</h3>
-        <p className="mt-0.5 text-[12px] text-slate-500">Financial statements and analytics</p>
-        <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 xl:grid-cols-4">
+        <h3 className="text-[15px] font-bold text-slate-900 dark:text-zinc-50">Reports</h3>
+        <p className="mt-0.5 text-[12px] text-slate-500 dark:text-zinc-400">
+          Financial statements and analytics
+        </p>
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-3.5 xl:grid-cols-4">
           {(
             [
               {
@@ -6053,56 +6049,72 @@ function FinanceOverview({
                 l: "Fees Report",
                 d: "Collections & dues",
                 icon: GraduationCap,
-                iconClass: "bg-[#CCFBF1] text-[#0F766E]",
+                surface:
+                  "border-[#99F6E4]/50 bg-gradient-to-br from-[#CCFBF1]/90 via-[#F0FDFA] to-white dark:from-[#0F766E]/20 dark:via-zinc-900 dark:to-zinc-900",
+                iconWrap: "bg-white/95 text-[#0F766E] ring-1 ring-[#0F766E]/10",
               },
               {
                 k: "daybook" as const,
                 l: "Day Book",
                 d: "Daily cash activity",
                 icon: BookOpen,
-                iconClass: "bg-[#FEF3C7] text-amber-700",
+                surface:
+                  "border-[#BAE6FD]/50 bg-gradient-to-br from-[#E0F2FE]/90 via-[#F0F9FF] to-white dark:from-sky-950/30 dark:via-zinc-900 dark:to-zinc-900",
+                iconWrap: "bg-white/95 text-sky-700 ring-1 ring-sky-200/80",
               },
               {
                 k: "analytics" as const,
                 l: "Analytics",
                 d: "Financial insights",
                 icon: ChartPie,
-                iconClass: "bg-[#D1F2E1] text-[#059669]",
+                surface:
+                  "border-[#FDE68A]/55 bg-gradient-to-br from-[#FEF3C7]/90 via-[#FFFBEB] to-white dark:from-amber-950/25 dark:via-zinc-900 dark:to-zinc-900",
+                iconWrap: "bg-white/95 text-amber-700 ring-1 ring-amber-200/80",
               },
               {
                 k: "ledger" as const,
                 l: "Ledger",
                 d: "Account entries",
                 icon: ListTodo,
-                iconClass: "bg-[#E0E7FF] text-indigo-600",
+                surface:
+                  "border-[#C7D2FE]/50 bg-gradient-to-br from-[#E0E7FF]/90 via-[#EEF2FF] to-white dark:from-indigo-950/25 dark:via-zinc-900 dark:to-zinc-900",
+                iconWrap: "bg-white/95 text-indigo-600 ring-1 ring-indigo-200/80",
               },
               {
                 k: "pl" as const,
                 l: "Profit & Loss",
                 d: "Income vs expense",
                 icon: TrendingUp,
-                iconClass: "bg-[#DCFCE7] text-emerald-700",
+                surface:
+                  "border-[#BBF7D0]/50 bg-gradient-to-br from-[#DCFCE7]/90 via-[#F0FDF4] to-white dark:from-emerald-950/25 dark:via-zinc-900 dark:to-zinc-900",
+                iconWrap: "bg-white/95 text-emerald-700 ring-1 ring-emerald-200/80",
               },
               {
                 k: "balance" as const,
                 l: "Balance Sheet",
                 d: "Assets & liabilities",
                 icon: Scale,
-                iconClass: "bg-[#FCE7F3] text-pink-700",
+                surface:
+                  "border-[#FBCFE8]/50 bg-gradient-to-br from-[#FCE7F3]/90 via-[#FDF2F8] to-white dark:from-rose-950/25 dark:via-zinc-900 dark:to-zinc-900",
+                iconWrap: "bg-white/95 text-rose-600 ring-1 ring-rose-200/80",
               },
               {
                 k: "reconciliation" as const,
                 l: "Bank Reconciliation",
                 d: "Match statement & books",
                 icon: Landmark,
-                iconClass: "bg-[#CFFAFE] text-cyan-700",
+                surface:
+                  "border-[#A5F3FC]/50 bg-gradient-to-br from-[#CFFAFE]/90 via-[#ECFEFF] to-white dark:from-cyan-950/25 dark:via-zinc-900 dark:to-zinc-900",
+                iconWrap: "bg-white/95 text-cyan-700 ring-1 ring-cyan-200/80",
               },
               {
                 k: "salary" as const,
                 l: "Salary Report",
                 d: "Payroll & staff payables",
                 icon: Users,
-                iconClass: "bg-[#F3E8FF] text-violet-600",
+                surface:
+                  "border-[#DDD6FE]/50 bg-gradient-to-br from-[#EDE9FE]/90 via-[#F5F3FF] to-white dark:from-violet-950/25 dark:via-zinc-900 dark:to-zinc-900",
+                iconWrap: "bg-white/95 text-violet-600 ring-1 ring-violet-200/80",
               },
             ] as const
           )
@@ -6115,7 +6127,8 @@ function FinanceOverview({
                   type="button"
                   onClick={() => onOpenView(item.k)}
                   className={cn(
-                    "group flex min-h-[116px] min-w-0 flex-col items-start justify-between gap-3 rounded-2xl border border-white/70 bg-white/70 p-3.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-white hover:bg-white hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E] dark:border-white/10 dark:bg-zinc-900/70 dark:hover:border-white/20 dark:hover:bg-zinc-800 sm:min-h-[128px] sm:p-4",
+                    "group relative flex min-h-[118px] min-w-0 flex-col items-start justify-between gap-3 overflow-hidden rounded-2xl border p-3.5 text-left shadow-[0_2px_14px_-6px_rgba(15,23,42,0.12)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_28px_-10px_rgba(15,23,42,0.18)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]/35 sm:min-h-[128px] sm:p-4",
+                    item.surface,
                     items.length % 2 === 1 &&
                       index === items.length - 1 &&
                       "col-span-2 sm:col-span-1",
@@ -6124,19 +6137,21 @@ function FinanceOverview({
                   <div className="flex w-full items-start justify-between gap-2">
                     <span
                       className={cn(
-                        "grid h-9 w-9 shrink-0 place-items-center rounded-xl sm:h-10 sm:w-10",
-                        item.iconClass,
+                        "grid h-9 w-9 shrink-0 place-items-center rounded-xl shadow-sm sm:h-10 sm:w-10",
+                        item.iconWrap,
                       )}
                     >
-                      <Icon className="h-4 w-4 sm:h-[18px] sm:w-[18px]" />
+                      <Icon className="h-4 w-4 sm:h-[18px] sm:w-[18px]" strokeWidth={2.25} />
                     </span>
-                    <ArrowUpRight className="h-4 w-4 shrink-0 text-slate-300 transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[#0F766E]" />
+                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/70 text-slate-400 ring-1 ring-black/[0.04] transition-all group-hover:bg-white group-hover:text-[#0F766E] group-hover:ring-[#0F766E]/15 dark:bg-zinc-800/80 dark:ring-white/10">
+                      <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:-translate-y-px group-hover:translate-x-px" />
+                    </span>
                   </div>
                   <div className="min-w-0">
-                    <div className="text-[12.5px] font-bold leading-snug text-slate-900 dark:text-zinc-100 sm:text-[14px]">
+                    <div className="text-[13px] font-bold leading-snug tracking-tight text-slate-900 dark:text-zinc-50 sm:text-[14px]">
                       {item.l}
                     </div>
-                    <p className="mt-1 text-[10.5px] leading-snug text-slate-500 dark:text-zinc-400 sm:text-[11.5px]">
+                    <p className="mt-1 text-[11px] leading-snug text-slate-500/90 dark:text-zinc-400">
                       {item.d}
                     </p>
                   </div>
@@ -7063,13 +7078,75 @@ function defaultFeePeriod(
   },
   matchedClass?: ClassConfig,
   matchedRoute?: TransportRoute,
+  opts?: {
+    balanceCtx?: FeePrefillBalanceContext;
+    reservedPeriods?: Array<{ feePeriodKind: FeePeriodKind; feePeriod: string }>;
+    tuitionFee?: number;
+    vehicleFee?: number;
+    collectionStartMonth?: string;
+    transportShift?: TransportFeeShift;
+  },
 ): { feePeriodKind: FeePeriodKind; feePeriod: string } {
+  const choices = feePeriodChoices(feeTerms, description, periodOpts, matchedClass, matchedRoute);
+  if (choices.length === 0) {
+    return { feePeriodKind: "month", feePeriod: currentFeeMonth() };
+  }
+
+  if (opts?.balanceCtx) {
+    const categoryLabel = description.trim();
+    for (const choice of choices) {
+      const reserved = opts.reservedPeriods?.some(
+        (r) => r.feePeriodKind === choice.kind && r.feePeriod === choice.period,
+      );
+      if (reserved) continue;
+
+      const lineItem = {
+        description,
+        feePeriodKind: choice.kind,
+        feePeriod: choice.period,
+      };
+      const scheduled = prefillScheduledAmountForFeeLine(
+        lineItem,
+        matchedClass,
+        feeTerms,
+        opts.tuitionFee,
+        opts.vehicleFee,
+        opts.collectionStartMonth,
+        matchedRoute,
+        opts.transportShift,
+      );
+      if (scheduled == null || scheduled <= 0) continue;
+
+      const paid = studentFeePeriodPaidAmount(opts.balanceCtx.payments, {
+        studentName: opts.balanceCtx.studentName,
+        className: opts.balanceCtx.className,
+        academicYear: opts.balanceCtx.academicYear,
+        description: categoryLabel,
+        feePeriodKind: choice.kind,
+        feePeriod: choice.period,
+        excludePaymentId: opts.balanceCtx.excludePaymentId,
+        pendingLines: opts.balanceCtx.feeItems
+          ?.filter((line) => line.description === description)
+          .map((line) => ({
+            description: feeLineCategoryLabel(line),
+            feePeriodKind: line.feePeriodKind,
+            feePeriod: line.feePeriod,
+            amount: Math.max(0, Math.round(Number(line.amount) || 0)),
+          }))
+          .filter((line) => line.amount > 0 && line.feePeriod.trim()),
+      });
+
+      if (paid < scheduled) {
+        return { feePeriodKind: choice.kind, feePeriod: choice.period };
+      }
+    }
+  }
+
   const termKind = categoryFeeTermKind(description);
   const effectiveBillingCycle =
     termKind === "vehicle" && matchedRoute?.billingCycle
       ? matchedRoute.billingCycle
       : billingCycle;
-  const choices = feePeriodChoices(feeTerms, description, periodOpts, matchedClass, matchedRoute);
   if (effectiveBillingCycle === "Term") {
     const term = choices.find((c) => c.kind === "term");
     if (term) return { feePeriodKind: "term", feePeriod: term.period };
@@ -7081,6 +7158,75 @@ function defaultFeePeriod(
   return { feePeriodKind: "month", feePeriod: currentFeeMonth() };
 }
 
+function getFeeLineBalanceSummary(
+  item: FeeLineItem,
+  matchedClass: ClassConfig | undefined,
+  feeTerms: FeeTerm[],
+  tuitionFee: number | undefined,
+  vehicleFee: number | undefined,
+  collectionStartMonth: string | undefined,
+  matchedRoute: TransportRoute | undefined,
+  transportShift: TransportFeeShift | undefined,
+  balanceCtx: FeePrefillBalanceContext | undefined,
+): { scheduled: number; paid: number; balance: number } | null {
+  if (!balanceCtx || !item.feePeriod.trim()) return null;
+  const scheduled = prefillScheduledAmountForFeeLine(
+    item,
+    matchedClass,
+    feeTerms,
+    tuitionFee,
+    vehicleFee,
+    collectionStartMonth,
+    matchedRoute,
+    transportShift,
+  );
+  if (scheduled == null || scheduled <= 0) return null;
+
+  const description = feeLineCategoryLabel(item);
+  const pendingLines = balanceCtx.feeItems
+    ?.filter((line) => line.id !== item.id)
+    .map((line) => ({
+      description: feeLineCategoryLabel(line),
+      feePeriodKind: line.feePeriodKind,
+      feePeriod: line.feePeriod,
+      amount: Math.max(0, Math.round(Number(line.amount) || 0)),
+    }))
+    .filter((line) => line.amount > 0 && line.feePeriod.trim());
+
+  const paid = studentFeePeriodPaidAmount(balanceCtx.payments, {
+    studentName: balanceCtx.studentName,
+    className: balanceCtx.className,
+    academicYear: balanceCtx.academicYear,
+    description,
+    feePeriodKind: item.feePeriodKind,
+    feePeriod: item.feePeriod,
+    excludePaymentId: balanceCtx.excludePaymentId,
+    pendingLines,
+  });
+
+  const balance = Math.max(0, scheduled - paid);
+  return { scheduled, paid, balance };
+}
+
+function defaultFeePeriodOptsFromReceiveForm(
+  balanceCtx: FeePrefillBalanceContext | undefined,
+  reservedPeriods: Array<{ feePeriodKind: FeePeriodKind; feePeriod: string }> | undefined,
+  tuitionFee: number | undefined,
+  vehicleFee: number | undefined,
+  collectionStartMonth: string | undefined,
+  transportShift: TransportFeeShift | undefined,
+) {
+  if (!balanceCtx) return undefined;
+  return {
+    balanceCtx,
+    reservedPeriods,
+    tuitionFee,
+    vehicleFee,
+    collectionStartMonth,
+    transportShift,
+  };
+}
+
 function parseFeePeriodValue(value: string): { feePeriodKind: FeePeriodKind; feePeriod: string } {
   const sep = value.indexOf(":");
   if (sep <= 0) return { feePeriodKind: "month", feePeriod: value };
@@ -7090,6 +7236,35 @@ function parseFeePeriodValue(value: string): { feePeriodKind: FeePeriodKind; fee
     feePeriodKind: kind === "term" ? "term" : "month",
     feePeriod: period,
   };
+}
+
+function feePeriodChoiceValue(kind: FeePeriodKind, period: string) {
+  return `${kind}:${period}`;
+}
+
+function selectedPeriodValuesForDescription(items: FeeLineItem[], description: string) {
+  return items
+    .filter((item) => item.description === description)
+    .map((item) => feePeriodChoiceValue(item.feePeriodKind, item.feePeriod));
+}
+
+function isPrimaryFeeLineForDescription(items: FeeLineItem[], itemId: string) {
+  const item = items.find((line) => line.id === itemId);
+  if (!item) return false;
+  return items.find((line) => line.description === item.description)?.id === itemId;
+}
+
+function formatFeePeriodMultiSelectLabel(
+  selectedValues: string[],
+  choices: { value: string; label: string }[],
+) {
+  if (!selectedValues.length) return "Select period(s)";
+  const labels = selectedValues
+    .map((value) => choices.find((choice) => choice.value === value)?.label ?? value.split(":")[1] ?? value)
+    .filter(Boolean);
+  if (labels.length === 1) return labels[0]!;
+  if (labels.length === 2) return labels.join(" · ");
+  return `${labels.length} periods selected`;
 }
 
 type FeePrefillBalanceContext = {
@@ -7699,9 +7874,23 @@ function ReceivePayment() {
         );
         if (prefill === undefined) return item;
         const current = Math.max(0, Math.round(Number(item.amount) || 0));
+        const summary = balanceCtx
+          ? getFeeLineBalanceSummary(
+              item,
+              matchedClass,
+              feeTerms,
+              tuitionFee,
+              vehicleFee,
+              collectionStartMonth,
+              matchedRoute,
+              transportShift,
+              balanceCtx,
+            )
+          : null;
         const looksAutoFilled =
           !item.amount.trim() ||
-          (scheduled != null && scheduled > 0 && current === scheduled);
+          (scheduled != null && scheduled > 0 && current === scheduled) ||
+          (summary != null && summary.paid > 0 && current === summary.balance);
         if (!looksAutoFilled) return item;
         if (String(prefill) === item.amount) return item;
         changed = true;
@@ -7754,6 +7943,17 @@ function ReceivePayment() {
           : [createFeeLineItem({ description: defaultCategory })];
       }
 
+      const balanceCtx = getPrefillBalanceContext(prev);
+      const periodOptsArg = defaultFeePeriodOptsFromReceiveForm(
+        balanceCtx,
+        prev
+          .filter((line) => line.description === vehicleCategoryLabel)
+          .map((line) => ({ feePeriodKind: line.feePeriodKind, feePeriod: line.feePeriod })),
+        tuitionFee,
+        vehicleFee,
+        collectionStartMonth,
+        transportShift,
+      );
       const period = defaultFeePeriod(
         feeTerms,
         vehicleCategoryLabel,
@@ -7761,6 +7961,7 @@ function ReceivePayment() {
         vehiclePeriodOpts ?? periodOpts,
         matchedClass,
         matchedRoute,
+        periodOptsArg,
       );
       let vehicleLine =
         existingVehicle ??
@@ -7773,6 +7974,16 @@ function ReceivePayment() {
         vehiclePeriodOpts ?? periodOpts,
         matchedClass,
         matchedRoute,
+        defaultFeePeriodOptsFromReceiveForm(
+          balanceCtx,
+          prev
+            .filter((line) => line.id !== vehicleLine.id && line.description === vehicleLine.description)
+            .map((line) => ({ feePeriodKind: line.feePeriodKind, feePeriod: line.feePeriod })),
+          tuitionFee,
+          vehicleFee,
+          collectionStartMonth,
+          transportShift,
+        ),
       );
       vehicleLine = {
         ...vehicleLine,
@@ -7846,11 +8057,116 @@ function ReceivePayment() {
   }, [applyPrefillToLines, isExternal, selected?.id, editingPayment, payments]);
 
   useEffect(() => {
+    if (isExternal || editingPayment || !selected) return;
+    setFeeItems((prev) => {
+      const balanceCtx = getPrefillBalanceContext(prev);
+      if (!balanceCtx) return prev;
+      let changed = false;
+      const next = prev.map((item) => {
+        if (prev.filter((line) => line.description === item.description).length > 1) {
+          return item;
+        }
+        const linePeriodOpts = periodOptsForDescription(item.description);
+        const pendingPeriod = defaultFeePeriod(
+          feeTerms,
+          item.description,
+          isVehicleFeeCategory(item.description)
+            ? matchedRoute?.billingCycle
+            : matchedClass?.billingCycle,
+          linePeriodOpts,
+          matchedClass,
+          isVehicleFeeCategory(item.description) ? matchedRoute : undefined,
+          defaultFeePeriodOptsFromReceiveForm(
+            balanceCtx,
+            prev
+              .filter((line) => line.id !== item.id && line.description === item.description)
+              .map((line) => ({ feePeriodKind: line.feePeriodKind, feePeriod: line.feePeriod })),
+            tuitionFee,
+            vehicleFee,
+            collectionStartMonth,
+            transportShift,
+          ),
+        );
+        const summary = getFeeLineBalanceSummary(
+          item,
+          matchedClass,
+          feeTerms,
+          tuitionFee,
+          vehicleFee,
+          collectionStartMonth,
+          matchedRoute,
+          transportShift,
+          balanceCtx,
+        );
+        const current = Math.max(0, Math.round(Number(item.amount) || 0));
+        const scheduled = prefillScheduledAmountForFeeLine(
+          item,
+          matchedClass,
+          feeTerms,
+          tuitionFee,
+          vehicleFee,
+          collectionStartMonth,
+          matchedRoute,
+          transportShift,
+        );
+        const looksAutoFilled =
+          !item.amount.trim() ||
+          (scheduled != null && scheduled > 0 && current === scheduled) ||
+          (summary != null && summary.paid > 0 && current === summary.balance);
+        const hasPartialBalance = summary != null && summary.paid > 0 && summary.balance > 0;
+        const fullyPaid =
+          summary != null && summary.scheduled > 0 && summary.balance <= 0 && summary.paid >= summary.scheduled;
+        const periodMismatch =
+          item.feePeriodKind !== pendingPeriod.feePeriodKind ||
+          item.feePeriod !== pendingPeriod.feePeriod;
+        if (!periodMismatch) return item;
+        if (hasPartialBalance && !fullyPaid) return item;
+        if (!looksAutoFilled && !fullyPaid) return item;
+        changed = true;
+        const updated = { ...item, ...pendingPeriod };
+        const prefill = prefillAmountForFeeLine(
+          updated,
+          matchedClass,
+          feeTerms,
+          tuitionFee,
+          vehicleFee,
+          collectionStartMonth,
+          matchedRoute,
+          transportShift,
+          balanceCtx,
+        );
+        return {
+          ...updated,
+          amount: prefill !== undefined ? String(prefill) : updated.amount,
+        };
+      });
+      return changed ? next : prev;
+    });
+  }, [
+    selected?.id,
+    payments,
+    isExternal,
+    editingPayment,
+    feeTerms,
+    matchedClass,
+    matchedRoute,
+    tuitionFee,
+    vehicleFee,
+    collectionStartMonth,
+    transportShift,
+    periodOptsForDescription,
+    getPrefillBalanceContext,
+  ]);
+
+  useEffect(() => {
     if (isExternal || editingPayment) return;
     if (!matchedClass && !matchedRoute) return;
     setFeeItems((prev) => {
       let changed = false;
       const next = prev.map((item) => {
+        if (prev.filter((line) => line.description === item.description).length > 1) {
+          return item;
+        }
         const linePeriodOpts = periodOptsForDescription(item.description);
         const choices = feePeriodChoices(
           feeTerms,
@@ -7865,33 +8181,69 @@ function ReceivePayment() {
         const routeTermBilling =
           isVehicleFeeCategory(item.description) && matchedRoute?.billingCycle === "Term";
         if (matchedClass?.billingCycle === "Term" || routeTermBilling) {
-          const termChoice = choices.find((c) => c.kind === "term");
-          if (
-            termChoice &&
-            (categoryFeeTermKind(item.description) === "tuition" || routeTermBilling) &&
-            (item.feePeriodKind !== "term" || item.feePeriod !== termChoice.period)
-          ) {
-            changed = true;
-            const updated = {
-              ...item,
-              feePeriodKind: "term" as const,
-              feePeriod: termChoice.period,
-            };
-            const prefill = prefillAmountForFeeLine(
-              updated,
-              matchedClass,
+          if (categoryFeeTermKind(item.description) === "tuition" || routeTermBilling) {
+            const balanceCtx = getPrefillBalanceContext(prev);
+            const pendingPeriod = defaultFeePeriod(
               feeTerms,
-              tuitionFee,
-              vehicleFee,
-              collectionStartMonth,
-              matchedRoute,
-              transportShift,
-              getPrefillBalanceContext(prev),
+              item.description,
+              isVehicleFeeCategory(item.description)
+                ? matchedRoute?.billingCycle
+                : matchedClass?.billingCycle,
+              linePeriodOpts,
+              matchedClass,
+              isVehicleFeeCategory(item.description) ? matchedRoute : undefined,
+              defaultFeePeriodOptsFromReceiveForm(
+                balanceCtx,
+                prev
+                  .filter((line) => line.id !== item.id && line.description === item.description)
+                  .map((line) => ({ feePeriodKind: line.feePeriodKind, feePeriod: line.feePeriod })),
+                tuitionFee,
+                vehicleFee,
+                collectionStartMonth,
+                transportShift,
+              ),
             );
-            return {
-              ...updated,
-              ...(prefill !== undefined ? { amount: String(prefill) } : {}),
-            };
+            const summary = balanceCtx
+              ? getFeeLineBalanceSummary(
+                  item,
+                  matchedClass,
+                  feeTerms,
+                  tuitionFee,
+                  vehicleFee,
+                  collectionStartMonth,
+                  matchedRoute,
+                  transportShift,
+                  balanceCtx,
+                )
+              : null;
+            const hasPartialBalance = summary != null && summary.paid > 0 && summary.balance > 0;
+            const shouldAdvance =
+              !hasPartialBalance &&
+              (item.feePeriodKind !== pendingPeriod.feePeriodKind ||
+                item.feePeriod !== pendingPeriod.feePeriod);
+            if (shouldAdvance) {
+              changed = true;
+              const updated = {
+                ...item,
+                feePeriodKind: pendingPeriod.feePeriodKind,
+                feePeriod: pendingPeriod.feePeriod,
+              };
+              const prefill = prefillAmountForFeeLine(
+                updated,
+                matchedClass,
+                feeTerms,
+                tuitionFee,
+                vehicleFee,
+                collectionStartMonth,
+                matchedRoute,
+                transportShift,
+                balanceCtx,
+              );
+              return {
+                ...updated,
+                ...(prefill !== undefined ? { amount: String(prefill) } : {}),
+              };
+            }
           }
         }
         if (
@@ -7915,6 +8267,16 @@ function ReceivePayment() {
             linePeriodOpts,
             matchedClass,
             isVehicleFeeCategory(item.description) ? matchedRoute : undefined,
+            defaultFeePeriodOptsFromReceiveForm(
+              getPrefillBalanceContext(prev),
+              prev
+                .filter((line) => line.id !== item.id && line.description === item.description)
+                .map((line) => ({ feePeriodKind: line.feePeriodKind, feePeriod: line.feePeriod })),
+              tuitionFee,
+              vehicleFee,
+              collectionStartMonth,
+              transportShift,
+            ),
           );
           changed = true;
           const updated = { ...item, ...fallback };
@@ -7953,9 +8315,88 @@ function ReceivePayment() {
     getPrefillBalanceContext,
   ]);
 
+  const syncFeePeriodLines = (
+    description: string,
+    selectedValues: string[],
+    periodChoiceList: { value: string; label: string; kind: FeePeriodKind; period: string }[],
+  ) => {
+    setFeeItems((prev) => {
+      const template = prev.find((item) => item.description === description);
+      if (!template) return prev;
+
+      const orderedSelected = periodChoiceList.filter((choice) =>
+        selectedValues.includes(choice.value),
+      );
+      const effectiveSelected =
+        orderedSelected.length > 0 ? orderedSelected : periodChoiceList.slice(0, 1);
+
+      const sameDescItems = prev.filter((item) => item.description === description);
+      const newLines: FeeLineItem[] = effectiveSelected.map((choice) => {
+        const existing = sameDescItems.find(
+          (item) =>
+            item.feePeriodKind === choice.kind && item.feePeriod === choice.period,
+        );
+        if (existing) return existing;
+        return createFeeLineItem({
+          description,
+          customDescription: template.customDescription,
+          feePeriodKind: choice.kind,
+          feePeriod: choice.period,
+        });
+      });
+
+      const merged: FeeLineItem[] = [];
+      let inserted = false;
+      for (const item of prev) {
+        if (item.description === description) {
+          if (!inserted) {
+            merged.push(...newLines);
+            inserted = true;
+          }
+          continue;
+        }
+        merged.push(item);
+      }
+      if (!inserted) merged.push(...newLines);
+
+      const balanceCtx = getPrefillBalanceContext(merged);
+      return merged.map((item) => {
+        if (item.description !== description) return item;
+        const hadAmount = sameDescItems.some(
+          (line) =>
+            line.feePeriodKind === item.feePeriodKind &&
+            line.feePeriod === item.feePeriod &&
+            line.amount.trim(),
+        );
+        if (hadAmount) return item;
+        const prefill = prefillAmountForFeeLine(
+          item,
+          matchedClass,
+          feeTerms,
+          tuitionFee,
+          vehicleFee,
+          collectionStartMonth,
+          matchedRoute,
+          transportShift,
+          balanceCtx,
+        );
+        if (prefill === undefined) return item;
+        return { ...item, amount: String(prefill) };
+      });
+    });
+  };
+
   const updateFeeLine = (id: string, patch: Partial<FeeLineItem>) => {
-    setFeeItems((prev) =>
-      prev.map((item) => {
+    setFeeItems((prev) => {
+      if (patch.description && patch.description !== prev.find((line) => line.id === id)?.description) {
+        const target = prev.find((line) => line.id === id);
+        if (target && prev.filter((line) => line.description === target.description).length > 1) {
+          prev = prev.filter(
+            (line) => line.description !== target.description || line.id === id,
+          );
+        }
+      }
+      return prev.map((item) => {
         if (item.id !== id) return item;
         let next = { ...item, ...patch };
         if (patch.description) {
@@ -7980,6 +8421,16 @@ function ReceivePayment() {
               linePeriodOpts,
               matchedClass,
               isVehicleFeeCategory(patch.description) ? matchedRoute : undefined,
+              defaultFeePeriodOptsFromReceiveForm(
+                getPrefillBalanceContext(prev),
+                prev
+                  .filter((line) => line.id !== id && line.description === patch.description)
+                  .map((line) => ({ feePeriodKind: line.feePeriodKind, feePeriod: line.feePeriod })),
+                tuitionFee,
+                vehicleFee,
+                collectionStartMonth,
+                transportShift,
+              ),
             );
             next = { ...next, ...period };
           }
@@ -8017,8 +8468,8 @@ function ReceivePayment() {
           if (prefill !== undefined) next = { ...next, amount: String(prefill) };
         }
         return next;
-      }),
-    );
+      });
+    });
   };
 
   const addFeeItem = () => {
@@ -8037,6 +8488,16 @@ function ReceivePayment() {
       linePeriodOpts,
       matchedClass,
       isVehicleFeeCategory(nextCat.label) ? matchedRoute : undefined,
+      defaultFeePeriodOptsFromReceiveForm(
+        getPrefillBalanceContext([...feeItems]),
+        feeItems
+          .filter((line) => line.description === nextCat.label)
+          .map((line) => ({ feePeriodKind: line.feePeriodKind, feePeriod: line.feePeriod })),
+        tuitionFee,
+        vehicleFee,
+        collectionStartMonth,
+        transportShift,
+      ),
     );
     const line = createFeeLineItem({ description: nextCat.label, ...period });
     const prefill = prefillAmountForFeeLine(
@@ -8260,6 +8721,17 @@ function ReceivePayment() {
       matchedClass?.billingCycle,
       periodOpts,
       matchedClass,
+      undefined,
+      defaultFeePeriodOptsFromReceiveForm(
+        getPrefillBalanceContext(feeItems),
+        feeItems
+          .filter((line) => line.description === defaultCategory)
+          .map((line) => ({ feePeriodKind: line.feePeriodKind, feePeriod: line.feePeriod })),
+        tuitionFee,
+        vehicleFee,
+        collectionStartMonth,
+        transportShift,
+      ),
     );
     setFeeItems([createFeeLineItem({ description: defaultCategory, ...resetPeriod })]);
   };
@@ -8594,12 +9066,27 @@ function ReceivePayment() {
             : `${selected.name} · ${periodLabel} · balance ₹ ${remaining.toLocaleString("en-IN")}`,
       });
       const resetPeriod = defaultFeePeriod(
-      feeTerms,
-      defaultCategory,
-      matchedClass?.billingCycle,
-      periodOpts,
-      matchedClass,
-    );
+        feeTerms,
+        defaultCategory,
+        matchedClass?.billingCycle,
+        periodOpts,
+        matchedClass,
+        undefined,
+        defaultFeePeriodOptsFromReceiveForm(
+          {
+            payments,
+            studentName: selected.name,
+            className: selected.cls,
+            academicYear,
+            feeItems: [],
+          },
+          [],
+          tuitionFee,
+          vehicleFee,
+          collectionStartMonth,
+          transportShift,
+        ),
+      );
       setFeeItems([createFeeLineItem({ description: defaultCategory, ...resetPeriod })]);
       setNarration("");
       setReceiptTime(formatReceiptDateTimeNow());
@@ -8918,11 +9405,31 @@ function ReceivePayment() {
                   matchedClass,
                   isVehicleFeeCategory(item.description) ? matchedRoute : undefined,
                 );
+                const periodSelectOptions = periodChoices.map((c) => ({
+                  value: c.value,
+                  label: c.label,
+                }));
                 const selectedPeriodLabel =
                   periodChoices.find(
                     (c) => c.kind === item.feePeriodKind && c.period === item.feePeriod,
                   )?.label ?? item.feePeriod;
                 const itemAmount = Number(item.amount) || 0;
+                const balanceSummary = getFeeLineBalanceSummary(
+                  item,
+                  matchedClass,
+                  feeTerms,
+                  tuitionFee,
+                  vehicleFee,
+                  collectionStartMonth,
+                  matchedRoute,
+                  transportShift,
+                  getPrefillBalanceContext(feeItems),
+                );
+                const isPrimaryLine = isPrimaryFeeLineForDescription(feeItems, item.id);
+                const selectedPeriodValues = selectedPeriodValuesForDescription(
+                  feeItems,
+                  item.description,
+                );
                 return (
                   <div key={item.id} className="col-span-12">
                     <div className="rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-3.5 shadow-sm dark:border-white/10 dark:bg-zinc-900/50 sm:p-4">
@@ -8944,6 +9451,11 @@ function ReceivePayment() {
                           {itemAmount > 0 ? (
                             <span className="rounded-lg bg-white px-2.5 py-1 font-mono text-[13px] font-semibold text-[#0F766E] ring-1 ring-[#99F6E4]/60 dark:bg-zinc-950 dark:text-[#2DD4BF]">
                               ₹ {itemAmount.toLocaleString("en-IN")}
+                            </span>
+                          ) : null}
+                          {balanceSummary && balanceSummary.paid > 0 ? (
+                            <span className="hidden rounded-lg bg-[#FEF3C7] px-2 py-1 text-[10px] font-semibold text-[#92400E] ring-1 ring-[#FDE68A]/80 sm:inline dark:bg-amber-950/40 dark:text-amber-200">
+                              Bal ₹ {balanceSummary.balance.toLocaleString("en-IN")}
                             </span>
                           ) : null}
                           {feeItems.length > 1 ? (
@@ -8973,18 +9485,28 @@ function ReceivePayment() {
                           />
                         </div>
                         <div className="col-span-12 min-w-0 sm:col-span-4">
-                          <FieldLabel>Fee period</FieldLabel>
-                          <FieldSelect
-                            value={`${item.feePeriodKind}:${item.feePeriod}`}
-                            onValueChange={(next) =>
-                              updateFeeLine(item.id, parseFeePeriodValue(next))
-                            }
-                            options={periodChoices.map((c) => ({ value: c.value, label: c.label }))}
-                            placeholder="Select period"
-                            className="min-w-0"
-                            triggerClassName="h-11 min-w-0 sm:h-10"
-                            contentClassName="min-w-[min(100vw-1.5rem,20rem)]"
-                          />
+                          <FieldLabel>
+                            {isPrimaryLine ? "Fee period(s)" : "Fee period"}
+                          </FieldLabel>
+                          {isPrimaryLine ? (
+                            <>
+                              <FeePeriodMultiSelect
+                                choices={periodSelectOptions}
+                                selectedValues={selectedPeriodValues}
+                                onChange={(next) =>
+                                  syncFeePeriodLines(item.description, next, periodChoices)
+                                }
+                                disabled={periodChoices.length === 0}
+                              />
+                              <p className="mt-1 text-[10.5px] text-black/45 dark:text-zinc-500">
+                                Select one or more · creates a line for each
+                              </p>
+                            </>
+                          ) : (
+                            <div className="flex h-11 items-center rounded-lg border border-[#E5E5E5] bg-[#F4F4F5] px-3 text-[13px] text-black/70 dark:border-white/10 dark:bg-zinc-800/60 dark:text-zinc-300 sm:h-10">
+                              {selectedPeriodLabel || item.feePeriod}
+                            </div>
+                          )}
                         </div>
                         <div className="col-span-12 min-w-0 sm:col-span-3">
                           <FieldLabel>Amount</FieldLabel>
@@ -8999,6 +9521,28 @@ function ReceivePayment() {
                             placeholder="0"
                             className="h-11 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 font-mono text-[15px] font-semibold dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 sm:h-10 sm:text-[13px] sm:font-normal"
                           />
+                          {balanceSummary && balanceSummary.paid > 0 ? (
+                            <p className="mt-1.5 text-[11px] leading-snug text-black/55 dark:text-zinc-400">
+                              Fee{" "}
+                              <span className="font-mono font-semibold text-black/70 dark:text-zinc-200">
+                                ₹ {balanceSummary.scheduled.toLocaleString("en-IN")}
+                              </span>
+                              {" · "}
+                              Paid{" "}
+                              <span className="font-mono font-semibold text-[#0F766E]">
+                                ₹ {balanceSummary.paid.toLocaleString("en-IN")}
+                              </span>
+                              {" · "}
+                              Balance{" "}
+                              <span className="font-mono font-semibold text-[#B45309] dark:text-amber-300">
+                                ₹ {balanceSummary.balance.toLocaleString("en-IN")}
+                              </span>
+                            </p>
+                          ) : balanceSummary && balanceSummary.scheduled > 0 ? (
+                            <p className="mt-1.5 text-[11px] text-black/45 dark:text-zinc-500">
+                              Scheduled fee ₹ {balanceSummary.scheduled.toLocaleString("en-IN")}
+                            </p>
+                          ) : null}
                         </div>
                         {isOtherFeeDescription(item.description) ? (
                           <div className="col-span-12 min-w-0">
@@ -16469,6 +17013,81 @@ function ThemeSelect<T extends string>({
         triggerClassName="h-9 px-2.5 text-[12px] font-medium"
       />
     </label>
+  );
+}
+
+export function FeePeriodMultiSelect({
+  choices,
+  selectedValues,
+  onChange,
+  disabled,
+}: {
+  choices: { value: string; label: string }[];
+  selectedValues: string[];
+  onChange: (values: string[]) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const label = formatFeePeriodMultiSelectLabel(selectedValues, choices);
+
+  const toggle = (value: string) => {
+    const next = selectedValues.includes(value)
+      ? selectedValues.filter((item) => item !== value)
+      : [...selectedValues, value];
+    onChange(next.length ? next : choices.slice(0, 1).map((choice) => choice.value));
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          role="combobox"
+          aria-expanded={open}
+          disabled={disabled}
+          className={cn(
+            "flex h-11 w-full min-w-0 items-center justify-between rounded-lg border border-[#E5E5E5] bg-white px-3 text-left text-[13px] shadow-sm transition-colors hover:bg-[#FAFAFA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-zinc-900 dark:hover:bg-zinc-800 sm:h-10",
+            selectedValues.length ? "text-black dark:text-zinc-100" : "text-black/45 dark:text-zinc-500",
+          )}
+        >
+          <span className="truncate">{label}</span>
+          <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="z-[250] w-[var(--radix-popover-trigger-width)] min-w-[min(100vw-1.5rem,20rem)] overflow-hidden p-0"
+      >
+        <div className="max-h-64 overflow-y-auto p-2">
+          {choices.map((choice) => {
+            const checked = selectedValues.includes(choice.value);
+            return (
+              <button
+                key={choice.value}
+                type="button"
+                onClick={() => toggle(choice.value)}
+                className={cn(
+                  "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-left text-[13px] transition-colors hover:bg-[#F4F4F5] dark:hover:bg-zinc-800",
+                  checked && "bg-[#ECFDF5] font-medium text-[#0F766E] dark:bg-teal-950/40 dark:text-[#2DD4BF]",
+                )}
+              >
+                <Checkbox checked={checked} className="pointer-events-none" />
+                <span className="min-w-0 flex-1 truncate">{choice.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="border-t border-[#EFEFEF] px-3 py-2 dark:border-white/10">
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="inline-flex h-8 w-full items-center justify-center rounded-full bg-[#0F766E] text-[12px] font-semibold text-white hover:bg-[#0D9488]"
+          >
+            Done
+          </button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
