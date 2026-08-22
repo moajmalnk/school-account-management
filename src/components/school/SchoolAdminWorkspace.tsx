@@ -6774,6 +6774,12 @@ function newPaymentCategoryId() {
 
 const FIELD_SELECT_ADD_NEW = "__field_select_add_new__";
 
+function blurActiveElement() {
+  if (typeof document === "undefined") return;
+  const active = document.activeElement;
+  if (active instanceof HTMLElement) active.blur();
+}
+
 function feeDescriptionSelectOptions(
   descriptionOptions: { value: string; label: string }[],
   currentDescription: string,
@@ -7906,6 +7912,7 @@ function ReceivePayment() {
   const openAddCategoryDialog = (
     target: { type: "feeLine"; id: string } | { type: "ledger" },
   ) => {
+    blurActiveElement();
     setAddCategoryTarget(target);
     setNewCategoryLabel("");
     setAddCategoryOpen(true);
@@ -16203,23 +16210,33 @@ export function FieldSelect({
       return true;
     });
   }, [options]);
-  const resolvedValue = uniqueOptions.some((o) => o.value === value) ? value : undefined;
-  const selectedLabel = uniqueOptions.find((o) => o.value === resolvedValue)?.label;
+  const displayOptions = useMemo(() => {
+    if (!value || uniqueOptions.some((o) => o.value === value)) {
+      return uniqueOptions;
+    }
+    return [{ value, label: value }, ...uniqueOptions];
+  }, [uniqueOptions, value]);
+  const selectedLabel = displayOptions.find((o) => o.value === value)?.label;
   const triggerOverflowClass =
     "min-w-0 gap-2 overflow-hidden [&>span:first-child]:min-w-0 [&>span:first-child]:flex-1 [&>span:first-child]:truncate";
 
+  const closeSelect = () => {
+    setOpen(false);
+    blurActiveElement();
+  };
+
   const handleValueChange = (next: string) => {
     if (next === FIELD_SELECT_ADD_NEW) {
-      setOpen(false);
+      closeSelect();
       onAddNew?.();
       return;
     }
     onValueChange(next);
-    setOpen(false);
+    closeSelect();
   };
 
   const handleAddNew = () => {
-    setOpen(false);
+    closeSelect();
     onAddNew?.();
   };
 
@@ -16240,8 +16257,11 @@ export function FieldSelect({
       <div className={cn("min-w-0", className)}>
         <Select
           open={open}
-          onOpenChange={setOpen}
-          value={resolvedValue}
+          onOpenChange={(next) => {
+            setOpen(next);
+            if (!next) blurActiveElement();
+          }}
+          value={value}
           onValueChange={handleValueChange}
           disabled={disabled}
         >
@@ -16268,7 +16288,7 @@ export function FieldSelect({
             {addNewRow ? (
               <div className="mb-1 border-b border-[#E5E5E5] pb-1 dark:border-white/10">{addNewRow}</div>
             ) : null}
-            {uniqueOptions.map((opt) => (
+            {displayOptions.map((opt) => (
               <SelectItem
                 key={opt.value}
                 value={opt.value}
@@ -16285,7 +16305,13 @@ export function FieldSelect({
 
   return (
     <div className={cn("min-w-0", className)}>
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) blurActiveElement();
+        }}
+      >
         <PopoverTrigger asChild>
           <button
             type="button"
@@ -16319,15 +16345,14 @@ export function FieldSelect({
                 No matches found
               </CommandEmpty>
               <CommandGroup className="p-1.5">
-                {uniqueOptions.map((opt) => {
-                  const active = opt.value === resolvedValue;
+                {displayOptions.map((opt) => {
+                  const active = opt.value === value;
                   return (
                     <CommandItem
                       key={opt.value}
                       value={opt.label}
                       onSelect={() => {
                         handleValueChange(opt.value);
-                        setOpen(false);
                       }}
                       className={cn(
                         "cursor-pointer rounded-md px-3 py-2 text-[13px]",
