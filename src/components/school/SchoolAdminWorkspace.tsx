@@ -677,13 +677,12 @@ function IncomeExpenseSummaryTiles({
   paymentCount: number;
   compact?: boolean;
 }) {
-  const net = income - expense;
   const tileClass = compact
     ? "flex min-h-[92px] min-w-0 flex-col items-center justify-center overflow-hidden rounded-2xl px-2.5 py-3 text-center sm:min-h-[96px] sm:px-3"
     : "flex min-h-[104px] min-w-0 flex-col items-center justify-center overflow-hidden rounded-2xl px-2.5 py-3.5 text-center sm:min-h-[112px] sm:px-3.5 sm:py-4";
 
   return (
-    <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
+    <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
       <div className={cn(dashIncomeTileClass, tileClass)}>
         <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-100">
           Total Income
@@ -709,17 +708,6 @@ function IncomeExpenseSummaryTiles({
         <div className="mt-1 text-[10px] font-medium text-rose-100/80">
           {paymentCount} payment{paymentCount === 1 ? "" : "s"}
         </div>
-      </div>
-      <div className={cn(dashTotalBalanceTileClass, tileClass)}>
-        <div className="text-[10px] font-bold uppercase tracking-wider text-white/90">
-          Net Surplus
-        </div>
-        <DashboardAmount
-          value={net}
-          compact={compact}
-          className="mt-1.5 w-full text-center text-white"
-        />
-        <div className="mt-1 text-[10px] font-medium text-white/75">Income − expense</div>
       </div>
     </div>
   );
