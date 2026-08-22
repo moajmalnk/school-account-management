@@ -6934,6 +6934,7 @@ function ReceivePayment() {
   const [viewingPayment, setViewingPayment] = useState<Payment | null>(null);
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
   const [pendingDeletePayment, setPendingDeletePayment] = useState<Payment | null>(null);
+  const [savingReceipt, setSavingReceipt] = useState(false);
 
   const isExternal = payerSource === "external";
   const selected = !isExternal
@@ -7436,7 +7437,8 @@ function ReceivePayment() {
     setPendingDeletePayment(null);
   };
 
-  const handleRecord = () => {
+  const handleRecord = async () => {
+    if (savingReceipt) return;
     const value = recordTotal;
     if (!value || value <= 0) {
       toast.error("Enter a valid amount");
@@ -7479,8 +7481,8 @@ function ReceivePayment() {
         return;
       }
       const periodLabel = currentFeeMonth();
-      const newPayment: Payment = {
-        id: `RC-${9822 + payments.length}`,
+      const draft: Payment = {
+        id: "",
         name: payer,
         cat: primaryCategory,
         mode,
@@ -7494,22 +7496,27 @@ function ReceivePayment() {
         ...(note ? { narration: note } : {}),
         ...(receiptAttachments ? { attachments: receiptAttachments } : {}),
       };
-      setPayments((prev) => [newPayment, ...prev]);
-      void apiCreatePayment(newPayment).catch((err) =>
-        toast.error(err instanceof Error ? err.message : "Could not sync receipt"),
-      );
-      toast.success(`Receipt ${newPayment.id} · ₹ ${value.toLocaleString("en-IN")} captured`, {
-        description: `External · ${payer} · ${primaryCategory} · ${periodLabel}${
-          receiptAttachments ? ` · ${receiptAttachments.length} file${receiptAttachments.length === 1 ? "" : "s"}` : ""
-        }`,
-      });
-      setExternalAmount("");
-      setExternalPayer("");
-      setNarration("");
-      setReceiptTime(formatDisbursalTime());
-      setAttachments([]);
-      setBankSplitAmount("");
-      setCashSplitAmount("");
+      setSavingReceipt(true);
+      try {
+        const saved = await apiCreatePayment(draft);
+        setPayments((prev) => [saved, ...prev.filter((p) => p.id !== saved.id)]);
+        toast.success(`Receipt ${saved.id} · ₹ ${value.toLocaleString("en-IN")} captured`, {
+          description: `External · ${payer} · ${primaryCategory} · ${periodLabel}${
+            receiptAttachments ? ` · ${receiptAttachments.length} file${receiptAttachments.length === 1 ? "" : "s"}` : ""
+          }`,
+        });
+        setExternalAmount("");
+        setExternalPayer("");
+        setNarration("");
+        setReceiptTime(formatDisbursalTime());
+        setAttachments([]);
+        setBankSplitAmount("");
+        setCashSplitAmount("");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Could not save receipt");
+      } finally {
+        setSavingReceipt(false);
+      }
       return;
     }
 
@@ -7532,8 +7539,8 @@ function ReceivePayment() {
       }
     }
     const periodLabel = primaryPeriod.trim();
-    const newPayment: Payment = {
-      id: `RC-${9822 + payments.length}`,
+    const draft: Payment = {
+      id: "",
       name: selected.name,
       cat: primaryCategory,
       mode,
@@ -7548,30 +7555,35 @@ function ReceivePayment() {
       ...(note ? { narration: note } : {}),
       ...(receiptAttachments ? { attachments: receiptAttachments } : {}),
     };
-    setPayments((prev) => [newPayment, ...prev]);
-    setStudents((prev) =>
-      prev.map((s) => (s.id === selected.id ? { ...s, due: Math.max(0, s.due - value) } : s)),
-    );
-    void apiCreatePayment(newPayment, {
-      reduceDue: true,
-      studentId: selected.id,
-    }).catch((err) =>
-      toast.error(err instanceof Error ? err.message : "Could not sync receipt"),
-    );
-    const remaining = Math.max(0, selected.due - value);
-    toast.success(`Receipt ${newPayment.id} · ₹ ${value.toLocaleString("en-IN")} captured`, {
-      description:
-        remaining === 0
-          ? `${selected.name}'s balance is now Cleared · ${periodLabel}`
-          : `${selected.name} · ${periodLabel} · balance ₹ ${remaining.toLocaleString("en-IN")}`,
-    });
-    const resetPeriod = defaultFeePeriod(feeTerms, defaultCategory, matchedClass?.billingCycle);
-    setFeeItems([createFeeLineItem({ description: defaultCategory, ...resetPeriod })]);
-    setNarration("");
-    setReceiptTime(formatDisbursalTime());
-    setAttachments([]);
-    setBankSplitAmount("");
-    setCashSplitAmount("");
+    setSavingReceipt(true);
+    try {
+      const saved = await apiCreatePayment(draft, {
+        reduceDue: true,
+        studentId: selected.id,
+      });
+      setPayments((prev) => [saved, ...prev.filter((p) => p.id !== saved.id)]);
+      setStudents((prev) =>
+        prev.map((s) => (s.id === selected.id ? { ...s, due: Math.max(0, s.due - value) } : s)),
+      );
+      const remaining = Math.max(0, selected.due - value);
+      toast.success(`Receipt ${saved.id} · ₹ ${value.toLocaleString("en-IN")} captured`, {
+        description:
+          remaining === 0
+            ? `${selected.name}'s balance is now Cleared · ${periodLabel}`
+            : `${selected.name} · ${periodLabel} · balance ₹ ${remaining.toLocaleString("en-IN")}`,
+      });
+      const resetPeriod = defaultFeePeriod(feeTerms, defaultCategory, matchedClass?.billingCycle);
+      setFeeItems([createFeeLineItem({ description: defaultCategory, ...resetPeriod })]);
+      setNarration("");
+      setReceiptTime(formatDisbursalTime());
+      setAttachments([]);
+      setBankSplitAmount("");
+      setCashSplitAmount("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save receipt");
+    } finally {
+      setSavingReceipt(false);
+    }
   };
 
   const todayTotal = useMemo(
@@ -8054,11 +8066,19 @@ function ReceivePayment() {
             </div>
             <button
               type="button"
-              onClick={editingPayment ? saveEditedHistoryPayment : handleRecord}
-              disabled={!canSubmit}
+              onClick={editingPayment ? saveEditedHistoryPayment : () => void handleRecord()}
+              disabled={!canSubmit || savingReceipt}
               className="inline-flex h-12 min-w-[140px] flex-1 items-center justify-center rounded-full bg-[#0F766E] px-8 text-[14px] font-semibold tracking-tight text-white shadow-[0_8px_24px_-10px_rgba(15,118,110,0.45)] transition-all hover:bg-[#0D9488] hover:shadow-[0_10px_28px_-10px_rgba(15,118,110,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none sm:flex-none"
             >
-              {editingPayment ? "Save changes" : isExternal ? "Record" : "Record Payment"}
+              {savingReceipt ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : editingPayment ? (
+                "Save changes"
+              ) : isExternal ? (
+                "Record"
+              ) : (
+                "Record Payment"
+              )}
             </button>
           </div>
         </div>
