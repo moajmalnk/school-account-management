@@ -137,6 +137,7 @@ import {
 } from "@/lib/academic-year";
 import {
   composeClassName,
+  splitClassName,
   normalizeClassConfig,
   CLASS_SCHEDULE_CYCLES,
   CLASS_ONE_TIME_FEE_SUGGESTIONS,
@@ -314,7 +315,7 @@ import {
   type PaymentPeriod,
 } from "@/lib/payment-period";
 import { amountToIndianWords } from "@/lib/amount-words";
-import { formatEventDateTime, isBlankDate, isEventToday, parseEventDate, toIsoDate, toSqlDateTime } from "@/lib/dates";
+import { formatEventDateTime, formatInAppZone, formatNow, isBlankDate, isEventToday, parseEventDate, toIsoDate, toSqlDateTime } from "@/lib/dates";
 import { cn, dashCardClass, glassCardClass, glassInsetClass, glassPanelClass, glassTableWrapClass, premiumCardClass, type CornerSide, type Tone } from "@/lib/utils";
 
 type PendingObligation = {
@@ -1785,7 +1786,7 @@ function DirectoryRecycleBinList({
     <div className={directoryMobileListClass}>
       {items.map((item) => {
         const deletedLabel = item.deletedAt
-          ? new Date(item.deletedAt).toLocaleString("en-IN", {
+          ? formatInAppZone(new Date(item.deletedAt), {
               dateStyle: "medium",
               timeStyle: "short",
             })
@@ -2218,7 +2219,7 @@ function StudentsDirectoryTable({
 }
 
 export function AdmitStudentPage() {
-  const { students, classes, admitStudentToActiveYear } = useTenantStore();
+  const { students, classes, setClasses, admitStudentToActiveYear } = useTenantStore();
   const navigate = useNavigate();
   const defaultClass = classes[0]?.className ?? "";
   const [form, setForm] = useState<AdmitStudentForm>(() => emptyAdmitForm(defaultClass));
@@ -2228,6 +2229,10 @@ export function AdmitStudentPage() {
   const [sharePhone, setSharePhone] = useState("");
   const [shareGuardian, setShareGuardian] = useState("");
   const [admittedId, setAdmittedId] = useState<string | null>(null);
+  const [addClassOpen, setAddClassOpen] = useState(false);
+  const [newClassGrade, setNewClassGrade] = useState("");
+  const [newClassSection, setNewClassSection] = useState("");
+  const [savingClass, setSavingClass] = useState(false);
 
   useEffect(() => {
     if (!defaultClass) return;
@@ -2239,6 +2244,58 @@ export function AdmitStudentPage() {
   }, [classes, defaultClass]);
 
   const backToStudents = () => navigate({ to: "/tenant/students" });
+
+  const submitNewClass = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const grade = newClassGrade.trim();
+    const section = newClassSection.trim();
+    if (!grade) {
+      toast.error("Class name is required");
+      return;
+    }
+    if (!section) {
+      toast.error("Division is required");
+      return;
+    }
+    const className = composeClassName(grade, section);
+    const existing = matchExistingClass(classes, className);
+    if (existing) {
+      setForm((prev) => ({ ...prev, cls: existing.className }));
+      setAddClassOpen(false);
+      setNewClassGrade("");
+      setNewClassSection("");
+      toast.message(`Using existing class ${existing.className}`);
+      return;
+    }
+    const created = buildClassFromLabel(
+      nextPrefixedId(
+        "CLS",
+        classes.map((c) => c.id),
+        3,
+      ),
+      className,
+    );
+    setSavingClass(true);
+    try {
+      setClasses((prev) => [...prev, created]);
+      if (getApiToken()) {
+        await apiUpsertClass(created);
+      }
+      setForm((prev) => ({ ...prev, cls: created.className }));
+      setAddClassOpen(false);
+      setNewClassGrade("");
+      setNewClassSection("");
+      toast.success(`${created.className} added`, {
+        description: getApiToken()
+          ? "Saved to class tier · configure fees in Settings"
+          : "Configure fees anytime in Settings → Class Tier",
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not add class");
+    } finally {
+      setSavingClass(false);
+    }
+  };
 
   const createStudent = (): Student | null => {
     if (!form.name.trim() || !form.guardian.trim()) {
@@ -2342,9 +2399,15 @@ export function AdmitStudentPage() {
             <FieldSelect
               value={form.cls}
               onValueChange={(cls) => setForm({ ...form, cls })}
-              options={classes.map((c) => ({ value: c.className, label: c.className }))}
+              options={classSelectOptions(classes, form.cls)}
               placeholder="Select class"
-              disabled={classes.length === 0}
+              onAddNew={() => {
+                const parts = splitClassName(form.cls);
+                setNewClassGrade(parts.grade);
+                setNewClassSection(parts.section);
+                setAddClassOpen(true);
+              }}
+              addNewLabel="Add new class"
             />
           </div>
 
@@ -2399,6 +2462,87 @@ export function AdmitStudentPage() {
           </div>
         </form>
       </section>
+
+      <Dialog
+        open={addClassOpen}
+        onOpenChange={(open) => {
+          setAddClassOpen(open);
+          if (!open) {
+            setNewClassGrade("");
+            setNewClassSection("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm rounded-xl">
+          <DialogHeader>
+            <DialogTitle>Add class</DialogTitle>
+            <DialogDescription>
+              Creates a class tier for admissions and fee posting. You can set fee amounts later in
+              Settings → Class Tier.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={(e) => void submitNewClass(e)} className="space-y-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                  Class
+                </Label>
+                <Input
+                  value={newClassGrade}
+                  onChange={(e) => setNewClassGrade(e.target.value)}
+                  placeholder="e.g. Grade 4, 2025"
+                  autoFocus
+                  className="h-11"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                  Division
+                </Label>
+                <Input
+                  value={newClassSection}
+                  onChange={(e) => setNewClassSection(e.target.value)}
+                  placeholder="e.g. A, B"
+                  className="h-11"
+                />
+              </div>
+            </div>
+            {newClassGrade.trim() || newClassSection.trim() ? (
+              <p className="text-[12px] text-black/50 dark:text-zinc-400">
+                Preview:{" "}
+                <span className="font-semibold text-black dark:text-zinc-100">
+                  {composeClassName(newClassGrade, newClassSection) || "—"}
+                </span>
+              </p>
+            ) : null}
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full"
+                disabled={savingClass}
+                onClick={() => setAddClassOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={savingClass || !newClassGrade.trim() || !newClassSection.trim()}
+                className="rounded-full bg-[#0F766E] hover:bg-[#0D9488]"
+              >
+                {savingClass ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Adding…
+                  </>
+                ) : (
+                  "Add class"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <ShareParentLinkDialog
         open={shareOpen}
@@ -3018,10 +3162,7 @@ export function StudentsLedger() {
       toast.error("Popup blocked · allow pop-ups for this site");
       return;
     }
-    const stampedAt = new Date().toLocaleString("en-IN", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
+    const stampedAt = formatNow();
     const contextLabel = [
       gradeFilter === "all"
         ? "All Grades"
@@ -6615,6 +6756,37 @@ function newFeeLineId() {
   return `fl-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+function newPaymentCategoryId() {
+  return `PC-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+}
+
+const FIELD_SELECT_ADD_NEW = "__field_select_add_new__";
+
+function feeDescriptionSelectOptions(
+  descriptionOptions: { value: string; label: string }[],
+  currentDescription: string,
+) {
+  const options = [...descriptionOptions];
+  if (
+    currentDescription.trim() &&
+    !options.some((o) => o.value.toLowerCase() === currentDescription.trim().toLowerCase())
+  ) {
+    options.push({ value: currentDescription, label: currentDescription });
+  }
+  return options;
+}
+
+function classSelectOptions(classes: ClassConfig[], currentClass: string) {
+  const options = classes.map((c) => ({ value: c.className, label: c.className }));
+  if (
+    currentClass.trim() &&
+    !options.some((o) => o.value.toLowerCase() === currentClass.trim().toLowerCase())
+  ) {
+    options.push({ value: currentClass, label: currentClass });
+  }
+  return options;
+}
+
 function isOtherFeeDescription(label: string) {
   return label.trim().toLowerCase() === "other";
 }
@@ -6925,6 +7097,7 @@ function ReceivePayment() {
     classes: classConfigs,
     transportRoutes,
     paymentCategories,
+    setPaymentCategories,
     activeFeeTerms: feeTerms,
     academicYear,
     schoolDetails,
@@ -6973,6 +7146,12 @@ function ReceivePayment() {
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
   const [pendingDeletePayment, setPendingDeletePayment] = useState<Payment | null>(null);
   const [savingReceipt, setSavingReceipt] = useState(false);
+  const [addCategoryOpen, setAddCategoryOpen] = useState(false);
+  const [addCategoryTarget, setAddCategoryTarget] = useState<
+    { type: "feeLine"; id: string } | { type: "ledger" } | null
+  >(null);
+  const [newCategoryLabel, setNewCategoryLabel] = useState("");
+  const [savingCategory, setSavingCategory] = useState(false);
 
   const isExternal = payerSource === "external";
   const selected = !isExternal
@@ -7173,6 +7352,50 @@ function ReceivePayment() {
 
   const removeFeeItem = (id: string) => {
     setFeeItems((prev) => (prev.length <= 1 ? prev : prev.filter((item) => item.id !== id)));
+  };
+
+  const openAddCategoryDialog = (
+    target: { type: "feeLine"; id: string } | { type: "ledger" },
+  ) => {
+    setAddCategoryTarget(target);
+    setNewCategoryLabel("");
+    setAddCategoryOpen(true);
+  };
+
+  const submitNewCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const label = newCategoryLabel.trim();
+    if (!label) {
+      toast.error("Enter a fee description");
+      return;
+    }
+    if (
+      paymentCategories.some((c) => c.label.trim().toLowerCase() === label.toLowerCase())
+    ) {
+      toast.error("This fee description already exists");
+      return;
+    }
+    const draft: PaymentCategory = { id: newPaymentCategoryId(), label };
+    setSavingCategory(true);
+    try {
+      const saved = getApiToken() ? await apiUpsertPaymentCategory(draft) : draft;
+      setPaymentCategories((prev) => [...prev, saved]);
+      if (addCategoryTarget?.type === "feeLine") {
+        updateFeeLine(addCategoryTarget.id, { description: saved.label, customDescription: "" });
+      } else if (addCategoryTarget?.type === "ledger") {
+        setLedgerCategory(saved.label);
+      }
+      setAddCategoryOpen(false);
+      setAddCategoryTarget(null);
+      setNewCategoryLabel("");
+      toast.success(`Added “${saved.label}”`, {
+        description: getApiToken() ? "Saved to fee categories" : "Available for this session",
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not add fee description");
+    } finally {
+      setSavingCategory(false);
+    }
   };
 
   const handleModeChange = (next: string) => {
@@ -7802,6 +8025,8 @@ function ReceivePayment() {
                     options={descriptionOptions}
                     placeholder="Select category"
                     triggerClassName="h-11 sm:h-10"
+                    onAddNew={() => openAddCategoryDialog({ type: "ledger" })}
+                    addNewLabel="Add new description"
                   />
                 </div>
                 <div className="col-span-12">
@@ -7968,13 +8193,11 @@ function ReceivePayment() {
                           <FieldSelect
                             value={item.description}
                             onValueChange={(next) => updateFeeLine(item.id, { description: next })}
-                            options={
-                              descriptionOptions.length
-                                ? descriptionOptions
-                                : [{ value: item.description, label: item.description }]
-                            }
+                            options={feeDescriptionSelectOptions(descriptionOptions, item.description)}
                             placeholder="Select fee"
                             triggerClassName="h-11 sm:h-10"
+                            onAddNew={() => openAddCategoryDialog({ type: "feeLine", id: item.id })}
+                            addNewLabel="Add new description"
                           />
                           {isOtherFeeDescription(item.description) && (
                             <Input
@@ -8601,6 +8824,65 @@ function ReceivePayment() {
               </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={addCategoryOpen}
+        onOpenChange={(open) => {
+          setAddCategoryOpen(open);
+          if (!open) {
+            setAddCategoryTarget(null);
+            setNewCategoryLabel("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm rounded-xl">
+          <DialogHeader>
+            <DialogTitle>Add fee description</DialogTitle>
+            <DialogDescription>
+              Creates a reusable category for fee items, receipts, and ledger posting.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={(e) => void submitNewCategory(e)} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                Description
+              </Label>
+              <Input
+                value={newCategoryLabel}
+                onChange={(e) => setNewCategoryLabel(e.target.value)}
+                placeholder="e.g. Library Fee, Lab Fee"
+                autoFocus
+                className="h-11"
+              />
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full"
+                disabled={savingCategory}
+                onClick={() => setAddCategoryOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={savingCategory || !newCategoryLabel.trim()}
+                className="rounded-full bg-[#0F766E] hover:bg-[#0D9488]"
+              >
+                {savingCategory ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Adding…
+                  </>
+                ) : (
+                  "Add description"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -14828,6 +15110,8 @@ function FieldSelect({
   contentClassName,
   searchable = false,
   searchPlaceholder = "Search…",
+  onAddNew,
+  addNewLabel = "Add new",
 }: {
   value: string;
   onValueChange: (value: string) => void;
@@ -14839,12 +15123,14 @@ function FieldSelect({
   contentClassName?: string;
   searchable?: boolean;
   searchPlaceholder?: string;
+  onAddNew?: () => void;
+  addNewLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const uniqueOptions = useMemo(() => {
     const seen = new Set<string>();
     return options.filter((opt) => {
-      if (!opt.value || seen.has(opt.value)) return false;
+      if (!opt.value || opt.value === FIELD_SELECT_ADD_NEW || seen.has(opt.value)) return false;
       seen.add(opt.value);
       return true;
     });
@@ -14854,10 +15140,33 @@ function FieldSelect({
   const triggerOverflowClass =
     "min-w-0 gap-2 overflow-hidden [&>span:first-child]:min-w-0 [&>span:first-child]:flex-1 [&>span:first-child]:truncate";
 
+  const handleValueChange = (next: string) => {
+    if (next === FIELD_SELECT_ADD_NEW) {
+      onAddNew?.();
+      return;
+    }
+    onValueChange(next);
+  };
+
+  const addNewRow = onAddNew ? (
+    <button
+      type="button"
+      onPointerDown={(event) => event.preventDefault()}
+      onClick={() => {
+        setOpen(false);
+        onAddNew();
+      }}
+      className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-left text-[13px] font-semibold text-[#0F766E] transition-colors hover:bg-[#F0FDFA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]/30 dark:text-[#2DD4BF] dark:hover:bg-teal-950/40"
+    >
+      <Plus className="h-3.5 w-3.5 shrink-0" />
+      {addNewLabel}
+    </button>
+  ) : null;
+
   if (!searchable) {
     return (
       <div className={cn("min-w-0", className)}>
-        <Select value={resolvedValue} onValueChange={onValueChange} disabled={disabled}>
+        <Select value={resolvedValue} onValueChange={handleValueChange} disabled={disabled}>
           <SelectTrigger
             className={cn(
               "h-10 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 text-[13px] font-normal text-black shadow-none focus:ring-2 focus:ring-[#0F766E] focus:ring-offset-0 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100",
@@ -14877,6 +15186,9 @@ function FieldSelect({
               contentClassName,
             )}
           >
+            {addNewRow ? (
+              <div className="mb-1 border-b border-[#E5E5E5] pb-1 dark:border-white/10">{addNewRow}</div>
+            ) : null}
             {uniqueOptions.map((opt) => (
               <SelectItem
                 key={opt.value}
@@ -14918,6 +15230,9 @@ function FieldSelect({
           )}
         >
           <Command className="rounded-lg bg-white dark:bg-zinc-900 dark:text-zinc-100">
+            {addNewRow ? (
+              <div className="border-b border-[#E5E5E5] p-1.5 dark:border-white/10">{addNewRow}</div>
+            ) : null}
             <CommandInput placeholder={searchPlaceholder} className="h-10 text-[13px] dark:text-zinc-100" />
             <CommandList className="max-h-56">
               <CommandEmpty className="py-4 text-center text-[12px] text-slate-500 dark:text-zinc-400">
@@ -14931,7 +15246,7 @@ function FieldSelect({
                       key={opt.value}
                       value={opt.label}
                       onSelect={() => {
-                        onValueChange(opt.value);
+                        handleValueChange(opt.value);
                         setOpen(false);
                       }}
                       className={cn(

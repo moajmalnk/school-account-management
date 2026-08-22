@@ -71,7 +71,7 @@ import {
   STAFF_PROFILE_TABS,
   type ProfileDetailTabId,
 } from "@/components/school/ProfileDetailTabs";
-import { formatEventDateTime } from "@/lib/dates";
+import { formatEventDateTime, formatInAppZone } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 
 const CARD_FRAME =
@@ -251,7 +251,7 @@ function formatJoinedAt(iso: string) {
 function formatStatusDateTime(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString("en-IN", {
+  return formatInAppZone(d, {
     day: "2-digit",
     month: "short",
     year: "numeric",

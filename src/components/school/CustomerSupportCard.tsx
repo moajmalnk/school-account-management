@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { ArrowLeft, Loader2, Mail, Plus } from "lucide-react";
 import { toast } from "sonner";
 
-import { SupportChatBubble, SupportChatShell } from "@/components/support/SupportChatBubble";
+import { SupportChatBubble, SupportChatShell, ConversationMeta } from "@/components/support/SupportChatBubble";
 import { SupportComposer } from "@/components/support/SupportComposer";
 import { Button } from "@/components/ui/button";
 import { OrganicCard } from "@/components/ui/organic-card";
@@ -26,6 +26,7 @@ import {
   type SupportTicket,
   type SupportTicketStatus,
 } from "@/lib/api/support";
+import { formatChatStamp } from "@/lib/dates";
 import { useTenantStore } from "@/lib/tenant-store";
 import { cn, glassCardClass } from "@/lib/utils";
 
@@ -56,14 +57,7 @@ const STATUS_LABEL: Record<SupportTicketStatus, string> = {
 };
 
 function formatStamp(raw: string): string {
-  const parsed = Date.parse(raw.replace(" ", "T"));
-  if (!Number.isFinite(parsed)) return raw;
-  return new Date(parsed).toLocaleString("en-IN", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatChatStamp(raw, "list");
 }
 
 export function CustomerSupportCard() {
@@ -271,7 +265,7 @@ export function CustomerSupportCard() {
   useEffect(() => {
     if (!chatId || chatId === "new") return;
     const ticket = tickets.find((item) => item.id === chatId);
-    if (!ticket?.schoolUnread) return;
+    if (!ticket?.schoolUnread && !(ticket.schoolUnreadCount ?? 0)) return;
     void markSupportTicketRead(chatId)
       .then((next) => {
         setTickets((prev) => prev.map((item) => (item.id === next.id ? { ...item, ...next } : item)));
@@ -347,6 +341,9 @@ export function CustomerSupportCard() {
                 tickets.map((ticket) => {
                   const active = ticket.id === chatId;
                   const preview = ticket.lastMessage?.body || ticket.subject;
+                  const unread =
+                    ticket.schoolUnreadCount ?? (ticket.schoolUnread ? 1 : 0);
+                  const messageCount = ticket.messageCount ?? ticket.messages?.length ?? 0;
                   return (
                     <li key={ticket.id}>
                       <Link
@@ -362,18 +359,33 @@ export function CustomerSupportCard() {
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="flex items-baseline justify-between gap-2">
-                            <span className="truncate text-[15px] font-semibold text-black dark:text-zinc-100">
+                            <span
+                              className={cn(
+                                "truncate text-[15px] text-black dark:text-zinc-100",
+                                unread > 0 ? "font-bold" : "font-semibold",
+                              )}
+                            >
                               {ticket.subject || "Feezo"}
                             </span>
-                            <span className="shrink-0 text-[11px] text-black/35">
+                            <span
+                              className={cn(
+                                "shrink-0 text-[11px]",
+                                unread > 0 ? "font-semibold text-[#0F766E]" : "text-black/35",
+                              )}
+                            >
                               {formatStamp(ticket.updatedAt)}
                             </span>
                           </span>
                           <span className="mt-0.5 flex items-center gap-1.5">
-                            <span className="min-w-0 flex-1 truncate text-[13px] text-black/50">{preview}</span>
-                            {ticket.schoolUnread ? (
-                              <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-[#0F766E]" />
-                            ) : null}
+                            <span
+                              className={cn(
+                                "min-w-0 flex-1 truncate text-[13px]",
+                                unread > 0 ? "font-medium text-black/70" : "text-black/50",
+                              )}
+                            >
+                              {preview}
+                            </span>
+                            <ConversationMeta unreadCount={unread} messageCount={messageCount} />
                           </span>
                         </span>
                       </Link>

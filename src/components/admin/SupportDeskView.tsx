@@ -3,7 +3,7 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { ArrowLeft, LifeBuoy, Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { SupportChatBubble, SupportChatShell } from "@/components/support/SupportChatBubble";
+import { SupportChatBubble, SupportChatShell, ConversationMeta } from "@/components/support/SupportChatBubble";
 import { SupportComposer } from "@/components/support/SupportComposer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +23,7 @@ import {
   type SupportTicket,
   type SupportTicketStatus,
 } from "@/lib/api/support";
+import { formatChatStamp } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 
 type Section = "messages" | "help" | "contact";
@@ -41,14 +42,7 @@ const STATUS_FILTERS: { id: "all" | SupportTicketStatus; label: string }[] = [
 ];
 
 function formatStamp(raw: string): string {
-  const parsed = Date.parse(String(raw).replace(" ", "T"));
-  if (!Number.isFinite(parsed)) return raw;
-  return new Date(parsed).toLocaleString("en-IN", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatChatStamp(raw, "list");
 }
 
 function emptyFaq(): SupportFaq {
@@ -180,10 +174,19 @@ export function SupportDeskView() {
         if (cancelled) return;
         setThread(full);
         setTickets((prev) => {
-          const wasUnread = prev.find((item) => item.id === full.id)?.adminUnread;
-          if (wasUnread) setUnreadCount((n) => Math.max(0, n - 1));
-          return prev.map((item) =>
-            item.id === full.id ? { ...item, adminUnread: false, status: full.status } : item,
+          const item = prev.find((row) => row.id === full.id);
+          const pending = item?.adminUnreadCount ?? (item?.adminUnread ? 1 : 0);
+          if (pending > 0) setUnreadCount((n) => Math.max(0, n - pending));
+          return prev.map((row) =>
+            row.id === full.id
+              ? {
+                  ...row,
+                  adminUnread: false,
+                  adminUnreadCount: 0,
+                  status: full.status,
+                  messageCount: full.messageCount ?? row.messageCount,
+                }
+              : row,
           );
         });
       } catch (err) {
@@ -439,6 +442,7 @@ export function SupportDeskView() {
                 visibleTickets.map((ticket) => {
                   const active = ticket.id === ticketId;
                   const preview = ticket.lastMessage?.body || ticket.subject;
+                  const unread = ticket.adminUnreadCount ?? (ticket.adminUnread ? 1 : 0);
                   return (
                     <li key={ticket.id}>
                       <Link
@@ -454,18 +458,36 @@ export function SupportDeskView() {
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="flex items-baseline justify-between gap-2">
-                            <span className="truncate text-[14px] font-semibold text-black">
+                            <span
+                              className={cn(
+                                "truncate text-[14px] text-black",
+                                unread > 0 ? "font-bold" : "font-semibold",
+                              )}
+                            >
                               {ticket.tenantName || "School"}
                             </span>
-                            <span className="shrink-0 text-[10px] text-black/35">
+                            <span
+                              className={cn(
+                                "shrink-0 text-[10px]",
+                                unread > 0 ? "font-semibold text-[#0F766E]" : "text-black/35",
+                              )}
+                            >
                               {formatStamp(ticket.updatedAt)}
                             </span>
                           </span>
                           <span className="mt-0.5 flex items-center gap-1.5">
-                            <span className="min-w-0 flex-1 truncate text-[12px] text-black/50">{preview}</span>
-                            {ticket.adminUnread ? (
-                              <span className="h-2 w-2 shrink-0 rounded-full bg-[#0F766E]" />
-                            ) : null}
+                            <span
+                              className={cn(
+                                "min-w-0 flex-1 truncate text-[12px]",
+                                unread > 0 ? "font-medium text-black/70" : "text-black/50",
+                              )}
+                            >
+                              {preview}
+                            </span>
+                            <ConversationMeta
+                              unreadCount={unread}
+                              messageCount={ticket.messageCount ?? 0}
+                            />
                           </span>
                         </span>
                       </Link>

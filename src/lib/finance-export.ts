@@ -2,7 +2,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
 import { apiBaseUrl, getApiToken } from "@/lib/api/client";
-import { isBlankDate } from "@/lib/dates";
+import { formatInAppZone, formatNow, isBlankDate, parseAppInstant } from "@/lib/dates";
 import { resolveMediaUrl } from "@/lib/media";
 import {
   currentPayrollMonth,
@@ -176,21 +176,11 @@ function formatReceiptIssuedAt(raw: string | undefined, fallback: string): strin
   if (/^yesterday\b/i.test(v)) {
     const d = new Date();
     d.setDate(d.getDate() - 1);
-    return d.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
+    return formatInAppZone(d, { dateStyle: "medium", timeStyle: "short" });
   }
-  const iso = v.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/);
-  if (iso) {
-    const dt = new Date(
-      Number(iso[1]),
-      Number(iso[2]) - 1,
-      Number(iso[3]),
-      Number(iso[4] ?? 12),
-      Number(iso[5] ?? 0),
-      Number(iso[6] ?? 0),
-    );
-    if (!Number.isNaN(dt.getTime()) && dt.getFullYear() > 1970) {
-      return dt.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
-    }
+  const dt = parseAppInstant(v) ?? (v.match(/^\d{4}-\d{2}-\d{2}$/) ? new Date(`${v}T12:00:00+05:30`) : null);
+  if (dt && !Number.isNaN(dt.getTime()) && dt.getFullYear() > 1970) {
+    return formatInAppZone(dt, { dateStyle: "medium", timeStyle: "short" });
   }
   return pdfSafe(v);
 }
@@ -438,10 +428,7 @@ export async function downloadReceiptPdf(
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 16;
   const contentWidth = pageWidth - margin * 2;
-  const generatedAt = new Date().toLocaleString("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+  const generatedAt = formatNow();
   const issuedAt = formatReceiptIssuedAt(payment.time, generatedAt);
   const amountFormatted = formatInrPdf(payment.amount);
   const isExternal = payment.payerType === "external";
@@ -1148,10 +1135,7 @@ export async function downloadSalarySlipPdf(
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 16;
   const contentWidth = pageWidth - margin * 2;
-  const generatedAt = new Date().toLocaleString("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+  const generatedAt = formatNow();
   const issuedAt = formatReceiptIssuedAt(payment.time, generatedAt);
   const payDate = formatPayDateNumeric(payment.time, generatedAt);
   const payPeriod = payPeriodFromDescription(payment.desc || "");
@@ -1374,10 +1358,7 @@ export async function downloadPaymentVoucherPdf(
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 16;
   const contentWidth = pageWidth - margin * 2;
-  const generatedAt = new Date().toLocaleString("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+  const generatedAt = formatNow();
   const issuedAt = formatReceiptIssuedAt(payment.time, generatedAt);
   const displayName = pdfSafe(schoolName || "School");
   const amountFormatted = formatInrPdf(payment.amount);

@@ -2,23 +2,37 @@ import type { ReactNode } from "react";
 
 import { SupportMessageContent } from "@/components/support/SupportMessageContent";
 import type { SupportAttachment } from "@/lib/api/support";
+import { formatChatStamp } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 
 export function formatChatTime(raw: string): string {
-  const parsed = Date.parse(String(raw).replace(" ", "T"));
-  if (!Number.isFinite(parsed)) return raw;
-  const d = new Date(parsed);
-  const now = new Date();
-  const sameDay = d.toDateString() === now.toDateString();
-  if (sameDay) {
-    return d.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
-  }
-  return d.toLocaleString("en-IN", {
-    day: "numeric",
-    month: "short",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formatChatStamp(raw, "bubble");
+}
+
+export function ConversationMeta({
+  unreadCount = 0,
+  messageCount = 0,
+}: {
+  unreadCount?: number;
+  messageCount?: number;
+}) {
+  const msgs = Math.max(0, messageCount);
+  const unread = Math.max(0, unreadCount);
+  if (msgs < 1 && unread < 1) return null;
+  return (
+    <span className="flex shrink-0 items-center gap-1.5">
+      {msgs > 0 ? (
+        <span className="tabular-nums text-[10px] font-medium text-black/40">
+          {msgs} {msgs === 1 ? "msg" : "msgs"}
+        </span>
+      ) : null}
+      {unread > 0 ? (
+        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#0F766E] px-1.5 font-mono text-[10px] font-bold text-white">
+          {unread > 99 ? "99+" : unread}
+        </span>
+      ) : null}
+    </span>
+  );
 }
 
 export function SupportChatBubble({

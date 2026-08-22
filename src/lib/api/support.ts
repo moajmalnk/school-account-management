@@ -60,6 +60,9 @@ export type SupportTicket = {
   status: SupportTicketStatus;
   schoolUnread: boolean;
   adminUnread: boolean;
+  schoolUnreadCount?: number;
+  adminUnreadCount?: number;
+  messageCount?: number;
   createdByName: string;
   createdAt: string;
   updatedAt: string;
