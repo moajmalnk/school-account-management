@@ -647,10 +647,18 @@
 .dark .bg-\[\#CCFBF1\] .text-black,
 .dark .bg-\[\#CCFBF1\] .text-\[\#0F172A\],
 .dark .bg-\[\#CCFBF1\] .text-\[\#0F766E\],
+.dark .bg-\[\#CCFBF1\] .text-\[\#10B981\],
 .dark .bg-\[\#CCFBF1\]\/40 .text-black,
 .dark .bg-\[\#CCFBF1\] .text-black\/55,
-.dark .bg-\[\#CCFBF1\] .text-black\/65 {
+.dark .bg-\[\#CCFBF1\] .text-black\/65,
+.dark .bg-\[\#CCFBF1\][class~="text-[#0F172A]"],
+.dark .bg-\[\#CCFBF1\][class~="text-[#10B981]"] {
   color: rgba(244, 244, 245, 0.92) !important;
+}
+.dark .bg-\[\#CCFBF1\] .text-\[\#10B981\],
+.dark .bg-\[\#CCFBF1\][class~="text-[#10B981]"],
+.dark .bg-\[\#CCFBF1\].text-\[\#10B981\] {
+  color: #5eead4 !important;
 }
 .dark .bg-\[\#CCFBF1\] .text-\[\#0F766E\],
 .dark .bg-\[\#F0FDFA\] .text-\[\#0F766E\],
@@ -960,6 +968,29 @@ html.school-brand [class~="focus:bg-[#CCFBF1]"]:focus,
 html.school-brand [class~="data-[highlighted]:bg-[#CCFBF1]"][data-highlighted],
 html.school-brand [class~="data-[selected=true]:bg-[#CCFBF1]"][data-selected="true"] {
   background-color: var(--school-primary-muted) !important;
+}
+
+/* Branded mint chips in dark mode: teal tint + light teal text (never light slab + white ink) */
+html.dark.school-brand [class~="bg-[#CCFBF1]"],
+html.dark.school-brand [class~="hover:bg-[#CCFBF1]"]:hover,
+html.dark.school-brand [class~="focus:bg-[#CCFBF1]"]:focus,
+html.dark.school-brand [class~="data-[highlighted]:bg-[#CCFBF1]"][data-highlighted],
+html.dark.school-brand [class~="data-[selected=true]:bg-[#CCFBF1]"][data-selected="true"] {
+  background-color: rgba(15, 118, 110, 0.28) !important;
+  color: #5eead4 !important;
+  border-color: rgba(45, 212, 191, 0.28);
+}
+html.dark.school-brand [class~="bg-[#CCFBF1]"][class~="text-[#0F172A]"],
+html.dark.school-brand [class~="bg-[#CCFBF1]"][class~="text-[#10B981]"],
+html.dark.school-brand [class~="bg-[#CCFBF1]"] [class~="text-[#0F172A]"],
+html.dark.school-brand [class~="bg-[#CCFBF1]"] [class~="text-[#10B981]"] {
+  color: #5eead4 !important;
+}
+html.dark.school-brand [class~="dark:text-[#5EEAD4]"] {
+  color: #5eead4 !important;
+}
+html.dark.school-brand [class~="dark:bg-[#0F766E]/30"] {
+  background-color: rgba(15, 118, 110, 0.28) !important;
 }
 html.school-brand [class~="bg-[#F0FDFA]"],
 html.school-brand [class~="hover:bg-[#F0FDFA]"]:hover {

@@ -16,12 +16,24 @@ export function TenantDirectorySkeleton({
 }) {
   return (
     <div
-      className="w-full min-w-0 max-w-full space-y-6 overflow-x-clip"
+      className="w-full min-w-0 max-w-full space-y-3 overflow-x-clip lg:space-y-6"
       aria-busy="true"
       aria-live="polite"
       aria-label={label}
     >
-      <div className="grid w-full grid-cols-3 gap-3">
+      <div className="grid w-full grid-cols-3 divide-x divide-slate-100 overflow-hidden rounded-2xl border border-white/70 bg-white/90 dark:divide-white/10 dark:border-white/10 dark:bg-zinc-900/90 lg:hidden">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-2 px-2.5 py-2">
+            <Bone className="h-7 w-7 shrink-0 rounded-md" />
+            <div className="min-w-0 space-y-1">
+              <Bone className="h-4 w-8 rounded-md" />
+              <Bone className={cn("h-2.5 w-10 rounded-md", boneSoft)} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="hidden w-full grid-cols-3 gap-3 lg:grid">
         {Array.from({ length: 3 }).map((_, i) => (
           <div
             key={i}
@@ -36,28 +48,25 @@ export function TenantDirectorySkeleton({
               <Bone className="h-3.5 w-3.5 rounded-full sm:h-4 sm:w-4" />
             </div>
             <Bone className="h-7 w-10 rounded-md sm:h-8 sm:w-12" />
-            {i === 2 ? (
-              <Bone className={cn("h-2.5 w-16 rounded-md", boneSoft)} />
-            ) : null}
+            {i === 2 ? <Bone className={cn("h-2.5 w-16 rounded-md", boneSoft)} /> : null}
           </div>
         ))}
       </div>
 
-      <div className="flex w-full flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <Bone className="h-7 w-48 rounded-lg sm:h-8 sm:w-64" />
-        <div className="flex flex-wrap gap-2">
+      <div className="flex w-full flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+        <Bone className="h-5 w-40 rounded-lg sm:h-8 sm:w-64" />
+        <div className="flex w-full gap-1.5 sm:w-auto sm:flex-wrap sm:gap-2">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Bone key={i} className="h-9 w-20 rounded-lg sm:w-24" />
+            <Bone key={i} className="h-8 min-w-0 flex-1 rounded-full sm:h-10 sm:w-24 sm:flex-none" />
           ))}
-          <Bone className="h-9 w-32 rounded-full" />
         </div>
       </div>
 
-      <div className={cn(glassCardClass, "space-y-3 p-3.5 sm:p-4")}>
-        <Bone className="h-11 w-full rounded-xl" />
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <Bone className="h-10 w-full rounded-lg" />
-          <Bone className="h-10 w-full rounded-lg" />
+      <div className={cn(glassCardClass, "space-y-2 p-2.5 md:space-y-3 md:p-5")}>
+        <Bone className="h-9 w-full rounded-lg md:h-10" />
+        <div className="grid grid-cols-2 gap-2">
+          <Bone className="h-9 w-full rounded-lg md:h-10" />
+          <Bone className="h-9 w-full rounded-lg md:h-10" />
         </div>
       </div>
 

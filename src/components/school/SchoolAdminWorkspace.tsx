@@ -59,6 +59,7 @@ import {
   LogOut,
   MapPin,
   Route,
+  Scan,
 } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, XAxis, YAxis } from "recharts";
 import {
@@ -281,7 +282,7 @@ import {
   parseStudentCsv,
 } from "@/lib/student-csv";
 import { resolveMediaUrl } from "@/lib/media";
-import { resolveSealDisplaySrc, resolveSignatureDisplaySrc } from "@/lib/school-marks";
+import { defaultSealToPng, resolveSealDisplaySrc, resolveSignatureDisplaySrc } from "@/lib/school-marks";
 import {
   bankBalance,
   cashOnHand,
@@ -435,27 +436,6 @@ function dashboardValueSize(value: string): string {
   return "text-[17px] sm:text-[20px]";
 }
 
-function MobileDashboardSectionTitle({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <h2
-      className={cn(
-        "text-[18px] font-bold leading-tight tracking-tight text-slate-900",
-        className,
-      )}
-    >
-      {children}
-    </h2>
-  );
-}
-
-const MobileSectionTitle = MobileDashboardSectionTitle;
-
 const mobileOutlineBtn =
   "inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full border border-slate-200/80 bg-white px-4 text-[12.5px] font-semibold text-slate-900 shadow-sm transition-colors hover:bg-slate-50 dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800";
 
@@ -487,7 +467,7 @@ const bulkActionWhatsAppBtn =
 /** Equal-width outline actions for directory toolbars on small screens */
 const directoryToolbarBtn = cn(
   mobileOutlineBtn,
-  "min-w-0 flex-1 gap-1 px-2 text-[11.5px] sm:flex-none sm:gap-1.5 sm:px-4 sm:text-[12.5px]",
+  "h-8 min-w-0 flex-1 gap-1 px-1.5 text-[11px] sm:h-10 sm:flex-none sm:gap-1.5 sm:px-4 sm:text-[12.5px]",
 );
 
 const mobilePrimaryBtn =
@@ -510,16 +490,22 @@ function MobileCompactStat({
   valueClass?: string;
 }) {
   return (
-    <div className="flex min-w-0 flex-col items-center px-1 py-3 text-center">
-      <Icon className={cn("h-4 w-4 shrink-0", iconClass)} strokeWidth={2.25} />
-      <div className="mt-1.5 text-[10px] font-medium leading-tight text-slate-500">{label}</div>
-      <div
-        className={cn(
-          "mt-0.5 font-mono text-[20px] font-bold leading-none tracking-tight",
-          valueClass,
-        )}
-      >
-        {value}
+    <div className="flex min-w-0 items-center gap-2 px-2.5 py-2 sm:px-3 sm:py-2.5">
+      <div className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-slate-50 dark:bg-white/5">
+        <Icon className={cn("h-3.5 w-3.5", iconClass)} strokeWidth={2.25} />
+      </div>
+      <div className="min-w-0 text-left">
+        <div
+          className={cn(
+            "font-mono text-[16px] font-bold leading-none tracking-tight",
+            valueClass,
+          )}
+        >
+          {value}
+        </div>
+        <div className="mt-0.5 truncate text-[10px] font-medium leading-tight text-slate-500">
+          {label}
+        </div>
       </div>
     </div>
   );
@@ -537,9 +523,13 @@ function MobileStatsOverview({
   }[];
 }) {
   return (
-    <section className="w-full space-y-3 lg:hidden">
-      <MobileSectionTitle>Overview</MobileSectionTitle>
-      <div className={cn(premiumCardClass, "grid grid-cols-3 divide-x divide-slate-100 p-0")}>
+    <section className="w-full lg:hidden">
+      <div
+        className={cn(
+          premiumCardClass,
+          "grid grid-cols-3 divide-x divide-slate-100 p-0 dark:divide-white/10",
+        )}
+      >
         {items.map((item) => (
           <MobileCompactStat key={item.label} {...item} />
         ))}
@@ -1570,6 +1560,28 @@ function studentMatchesClassDivisionFilter(
   return true;
 }
 
+function normalizeClassKey(className: string) {
+  return className
+    .trim()
+    .toLowerCase()
+    .replace(/\s*[-–—]\s*/g, "-")
+    .replace(/\s+/g, " ");
+}
+
+/** True when the student is enrolled in the selected class (grade + section). */
+function studentBelongsToClass(studentCls: string, selectedClass: string) {
+  const selected = selectedClass.trim();
+  const enrolled = studentCls.trim();
+  if (!selected || !enrolled) return false;
+  if (normalizeClassKey(enrolled) === normalizeClassKey(selected)) return true;
+  const student = parseClassDivision(enrolled);
+  const target = parseClassDivision(selected);
+  if (student.grade.toLowerCase() !== target.grade.toLowerCase()) return false;
+  if (!target.division) return true;
+  if (!student.division) return false;
+  return student.division.toLowerCase() === target.division.toLowerCase();
+}
+
 function buildClassDivisionIndex(classNames: string[]) {
   const gradeMap = new Map<string, Set<string>>();
   for (const name of classNames) {
@@ -1649,6 +1661,9 @@ const directoryMobileCardClass = cn(
   premiumCardClass,
   "flex w-full min-w-0 max-w-full flex-col gap-2.5 overflow-hidden p-3 text-left transition-all active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E] focus-visible:ring-offset-2 sm:gap-3 sm:p-3.5",
 );
+
+const directoryMintChipClass =
+  "inline-flex max-w-full truncate rounded-full bg-[#CCFBF1] px-2 py-0.5 text-[10px] font-semibold text-[#0F172A] dark:bg-[#0F766E]/30 dark:text-[#5EEAD4] sm:px-2.5 sm:py-1 sm:text-[10.5px]";
 
 const directoryEmptyClass = cn(
   premiumCardClass,
@@ -1810,15 +1825,15 @@ function DirectoryRecycleBinList({
 function StudentFeesStatusBadge({ due }: { due: number }) {
   if (due === 0) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#CCFBF1] px-2.5 py-1 text-[10.5px] font-semibold text-[#10B981]">
-        <span className="h-1.5 w-1.5 rounded-full bg-[#10B981]" />
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#CCFBF1] px-2.5 py-1 text-[10.5px] font-semibold text-[#10B981] dark:bg-[#0F766E]/30 dark:text-[#5EEAD4]">
+        <span className="h-1.5 w-1.5 rounded-full bg-[#10B981] dark:bg-[#2DD4BF]" />
         Paid
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FEE2E2] px-2.5 py-1 text-[10.5px] font-semibold text-[#EF4444]">
-      <span className="h-1.5 w-1.5 rounded-full bg-[#EF4444]" />
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FEE2E2] px-2.5 py-1 text-[10.5px] font-semibold text-[#EF4444] dark:bg-rose-950/50 dark:text-[#FDA4AF]">
+      <span className="h-1.5 w-1.5 rounded-full bg-[#EF4444] dark:bg-[#FB7185]" />
       Overdue
     </span>
   );
@@ -1956,10 +1971,10 @@ function StudentsDirectoryTable({
                   </div>
                   <DirectoryPersonAvatar name={student.name} photoUrl={student.photoUrl} />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13.5px] font-semibold leading-tight text-slate-900 sm:text-[14px]">
+                    <div className="truncate text-[13.5px] font-semibold leading-tight text-slate-900 dark:text-zinc-100 sm:text-[14px]">
                       {student.name}
                     </div>
-                    <div className="mt-0.5 truncate font-mono text-[10px] text-slate-400 sm:text-[10.5px]">
+                    <div className="mt-0.5 truncate font-mono text-[10px] text-slate-400 dark:text-zinc-500 sm:text-[10.5px]">
                       {student.id}
                     </div>
                   </div>
@@ -1970,21 +1985,19 @@ function StudentsDirectoryTable({
               </div>
 
               <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                <span className="inline-flex max-w-full truncate rounded-full bg-[#CCFBF1] px-2 py-0.5 text-[10px] font-semibold text-[#0F172A] sm:px-2.5 sm:py-1 sm:text-[10.5px]">
-                  {student.cls}
-                </span>
+                <span className={directoryMintChipClass}>{student.cls}</span>
                 <DirectoryEnrollmentStatusControl
                   active={isActive}
                   onChange={(next) => onChangeStatus(student.id, next)}
                 />
               </div>
 
-              <div className="flex items-center justify-between gap-2 border-t border-[#F0F0F0] pt-2 sm:pt-2.5">
+              <div className="flex items-center justify-between gap-2 border-t border-[#F0F0F0] pt-2 dark:border-white/10 sm:pt-2.5">
                 <div className="min-w-0">
-                  <div className="truncate text-[11.5px] font-medium text-black/75 sm:text-[12px]">
+                  <div className="truncate text-[11.5px] font-medium text-black/75 dark:text-zinc-300 sm:text-[12px]">
                     {student.guardian}
                   </div>
-                  <div className="mt-0.5 truncate font-mono text-[10px] text-black/45 sm:text-[10.5px]">
+                  <div className="mt-0.5 truncate font-mono text-[10px] text-black/45 dark:text-zinc-500 sm:text-[10.5px]">
                     {hasPhone ? formatPhone(student.phone) : "No contact on file"}
                   </div>
                 </div>
@@ -2114,10 +2127,7 @@ function StudentsDirectoryTable({
                   </div>
                 </td>
                 <td className="min-w-0 px-3 py-3.5 align-middle sm:px-4 lg:px-6">
-                  <span
-                    title={student.cls}
-                    className="block w-fit max-w-full truncate rounded-full bg-[#CCFBF1] px-2.5 py-1 text-[11px] font-medium text-black"
-                  >
+                  <span title={student.cls} className={cn(directoryMintChipClass, "block w-fit text-[11px] font-medium")}>
                     {student.cls}
                   </span>
                 </td>
@@ -3148,7 +3158,7 @@ export function StudentsLedger() {
   }
 
   return (
-    <div className="w-full min-w-0 max-w-full space-y-6 overflow-x-clip lg:space-y-6">
+    <div className="w-full min-w-0 max-w-full space-y-3 overflow-x-clip lg:space-y-6">
       <MobileStatsOverview
         items={[
           {
@@ -3206,8 +3216,8 @@ export function StudentsLedger() {
         </div>
       </div>
 
-      <div className="flex w-full min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between xl:gap-4">
-        <h1 className="shrink-0 text-[18px] font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50 md:text-[24px] md:font-semibold xl:min-w-0 xl:flex-1 xl:truncate xl:text-[28px]">
+      <div className="flex w-full min-w-0 flex-col gap-2 xl:flex-row xl:items-center xl:justify-between xl:gap-4">
+        <h1 className="shrink-0 text-[16px] font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50 md:text-[24px] md:font-semibold xl:min-w-0 xl:flex-1 xl:truncate xl:text-[28px]">
           {showRecycleBin ? "Recycle Bin" : "Students Directory"}
         </h1>
         <div className={cn(directoryToolbarRow, "xl:max-w-full xl:shrink-0")}>
@@ -3383,19 +3393,19 @@ export function StudentsLedger() {
         </div>
       ) : (
         <>
-      <div className={cn(glassCardClass, "min-w-0 p-4 md:p-5")}>
-        <div className="flex flex-col gap-3">
+      <div className={cn(glassCardClass, "min-w-0 p-2.5 md:p-5")}>
+        <div className="flex flex-col gap-2 md:gap-3">
           <div className="min-w-0">
-            <div className="mb-1.5 text-[12px] font-medium text-slate-500 md:text-[10px] md:font-semibold md:uppercase md:tracking-wider">
+            <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
               Search
             </div>
             <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400 md:h-4 md:w-4" />
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search name, ID, guardian, phone, class…"
-                className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white pl-9 pr-9"
+                placeholder="Search name, ID, guardian, phone…"
+                className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white pl-9 pr-9 md:h-10"
                 aria-label="Search students"
               />
               {searchQuery && (
@@ -3411,14 +3421,17 @@ export function StudentsLedger() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between lg:gap-4">
-            <div className="grid min-w-0 w-full flex-1 grid-cols-2 gap-2 md:gap-4">
+          <div className="flex items-end gap-2 lg:gap-4">
+            <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 md:gap-4">
               <div className="min-w-0">
-                <div className="mb-1.5 text-[12px] font-medium text-slate-500 md:text-[10px] md:font-semibold md:uppercase md:tracking-wider">
+                <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
                   Class / Grade
                 </div>
                 <Select value={gradeFilter} onValueChange={setGradeFilter}>
-                  <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
+                  <SelectTrigger
+                    className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
+                    aria-label="Class / Grade"
+                  >
                     <SelectValue placeholder="All classes" />
                   </SelectTrigger>
                   <SelectContent
@@ -3439,7 +3452,7 @@ export function StudentsLedger() {
               </div>
 
               <div className="min-w-0">
-                <div className="mb-1.5 text-[12px] font-medium text-slate-500 md:text-[10px] md:font-semibold md:uppercase md:tracking-wider">
+                <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
                   Division
                 </div>
                 <Select
@@ -3447,7 +3460,10 @@ export function StudentsLedger() {
                   onValueChange={setDivisionFilter}
                   disabled={gradeFilter === "all" && divisionOptions.length === 0}
                 >
-                  <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
+                  <SelectTrigger
+                    className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
+                    aria-label="Division"
+                  >
                     <SelectValue placeholder="All divisions" />
                   </SelectTrigger>
                   <SelectContent
@@ -3468,8 +3484,8 @@ export function StudentsLedger() {
               </div>
             </div>
 
-            <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end lg:flex-col lg:items-end lg:justify-end">
-              <span className="font-mono text-[11px] text-black/45">
+            <div className="mb-0.5 flex shrink-0 flex-col items-end gap-0.5 lg:mb-1">
+              <span className="font-mono text-[10px] tabular-nums text-slate-400 md:text-[11px]">
                 {filtered.length} shown
               </span>
               {(gradeFilter !== "all" || divisionFilter !== "all" || searchQuery.trim()) && (
@@ -3480,9 +3496,9 @@ export function StudentsLedger() {
                     setDivisionFilter("all");
                     setSearchQuery("");
                   }}
-                  className="text-[11px] font-semibold text-black/55 dark:text-zinc-400 underline-offset-2 hover:text-black hover:underline"
+                  className="text-[10px] font-semibold text-slate-500 underline-offset-2 hover:text-slate-900 hover:underline"
                 >
-                  Clear filters
+                  Clear
                 </button>
               )}
             </div>
@@ -4430,7 +4446,7 @@ export function StaffRoster() {
   }
 
   return (
-    <div className="w-full min-w-0 max-w-full space-y-6 overflow-x-clip lg:space-y-6">
+    <div className="w-full min-w-0 max-w-full space-y-3 overflow-x-clip lg:space-y-6">
       <MobileStatsOverview
         items={[
           {
@@ -4491,8 +4507,8 @@ export function StaffRoster() {
         </div>
       </div>
 
-      <div className="flex w-full min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between xl:gap-4">
-        <h1 className="shrink-0 text-[18px] font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50 md:text-[24px] md:font-semibold xl:min-w-0 xl:flex-1 xl:truncate xl:text-[28px]">
+      <div className="flex w-full min-w-0 flex-col gap-2 xl:flex-row xl:items-center xl:justify-between xl:gap-4">
+        <h1 className="shrink-0 text-[16px] font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50 md:text-[24px] md:font-semibold xl:min-w-0 xl:flex-1 xl:truncate xl:text-[28px]">
           {showRecycleBin ? "Recycle Bin" : "Staff Directory"}
         </h1>
         <div className={cn(directoryToolbarRow, "xl:max-w-full xl:shrink-0")}>
@@ -4706,19 +4722,19 @@ export function StaffRoster() {
         </div>
       ) : (
         <>
-      <div className={cn(glassCardClass, "min-w-0 p-4 md:p-5")}>
-        <div className="flex flex-col gap-3">
+      <div className={cn(glassCardClass, "min-w-0 p-2.5 md:p-5")}>
+        <div className="flex flex-col gap-2 md:gap-3">
           <div className="min-w-0">
-            <div className="mb-1.5 text-[12px] font-medium text-slate-500 md:text-[10px] md:font-semibold md:uppercase md:tracking-wider">
+            <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
               Search
             </div>
             <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400 md:h-4 md:w-4" />
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search name, ID, role, phone…"
-                className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white pl-9 pr-9"
+                className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white pl-9 pr-9 md:h-10"
                 aria-label="Search staff"
               />
               {searchQuery && (
@@ -4734,14 +4750,17 @@ export function StaffRoster() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between lg:gap-4">
-            <div className="grid min-w-0 w-full flex-1 grid-cols-2 gap-2 md:gap-4">
+          <div className="flex items-end gap-2 lg:gap-4">
+            <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 md:gap-4">
               <div className="min-w-0">
-                <div className="mb-1.5 text-[12px] font-medium text-slate-500 md:text-[10px] md:font-semibold md:uppercase md:tracking-wider">
+                <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
                   Department
                 </div>
                 <Select value={deptFilter} onValueChange={setDeptFilter}>
-                  <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
+                  <SelectTrigger
+                    className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
+                    aria-label="Department"
+                  >
                     <SelectValue placeholder="All departments" />
                   </SelectTrigger>
                   <SelectContent
@@ -4762,14 +4781,17 @@ export function StaffRoster() {
               </div>
 
               <div className="min-w-0">
-                <div className="mb-1.5 text-[12px] font-medium text-slate-500 md:text-[10px] md:font-semibold md:uppercase md:tracking-wider">
+                <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
                   Status
                 </div>
                 <Select
                   value={statusFilter}
                   onValueChange={(value) => setStatusFilter(value as StaffStatusFilter)}
                 >
-                  <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
+                  <SelectTrigger
+                    className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
+                    aria-label="Status"
+                  >
                     <SelectValue placeholder="All statuses" />
                   </SelectTrigger>
                   <SelectContent
@@ -4791,8 +4813,8 @@ export function StaffRoster() {
               </div>
             </div>
 
-            <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end lg:flex-col lg:items-end lg:justify-end">
-              <span className="font-mono text-[11px] text-black/45">
+            <div className="mb-0.5 flex shrink-0 flex-col items-end gap-0.5 lg:mb-1">
+              <span className="font-mono text-[10px] tabular-nums text-slate-400 md:text-[11px]">
                 {filteredStaff.length} shown
               </span>
               {(deptFilter !== "all" || statusFilter !== "all" || searchQuery.trim()) && (
@@ -4803,9 +4825,9 @@ export function StaffRoster() {
                     setStatusFilter("all");
                     setSearchQuery("");
                   }}
-                  className="text-[12px] font-semibold text-[#0F766E] underline-offset-2 hover:underline"
+                  className="text-[10px] font-semibold text-[#0F766E] underline-offset-2 hover:underline"
                 >
-                  Clear filters
+                  Clear
                 </button>
               )}
             </div>
@@ -4893,10 +4915,8 @@ export function StaffRoster() {
               </div>
 
               <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                <span className="inline-flex max-w-full truncate rounded-full bg-[#CCFBF1] px-2 py-0.5 text-[10px] font-semibold text-[#0F172A] sm:px-2.5 sm:py-1 sm:text-[10.5px]">
-                  {member.role}
-                </span>
-                <span className="inline-flex max-w-full truncate rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-medium text-black/75 sm:px-2.5 sm:py-1 sm:text-[10.5px]">
+                <span className={directoryMintChipClass}>{member.role}</span>
+                <span className="inline-flex max-w-full truncate rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-medium text-black/75 dark:bg-white/10 dark:text-zinc-300 sm:px-2.5 sm:py-1 sm:text-[10.5px]">
                   {member.dept}
                 </span>
               </div>
@@ -6917,8 +6937,15 @@ function ReceivePayment() {
   const [externalAmount, setExternalAmount] = useState("");
   const [ledgerCategory, setLedgerCategory] = useState(ledgerDefault);
   const [cls, setCls] = useState(classes[0] ?? "");
-  const studentsInClass = useMemo(() => students.filter((s) => s.cls === cls), [students, cls]);
-  const [stu, setStu] = useState(studentsInClass[0]?.name ?? students[0]?.name ?? "");
+  const studentsInClass = useMemo(
+    () =>
+      students
+        .filter((s) => studentBelongsToClass(s.cls, cls))
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" })),
+    [students, cls],
+  );
+  const [stu, setStu] = useState(studentsInClass[0]?.name ?? "");
   const [feeItems, setFeeItems] = useState<FeeLineItem[]>(() => [
     createFeeLineItem({ description: defaultCategory }),
   ]);
@@ -6939,8 +6966,8 @@ function ReceivePayment() {
 
   const isExternal = payerSource === "external";
   const selected = !isExternal
-    ? students.find((s) => s.name === stu && s.cls === cls) ??
-      students.find((s) => s.name === stu)
+    ? studentsInClass.find((s) => s.name === stu) ??
+      (editingPayment ? students.find((s) => s.name === stu) : undefined)
     : undefined;
   const descriptionOptions = useMemo(
     () => paymentCategories.map((c) => ({ value: c.label, label: c.label })),
@@ -6975,11 +7002,13 @@ function ReceivePayment() {
 
   useEffect(() => {
     if (isExternal || editingPayment) return;
-    const pool = studentsInClass.length ? studentsInClass : students;
-    if (pool.length && !pool.some((s) => s.name === stu)) {
-      setStu(pool[0].name);
+    if (!cls) {
+      if (stu) setStu("");
+      return;
     }
-  }, [students, studentsInClass, stu, isExternal, editingPayment]);
+    if (studentsInClass.some((s) => s.name === stu)) return;
+    setStu(studentsInClass[0]?.name ?? "");
+  }, [cls, studentsInClass, stu, isExternal, editingPayment]);
 
   useEffect(() => {
     if (editingPayment) return;
@@ -7640,13 +7669,12 @@ function ReceivePayment() {
     return classes;
   }, [classes, cls]);
   const studentOptions = useMemo(() => {
-    const pool = studentsInClass.length ? studentsInClass : students;
-    const opts = pool.map((s) => ({ value: s.name, label: s.name }));
-    if (stu && !opts.some((o) => o.value === stu)) {
+    const opts = studentsInClass.map((s) => ({ value: s.name, label: s.name }));
+    if (editingPayment && stu && !opts.some((o) => o.value === stu)) {
       return [{ value: stu, label: stu }, ...opts];
     }
     return opts;
-  }, [studentsInClass, students, stu]);
+  }, [studentsInClass, stu, editingPayment]);
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -7848,8 +7876,10 @@ function ReceivePayment() {
                   onValueChange={(next) => {
                     setCls(next);
                     if (editingPayment) return;
-                    const first = students.find((s) => s.cls === next);
-                    if (first) setStu(first.name);
+                    const first = students
+                      .filter((s) => studentBelongsToClass(s.cls, next))
+                      .sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" }))[0];
+                    setStu(first?.name ?? "");
                   }}
                   options={classOptions.map((c) => ({ value: c, label: c }))}
                   placeholder="Select class"
@@ -7865,7 +7895,14 @@ function ReceivePayment() {
                   value={stu}
                   onValueChange={setStu}
                   options={studentOptions}
-                  placeholder="Select student"
+                  placeholder={
+                    !cls
+                      ? "Select a class first"
+                      : studentsInClass.length
+                        ? "Select student"
+                        : "No students in this class"
+                  }
+                  disabled={!cls || (studentsInClass.length === 0 && !editingPayment)}
                   searchable
                   searchPlaceholder="Search student..."
                   triggerClassName="h-11 sm:h-10"
@@ -7874,72 +7911,100 @@ function ReceivePayment() {
 
               {feeItems.map((item, index) => {
                 const periodChoices = feePeriodChoices(feeTerms, item.description);
+                const selectedPeriodLabel =
+                  periodChoices.find(
+                    (c) => c.kind === item.feePeriodKind && c.period === item.feePeriod,
+                  )?.label ?? item.feePeriod;
+                const itemAmount = Number(item.amount) || 0;
                 return (
-                  <div key={item.id} className="col-span-12 space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <FieldLabel className="mb-0">Fee item-{index + 1}</FieldLabel>
-                      {feeItems.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeFeeItem(item.id)}
-                          className="inline-flex h-7 items-center rounded-lg px-2 text-[11px] font-semibold text-red-600 hover:bg-red-50"
-                        >
-                          Remove
-                        </button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-12 gap-3">
-                      <div className="col-span-12 min-w-0 lg:col-span-5">
-                        <FieldLabel>Fee description</FieldLabel>
-                        <FieldSelect
-                          value={item.description}
-                          onValueChange={(next) => updateFeeLine(item.id, { description: next })}
-                          options={
-                            descriptionOptions.length
-                              ? descriptionOptions
-                              : [{ value: item.description, label: item.description }]
-                          }
-                          placeholder="Select fee"
-                          triggerClassName="h-11 sm:h-10"
-                        />
-                        {isOtherFeeDescription(item.description) && (
-                          <Input
-                            value={item.customDescription}
-                            onChange={(e) =>
-                              updateFeeLine(item.id, { customDescription: e.target.value })
+                  <div key={item.id} className="col-span-12">
+                    <div className="rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-3.5 shadow-sm dark:border-white/10 dark:bg-zinc-900/50 sm:p-4">
+                      <div className="flex items-start justify-between gap-3 border-b border-[#EFEFEF] pb-3 dark:border-white/10">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[13px] font-semibold text-black dark:text-zinc-100">
+                            Fee item {index + 1}
+                          </div>
+                          <p className="mt-0.5 truncate text-[12px] text-black/50 dark:text-zinc-400">
+                            {feeLineCategoryLabel(item) || "Choose fee and period"}
+                          </p>
+                          {selectedPeriodLabel ? (
+                            <p className="mt-0.5 truncate text-[11px] text-black/40 dark:text-zinc-500">
+                              {selectedPeriodLabel}
+                            </p>
+                          ) : null}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          {itemAmount > 0 ? (
+                            <span className="rounded-lg bg-white px-2.5 py-1 font-mono text-[13px] font-semibold text-[#0F766E] ring-1 ring-[#99F6E4]/60 dark:bg-zinc-950 dark:text-[#2DD4BF]">
+                              ₹ {itemAmount.toLocaleString("en-IN")}
+                            </span>
+                          ) : null}
+                          {feeItems.length > 1 ? (
+                            <button
+                              type="button"
+                              onClick={() => removeFeeItem(item.id)}
+                              aria-label={`Remove fee item ${index + 1}`}
+                              className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:bg-[#FEE2E2] dark:border-rose-500/40 dark:bg-rose-950/50 dark:text-rose-300"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-12 gap-3">
+                        <div className="col-span-12 min-w-0">
+                          <FieldLabel>Fee description</FieldLabel>
+                          <FieldSelect
+                            value={item.description}
+                            onValueChange={(next) => updateFeeLine(item.id, { description: next })}
+                            options={
+                              descriptionOptions.length
+                                ? descriptionOptions
+                                : [{ value: item.description, label: item.description }]
                             }
-                            placeholder="Other"
-                            className="mt-1.5 h-9 border-red-200 text-[12px] text-red-700 placeholder:text-red-400"
+                            placeholder="Select fee"
+                            triggerClassName="h-11 sm:h-10"
                           />
-                        )}
-                      </div>
-                      <div className="col-span-12 min-w-0 sm:col-span-5 lg:col-span-3">
-                        <FieldLabel>Amount</FieldLabel>
-                        <input
-                          value={item.amount}
-                          onChange={(e) =>
-                            updateFeeLine(item.id, {
-                              amount: e.target.value.replace(/[^0-9]/g, ""),
-                            })
-                          }
-                          inputMode="numeric"
-                          placeholder="0"
-                          className="h-11 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 font-mono text-[15px] font-semibold dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 sm:h-10 sm:text-[13px] sm:font-normal"
-                        />
-                      </div>
-                      <div className="col-span-12 min-w-0 sm:col-span-7 lg:col-span-4">
-                        <FieldLabel>Fee period</FieldLabel>
-                        <FieldSelect
-                          value={`${item.feePeriodKind}:${item.feePeriod}`}
-                          onValueChange={(next) =>
-                            updateFeeLine(item.id, parseFeePeriodValue(next))
-                          }
-                          options={periodChoices.map((c) => ({ value: c.value, label: c.label }))}
-                          placeholder="Select period"
-                          className="min-w-0"
-                          triggerClassName="h-11 min-w-0 sm:h-10"
-                          contentClassName="min-w-[min(100vw-1.5rem,20rem)]"
-                        />
+                          {isOtherFeeDescription(item.description) && (
+                            <Input
+                              value={item.customDescription}
+                              onChange={(e) =>
+                                updateFeeLine(item.id, { customDescription: e.target.value })
+                              }
+                              placeholder="Describe this fee"
+                              className="mt-1.5 h-10 border-red-200 text-[12px] text-red-700 placeholder:text-red-400"
+                            />
+                          )}
+                        </div>
+                        <div className="col-span-12 min-w-0 sm:col-span-5">
+                          <FieldLabel>Amount</FieldLabel>
+                          <input
+                            value={item.amount}
+                            onChange={(e) =>
+                              updateFeeLine(item.id, {
+                                amount: e.target.value.replace(/[^0-9]/g, ""),
+                              })
+                            }
+                            inputMode="numeric"
+                            placeholder="0"
+                            className="h-11 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 font-mono text-[15px] font-semibold dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 sm:h-10 sm:text-[13px] sm:font-normal"
+                          />
+                        </div>
+                        <div className="col-span-12 min-w-0 sm:col-span-7">
+                          <FieldLabel>Fee period</FieldLabel>
+                          <FieldSelect
+                            value={`${item.feePeriodKind}:${item.feePeriod}`}
+                            onValueChange={(next) =>
+                              updateFeeLine(item.id, parseFeePeriodValue(next))
+                            }
+                            options={periodChoices.map((c) => ({ value: c.value, label: c.label }))}
+                            placeholder="Select period"
+                            className="min-w-0"
+                            triggerClassName="h-11 min-w-0 sm:h-10"
+                            contentClassName="min-w-[min(100vw-1.5rem,20rem)]"
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -7950,14 +8015,14 @@ function ReceivePayment() {
                 <button
                   type="button"
                   onClick={addFeeItem}
-                  className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#E5E5E5] bg-white text-[13px] font-semibold text-black/75 transition-colors hover:border-[#0F766E]/40 hover:bg-[#F0FDFA] dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200"
+                  className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#0F766E]/35 bg-[#F0FDFA]/60 text-[13px] font-semibold text-[#0F766E] transition-colors hover:border-[#0F766E]/50 hover:bg-[#F0FDFA] dark:border-teal-500/30 dark:bg-teal-950/20 dark:text-[#2DD4BF] dark:hover:bg-teal-950/35"
                 >
                   <Plus className="h-4 w-4" />
-                  Add Fee Item
+                  Add fee item
                 </button>
               </div>
 
-              <div className="col-span-12 flex items-center justify-between gap-4 rounded-xl border border-[#E8E8EA] bg-[#F8F8F9] px-4 py-3 dark:border-white/10 dark:bg-zinc-900/80">
+              <div className="col-span-12 flex items-center justify-between gap-4 rounded-xl border border-[#E8E8EA] bg-[#F8F8F9] px-4 py-3.5 dark:border-white/10 dark:bg-zinc-900/80">
                 <div className="min-w-0">
                   <FieldLabel className="mb-0.5">Total Amount</FieldLabel>
                   <div className="text-[13px] text-black/65 dark:text-zinc-300">
@@ -13168,6 +13233,148 @@ function readImageForCrop(
   return URL.createObjectURL(file);
 }
 
+async function prepareImageForCrop(src: string): Promise<string> {
+  const trimmed = src.trim();
+  if (!trimmed) throw new Error("No image to adjust");
+  if (trimmed.startsWith("data:") || trimmed.startsWith("blob:")) return trimmed;
+  const resolved = resolveMediaUrl(trimmed) ?? trimmed;
+  const res = await fetch(resolved, { credentials: "include" });
+  if (!res.ok) throw new Error("Could not load image for editing");
+  const blob = await res.blob();
+  if (!blob.type.startsWith("image/")) throw new Error("Could not load image for editing");
+  return URL.createObjectURL(blob);
+}
+
+async function toRasterDataUrl(src: string): Promise<string> {
+  if (src.startsWith("data:")) return src;
+  const objectUrl = await prepareImageForCrop(src);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error("Could not read image"));
+      el.src = objectUrl;
+    });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, img.naturalWidth);
+    canvas.height = Math.max(1, img.naturalHeight);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Could not prepare image");
+    ctx.drawImage(img, 0, 0);
+    return canvas.toDataURL("image/png");
+  } finally {
+    if (objectUrl.startsWith("blob:")) URL.revokeObjectURL(objectUrl);
+  }
+}
+
+const schoolBrandActionBtn =
+  "inline-flex h-8 items-center gap-1 rounded-full bg-white px-2.5 text-[11px] font-semibold text-slate-700 shadow-sm ring-1 ring-black/10 transition-colors hover:bg-[#0F766E] hover:text-white disabled:pointer-events-none disabled:opacity-45";
+
+function SchoolDetailsMediaField({
+  label,
+  badge,
+  hint,
+  preview,
+  onAdjust,
+  canAdjust = true,
+  adjustLoading = false,
+  onUpload,
+  uploadLabel = "Upload",
+  uploadIcon: UploadIcon = ImagePlus,
+  onRemove,
+  removeAriaLabel,
+  extraActions,
+}: {
+  label: string;
+  badge?: ReactNode;
+  hint: string;
+  preview: ReactNode;
+  onAdjust?: () => void;
+  canAdjust?: boolean;
+  adjustLoading?: boolean;
+  onUpload?: () => void;
+  uploadLabel?: string;
+  uploadIcon?: typeof ImagePlus;
+  onRemove?: () => void;
+  removeAriaLabel?: string;
+  extraActions?: ReactNode;
+}) {
+  const showAdjust = Boolean(canAdjust && onAdjust);
+  const previewShell = (
+    <div className="relative shrink-0 overflow-hidden rounded-xl bg-white ring-1 ring-black/10">
+      {preview}
+      {showAdjust && (
+        <span className="pointer-events-none absolute inset-0 flex items-end justify-center bg-gradient-to-t from-black/45 via-black/10 to-transparent pb-1.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+          <span className="rounded-full bg-white/95 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-800 shadow-sm">
+            Adjust
+          </span>
+        </span>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="col-span-12 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3 sm:col-span-6">
+      <div className="flex items-start justify-between gap-2">
+        <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/45">
+          {label}
+          {badge}
+        </span>
+        <div className="flex flex-wrap items-center justify-end gap-1">
+          {onRemove && (
+            <button
+              type="button"
+              onClick={onRemove}
+              className="grid h-8 w-8 place-items-center rounded-full text-black/45 transition-colors hover:bg-[#FEE2E2] hover:text-[#EF4444]"
+              aria-label={removeAriaLabel ?? `Remove ${label.toLowerCase()}`}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {extraActions}
+          {showAdjust && (
+            <button
+              type="button"
+              onClick={onAdjust}
+              disabled={adjustLoading}
+              className={schoolBrandActionBtn}
+            >
+              {adjustLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Scan className="h-3.5 w-3.5" />
+              )}
+              Adjust
+            </button>
+          )}
+          {onUpload && (
+            <button type="button" onClick={onUpload} className={schoolBrandActionBtn}>
+              <UploadIcon className="h-3.5 w-3.5" />
+              {uploadLabel}
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="mt-3 flex items-start gap-3">
+        {showAdjust ? (
+          <button
+            type="button"
+            onClick={onAdjust}
+            disabled={adjustLoading}
+            className="group rounded-xl outline-none transition-transform active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-[#0F766E]/40"
+            aria-label={`Adjust ${label.toLowerCase()}`}
+          >
+            {previewShell}
+          </button>
+        ) : (
+          previewShell
+        )}
+        <p className="min-w-0 pt-0.5 text-[11px] leading-relaxed text-black/50">{hint}</p>
+      </div>
+    </div>
+  );
+}
+
 function SchoolDetailsCard({
   schoolDetails,
   setSchoolDetails,
@@ -13185,6 +13392,9 @@ function SchoolDetailsCard({
     null,
   );
   const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [cropLoading, setCropLoading] = useState<
+    "logo" | "letterhead" | "seal" | "signature" | null
+  >(null);
   const [drawSignatureOpen, setDrawSignatureOpen] = useState(false);
 
   useEffect(() => {
@@ -13332,6 +13542,68 @@ function SchoolDetailsCard({
     closeCrop();
   };
 
+  const openAdjust = async (target: "logo" | "letterhead" | "seal" | "signature") => {
+    setCropLoading(target);
+    try {
+      let src: string;
+      switch (target) {
+        case "logo": {
+          if (!draft.logoUrl) {
+            toast.error("Upload a logo first");
+            return;
+          }
+          src = await prepareImageForCrop(resolveMediaUrl(draft.logoUrl) ?? draft.logoUrl);
+          break;
+        }
+        case "letterhead": {
+          if (!draft.letterheadUrl) {
+            toast.error("Upload a letterhead first");
+            return;
+          }
+          src = await prepareImageForCrop(
+            resolveMediaUrl(draft.letterheadUrl) ?? draft.letterheadUrl,
+          );
+          break;
+        }
+        case "seal": {
+          if (draft.sealUrl) {
+            src = await prepareImageForCrop(resolveMediaUrl(draft.sealUrl) ?? draft.sealUrl);
+          } else {
+            let logoDataUrl: string | undefined;
+            if (draft.logoUrl) {
+              logoDataUrl = await toRasterDataUrl(resolveMediaUrl(draft.logoUrl) ?? draft.logoUrl);
+            }
+            const png = await defaultSealToPng(draft.name || "School", {
+              details: draft.address,
+              logoDataUrl,
+            });
+            src = png.dataUrl;
+          }
+          break;
+        }
+        case "signature": {
+          if (draft.signatureUrl) {
+            src = await prepareImageForCrop(
+              resolveMediaUrl(draft.signatureUrl) ?? draft.signatureUrl,
+            );
+          } else {
+            src = resolveSignatureDisplaySrc(draft.principalName, undefined);
+          }
+          break;
+        }
+      }
+      setCropSrc((prev) => {
+        if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+        return src;
+      });
+      setCropTarget(target);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not open image editor");
+    } finally {
+      setCropLoading(null);
+    }
+  };
+
   return (
     <OrganicCard tone="white" cornerSide="br" padded className={workspacePanelClass}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -13352,226 +13624,153 @@ function SchoolDetailsCard({
 
       <form onSubmit={save} className="mt-4 space-y-5">
         <div className="grid grid-cols-12 gap-3">
-          <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3 sm:col-span-6 lg:col-span-6">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                Logo
-              </span>
-              <div className="flex items-center gap-1">
-                {draft.logoUrl && (
-                  <button
-                    type="button"
-                    onClick={() => patch("logoUrl", undefined)}
-                    className="grid h-7 w-7 place-items-center rounded-full text-black/45 hover:bg-[#FEE2E2] hover:text-[#EF4444]"
-                    aria-label="Remove logo"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => logoInputRef.current?.click()}
-                  className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px] font-semibold text-black shadow-sm ring-1 ring-black/10 hover:bg-[#0F766E] hover:text-white"
-                >
-                  <ImagePlus className="h-3.5 w-3.5" />
-                  Upload
-                </button>
-              </div>
-            </div>
-            <div className="mt-3 flex items-center gap-3">
-              {draft.logoUrl ? (
+          <SchoolDetailsMediaField
+            label="Logo"
+            hint="Dock & headers · square · click preview or Adjust to reposition and scale · PNG/JPG · max 2 MB"
+            canAdjust={Boolean(draft.logoUrl)}
+            adjustLoading={cropLoading === "logo"}
+            onAdjust={() => void openAdjust("logo")}
+            onUpload={() => logoInputRef.current?.click()}
+            onRemove={draft.logoUrl ? () => patch("logoUrl", undefined) : undefined}
+            removeAriaLabel="Remove logo"
+            preview={
+              draft.logoUrl ? (
                 <img
                   src={resolveMediaUrl(draft.logoUrl) ?? draft.logoUrl}
                   alt="School logo"
-                  className="h-14 w-14 rounded-lg bg-white object-contain p-1 ring-1 ring-black/10"
+                  className="h-16 w-16 object-contain p-1.5"
                 />
               ) : (
-                <div className="grid h-14 w-14 place-items-center rounded-lg bg-gradient-to-br from-[#0F766E] to-[#115E59] text-[13px] font-bold text-white">
+                <div className="grid h-16 w-16 place-items-center bg-gradient-to-br from-[#0F766E] to-[#115E59] text-[13px] font-bold text-white">
                   {initials}
                 </div>
-              )}
-              <p className="text-[11px] leading-relaxed text-black/50">
-                Shown on the dock and headers. Zoom out in the editor to fit a wide logo. PNG/JPG · max 2 MB.
-              </p>
-            </div>
-            <input
-              ref={logoInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
-              className="hidden"
-              onChange={onLogo}
-            />
-          </div>
+              )
+            }
+          />
 
-          <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3 sm:col-span-6 lg:col-span-6">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                Letterhead
-              </span>
-              <div className="flex items-center gap-1">
-                {draft.letterheadUrl && (
-                  <button
-                    type="button"
-                    onClick={() => patch("letterheadUrl", undefined)}
-                    className="grid h-7 w-7 place-items-center rounded-full text-black/45 hover:bg-[#FEE2E2] hover:text-[#EF4444]"
-                    aria-label="Remove letterhead"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => letterheadInputRef.current?.click()}
-                  className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px] font-semibold text-black shadow-sm ring-1 ring-black/10 hover:bg-[#0F766E] hover:text-white"
-                >
-                  <FileImage className="h-3.5 w-3.5" />
-                  Upload
-                </button>
-              </div>
-            </div>
-            <div className="mt-3">
-              {draft.letterheadUrl ? (
+          <SchoolDetailsMediaField
+            label="Letterhead"
+            hint="Wide banner for receipts & PDFs · Adjust to crop and scale · max 3 MB"
+            canAdjust={Boolean(draft.letterheadUrl)}
+            adjustLoading={cropLoading === "letterhead"}
+            onAdjust={() => void openAdjust("letterhead")}
+            onUpload={() => letterheadInputRef.current?.click()}
+            uploadIcon={FileImage}
+            onRemove={draft.letterheadUrl ? () => patch("letterheadUrl", undefined) : undefined}
+            removeAriaLabel="Remove letterhead"
+            preview={
+              draft.letterheadUrl ? (
                 <img
-                  src={draft.letterheadUrl}
+                  src={resolveMediaUrl(draft.letterheadUrl) ?? draft.letterheadUrl}
                   alt="School letterhead"
-                  className="h-16 w-full rounded-xl object-cover object-top ring-1 ring-black/10"
+                  className="h-16 w-[min(100%,12rem)] object-cover object-top sm:w-48"
                 />
               ) : (
-                <div className="flex h-16 items-center justify-center rounded-xl border border-dashed border-black/15 bg-white px-3 text-center text-[11px] text-black/45">
-                  Wide image for receipts & PDFs · max 3 MB
+                <div className="flex h-16 w-[min(100%,12rem)] items-center justify-center border border-dashed border-black/10 px-3 text-center text-[10px] text-black/45 sm:w-48">
+                  No letterhead
                 </div>
-              )}
-            </div>
-            <input
-              ref={letterheadInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
-              className="hidden"
-              onChange={onLetterhead}
-            />
-          </div>
+              )
+            }
+          />
         </div>
 
         <div className="grid grid-cols-12 gap-3">
-          <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3 sm:col-span-6">
-            <div className="flex items-center justify-between gap-2">
-              <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                Seal
-                {!draft.sealUrl && (
-                  <span className="rounded-full bg-[#CCFBF1] px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-[#0F766E]">
-                    Default
-                  </span>
-                )}
-              </span>
-              <div className="flex items-center gap-1">
-                {draft.sealUrl && (
-                  <button
-                    type="button"
-                    onClick={() => patch("sealUrl", undefined)}
-                    className="grid h-7 w-7 place-items-center rounded-full text-black/45 hover:bg-[#FEE2E2] hover:text-[#EF4444]"
-                    aria-label="Reset seal to default"
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => sealInputRef.current?.click()}
-                  className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px] font-semibold text-black shadow-sm ring-1 ring-black/10 hover:bg-[#0F766E] hover:text-white"
-                >
-                  <ImagePlus className="h-3.5 w-3.5" />
-                  Upload
-                </button>
-              </div>
-            </div>
-            <div className="mt-3 flex items-center gap-3">
-              {draft.sealUrl ? (
+          <SchoolDetailsMediaField
+            label="Seal"
+            badge={
+              !draft.sealUrl ? (
+                <span className="rounded-full bg-[#CCFBF1] px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-[#0F766E]">
+                  Default
+                </span>
+              ) : undefined
+            }
+            hint="Official stamp on receipts · Adjust default or uploaded seal · PNG/JPG · max 2 MB"
+            adjustLoading={cropLoading === "seal"}
+            onAdjust={() => void openAdjust("seal")}
+            onUpload={() => sealInputRef.current?.click()}
+            onRemove={draft.sealUrl ? () => patch("sealUrl", undefined) : undefined}
+            removeAriaLabel="Reset seal to default"
+            preview={
+              draft.sealUrl ? (
                 <img
                   src={resolveSealDisplaySrc(draft.name, draft.sealUrl)}
                   alt="School seal"
-                  className="h-24 w-24 rounded-full bg-white object-contain ring-1 ring-black/10"
+                  className="h-20 w-20 rounded-full object-contain p-1"
                 />
               ) : (
                 <DefaultSchoolSeal
                   name={draft.name}
                   details={draft.address}
                   logoUrl={draft.logoUrl}
-                  className="h-24 w-24 shrink-0 rounded-full bg-white ring-1 ring-black/10"
+                  className="h-20 w-20 rounded-full"
                 />
-              )}
-              <p className="text-[11px] leading-relaxed text-black/50">
-                Default stamp uses your logo in the center with the school name
-                and address around the ring. Upload a custom image to replace it.
-                JPG/PNG · max 2 MB.
-              </p>
-            </div>
-            <input
-              ref={sealInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
-              className="hidden"
-              onChange={onSeal}
-            />
-          </div>
+              )
+            }
+          />
 
-          <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3 sm:col-span-6">
-            <div className="flex items-center justify-between gap-2">
-              <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                Signature
-                {!draft.signatureUrl && (
-                  <span className="rounded-full bg-[#CCFBF1] px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-[#0F766E]">
-                    Default
-                  </span>
-                )}
-              </span>
-              <div className="flex flex-wrap items-center justify-end gap-1">
-                {draft.signatureUrl && (
-                  <button
-                    type="button"
-                    onClick={() => patch("signatureUrl", undefined)}
-                    className="grid h-7 w-7 place-items-center rounded-full text-black/45 hover:bg-[#FEE2E2] hover:text-[#EF4444]"
-                    aria-label="Reset signature to default"
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setDrawSignatureOpen(true)}
-                  className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px] font-semibold text-black shadow-sm ring-1 ring-black/10 hover:bg-[#0F766E] hover:text-white"
-                >
-                  <PenLine className="h-3.5 w-3.5" />
-                  Draw
-                </button>
-                <button
-                  type="button"
-                  onClick={() => signatureInputRef.current?.click()}
-                  className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px] font-semibold text-black shadow-sm ring-1 ring-black/10 hover:bg-[#0F766E] hover:text-white"
-                >
-                  <ImagePlus className="h-3.5 w-3.5" />
-                  Upload
-                </button>
-              </div>
-            </div>
-            <div className="mt-3 flex items-center gap-3">
+          <SchoolDetailsMediaField
+            label="Signature"
+            badge={
+              !draft.signatureUrl ? (
+                <span className="rounded-full bg-[#CCFBF1] px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-[#0F766E]">
+                  Default
+                </span>
+              ) : undefined
+            }
+            hint="Authorised signatory · Draw, upload, or Adjust to reposition · max 2 MB"
+            adjustLoading={cropLoading === "signature"}
+            onAdjust={() => void openAdjust("signature")}
+            onUpload={() => signatureInputRef.current?.click()}
+            extraActions={
+              <button
+                type="button"
+                onClick={() => setDrawSignatureOpen(true)}
+                className={schoolBrandActionBtn}
+              >
+                <PenLine className="h-3.5 w-3.5" />
+                Draw
+              </button>
+            }
+            onRemove={draft.signatureUrl ? () => patch("signatureUrl", undefined) : undefined}
+            removeAriaLabel="Reset signature to default"
+            preview={
               <img
                 src={resolveSignatureDisplaySrc(draft.principalName, draft.signatureUrl)}
                 alt="Authorised signature"
-                className="h-14 w-[min(100%,11rem)] rounded-lg bg-white object-contain object-left px-1 ring-1 ring-black/10"
+                className="h-14 w-[min(100%,11rem)] object-contain object-left px-2"
               />
-              <p className="text-[11px] leading-relaxed text-black/50">
-                Authorised signatory on receipts. Draw or upload · max 2 MB.
-              </p>
-            </div>
-            <input
-              ref={signatureInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
-              className="hidden"
-              onChange={onSignatureFile}
-            />
-          </div>
+            }
+          />
         </div>
+
+        <input
+          ref={logoInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/gif"
+          className="hidden"
+          onChange={onLogo}
+        />
+        <input
+          ref={letterheadInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/gif"
+          className="hidden"
+          onChange={onLetterhead}
+        />
+        <input
+          ref={sealInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/gif"
+          className="hidden"
+          onChange={onSeal}
+        />
+        <input
+          ref={signatureInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/gif"
+          className="hidden"
+          onChange={onSignatureFile}
+        />
 
         <div className="grid grid-cols-12 gap-3">
           <div className="col-span-12 lg:col-span-4">
@@ -13712,8 +13911,12 @@ function SchoolDetailsCard({
         }
         description={
           cropTarget === "logo"
-            ? "Zoom out to fit the full logo in the square, or zoom in to crop."
-            : "Drag to reposition, zoom, then confirm."
+            ? "Drag to reposition, zoom out to fit wide logos, then confirm."
+            : cropTarget === "seal"
+              ? "Reposition and scale the seal within the square frame."
+              : cropTarget === "signature"
+                ? "Reposition and scale the signature within the frame."
+                : "Drag to reposition, zoom, then confirm."
         }
         aspect={
           cropTarget === "letterhead" ? 16 / 5 : cropTarget === "signature" ? 2.4 : 1
