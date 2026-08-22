@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock3 } from "lucide-react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  formatEventDate,
+  formatEventDateTime,
+  formatReceiptDateTimeFromParts,
+  parseReceiptDateTimeParts,
+} from "@/lib/dates";
 import {
   Select,
   SelectContent,
@@ -104,6 +110,8 @@ export type DatePickerProps = {
   disabled?: boolean;
   valueFormat?: "iso" | "display";
   variant?: "default" | "pill";
+  /** Show "Today" / "Yesterday" instead of numeric dates when applicable. */
+  relativeDisplay?: boolean;
   quickPicks?: { label: string; getDate: (today: Date) => Date }[];
 };
 
@@ -127,6 +135,7 @@ export function DatePicker({
   disabled,
   valueFormat = "iso",
   variant = "default",
+  relativeDisplay = false,
   quickPicks = DEFAULT_QUICK_PICKS,
 }: DatePickerProps) {
   const selected = useMemo(() => parseFlexibleDate(value), [value]);
@@ -174,9 +183,11 @@ export function DatePicker({
     setViewMonth((m) => new Date(m.getFullYear(), m.getMonth() + delta, 1));
 
   const displayText = selected
-    ? valueFormat === "display"
-      ? formatDisplayLong(selected)
-      : formatDisplay(selected)
+    ? relativeDisplay
+      ? formatEventDate(selected)
+      : valueFormat === "display"
+        ? formatDisplayLong(selected)
+        : formatDisplay(selected)
     : null;
 
   return (
@@ -339,6 +350,90 @@ export function DatePicker({
         )}
       </PopoverContent>
     </Popover>
+  );
+}
+
+const RECEIPT_TIME_QUICK_PICKS: NonNullable<DatePickerProps["quickPicks"]> = [
+  { label: "Today", getDate: (t) => t },
+  {
+    label: "Yesterday",
+    getDate: (t) => new Date(t.getFullYear(), t.getMonth(), t.getDate() - 1),
+  },
+];
+
+export type ReceiptDateTimePickerProps = {
+  value: string;
+  onChange: (value: string) => void;
+  className?: string;
+  disabled?: boolean;
+};
+
+/** Combined date + time control for fee receipts · stores "Today · 15:03" labels. */
+export function ReceiptDateTimePicker({
+  value,
+  onChange,
+  className,
+  disabled,
+}: ReceiptDateTimePickerProps) {
+  const parts = useMemo(() => parseReceiptDateTimeParts(value), [value]);
+
+  const setDate = (iso: string) => {
+    onChange(formatReceiptDateTimeFromParts(iso || parts.date, parts.clock));
+  };
+
+  const setClock = (clock: string) => {
+    onChange(formatReceiptDateTimeFromParts(parts.date, clock || parts.clock));
+  };
+
+  const setNow = () => {
+    onChange(formatEventDateTime(new Date()));
+  };
+
+  return (
+    <div
+      className={cn(
+        "flex h-11 min-w-0 flex-1 items-stretch overflow-hidden rounded-lg border border-[#E5E5E5] bg-white transition focus-within:border-[#0F766E] focus-within:ring-2 focus-within:ring-[#0F766E]/20 dark:border-white/10 dark:bg-zinc-900 dark:focus-within:border-[#0F766E]",
+        disabled && "cursor-not-allowed opacity-50",
+        className,
+      )}
+    >
+      <DatePicker
+        value={parts.date}
+        onChange={(iso) => setDate(iso || parts.date)}
+        valueFormat="iso"
+        relativeDisplay
+        disabled={disabled}
+        placeholder="Date"
+        quickPicks={RECEIPT_TIME_QUICK_PICKS}
+        className="h-full min-w-0 flex-1 rounded-none border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 dark:bg-zinc-900"
+      />
+      <span
+        aria-hidden
+        className="flex shrink-0 items-center px-0.5 font-mono text-[13px] text-black/25 dark:text-zinc-500"
+      >
+        ·
+      </span>
+      <div className="relative flex w-[5.75rem] shrink-0 items-center sm:w-[6.25rem]">
+        <Clock3 className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-black/35 dark:text-zinc-500" />
+        <input
+          type="time"
+          value={parts.clock}
+          disabled={disabled}
+          onChange={(e) => setClock(e.target.value)}
+          className="h-full w-full border-0 bg-transparent py-0 pl-8 pr-2 font-mono text-[13px] text-black focus:outline-none disabled:cursor-not-allowed dark:text-zinc-100 [&::-webkit-calendar-picker-indicator]:opacity-0"
+          aria-label="Receipt time"
+        />
+      </div>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={setNow}
+        className="hidden shrink-0 border-l border-[#E5E5E5] px-2.5 text-[10.5px] font-semibold uppercase tracking-wide text-[#0F766E] transition hover:bg-[#CCFBF1]/40 disabled:cursor-not-allowed sm:inline-flex sm:items-center dark:border-white/10 dark:hover:bg-[#0F766E]/15"
+        title="Set to current date and time"
+      >
+        Now
+      </button>
+    </div>
   );
 }
 

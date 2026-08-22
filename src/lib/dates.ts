@@ -356,3 +356,34 @@ export function isEventToday(value?: string | Date | null, reference = new Date(
   if (!parsed) return false;
   return calendarDayKey(parsed) === calendarDayKey(reference);
 }
+
+/** 24-hour clock for `<input type="time">` in Asia/Kolkata. */
+export function toClockLocal(date: Date): string {
+  return formatClock24(date);
+}
+
+/** Split a receipt label into ISO date + clock for pickers. */
+export function parseReceiptDateTimeParts(label: string): { date: string; clock: string } {
+  const parsed = parseEventDate(label);
+  const date = parsed ?? new Date();
+  const p = partsInAppZone(date);
+  return {
+    date: `${p.year}-${pad2(p.month)}-${pad2(p.day)}`,
+    clock: `${pad2(p.hours)}:${pad2(p.minutes)}`,
+  };
+}
+
+/** Build a receipt label from picker parts · "Today · 13:47". */
+export function formatReceiptDateTimeFromParts(dateIso: string, clock: string): string {
+  const [y, m, d] = dateIso.split("-").map(Number);
+  const [hh, mm] = (clock || "00:00").split(":").map(Number);
+  if (!y || !m || !d) return formatEventDateTime(new Date());
+  const iso = `${y}-${pad2(m)}-${pad2(d)}T${pad2(hh || 0)}:${pad2(mm || 0)}:00${APP_OFFSET}`;
+  const date = new Date(iso);
+  return formatEventDateTime(date);
+}
+
+/** Default stamp for new receipts. */
+export function formatReceiptDateTimeNow(): string {
+  return formatEventDateTime(new Date());
+}

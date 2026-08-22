@@ -1080,6 +1080,109 @@ export function resolvePaymentFeePeriodKind(payment: Payment): FeePeriodKind {
   return "month";
 }
 
+function feePeriodsMatchForBalance(
+  aKind: FeePeriodKind | undefined,
+  aPeriod: string,
+  bKind: FeePeriodKind,
+  bPeriod: string,
+): boolean {
+  const periodA = aPeriod.trim().toLowerCase();
+  const periodB = bPeriod.trim().toLowerCase();
+  if (!periodA || !periodB || periodA !== periodB) return false;
+  if (aKind && aKind !== bKind) return false;
+  return true;
+}
+
+/** Whether two fee-line descriptions refer to the same charge category. */
+export function feeCategoriesMatchForBalance(a: string, b: string): boolean {
+  const left = a.trim();
+  const right = b.trim();
+  if (!left || !right) return false;
+  if (left.toLowerCase() === "other" || right.toLowerCase() === "other") {
+    return left.toLowerCase() === right.toLowerCase();
+  }
+  return (
+    normalizePaymentCategoryLabel(left).trim().toLowerCase() ===
+    normalizePaymentCategoryLabel(right).trim().toLowerCase()
+  );
+}
+
+/** Sum already collected for one student · category · period in the active academic year. */
+export function studentFeePeriodPaidAmount(
+  payments: Payment[],
+  opts: {
+    studentName: string;
+    className?: string;
+    academicYear: string;
+    description: string;
+    feePeriodKind: FeePeriodKind;
+    feePeriod: string;
+    excludePaymentId?: string;
+    /** Unsaved lines on the current receipt · avoids double-counting the same period */
+    pendingLines?: Array<{
+      description: string;
+      feePeriodKind: FeePeriodKind;
+      feePeriod: string;
+      amount: number;
+    }>;
+  },
+): number {
+  const studentKey = opts.studentName.trim().toLowerCase();
+  const year = opts.academicYear.trim();
+  const description = opts.description.trim();
+  const period = opts.feePeriod.trim();
+  if (!studentKey || !description || !period) return 0;
+
+  let total = 0;
+  for (const payment of payments) {
+    if (opts.excludePaymentId && payment.id === opts.excludePaymentId) continue;
+    if (payment.payerType === "external") continue;
+    if (payment.name.trim().toLowerCase() !== studentKey) continue;
+    if (payment.academicYear?.trim() && year && payment.academicYear.trim() !== year) continue;
+    if (
+      opts.className?.trim() &&
+      payment.className?.trim() &&
+      payment.className.trim() !== opts.className.trim()
+    ) {
+      continue;
+    }
+
+    for (const line of resolvePaymentFeeLines(payment)) {
+      if (!feeCategoriesMatchForBalance(line.description, description)) continue;
+      if (
+        !feePeriodsMatchForBalance(
+          line.feePeriodKind,
+          line.feePeriod,
+          opts.feePeriodKind,
+          period,
+        )
+      ) {
+        continue;
+      }
+      total += Math.max(0, Math.round(line.amount) || 0);
+    }
+  }
+
+  if (opts.pendingLines?.length) {
+    for (const line of opts.pendingLines) {
+      if (!feeCategoriesMatchForBalance(line.description, description)) continue;
+      if (
+        !feePeriodsMatchForBalance(
+          line.feePeriodKind,
+          line.feePeriod,
+          opts.feePeriodKind,
+          period,
+        )
+      ) {
+        continue;
+      }
+      total += Math.max(0, Math.round(line.amount) || 0);
+    }
+  }
+
+  return total;
+}
+
 /** Map a fee category label to the term group it uses (if any). */
 export function normalizePaymentCategoryLabel(label: string): string {
   const trimmed = label.trim();

@@ -123,7 +123,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { DatePicker, MonthPicker } from "@/components/ui/date-picker";
+import { DatePicker, MonthPicker, ReceiptDateTimePicker } from "@/components/ui/date-picker";
 import { FinancialYearFields, resolveFinancialYearInput } from "@/components/school/FinancialYearFields";
 import { SignaturePadDialog } from "@/components/school/SignaturePadDialog";
 import { OrganicCard } from "@/components/ui/organic-card";
@@ -173,6 +173,7 @@ import {
   resolvePaymentFeePeriod,
   resolvePaymentFeePeriodKind,
   resolvePaymentFeeLines,
+  studentFeePeriodPaidAmount,
   paymentFeePeriods,
   formatPaymentPeriodsLabel,
   resolveTransportFeeForStudent,
@@ -333,7 +334,20 @@ import {
   type PaymentPeriod,
 } from "@/lib/payment-period";
 import { amountToIndianWords } from "@/lib/amount-words";
-import { formatEventDateTime, formatInAppZone, formatNow, isBlankDate, isEventToday, parseEventDate, toIsoDate, toSqlDateTime } from "@/lib/dates";
+import {
+  formatEventDateTime,
+  formatInAppZone,
+  formatNow,
+  formatReceiptDateTimeFromParts,
+  formatReceiptDateTimeNow,
+  isBlankDate,
+  isEventToday,
+  parseEventDate,
+  parseReceiptDateTimeParts,
+  toClockLocal,
+  toIsoDate,
+  toSqlDateTime,
+} from "@/lib/dates";
 import { cn, dashCardClass, glassCardClass, glassInsetClass, glassPanelClass, glassTableWrapClass, premiumCardClass, type CornerSide, type Tone } from "@/lib/utils";
 
 type PendingObligation = {
@@ -376,33 +390,6 @@ function readFileAsDataUrl(file: File): Promise<string> {
 }
 
 const EXPENSE_CHART_COLORS = ["#0F766E", "#10B981", "#F59E0B", "#EF4444", "#64748B"];
-
-function formatDisbursalTime(date = new Date()) {
-  return formatEventDateTime(date);
-}
-
-function toIsoDateLocal(date: Date): string {
-  return toIsoDate(date);
-}
-
-function toClockLocal(date: Date): string {
-  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-}
-
-/** Parse stored disbursal time labels back into date + clock for the picker. */
-function parseDisbursalTimeParts(label: string): { date: string; clock: string } {
-  const parsed = parseEventDate(label);
-  const date = parsed ?? new Date();
-  return { date: toIsoDateLocal(date), clock: toClockLocal(date) };
-}
-
-function formatDisbursalTimeFromParts(dateIso: string, clock: string): string {
-  const [y, m, d] = dateIso.split("-").map(Number);
-  const [hh, mm] = (clock || "00:00").split(":").map(Number);
-  if (!y || !m || !d) return formatDisbursalTime();
-  const date = new Date(y, m - 1, d, hh || 0, mm || 0, 0, 0);
-  return formatDisbursalTime(date);
-}
 
 function DashboardPeriodFilter({
   period,
@@ -7034,7 +7021,16 @@ function parseFeePeriodValue(value: string): { feePeriodKind: FeePeriodKind; fee
   };
 }
 
-function prefillAmountForFeeLine(
+type FeePrefillBalanceContext = {
+  payments: Payment[];
+  studentName: string;
+  className?: string;
+  academicYear: string;
+  excludePaymentId?: string;
+  feeItems?: FeeLineItem[];
+};
+
+function prefillScheduledAmountForFeeLine(
   item: Pick<FeeLineItem, "description" | "feePeriodKind" | "feePeriod">,
   matchedClass: ClassConfig | undefined,
   feeTerms: FeeTerm[],
@@ -7116,6 +7112,56 @@ function prefillAmountForFeeLine(
   return tuitionFee && tuitionFee > 0 ? tuitionFee : undefined;
 }
 
+function prefillAmountForFeeLine(
+  item: Pick<FeeLineItem, "id" | "description" | "customDescription" | "feePeriodKind" | "feePeriod">,
+  matchedClass: ClassConfig | undefined,
+  feeTerms: FeeTerm[],
+  tuitionFee: number | undefined,
+  vehicleFee: number | undefined,
+  collectionStartMonth?: string,
+  matchedRoute?: TransportRoute,
+  transportShift?: TransportFeeShift,
+  balanceCtx?: FeePrefillBalanceContext,
+): number | undefined {
+  const scheduled = prefillScheduledAmountForFeeLine(
+    item,
+    matchedClass,
+    feeTerms,
+    tuitionFee,
+    vehicleFee,
+    collectionStartMonth,
+    matchedRoute,
+    transportShift,
+  );
+  if (scheduled == null || scheduled <= 0 || !balanceCtx || !item.feePeriod.trim()) {
+    return scheduled;
+  }
+
+  const description = feeLineCategoryLabel(item as FeeLineItem);
+  const pendingLines = balanceCtx.feeItems
+    ?.filter((line) => line.id !== item.id)
+    .map((line) => ({
+      description: feeLineCategoryLabel(line),
+      feePeriodKind: line.feePeriodKind,
+      feePeriod: line.feePeriod,
+      amount: Math.max(0, Math.round(Number(line.amount) || 0)),
+    }))
+    .filter((line) => line.amount > 0 && line.feePeriod.trim());
+
+  const paid = studentFeePeriodPaidAmount(balanceCtx.payments, {
+    studentName: balanceCtx.studentName,
+    className: balanceCtx.className,
+    academicYear: balanceCtx.academicYear,
+    description,
+    feePeriodKind: item.feePeriodKind,
+    feePeriod: item.feePeriod,
+    excludePaymentId: balanceCtx.excludePaymentId,
+    pendingLines,
+  });
+
+  return Math.max(0, scheduled - paid);
+}
+
 function splitMatchesTotal(mode: string, bank: string, cash: string, total: number) {
   if (mode !== "Both") return true;
   const bankN = Number(bank);
@@ -7125,7 +7171,7 @@ function splitMatchesTotal(mode: string, bank: string, cash: string, total: numb
 
 function receiptTimeForForm(raw?: string) {
   const formatted = formatEventDateTime(raw);
-  if (!formatted || formatted === "—") return formatDisbursalTime();
+  if (!formatted || formatted === "—") return formatReceiptDateTimeNow();
   return formatted;
 }
 
@@ -7394,7 +7440,7 @@ function ReceivePayment() {
   const [bankSplitAmount, setBankSplitAmount] = useState("");
   const [cashSplitAmount, setCashSplitAmount] = useState("");
   const [narration, setNarration] = useState("");
-  const [receiptTime, setReceiptTime] = useState(() => formatDisbursalTime());
+  const [receiptTime, setReceiptTime] = useState(() => formatReceiptDateTimeNow());
   const [attachments, setAttachments] = useState<PaymentAttachment[]>([]);
   const [historyQuery, setHistoryQuery] = useState("");
   const attachmentInputRef = useRef<HTMLInputElement>(null);
@@ -7505,6 +7551,21 @@ function ReceivePayment() {
 
   const tuitionFee = matchedClass?.tuitionFeeAmount;
 
+  const getPrefillBalanceContext = useCallback(
+    (lines: FeeLineItem[]): FeePrefillBalanceContext | undefined => {
+      if (isExternal || !selected) return undefined;
+      return {
+        payments,
+        studentName: selected.name,
+        className: selected.cls,
+        academicYear,
+        excludePaymentId: editingPayment?.id,
+        feeItems: lines,
+      };
+    },
+    [isExternal, selected, payments, academicYear, editingPayment?.id],
+  );
+
   const periodOpts = useMemo(() => {
     if (!matchedClass || isExternal) return undefined;
     const scheduled = withClassFeeSchedule(matchedClass, feeTerms);
@@ -7553,8 +7614,9 @@ function ReceivePayment() {
           collectionStartMonth,
           matchedRoute,
           transportShift,
+          getPrefillBalanceContext(lines),
         );
-        if (prefill && prefill > 0) {
+        if (prefill !== undefined) {
           changed = true;
           return { ...item, amount: String(prefill) };
         }
@@ -7562,7 +7624,16 @@ function ReceivePayment() {
       });
       return changed ? next : lines;
     },
-    [feeTerms, matchedClass, matchedRoute, tuitionFee, vehicleFee, collectionStartMonth, transportShift],
+    [
+      feeTerms,
+      matchedClass,
+      matchedRoute,
+      tuitionFee,
+      vehicleFee,
+      collectionStartMonth,
+      transportShift,
+      getPrefillBalanceContext,
+    ],
   );
 
   useEffect(() => {
@@ -7624,6 +7695,13 @@ function ReceivePayment() {
         feePeriod: vehicleLine.feePeriod.trim() ? vehicleLine.feePeriod : vehiclePeriod.feePeriod,
       };
 
+      const tuitionLines =
+        nonVehicle.length > 0
+          ? nonVehicle
+          : [createFeeLineItem({ description: defaultCategory })];
+
+      const next = [...tuitionLines, vehicleLine];
+
       if (!vehicleLine.amount.trim()) {
         const prefill = prefillAmountForFeeLine(
           vehicleLine,
@@ -7634,18 +7712,14 @@ function ReceivePayment() {
           collectionStartMonth,
           matchedRoute,
           transportShift,
+          getPrefillBalanceContext(next),
         );
-        if (prefill && prefill > 0) {
+        if (prefill !== undefined) {
           vehicleLine = { ...vehicleLine, amount: String(prefill) };
+          next[next.length - 1] = vehicleLine;
         }
       }
 
-      const tuitionLines =
-        nonVehicle.length > 0
-          ? nonVehicle
-          : [createFeeLineItem({ description: defaultCategory })];
-
-      const next = [...tuitionLines, vehicleLine];
       const unchanged =
         next.length === prev.length &&
         next.every((line, index) => {
@@ -7678,6 +7752,7 @@ function ReceivePayment() {
     tuitionFee,
     defaultCategory,
     transportShift,
+    getPrefillBalanceContext,
   ]);
 
   useEffect(() => {
@@ -7726,10 +7801,11 @@ function ReceivePayment() {
               collectionStartMonth,
               matchedRoute,
               transportShift,
+              getPrefillBalanceContext(prev),
             );
             return {
               ...updated,
-              ...(prefill && prefill > 0 ? { amount: String(prefill) } : {}),
+              ...(prefill !== undefined ? { amount: String(prefill) } : {}),
             };
           }
         }
@@ -7766,30 +7842,12 @@ function ReceivePayment() {
             collectionStartMonth,
             matchedRoute,
             transportShift,
+            getPrefillBalanceContext(prev),
           );
-          if (prefill && prefill > 0) {
+          if (prefill !== undefined) {
             return { ...updated, amount: String(prefill) };
           }
           return updated;
-        }
-        if (
-          categoryFeeTermKind(item.description) === "tuition" ||
-          isVehicleFeeCategory(item.description)
-        ) {
-          const prefill = prefillAmountForFeeLine(
-            item,
-            matchedClass,
-            feeTerms,
-            tuitionFee,
-            vehicleFee,
-            collectionStartMonth,
-            matchedRoute,
-            transportShift,
-          );
-          if (prefill && prefill > 0 && String(prefill) !== item.amount) {
-            changed = true;
-            return { ...item, amount: String(prefill) };
-          }
         }
         return item;
       });
@@ -7807,6 +7865,7 @@ function ReceivePayment() {
     tuitionFee,
     vehicleFee,
     transportShift,
+    getPrefillBalanceContext,
   ]);
 
   const updateFeeLine = (id: string, patch: Partial<FeeLineItem>) => {
@@ -7853,8 +7912,11 @@ function ReceivePayment() {
             tuitionFee,
             vehicleFee,
             collectionStartMonth,
+            matchedRoute,
+            transportShift,
+            getPrefillBalanceContext(prev),
           );
-          if (prefill && prefill > 0) next = { ...next, amount: String(prefill) };
+          if (prefill !== undefined) next = { ...next, amount: String(prefill) };
         } else if (!("amount" in patch) && !next.amount.trim()) {
           const prefill = prefillAmountForFeeLine(
             next,
@@ -7863,8 +7925,11 @@ function ReceivePayment() {
             tuitionFee,
             vehicleFee,
             collectionStartMonth,
+            matchedRoute,
+            transportShift,
+            getPrefillBalanceContext(prev),
           );
-          if (prefill && prefill > 0) next = { ...next, amount: String(prefill) };
+          if (prefill !== undefined) next = { ...next, amount: String(prefill) };
         }
         return next;
       }),
@@ -7898,8 +7963,9 @@ function ReceivePayment() {
       collectionStartMonth,
       matchedRoute,
       transportShift,
+      getPrefillBalanceContext([...feeItems, line]),
     );
-    if (prefill && prefill > 0) line.amount = String(prefill);
+    if (prefill !== undefined) line.amount = String(prefill);
     setFeeItems((prev) => [...prev, line]);
   };
 
@@ -8083,7 +8149,7 @@ function ReceivePayment() {
     setExternalAmount("");
     setLedgerCategory(ledgerDefault);
     setNarration("");
-    setReceiptTime(formatDisbursalTime());
+    setReceiptTime(formatReceiptDateTimeNow());
     setAttachments([]);
     setBankSplitAmount("");
     setCashSplitAmount("");
@@ -8361,7 +8427,7 @@ function ReceivePayment() {
         setExternalAmount("");
         setExternalPayer("");
         setNarration("");
-        setReceiptTime(formatDisbursalTime());
+        setReceiptTime(formatReceiptDateTimeNow());
         setAttachments([]);
         setBankSplitAmount("");
         setCashSplitAmount("");
@@ -8436,7 +8502,7 @@ function ReceivePayment() {
     );
       setFeeItems([createFeeLineItem({ description: defaultCategory, ...resetPeriod })]);
       setNarration("");
-      setReceiptTime(formatDisbursalTime());
+      setReceiptTime(formatReceiptDateTimeNow());
       setAttachments([]);
       setBankSplitAmount("");
       setCashSplitAmount("");
@@ -8904,11 +8970,9 @@ function ReceivePayment() {
                 <div>
                   <FieldLabel>Date / Time</FieldLabel>
                   <div className="flex items-center gap-2">
-                    <Input
+                    <ReceiptDateTimePicker
                       value={receiptTime}
-                      onChange={(e) => setReceiptTime(e.target.value)}
-                      placeholder="e.g. Today · 10:22"
-                      className="h-11 flex-1 font-mono sm:h-10"
+                      onChange={setReceiptTime}
                     />
                     <button
                       type="button"
@@ -9691,7 +9755,7 @@ function MakePayment() {
     mode: "UPI Business",
     payeeType: "Supplier" as PayeeType,
     status: "Queued" as "Queued" | "Cleared",
-    date: toIsoDateLocal(new Date()),
+    date: toIsoDate(new Date()),
     clock: toClockLocal(new Date()),
   });
   const prefillAppliedRef = useRef(false);
@@ -10259,7 +10323,7 @@ function MakePayment() {
 
   const openEditDisbursal = (payment: MadePayment) => {
     setEditingDisbursal(payment);
-    const parts = parseDisbursalTimeParts(payment.time);
+    const parts = parseReceiptDateTimeParts(payment.time);
     setDisbursalEditForm({
       payee: payment.payee,
       desc: payment.desc,
@@ -10280,7 +10344,7 @@ function MakePayment() {
     const nextAmount = Number(disbursalEditForm.amount);
     const modeValue = disbursalEditForm.mode.trim();
     const time = toSqlDateTime(
-      formatDisbursalTimeFromParts(disbursalEditForm.date, disbursalEditForm.clock),
+      formatReceiptDateTimeFromParts(disbursalEditForm.date, disbursalEditForm.clock),
     );
     if (!payee) {
       toast.error("Payee is required");
@@ -10862,7 +10926,7 @@ function MakePayment() {
                   onChange={(date) =>
                     setDisbursalEditForm({
                       ...disbursalEditForm,
-                      date: date || toIsoDateLocal(new Date()),
+                      date: date || toIsoDate(new Date()),
                     })
                   }
                   valueFormat="iso"
@@ -10897,7 +10961,7 @@ function MakePayment() {
             <p className="text-[11px] text-black/45">
               Saves as{" "}
               <span className="font-mono text-black/70">
-                {formatDisbursalTimeFromParts(
+                {formatReceiptDateTimeFromParts(
                   disbursalEditForm.date,
                   disbursalEditForm.clock,
                 )}
