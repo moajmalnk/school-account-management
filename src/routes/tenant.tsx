@@ -253,7 +253,11 @@ function TenantMobileHeader() {
             )}
           >
             {logoUrl ? (
-              <img src={logoUrl} alt={tenantName} className="h-full w-full object-cover" />
+              <img
+                src={logoUrl}
+                alt={tenantName}
+                className="h-full w-full bg-white object-contain p-0.5"
+              />
             ) : (
               initials
             )}

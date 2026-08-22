@@ -378,7 +378,7 @@ export function TenantMacDock({
             aria-label={tenantName}
           >
             {logoUrl ? (
-              <img src={logoUrl} alt="" className="h-full w-full object-cover" />
+              <img src={logoUrl} alt="" className="h-full w-full bg-white object-contain p-0.5" />
             ) : (
               initials
             )}

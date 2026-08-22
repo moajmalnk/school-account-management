@@ -10306,7 +10306,7 @@ export function SchoolSettings() {
               )}
             >
               {logoUrl ? (
-                <img src={logoUrl} alt={tenantName} className="h-full w-full object-cover" />
+                <img src={logoUrl} alt={tenantName} className="h-full w-full bg-white object-contain p-0.5" />
               ) : (
                 initials
               )}
@@ -13390,7 +13390,7 @@ function SchoolDetailsCard({
                 <img
                   src={resolveMediaUrl(draft.logoUrl) ?? draft.logoUrl}
                   alt="School logo"
-                  className="h-14 w-14 rounded-lg object-cover ring-1 ring-black/10"
+                  className="h-14 w-14 rounded-lg bg-white object-contain p-1 ring-1 ring-black/10"
                 />
               ) : (
                 <div className="grid h-14 w-14 place-items-center rounded-lg bg-gradient-to-br from-[#0F766E] to-[#115E59] text-[13px] font-bold text-white">
@@ -13398,7 +13398,7 @@ function SchoolDetailsCard({
                 </div>
               )}
               <p className="text-[11px] leading-relaxed text-black/50">
-                Shown on the navigation dock and headers. JPG/PNG · max 2 MB.
+                Shown on the dock and headers. Zoom out in the editor to fit a wide logo. PNG/JPG · max 2 MB.
               </p>
             </div>
             <input
@@ -13706,14 +13706,21 @@ function SchoolDetailsCard({
                 ? "Adjust signature"
                 : "Adjust logo"
         }
-        description="Drag to reposition, zoom, then confirm the crop."
+        description={
+          cropTarget === "logo"
+            ? "Zoom out to fit the full logo in the square, or zoom in to crop."
+            : "Drag to reposition, zoom, then confirm."
+        }
         aspect={
           cropTarget === "letterhead" ? 16 / 5 : cropTarget === "signature" ? 2.4 : 1
         }
         outputSize={
           cropTarget === "letterhead" ? 1280 : cropTarget === "signature" ? 960 : 512
         }
-        outputMime={cropTarget === "seal" || cropTarget === "signature" ? "image/png" : "image/jpeg"}
+        outputMime={cropTarget === "letterhead" ? "image/jpeg" : "image/png"}
+        fit="contain"
+        background={cropTarget === "seal" || cropTarget === "signature" ? "transparent" : "#FFFFFF"}
+        confirmLabel="Use image"
         onOpenChange={(next) => {
           if (!next) closeCrop();
         }}

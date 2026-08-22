@@ -1,8 +1,8 @@
-import { useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
+import { useState, type Dispatch, type SetStateAction } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { LocationPicker } from "@/components/school/LocationPicker";
+import { AddBranchDialog } from "@/components/school/AddBranchDialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,21 +11,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { OrganicCard } from "@/components/ui/organic-card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { apiDeleteBranch, apiUpsertBranch } from "@/lib/api/settings";
+import { apiDeleteBranch } from "@/lib/api/settings";
 import { getApiToken } from "@/lib/api/client";
 import {
   isMainCampusBranch,
-  normalizeCampusBranch,
   type CampusBranch,
 } from "@/lib/tenant-store";
 import { cn, glassCardClass } from "@/lib/utils";
@@ -62,17 +52,6 @@ function CardHeader({
   );
 }
 
-const emptyForm = () => ({
-  name: "",
-  code: "",
-  address: "",
-  phone: "",
-  email: "",
-  lat: null as number | null,
-  lng: null as number | null,
-  copyFromId: "",
-});
-
 export function SettingsBranchesCard({
   branches,
   setBranches,
@@ -87,117 +66,22 @@ export function SettingsBranchesCard({
   canAddBranch?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<CampusBranch | null>(null);
   const [pendingDelete, setPendingDelete] = useState<CampusBranch | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState(emptyForm);
 
   const startCreate = () => {
     if (!canAddBranch) {
       toast.error("Multiple campuses are not included in this plan");
       return;
     }
-    setEditingId(null);
-    setForm({ ...emptyForm(), copyFromId: activeBranchId });
+    setEditing(null);
     setOpen(true);
   };
 
   const startEdit = (b: CampusBranch) => {
-    setEditingId(b.id);
-    setForm({
-      name: b.name,
-      code: b.code,
-      address: b.address,
-      phone: b.phone,
-      email: b.email,
-      lat: b.lat,
-      lng: b.lng,
-      copyFromId: "",
-    });
+    setEditing(b);
     setOpen(true);
   };
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    const name = form.name.trim();
-    const code = form.code.trim().toUpperCase();
-    if (!name || !code) {
-      toast.error("Campus name and code are required");
-      return;
-    }
-    if (!editingId && !canAddBranch) {
-      toast.error("Multiple campuses are not included in this plan");
-      return;
-    }
-    setSaving(true);
-    try {
-      const payload = {
-        ...(editingId ? { id: editingId } : {}),
-        name,
-        code,
-        address: form.address.trim(),
-        phone: form.phone.trim(),
-        email: form.email.trim(),
-        lat: form.lat,
-        lng: form.lng,
-        isActive: true,
-        ...(editingId ? {} : { copyFromId: form.copyFromId || activeBranchId }),
-      };
-      if (getApiToken()) {
-        const saved = await apiUpsertBranch(payload, !editingId);
-        const normalized = normalizeCampusBranch(saved) ?? {
-          id: saved.id ?? editingId ?? `BR-${code}`,
-          name,
-          code,
-          address: payload.address,
-          phone: payload.phone,
-          email: payload.email,
-          lat: payload.lat ?? null,
-          lng: payload.lng ?? null,
-          isActive: true,
-        };
-        if (editingId) {
-          setBranches((prev) => prev.map((b) => (b.id === editingId ? normalized : b)));
-          toast.success(`Campus updated · ${name}`);
-        } else {
-          setBranches((prev) => [...prev.filter((b) => b.id !== normalized.id), normalized]);
-          toast.success(`Campus added · ${name}`, {
-            description: "Classes and fees copied from the source campus · students stay empty",
-          });
-        }
-      } else if (editingId) {
-        setBranches((prev) =>
-          prev.map((b) =>
-            b.id === editingId
-              ? { ...b, name, code, address: form.address, phone: form.phone, email: form.email, lat: form.lat, lng: form.lng }
-              : b,
-          ),
-        );
-        toast.success(`Campus updated · ${name}`);
-      } else {
-        const created: CampusBranch = {
-          id: `BR-${code}`,
-          name,
-          code,
-          address: form.address.trim(),
-          phone: form.phone.trim(),
-          email: form.email.trim(),
-          lat: form.lat,
-          lng: form.lng,
-          isActive: true,
-        };
-        setBranches((prev) => [...prev, created]);
-        toast.success(`Campus added · ${name}`);
-      }
-      setOpen(false);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not save campus");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const confirmDelete = async () => {
     if (!pendingDelete) return;
     if (isMainCampusBranch(pendingDelete, branches)) {
       toast.error("The main campus cannot be deleted");
