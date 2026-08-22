@@ -179,6 +179,11 @@ import {
   studentNeedsTransport,
   vehicleFeeCategoryLabel,
   isVehicleFeeCategory,
+  withRouteFeeSchedule,
+  routeFeePrefillAmount,
+  routeScheduleSummary,
+  routeScheduleForShift,
+  type TransportFeeShift,
   type PaymentFeeLine,
   currentPayrollMonth,
   formatPayrollMonthLabel,
@@ -285,11 +290,13 @@ import {
   apiDeleteDepartment,
   apiDeletePaymentCategory,
   apiDeleteTransportRoute,
+  apiDeleteVehicle,
   apiSaveSchoolDetails,
   apiUpsertClass,
   apiUpsertDepartment,
   apiUpsertPaymentCategory,
   apiUpsertTransportRoute,
+  apiUpsertVehicle,
 } from "@/lib/api/settings";
 import { apiCreateDisbursement, apiCreatePayment, apiDeleteDisbursement, apiDeletePayment, apiDeleteStaff, apiDeleteStudent, apiListDisbursements, apiUpdateDisbursement, apiUpdatePayment, apiUpsertStaff, apiUpsertStudent } from "@/lib/api/records";
 import { apiSaveDashboardTodos } from "@/lib/api/dashboard";
@@ -3867,13 +3874,12 @@ export function StaffRoster() {
   const { staff, setStaff, departments, roles, hydrated, branchSyncing, schoolDetails, academicYear } = useTenantStore();
   const schoolName = schoolDetails.name || "School";
   const navigate = useNavigate();
-  const search = useSearch({ from: "/tenant/staff" }) as { id?: string; edit?: string };
+  const search = useSearch({ from: "/tenant/staff" }) as { id?: string };
   const activeStaffViewId = search.id ?? null;
-  const initialEdit = search.edit === "1";
 
   const openStaff = (id: string) => navigate({ to: "/tenant/staff", search: { id } });
   const openStaffEdit = (id: string) =>
-    navigate({ to: "/tenant/staff", search: { id, edit: "1" } });
+    navigate({ to: "/tenant/staff/edit", search: { id } });
   const closeStaff = () => navigate({ to: "/tenant/staff", search: {} });
 
   const defaultDept = departments[0]?.name ?? "";
@@ -4597,11 +4603,7 @@ export function StaffRoster() {
 
   if (activeStaff) {
     return (
-      <StaffProfileDetail
-        staff={activeStaff}
-        onBack={closeStaff}
-        initialEdit={initialEdit}
-      />
+      <StaffProfileDetail staff={activeStaff} onBack={closeStaff} />
     );
   }
 
@@ -6785,6 +6787,26 @@ function feeDescriptionSelectOptions(
   return options;
 }
 
+function orderedFeeDescriptionOptions(
+  categories: PaymentCategory[],
+): { value: string; label: string }[] {
+  const tuition: PaymentCategory[] = [];
+  const vehicle: PaymentCategory[] = [];
+  const other: PaymentCategory[] = [];
+  const rest: PaymentCategory[] = [];
+  for (const category of categories) {
+    const kind = categoryFeeTermKind(category.label);
+    if (kind === "tuition") tuition.push(category);
+    else if (kind === "vehicle") vehicle.push(category);
+    else if (isOtherFeeDescription(category.label)) other.push(category);
+    else rest.push(category);
+  }
+  return [...tuition, ...vehicle, ...other, ...rest].map((category) => ({
+    value: category.label,
+    label: category.label,
+  }));
+}
+
 export function classSelectOptions(classes: ClassConfig[], currentClass: string) {
   const options = classes.map((c) => ({ value: c.className, label: c.className }));
   if (
@@ -6838,11 +6860,16 @@ function feePeriodChoices(
     billingCycle?: ClassBillingCycle;
   },
   matchedClass?: ClassConfig,
+  matchedRoute?: TransportRoute,
 ): { value: string; label: string; kind: FeePeriodKind; period: string }[] {
   const termKind = categoryFeeTermKind(description);
   const scheduled = matchedClass ? withClassFeeSchedule(matchedClass, feeTerms) : undefined;
   const classInstallments =
     scheduled?.feeSchedule.filter((line) => line.kind === "installment" && line.amount > 0) ?? [];
+  const routeNormalized = matchedRoute ? withRouteFeeSchedule(matchedRoute, feeTerms) : undefined;
+  const routeInstallments =
+    routeNormalized?.bothFeeSchedule.filter((line) => line.kind === "installment" && line.amount > 0) ??
+    [];
 
   if (termKind === "tuition" && matchedClass?.billingCycle === "Term" && classInstallments.length > 0) {
     return classInstallments.map((line) => ({
@@ -6879,6 +6906,38 @@ function feePeriodChoices(
     }));
   }
 
+  if (termKind === "vehicle" && routeNormalized && routeInstallments.length > 0) {
+    if (routeNormalized.billingCycle === "Term") {
+      return routeInstallments.map((line) => ({
+        value: `term:${line.label}`,
+        label: line.label,
+        kind: "term" as const,
+        period: line.label,
+      }));
+    }
+    if (routeNormalized.billingCycle === "Monthly") {
+      let labels = routeInstallments.map((line) => line.label);
+      const startMonth =
+        routeNormalized.feeCollectionStartMonth?.trim() || opts?.startMonth?.trim();
+      if (startMonth) {
+        const allowed = feeMonthsFromStart(startMonth, labels.length);
+        const allowedSet = new Set(allowed.map((month) => month.toLowerCase()));
+        const monthLike = labels.filter((label) => allowedSet.has(label.trim().toLowerCase()));
+        if (monthLike.length > 0) {
+          labels = monthLike;
+        } else if (allowed.length > 0) {
+          labels = allowed.slice(0, labels.length);
+        }
+      }
+      return labels.map((label) => ({
+        value: `month:${label}`,
+        label,
+        kind: "month" as const,
+        period: label,
+      }));
+    }
+  }
+
   const terms = uniqueByLabel(termKind ? filterFeePeriods(feeTerms, "term", termKind) : []);
   const months = uniqueByLabel(termKind ? filterFeePeriods(feeTerms, "month", termKind) : []);
   let monthLabels = months.length > 0 ? months.map((t) => t.label) : [...FEE_MONTHS];
@@ -6904,7 +6963,9 @@ function feePeriodChoices(
     })),
     ...(matchedClass?.billingCycle === "Term" && termKind === "tuition"
       ? []
-      : monthLabels.map((label) => {
+      : routeNormalized?.billingCycle === "Term" && termKind === "vehicle"
+        ? []
+        : monthLabels.map((label) => {
           const monthTerm = months.find((t) => t.label === label);
           return {
             value: `month:${label}`,
@@ -6936,9 +6997,15 @@ function defaultFeePeriod(
     billingCycle?: ClassBillingCycle;
   },
   matchedClass?: ClassConfig,
+  matchedRoute?: TransportRoute,
 ): { feePeriodKind: FeePeriodKind; feePeriod: string } {
-  const choices = feePeriodChoices(feeTerms, description, periodOpts, matchedClass);
-  if (billingCycle === "Term") {
+  const termKind = categoryFeeTermKind(description);
+  const effectiveBillingCycle =
+    termKind === "vehicle" && matchedRoute?.billingCycle
+      ? matchedRoute.billingCycle
+      : billingCycle;
+  const choices = feePeriodChoices(feeTerms, description, periodOpts, matchedClass, matchedRoute);
+  if (effectiveBillingCycle === "Term") {
     const term = choices.find((c) => c.kind === "term");
     if (term) return { feePeriodKind: "term", feePeriod: term.period };
   }
@@ -6967,6 +7034,8 @@ function prefillAmountForFeeLine(
   tuitionFee: number | undefined,
   vehicleFee: number | undefined,
   collectionStartMonth?: string,
+  matchedRoute?: TransportRoute,
+  transportShift?: TransportFeeShift,
 ): number | undefined {
   const category = item.description;
   const lower = category.toLowerCase();
@@ -6982,7 +7051,7 @@ function prefillAmountForFeeLine(
       ? monthsForCategory.find((t) => t.label === item.feePeriod)
       : undefined;
 
-  if (matchedClass) {
+  if (matchedClass && !(termKind === "vehicle" && matchedRoute)) {
     const scheduled = withClassFeeSchedule(matchedClass, feeTerms);
     const installments = scheduled.feeSchedule.filter((line) => line.kind === "installment");
     const scheduleIndex = installments.findIndex(
@@ -7008,6 +7077,26 @@ function prefillAmountForFeeLine(
         undefined,
     });
     if (fromSchedule && fromSchedule > 0) return fromSchedule;
+  }
+  if (termKind === "vehicle" && matchedRoute && transportShift) {
+    const routeInstallments = routeScheduleForShift(matchedRoute, transportShift);
+    const routeIndex = routeInstallments.findIndex(
+      (line) => line.label.trim().toLowerCase() === item.feePeriod.trim().toLowerCase(),
+    );
+    const fromRoute = routeFeePrefillAmount(
+      matchedRoute,
+      transportShift,
+      {
+        periodLabel: item.feePeriod || selectedTerm?.label || selectedMonthPeriod?.label,
+        periodIndex: routeIndex >= 0 ? routeIndex : undefined,
+        collectionStartMonth:
+          collectionStartMonth?.trim() ||
+          matchedRoute.feeCollectionStartMonth?.trim() ||
+          undefined,
+      },
+      feeTerms,
+    );
+    if (fromRoute && fromRoute > 0) return fromRoute;
   }
   if (selectedTerm?.feeAmount && selectedTerm.feeAmount > 0) return selectedTerm.feeAmount;
   if (selectedMonthPeriod?.feeAmount && selectedMonthPeriod.feeAmount > 0) {
@@ -7266,7 +7355,10 @@ function ReceivePayment() {
     const fromStudents = Array.from(new Set(students.map((s) => s.cls)));
     return Array.from(new Set([...fromConfig, ...fromStudents]));
   }, [classConfigs, students]);
-  const defaultCategory = paymentCategories[0]?.label ?? "Tuition Fee";
+  const defaultCategory =
+    paymentCategories.find((c) => categoryFeeTermKind(c.label) === "tuition")?.label ??
+    paymentCategories[0]?.label ??
+    "Tuition Fee";
   const ledgerDefault =
     paymentCategories.find((c) => /donation/i.test(c.label))?.label ??
     paymentCategories.find((c) => categorySuggestsExternal(c.label))?.label ??
@@ -7318,7 +7410,7 @@ function ReceivePayment() {
       (editingPayment ? students.find((s) => s.name === stu) : undefined)
     : undefined;
   const descriptionOptions = useMemo(
-    () => paymentCategories.map((c) => ({ value: c.label, label: c.label })),
+    () => orderedFeeDescriptionOptions(paymentCategories),
     [paymentCategories],
   );
   const filledFeeItems = useMemo(
@@ -7383,8 +7475,11 @@ function ReceivePayment() {
 
   const transportFeeResolved = useMemo(() => {
     if (!selected) return undefined;
-    return resolveTransportFeeForStudent(selected, transportRoutes, matchedClass);
-  }, [selected, transportRoutes, matchedClass]);
+    return resolveTransportFeeForStudent(selected, transportRoutes, matchedClass, undefined, feeTerms);
+  }, [selected, transportRoutes, matchedClass, feeTerms]);
+
+  const matchedRoute = transportFeeResolved?.route;
+  const transportShift = transportFeeResolved?.shift ?? "both";
 
   const vehicleCategoryLabel = useMemo(
     () => vehicleFeeCategoryLabel(paymentCategories),
@@ -7417,6 +7512,26 @@ function ReceivePayment() {
     };
   }, [matchedClass, feeTerms, collectionStartMonth, isExternal]);
 
+  const vehiclePeriodOpts = useMemo(() => {
+    if (!matchedRoute || isExternal) return undefined;
+    const normalized = withRouteFeeSchedule(matchedRoute, feeTerms);
+    const count = normalized.bothFeeSchedule.filter(
+      (line) => line.kind === "installment" && line.amount > 0,
+    ).length;
+    if (normalized.billingCycle !== "Monthly" || count <= 0) return undefined;
+    return {
+      startMonth: normalized.feeCollectionStartMonth?.trim() || collectionStartMonth,
+      installmentCount: count,
+      billingCycle: "Monthly" as const,
+    };
+  }, [matchedRoute, feeTerms, collectionStartMonth, isExternal]);
+
+  const periodOptsForDescription = useCallback(
+    (description: string) =>
+      isVehicleFeeCategory(description) ? vehiclePeriodOpts ?? periodOpts : periodOpts,
+    [periodOpts, vehiclePeriodOpts],
+  );
+
   const showCollectionStart = Boolean(periodOpts);
 
   const applyPrefillToLines = useCallback(
@@ -7431,6 +7546,8 @@ function ReceivePayment() {
           tuitionFee,
           vehicleFee,
           collectionStartMonth,
+          matchedRoute,
+          transportShift,
         );
         if (prefill && prefill > 0) {
           changed = true;
@@ -7440,7 +7557,7 @@ function ReceivePayment() {
       });
       return changed ? next : lines;
     },
-    [feeTerms, matchedClass, tuitionFee, vehicleFee, collectionStartMonth],
+    [feeTerms, matchedClass, matchedRoute, tuitionFee, vehicleFee, collectionStartMonth, transportShift],
   );
 
   useEffect(() => {
@@ -7479,9 +7596,10 @@ function ReceivePayment() {
       const period = defaultFeePeriod(
         feeTerms,
         vehicleCategoryLabel,
-        matchedClass?.billingCycle,
-        periodOpts,
+        matchedRoute?.billingCycle ?? matchedClass?.billingCycle,
+        vehiclePeriodOpts ?? periodOpts,
         matchedClass,
+        matchedRoute,
       );
       let vehicleLine =
         existingVehicle ??
@@ -7490,9 +7608,10 @@ function ReceivePayment() {
       const vehiclePeriod = defaultFeePeriod(
         feeTerms,
         vehicleLine.description,
-        matchedClass?.billingCycle,
-        periodOpts,
+        matchedRoute?.billingCycle ?? matchedClass?.billingCycle,
+        vehiclePeriodOpts ?? periodOpts,
         matchedClass,
+        matchedRoute,
       );
       vehicleLine = {
         ...vehicleLine,
@@ -7500,9 +7619,7 @@ function ReceivePayment() {
         feePeriod: vehicleLine.feePeriod.trim() ? vehicleLine.feePeriod : vehiclePeriod.feePeriod,
       };
 
-      if (vehicleFee && vehicleFee > 0) {
-        vehicleLine = { ...vehicleLine, amount: String(vehicleFee) };
-      } else if (!vehicleLine.amount.trim()) {
+      if (!vehicleLine.amount.trim()) {
         const prefill = prefillAmountForFeeLine(
           vehicleLine,
           matchedClass,
@@ -7510,6 +7627,8 @@ function ReceivePayment() {
           tuitionFee,
           vehicleFee,
           collectionStartMonth,
+          matchedRoute,
+          transportShift,
         );
         if (prefill && prefill > 0) {
           vehicleLine = { ...vehicleLine, amount: String(prefill) };
@@ -7547,10 +7666,13 @@ function ReceivePayment() {
     vehicleCategoryLabel,
     feeTerms,
     matchedClass,
+    matchedRoute,
     periodOpts,
+    vehiclePeriodOpts,
     collectionStartMonth,
     tuitionFee,
     defaultCategory,
+    transportShift,
   ]);
 
   useEffect(() => {
@@ -7559,19 +7681,29 @@ function ReceivePayment() {
   }, [applyPrefillToLines, isExternal, selected?.id, editingPayment]);
 
   useEffect(() => {
-    if (isExternal || !matchedClass || editingPayment) return;
+    if (isExternal || editingPayment) return;
+    if (!matchedClass && !matchedRoute) return;
     setFeeItems((prev) => {
       let changed = false;
       const next = prev.map((item) => {
-        const choices = feePeriodChoices(feeTerms, item.description, periodOpts, matchedClass);
+        const linePeriodOpts = periodOptsForDescription(item.description);
+        const choices = feePeriodChoices(
+          feeTerms,
+          item.description,
+          linePeriodOpts,
+          matchedClass,
+          isVehicleFeeCategory(item.description) ? matchedRoute : undefined,
+        );
         const valid = choices.some(
           (c) => c.kind === item.feePeriodKind && c.period === item.feePeriod,
         );
-        if (matchedClass.billingCycle === "Term") {
+        const routeTermBilling =
+          isVehicleFeeCategory(item.description) && matchedRoute?.billingCycle === "Term";
+        if (matchedClass?.billingCycle === "Term" || routeTermBilling) {
           const termChoice = choices.find((c) => c.kind === "term");
           if (
             termChoice &&
-            categoryFeeTermKind(item.description) === "tuition" &&
+            (categoryFeeTermKind(item.description) === "tuition" || routeTermBilling) &&
             (item.feePeriodKind !== "term" || item.feePeriod !== termChoice.period)
           ) {
             changed = true;
@@ -7587,6 +7719,8 @@ function ReceivePayment() {
               tuitionFee,
               vehicleFee,
               collectionStartMonth,
+              matchedRoute,
+              transportShift,
             );
             return {
               ...updated,
@@ -7594,7 +7728,11 @@ function ReceivePayment() {
             };
           }
         }
-        if (matchedClass.billingCycle === "Monthly" && item.feePeriodKind === "term") {
+        if (
+          (matchedClass?.billingCycle === "Monthly" || matchedRoute?.billingCycle === "Monthly") &&
+          item.feePeriodKind === "term" &&
+          categoryFeeTermKind(item.description) !== "vehicle"
+        ) {
           const monthChoice = choices.find((c) => c.kind === "month");
           if (monthChoice) {
             changed = true;
@@ -7605,9 +7743,12 @@ function ReceivePayment() {
           const fallback = defaultFeePeriod(
             feeTerms,
             item.description,
-            matchedClass.billingCycle,
-            periodOpts,
+            isVehicleFeeCategory(item.description)
+              ? matchedRoute?.billingCycle
+              : matchedClass?.billingCycle,
+            linePeriodOpts,
             matchedClass,
+            isVehicleFeeCategory(item.description) ? matchedRoute : undefined,
           );
           changed = true;
           const updated = { ...item, ...fallback };
@@ -7618,13 +7759,18 @@ function ReceivePayment() {
             tuitionFee,
             vehicleFee,
             collectionStartMonth,
+            matchedRoute,
+            transportShift,
           );
           if (prefill && prefill > 0) {
             return { ...updated, amount: String(prefill) };
           }
           return updated;
         }
-        if (categoryFeeTermKind(item.description) === "tuition") {
+        if (
+          categoryFeeTermKind(item.description) === "tuition" ||
+          isVehicleFeeCategory(item.description)
+        ) {
           const prefill = prefillAmountForFeeLine(
             item,
             matchedClass,
@@ -7632,6 +7778,8 @@ function ReceivePayment() {
             tuitionFee,
             vehicleFee,
             collectionStartMonth,
+            matchedRoute,
+            transportShift,
           );
           if (prefill && prefill > 0 && String(prefill) !== item.amount) {
             changed = true;
@@ -7646,11 +7794,14 @@ function ReceivePayment() {
     feeTerms,
     isExternal,
     matchedClass,
+    matchedRoute,
     editingPayment,
     periodOpts,
+    periodOptsForDescription,
     collectionStartMonth,
     tuitionFee,
     vehicleFee,
+    transportShift,
   ]);
 
   const updateFeeLine = (id: string, patch: Partial<FeeLineItem>) => {
@@ -7659,7 +7810,14 @@ function ReceivePayment() {
         if (item.id !== id) return item;
         let next = { ...item, ...patch };
         if (patch.description) {
-          const choices = feePeriodChoices(feeTerms, patch.description, periodOpts, matchedClass);
+          const linePeriodOpts = periodOptsForDescription(patch.description);
+          const choices = feePeriodChoices(
+            feeTerms,
+            patch.description,
+            linePeriodOpts,
+            matchedClass,
+            isVehicleFeeCategory(patch.description) ? matchedRoute : undefined,
+          );
           const stillValid = choices.some(
             (c) => c.kind === next.feePeriodKind && c.period === next.feePeriod,
           );
@@ -7667,9 +7825,12 @@ function ReceivePayment() {
             const period = defaultFeePeriod(
               feeTerms,
               patch.description,
-              matchedClass?.billingCycle,
-              periodOpts,
+              isVehicleFeeCategory(patch.description)
+                ? matchedRoute?.billingCycle
+                : matchedClass?.billingCycle,
+              linePeriodOpts,
               matchedClass,
+              isVehicleFeeCategory(patch.description) ? matchedRoute : undefined,
             );
             next = { ...next, ...period };
           }
@@ -7707,15 +7868,20 @@ function ReceivePayment() {
 
   const addFeeItem = () => {
     const used = new Set(feeItems.map((item) => item.description));
+    const ordered = orderedFeeDescriptionOptions(paymentCategories);
     const nextCat =
-      paymentCategories.find((c) => !used.has(c.label)) ??
-      paymentCategories[0] ?? { label: defaultCategory };
+      ordered.find((option) => !used.has(option.value)) ??
+      ordered[0] ?? { value: defaultCategory, label: defaultCategory };
+    const linePeriodOpts = periodOptsForDescription(nextCat.label);
     const period = defaultFeePeriod(
       feeTerms,
       nextCat.label,
-      matchedClass?.billingCycle,
-      periodOpts,
+      isVehicleFeeCategory(nextCat.label)
+        ? matchedRoute?.billingCycle
+        : matchedClass?.billingCycle,
+      linePeriodOpts,
       matchedClass,
+      isVehicleFeeCategory(nextCat.label) ? matchedRoute : undefined,
     );
     const line = createFeeLineItem({ description: nextCat.label, ...period });
     const prefill = prefillAmountForFeeLine(
@@ -7725,6 +7891,8 @@ function ReceivePayment() {
       tuitionFee,
       vehicleFee,
       collectionStartMonth,
+      matchedRoute,
+      transportShift,
     );
     if (prefill && prefill > 0) line.amount = String(prefill);
     setFeeItems((prev) => [...prev, line]);
@@ -8587,11 +8755,13 @@ function ReceivePayment() {
               ) : null}
 
               {feeItems.map((item, index) => {
+                const linePeriodOpts = periodOptsForDescription(item.description);
                 const periodChoices = feePeriodChoices(
                   feeTerms,
                   item.description,
-                  periodOpts,
+                  linePeriodOpts,
                   matchedClass,
+                  isVehicleFeeCategory(item.description) ? matchedRoute : undefined,
                 );
                 const selectedPeriodLabel =
                   periodChoices.find(
@@ -11147,6 +11317,7 @@ export function SchoolSettings() {
             setTransportRoutes={setTransportRoutes}
             transportVehicles={transportVehicles}
             setTransportVehicles={setTransportVehicles}
+            feeTerms={feeTerms}
           />
         </>
       )}
@@ -12695,13 +12866,21 @@ function VehicleCard({
       })),
     };
     if (editingId) {
+      const updated: TransportVehicle = { id: editingId, ...payload };
       setTransportVehicles((prev) =>
-        prev.map((v) => (v.id === editingId ? { ...v, ...payload } : v)),
+        prev.map((v) => (v.id === editingId ? updated : v)),
+      );
+      void apiUpsertVehicle(updated).catch((err) =>
+        toast.error(err instanceof Error ? err.message : "Could not sync vehicle"),
       );
       toast.success(`${name} updated`);
     } else {
       const nextId = `VH-${(transportVehicles.length + 1).toString().padStart(3, "0")}`;
-      setTransportVehicles((prev) => [...prev, { id: nextId, ...payload }]);
+      const created: TransportVehicle = { id: nextId, ...payload };
+      setTransportVehicles((prev) => [...prev, created]);
+      void apiUpsertVehicle(created).catch((err) =>
+        toast.error(err instanceof Error ? err.message : "Could not sync vehicle"),
+      );
       toast.success(`${name} added to fleet`);
     }
     setOpen(false);
@@ -12709,6 +12888,9 @@ function VehicleCard({
 
   const remove = (v: TransportVehicle) => {
     setTransportVehicles((prev) => prev.filter((x) => x.id !== v.id));
+    void apiDeleteVehicle(v.id).catch((err) =>
+      toast.error(err instanceof Error ? err.message : "Could not delete vehicle"),
+    );
     toast.error(`${v.name} removed from fleet`);
   };
 
@@ -13604,14 +13786,18 @@ function TransportCard({
   setTransportRoutes,
   transportVehicles,
   setTransportVehicles,
+  feeTerms,
   listLayout = "table",
 }: {
   transportRoutes: TransportRoute[];
   setTransportRoutes: React.Dispatch<React.SetStateAction<TransportRoute[]>>;
   transportVehicles: TransportVehicle[];
   setTransportVehicles: React.Dispatch<React.SetStateAction<TransportVehicle[]>>;
+  feeTerms: FeeTerm[];
   listLayout?: "cards" | "table";
 }) {
+  type RouteFeeDraftRow = { id: string; label: string; amount: string };
+
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<TransportRoute | null>(null);
@@ -13625,39 +13811,93 @@ function TransportCard({
     morningFee: "",
     eveningFee: "",
     bothFee: "",
+    billingCycle: "Monthly" as Extract<ClassBillingCycle, "Monthly" | "Term">,
+    feeAmountMode: "fixed" as ClassFeeAmountMode,
+    feeCollectionStartMonth: defaultFeeCollectionStartMonth(feeTerms),
+    installmentCount: "12",
+    installments: [] as RouteFeeDraftRow[],
   });
+
+  const defaultInstallmentCount = (cycle: Extract<ClassBillingCycle, "Monthly" | "Term">) => {
+    const mode = cycle === "Term" ? "term" : "month";
+    const n = filterFeePeriods(feeTerms, mode, "vehicle").length;
+    if (n > 0) return String(n);
+    return cycle === "Term" ? "4" : "12";
+  };
+
+  const schedulePreview = useMemo(() => {
+    const count = Math.max(1, Math.floor(Number(form.installmentCount) || 0));
+    const bothAmount = Math.max(0, Math.round(Number(form.bothFee) || 0));
+    const bothLines =
+      form.feeAmountMode === "fixed"
+        ? buildFixedInstallments(count, bothAmount, form.billingCycle)
+        : form.installments.map((row, index) => ({
+            id: row.id || `fl-i-${index + 1}`,
+            kind: "installment" as const,
+            label: row.label.trim() || installmentLabel(index, form.billingCycle),
+            amount: Math.max(0, Math.round(Number(row.amount) || 0)),
+          }));
+    return {
+      bothLines: bothLines.filter((line) => line.amount > 0),
+      total: bothLines.reduce((sum, line) => sum + line.amount, 0),
+    };
+  }, [form]);
 
   const vehiclesForRoute = (routeId: string) =>
     transportVehicles.filter((v) => v.routeIds.includes(routeId));
 
+  const emptyForm = () => ({
+    mapFrom: "",
+    mapTo: "",
+    fromLat: null as number | null,
+    fromLng: null as number | null,
+    toLat: null as number | null,
+    toLng: null as number | null,
+    morningFee: "",
+    eveningFee: "",
+    bothFee: "",
+    billingCycle: "Monthly" as Extract<ClassBillingCycle, "Monthly" | "Term">,
+    feeAmountMode: "fixed" as ClassFeeAmountMode,
+    feeCollectionStartMonth: defaultFeeCollectionStartMonth(feeTerms),
+    installmentCount: defaultInstallmentCount("Monthly"),
+    installments: [] as RouteFeeDraftRow[],
+  });
+
   const startCreate = () => {
     setEditingId(null);
-    setForm({
-      mapFrom: "",
-      mapTo: "",
-      fromLat: null,
-      fromLng: null,
-      toLat: null,
-      toLng: null,
-      morningFee: "",
-      eveningFee: "",
-      bothFee: "",
-    });
+    setForm(emptyForm());
     setOpen(true);
   };
 
   const startEdit = (r: TransportRoute) => {
+    const normalized = withRouteFeeSchedule(r, feeTerms);
+    const cycle: Extract<ClassBillingCycle, "Monthly" | "Term"> =
+      normalized.billingCycle === "Term" ? "Term" : "Monthly";
+    const installments = normalized.bothFeeSchedule.filter((line) => line.kind === "installment");
+    const uniqueAmounts = [...new Set(installments.map((line) => line.amount))];
     setEditingId(r.id);
     setForm({
-      mapFrom: r.mapFrom,
-      mapTo: r.mapTo,
-      fromLat: r.fromLat ?? null,
-      fromLng: r.fromLng ?? null,
-      toLat: r.toLat ?? null,
-      toLng: r.toLng ?? null,
-      morningFee: String(r.morningFee),
-      eveningFee: String(r.eveningFee),
-      bothFee: String(r.bothFee),
+      mapFrom: normalized.mapFrom,
+      mapTo: normalized.mapTo,
+      fromLat: normalized.fromLat ?? null,
+      fromLng: normalized.fromLng ?? null,
+      toLat: normalized.toLat ?? null,
+      toLng: normalized.toLng ?? null,
+      morningFee: String(normalized.morningFee),
+      eveningFee: String(normalized.eveningFee),
+      bothFee: String(installments[0]?.amount || normalized.bothFee),
+      billingCycle: cycle,
+      feeAmountMode:
+        normalized.feeAmountMode === "custom" || uniqueAmounts.length > 1 ? "custom" : "fixed",
+      feeCollectionStartMonth:
+        normalized.feeCollectionStartMonth?.trim() ||
+        defaultFeeCollectionStartMonth(feeTerms),
+      installmentCount: String(installments.length || defaultInstallmentCount(cycle)),
+      installments: installments.map((line) => ({
+        id: line.id,
+        label: line.label,
+        amount: line.amount ? String(line.amount) : "",
+      })),
     });
     setOpen(true);
   };
@@ -13677,12 +13917,44 @@ function TransportCard({
       toast.error("Morning, evening, and both-shift fees must be positive amounts");
       return;
     }
+    if (schedulePreview.bothLines.length === 0) {
+      toast.error("Add at least one installment amount for both shifts");
+      return;
+    }
+    const count = Math.max(1, Math.floor(Number(form.installmentCount) || 0));
+    const bothFeeSchedule =
+      form.feeAmountMode === "fixed"
+        ? buildFixedInstallments(count, bothFee, form.billingCycle)
+        : schedulePreview.bothLines;
+    const morningFeeSchedule =
+      form.feeAmountMode === "fixed"
+        ? buildFixedInstallments(count, morningFee, form.billingCycle)
+        : bothFeeSchedule.map((line, index) => ({
+            ...line,
+            id: `fl-m-${index + 1}`,
+            amount: morningFee,
+          }));
+    const eveningFeeSchedule =
+      form.feeAmountMode === "fixed"
+        ? buildFixedInstallments(count, eveningFee, form.billingCycle)
+        : bothFeeSchedule.map((line, index) => ({
+            ...line,
+            id: `fl-e-${index + 1}`,
+            amount: eveningFee,
+          }));
     const payload: Omit<TransportRoute, "id"> = {
       mapFrom,
       mapTo,
       morningFee,
       eveningFee,
       bothFee,
+      billingCycle: form.billingCycle,
+      feeAmountMode: form.feeAmountMode,
+      morningFeeSchedule,
+      eveningFeeSchedule,
+      bothFeeSchedule,
+      feeCollectionStartMonth:
+        form.billingCycle === "Monthly" ? form.feeCollectionStartMonth : undefined,
       ...(form.fromLat != null ? { fromLat: form.fromLat } : {}),
       ...(form.fromLng != null ? { fromLng: form.fromLng } : {}),
       ...(form.toLat != null ? { toLat: form.toLat } : {}),
@@ -13716,10 +13988,17 @@ function TransportCard({
   const remove = (r: TransportRoute) => {
     setTransportRoutes((prev) => prev.filter((x) => x.id !== r.id));
     setTransportVehicles((prev) =>
-      prev.map((v) => ({
-        ...v,
-        routeIds: v.routeIds.filter((id) => id !== r.id),
-      })),
+      prev.map((v) => {
+        if (!v.routeIds.includes(r.id)) return v;
+        const updated = {
+          ...v,
+          routeIds: v.routeIds.filter((id) => id !== r.id),
+        };
+        void apiUpsertVehicle(updated).catch((err) =>
+          toast.error(err instanceof Error ? err.message : "Could not sync vehicle"),
+        );
+        return updated;
+      }),
     );
     void apiDeleteTransportRoute(r.id).catch((err) =>
       toast.error(err instanceof Error ? err.message : "Could not delete route"),
@@ -14108,6 +14387,256 @@ function TransportCard({
                 />
               </div>
             </div>
+
+            <div className="space-y-3 rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] p-3.5">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                  Fee structure
+                </p>
+                <p className="mt-1 text-[12px] leading-snug text-black/50">
+                  Monthly or term installments for vehicle fee collection — same pattern as class
+                  tier.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                  Billing
+                </Label>
+                <div
+                  role="tablist"
+                  aria-label="Billing cycle"
+                  className="flex border-b border-[#E8E8EA] dark:border-white/10"
+                >
+                  {CLASS_SCHEDULE_CYCLES.map((cycle) => {
+                    const active = form.billingCycle === cycle;
+                    return (
+                      <button
+                        key={cycle}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        onClick={() => {
+                          const count = defaultInstallmentCount(cycle);
+                          setForm((prev) => ({
+                            ...prev,
+                            billingCycle: cycle,
+                            installmentCount: prev.installmentCount || count,
+                            installments: prev.installments.map((row, index) => ({
+                              ...row,
+                              label: installmentLabel(index, cycle),
+                            })),
+                          }));
+                        }}
+                        className={cn(
+                          "relative min-w-0 flex-1 px-2 py-2.5 text-center text-[12.5px] font-semibold tracking-tight transition-colors",
+                          active
+                            ? "text-[#0F766E] dark:text-[#5EEAD4]"
+                            : "text-black/45 hover:text-black/70 dark:text-zinc-500 dark:hover:text-zinc-300",
+                        )}
+                      >
+                        {cycle}
+                        {active && (
+                          <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-[#0F766E] dark:bg-[#2DD4BF]" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                  Amounts
+                </Label>
+                <div className="flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
+                  {(
+                    [
+                      { key: "fixed" as const, label: "Fixed" },
+                      { key: "custom" as const, label: "Different" },
+                    ] as const
+                  ).map((option) => {
+                    const active = form.feeAmountMode === option.key;
+                    return (
+                      <button
+                        key={option.key}
+                        type="button"
+                        onClick={() => {
+                          setForm((prev) => {
+                            if (option.key === "custom" && prev.installments.length === 0) {
+                              const count = Math.max(
+                                1,
+                                Math.floor(Number(prev.installmentCount) || 0),
+                              );
+                              const amount = prev.bothFee;
+                              return {
+                                ...prev,
+                                feeAmountMode: "custom",
+                                installments: Array.from({ length: count }, (_, index) => ({
+                                  id: `fl-i-${index + 1}`,
+                                  label: installmentLabel(index, prev.billingCycle),
+                                  amount,
+                                  dueDate: "",
+                                })),
+                              };
+                            }
+                            return { ...prev, feeAmountMode: option.key };
+                          });
+                        }}
+                        className={cn(
+                          "flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors",
+                          active ? "bg-[#0F766E] text-white" : "text-black/65 hover:text-black",
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {form.feeAmountMode === "fixed" ? (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                      {form.billingCycle === "Term" ? "Terms" : "Installments"}
+                    </Label>
+                    <Input
+                      inputMode="numeric"
+                      value={form.installmentCount}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          installmentCount: e.target.value.replace(/[^0-9]/g, ""),
+                        })
+                      }
+                      placeholder={form.billingCycle === "Term" ? "4" : "12"}
+                      className="font-mono bg-white"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                      Both shifts · amount each (₹)
+                    </Label>
+                    <Input
+                      inputMode="numeric"
+                      value={form.bothFee}
+                      onChange={(e) =>
+                        setForm({ ...form, bothFee: e.target.value.replace(/[^0-9]/g, "") })
+                      }
+                      placeholder="0"
+                      className="font-mono bg-white"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {form.installments.map((row, index) => (
+                    <div key={row.id} className="grid grid-cols-[1fr_7rem_auto] items-end gap-2">
+                      <div className="space-y-1">
+                        {index === 0 && (
+                          <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                            Label
+                          </Label>
+                        )}
+                        <Input
+                          value={row.label}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              installments: form.installments.map((item) =>
+                                item.id === row.id ? { ...item, label: e.target.value } : item,
+                              ),
+                            })
+                          }
+                          className="h-9 bg-white text-[13px]"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        {index === 0 && (
+                          <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                            Both (₹)
+                          </Label>
+                        )}
+                        <Input
+                          inputMode="numeric"
+                          value={row.amount}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              installments: form.installments.map((item) =>
+                                item.id === row.id
+                                  ? { ...item, amount: e.target.value.replace(/[^0-9]/g, "") }
+                                  : item,
+                              ),
+                            })
+                          }
+                          className="h-9 font-mono bg-white"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        aria-label={`Remove ${row.label}`}
+                        onClick={() =>
+                          setForm({
+                            ...form,
+                            installments: form.installments.filter((item) => item.id !== row.id),
+                            installmentCount: String(Math.max(1, form.installments.length - 1)),
+                          })
+                        }
+                        className="mb-0.5 grid h-9 w-9 place-items-center rounded-full text-black/40 hover:bg-[#FEE2E2] hover:text-[#EF4444]"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setForm({
+                        ...form,
+                        installments: [
+                          ...form.installments,
+                          {
+                            id: `fl-i-${form.installments.length + 1}-${Date.now()}`,
+                            label: installmentLabel(form.installments.length, form.billingCycle),
+                            amount: form.bothFee,
+                          },
+                        ],
+                        installmentCount: String(form.installments.length + 1),
+                      })
+                    }
+                    className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#0F766E] hover:underline"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add installment
+                  </button>
+                </div>
+              )}
+
+              {form.billingCycle === "Monthly" ? (
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                    Fee collection starts from
+                  </Label>
+                  <FieldSelect
+                    value={form.feeCollectionStartMonth}
+                    onValueChange={(month) => setForm({ ...form, feeCollectionStartMonth: month })}
+                    options={FEE_MONTHS.map((month) => ({ value: month, label: month }))}
+                    placeholder="Select month"
+                    triggerClassName="h-10 bg-white"
+                  />
+                </div>
+              ) : null}
+
+              <div className="flex items-center justify-between rounded-lg border border-[#D1FAE5] bg-white px-3 py-2.5">
+                <span className="text-[12px] text-black/55">Both-shift total</span>
+                <span className="font-mono text-[15px] font-semibold text-[#0F766E]">
+                  ₹ {schedulePreview.total.toLocaleString("en-IN")}
+                </span>
+              </div>
+            </div>
+
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel

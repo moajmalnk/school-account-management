@@ -1656,9 +1656,19 @@ export type TransportRoute = {
   fromLng?: number;
   toLat?: number;
   toLng?: number;
+  /** Per-installment amount for morning-only shift (fixed mode) */
   morningFee: number;
+  /** Per-installment amount for evening-only shift (fixed mode) */
   eveningFee: number;
+  /** Per-installment amount for both shifts (fixed mode) */
   bothFee: number;
+  billingCycle: ClassBillingCycle;
+  feeAmountMode: ClassFeeAmountMode;
+  morningFeeSchedule: ClassFeeLine[];
+  eveningFeeSchedule: ClassFeeLine[];
+  bothFeeSchedule: ClassFeeLine[];
+  /** First calendar month mapped to installment 1 · Monthly billing */
+  feeCollectionStartMonth?: string;
 };
 
 export type PaymentCategory = {
@@ -1793,7 +1803,158 @@ function normalizeTransportRoute(raw: unknown): TransportRoute | null {
     morningFee,
     eveningFee,
     bothFee,
+    billingCycle: normalizeClassBillingCycle(r.billingCycle),
+    feeAmountMode: normalizeClassFeeAmountMode(r.feeAmountMode),
+    morningFeeSchedule: parseClassFeeSchedule(r.morningFeeSchedule),
+    eveningFeeSchedule: parseClassFeeSchedule(r.eveningFeeSchedule),
+    bothFeeSchedule: parseClassFeeSchedule(r.bothFeeSchedule),
+    ...(typeof r.feeCollectionStartMonth === "string" && r.feeCollectionStartMonth.trim()
+      ? { feeCollectionStartMonth: r.feeCollectionStartMonth.trim() }
+      : {}),
   };
+}
+
+export function migrateRouteFeeSchedule(
+  route: Pick<TransportRoute, "billingCycle" | "morningFee" | "eveningFee" | "bothFee">,
+  feeTerms: FeeTerm[],
+  amount: number,
+): ClassFeeLine[] {
+  const total = Math.max(0, Math.round(amount) || 0);
+  if (total <= 0) return [];
+  const cycle = route.billingCycle === "Term" ? "Term" : "Monthly";
+  const mode: FeePeriodMode = cycle === "Monthly" ? "month" : "term";
+  const periods = filterFeePeriods(feeTerms, mode, "vehicle");
+  const count = periods.length > 0 ? periods.length : cycle === "Term" ? 4 : 12;
+  const lines = buildFixedInstallments(count, total, cycle);
+  if (periods.length > 0) {
+    return lines.map((line, index) => ({
+      ...line,
+      label: periods[index]?.label ?? line.label,
+      ...(periods[index]?.startDate ? { dueDate: periods[index]!.startDate } : {}),
+    }));
+  }
+  return lines;
+}
+
+export function withRouteFeeSchedule(
+  route: TransportRoute,
+  feeTerms: FeeTerm[] = [],
+): TransportRoute {
+  const billingCycle = normalizeClassBillingCycle(route.billingCycle);
+  const feeAmountMode = normalizeClassFeeAmountMode(route.feeAmountMode);
+  let bothFeeSchedule = route.bothFeeSchedule.filter((line) => line.amount > 0);
+  let morningFeeSchedule = route.morningFeeSchedule.filter((line) => line.amount > 0);
+  let eveningFeeSchedule = route.eveningFeeSchedule.filter((line) => line.amount > 0);
+
+  if (bothFeeSchedule.length === 0 && route.bothFee > 0) {
+    bothFeeSchedule = migrateRouteFeeSchedule({ ...route, billingCycle }, feeTerms, route.bothFee);
+  }
+  if (morningFeeSchedule.length === 0 && route.morningFee > 0) {
+    morningFeeSchedule =
+      bothFeeSchedule.length > 0
+        ? bothFeeSchedule.map((line, index) => ({
+            ...line,
+            id: `fl-m-${index + 1}`,
+            amount: route.morningFee,
+          }))
+        : migrateRouteFeeSchedule({ ...route, billingCycle }, feeTerms, route.morningFee);
+  }
+  if (eveningFeeSchedule.length === 0 && route.eveningFee > 0) {
+    eveningFeeSchedule =
+      bothFeeSchedule.length > 0
+        ? bothFeeSchedule.map((line, index) => ({
+            ...line,
+            id: `fl-e-${index + 1}`,
+            amount: route.eveningFee,
+          }))
+        : migrateRouteFeeSchedule({ ...route, billingCycle }, feeTerms, route.eveningFee);
+  }
+
+  const uniqueBoth = [
+    ...new Set(bothFeeSchedule.filter((l) => l.kind === "installment").map((l) => l.amount)),
+  ];
+  const resolvedMode =
+    feeAmountMode === "custom" || uniqueBoth.length > 1 ? "custom" : "fixed";
+  return {
+    ...route,
+    billingCycle,
+    feeAmountMode: resolvedMode,
+    bothFeeSchedule,
+    morningFeeSchedule,
+    eveningFeeSchedule,
+  };
+}
+
+export function routeScheduleForShift(
+  route: TransportRoute,
+  shift: TransportFeeShift,
+): ClassFeeLine[] {
+  const normalized = withRouteFeeSchedule(route);
+  const pool =
+    shift === "morning"
+      ? normalized.morningFeeSchedule
+      : shift === "evening"
+        ? normalized.eveningFeeSchedule
+        : normalized.bothFeeSchedule;
+  return pool.filter((line) => line.kind === "installment" && line.amount > 0);
+}
+
+export function routeFeePrefillAmount(
+  route: TransportRoute,
+  shift: TransportFeeShift,
+  opts: {
+    periodLabel?: string;
+    periodIndex?: number;
+    collectionStartMonth?: string;
+  },
+  feeTerms: FeeTerm[] = [],
+): number | undefined {
+  const normalized = withRouteFeeSchedule(route, feeTerms);
+  const installments = routeScheduleForShift(normalized, shift);
+  if (
+    opts.periodLabel &&
+    opts.collectionStartMonth &&
+    normalized.billingCycle === "Monthly"
+  ) {
+    const monthIndex = installmentIndexForFeeMonth(
+      opts.collectionStartMonth,
+      opts.periodLabel,
+    );
+    if (monthIndex >= 0 && installments[monthIndex]) {
+      return installments[monthIndex].amount;
+    }
+  }
+  if (opts.periodLabel) {
+    const needle = opts.periodLabel.trim().toLowerCase();
+    const exact = installments.find((line) => line.label.trim().toLowerCase() === needle);
+    if (exact) return exact.amount;
+  }
+  if (
+    opts.periodIndex != null &&
+    opts.periodIndex >= 0 &&
+    installments[opts.periodIndex]
+  ) {
+    return installments[opts.periodIndex].amount;
+  }
+  if (installments[0]) return installments[0].amount;
+  const flat =
+    shift === "morning"
+      ? normalized.morningFee
+      : shift === "evening"
+        ? normalized.eveningFee
+        : normalized.bothFee;
+  return flat > 0 ? flat : undefined;
+}
+
+export function routeScheduleSummary(route: TransportRoute, feeTerms: FeeTerm[] = []): string {
+  const normalized = withRouteFeeSchedule(route, feeTerms);
+  const installments = normalized.bothFeeSchedule.filter(
+    (line) => line.kind === "installment" && line.amount > 0,
+  );
+  if (!installments.length) return normalized.billingCycle;
+  return normalized.billingCycle === "Term"
+    ? `${installments.length} term${installments.length === 1 ? "" : "s"}`
+    : `${installments.length} installment${installments.length === 1 ? "" : "s"}`;
 }
 
 function normalizeVehicleDocumentFile(raw: unknown): VehicleDocumentFile | undefined {
@@ -2792,6 +2953,11 @@ export const SEED_TRANSPORT: TransportRoute[] = [
     morningFee: 1000,
     eveningFee: 1000,
     bothFee: 1800,
+    billingCycle: "Monthly",
+    feeAmountMode: "fixed",
+    morningFeeSchedule: [],
+    eveningFeeSchedule: [],
+    bothFeeSchedule: [],
   },
   {
     id: "TR-002",
@@ -2804,6 +2970,11 @@ export const SEED_TRANSPORT: TransportRoute[] = [
     morningFee: 850,
     eveningFee: 850,
     bothFee: 1500,
+    billingCycle: "Monthly",
+    feeAmountMode: "fixed",
+    morningFeeSchedule: [],
+    eveningFeeSchedule: [],
+    bothFeeSchedule: [],
   },
   {
     id: "TR-003",
@@ -2816,6 +2987,11 @@ export const SEED_TRANSPORT: TransportRoute[] = [
     morningFee: 1350,
     eveningFee: 1350,
     bothFee: 2400,
+    billingCycle: "Monthly",
+    feeAmountMode: "fixed",
+    morningFeeSchedule: [],
+    eveningFeeSchedule: [],
+    bothFeeSchedule: [],
   },
   {
     id: "TR-004",
@@ -2828,6 +3004,11 @@ export const SEED_TRANSPORT: TransportRoute[] = [
     morningFee: 1100,
     eveningFee: 1100,
     bothFee: 2000,
+    billingCycle: "Monthly",
+    feeAmountMode: "fixed",
+    morningFeeSchedule: [],
+    eveningFeeSchedule: [],
+    bothFeeSchedule: [],
   },
   {
     id: "TR-005",
@@ -2840,6 +3021,11 @@ export const SEED_TRANSPORT: TransportRoute[] = [
     morningFee: 1200,
     eveningFee: 1200,
     bothFee: 2200,
+    billingCycle: "Monthly",
+    feeAmountMode: "fixed",
+    morningFeeSchedule: [],
+    eveningFeeSchedule: [],
+    bothFeeSchedule: [],
   },
 ];
 
@@ -3760,6 +3946,12 @@ export function resolveTransportFeeForStudent(
   student: Pick<Student, "needsBus" | "busPoint1" | "busPoint2" | "cls">,
   routes: TransportRoute[],
   classConfig?: Pick<ClassConfig, "vehicleFeeAmount">,
+  period?: {
+    label?: string;
+    kind?: FeePeriodKind;
+    collectionStartMonth?: string;
+  },
+  feeTerms: FeeTerm[] = [],
 ): { amount: number | undefined; shift: TransportFeeShift; route?: TransportRoute } {
   if (!studentNeedsTransport(student)) {
     return { amount: undefined, shift: "both" };
@@ -3769,14 +3961,22 @@ export function resolveTransportFeeForStudent(
   const route = findTransportRouteForStudent(student, routes);
 
   if (route) {
+    const normalized = withRouteFeeSchedule(route, feeTerms);
+    const fromSchedule = routeFeePrefillAmount(normalized, shift, {
+      periodLabel: period?.label,
+      collectionStartMonth: period?.collectionStartMonth,
+    }, feeTerms);
+    if (fromSchedule && fromSchedule > 0) {
+      return { amount: Math.round(fromSchedule), shift, route: normalized };
+    }
     const raw =
       shift === "morning"
-        ? route.morningFee
+        ? normalized.morningFee
         : shift === "evening"
-          ? route.eveningFee
-          : route.bothFee;
+          ? normalized.eveningFee
+          : normalized.bothFee;
     if (raw > 0) {
-      return { amount: Math.round(raw), shift, route };
+      return { amount: Math.round(raw), shift, route: normalized };
     }
   }
 
@@ -3784,9 +3984,17 @@ export function resolveTransportFeeForStudent(
     return { amount: classConfig.vehicleFeeAmount, shift, route };
   }
 
-  const fallback = routes[0];
-  if (fallback?.bothFee > 0) {
-    return { amount: Math.round(fallback.bothFee), shift: "both", route: fallback };
+  const fallback = routes[0] ? withRouteFeeSchedule(routes[0], feeTerms) : undefined;
+  if (fallback?.bothFee && fallback.bothFee > 0) {
+    const amt = routeFeePrefillAmount(fallback, "both", {
+      periodLabel: period?.label,
+      collectionStartMonth: period?.collectionStartMonth,
+    }, feeTerms);
+    return {
+      amount: Math.round(amt ?? fallback.bothFee),
+      shift: "both",
+      route: fallback,
+    };
   }
 
   return { amount: undefined, shift, route };

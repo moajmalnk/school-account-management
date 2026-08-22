@@ -25,13 +25,6 @@ import {
 import { MonthPicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
 import { ImageCropDialog } from "@/components/ui/image-crop-dialog";
 import type { Staff, StaffDocument, StaffDocumentAttachment, TenantUser } from "@/lib/tenant-store";
@@ -80,16 +73,6 @@ const META_LABEL =
   "text-[11px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400";
 const MAX_FILE_BYTES = 1_500_000;
 const MAX_FILES_PER_DOC = 8;
-
-function initials(name: string) {
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .map((n) => n[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-}
 
 function StaffPhotoAvatar({
   staff,
@@ -301,11 +284,9 @@ function isDocumentComplete(doc: StaffDocument) {
 export function StaffProfileDetail({
   staff,
   onBack,
-  initialEdit = false,
 }: {
   staff: Staff;
   onBack: () => void;
-  initialEdit?: boolean;
 }) {
   const navigate = useNavigate();
   const { session } = useAuth();
@@ -439,44 +420,7 @@ export function StaffProfileDetail({
     toast.error("Workspace login removed", { description: staff.name });
     setPendingRemoveLogin(false);
   };
-  const [editOpen, setEditOpen] = useState(initialEdit);
   const [activeTab, setActiveTab] = useState<ProfileDetailTabId>("profile");
-  const [draft, setDraft] = useState({
-    name: staff.name,
-    role: staff.role,
-    dept: staff.dept,
-    id: staff.id,
-    phone: staff.phone ?? "",
-    altPhone: staff.altPhone ?? "",
-    guardianPhone: staff.guardianPhone ?? "",
-    photoUrl: staff.photoUrl ?? "",
-  });
-  const [editCropSrc, setEditCropSrc] = useState<string | null>(null);
-  const editPhotoRef = useRef<HTMLInputElement>(null);
-
-  const resetDraft = () => {
-    setDraft({
-      name: staff.name,
-      role: staff.role,
-      dept: staff.dept,
-      id: staff.id,
-      phone: staff.phone ?? "",
-      altPhone: staff.altPhone ?? "",
-      guardianPhone: staff.guardianPhone ?? "",
-      photoUrl: staff.photoUrl ?? "",
-    });
-  };
-
-  useEffect(() => {
-    resetDraft();
-  }, [staff]);
-
-  useEffect(() => {
-    if (initialEdit) {
-      navigate({ to: "/tenant/staff", search: { id: staff.id }, replace: true });
-    }
-  }, [initialEdit, navigate, staff.id]);
-
   useEffect(() => {
     const needsNormalize =
       !staff.documents?.length ||
@@ -789,61 +733,8 @@ export function StaffProfileDetail({
     toast.success("Attachment removed");
   };
 
-  const toggleEdit = () => {
-    resetDraft();
-    setEditOpen(true);
-  };
-
-  const handleEditPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast.error("Please choose a JPG, PNG, or WebP image");
-      return;
-    }
-    if (file.size > 8 * 1024 * 1024) {
-      toast.error("Image must be 8 MB or smaller");
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = String(reader.result ?? "");
-      if (dataUrl) setEditCropSrc(dataUrl);
-    };
-    reader.onerror = () => toast.error("Could not read the selected image");
-    reader.readAsDataURL(file);
-    e.target.value = "";
-  };
-
-  const handleSaveProfile = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!draft.name.trim() || !draft.role.trim()) {
-      toast.error("Name and role are required");
-      return;
-    }
-    // Keep public id stable for API sync (rename not supported server-side).
-    const nextId = staff.id;
-    if (draft.id.trim() && draft.id.trim() !== staff.id) {
-      toast.error("Employee ID cannot be changed after sync", {
-        description: "Contact support if you need the ID remapped.",
-      });
-    }
-    const updated: Staff = {
-      ...staff,
-      id: nextId,
-      name: draft.name.trim(),
-      role: draft.role.trim(),
-      dept: draft.dept,
-      phone: draft.phone.trim() || undefined,
-      altPhone: draft.altPhone.trim() || undefined,
-      guardianPhone: draft.guardianPhone.trim() || undefined,
-      photoUrl: draft.photoUrl || undefined,
-    };
-    syncStaff(updated);
-    toast.success(`${draft.name.trim()} updated`, {
-      description: `${nextId} · ${draft.dept}`,
-    });
-    setEditOpen(false);
+  const openEditPage = () => {
+    navigate({ to: "/tenant/staff/edit", search: { id: staff.id } });
   };
 
   const updatePhoto = async (photoUrl: string | undefined) => {
@@ -926,7 +817,7 @@ export function StaffProfileDetail({
 
           <button
             type="button"
-            onClick={toggleEdit}
+            onClick={openEditPage}
             className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-[#0F766E] px-4 text-[13px] font-semibold text-white shadow-sm transition-colors hover:bg-[#0D9488]"
           >
             <Pencil className="h-4 w-4" />
@@ -2070,199 +1961,6 @@ export function StaffProfileDetail({
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={editOpen}
-        onOpenChange={(open) => {
-          setEditOpen(open);
-          if (!open) resetDraft();
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Edit Staff Profile</DialogTitle>
-            <DialogDescription>Update core roster details for {staff.name}.</DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSaveProfile} className="space-y-3">
-            <div className="flex items-center gap-4 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3">
-              <div className="relative h-14 w-14 shrink-0">
-                {draft.photoUrl ? (
-                  <img src={draft.photoUrl} alt="" className="h-14 w-14 rounded-lg object-cover" />
-                ) : (
-                  <div className="grid h-14 w-14 place-items-center rounded-lg bg-[#0F766E] text-sm font-semibold text-white">
-                    {draft.name.trim() ? initials(draft.name) : "?"}
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={() => editPhotoRef.current?.click()}
-                  aria-label="Upload profile photo"
-                  className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#0F766E] text-white shadow-sm"
-                >
-                  <Camera className="h-3.5 w-3.5" />
-                </button>
-              </div>
-              <div className="min-w-0 text-[12px] text-black/55">
-                <div className="font-medium text-black">Profile Photo</div>
-                <div className="mt-0.5">Optional · JPG, PNG or WebP · crop after pick</div>
-                {draft.photoUrl && (
-                  <button
-                    type="button"
-                    onClick={() => setDraft((prev) => ({ ...prev, photoUrl: "" }))}
-                    className="mt-1.5 text-[11px] font-semibold text-[#EF4444] hover:underline"
-                  >
-                    Remove photo
-                  </button>
-                )}
-              </div>
-              <input
-                ref={editPhotoRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                className="hidden"
-                onChange={handleEditPhoto}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                Full Name
-              </Label>
-              <Input
-                value={draft.name}
-                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                placeholder="e.g. Sneha Pillai"
-                autoFocus
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                Role
-              </Label>
-              <Select
-                value={roles.some((r) => r.title === draft.role) ? draft.role : undefined}
-                onValueChange={(role) => setDraft({ ...draft, role })}
-                disabled={roles.length === 0}
-              >
-                <SelectTrigger className="h-10 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 text-[13px] font-normal text-black shadow-none focus:ring-2 focus:ring-[#0F766E]">
-                  <SelectValue placeholder="No roles configured" />
-                </SelectTrigger>
-                <SelectContent className="z-[250] rounded-lg border border-[#E5E5E5] bg-white p-1.5">
-                  {roles.map((r) => (
-                    <SelectItem key={r.id} value={r.title}>
-                      {r.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-[10.5px] text-black/45">
-                Manage role catalogue under Settings · Roles
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                  Department
-                </Label>
-                <Select
-                  value={departments.some((d) => d.name === draft.dept) ? draft.dept : undefined}
-                  onValueChange={(dept) => setDraft({ ...draft, dept })}
-                  disabled={departments.length === 0}
-                >
-                  <SelectTrigger className="h-10 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 text-[13px] font-normal text-black shadow-none focus:ring-2 focus:ring-[#0F766E]">
-                    <SelectValue placeholder="No departments configured" />
-                  </SelectTrigger>
-                  <SelectContent className="z-[250] rounded-lg border border-[#E5E5E5] bg-white p-1.5">
-                    {departments.map((d) => (
-                      <SelectItem key={d.id} value={d.name}>
-                        {d.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                  Employee ID
-                </Label>
-                <Input
-                  value={draft.id}
-                  onChange={(e) => setDraft({ ...draft, id: e.target.value })}
-                  placeholder={staff.id}
-                  className="font-mono"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                Phone
-              </Label>
-              <Input
-                value={draft.phone}
-                onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
-                placeholder="Primary mobile"
-                className="font-mono"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                  Alternative Number
-                  <span className="ml-1 font-medium normal-case tracking-normal text-black/40">
-                    (optional)
-                  </span>
-                </Label>
-                <Input
-                  value={draft.altPhone}
-                  onChange={(e) => setDraft({ ...draft, altPhone: e.target.value })}
-                  placeholder="Optional"
-                  className="font-mono"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                  Guardian Number
-                </Label>
-                <Input
-                  value={draft.guardianPhone}
-                  onChange={(e) => setDraft({ ...draft, guardianPhone: e.target.value })}
-                  placeholder="Emergency / guardian"
-                  className="font-mono"
-                />
-              </div>
-            </div>
-
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setEditOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
-                Save Profile
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      <ImageCropDialog
-        open={Boolean(editCropSrc)}
-        imageSrc={editCropSrc}
-        title="Change photo"
-        description="Drag to reposition, zoom, then confirm the crop."
-        aspect={1}
-        outputSize={512}
-        onOpenChange={(next) => {
-          if (!next) setEditCropSrc(null);
-        }}
-        onConfirm={(dataUrl) => {
-          setEditCropSrc(null);
-          setDraft((prev) => ({ ...prev, photoUrl: dataUrl }));
-        }}
-        onRetake={() => editPhotoRef.current?.click()}
-      />
     </div>
   );
 }

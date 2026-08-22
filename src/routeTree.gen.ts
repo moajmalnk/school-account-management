@@ -32,6 +32,7 @@ import { Route as SuperAdminOverviewRouteImport } from './routes/super-admin/ove
 import { Route as SuperAdminSupportIndexRouteImport } from './routes/super-admin/support/index'
 import { Route as TenantStudentsEditRouteImport } from './routes/tenant/students_.edit'
 import { Route as TenantStudentsAdmitRouteImport } from './routes/tenant/students_.admit'
+import { Route as TenantStaffEditRouteImport } from './routes/tenant/staff_.edit'
 import { Route as SuperAdminSupportHelpRouteImport } from './routes/super-admin/support/help'
 import { Route as SuperAdminSupportContactRouteImport } from './routes/super-admin/support/contact'
 import { Route as SuperAdminSupportTicketIdRouteImport } from './routes/super-admin/support/$ticketId'
@@ -152,6 +153,11 @@ const TenantStudentsAdmitRoute = TenantStudentsAdmitRouteImport.update({
   path: '/students/admit',
   getParentRoute: () => TenantRoute,
 } as any)
+const TenantStaffEditRoute = TenantStaffEditRouteImport.update({
+  id: '/staff_/edit',
+  path: '/staff/edit',
+  getParentRoute: () => TenantRoute,
+} as any)
 const SuperAdminSupportHelpRoute = SuperAdminSupportHelpRouteImport.update({
   id: '/help',
   path: '/help',
@@ -200,6 +206,7 @@ export interface FileRoutesByFullPath {
   '/super-admin/support/$ticketId': typeof SuperAdminSupportTicketIdRoute
   '/super-admin/support/contact': typeof SuperAdminSupportContactRoute
   '/super-admin/support/help': typeof SuperAdminSupportHelpRoute
+  '/tenant/staff/edit': typeof TenantStaffEditRoute
   '/tenant/students/admit': typeof TenantStudentsAdmitRoute
   '/tenant/students/edit': typeof TenantStudentsEditRoute
   '/super-admin/support/': typeof SuperAdminSupportIndexRoute
@@ -226,6 +233,7 @@ export interface FileRoutesByTo {
   '/super-admin/support/$ticketId': typeof SuperAdminSupportTicketIdRoute
   '/super-admin/support/contact': typeof SuperAdminSupportContactRoute
   '/super-admin/support/help': typeof SuperAdminSupportHelpRoute
+  '/tenant/staff/edit': typeof TenantStaffEditRoute
   '/tenant/students/admit': typeof TenantStudentsAdmitRoute
   '/tenant/students/edit': typeof TenantStudentsEditRoute
   '/super-admin/support': typeof SuperAdminSupportIndexRoute
@@ -256,6 +264,7 @@ export interface FileRoutesById {
   '/super-admin/support/$ticketId': typeof SuperAdminSupportTicketIdRoute
   '/super-admin/support/contact': typeof SuperAdminSupportContactRoute
   '/super-admin/support/help': typeof SuperAdminSupportHelpRoute
+  '/tenant/staff_/edit': typeof TenantStaffEditRoute
   '/tenant/students_/admit': typeof TenantStudentsAdmitRoute
   '/tenant/students_/edit': typeof TenantStudentsEditRoute
   '/super-admin/support/': typeof SuperAdminSupportIndexRoute
@@ -287,6 +296,7 @@ export interface FileRouteTypes {
     | '/super-admin/support/$ticketId'
     | '/super-admin/support/contact'
     | '/super-admin/support/help'
+    | '/tenant/staff/edit'
     | '/tenant/students/admit'
     | '/tenant/students/edit'
     | '/super-admin/support/'
@@ -313,6 +323,7 @@ export interface FileRouteTypes {
     | '/super-admin/support/$ticketId'
     | '/super-admin/support/contact'
     | '/super-admin/support/help'
+    | '/tenant/staff/edit'
     | '/tenant/students/admit'
     | '/tenant/students/edit'
     | '/super-admin/support'
@@ -342,6 +353,7 @@ export interface FileRouteTypes {
     | '/super-admin/support/$ticketId'
     | '/super-admin/support/contact'
     | '/super-admin/support/help'
+    | '/tenant/staff_/edit'
     | '/tenant/students_/admit'
     | '/tenant/students_/edit'
     | '/super-admin/support/'
@@ -521,6 +533,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TenantStudentsAdmitRouteImport
       parentRoute: typeof TenantRoute
     }
+    '/tenant/staff_/edit': {
+      id: '/tenant/staff_/edit'
+      path: '/staff/edit'
+      fullPath: '/tenant/staff/edit'
+      preLoaderRoute: typeof TenantStaffEditRouteImport
+      parentRoute: typeof TenantRoute
+    }
     '/super-admin/support/help': {
       id: '/super-admin/support/help'
       path: '/help'
@@ -598,6 +617,7 @@ interface TenantRouteChildren {
   TenantStaffRoute: typeof TenantStaffRoute
   TenantStudentsRoute: typeof TenantStudentsRoute
   TenantIndexRoute: typeof TenantIndexRoute
+  TenantStaffEditRoute: typeof TenantStaffEditRoute
   TenantStudentsAdmitRoute: typeof TenantStudentsAdmitRoute
   TenantStudentsEditRoute: typeof TenantStudentsEditRoute
 }
@@ -611,6 +631,7 @@ const TenantRouteChildren: TenantRouteChildren = {
   TenantStaffRoute: TenantStaffRoute,
   TenantStudentsRoute: TenantStudentsRoute,
   TenantIndexRoute: TenantIndexRoute,
+  TenantStaffEditRoute: TenantStaffEditRoute,
   TenantStudentsAdmitRoute: TenantStudentsAdmitRoute,
   TenantStudentsEditRoute: TenantStudentsEditRoute,
 }
