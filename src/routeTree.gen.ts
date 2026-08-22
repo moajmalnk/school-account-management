@@ -29,7 +29,11 @@ import { Route as SuperAdminTenantsRouteImport } from './routes/super-admin/tena
 import { Route as SuperAdminSupportRouteImport } from './routes/super-admin/support'
 import { Route as SuperAdminPlansRouteImport } from './routes/super-admin/plans'
 import { Route as SuperAdminOverviewRouteImport } from './routes/super-admin/overview'
+import { Route as SuperAdminSupportIndexRouteImport } from './routes/super-admin/support/index'
 import { Route as TenantStudentsAdmitRouteImport } from './routes/tenant/students_.admit'
+import { Route as SuperAdminSupportHelpRouteImport } from './routes/super-admin/support/help'
+import { Route as SuperAdminSupportContactRouteImport } from './routes/super-admin/support/contact'
+import { Route as SuperAdminSupportTicketIdRouteImport } from './routes/super-admin/support/$ticketId'
 import { Route as ParentStudentTokenRouteImport } from './routes/parent/student.$token'
 
 const TenantRoute = TenantRouteImport.update({
@@ -132,11 +136,33 @@ const SuperAdminOverviewRoute = SuperAdminOverviewRouteImport.update({
   path: '/overview',
   getParentRoute: () => SuperAdminRoute,
 } as any)
+const SuperAdminSupportIndexRoute = SuperAdminSupportIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SuperAdminSupportRoute,
+} as any)
 const TenantStudentsAdmitRoute = TenantStudentsAdmitRouteImport.update({
   id: '/students_/admit',
   path: '/students/admit',
   getParentRoute: () => TenantRoute,
 } as any)
+const SuperAdminSupportHelpRoute = SuperAdminSupportHelpRouteImport.update({
+  id: '/help',
+  path: '/help',
+  getParentRoute: () => SuperAdminSupportRoute,
+} as any)
+const SuperAdminSupportContactRoute =
+  SuperAdminSupportContactRouteImport.update({
+    id: '/contact',
+    path: '/contact',
+    getParentRoute: () => SuperAdminSupportRoute,
+  } as any)
+const SuperAdminSupportTicketIdRoute =
+  SuperAdminSupportTicketIdRouteImport.update({
+    id: '/$ticketId',
+    path: '/$ticketId',
+    getParentRoute: () => SuperAdminSupportRoute,
+  } as any)
 const ParentStudentTokenRoute = ParentStudentTokenRouteImport.update({
   id: '/parent/student/$token',
   path: '/parent/student/$token',
@@ -153,7 +179,7 @@ export interface FileRoutesByFullPath {
   '/tenant': typeof TenantRouteWithChildren
   '/super-admin/overview': typeof SuperAdminOverviewRoute
   '/super-admin/plans': typeof SuperAdminPlansRoute
-  '/super-admin/support': typeof SuperAdminSupportRoute
+  '/super-admin/support': typeof SuperAdminSupportRouteWithChildren
   '/super-admin/tenants': typeof SuperAdminTenantsRoute
   '/tenant/billing': typeof TenantBillingRoute
   '/tenant/dashboard': typeof TenantDashboardRoute
@@ -165,7 +191,11 @@ export interface FileRoutesByFullPath {
   '/super-admin/': typeof SuperAdminIndexRoute
   '/tenant/': typeof TenantIndexRoute
   '/parent/student/$token': typeof ParentStudentTokenRoute
+  '/super-admin/support/$ticketId': typeof SuperAdminSupportTicketIdRoute
+  '/super-admin/support/contact': typeof SuperAdminSupportContactRoute
+  '/super-admin/support/help': typeof SuperAdminSupportHelpRoute
   '/tenant/students/admit': typeof TenantStudentsAdmitRoute
+  '/super-admin/support/': typeof SuperAdminSupportIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -175,7 +205,6 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/super-admin/overview': typeof SuperAdminOverviewRoute
   '/super-admin/plans': typeof SuperAdminPlansRoute
-  '/super-admin/support': typeof SuperAdminSupportRoute
   '/super-admin/tenants': typeof SuperAdminTenantsRoute
   '/tenant/billing': typeof TenantBillingRoute
   '/tenant/dashboard': typeof TenantDashboardRoute
@@ -187,7 +216,11 @@ export interface FileRoutesByTo {
   '/super-admin': typeof SuperAdminIndexRoute
   '/tenant': typeof TenantIndexRoute
   '/parent/student/$token': typeof ParentStudentTokenRoute
+  '/super-admin/support/$ticketId': typeof SuperAdminSupportTicketIdRoute
+  '/super-admin/support/contact': typeof SuperAdminSupportContactRoute
+  '/super-admin/support/help': typeof SuperAdminSupportHelpRoute
   '/tenant/students/admit': typeof TenantStudentsAdmitRoute
+  '/super-admin/support': typeof SuperAdminSupportIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -200,7 +233,7 @@ export interface FileRoutesById {
   '/tenant': typeof TenantRouteWithChildren
   '/super-admin/overview': typeof SuperAdminOverviewRoute
   '/super-admin/plans': typeof SuperAdminPlansRoute
-  '/super-admin/support': typeof SuperAdminSupportRoute
+  '/super-admin/support': typeof SuperAdminSupportRouteWithChildren
   '/super-admin/tenants': typeof SuperAdminTenantsRoute
   '/tenant/billing': typeof TenantBillingRoute
   '/tenant/dashboard': typeof TenantDashboardRoute
@@ -212,7 +245,11 @@ export interface FileRoutesById {
   '/super-admin/': typeof SuperAdminIndexRoute
   '/tenant/': typeof TenantIndexRoute
   '/parent/student/$token': typeof ParentStudentTokenRoute
+  '/super-admin/support/$ticketId': typeof SuperAdminSupportTicketIdRoute
+  '/super-admin/support/contact': typeof SuperAdminSupportContactRoute
+  '/super-admin/support/help': typeof SuperAdminSupportHelpRoute
   '/tenant/students_/admit': typeof TenantStudentsAdmitRoute
+  '/super-admin/support/': typeof SuperAdminSupportIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -238,7 +275,11 @@ export interface FileRouteTypes {
     | '/super-admin/'
     | '/tenant/'
     | '/parent/student/$token'
+    | '/super-admin/support/$ticketId'
+    | '/super-admin/support/contact'
+    | '/super-admin/support/help'
     | '/tenant/students/admit'
+    | '/super-admin/support/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -248,7 +289,6 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/super-admin/overview'
     | '/super-admin/plans'
-    | '/super-admin/support'
     | '/super-admin/tenants'
     | '/tenant/billing'
     | '/tenant/dashboard'
@@ -260,7 +300,11 @@ export interface FileRouteTypes {
     | '/super-admin'
     | '/tenant'
     | '/parent/student/$token'
+    | '/super-admin/support/$ticketId'
+    | '/super-admin/support/contact'
+    | '/super-admin/support/help'
     | '/tenant/students/admit'
+    | '/super-admin/support'
   id:
     | '__root__'
     | '/'
@@ -284,7 +328,11 @@ export interface FileRouteTypes {
     | '/super-admin/'
     | '/tenant/'
     | '/parent/student/$token'
+    | '/super-admin/support/$ticketId'
+    | '/super-admin/support/contact'
+    | '/super-admin/support/help'
     | '/tenant/students_/admit'
+    | '/super-admin/support/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -440,12 +488,40 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SuperAdminOverviewRouteImport
       parentRoute: typeof SuperAdminRoute
     }
+    '/super-admin/support/': {
+      id: '/super-admin/support/'
+      path: '/'
+      fullPath: '/super-admin/support/'
+      preLoaderRoute: typeof SuperAdminSupportIndexRouteImport
+      parentRoute: typeof SuperAdminSupportRoute
+    }
     '/tenant/students_/admit': {
       id: '/tenant/students_/admit'
       path: '/students/admit'
       fullPath: '/tenant/students/admit'
       preLoaderRoute: typeof TenantStudentsAdmitRouteImport
       parentRoute: typeof TenantRoute
+    }
+    '/super-admin/support/help': {
+      id: '/super-admin/support/help'
+      path: '/help'
+      fullPath: '/super-admin/support/help'
+      preLoaderRoute: typeof SuperAdminSupportHelpRouteImport
+      parentRoute: typeof SuperAdminSupportRoute
+    }
+    '/super-admin/support/contact': {
+      id: '/super-admin/support/contact'
+      path: '/contact'
+      fullPath: '/super-admin/support/contact'
+      preLoaderRoute: typeof SuperAdminSupportContactRouteImport
+      parentRoute: typeof SuperAdminSupportRoute
+    }
+    '/super-admin/support/$ticketId': {
+      id: '/super-admin/support/$ticketId'
+      path: '/$ticketId'
+      fullPath: '/super-admin/support/$ticketId'
+      preLoaderRoute: typeof SuperAdminSupportTicketIdRouteImport
+      parentRoute: typeof SuperAdminSupportRoute
     }
     '/parent/student/$token': {
       id: '/parent/student/$token'
@@ -457,10 +533,27 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface SuperAdminSupportRouteChildren {
+  SuperAdminSupportTicketIdRoute: typeof SuperAdminSupportTicketIdRoute
+  SuperAdminSupportContactRoute: typeof SuperAdminSupportContactRoute
+  SuperAdminSupportHelpRoute: typeof SuperAdminSupportHelpRoute
+  SuperAdminSupportIndexRoute: typeof SuperAdminSupportIndexRoute
+}
+
+const SuperAdminSupportRouteChildren: SuperAdminSupportRouteChildren = {
+  SuperAdminSupportTicketIdRoute: SuperAdminSupportTicketIdRoute,
+  SuperAdminSupportContactRoute: SuperAdminSupportContactRoute,
+  SuperAdminSupportHelpRoute: SuperAdminSupportHelpRoute,
+  SuperAdminSupportIndexRoute: SuperAdminSupportIndexRoute,
+}
+
+const SuperAdminSupportRouteWithChildren =
+  SuperAdminSupportRoute._addFileChildren(SuperAdminSupportRouteChildren)
+
 interface SuperAdminRouteChildren {
   SuperAdminOverviewRoute: typeof SuperAdminOverviewRoute
   SuperAdminPlansRoute: typeof SuperAdminPlansRoute
-  SuperAdminSupportRoute: typeof SuperAdminSupportRoute
+  SuperAdminSupportRoute: typeof SuperAdminSupportRouteWithChildren
   SuperAdminTenantsRoute: typeof SuperAdminTenantsRoute
   SuperAdminIndexRoute: typeof SuperAdminIndexRoute
 }
@@ -468,7 +561,7 @@ interface SuperAdminRouteChildren {
 const SuperAdminRouteChildren: SuperAdminRouteChildren = {
   SuperAdminOverviewRoute: SuperAdminOverviewRoute,
   SuperAdminPlansRoute: SuperAdminPlansRoute,
-  SuperAdminSupportRoute: SuperAdminSupportRoute,
+  SuperAdminSupportRoute: SuperAdminSupportRouteWithChildren,
   SuperAdminTenantsRoute: SuperAdminTenantsRoute,
   SuperAdminIndexRoute: SuperAdminIndexRoute,
 }

@@ -205,6 +205,7 @@ import {
 import { SettingsUsersCard } from "@/components/school/SettingsUsersCard";
 import { SettingsBranchesCard } from "@/components/school/SettingsBranchesCard";
 import { CustomerSupportCard } from "@/components/school/CustomerSupportCard";
+import { DefaultSchoolSeal } from "@/components/school/DefaultSchoolSeal";
 import { BRAND_PRESETS, FONT_FAMILY_OPTIONS, FONT_SIZE_OPTIONS, normalizeHexColor } from "@/lib/brand-theme";
 import {
   DEFAULT_FILE_NAMES,
@@ -13492,13 +13493,24 @@ function SchoolDetailsCard({
               </div>
             </div>
             <div className="mt-3 flex items-center gap-3">
-              <img
-                src={resolveSealDisplaySrc(draft.name, draft.sealUrl)}
-                alt="School seal"
-                className="h-16 w-16 rounded-full bg-white object-contain ring-1 ring-black/10"
-              />
+              {draft.sealUrl ? (
+                <img
+                  src={resolveSealDisplaySrc(draft.name, draft.sealUrl)}
+                  alt="School seal"
+                  className="h-24 w-24 rounded-full bg-white object-contain ring-1 ring-black/10"
+                />
+              ) : (
+                <DefaultSchoolSeal
+                  name={draft.name}
+                  details={draft.address}
+                  logoUrl={draft.logoUrl}
+                  className="h-24 w-24 shrink-0 rounded-full bg-white ring-1 ring-black/10"
+                />
+              )}
               <p className="text-[11px] leading-relaxed text-black/50">
-                Official stamp on receipts and vouchers. JPG/PNG · max 2 MB.
+                Default stamp uses your logo in the center with the school name
+                and address around the ring. Upload a custom image to replace it.
+                JPG/PNG · max 2 MB.
               </p>
             </div>
             <input

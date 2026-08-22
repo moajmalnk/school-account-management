@@ -82,6 +82,8 @@ export function SettingsBranchesCard({
     setEditing(b);
     setOpen(true);
   };
+
+  const confirmDelete = async () => {
     if (!pendingDelete) return;
     if (isMainCampusBranch(pendingDelete, branches)) {
       toast.error("The main campus cannot be deleted");
@@ -202,107 +204,7 @@ export function SettingsBranchesCard({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{editingId ? "Edit Branch" : "Add Branch"}</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={(e) => void submit(e)} className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="branch-name">Location name</Label>
-                <Input
-                  id="branch-name"
-                  value={form.name}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                  placeholder="Malappuram"
-                  required
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="branch-code">Code</Label>
-                <Input
-                  id="branch-code"
-                  value={form.code}
-                  onChange={(e) => setForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))}
-                  placeholder="MLP"
-                  required
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="branch-phone">Phone</Label>
-              <Input
-                id="branch-phone"
-                value={form.phone}
-                onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-                placeholder="+91 …"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="branch-email">Email</Label>
-              <Input
-                id="branch-email"
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                placeholder="office@…"
-              />
-            </div>
-            <LocationPicker
-              label="Campus address"
-              value={form.address}
-              lat={form.lat}
-              lng={form.lng}
-              placeholder="Street, city, pin"
-              onChange={(next) =>
-                setForm((f) => ({
-                  ...f,
-                  address: next.label,
-                  lat: next.lat,
-                  lng: next.lng,
-                }))
-              }
-            />
-            {!editingId && branches.length > 0 && (
-              <div className="space-y-1.5">
-                <Label>Copy setup from</Label>
-                <Select
-                  value={form.copyFromId || activeBranchId}
-                  onValueChange={(v) => setForm((f) => ({ ...f, copyFromId: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select campus" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {branches.map((b) => (
-                      <SelectItem key={b.id} value={b.id}>
-                        {b.name} · {b.code}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-[11px] text-black/50 dark:text-zinc-500">
-                  Copies classes, departments, positions, and fee catalogs. Students, staff, and
-                  receipts start empty.
-                </p>
-              </div>
-            )}
-            <DialogFooter className="flex-row justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={saving}
-                className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
-              >
-                {saving ? "Saving…" : "Save changes"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <AddBranchDialog open={open} onOpenChange={setOpen} editing={editing} />
     </OrganicCard>
   );
 }

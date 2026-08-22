@@ -43,6 +43,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { FinancialYearFields, resolveFinancialYearInput } from "@/components/school/FinancialYearFields";
+import { AddBranchDialog } from "@/components/school/AddBranchDialog";
 import { FloatingDock, type FloatingDockItem } from "@/components/ui/floating-dock";
 import {
   sessionCanAccessSettings,
@@ -52,10 +53,12 @@ import {
 } from "@/lib/auth";
 import { defaultClosingMonthKey, suggestNextBooksMonthKey } from "@/lib/academic-year";
 import {
+  isMainCampusBranch,
   schoolInitials,
   useTenantStore,
   type ThemeSettings,
 } from "@/lib/tenant-store";
+import { planAllowsMultipleBranches } from "@/lib/permissions";
 import { isFinanceTab } from "@/lib/finance-tabs";
 import { resolveMediaUrl } from "@/lib/media";
 import { cn, glassInsetClass, glassPanelClass } from "@/lib/utils";
@@ -103,59 +106,110 @@ export function AcademicYearBooksFade({ children }: { children: ReactNode }) {
 }
 
 export function BranchSwitcher({ compact = false }: { compact?: boolean }) {
+  const { session } = useAuth();
   const { branches, activeBranchId, activeBranch, openBranch, hydrated } = useTenantStore();
+  const [addOpen, setAddOpen] = useState(false);
   const selectable = branches.filter((b) => b.isActive !== false);
-  if (!hydrated || selectable.length < 2) return null;
+  const canManage = sessionCanAccessSettings(session);
+  const canAdd = canManage && planAllowsMultipleBranches(session?.planFlags);
+  const label = activeBranch?.name ?? selectable[0]?.name ?? "Main Campus";
 
-  const label = activeBranch?.name ?? "Campus";
+  if (!hydrated) {
+    return (
+      <Skeleton
+        aria-label="Loading campus"
+        className={cn(
+          "h-9 w-[8.5rem] rounded-full bg-white/70 sm:w-[10rem]",
+          compact && "h-8 w-[7.5rem]",
+        )}
+      />
+    );
+  }
+
+  const requestAdd = () => {
+    if (!canManage) {
+      toast.error("You do not have permission to add a campus");
+      return;
+    }
+    if (!canAdd) {
+      toast.error("Multiple campuses are not included in this plan", {
+        description: "Upgrade to Premium or Enterprise to add another branch",
+      });
+      return;
+    }
+    setAddOpen(true);
+  };
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "inline-flex max-w-[11rem] items-center gap-1 rounded-full border border-slate-200/80 bg-white/80 px-2.5 py-2 text-[11px] font-semibold text-slate-800 shadow-sm backdrop-blur-md transition-colors hover:border-[#0F766E]/40 hover:text-[#0F766E] dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-100 dark:hover:text-[#2DD4BF] sm:max-w-none sm:gap-1.5 sm:px-3.5 sm:text-[12px]",
-            compact && "max-w-[9rem] px-2 py-1.5 text-[10px] sm:max-w-[11rem]",
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className={cn(
+              "inline-flex max-w-[11rem] items-center gap-1 rounded-full border border-slate-200/80 bg-white/80 px-2.5 py-2 text-[11px] font-semibold text-slate-800 shadow-sm backdrop-blur-md transition-colors hover:border-[#0F766E]/40 hover:text-[#0F766E] dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-100 dark:hover:text-[#2DD4BF] sm:max-w-none sm:gap-1.5 sm:px-3.5 sm:text-[12px]",
+              compact && "max-w-[9rem] px-2 py-1.5 text-[10px] sm:max-w-[11rem]",
+            )}
+          >
+            <Building2 className="hidden h-3.5 w-3.5 shrink-0 sm:block" strokeWidth={2.25} />
+            <span className="truncate">{label}</span>
+            <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          className="min-w-[13rem] rounded-lg border-white/60 bg-white/90 backdrop-blur-xl dark:border-white/10 dark:bg-zinc-900"
+        >
+          <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400">
+            Branches
+          </DropdownMenuLabel>
+          {selectable.length === 0 ? (
+            <div className="px-2 py-2 text-[12px] text-slate-400">No campuses yet</div>
+          ) : (
+            <DropdownMenuRadioGroup
+              value={activeBranchId}
+              onValueChange={(id) => {
+                void (async () => {
+                  const stats = await openBranch(id);
+                  const name = selectable.find((b) => b.id === id)?.name ?? "campus";
+                  toast.success(`Opened ${name}`, {
+                    description: `${stats.students} student${stats.students === 1 ? "" : "s"} · ${stats.receipts} receipt${stats.receipts === 1 ? "" : "s"}`,
+                  });
+                })();
+              }}
+            >
+              {selectable.map((b) => (
+                <DropdownMenuRadioItem key={b.id} value={b.id} className="rounded-md text-[13px]">
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate">
+                      {b.name}
+                      {isMainCampusBranch(b, branches) ? (
+                        <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                          Main
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-slate-400">
+                      {b.code}
+                    </span>
+                  </span>
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
           )}
-        >
-          <Building2 className="hidden h-3.5 w-3.5 shrink-0 sm:block" strokeWidth={2.25} />
-          <span className="truncate">{label}</span>
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="end"
-        className="min-w-[12rem] rounded-lg border-white/60 bg-white/90 backdrop-blur-xl dark:border-white/10 dark:bg-zinc-900"
-      >
-        <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400">
-          Campuses
-        </DropdownMenuLabel>
-        <DropdownMenuRadioGroup
-          value={activeBranchId}
-          onValueChange={(id) => {
-            void (async () => {
-              const stats = await openBranch(id);
-              const name = selectable.find((b) => b.id === id)?.name ?? "campus";
-              toast.success(`Opened ${name}`, {
-                description: `${stats.students} student${stats.students === 1 ? "" : "s"} · ${stats.receipts} receipt${stats.receipts === 1 ? "" : "s"}`,
-              });
-            })();
-          }}
-        >
-          {selectable.map((b) => (
-            <DropdownMenuRadioItem key={b.id} value={b.id} className="rounded-md text-[13px]">
-              <span className="flex min-w-0 flex-col">
-                <span className="truncate">{b.name}</span>
-                <span className="text-[10px] font-medium uppercase tracking-wider text-slate-400">
-                  {b.code}
-                </span>
-              </span>
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          {canManage ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="rounded-md text-[13px]" onSelect={requestAdd}>
+                <Plus className="mr-2 h-3.5 w-3.5" />
+                Add branch
+              </DropdownMenuItem>
+            </>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <AddBranchDialog open={addOpen} onOpenChange={setAddOpen} />
+    </>
   );
 }
 

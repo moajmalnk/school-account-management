@@ -15,7 +15,7 @@ import {
 } from "@/lib/tenant-store";
 import { getActiveBrandPalette, pdfFontName } from "@/lib/brand-theme";
 import {
-  defaultSealSvg,
+  defaultSealToPng,
   defaultSignatureSvg,
   svgMarkupToPng,
 } from "@/lib/school-marks";
@@ -878,6 +878,25 @@ async function loadSchoolMarkPng(
   }
 }
 
+async function loadReceiptSealPng(
+  schoolName: string,
+  branding?: ReceiptBranding,
+): Promise<PdfLogo | null> {
+  if (branding?.sealUrl?.trim()) {
+    const custom = await loadLogoForPdf(branding.sealUrl);
+    if (custom) return custom;
+  }
+  const logo = branding?.logoUrl ? await loadLogoForPdf(branding.logoUrl) : null;
+  try {
+    return await defaultSealToPng(schoolName, {
+      details: branding?.address,
+      logoDataUrl: logo?.dataUrl,
+    });
+  } catch {
+    return null;
+  }
+}
+
 async function drawSealFooter(
   doc: jsPDF,
   pageWidth: number,
@@ -890,17 +909,11 @@ async function drawSealFooter(
   compact = false,
   branding?: ReceiptBranding,
 ) {
-  const brand = getActiveBrandPalette();
   const markH = compact ? 18 : 24;
   const sealSize = markH;
   const signW = compact ? 42 : 52;
   const [seal, signature] = await Promise.all([
-    loadSchoolMarkPng(
-      branding?.sealUrl,
-      defaultSealSvg(schoolName, brand.primary),
-      320,
-      320,
-    ),
+    loadReceiptSealPng(schoolName, branding),
     loadSchoolMarkPng(
       branding?.signatureUrl,
       defaultSignatureSvg(branding?.principalName || "", "#1E293B"),

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate, useParams, useRouterState } from "@tanstack/react-router";
 import { LifeBuoy, Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -110,7 +111,19 @@ function StatusPill({ status }: { status: SupportTicketStatus }) {
 }
 
 export function SupportDeskView() {
-  const [section, setSection] = useState<Section>("messages");
+  const navigate = useNavigate();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const params = useParams({ strict: false }) as { ticketId?: string };
+  const section: Section = pathname.endsWith("/help")
+    ? "help"
+    : pathname.endsWith("/contact")
+      ? "contact"
+      : "messages";
+  const ticketId =
+    section === "messages" && params.ticketId && params.ticketId !== "help" && params.ticketId !== "contact"
+      ? params.ticketId
+      : undefined;
+
   const [settings, setSettings] = useState<SupportSettings>({
     supportEmail: "support@schoolaccounts.in",
     whatsappE164: SUPPORT_DEFAULT_WHATSAPP_E164,
@@ -124,7 +137,6 @@ export function SupportDeskView() {
   const [savingChannels, setSavingChannels] = useState(false);
   const [faqDraft, setFaqDraft] = useState<SupportFaq>(emptyFaq());
   const [faqBusy, setFaqBusy] = useState(false);
-  const [activeId, setActiveId] = useState<string | null>(null);
   const [thread, setThread] = useState<SupportTicket | null>(null);
   const [replyBusy, setReplyBusy] = useState(false);
   const threadEndRef = useRef<HTMLDivElement>(null);
@@ -167,22 +179,36 @@ export function SupportDeskView() {
     void load();
   }, [load]);
 
-  const openTicket = async (ticket: SupportTicket) => {
-    setActiveId(ticket.id);
-    try {
-      const full = await fetchSuperAdminSupportTicket(ticket.id);
-      setThread(full);
-      setTickets((prev) =>
-        prev.map((item) =>
-          item.id === full.id ? { ...item, adminUnread: false, status: full.status } : item,
-        ),
-      );
-      setUnreadCount((n) => (ticket.adminUnread ? Math.max(0, n - 1) : n));
-    } catch (err) {
-      const msg = err instanceof ApiError ? err.message : "Could not open message";
-      toast.error("Could not open message", { description: msg });
+  useEffect(() => {
+    if (!ticketId) {
+      setThread(null);
+      return;
     }
-  };
+    if (!getApiToken()) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const full = await fetchSuperAdminSupportTicket(ticketId);
+        if (cancelled) return;
+        setThread(full);
+        setTickets((prev) => {
+          const wasUnread = prev.find((item) => item.id === full.id)?.adminUnread;
+          if (wasUnread) setUnreadCount((n) => Math.max(0, n - 1));
+          return prev.map((item) =>
+            item.id === full.id ? { ...item, adminUnread: false, status: full.status } : item,
+          );
+        });
+      } catch (err) {
+        if (cancelled) return;
+        const msg = err instanceof ApiError ? err.message : "Could not open message";
+        toast.error("Could not open message", { description: msg });
+        void navigate({ to: "/super-admin/support", replace: true });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ticketId, navigate]);
 
   const sendReply = async (input: { body: string; attachments: SupportAttachment[] }) => {
     if (!thread) return;
@@ -317,10 +343,18 @@ export function SupportDeskView() {
 
       <div className="col-span-12 flex flex-wrap items-center gap-2">
         {SECTIONS.map((item) => (
-          <button
+          <Link
             key={item.id}
-            type="button"
-            onClick={() => setSection(item.id)}
+            to={
+              item.id === "help"
+                ? "/super-admin/support/help"
+                : item.id === "contact"
+                  ? "/super-admin/support/contact"
+                  : ticketId
+                    ? "/super-admin/support/$ticketId"
+                    : "/super-admin/support"
+            }
+            params={item.id === "messages" && ticketId ? { ticketId } : undefined}
             className={cn(
               "inline-flex h-9 items-center gap-2 rounded-full px-3.5 text-[13px] font-semibold transition-colors",
               section === item.id
@@ -339,7 +373,7 @@ export function SupportDeskView() {
                 {unreadCount}
               </span>
             ) : null}
-          </button>
+          </Link>
         ))}
       </div>
 
@@ -382,23 +416,26 @@ export function SupportDeskView() {
                 </li>
               ) : (
                 visibleTickets.map((ticket) => {
-                  const active = ticket.id === activeId;
+                  const active = ticket.id === ticketId;
                   const preview = ticket.lastMessage?.body || ticket.subject;
                   return (
                     <li key={ticket.id}>
-                      <button
-                        type="button"
-                        onClick={() => void openTicket(ticket)}
+                      <Link
+                        to="/super-admin/support/$ticketId"
+                        params={{ ticketId: ticket.id }}
                         className={cn(
-                          "w-full rounded-xl border px-3 py-2.5 text-left",
+                          "block w-full rounded-xl border px-3 py-2.5 text-left",
                           active
                             ? "border-[#0F766E]/40 bg-[#F0FDFA]"
                             : "border-[#EFEFEF] bg-white hover:bg-[#FAFAFA]",
                         )}
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <span className="truncate text-[13px] font-semibold text-black">
-                            {ticket.tenantName || "School"}
+                          <span className="min-w-0">
+                            <span className="block truncate text-[13px] font-semibold text-black">
+                              {ticket.tenantName || "School"}
+                            </span>
+                            <span className="mt-0.5 block font-mono text-[10px] text-black/35">{ticket.id}</span>
                           </span>
                           {ticket.adminUnread ? (
                             <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#0F766E]" />
@@ -409,7 +446,7 @@ export function SupportDeskView() {
                           <StatusPill status={ticket.status} />
                           <span className="text-[10.5px] text-black/35">{formatStamp(ticket.updatedAt)}</span>
                         </div>
-                      </button>
+                      </Link>
                     </li>
                   );
                 })
@@ -417,7 +454,7 @@ export function SupportDeskView() {
             </ul>
 
             <div className="col-span-12 flex min-h-[22rem] flex-col rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3 lg:col-span-8">
-              {thread ? (
+              {thread && thread.id === ticketId ? (
                 <>
                   <div className="mb-3 flex flex-wrap items-start justify-between gap-2 border-b border-[#EFEFEF] pb-3">
                     <div className="min-w-0">
@@ -425,7 +462,8 @@ export function SupportDeskView() {
                         {thread.tenantName || "School"}
                       </div>
                       <div className="mt-0.5 text-[12px] text-black/50">
-                        {thread.createdByName || "School admin"}
+                        <span className="font-mono text-[11px] text-black/40">{thread.id}</span>
+                        {thread.createdByName ? ` · ${thread.createdByName}` : ""}
                         {thread.subject ? ` · ${thread.subject}` : ""}
                       </div>
                     </div>
@@ -490,12 +528,19 @@ export function SupportDeskView() {
                     </div>
                   )}
                 </>
+              ) : ticketId ? (
+                <div className="grid flex-1 place-items-center text-center">
+                  <div className="flex items-center gap-2 text-[13px] text-black/45">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Opening {ticketId}…
+                  </div>
+                </div>
               ) : (
                 <div className="grid flex-1 place-items-center text-center">
                   <div>
                     <LifeBuoy className="mx-auto h-8 w-8 text-black/25" />
-                    <p className="mt-2 text-[13px] font-medium text-black/55">Pick a school on the left</p>
-                    <p className="mt-0.5 text-[12px] text-black/40">Read the thread and send a reply.</p>
+                    <p className="mt-2 text-[13px] font-medium text-black/55">Pick a conversation</p>
+                    <p className="mt-0.5 text-[12px] text-black/40">Each chat has its own URL so you can reopen it.</p>
                   </div>
                 </div>
               )}

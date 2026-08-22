@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { Loader2, Mail, Send } from "lucide-react";
 import { toast } from "sonner";
 
@@ -80,6 +81,9 @@ function StatusPill({ status }: { status: SupportTicketStatus }) {
 }
 
 export function CustomerSupportCard() {
+  const navigate = useNavigate();
+  const search = useSearch({ from: "/tenant/settings" });
+  const chatId = search.chat;
   const { session } = useAuth();
   const { schoolDetails } = useTenantStore();
   const schoolName = schoolDetails.name || session?.tenantName || "School";
@@ -92,7 +96,6 @@ export function CustomerSupportCard() {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [chat, setChat] = useState<ChatLine[]>([]);
-  const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
   const [ticketBusy, setTicketBusy] = useState(false);
   const threadEndRef = useRef<HTMLDivElement>(null);
 
@@ -184,7 +187,10 @@ export function CustomerSupportCard() {
     try {
       const ticket = await createSupportTicket({ subject: question, body: question });
       setTickets((prev) => [ticket, ...prev.filter((t) => t.id !== ticket.id)]);
-      setActiveTicketId(ticket.id);
+      void navigate({
+        to: "/tenant/settings",
+        search: (prev) => ({ ...prev, tab: "support", chat: ticket.id }),
+      });
       setChat((prev) =>
         prev.map((line) =>
           line.id === lineId
@@ -201,15 +207,11 @@ export function CustomerSupportCard() {
     }
   };
 
-  const activeTicket = tickets.find((t) => t.id === activeTicketId) ?? tickets[0] ?? null;
-
-  useEffect(() => {
-    if (!activeTicketId && tickets[0]) setActiveTicketId(tickets[0].id);
-  }, [tickets, activeTicketId]);
+  const activeTicket = tickets.find((t) => t.id === chatId) ?? null;
 
   useEffect(() => {
     threadEndRef.current?.scrollIntoView({ block: "end" });
-  }, [activeTicketId, activeTicket?.messages?.length]);
+  }, [chatId, activeTicket?.messages?.length]);
 
   const sendTicketReply = async (input: { body: string; attachments: SupportAttachment[] }) => {
     if (!activeTicket) return;
@@ -240,7 +242,10 @@ export function CustomerSupportCard() {
         attachments: input.attachments,
       });
       setTickets((prev) => [ticket, ...prev.filter((item) => item.id !== ticket.id)]);
-      setActiveTicketId(ticket.id);
+      void navigate({
+        to: "/tenant/settings",
+        search: (prev) => ({ ...prev, tab: "support", chat: ticket.id }),
+      });
       toast.success("Sent to Feezo", { description: "The team will reply in Your messages" });
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Could not open a ticket";
@@ -250,16 +255,18 @@ export function CustomerSupportCard() {
     }
   };
 
-  const openTicket = async (ticket: SupportTicket) => {
-    setActiveTicketId(ticket.id);
-    if (!ticket.schoolUnread) return;
-    try {
-      const next = await markSupportTicketRead(ticket.id);
-      setTickets((prev) => prev.map((t) => (t.id === next.id ? { ...t, ...next } : t)));
-    } catch {
-      // ignore
-    }
-  };
+  useEffect(() => {
+    if (!chatId) return;
+    const ticket = tickets.find((item) => item.id === chatId);
+    if (!ticket?.schoolUnread) return;
+    void markSupportTicketRead(chatId)
+      .then((next) => {
+        setTickets((prev) => prev.map((item) => (item.id === next.id ? { ...item, ...next } : item)));
+      })
+      .catch(() => {
+        // ignore
+      });
+  }, [chatId, tickets]);
 
   if (loading) {
     return (
@@ -412,23 +419,26 @@ export function CustomerSupportCard() {
           <div className="mt-4 grid grid-cols-12 gap-3">
             <ul className="mobile-scrollbar-none col-span-12 max-h-[28rem] space-y-1.5 overflow-y-auto lg:col-span-4">
               {tickets.map((ticket) => {
-                const active = ticket.id === activeTicket?.id;
+                const active = ticket.id === chatId;
                 const preview = ticket.lastMessage?.body || ticket.subject;
                 return (
                   <li key={ticket.id}>
-                    <button
-                      type="button"
-                      onClick={() => void openTicket(ticket)}
+                    <Link
+                      to="/tenant/settings"
+                      search={{ tab: "support", chat: ticket.id }}
                       className={cn(
-                        "w-full rounded-xl border px-3 py-2.5 text-left transition-colors",
+                        "block w-full rounded-xl border px-3 py-2.5 text-left transition-colors",
                         active
                           ? "border-[#0F766E]/40 bg-[#F0FDFA]"
                           : "border-[#EFEFEF] bg-white hover:bg-[#FAFAFA] dark:border-white/10 dark:bg-zinc-900",
                       )}
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <span className="truncate text-[13px] font-semibold text-black dark:text-zinc-100">
-                          {ticket.subject}
+                        <span className="min-w-0">
+                          <span className="block truncate text-[13px] font-semibold text-black dark:text-zinc-100">
+                            {ticket.subject}
+                          </span>
+                          <span className="mt-0.5 block font-mono text-[10px] text-black/35">{ticket.id}</span>
                         </span>
                         {ticket.schoolUnread ? (
                           <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#0F766E]" />
@@ -439,7 +449,7 @@ export function CustomerSupportCard() {
                         <StatusPill status={ticket.status} />
                         <span className="text-[10.5px] text-black/35">{formatStamp(ticket.updatedAt)}</span>
                       </div>
-                    </button>
+                    </Link>
                   </li>
                 );
               })}
@@ -452,7 +462,7 @@ export function CustomerSupportCard() {
                       <div className="truncate text-[15px] font-semibold text-black dark:text-zinc-100">
                         {activeTicket.subject}
                       </div>
-                      <div className="mt-0.5 text-[12px] text-black/50">Feezo team</div>
+                      <div className="mt-0.5 font-mono text-[11px] text-black/40">{activeTicket.id}</div>
                     </div>
                     <StatusPill status={activeTicket.status} />
                   </div>
