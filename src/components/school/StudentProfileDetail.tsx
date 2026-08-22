@@ -869,15 +869,15 @@ export function StudentProfileDetail({
                       />
                     </div>
                     {studentTransportFee.amount && studentTransportFee.amount > 0 ? (
-                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#CCFBF1] bg-[#F0FDFA]/70 px-3.5 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#CCFBF1] bg-[#F0FDFA]/70 px-3.5 py-3 dark:border-teal-500/30 dark:bg-teal-950/40">
                         <div>
-                          <div className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                          <div className="text-[11px] font-semibold uppercase tracking-wider text-black/45 dark:text-teal-200/80">
                             Vehicle fee
                           </div>
-                          <div className="mt-0.5 font-mono text-[15px] font-bold text-black">
+                          <div className="mt-0.5 font-mono text-[15px] font-bold text-black dark:text-teal-50">
                             ₹ {studentTransportFee.amount.toLocaleString("en-IN")}
                           </div>
-                          <div className="mt-0.5 text-[12px] text-black/50">
+                          <div className="mt-0.5 text-[12px] text-black/50 dark:text-zinc-400">
                             Based on assigned pickup / drop route
                           </div>
                         </div>

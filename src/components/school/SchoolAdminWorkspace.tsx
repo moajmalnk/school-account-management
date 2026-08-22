@@ -9,6 +9,7 @@ import {
   Printer,
   Download,
   Upload,
+  Eye,
   Phone,
   MessageCircle,
   MessageSquare,
@@ -286,6 +287,7 @@ import {
   downloadTablePdf,
   findReceiptStudent,
   receiptBrandingFromSchool,
+  showReceiptPdf,
 } from "@/lib/finance-export";
 import {
   apiDeleteClass,
@@ -317,7 +319,9 @@ import {
   bankBalance,
   cashOnHand,
   expenseSegmentsFromDisbursements,
+  filterDisbursementsByPeriod,
   formatInr,
+  isClearedDisbursement,
   operatingExpenseForPeriod,
   queuedPayables,
   queuedSalaryPayables,
@@ -581,6 +585,44 @@ const DASH = {
     "border-teal-800/20 bg-gradient-to-br from-[#0F766E] via-[#0D9488] to-[#115E59] text-white",
 } as const;
 
+const dashTileHover =
+  "transition-all duration-300 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2";
+
+const dashStudentsTileClass = cn(
+  dashTileHover,
+  "border-emerald-400/50 bg-gradient-to-br from-[#6EE7B7] via-[#A7F3D0] to-[#D1FAE5] shadow-[0_8px_24px_-10px_rgba(16,185,129,0.32)] focus-visible:ring-emerald-400/45 dark:border-emerald-600/40 dark:from-emerald-950/80 dark:via-zinc-900 dark:to-emerald-900/50",
+);
+
+const dashStaffTileClass = cn(
+  dashTileHover,
+  "border-sky-400/50 bg-gradient-to-br from-[#7DD3FC] via-[#BAE6FD] to-[#E0F2FE] shadow-[0_8px_24px_-10px_rgba(56,189,248,0.28)] focus-visible:ring-sky-400/45 dark:border-sky-600/40 dark:from-sky-950/80 dark:via-zinc-900 dark:to-blue-950/50",
+);
+
+const dashIncomeTileClass = cn(
+  dashTileHover,
+  "border-emerald-300/40 bg-gradient-to-br from-emerald-500 via-teal-600 to-teal-700 text-white shadow-[0_10px_30px_-12px_rgba(16,185,129,0.42)] focus-visible:ring-emerald-400/45 dark:border-emerald-500/25 dark:from-emerald-800/95 dark:via-teal-900 dark:to-zinc-950 dark:shadow-[0_12px_36px_-14px_rgba(16,185,129,0.32)]",
+);
+
+const dashExpenseTileClass = cn(
+  dashTileHover,
+  "border-rose-300/40 bg-gradient-to-br from-rose-500 via-red-500 to-red-600 text-white shadow-[0_10px_30px_-12px_rgba(239,68,68,0.38)] focus-visible:ring-rose-400/45 dark:border-rose-500/25 dark:from-rose-900/95 dark:via-red-950 dark:to-zinc-950 dark:shadow-[0_12px_36px_-14px_rgba(239,68,68,0.28)]",
+);
+
+const dashCashInHandTileClass = cn(
+  dashTileHover,
+  "border-emerald-400/45 bg-gradient-to-br from-[#6EE7B7] via-[#A7F3D0] to-[#D1FAE5] shadow-[0_6px_20px_-8px_rgba(16,185,129,0.28)] focus-visible:ring-emerald-400/45 dark:border-emerald-600/40 dark:from-emerald-950/80 dark:via-zinc-900 dark:to-emerald-900/50",
+);
+
+const dashBankTileClass = cn(
+  dashTileHover,
+  "border-violet-400/45 bg-gradient-to-br from-[#C4B5FD] via-[#DDD6FE] to-[#EDE9FE] shadow-[0_6px_20px_-8px_rgba(139,92,246,0.25)] focus-visible:ring-violet-400/45 dark:border-violet-600/40 dark:from-violet-950/80 dark:via-zinc-900 dark:to-indigo-950/50",
+);
+
+const dashTotalBalanceTileClass = cn(
+  dashTileHover,
+  "border-indigo-400/45 bg-gradient-to-br from-indigo-500 via-violet-600 to-purple-700 text-white shadow-[0_8px_24px_-10px_rgba(99,102,241,0.35)] focus-visible:ring-indigo-400/45 dark:border-indigo-500/25 dark:from-indigo-900/95 dark:via-violet-950 dark:to-zinc-950 dark:shadow-[0_12px_36px_-14px_rgba(99,102,241,0.28)]",
+);
+
 const dashboardCountClass =
   "min-w-0 max-w-full overflow-hidden font-mono font-bold leading-none tracking-tight tabular-nums text-[clamp(1.5rem,3.6vw,2.5rem)]";
 
@@ -622,11 +664,74 @@ function DashboardAmount({
   );
 }
 
+function IncomeExpenseSummaryTiles({
+  income,
+  expense,
+  receiptCount,
+  paymentCount,
+  compact = false,
+}: {
+  income: number;
+  expense: number;
+  receiptCount: number;
+  paymentCount: number;
+  compact?: boolean;
+}) {
+  const net = income - expense;
+  const tileClass = compact
+    ? "flex min-h-[92px] min-w-0 flex-col items-center justify-center overflow-hidden rounded-2xl px-2.5 py-3 text-center sm:min-h-[96px] sm:px-3"
+    : "flex min-h-[104px] min-w-0 flex-col items-center justify-center overflow-hidden rounded-2xl px-2.5 py-3.5 text-center sm:min-h-[112px] sm:px-3.5 sm:py-4";
+
+  return (
+    <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
+      <div className={cn(dashIncomeTileClass, tileClass)}>
+        <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-100">
+          Total Income
+        </div>
+        <DashboardAmount
+          value={income}
+          compact={compact}
+          className="mt-1.5 w-full text-center text-white"
+        />
+        <div className="mt-1 text-[10px] font-medium text-emerald-100/80">
+          {receiptCount} receipt{receiptCount === 1 ? "" : "s"}
+        </div>
+      </div>
+      <div className={cn(dashExpenseTileClass, tileClass)}>
+        <div className="text-[10px] font-bold uppercase tracking-wider text-rose-100">
+          Total Expense
+        </div>
+        <DashboardAmount
+          value={expense}
+          compact={compact}
+          className="mt-1.5 w-full text-center text-white"
+        />
+        <div className="mt-1 text-[10px] font-medium text-rose-100/80">
+          {paymentCount} payment{paymentCount === 1 ? "" : "s"}
+        </div>
+      </div>
+      <div className={cn(dashTotalBalanceTileClass, tileClass)}>
+        <div className="text-[10px] font-bold uppercase tracking-wider text-white/90">
+          Net Surplus
+        </div>
+        <DashboardAmount
+          value={net}
+          compact={compact}
+          className="mt-1.5 w-full text-center text-white"
+        />
+        <div className="mt-1 text-[10px] font-medium text-white/75">Income − expense</div>
+      </div>
+    </div>
+  );
+}
+
 type PremiumDashboardProps = {
   students: Student[];
   staff: Staff[];
   periodIncome: number;
   expenseTotal: number;
+  periodReceiptCount: number;
+  periodExpenseCount: number;
   periodPayments: Payment[];
   totalDue: number;
   salaryOutstanding: number;
@@ -645,6 +750,8 @@ type PremiumDashboardProps = {
   onViewStudents: () => void;
   onAdmitStudent: () => void;
   onViewStaff: () => void;
+  onShowReceipt: (payment: Payment) => void;
+  onDownloadReceipt: (payment: Payment) => void;
 };
 
 /** Isolated from PremiumDashboard so typing todos/notes does not re-render charts. */
@@ -897,6 +1004,8 @@ function PremiumDashboard({
   staff,
   periodIncome,
   expenseTotal,
+  periodReceiptCount,
+  periodExpenseCount,
   periodPayments,
   totalDue,
   salaryOutstanding,
@@ -915,6 +1024,8 @@ function PremiumDashboard({
   onViewStudents,
   onAdmitStudent,
   onViewStaff,
+  onShowReceipt,
+  onDownloadReceipt,
 }: PremiumDashboardProps) {
   const liveStudents = students.filter((s) => !isRecordDeleted(s.deletedAt));
   const liveStaff = staff.filter((s) => !isRecordDeleted(s.deletedAt));
@@ -972,19 +1083,24 @@ function PremiumDashboard({
               <button
                 type="button"
                 onClick={onViewStudents}
-                className="flex min-h-[120px] min-w-0 flex-col overflow-hidden rounded-2xl bg-white/55 p-3 text-center shadow-sm shadow-sky-200/40 transition-colors hover:bg-white/75 sm:min-h-[128px] sm:p-4"
+                className={cn(
+                  dashStudentsTileClass,
+                  "flex min-h-[120px] min-w-0 flex-col overflow-hidden rounded-2xl p-3 text-center sm:min-h-[128px] sm:p-4",
+                )}
               >
                 <div className="flex items-start justify-between gap-2 text-left">
-                  <span className="text-[12px] font-medium text-slate-600 dark:text-zinc-300">Total Students</span>
-                  <span className="grid h-8 w-8 place-items-center rounded-full bg-[#99F6E4]/80 text-[#0F766E] dark:text-teal-300">
+                  <span className="text-[12px] font-semibold text-emerald-950 dark:text-emerald-50">
+                    Total Students
+                  </span>
+                  <span className="grid h-8 w-8 place-items-center rounded-xl bg-white/80 text-[#047857] shadow-sm dark:bg-white/10 dark:text-emerald-300">
                     <GraduationCap className="h-4 w-4" />
                   </span>
                 </div>
                 <div className="flex flex-1 flex-col items-center justify-center">
-                  <div className={cn(dashboardCountClass, "text-slate-900")}>
+                  <div className={cn(dashboardCountClass, "text-emerald-950 dark:text-emerald-50")}>
                     {liveStudents.length}
                   </div>
-                  <div className="mt-1 text-[11px] font-medium text-[#059669] dark:text-emerald-400">
+                  <div className="mt-1 text-[11px] font-medium text-emerald-800/80 dark:text-emerald-100/70">
                     {paidCount} paid · {liveStudents.length - paidCount} overdue
                   </div>
                 </div>
@@ -992,19 +1108,24 @@ function PremiumDashboard({
               <button
                 type="button"
                 onClick={onViewStaff}
-                className="flex min-h-[120px] min-w-0 flex-col overflow-hidden rounded-2xl bg-white/55 p-3 text-center shadow-sm shadow-sky-200/40 transition-colors hover:bg-white/75 sm:min-h-[128px] sm:p-4"
+                className={cn(
+                  dashStaffTileClass,
+                  "flex min-h-[120px] min-w-0 flex-col overflow-hidden rounded-2xl p-3 text-center sm:min-h-[128px] sm:p-4",
+                )}
               >
                 <div className="flex items-start justify-between gap-2 text-left">
-                  <span className="text-[12px] font-medium text-slate-600 dark:text-zinc-300">Total Staff</span>
-                  <span className="grid h-8 w-8 place-items-center rounded-full bg-orange-100 text-orange-500 dark:bg-orange-950/45 dark:text-orange-300">
+                  <span className="text-[12px] font-semibold text-sky-950 dark:text-sky-50">
+                    Total Staff
+                  </span>
+                  <span className="grid h-8 w-8 place-items-center rounded-xl bg-white/80 text-sky-700 shadow-sm dark:bg-white/10 dark:text-sky-300">
                     <Briefcase className="h-4 w-4" />
                   </span>
                 </div>
                 <div className="flex flex-1 flex-col items-center justify-center">
-                  <div className={cn(dashboardCountClass, "text-slate-900")}>
+                  <div className={cn(dashboardCountClass, "text-sky-950 dark:text-sky-50")}>
                     {liveStaff.length}
                   </div>
-                  <div className="mt-1 text-[11px] font-medium text-slate-500">
+                  <div className="mt-1 text-[11px] font-medium text-sky-800/75 dark:text-sky-100/70">
                     {activeStaff} active · {liveStaff.length - activeStaff} inactive
                   </div>
                 </div>
@@ -1033,19 +1154,13 @@ function PremiumDashboard({
                 />
               </div>
             </div>
-            <div className="mt-4 grid min-w-0 flex-1 grid-cols-2 gap-2 sm:gap-3">
-              <div className="flex min-h-[104px] min-w-0 flex-col items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-[#059669] to-[#047857] px-2.5 py-3.5 text-center text-white shadow-md shadow-emerald-600/20 dark:from-emerald-950 dark:to-emerald-900 dark:shadow-none dark:ring-1 dark:ring-emerald-700/40 sm:min-h-[112px] sm:px-3.5 sm:py-4">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-100 dark:text-emerald-300/80">
-                  Total Income
-                </div>
-                <DashboardAmount value={periodIncome} className="mt-2 w-full text-center text-white" />
-              </div>
-              <div className="flex min-h-[104px] min-w-0 flex-col items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-[#DC2626] to-[#B91C1C] px-2.5 py-3.5 text-center text-white shadow-md shadow-red-600/20 dark:from-rose-950 dark:to-rose-900 dark:shadow-none dark:ring-1 dark:ring-rose-700/40 sm:min-h-[112px] sm:px-3.5 sm:py-4">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-red-100 dark:text-rose-300/80">
-                  Total Expense
-                </div>
-                <DashboardAmount value={expenseTotal} className="mt-2 w-full text-center text-white" />
-              </div>
+            <div className="mt-4">
+              <IncomeExpenseSummaryTiles
+                income={periodIncome}
+                expense={expenseTotal}
+                receiptCount={periodReceiptCount}
+                paymentCount={periodExpenseCount}
+              />
             </div>
           </section>
 
@@ -1090,32 +1205,59 @@ function PremiumDashboard({
           <section className={cn(dashCardClass, DASH.cash, "flex min-w-0 flex-col p-4 sm:p-5")}>
             <DashboardPanelHeading icon={Landmark} title="Cash Position" />
             <div className="mt-4 grid min-w-0 flex-1 grid-cols-2 gap-2 sm:gap-3">
-              <div className="flex min-h-[84px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl bg-white/55 p-2.5 shadow-sm shadow-violet-200/30 dark:ring-1 dark:ring-white/10 sm:p-3.5">
-                <div className="flex items-center justify-between gap-1.5 text-emerald-600 dark:text-emerald-400">
-                  <span className="min-w-0 truncate text-[11px] font-medium text-slate-600 sm:text-[12px] dark:text-zinc-300">
+              <div
+                className={cn(
+                  dashCashInHandTileClass,
+                  "flex min-h-[84px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl p-2.5 sm:p-3.5",
+                )}
+              >
+                <div className="flex items-center justify-between gap-1.5 text-[#047857] dark:text-emerald-300">
+                  <span className="min-w-0 truncate text-[11px] font-semibold text-emerald-950 sm:text-[12px] dark:text-emerald-50">
                     Cash In Hand
                   </span>
-                  <Banknote className="h-3.5 w-3.5 shrink-0" />
+                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-white/80 text-[#047857] shadow-sm dark:bg-white/10 dark:text-emerald-300">
+                    <Banknote className="h-3.5 w-3.5 shrink-0" />
+                  </span>
                 </div>
-                <DashboardAmount value={inHand} compact className="text-slate-900" />
+                <DashboardAmount
+                  value={inHand}
+                  compact
+                  className="text-emerald-950 dark:text-emerald-50"
+                />
               </div>
-              <div className="flex min-h-[84px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl bg-white/55 p-2.5 shadow-sm shadow-violet-200/30 dark:ring-1 dark:ring-white/10 sm:p-3.5">
-                <div className="flex items-center justify-between gap-1.5 text-violet-600 dark:text-violet-400">
-                  <span className="min-w-0 truncate text-[11px] font-medium text-slate-600 sm:text-[12px] dark:text-zinc-300">
+              <div
+                className={cn(
+                  dashBankTileClass,
+                  "flex min-h-[84px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl p-2.5 sm:p-3.5",
+                )}
+              >
+                <div className="flex items-center justify-between gap-1.5 text-violet-700 dark:text-violet-300">
+                  <span className="min-w-0 truncate text-[11px] font-semibold text-violet-950 sm:text-[12px] dark:text-violet-50">
                     Bank Balance
                   </span>
-                  <Landmark className="h-3.5 w-3.5 shrink-0" />
+                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-white/80 text-violet-700 shadow-sm dark:bg-white/10 dark:text-violet-300">
+                    <Landmark className="h-3.5 w-3.5 shrink-0" />
+                  </span>
                 </div>
-                <DashboardAmount value={inBank} compact className="text-slate-900" />
+                <DashboardAmount
+                  value={inBank}
+                  compact
+                  className="text-violet-950 dark:text-violet-50"
+                />
               </div>
-              <div className="col-span-2 flex min-h-[84px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-r from-[#6366F1]/20 via-[#A78BFA]/25 to-[#818CF8]/20 p-3.5 ring-1 ring-violet-200/40 dark:from-violet-950/50 dark:via-zinc-900 dark:to-indigo-950/40 dark:ring-violet-800/30 sm:p-4">
+              <div
+                className={cn(
+                  dashTotalBalanceTileClass,
+                  "col-span-2 flex min-h-[84px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl p-3.5 sm:p-4",
+                )}
+              >
                 <div className="flex items-start justify-between gap-2">
-                  <span className="text-[12px] font-semibold text-slate-700 dark:text-zinc-200">Total Balance</span>
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/80 text-[#4F46E5] dark:bg-white/10 dark:text-violet-300">
+                  <span className="text-[12px] font-semibold text-white/95">Total Balance</span>
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white/20 text-white ring-1 ring-white/35">
                     <Wallet className="h-4 w-4" />
                   </span>
                 </div>
-                <DashboardAmount value={totalBalance} className="text-slate-900 dark:text-zinc-50" />
+                <DashboardAmount value={totalBalance} className="text-white" />
               </div>
             </div>
           </section>
@@ -1265,19 +1407,14 @@ function PremiumDashboard({
               />
             </AreaChart>
           </ChartContainer>
-          <div className="mt-4 grid min-w-0 grid-cols-2 gap-2 sm:gap-3">
-            <div className="flex min-w-0 flex-col items-center justify-center overflow-hidden rounded-2xl bg-[#D1FAE5]/70 px-2 py-3.5 text-center sm:px-3">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700/80">
-                Total Income
-              </div>
-              <DashboardAmount value={periodIncome} compact className="mt-1.5 w-full text-center text-emerald-800" />
-            </div>
-            <div className="flex min-w-0 flex-col items-center justify-center overflow-hidden rounded-2xl bg-[#FEE2E2]/70 px-2 py-3.5 text-center sm:px-3">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-rose-700/80">
-                Total Expense
-              </div>
-              <DashboardAmount value={expenseTotal} compact className="mt-1.5 w-full text-center text-rose-800" />
-            </div>
+          <div className="mt-4">
+            <IncomeExpenseSummaryTiles
+              income={periodIncome}
+              expense={expenseTotal}
+              receiptCount={periodReceiptCount}
+              paymentCount={periodExpenseCount}
+              compact
+            />
           </div>
         </section>
 
@@ -1319,6 +1456,27 @@ function PremiumDashboard({
                     {formatInr(payment.amount)}
                   </div>
                   <div className="mt-0.5 text-[10px] text-teal-100/60">{formatEventDateTime(payment.time)}</div>
+                  <div className="mt-1.5 flex items-center justify-end gap-1">
+                    <button
+                      type="button"
+                      aria-label={`Show receipt ${payment.id}`}
+                      title="Show"
+                      onClick={() => onShowReceipt(payment)}
+                      className="inline-flex h-7 items-center gap-1 rounded-lg border border-white/20 bg-white/10 px-2 text-[10px] font-semibold text-teal-50 transition-colors hover:bg-white/20 hover:text-white"
+                    >
+                      <Eye className="h-3 w-3" />
+                      Show
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Download receipt ${payment.id}`}
+                      title="Download"
+                      onClick={() => onDownloadReceipt(payment)}
+                      className="inline-grid h-7 w-7 place-items-center rounded-lg border border-white/20 bg-white/10 text-teal-50 transition-colors hover:bg-white/20 hover:text-white"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -1455,7 +1613,44 @@ export function SchoolDashboard() {
     branchSyncing,
     activeBranch,
     branches,
+    schoolDetails,
   } = useTenantStore();
+  const schoolName = schoolDetails.name || "School";
+
+  const showRecentReceipt = useCallback(
+    async (payment: Payment) => {
+      try {
+        await showReceiptPdf(
+          payment,
+          schoolName,
+          academicYear,
+          receiptBrandingFromSchool(schoolDetails, findReceiptStudent(students, payment)),
+        );
+      } catch {
+        toast.error(`Could not show receipt ${payment.id}`, {
+          description: "Allow pop-ups for this site and try again",
+        });
+      }
+    },
+    [academicYear, schoolDetails, schoolName, students],
+  );
+
+  const downloadRecentReceipt = useCallback(
+    async (payment: Payment) => {
+      try {
+        await downloadReceiptPdf(
+          payment,
+          schoolName,
+          academicYear,
+          receiptBrandingFromSchool(schoolDetails, findReceiptStudent(students, payment)),
+        );
+        toast.success(`Receipt ${payment.id} downloaded`);
+      } catch {
+        toast.error(`Could not download receipt ${payment.id}`);
+      }
+    },
+    [academicYear, schoolDetails, schoolName, students],
+  );
   const tenantScope = `${session?.tenantId ?? session?.tenantName ?? "tenant"}|${academicYear}`;
   const { disbursements, loaded: disbursementsLoaded } = useDisbursements(
     tenantScope,
@@ -1485,6 +1680,12 @@ export function SchoolDashboard() {
   const totalBalance = inHand + inBank;
   const expenseTotal = useMemo(
     () => operatingExpenseForPeriod(disbursements, period, customRange),
+    [disbursements, period, customRange],
+  );
+  const periodExpenseCount = useMemo(
+    () =>
+      filterDisbursementsByPeriod(disbursements, period, customRange).filter(isClearedDisbursement)
+        .length,
     [disbursements, period, customRange],
   );
   const salaryOutstandingRows = useMemo(
@@ -1523,6 +1724,8 @@ export function SchoolDashboard() {
         staff={staff}
         periodIncome={periodIncome}
         expenseTotal={expenseTotal}
+        periodReceiptCount={filteredPayments.length}
+        periodExpenseCount={periodExpenseCount}
         periodPayments={filteredPayments}
         totalDue={totalDue}
         salaryOutstanding={salaryOutstanding}
@@ -1541,6 +1744,8 @@ export function SchoolDashboard() {
         onViewStudents={() => navigate({ to: "/tenant/students" })}
         onAdmitStudent={() => navigate({ to: "/tenant/students/admit" })}
         onViewStaff={() => navigate({ to: "/tenant/staff" })}
+        onShowReceipt={(payment) => void showRecentReceipt(payment)}
+        onDownloadReceipt={(payment) => void downloadRecentReceipt(payment)}
       />
     </div>
   );

@@ -30,7 +30,7 @@ function triggerDownload(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-export type PdfEmitAction = "download" | "print";
+export type PdfEmitAction = "download" | "print" | "preview";
 
 export function printJsPdf(doc: jsPDF) {
   const blob = doc.output("blob");
@@ -61,9 +61,23 @@ export function printJsPdf(doc: jsPDF) {
   setTimeout(cleanup, 60_000);
 }
 
+export function previewJsPdf(doc: jsPDF) {
+  const blob = doc.output("blob");
+  const url = URL.createObjectURL(blob);
+  const tab = window.open(url, "_blank", "noopener,noreferrer");
+  if (!tab) {
+    URL.revokeObjectURL(url);
+    throw new Error("Popup blocked");
+  }
+  tab.addEventListener("beforeunload", () => URL.revokeObjectURL(url), { once: true });
+  setTimeout(() => URL.revokeObjectURL(url), 120_000);
+}
+
 export function emitPdf(doc: jsPDF, filename: string, action: PdfEmitAction = "download") {
   if (action === "print") {
     printJsPdf(doc);
+  } else if (action === "preview") {
+    previewJsPdf(doc);
   } else {
     doc.save(filename);
   }
@@ -660,6 +674,15 @@ export async function printReceiptPdf(
   branding?: ReceiptBranding,
 ) {
   return downloadReceiptPdf(payment, schoolName, academicYear, branding, "print");
+}
+
+export async function showReceiptPdf(
+  payment: Payment,
+  schoolName: string,
+  academicYear: string,
+  branding?: ReceiptBranding,
+) {
+  return downloadReceiptPdf(payment, schoolName, academicYear, branding, "preview");
 }
 
 const MONTH_ABBR = [

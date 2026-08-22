@@ -381,7 +381,7 @@ export function StudentEditPage() {
             </p>
           </div>
 
-          <div className="rounded-lg border border-[#CCFBF1] bg-[#F0FDFA]/70 px-3.5 py-3 text-[12px] text-slate-600">
+          <div className="rounded-lg border border-[#CCFBF1] bg-[#F0FDFA]/70 px-3.5 py-3 text-[12px] text-slate-600 dark:border-teal-500/30 dark:bg-teal-950/40 dark:text-zinc-300">
             Update identity, family, contact, and transport details. Vehicle fees are calculated
             from assigned bus routes and can be collected in Finance after saving.
           </div>
@@ -706,9 +706,9 @@ export function StudentEditPage() {
           )}
 
           {draft.needsBus && draftTransportFee.amount && draftTransportFee.amount > 0 ? (
-            <div className="rounded-xl border border-[#CCFBF1] bg-[#F0FDFA]/70 px-3.5 py-3 text-[12px] text-slate-600">
+            <div className="rounded-xl border border-[#CCFBF1] bg-[#F0FDFA]/70 px-3.5 py-3 text-[12px] text-slate-600 dark:border-teal-500/30 dark:bg-teal-950/40 dark:text-zinc-300">
               Vehicle fee for selected route:{" "}
-              <span className="font-mono font-semibold text-slate-900">
+              <span className="font-mono font-semibold text-slate-900 dark:text-teal-50">
                 ₹ {draftTransportFee.amount.toLocaleString("en-IN")}
               </span>
               . Save changes, then collect in Finance.

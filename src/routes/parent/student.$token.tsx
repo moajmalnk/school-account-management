@@ -538,9 +538,9 @@ function ParentStudentPage() {
             )}
 
             {form.needsBus === true && formTransportFee.amount && formTransportFee.amount > 0 ? (
-              <div className="rounded-xl border border-[#CCFBF1] bg-[#F0FDFA]/70 px-3.5 py-3 text-[12px] text-slate-600">
+              <div className="rounded-xl border border-[#CCFBF1] bg-[#F0FDFA]/70 px-3.5 py-3 text-[12px] text-slate-600 dark:border-teal-500/30 dark:bg-teal-950/40 dark:text-zinc-300">
                 Estimated vehicle fee:{" "}
-                <span className="font-mono font-semibold text-slate-900">
+                <span className="font-mono font-semibold text-slate-900 dark:text-teal-50">
                   ₹ {formTransportFee.amount.toLocaleString("en-IN")}
                 </span>
                 . The school will collect this in Finance after route confirmation.
