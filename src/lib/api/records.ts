@@ -121,9 +121,10 @@ export async function apiCreatePayment(
   if (!hasToken()) {
     throw new Error("Not signed in to API — log in again to save payments");
   }
+  const { id: _clientId, ...payload } = payment;
   return apiRequest<Payment>("/api/finance/payments.php", {
     method: "POST",
-    body: { ...payment, ...extras },
+    body: { ...payload, ...extras },
   });
 }
 
