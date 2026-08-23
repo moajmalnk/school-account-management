@@ -1198,18 +1198,24 @@ function FeeBreaksManageDialog({
   const [saving, setSaving] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
 
-  const periodOptions = useMemo(
-    () =>
-      studentSchedulePeriodOptions({
-        student,
-        classes,
-        feeTerms,
-        transportRoutes,
-        academicYear,
-        kind: appliesTo,
-      }),
-    [student, classes, feeTerms, transportRoutes, academicYear, appliesTo],
-  );
+  const periodOptions = useMemo(() => {
+    const raw = studentSchedulePeriodOptions({
+      student,
+      classes,
+      feeTerms,
+      transportRoutes,
+      academicYear,
+      kind: appliesTo,
+    });
+    // When applies-to is both, tuition + vehicle share labels — show each period once.
+    const seen = new Set<string>();
+    return raw.filter((o) => {
+      const key = o.label.trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [student, classes, feeTerms, transportRoutes, academicYear, appliesTo]);
 
   const periodLabels = useMemo(
     () => periodOptions.map((o) => o.label),
@@ -1262,10 +1268,12 @@ function FeeBreaksManageDialog({
         });
         const mapped: StudentFeeBreak = {
           id: saved.id,
-          studentId: saved.studentId,
-          academicYear: saved.academicYear,
-          appliesTo: saved.appliesTo,
-          periods: saved.periods,
+          studentId: saved.studentId || student.id,
+          academicYear: saved.academicYear || academicYear,
+          appliesTo: saved.appliesTo || appliesTo,
+          periods: Array.isArray(saved.periods) && saved.periods.length
+            ? saved.periods
+            : selectedPeriods,
           reason: saved.reason,
           createdAt: saved.createdAt,
           updatedAt: saved.updatedAt,
@@ -1296,6 +1304,7 @@ function FeeBreaksManageDialog({
       });
       setSelectedPeriods([]);
       setReason("");
+      onOpenChange(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not save fee break");
     } finally {

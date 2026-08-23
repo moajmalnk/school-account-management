@@ -105,7 +105,12 @@ export function FeePeriodChecklist({
                   <Checkbox
                     checked={checked}
                     disabled={disabled}
-                    onCheckedChange={() => toggle(opt.label)}
+                    onCheckedChange={(value) => {
+                      if (disabled) return;
+                      const next = value === true;
+                      if (next === checked) return;
+                      toggle(opt.label);
+                    }}
                     className="h-4 w-4 shrink-0"
                   />
                   <span className="truncate font-medium text-slate-900 dark:text-zinc-100">
