@@ -185,6 +185,7 @@ import {
   routeFeePrefillAmount,
   routeScheduleSummary,
   routeScheduleForShift,
+  type StudentFeeBreak,
   type TransportFeeShift,
   type PaymentFeeLine,
   currentPayrollMonth,
@@ -218,6 +219,7 @@ import {
   type VehicleOwnership,
 } from "@/lib/tenant-store";
 import { StudentProfileDetail } from "@/components/school/StudentProfileDetail";
+import { isPeriodOnBreak } from "@/lib/student-fees";
 import { ShareParentLinkDialog } from "@/components/school/ShareParentLinkDialog";
 import { StaffProfileDetail } from "@/components/school/StaffProfileDetail";
 import { StaffOrgQuickCreateDialogs } from "@/components/school/StaffOrgQuickCreate";
@@ -7236,6 +7238,15 @@ function uniqueByLabel<T extends { label: string }>(items: T[]): T[] {
   });
 }
 
+type FeeBreakPeriodContext = {
+  studentId: string;
+  academicYear: string;
+  breaks: StudentFeeBreak[];
+};
+
+/** Set while Fee Collection (ReceivePayment) is mounted so period helpers skip break periods. */
+let receivePaymentBreakCtx: FeeBreakPeriodContext | undefined;
+
 function feePeriodChoices(
   feeTerms: FeeTerm[],
   description: string,
@@ -7246,6 +7257,7 @@ function feePeriodChoices(
   },
   matchedClass?: ClassConfig,
   matchedRoute?: TransportRoute,
+  breakCtx?: FeeBreakPeriodContext,
 ): { value: string; label: string; kind: FeePeriodKind; period: string }[] {
   const termKind = categoryFeeTermKind(description);
   const scheduled = matchedClass ? withClassFeeSchedule(matchedClass, feeTerms) : undefined;
@@ -7365,11 +7377,25 @@ function feePeriodChoices(
         })),
   ];
   const seen = new Set<string>();
-  return choices.filter((choice) => {
+  const deduped = choices.filter((choice) => {
     if (seen.has(choice.value)) return false;
     seen.add(choice.value);
     return true;
   });
+  const effectiveBreakCtx = breakCtx ?? receivePaymentBreakCtx;
+  if (!effectiveBreakCtx?.studentId) return deduped;
+  const breakKind = categoryFeeTermKind(description);
+  if (breakKind !== "tuition" && breakKind !== "vehicle") return deduped;
+  return deduped.filter(
+    (choice) =>
+      !isPeriodOnBreak(
+        effectiveBreakCtx.breaks,
+        effectiveBreakCtx.studentId,
+        effectiveBreakCtx.academicYear,
+        breakKind,
+        choice.period,
+      ),
+  );
 }
 
 function defaultFeePeriod(
@@ -7390,9 +7416,17 @@ function defaultFeePeriod(
     vehicleFee?: number;
     collectionStartMonth?: string;
     transportShift?: TransportFeeShift;
+    breakCtx?: FeeBreakPeriodContext;
   },
 ): { feePeriodKind: FeePeriodKind; feePeriod: string } {
-  const choices = feePeriodChoices(feeTerms, description, periodOpts, matchedClass, matchedRoute);
+  const choices = feePeriodChoices(
+    feeTerms,
+    description,
+    periodOpts,
+    matchedClass,
+    matchedRoute,
+    opts?.breakCtx,
+  );
   if (choices.length === 0) {
     return { feePeriodKind: "month", feePeriod: currentFeeMonth() };
   }
@@ -8165,6 +8199,7 @@ function ReceivePayment() {
     paymentCategories,
     setPaymentCategories,
     activeFeeTerms: feeTerms,
+    studentFeeBreaks,
     academicYear,
     schoolDetails,
   } = useTenantStore();
@@ -8230,6 +8265,18 @@ function ReceivePayment() {
     ? studentsInClass.find((s) => s.name === stu) ??
       (editingPayment ? students.find((s) => s.name === stu) : undefined)
     : undefined;
+  receivePaymentBreakCtx = selected
+    ? {
+        studentId: selected.id,
+        academicYear,
+        breaks: studentFeeBreaks,
+      }
+    : undefined;
+  useEffect(() => {
+    return () => {
+      receivePaymentBreakCtx = undefined;
+    };
+  }, []);
   const descriptionOptions = useMemo(
     () => orderedFeeDescriptionOptions(paymentCategories),
     [paymentCategories],
@@ -9548,6 +9595,22 @@ function ReceivePayment() {
       }
       if (!item.feePeriod.trim()) {
         toast.error("Each fee item needs a fee period");
+        return;
+      }
+      const kind = categoryFeeTermKind(item.description);
+      if (
+        (kind === "tuition" || kind === "vehicle") &&
+        isPeriodOnBreak(
+          studentFeeBreaks,
+          selected.id,
+          academicYear,
+          kind,
+          item.feePeriod,
+        )
+      ) {
+        toast.error(
+          `${item.feePeriod} is on fee break for this student — remove the break or pick another period`,
+        );
         return;
       }
     }
@@ -13205,13 +13268,29 @@ function ClassesCard({
   const schedulePreview = useMemo(() => {
     const count = Math.max(1, Math.floor(Number(form.installmentCount) || 0));
     const fixed = Math.max(0, Math.round(Number(form.fixedAmount) || 0));
+    const rows =
+      form.installments.length > 0
+        ? form.installments
+        : Array.from({ length: count }, (_, index) => ({
+            id: `fl-i-${index + 1}`,
+            label: installmentLabel(index, form.billingCycle),
+            amount: form.fixedAmount,
+            dueDate: "",
+          }));
     const installmentLines =
       form.feeAmountMode === "fixed"
-        ? buildFixedInstallments(count, fixed, form.billingCycle).map((line, index) => {
-            const dueDate = form.installments[index]?.dueDate?.trim();
-            return dueDate ? { ...line, dueDate } : line;
+        ? Array.from({ length: count }, (_, index) => {
+            const row = rows[index];
+            return {
+              id: row?.id || `fl-i-${index + 1}`,
+              kind: "installment" as const,
+              label:
+                row?.label?.trim() || installmentLabel(index, form.billingCycle),
+              amount: fixed,
+              ...(row?.dueDate?.trim() ? { dueDate: row.dueDate.trim() } : {}),
+            };
           })
-        : form.installments.map((row, index) => ({
+        : rows.map((row, index) => ({
             id: row.id || `fl-i-${index + 1}`,
             kind: "installment" as const,
             label: row.label.trim() || installmentLabel(index, form.billingCycle),
@@ -13230,6 +13309,64 @@ function ClassesCard({
     const feeSchedule = [...installmentLines.filter((l) => l.amount > 0), ...oneTimeLines];
     return { installmentLines, oneTimeLines, feeSchedule, total: sumFeeSchedule(feeSchedule) };
   }, [form]);
+
+  const ensureInstallmentRows = (
+    prev: typeof form,
+    count: number,
+    mode: ClassFeeAmountMode = prev.feeAmountMode,
+  ): FeeDraftRow[] =>
+    Array.from({ length: Math.max(1, count) }, (_, index) => {
+      const existing = prev.installments[index];
+      return {
+        id: existing?.id || `fl-i-${index + 1}`,
+        label: existing?.label || installmentLabel(index, prev.billingCycle),
+        amount:
+          mode === "fixed"
+            ? prev.fixedAmount
+            : existing?.amount || prev.fixedAmount || "",
+        dueDate: existing?.dueDate || "",
+      };
+    });
+
+  const termScheduleRows = useMemo(() => {
+    const count = Math.max(1, Math.floor(Number(form.installmentCount) || 0));
+    return Array.from({ length: count }, (_, index) => {
+      const existing = form.installments[index];
+      return {
+        id: existing?.id || `fl-i-${index + 1}`,
+        label: existing?.label || installmentLabel(index, form.billingCycle),
+        amount:
+          form.feeAmountMode === "fixed"
+            ? form.fixedAmount
+            : existing?.amount || "",
+        dueDate: existing?.dueDate || "",
+      };
+    });
+  }, [form]);
+
+  const patchInstallmentRow = (
+    index: number,
+    patch: Partial<FeeDraftRow>,
+  ) => {
+    setForm((prev) => {
+      const count = Math.max(1, Math.floor(Number(prev.installmentCount) || 0));
+      const rows = ensureInstallmentRows(prev, count);
+      rows[index] = { ...rows[index], ...patch };
+      const nextFixed =
+        prev.feeAmountMode === "fixed" && patch.amount !== undefined
+          ? patch.amount
+          : prev.fixedAmount;
+      return {
+        ...prev,
+        fixedAmount: nextFixed,
+        installments:
+          prev.feeAmountMode === "fixed"
+            ? rows.map((row) => ({ ...row, amount: nextFixed }))
+            : rows,
+        installmentCount: String(rows.length),
+      };
+    });
+  };
 
   const emptyForm = () => ({
     grade: "",
@@ -13515,8 +13652,8 @@ function ClassesCard({
                   Fee structure
                 </p>
                 <p className="mt-1 text-[12px] leading-snug text-black/50">
-                  Monthly or term installments, fixed or different amounts, plus optional one-time
-                  fees.
+                  Choose monthly or term billing, then set the same amount for every period or a
+                  different amount and due date for each.
                 </p>
               </div>
 
@@ -13539,15 +13676,30 @@ function ClassesCard({
                         aria-selected={active}
                         onClick={() => {
                           const count = defaultInstallmentCount(cycle);
-                          setForm((prev) => ({
-                            ...prev,
-                            billingCycle: cycle,
-                            installmentCount: prev.installmentCount || count,
-                            installments: prev.installments.map((row, index) => ({
-                              ...row,
-                              label: installmentLabel(index, cycle),
-                            })),
-                          }));
+                          setForm((prev) => {
+                            const nextCount = Math.max(
+                              1,
+                              Math.floor(Number(prev.installmentCount) || 0) || Number(count),
+                            );
+                            const rows = Array.from({ length: nextCount }, (_, index) => {
+                              const existing = prev.installments[index];
+                              return {
+                                id: existing?.id || `fl-i-${index + 1}`,
+                                label: installmentLabel(index, cycle),
+                                amount:
+                                  prev.feeAmountMode === "fixed"
+                                    ? prev.fixedAmount
+                                    : existing?.amount || prev.fixedAmount || "",
+                                dueDate: existing?.dueDate || "",
+                              };
+                            });
+                            return {
+                              ...prev,
+                              billingCycle: cycle,
+                              installmentCount: String(nextCount),
+                              installments: rows,
+                            };
+                          });
                         }}
                         className={cn(
                           "relative min-w-0 flex-1 px-2 py-2.5 text-center text-[12.5px] font-semibold tracking-tight transition-colors",
@@ -13573,8 +13725,14 @@ function ClassesCard({
                 <div className="flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
                   {(
                     [
-                      { key: "fixed" as const, label: "Fixed" },
-                      { key: "custom" as const, label: "Different" },
+                      {
+                        key: "fixed" as const,
+                        label: form.billingCycle === "Term" ? "Same for every term" : "Same each month",
+                      },
+                      {
+                        key: "custom" as const,
+                        label: form.billingCycle === "Term" ? "Different per term" : "Different per month",
+                      },
                     ] as const
                   ).map((option) => {
                     const active = form.feeAmountMode === option.key;
@@ -13584,21 +13742,35 @@ function ClassesCard({
                         type="button"
                         onClick={() => {
                           setForm((prev) => {
-                            if (option.key === "custom" && prev.installments.length === 0) {
-                              const count = Math.max(1, Math.floor(Number(prev.installmentCount) || 0));
-                              const amount = prev.fixedAmount;
+                            const count = Math.max(
+                              1,
+                              Math.floor(Number(prev.installmentCount) || 0) ||
+                                Number(defaultInstallmentCount(prev.billingCycle)),
+                            );
+                            const rows = Array.from({ length: count }, (_, index) => {
+                              const existing = prev.installments[index];
                               return {
-                                ...prev,
-                                feeAmountMode: "custom",
-                                installments: Array.from({ length: count }, (_, index) => ({
-                                  id: `fl-i-${index + 1}`,
-                                  label: installmentLabel(index, prev.billingCycle),
-                                  amount,
-                                  dueDate: "",
-                                })),
+                                id: existing?.id || `fl-i-${index + 1}`,
+                                label:
+                                  existing?.label ||
+                                  installmentLabel(index, prev.billingCycle),
+                                amount:
+                                  option.key === "fixed"
+                                    ? prev.fixedAmount || existing?.amount || ""
+                                    : existing?.amount || prev.fixedAmount || "",
+                                dueDate: existing?.dueDate || "",
                               };
-                            }
-                            return { ...prev, feeAmountMode: option.key };
+                            });
+                            return {
+                              ...prev,
+                              feeAmountMode: option.key,
+                              installmentCount: String(count),
+                              fixedAmount:
+                                prev.fixedAmount ||
+                                rows[0]?.amount ||
+                                "",
+                              installments: rows,
+                            };
                           });
                         }}
                         className={cn(
@@ -13611,248 +13783,216 @@ function ClassesCard({
                     );
                   })}
                 </div>
+                <p className="text-[11px] text-black/45">
+                  {form.feeAmountMode === "fixed"
+                    ? form.billingCycle === "Term"
+                      ? "One amount applies to every term. Set a due date for each term below."
+                      : "One amount applies to every installment."
+                    : form.billingCycle === "Term"
+                      ? "Enter a separate amount and due date for each term."
+                      : "Enter a separate amount for each installment."}
+                </p>
               </div>
 
-              {form.feeAmountMode === "fixed" ? (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                        {form.billingCycle === "Term" ? "Terms" : "Installments"}
-                      </Label>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                    {form.billingCycle === "Term" ? "Number of terms" : "Number of installments"}
+                  </Label>
+                  <Input
+                    inputMode="numeric"
+                    value={form.installmentCount}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/[^0-9]/g, "");
+                      const count = Math.max(1, Math.floor(Number(raw) || 0));
+                      setForm((prev) => ({
+                        ...prev,
+                        installmentCount: raw,
+                        installments: ensureInstallmentRows(prev, count),
+                      }));
+                    }}
+                    placeholder={form.billingCycle === "Term" ? "4" : "12"}
+                    className="font-mono bg-white"
+                  />
+                </div>
+                {form.feeAmountMode === "fixed" ? (
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                      {form.billingCycle === "Term" ? "Amount per term (₹)" : "Amount each (₹)"}
+                    </Label>
+                    <Input
+                      inputMode="numeric"
+                      value={form.fixedAmount}
+                      onChange={(e) => {
+                        const amount = e.target.value.replace(/[^0-9]/g, "");
+                        setForm((prev) => {
+                          const count = Math.max(
+                            1,
+                            Math.floor(Number(prev.installmentCount) || 0),
+                          );
+                          const rows = ensureInstallmentRows(
+                            { ...prev, fixedAmount: amount },
+                            count,
+                            "fixed",
+                          );
+                          return {
+                            ...prev,
+                            fixedAmount: amount,
+                            installments: rows,
+                          };
+                        });
+                      }}
+                      placeholder="0"
+                      className="font-mono bg-white"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex items-end">
+                    <p className="pb-2 text-[12px] text-black/45">
+                      Set each {form.billingCycle === "Term" ? "term" : "installment"} amount in
+                      the schedule below.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2 rounded-xl border border-[#E8E8EA] bg-white p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    {form.billingCycle === "Term" ? "Term schedule" : "Installment schedule"}
+                  </Label>
+                  {form.feeAmountMode === "custom" ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm((prev) => {
+                          const rows = [
+                            ...ensureInstallmentRows(
+                              prev,
+                              Math.max(1, Math.floor(Number(prev.installmentCount) || 0)),
+                            ),
+                            {
+                              id: `fl-i-${prev.installments.length + 1}-${Date.now()}`,
+                              label: installmentLabel(
+                                Math.max(1, Math.floor(Number(prev.installmentCount) || 0)),
+                                prev.billingCycle,
+                              ),
+                              amount: prev.fixedAmount,
+                              dueDate: "",
+                            },
+                          ];
+                          return {
+                            ...prev,
+                            installments: rows,
+                            installmentCount: String(rows.length),
+                          };
+                        })
+                      }
+                      className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#0F766E] hover:underline"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Add {form.billingCycle === "Term" ? "term" : "installment"}
+                    </button>
+                  ) : null}
+                </div>
+
+                <div
+                  className={cn(
+                    "grid items-end gap-2 px-0.5 text-[10px] font-semibold uppercase tracking-wider text-black/40",
+                    form.feeAmountMode === "custom"
+                      ? "grid-cols-[minmax(0,1fr)_6.5rem_minmax(10rem,1fr)_auto]"
+                      : "grid-cols-[minmax(0,1fr)_6.5rem_minmax(10rem,1fr)]",
+                  )}
+                >
+                  <span>Label</span>
+                  <span>Amount</span>
+                  <span>Due date</span>
+                  {form.feeAmountMode === "custom" ? <span className="sr-only">Remove</span> : null}
+                </div>
+
+                {termScheduleRows.map((row, index) => (
+                  <div
+                    key={row.id}
+                    className={cn(
+                      "grid items-center gap-2",
+                      form.feeAmountMode === "custom"
+                        ? "grid-cols-[minmax(0,1fr)_6.5rem_minmax(10rem,1fr)_auto]"
+                        : "grid-cols-[minmax(0,1fr)_6.5rem_minmax(10rem,1fr)]",
+                    )}
+                  >
+                    <Input
+                      value={row.label}
+                      onChange={(e) => patchInstallmentRow(index, { label: e.target.value })}
+                      className="h-9 bg-[#FAFAFA] text-[13px]"
+                    />
+                    {form.feeAmountMode === "fixed" ? (
+                      <div className="flex h-9 items-center rounded-md border border-[#EFEFEF] bg-[#F7F7F8] px-2.5 font-mono text-[13px] text-black/70">
+                        {row.amount ? `₹ ${Number(row.amount).toLocaleString("en-IN")}` : "—"}
+                      </div>
+                    ) : (
                       <Input
                         inputMode="numeric"
-                        value={form.installmentCount}
-                        onChange={(e) => {
-                          const raw = e.target.value.replace(/[^0-9]/g, "");
-                          const count = Math.max(1, Math.floor(Number(raw) || 0));
-                          setForm((prev) => {
-                            const nextRows = Array.from({ length: count }, (_, index) => {
-                              const existing = prev.installments[index];
-                              return {
-                                id: existing?.id || `fl-i-${index + 1}`,
-                                label:
-                                  existing?.label ||
-                                  installmentLabel(index, prev.billingCycle),
-                                amount: existing?.amount || prev.fixedAmount,
-                                dueDate: existing?.dueDate || "",
-                              };
-                            });
-                            return {
-                              ...prev,
-                              installmentCount: raw,
-                              installments: nextRows,
-                            };
-                          });
-                        }}
-                        placeholder={form.billingCycle === "Term" ? "4" : "12"}
-                        className="font-mono bg-white"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                        Amount each (₹)
-                      </Label>
-                      <Input
-                        inputMode="numeric"
-                        value={form.fixedAmount}
+                        value={row.amount}
                         onChange={(e) =>
-                          setForm({
-                            ...form,
-                            fixedAmount: e.target.value.replace(/[^0-9]/g, ""),
+                          patchInstallmentRow(index, {
+                            amount: e.target.value.replace(/[^0-9]/g, ""),
                           })
                         }
                         placeholder="0"
-                        className="font-mono bg-white"
+                        className="h-9 font-mono bg-white"
                       />
-                    </div>
-                  </div>
-                  {form.billingCycle === "Term" &&
-                  Math.max(1, Math.floor(Number(form.installmentCount) || 0)) > 0 ? (
-                    <div className="space-y-2">
-                      <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                        Term due dates
-                      </Label>
-                      {Array.from(
+                    )}
+                    <DatePicker
+                      value={row.dueDate}
+                      onChange={(dueDate) => patchInstallmentRow(index, { dueDate })}
+                      placeholder="dd/mm/yyyy"
+                      valueFormat="iso"
+                      className="h-9 text-[12px]"
+                      quickPicks={[
+                        { label: "Today", getDate: (t) => t },
                         {
-                          length: Math.max(1, Math.floor(Number(form.installmentCount) || 0)),
+                          label: "+30d",
+                          getDate: (t) =>
+                            new Date(t.getFullYear(), t.getMonth(), t.getDate() + 30),
                         },
-                        (_, index) => {
-                          const row = form.installments[index] ?? {
-                            id: `fl-i-${index + 1}`,
-                            label: installmentLabel(index, form.billingCycle),
-                            amount: form.fixedAmount,
-                            dueDate: "",
-                          };
-                          return (
-                            <div
-                              key={row.id}
-                              className="grid grid-cols-[minmax(0,1fr)_minmax(10.5rem,12rem)] items-center gap-2"
-                            >
-                              <span className="truncate text-[13px] font-medium text-black/70">
-                                {row.label || installmentLabel(index, form.billingCycle)}
-                              </span>
-                              <DatePicker
-                                value={row.dueDate}
-                                onChange={(dueDate) =>
-                                  setForm((prev) => {
-                                    const count = Math.max(
-                                      1,
-                                      Math.floor(Number(prev.installmentCount) || 0),
-                                    );
-                                    const rows = Array.from({ length: count }, (_, i) => {
-                                      const existing = prev.installments[i];
-                                      return {
-                                        id: existing?.id || `fl-i-${i + 1}`,
-                                        label:
-                                          existing?.label ||
-                                          installmentLabel(i, prev.billingCycle),
-                                        amount: existing?.amount || prev.fixedAmount,
-                                        dueDate: existing?.dueDate || "",
-                                      };
-                                    });
-                                    rows[index] = { ...rows[index], dueDate };
-                                    return { ...prev, installments: rows };
-                                  })
-                                }
-                                placeholder="dd/mm/yyyy"
-                                valueFormat="iso"
-                                className="h-9 text-[12px]"
-                                quickPicks={[
-                                  { label: "Today", getDate: (t) => t },
-                                  {
-                                    label: "+30d",
-                                    getDate: (t) =>
-                                      new Date(t.getFullYear(), t.getMonth(), t.getDate() + 30),
-                                  },
-                                ]}
-                              />
-                            </div>
-                          );
-                        },
-                      )}
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {form.installments.map((row, index) => (
-                    <div
-                      key={row.id}
-                      className="grid grid-cols-[minmax(0,1fr)_6.5rem_minmax(10.5rem,12rem)_auto] items-end gap-2"
-                    >
-                      <div className="min-w-0 space-y-1">
-                        {index === 0 && (
-                          <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                            Label
-                          </Label>
-                        )}
-                        <Input
-                          value={row.label}
-                          onChange={(e) =>
-                            setForm({
-                              ...form,
-                              installments: form.installments.map((item) =>
-                                item.id === row.id ? { ...item, label: e.target.value } : item,
-                              ),
-                            })
-                          }
-                          className="h-9 bg-white text-[13px]"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        {index === 0 && (
-                          <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                            Amount
-                          </Label>
-                        )}
-                        <Input
-                          inputMode="numeric"
-                          value={row.amount}
-                          onChange={(e) =>
-                            setForm({
-                              ...form,
-                              installments: form.installments.map((item) =>
-                                item.id === row.id
-                                  ? { ...item, amount: e.target.value.replace(/[^0-9]/g, "") }
-                                  : item,
-                              ),
-                            })
-                          }
-                          className="h-9 font-mono bg-white"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        {index === 0 && (
-                          <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                            Due date
-                          </Label>
-                        )}
-                        <DatePicker
-                          value={row.dueDate}
-                          onChange={(dueDate) =>
-                            setForm({
-                              ...form,
-                              installments: form.installments.map((item) =>
-                                item.id === row.id ? { ...item, dueDate } : item,
-                              ),
-                            })
-                          }
-                          placeholder="dd/mm/yyyy"
-                          valueFormat="iso"
-                          className="h-9 text-[12px]"
-                          quickPicks={[
-                            { label: "Today", getDate: (t) => t },
-                            {
-                              label: "+30d",
-                              getDate: (t) =>
-                                new Date(t.getFullYear(), t.getMonth(), t.getDate() + 30),
-                            },
-                          ]}
-                        />
-                      </div>
+                      ]}
+                    />
+                    {form.feeAmountMode === "custom" ? (
                       <button
                         type="button"
                         aria-label={`Remove ${row.label}`}
                         onClick={() =>
-                          setForm({
-                            ...form,
-                            installments: form.installments.filter((item) => item.id !== row.id),
-                            installmentCount: String(
-                              Math.max(1, form.installments.length - 1),
-                            ),
+                          setForm((prev) => {
+                            const rows = ensureInstallmentRows(
+                              prev,
+                              Math.max(1, Math.floor(Number(prev.installmentCount) || 0)),
+                            ).filter((_, i) => i !== index);
+                            const nextRows =
+                              rows.length > 0
+                                ? rows
+                                : [
+                                    {
+                                      id: `fl-i-1`,
+                                      label: installmentLabel(0, prev.billingCycle),
+                                      amount: prev.fixedAmount,
+                                      dueDate: "",
+                                    },
+                                  ];
+                            return {
+                              ...prev,
+                              installments: nextRows,
+                              installmentCount: String(nextRows.length),
+                            };
                           })
                         }
-                        className="mb-0.5 grid h-9 w-9 place-items-center rounded-full text-black/40 hover:bg-[#FEE2E2] hover:text-[#EF4444]"
+                        className="grid h-9 w-9 place-items-center rounded-full text-black/40 hover:bg-[#FEE2E2] hover:text-[#EF4444]"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setForm({
-                        ...form,
-                        installments: [
-                          ...form.installments,
-                          {
-                            id: `fl-i-${form.installments.length + 1}-${Date.now()}`,
-                            label: installmentLabel(form.installments.length, form.billingCycle),
-                            amount: form.fixedAmount,
-                            dueDate: "",
-                          },
-                        ],
-                        installmentCount: String(form.installments.length + 1),
-                      })
-                    }
-                    className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#0F766E] hover:underline"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Add installment
-                  </button>
-                </div>
-              )}
+                    ) : null}
+                  </div>
+                ))}
+              </div>
 
               {form.billingCycle === "Monthly" ? (
                 <div className="space-y-1.5">

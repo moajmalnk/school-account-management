@@ -40,6 +40,27 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  buildStudentFeeStatement,
+  studentFeeBreaksForYear,
+  studentSchedulePeriodLabels,
+  unpaidAmountCoveredByBreak,
+  type StudentLedgerRow as LedgerRow,
+  type StudentLedgerStatus as LedgerStatus,
+  type StudentReceipt as Receipt,
+} from "@/lib/student-fees";
+import { ShareParentLinkDialog } from "@/components/school/ShareParentLinkDialog";
+import { downloadReceiptPdf, downloadStudentFeeReportPdf, receiptBrandingFromSchool } from "@/lib/finance-export";
+import { sendWhatsAppNotify, toNotifyWhatsAppNumber } from "@/lib/whatsapp-notify";
+import {
+  apiCreateFeeBreak,
+  apiDeleteFeeBreak,
+  apiDeleteStudent,
+  apiUpdateFeeBreak,
+  apiUpsertStudent,
+} from "@/lib/api/records";
+import { getApiToken } from "@/lib/api/client";
+import { useAuth } from "@/lib/auth";
+import {
   createStudentShareToken,
   DEFAULT_STUDENT_DOCUMENTS,
   transportBusPointOptions,
@@ -50,18 +71,9 @@ import {
   type StaffDocument,
   type StaffDocumentAttachment,
   type Student,
+  type StudentFeeBreak,
+  type StudentFeeBreakAppliesTo,
 } from "@/lib/tenant-store";
-import {
-  buildStudentFeeStatement,
-  type StudentLedgerRow as LedgerRow,
-  type StudentLedgerStatus as LedgerStatus,
-  type StudentReceipt as Receipt,
-} from "@/lib/student-fees";
-import { ShareParentLinkDialog } from "@/components/school/ShareParentLinkDialog";
-import { downloadReceiptPdf, downloadStudentFeeReportPdf, receiptBrandingFromSchool } from "@/lib/finance-export";
-import { sendWhatsAppNotify, toNotifyWhatsAppNumber } from "@/lib/whatsapp-notify";
-import { apiDeleteStudent, apiUpsertStudent } from "@/lib/api/records";
-import { useAuth } from "@/lib/auth";
 import {
   EnrollmentStatusBadge,
   isRecordActive,
