@@ -10084,7 +10084,11 @@ function ReceivePayment() {
                                 disabled={periodChoices.length === 0}
                               />
                               <p className="mt-1 text-[10.5px] text-black/45 dark:text-zinc-500">
-                                Select one or more · creates a line for each
+                                {periodChoices.length === 0
+                                  ? selected
+                                    ? "All periods for this fee are on break — manage breaks on the student Payments tab"
+                                    : "No fee periods available"
+                                  : "Select one or more · creates a line for each"}
                               </p>
                             </>
                           ) : (
