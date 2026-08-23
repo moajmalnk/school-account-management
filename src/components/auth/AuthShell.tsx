@@ -20,7 +20,7 @@ export function AuthShell({
       <div className="w-full max-w-md">
         <div className="mb-5 flex flex-col items-center text-center sm:mb-8">
           <Link
-            to="/login"
+            to="/"
             className="flex items-center gap-3 rounded-xl border border-white/70 bg-white/80 px-3 py-2.5 shadow-[0_14px_44px_-32px_rgba(0,0,0,0.45)] backdrop-blur-xl transition-opacity hover:opacity-90"
           >
             <FeezoBrand
