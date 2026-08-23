@@ -290,7 +290,7 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
               error={errors.schoolType}
             >
               <Select
-                value={form.schoolType || undefined}
+                value={form.schoolType}
                 onValueChange={(v) => patch("schoolType", v)}
               >
                 <SelectTrigger id="schoolType" className={signupSelectTriggerClass}>
@@ -331,7 +331,7 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
           <div className="grid gap-4 sm:grid-cols-2">
             <Field id="state" label="State" required error={errors.state}>
               <Select
-                value={form.state || undefined}
+                value={form.state}
                 onValueChange={(v) => patch("state", v)}
               >
                 <SelectTrigger id="state" className={signupSelectTriggerClass}>
@@ -352,7 +352,7 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
             </Field>
             <Field id="district" label="District" required error={errors.district}>
               <Select
-                value={form.district || undefined}
+                value={form.district}
                 onValueChange={(v) => patch("district", v)}
                 disabled={!form.state}
               >
