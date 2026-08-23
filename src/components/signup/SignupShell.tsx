@@ -75,13 +75,14 @@ export function SignupShell({
               return (
                 <li key={s.id} className="flex min-w-0 flex-1 items-center">
                   {clickable ? (
-                    <a
-                      href={`/signup/${s.slug}`}
+                    <Link
+                      to={"/signup/$step" as never}
+                      params={{ step: s.slug } as never}
                       className="flex min-w-0 flex-col items-center gap-1.5"
                       aria-current={active ? "step" : undefined}
                     >
                       {marker}
-                    </a>
+                    </Link>
                   ) : (
                     <div className="flex min-w-0 flex-col items-center gap-1.5">
                       {marker}

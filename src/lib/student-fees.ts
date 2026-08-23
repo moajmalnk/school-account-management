@@ -13,11 +13,13 @@ import {
   type FeeTerm,
   type Payment,
   type Student,
+  type StudentFeeBreak,
+  type StudentFeeBreakAppliesTo,
   type TransportFeeShift,
   type TransportRoute,
 } from "@/lib/tenant-store";
 
-export type StudentLedgerStatus = "Paid" | "Partially Paid" | "Overdue";
+export type StudentLedgerStatus = "Paid" | "Partially Paid" | "Overdue" | "On Break";
 
 export type StudentLedgerRow = {
   date: string;
@@ -27,6 +29,8 @@ export type StudentLedgerRow = {
   paid: number;
   balance: number;
   status: StudentLedgerStatus;
+  /** Schedule period label when known (Term 2, May, …) */
+  periodLabel?: string;
 };
 
 export type StudentReceipt = {
@@ -101,6 +105,73 @@ function isVehicleLineLabel(label: string): boolean {
   return /vehicle|transport|bus/i.test(label);
 }
 
+/** True when a charge/installment description covers the given period label. */
+export function feePeriodLabelMatches(chargeDesc: string, periodLabel: string): boolean {
+  const needle = periodLabel.trim().toLowerCase();
+  const hay = chargeDesc.trim().toLowerCase();
+  if (!needle || !hay) return false;
+  if (hay === needle) return true;
+  const parts = hay.split(/[·|,/–—-]/).map((p) => p.trim()).filter(Boolean);
+  if (parts.some((p) => p === needle)) return true;
+  // Word-boundary-ish: avoid "May" matching "Maya"
+  const re = new RegExp(`(?:^|[\\s·|,/])${needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:$|[\\s·|,/])`, "i");
+  return re.test(` ${hay} `);
+}
+
+function appliesToKind(appliesTo: StudentFeeBreakAppliesTo, kind: "tuition" | "vehicle"): boolean {
+  return appliesTo === "both" || appliesTo === kind;
+}
+
+export function studentFeeBreaksForYear(
+  breaks: StudentFeeBreak[] | undefined,
+  studentId: string,
+  academicYear: string,
+): StudentFeeBreak[] {
+  if (!breaks?.length) return [];
+  return breaks.filter(
+    (b) =>
+      b.studentId === studentId &&
+      (!b.academicYear || !academicYear || b.academicYear === academicYear),
+  );
+}
+
+export function isPeriodOnBreak(
+  breaks: StudentFeeBreak[] | undefined,
+  studentId: string,
+  academicYear: string,
+  kind: "tuition" | "vehicle",
+  periodLabel: string,
+): boolean {
+  const needle = periodLabel.trim();
+  if (!needle) return false;
+  return studentFeeBreaksForYear(breaks, studentId, academicYear).some(
+    (b) =>
+      appliesToKind(b.appliesTo, kind) &&
+      b.periods.some((p) => feePeriodLabelMatches(needle, p) || feePeriodLabelMatches(p, needle)),
+  );
+}
+
+export function isChargeOnBreak(
+  breaks: StudentFeeBreak[] | undefined,
+  studentId: string,
+  academicYear: string,
+  kind: "tuition" | "vehicle",
+  chargeDesc: string,
+  periodLabel?: string,
+): boolean {
+  const label = (periodLabel || chargeDesc).trim();
+  if (!label) return false;
+  return studentFeeBreaksForYear(breaks, studentId, academicYear).some((b) => {
+    if (!appliesToKind(b.appliesTo, kind)) return false;
+    return b.periods.some(
+      (p) =>
+        feePeriodLabelMatches(label, p) ||
+        feePeriodLabelMatches(chargeDesc, p) ||
+        feePeriodLabelMatches(p, label),
+    );
+  });
+}
+
 type ChargeDraft = {
   key: string;
   date: string;
@@ -108,6 +179,8 @@ type ChargeDraft = {
   due: string;
   charge: number;
   paid: number;
+  periodLabel?: string;
+  onBreak?: boolean;
 };
 
 function expectedTuitionChargeLines(
@@ -129,6 +202,7 @@ function expectedTuitionChargeLines(
       due,
       charge: line.amount,
       paid: 0,
+      periodLabel: line.label,
     };
   });
 }
@@ -164,6 +238,7 @@ function expectedVehicleChargeLines(
           due,
           charge: line.amount,
           paid: 0,
+          periodLabel: line.label,
         };
       });
     }
@@ -183,6 +258,7 @@ function expectedVehicleChargeLines(
           due,
           charge: line.amount,
           paid: 0,
+          periodLabel: line.label,
         };
       });
     }
@@ -199,6 +275,7 @@ function expectedVehicleChargeLines(
         due: "—",
         charge: transport.amount,
         paid: 0,
+        periodLabel: "Vehicle Fee",
       },
     ];
   }
@@ -212,11 +289,32 @@ function expectedVehicleChargeLines(
         due: "—",
         charge: classConfig.vehicleFeeAmount,
         paid: 0,
+        periodLabel: "Vehicle Fee",
       },
     ];
   }
 
   return [];
+}
+
+function markBreaksOnCharges(
+  charges: ChargeDraft[],
+  breaks: StudentFeeBreak[] | undefined,
+  studentId: string,
+  academicYear: string,
+  kind: "tuition" | "vehicle",
+): ChargeDraft[] {
+  return charges.map((c) => {
+    const onBreak = isChargeOnBreak(
+      breaks,
+      studentId,
+      academicYear,
+      kind,
+      c.desc,
+      c.periodLabel,
+    );
+    return onBreak ? { ...c, onBreak: true } : c;
+  });
 }
 
 function allocatePaymentsToCharges(
@@ -235,16 +333,20 @@ function allocatePaymentsToCharges(
       const needle = period.trim().toLowerCase();
       matchedIndex = next.findIndex(
         (c) =>
+          !c.onBreak &&
           c.paid < c.charge &&
           (c.desc.trim().toLowerCase() === needle ||
+            c.periodLabel?.trim().toLowerCase() === needle ||
             c.desc.toLowerCase().includes(needle) ||
-            needle.includes(c.desc.toLowerCase())),
+            needle.includes(c.desc.toLowerCase()) ||
+            (c.periodLabel ? needle.includes(c.periodLabel.toLowerCase()) : false)),
       );
     }
     if (matchedIndex < 0 && payment.cat) {
       const cat = payment.cat.trim().toLowerCase();
       matchedIndex = next.findIndex(
         (c) =>
+          !c.onBreak &&
           c.paid < c.charge &&
           (c.desc.toLowerCase().includes(cat) || cat.includes(c.desc.toLowerCase())),
       );
@@ -252,11 +354,13 @@ function allocatePaymentsToCharges(
     if (matchedIndex < 0) {
       matchedIndex = next.findIndex(
         (c) =>
-          c.paid < c.charge && /installment|term|annual|vehicle|transport|bus/i.test(c.desc),
+          !c.onBreak &&
+          c.paid < c.charge &&
+          /installment|term|annual|vehicle|transport|bus/i.test(c.desc),
       );
     }
     if (matchedIndex < 0 && termKind) {
-      matchedIndex = next.findIndex((c) => c.paid < c.charge);
+      matchedIndex = next.findIndex((c) => !c.onBreak && c.paid < c.charge);
     }
     if (matchedIndex < 0) {
       leftovers.push(payment);
@@ -285,10 +389,23 @@ function leftoverPaymentLine(payment: Payment): ChargeDraft {
     due: "—",
     charge: payment.amount,
     paid: payment.amount,
+    periodLabel: period || undefined,
   };
 }
 
 function toLedgerRow(draft: ChargeDraft): StudentLedgerRow {
+  if (draft.onBreak) {
+    return {
+      date: draft.date,
+      desc: draft.desc,
+      due: formatDisplayDate(draft.due),
+      charge: draft.charge,
+      paid: draft.paid,
+      balance: 0,
+      status: "On Break",
+      periodLabel: draft.periodLabel,
+    };
+  }
   const charge = Math.max(draft.charge, draft.paid);
   const balance = Math.max(0, charge - draft.paid);
   return {
@@ -299,11 +416,16 @@ function toLedgerRow(draft: ChargeDraft): StudentLedgerRow {
     paid: draft.paid,
     balance,
     status: ledgerStatus(charge, draft.paid, draft.due),
+    periodLabel: draft.periodLabel,
   };
 }
 
 function sortLedger(rows: StudentLedgerRow[]): StudentLedgerRow[] {
   return rows.slice().sort((a, b) => {
+    // Keep On Break after payable rows, but still group by balance then name
+    const aBreak = a.status === "On Break" ? 1 : 0;
+    const bBreak = b.status === "On Break" ? 1 : 0;
+    if (aBreak !== bBreak) return aBreak - bBreak;
     if (a.balance !== b.balance) return b.balance - a.balance;
     return a.desc.localeCompare(b.desc);
   });
@@ -334,20 +456,24 @@ function summarizeSection(
   const ledger = sortLedger(
     drafts
       .map(toLedgerRow)
-      .filter((row) => row.charge > 0 || row.paid > 0),
+      .filter((row) => row.charge > 0 || row.paid > 0 || row.status === "On Break"),
   );
 
   const receipts = mapReceipts(payments);
   const totalPaid = receipts.reduce((s, r) => s + r.amount, 0);
-  const totalFee = Math.max(ledger.reduce((s, r) => s + r.charge, 0), totalPaid);
-  const ledgerOutstanding = ledger.reduce((s, r) => s + r.balance, 0);
+  const billable = ledger.filter((r) => r.status !== "On Break");
+  const totalFee = Math.max(
+    billable.reduce((s, r) => s + r.charge, 0),
+    totalPaid,
+  );
+  const ledgerOutstanding = billable.reduce((s, r) => s + r.balance, 0);
   const totalDue = Math.max(ledgerOutstanding, Math.max(0, totalFee - totalPaid));
 
   return {
     totalFee,
     totalPaid,
     totalDue,
-    overdue: totalDue > 0 && ledger.some((r) => r.status === "Overdue"),
+    overdue: totalDue > 0 && billable.some((r) => r.status === "Overdue"),
     ledger,
     receipts,
   };
@@ -363,11 +489,9 @@ function mergeSections(
     String(b.date).localeCompare(String(a.date)),
   );
   const totalPaid = tuition.totalPaid + vehicle.totalPaid;
-  const totalFee = Math.max(
-    tuition.totalFee + vehicle.totalFee,
-    totalPaid,
-  );
-  const ledgerOutstanding = ledger.reduce((s, r) => s + r.balance, 0);
+  const totalFee = Math.max(tuition.totalFee + vehicle.totalFee, totalPaid);
+  const billable = ledger.filter((r) => r.status !== "On Break");
+  const ledgerOutstanding = billable.reduce((s, r) => s + r.balance, 0);
   const totalDue = Math.max(
     ledgerOutstanding,
     Math.max(0, studentDue),
@@ -378,7 +502,7 @@ function mergeSections(
     totalFee,
     totalPaid,
     totalDue,
-    overdue: totalDue > 0 && ledger.some((r) => r.status === "Overdue"),
+    overdue: totalDue > 0 && billable.some((r) => r.status === "Overdue"),
     ledger,
     receipts,
   };
@@ -395,9 +519,11 @@ export function buildStudentFeeStatement(input: {
   feeTerms: FeeTerm[];
   transportRoutes?: TransportRoute[];
   academicYear: string;
+  feeBreaks?: StudentFeeBreak[];
 }): StudentFeeStatement {
   const { student, academicYear } = input;
   const transportRoutes = input.transportRoutes ?? [];
+  const feeBreaks = input.feeBreaks ?? [];
   const yearPayments = filterByAcademicYear(input.payments, academicYear);
   const yearTerms = filterByAcademicYear(input.feeTerms, academicYear);
   const studentPayments = yearPayments
@@ -409,12 +535,19 @@ export function buildStudentFeeStatement(input: {
   const vehiclePayments = studentPayments.filter((p) => isVehiclePayment(p));
 
   const classConfig = input.classes.find((c) => c.className === student.cls);
-  const tuitionExpected = expectedTuitionChargeLines(classConfig, yearTerms);
-  const vehicleExpected = expectedVehicleChargeLines(
-    student,
-    classConfig,
-    transportRoutes,
-    yearTerms,
+  const tuitionExpected = markBreaksOnCharges(
+    expectedTuitionChargeLines(classConfig, yearTerms),
+    feeBreaks,
+    student.id,
+    academicYear,
+    "tuition",
+  );
+  const vehicleExpected = markBreaksOnCharges(
+    expectedVehicleChargeLines(student, classConfig, transportRoutes, yearTerms),
+    feeBreaks,
+    student.id,
+    academicYear,
+    "vehicle",
   );
 
   const tuition = summarizeSection(tuitionExpected, tuitionPayments);
@@ -438,10 +571,11 @@ export function buildStudentFeeStatement(input: {
     drop: student.busPoint2?.trim() || undefined,
   };
 
-  const combined = mergeSections(tuition, vehicle, student.due);
-
-  // Surface unmatched student.due when ledger doesn't explain it.
-  if (student.due > combined.totalDue && combined.ledger.length === 0) {
+  // student.due may still include amounts covered by breaks until adjusted — prefer ledger.
+  const combined = mergeSections(tuition, vehicle, 0);
+  if (student.due > 0 && combined.totalDue === 0 && combined.ledger.every((r) => r.status === "On Break" || r.balance <= 0)) {
+    // All remaining schedule is on break / paid — do not surface stale due as overdue.
+  } else if (student.due > combined.totalDue && combined.ledger.filter((r) => r.status !== "On Break").length === 0) {
     combined.ledger.push({
       date: "—",
       desc: "Outstanding Balance",
@@ -454,6 +588,15 @@ export function buildStudentFeeStatement(input: {
     combined.totalFee = Math.max(combined.totalFee, student.due);
     combined.totalDue = student.due;
     combined.overdue = true;
+  } else {
+    // Cap displayed due to ledger outstanding when breaks reduced billable schedule
+    const ledgerOutstanding = combined.ledger
+      .filter((r) => r.status !== "On Break")
+      .reduce((s, r) => s + r.balance, 0);
+    combined.totalDue = Math.max(ledgerOutstanding, Math.max(0, combined.totalFee - combined.totalPaid));
+    combined.overdue =
+      combined.totalDue > 0 &&
+      combined.ledger.some((r) => r.status === "Overdue");
   }
 
   return {
@@ -461,4 +604,77 @@ export function buildStudentFeeStatement(input: {
     tuition,
     vehicle,
   };
+}
+
+/** Period labels available on a student's tuition / vehicle schedule. */
+export function studentSchedulePeriodLabels(input: {
+  student: Student;
+  classes: ClassConfig[];
+  feeTerms: FeeTerm[];
+  transportRoutes?: TransportRoute[];
+  academicYear: string;
+  kind: "tuition" | "vehicle" | "both";
+}): string[] {
+  const yearTerms = filterByAcademicYear(input.feeTerms, input.academicYear);
+  const classConfig = input.classes.find((c) => c.className === input.student.cls);
+  const labels: string[] = [];
+  const seen = new Set<string>();
+  const push = (label: string) => {
+    const key = label.trim().toLowerCase();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    labels.push(label.trim());
+  };
+
+  if (input.kind === "tuition" || input.kind === "both") {
+    for (const line of expectedTuitionChargeLines(classConfig, yearTerms)) {
+      push(line.periodLabel || line.desc);
+    }
+  }
+  if (input.kind === "vehicle" || input.kind === "both") {
+    for (const line of expectedVehicleChargeLines(
+      input.student,
+      classConfig,
+      input.transportRoutes ?? [],
+      yearTerms,
+    )) {
+      push(line.periodLabel || line.desc);
+    }
+  }
+  return labels;
+}
+
+/**
+ * Unpaid scheduled amount covered by a proposed break (for student.due adjustment).
+ * Positive = amount that would no longer be owed.
+ */
+export function unpaidAmountCoveredByBreak(input: {
+  student: Student;
+  payments: Payment[];
+  classes: ClassConfig[];
+  feeTerms: FeeTerm[];
+  transportRoutes?: TransportRoute[];
+  academicYear: string;
+  appliesTo: StudentFeeBreakAppliesTo;
+  periods: string[];
+  /** Existing breaks excluding the one being edited */
+  feeBreaks?: StudentFeeBreak[];
+}): number {
+  const draftBreak: StudentFeeBreak = {
+    id: "__draft__",
+    studentId: input.student.id,
+    academicYear: input.academicYear,
+    appliesTo: input.appliesTo,
+    periods: input.periods,
+  };
+  const withoutDraft = (input.feeBreaks ?? []).filter((b) => b.id !== "__draft__");
+  const before = buildStudentFeeStatement({
+    ...input,
+    feeBreaks: withoutDraft,
+  });
+  const after = buildStudentFeeStatement({
+    ...input,
+    feeBreaks: [...withoutDraft, draftBreak],
+  });
+  return Math.max(0, before.totalDue - after.totalDue);
 }

@@ -247,3 +247,97 @@ export async function apiListDisbursements(): Promise<DisbursementPayload[]> {
   if (!hasToken()) return [];
   return apiRequest<DisbursementPayload[]>("/api/finance/disbursements.php");
 }
+
+export type StudentFeeBreakPayload = {
+  id?: string;
+  studentId: string;
+  academicYear: string;
+  appliesTo: "tuition" | "vehicle" | "both";
+  periods: string[];
+  reason?: string | null;
+  /** Signed delta applied to student.due (negative reduces due). */
+  dueAdjustment?: number;
+};
+
+export type StudentFeeBreakResponse = StudentFeeBreakPayload & {
+  id: string;
+  studentDue?: number;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
+export async function apiListFeeBreaks(opts?: {
+  studentId?: string;
+  academicYear?: string;
+}): Promise<StudentFeeBreakResponse[]> {
+  if (!hasToken()) return [];
+  const params = new URLSearchParams();
+  if (opts?.studentId) params.set("studentId", opts.studentId);
+  if (opts?.academicYear) params.set("academicYear", opts.academicYear);
+  const qs = params.toString();
+  return apiRequest<StudentFeeBreakResponse[]>(
+    `/api/finance/fee-breaks.php${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export async function apiCreateFeeBreak(
+  payload: StudentFeeBreakPayload,
+): Promise<StudentFeeBreakResponse> {
+  if (!hasToken()) {
+    throw new Error("Not signed in to API — log in again to save fee breaks");
+  }
+  const { id: _id, ...body } = payload;
+  return apiRequest<StudentFeeBreakResponse>("/api/finance/fee-breaks.php", {
+    method: "POST",
+    body,
+  });
+}
+
+export async function apiUpdateFeeBreak(
+  payload: StudentFeeBreakPayload & { id: string },
+): Promise<StudentFeeBreakResponse> {
+  if (!hasToken()) {
+    throw new Error("Not signed in to API — log in again to update fee breaks");
+  }
+  try {
+    return await apiRequest<StudentFeeBreakResponse>("/api/finance/fee-breaks.php", {
+      method: "POST",
+      body: { ...payload, _update: true },
+    });
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 405) {
+      return mutate<StudentFeeBreakResponse>("/api/finance/fee-breaks.php", payload, [
+        "PUT",
+        "PATCH",
+      ]);
+    }
+    throw err;
+  }
+}
+
+export async function apiDeleteFeeBreak(
+  id: string,
+  extras?: { dueAdjustment?: number },
+): Promise<{ id: string; deleted: boolean; studentDue?: number }> {
+  if (!hasToken()) {
+    throw new Error("Not signed in to API — log in again to delete fee breaks");
+  }
+  try {
+    return await apiRequest("/api/finance/fee-breaks.php", {
+      method: "POST",
+      body: { id, _delete: true, dueAdjustment: extras?.dueAdjustment ?? 0 },
+    });
+  } catch (err) {
+    try {
+      return await apiRequest(
+        `/api/finance/fee-breaks.php?id=${encodeURIComponent(id)}`,
+        {
+          method: "DELETE",
+          body: { dueAdjustment: extras?.dueAdjustment ?? 0 },
+        },
+      );
+    } catch {
+      throw err;
+    }
+  }
+}

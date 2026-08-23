@@ -46,9 +46,10 @@ function goToSignupStep(
   replace = false,
 ) {
   void navigate({
-    href: `/signup/${step}`,
+    to: "/signup/$step",
+    params: { step },
     replace,
-  });
+  } as never);
 }
 
 export function SignupWizard({ stepSlug }: { stepSlug: string }) {
@@ -134,7 +135,39 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
       e.agreeTerms = "Please agree to continue";
     }
     setErrors(e);
-    return Object.keys(e).length === 0;
+    const keys = Object.keys(e) as (keyof SignupFormState)[];
+    if (keys.length === 0) return true;
+
+    const firstKey = keys[0];
+    const labels: Partial<Record<keyof SignupFormState, string>> = {
+      schoolName: "School name",
+      schoolCode: "School code",
+      schoolType: "School type",
+      phone: "Phone number",
+      address: "Address",
+      state: "State",
+      district: "District",
+      schoolEmail: "School email",
+      subdomain: "Workspace URL",
+      adminName: "Administrator name",
+      adminMobile: "Administrator mobile",
+      adminEmail: "Administrator email",
+      password: "Password",
+      passwordConfirm: "Password confirmation",
+      tier: "Package",
+      agreeTerms: "Terms agreement",
+    };
+    toast.error("Please complete the required fields", {
+      description: labels[firstKey] ? `Missing: ${labels[firstKey]}` : e[firstKey],
+    });
+    window.setTimeout(() => {
+      const el =
+        document.getElementById(String(firstKey)) ??
+        document.querySelector(`[data-signup-field="${String(firstKey)}"]`);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (el instanceof HTMLElement) el.focus({ preventScroll: true });
+    }, 50);
+    return false;
   };
 
   const next = () => {
@@ -293,7 +326,11 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
                 value={form.schoolType}
                 onValueChange={(v) => patch("schoolType", v)}
               >
-                <SelectTrigger id="schoolType" className={signupSelectTriggerClass}>
+                <SelectTrigger
+                  id="schoolType"
+                  data-signup-field="schoolType"
+                  className={signupSelectTriggerClass}
+                >
                   <SelectValue placeholder="Select School Type" />
                 </SelectTrigger>
                 <SelectContent className={signupSelectContentClass}>
@@ -334,7 +371,11 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
                 value={form.state}
                 onValueChange={(v) => patch("state", v)}
               >
-                <SelectTrigger id="state" className={signupSelectTriggerClass}>
+                <SelectTrigger
+                  id="state"
+                  data-signup-field="state"
+                  className={signupSelectTriggerClass}
+                >
                   <SelectValue placeholder="Select state" />
                 </SelectTrigger>
                 <SelectContent className={signupSelectContentClass}>
@@ -358,6 +399,7 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
               >
                 <SelectTrigger
                   id="district"
+                  data-signup-field="district"
                   className={signupSelectTriggerClass}
                 >
                   <SelectValue

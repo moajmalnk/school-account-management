@@ -806,6 +806,21 @@ export type FeeTermKind = "tuition" | "vehicle";
 /** Whether this period is a multi-month term or a single calendar month */
 export type FeePeriodMode = "term" | "month";
 
+/** Per-student exemption from billing selected fee periods */
+export type StudentFeeBreakAppliesTo = "tuition" | "vehicle" | "both";
+
+export type StudentFeeBreak = {
+  id: string;
+  studentId: string;
+  academicYear: string;
+  appliesTo: StudentFeeBreakAppliesTo;
+  /** Schedule period labels · e.g. "May", "Term 2" */
+  periods: string[];
+  reason?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
 export type FeeTerm = {
   id: string;
   kind: FeeTermKind;
@@ -1291,6 +1306,38 @@ export function normalizeFeeTerm(
     ...(endDate ? { endDate } : {}),
     ...(feeAmount !== undefined ? { feeAmount } : {}),
     ...(coverage ? { coverage } : {}),
+  };
+}
+
+export function normalizeStudentFeeBreak(
+  raw: Partial<StudentFeeBreak> & Pick<StudentFeeBreak, "id" | "studentId">,
+): StudentFeeBreak | null {
+  const id = raw.id?.trim();
+  const studentId = raw.studentId?.trim();
+  if (!id || !studentId) return null;
+  const appliesRaw = String(raw.appliesTo ?? "both").toLowerCase();
+  const appliesTo: StudentFeeBreakAppliesTo =
+    appliesRaw === "tuition" || appliesRaw === "vehicle" ? appliesRaw : "both";
+  const periods = Array.isArray(raw.periods)
+    ? raw.periods
+        .map((p) => String(p ?? "").trim())
+        .filter(Boolean)
+        .filter((p, i, arr) => arr.findIndex((x) => x.toLowerCase() === p.toLowerCase()) === i)
+    : [];
+  if (periods.length === 0) return null;
+  const academicYear =
+    typeof raw.academicYear === "string" && raw.academicYear.trim()
+      ? raw.academicYear.trim()
+      : "";
+  return {
+    id,
+    studentId,
+    academicYear,
+    appliesTo,
+    periods,
+    reason: raw.reason?.trim() || null,
+    createdAt: raw.createdAt ?? null,
+    updatedAt: raw.updatedAt ?? null,
   };
 }
 
@@ -3544,6 +3591,7 @@ type Snapshot = {
   transportVehicles: TransportVehicle[];
   paymentCategories: PaymentCategory[];
   feeTerms: FeeTerm[];
+  studentFeeBreaks: StudentFeeBreak[];
   studentYearLedgers: StudentYearLedger[];
   academicYears: string[];
   /** Years closed for day-to-day posting (still visible for history). */
@@ -3588,6 +3636,8 @@ type TenantStoreValue = {
   setFeeTerms: Dispatch<SetStateAction<FeeTerm[]>>;
   /** Fee periods for the active academic year. */
   activeFeeTerms: FeeTerm[];
+  studentFeeBreaks: StudentFeeBreak[];
+  setStudentFeeBreaks: Dispatch<SetStateAction<StudentFeeBreak[]>>;
   studentYearLedgers: StudentYearLedger[];
   setStudentYearLedgers: Dispatch<SetStateAction<StudentYearLedger[]>>;
   academicYears: string[];
@@ -3897,6 +3947,15 @@ function parseSnapshot(raw: string): Snapshot | null {
       : [...SEED_VEHICLES],
     paymentCategories: normalizePaymentCategories(parsed.paymentCategories),
     feeTerms: migratedFeeTerms,
+    studentFeeBreaks: Array.isArray((parsed as Partial<Snapshot>).studentFeeBreaks)
+      ? ((parsed as Partial<Snapshot>).studentFeeBreaks as Partial<StudentFeeBreak>[])
+          .map((b) =>
+            normalizeStudentFeeBreak(
+              b as Partial<StudentFeeBreak> & Pick<StudentFeeBreak, "id" | "studentId">,
+            ),
+          )
+          .filter((b): b is StudentFeeBreak => b !== null)
+      : [],
     studentYearLedgers,
     academicYears: ensureAcademicYearInList(
       Array.isArray(parsed.academicYears)
@@ -4376,6 +4435,9 @@ export function TenantStoreProvider({
   const [feeTerms, setFeeTerms] = useState<FeeTerm[]>(() =>
     liveApi ? (cachedSnapshot?.feeTerms ?? []) : SEED_FEE_TERMS,
   );
+  const [studentFeeBreaks, setStudentFeeBreaks] = useState<StudentFeeBreak[]>(() =>
+    liveApi ? (cachedSnapshot?.studentFeeBreaks ?? []) : [],
+  );
   const [studentYearLedgers, setStudentYearLedgers] = useState<StudentYearLedger[]>(() =>
     liveApi ? (cachedSnapshot?.studentYearLedgers ?? []) : SEED_STUDENT_YEAR_LEDGERS,
   );
@@ -4471,6 +4533,17 @@ export function TenantStoreProvider({
           ? []
           : SEED_FEE_TERMS,
     );
+    setStudentFeeBreaks(
+      Array.isArray(snap.studentFeeBreaks)
+        ? snap.studentFeeBreaks
+            .map((b) =>
+              normalizeStudentFeeBreak(
+                b as Partial<StudentFeeBreak> & Pick<StudentFeeBreak, "id" | "studentId">,
+              ),
+            )
+            .filter((b): b is StudentFeeBreak => b !== null)
+        : [],
+    );
     setStudentYearLedgers(
       snap.studentYearLedgers?.length
         ? snap.studentYearLedgers
@@ -4502,6 +4575,7 @@ export function TenantStoreProvider({
       dashboardTodos: string[];
       dashboardNote: string;
       activeBranchId: string;
+      studentFeeBreaks?: StudentFeeBreak[];
     }) => {
       setStudents(Array.isArray(data.students) ? data.students : []);
       setStaff(
@@ -4512,6 +4586,17 @@ export function TenantStoreProvider({
           : [],
       );
       setPayments(data.payments);
+      if (data.studentFeeBreaks) {
+        setStudentFeeBreaks(
+          data.studentFeeBreaks
+            .map((b) =>
+              normalizeStudentFeeBreak(
+                b as Partial<StudentFeeBreak> & Pick<StudentFeeBreak, "id" | "studentId">,
+              ),
+            )
+            .filter((b): b is StudentFeeBreak => b !== null),
+        );
+      }
       setStudentYearLedgers(
         data.studentYearLedgers?.length
           ? data.studentYearLedgers
@@ -4576,6 +4661,7 @@ export function TenantStoreProvider({
               transportVehicles: remote.transportVehicles,
               paymentCategories: remote.paymentCategories,
               feeTerms: remote.feeTerms,
+              studentFeeBreaks: remote.studentFeeBreaks ?? [],
               studentYearLedgers: reconcileLedgersWithStudents(
                 remote.students,
                 mergedLedgers,
@@ -4632,6 +4718,7 @@ export function TenantStoreProvider({
             transportVehicles: [],
             paymentCategories: [],
             feeTerms: [],
+            studentFeeBreaks: [],
             studentYearLedgers: [],
             academicYears: [...SEED_ACADEMIC_YEARS],
             closedAcademicYears: [],
@@ -4761,6 +4848,7 @@ export function TenantStoreProvider({
         transportVehicles,
         paymentCategories,
         feeTerms,
+        studentFeeBreaks,
         studentYearLedgers,
         academicYears,
         closedAcademicYears,
@@ -4788,6 +4876,7 @@ export function TenantStoreProvider({
     transportVehicles,
     paymentCategories,
     feeTerms,
+    studentFeeBreaks,
     studentYearLedgers,
     academicYears,
     closedAcademicYears,
@@ -5031,6 +5120,7 @@ export function TenantStoreProvider({
       setClosedAcademicYears(nextClosed);
       // Hard delete: wipe year-scoped books data locally.
       setFeeTerms((prev) => prev.filter((t) => t.academicYear !== year));
+      setStudentFeeBreaks((prev) => prev.filter((b) => b.academicYear !== year));
       setStudentYearLedgers((prev) => prev.filter((l) => l.academicYear !== year));
       setPayments((prev) => prev.filter((p) => p.academicYear !== year));
       if (academicYear === year && nextActive) {
@@ -5103,6 +5193,7 @@ export function TenantStoreProvider({
     setTransportVehicles(SEED_VEHICLES);
     setPaymentCategories(SEED_PAYMENT_CATEGORIES);
     setFeeTerms(SEED_FEE_TERMS);
+    setStudentFeeBreaks([]);
     setStudentYearLedgers(SEED_STUDENT_YEAR_LEDGERS);
     setAcademicYears([...SEED_ACADEMIC_YEARS]);
     setClosedAcademicYears([]);
@@ -5125,6 +5216,7 @@ export function TenantStoreProvider({
       transportVehicles: SEED_VEHICLES,
       paymentCategories: SEED_PAYMENT_CATEGORIES,
       feeTerms: SEED_FEE_TERMS,
+      studentFeeBreaks: [],
       studentYearLedgers: SEED_STUDENT_YEAR_LEDGERS,
       academicYears: [...SEED_ACADEMIC_YEARS],
       closedAcademicYears: [],
@@ -5193,6 +5285,7 @@ export function TenantStoreProvider({
             dashboardTodos: operational.dashboardTodos,
             dashboardNote: operational.dashboardNote,
             activeBranchId: nextId,
+            studentFeeBreaks: operational.studentFeeBreaks,
           });
 
           const stats = {
@@ -5227,6 +5320,7 @@ export function TenantStoreProvider({
                 transportVehicles: remote.transportVehicles,
                 paymentCategories: remote.paymentCategories,
                 feeTerms: remote.feeTerms,
+                studentFeeBreaks: remote.studentFeeBreaks ?? [],
                 studentYearLedgers: reconcileLedgersWithStudents(
                   remote.students,
                   remote.studentYearLedgers,
@@ -5297,6 +5391,8 @@ export function TenantStoreProvider({
       feeTerms,
       setFeeTerms,
       activeFeeTerms,
+      studentFeeBreaks,
+      setStudentFeeBreaks,
       studentYearLedgers,
       setStudentYearLedgers,
       academicYears,
@@ -5346,6 +5442,7 @@ export function TenantStoreProvider({
       paymentCategories,
       feeTerms,
       activeFeeTerms,
+      studentFeeBreaks,
       studentYearLedgers,
       academicYears,
       closedAcademicYears,

@@ -14,9 +14,10 @@ export const Route = createFileRoute("/signup/$step")({
     const slug = params.step;
     if (!isSignupStepSlug(slug)) {
       throw redirect({
-        href: "/signup/school",
+        to: "/signup/$step",
+        params: { step: "school" },
         replace: true,
-      });
+      } as never);
     }
 
     if (slug === "success") return;
@@ -26,9 +27,10 @@ export const Route = createFileRoute("/signup/$step")({
     const allowed = maxAllowedSignupStep(draft);
     if (requested > allowed) {
       throw redirect({
-        href: `/signup/${slugFromStepNumber(allowed)}`,
+        to: "/signup/$step",
+        params: { step: slugFromStepNumber(allowed) },
         replace: true,
-      });
+      } as never);
     }
   },
   component: SignupStepPage,

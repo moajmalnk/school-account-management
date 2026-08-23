@@ -13207,7 +13207,10 @@ function ClassesCard({
     const fixed = Math.max(0, Math.round(Number(form.fixedAmount) || 0));
     const installmentLines =
       form.feeAmountMode === "fixed"
-        ? buildFixedInstallments(count, fixed, form.billingCycle)
+        ? buildFixedInstallments(count, fixed, form.billingCycle).map((line, index) => {
+            const dueDate = form.installments[index]?.dueDate?.trim();
+            return dueDate ? { ...line, dueDate } : line;
+          })
         : form.installments.map((row, index) => ({
             id: row.id || `fl-i-${index + 1}`,
             kind: "installment" as const,
@@ -13444,7 +13447,17 @@ function ClassesCard({
       />
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="mobile-scrollbar-none max-h-[90vh] overflow-y-auto sm:max-w-xl">
+        <DialogContent
+          className="mobile-scrollbar-none max-h-[90vh] overflow-y-auto sm:max-w-xl"
+          onPointerDownOutside={(e) => {
+            const target = e.target as HTMLElement | null;
+            if (target?.closest("[data-radix-popper-content-wrapper]")) e.preventDefault();
+          }}
+          onInteractOutside={(e) => {
+            const target = e.target as HTMLElement | null;
+            if (target?.closest("[data-radix-popper-content-wrapper]")) e.preventDefault();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>{editingId ? "Edit Class Tier" : "Add Class Tier"}</DialogTitle>
             <DialogDescription>
@@ -13601,47 +13614,134 @@ function ClassesCard({
               </div>
 
               {form.feeAmountMode === "fixed" ? (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                      {form.billingCycle === "Term" ? "Terms" : "Installments"}
-                    </Label>
-                    <Input
-                      inputMode="numeric"
-                      value={form.installmentCount}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          installmentCount: e.target.value.replace(/[^0-9]/g, ""),
-                        })
-                      }
-                      placeholder={form.billingCycle === "Term" ? "4" : "12"}
-                      className="font-mono bg-white"
-                    />
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                        {form.billingCycle === "Term" ? "Terms" : "Installments"}
+                      </Label>
+                      <Input
+                        inputMode="numeric"
+                        value={form.installmentCount}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/[^0-9]/g, "");
+                          const count = Math.max(1, Math.floor(Number(raw) || 0));
+                          setForm((prev) => {
+                            const nextRows = Array.from({ length: count }, (_, index) => {
+                              const existing = prev.installments[index];
+                              return {
+                                id: existing?.id || `fl-i-${index + 1}`,
+                                label:
+                                  existing?.label ||
+                                  installmentLabel(index, prev.billingCycle),
+                                amount: existing?.amount || prev.fixedAmount,
+                                dueDate: existing?.dueDate || "",
+                              };
+                            });
+                            return {
+                              ...prev,
+                              installmentCount: raw,
+                              installments: nextRows,
+                            };
+                          });
+                        }}
+                        placeholder={form.billingCycle === "Term" ? "4" : "12"}
+                        className="font-mono bg-white"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                        Amount each (₹)
+                      </Label>
+                      <Input
+                        inputMode="numeric"
+                        value={form.fixedAmount}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            fixedAmount: e.target.value.replace(/[^0-9]/g, ""),
+                          })
+                        }
+                        placeholder="0"
+                        className="font-mono bg-white"
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                      Amount each (₹)
-                    </Label>
-                    <Input
-                      inputMode="numeric"
-                      value={form.fixedAmount}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          fixedAmount: e.target.value.replace(/[^0-9]/g, ""),
-                        })
-                      }
-                      placeholder="0"
-                      className="font-mono bg-white"
-                    />
-                  </div>
+                  {form.billingCycle === "Term" &&
+                  Math.max(1, Math.floor(Number(form.installmentCount) || 0)) > 0 ? (
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                        Term due dates
+                      </Label>
+                      {Array.from(
+                        {
+                          length: Math.max(1, Math.floor(Number(form.installmentCount) || 0)),
+                        },
+                        (_, index) => {
+                          const row = form.installments[index] ?? {
+                            id: `fl-i-${index + 1}`,
+                            label: installmentLabel(index, form.billingCycle),
+                            amount: form.fixedAmount,
+                            dueDate: "",
+                          };
+                          return (
+                            <div
+                              key={row.id}
+                              className="grid grid-cols-[minmax(0,1fr)_minmax(10.5rem,12rem)] items-center gap-2"
+                            >
+                              <span className="truncate text-[13px] font-medium text-black/70">
+                                {row.label || installmentLabel(index, form.billingCycle)}
+                              </span>
+                              <DatePicker
+                                value={row.dueDate}
+                                onChange={(dueDate) =>
+                                  setForm((prev) => {
+                                    const count = Math.max(
+                                      1,
+                                      Math.floor(Number(prev.installmentCount) || 0),
+                                    );
+                                    const rows = Array.from({ length: count }, (_, i) => {
+                                      const existing = prev.installments[i];
+                                      return {
+                                        id: existing?.id || `fl-i-${i + 1}`,
+                                        label:
+                                          existing?.label ||
+                                          installmentLabel(i, prev.billingCycle),
+                                        amount: existing?.amount || prev.fixedAmount,
+                                        dueDate: existing?.dueDate || "",
+                                      };
+                                    });
+                                    rows[index] = { ...rows[index], dueDate };
+                                    return { ...prev, installments: rows };
+                                  })
+                                }
+                                placeholder="dd/mm/yyyy"
+                                valueFormat="iso"
+                                className="h-9 text-[12px]"
+                                quickPicks={[
+                                  { label: "Today", getDate: (t) => t },
+                                  {
+                                    label: "+30d",
+                                    getDate: (t) =>
+                                      new Date(t.getFullYear(), t.getMonth(), t.getDate() + 30),
+                                  },
+                                ]}
+                              />
+                            </div>
+                          );
+                        },
+                      )}
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <div className="space-y-2">
                   {form.installments.map((row, index) => (
-                    <div key={row.id} className="grid grid-cols-[1fr_7rem_auto] items-end gap-2">
-                      <div className="space-y-1">
+                    <div
+                      key={row.id}
+                      className="grid grid-cols-[minmax(0,1fr)_6.5rem_minmax(10.5rem,12rem)_auto] items-end gap-2"
+                    >
+                      <div className="min-w-0 space-y-1">
                         {index === 0 && (
                           <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
                             Label
@@ -13680,6 +13780,35 @@ function ClassesCard({
                             })
                           }
                           className="h-9 font-mono bg-white"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        {index === 0 && (
+                          <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                            Due date
+                          </Label>
+                        )}
+                        <DatePicker
+                          value={row.dueDate}
+                          onChange={(dueDate) =>
+                            setForm({
+                              ...form,
+                              installments: form.installments.map((item) =>
+                                item.id === row.id ? { ...item, dueDate } : item,
+                              ),
+                            })
+                          }
+                          placeholder="dd/mm/yyyy"
+                          valueFormat="iso"
+                          className="h-9 text-[12px]"
+                          quickPicks={[
+                            { label: "Today", getDate: (t) => t },
+                            {
+                              label: "+30d",
+                              getDate: (t) =>
+                                new Date(t.getFullYear(), t.getMonth(), t.getDate() + 30),
+                            },
+                          ]}
                         />
                       </div>
                       <button

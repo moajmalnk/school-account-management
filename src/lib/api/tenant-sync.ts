@@ -30,6 +30,7 @@ import {
   type SchoolDetails,
   type Staff,
   type Student,
+  type StudentFeeBreak,
   type TenantNotification,
   type TenantUser,
   type ThemeSettings,
@@ -50,6 +51,7 @@ export type BranchOperationalBundle = {
   dashboardTodos: string[];
   dashboardNote: string;
   studentYearLedgers: StudentYearLedger[];
+  studentFeeBreaks: StudentFeeBreak[];
 };
 
 export type RemoteTenantBundle = {
@@ -63,6 +65,7 @@ export type RemoteTenantBundle = {
   transportVehicles: TransportVehicle[];
   paymentCategories: PaymentCategory[];
   feeTerms: FeeTerm[];
+  studentFeeBreaks: StudentFeeBreak[];
   tenantUsers: TenantUser[];
   notifications: TenantNotification[];
   schoolDetails: SchoolDetails;
@@ -156,10 +159,11 @@ export async function fetchBranchOperationalBundle(): Promise<BranchOperationalB
   if (!token) return null;
 
   try {
-    const [students, staff, payments, todos] = await Promise.all([
+    const [students, staff, payments, feeBreaks, todos] = await Promise.all([
       getSafe<Student[]>("/api/students/list.php?includeDeleted=1", []),
       getSafe<Staff[]>("/api/staff/list.php?includeDeleted=1", []),
       getSafe<Payment[]>("/api/finance/payments.php", []),
+      getSafe<StudentFeeBreak[]>("/api/finance/fee-breaks.php", []),
       getSafe<{ dashboardTodos: string[]; dashboardNote: string } | null>(
         "/api/dashboard/todos.php",
         null,
@@ -175,6 +179,7 @@ export async function fetchBranchOperationalBundle(): Promise<BranchOperationalB
         : ["", "", "", "", ""],
       dashboardNote: typeof todos?.dashboardNote === "string" ? todos.dashboardNote : "",
       studentYearLedgers: [],
+      studentFeeBreaks: Array.isArray(feeBreaks) ? feeBreaks : [],
     };
   } catch (err) {
     if (isAuthExpiredError(err)) return null;
@@ -269,6 +274,10 @@ export async function fetchRemoteTenantBundle(
       "/api/settings/fees.php?resource=categories",
       [],
     );
+    const studentFeeBreaks = await getSafe<StudentFeeBreak[]>(
+      "/api/finance/fee-breaks.php",
+      [],
+    );
     const routes = await getSafe<TransportRoute[]>(
       "/api/settings/transport.php",
       [],
@@ -298,6 +307,7 @@ export async function fetchRemoteTenantBundle(
       transportVehicles: vehicles,
       paymentCategories,
       feeTerms: allFeeTerms,
+      studentFeeBreaks: Array.isArray(studentFeeBreaks) ? studentFeeBreaks : [],
       tenantUsers: users,
       notifications,
       schoolDetails: school?.schoolDetails ?? { ...EMPTY_SCHOOL_DETAILS },
@@ -341,6 +351,7 @@ export function seedTenantBundle(): RemoteTenantBundle {
     transportVehicles: SEED_VEHICLES,
     paymentCategories: SEED_PAYMENT_CATEGORIES,
     feeTerms: SEED_FEE_TERMS,
+    studentFeeBreaks: [],
     tenantUsers: [],
     notifications: [...SEED_NOTIFICATIONS],
     schoolDetails: { ...SEED_SCHOOL_DETAILS },

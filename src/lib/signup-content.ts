@@ -121,28 +121,36 @@ export const EMPTY_SIGNUP: SignupFormState = {
 
 const DRAFT_KEY = "feezo-signup-draft-v1";
 
+/** In-memory copy so step navigation works even if sessionStorage is blocked. */
+let memoryDraft: SignupFormState | null = null;
+
 export function loadSignupDraft(): SignupFormState {
+  if (memoryDraft) return memoryDraft;
   if (typeof window === "undefined") return EMPTY_SIGNUP;
   try {
     const raw = window.sessionStorage.getItem(DRAFT_KEY);
     if (!raw) return EMPTY_SIGNUP;
     const parsed = JSON.parse(raw) as Partial<SignupFormState>;
-    return { ...EMPTY_SIGNUP, ...parsed, agreeTerms: Boolean(parsed.agreeTerms) };
+    const merged = { ...EMPTY_SIGNUP, ...parsed, agreeTerms: Boolean(parsed.agreeTerms) };
+    memoryDraft = merged;
+    return merged;
   } catch {
     return EMPTY_SIGNUP;
   }
 }
 
 export function saveSignupDraft(form: SignupFormState) {
+  memoryDraft = form;
   if (typeof window === "undefined") return;
   try {
     window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify(form));
   } catch {
-    // ignore quota
+    // ignore quota / private mode — memory draft still advances the wizard
   }
 }
 
 export function clearSignupDraft() {
+  memoryDraft = null;
   if (typeof window === "undefined") return;
   try {
     window.sessionStorage.removeItem(DRAFT_KEY);
@@ -153,28 +161,34 @@ export function clearSignupDraft() {
 
 /** Highest step the user may open based on saved draft completeness. */
 export function maxAllowedSignupStep(form: SignupFormState): number {
-  if (
-    !form.schoolName.trim() ||
-    !form.schoolCode.trim() ||
-    !form.schoolType ||
-    !form.phone.trim() ||
-    !form.address.trim() ||
-    !form.state ||
-    !form.district ||
-    !form.schoolEmail.trim() ||
-    !form.subdomain.trim()
-  ) {
-    return 1;
-  }
-  if (
-    !form.adminName.trim() ||
-    !form.adminMobile.trim() ||
-    !form.adminEmail.trim() ||
-    form.password.length < 8 ||
-    form.passwordConfirm !== form.password
-  ) {
-    return 2;
-  }
+  if (!isSignupStep1Complete(form)) return 1;
+  if (!isSignupStep2Complete(form)) return 2;
   if (!form.tier) return 3;
   return 4;
+}
+
+export function isSignupStep1Complete(form: SignupFormState): boolean {
+  return Boolean(
+    form.schoolName.trim() &&
+      form.schoolCode.trim() &&
+      form.schoolType &&
+      form.phone.trim() &&
+      form.address.trim() &&
+      form.state &&
+      form.district &&
+      form.schoolEmail.trim() &&
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.schoolEmail) &&
+      form.subdomain.trim().length >= 2,
+  );
+}
+
+export function isSignupStep2Complete(form: SignupFormState): boolean {
+  return Boolean(
+    form.adminName.trim() &&
+      form.adminMobile.trim() &&
+      form.adminEmail.trim() &&
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.adminEmail) &&
+      form.password.length >= 8 &&
+      form.passwordConfirm === form.password,
+  );
 }

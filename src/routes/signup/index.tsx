@@ -2,6 +2,10 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/signup/")({
   beforeLoad: () => {
-    throw redirect({ href: "/signup/school", replace: true });
+    throw redirect({
+      to: "/signup/$step",
+      params: { step: "school" },
+      replace: true,
+    } as never);
   },
 });
