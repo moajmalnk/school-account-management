@@ -12,6 +12,7 @@ import {
   DeviceFrame,
   ProductShot,
 } from "@/components/marketing/DeviceFrame";
+import { TrialSignupLink } from "@/components/marketing/TrialSignupLink";
 import { easeOutExpo } from "@/components/marketing/motion";
 import { MARKETING } from "@/lib/marketing-content";
 
@@ -89,12 +90,9 @@ export function Hero() {
               whileHover={reduce ? undefined : { scale: 1.02 }}
               whileTap={reduce ? undefined : { scale: 0.98 }}
             >
-              <Link
-                to="/signup"
-                className="inline-flex h-12 w-full items-center justify-center rounded-full bg-[var(--mkt-green)] px-6 text-[14px] font-semibold text-[var(--mkt-ink)] shadow-[0_12px_32px_-14px_rgba(107,168,50,0.55)] transition-colors hover:bg-[var(--mkt-green-deep)] hover:text-white sm:w-auto"
-              >
+              <TrialSignupLink className="inline-flex h-12 w-full items-center justify-center rounded-full bg-[var(--mkt-green)] px-6 text-[14px] font-semibold text-[var(--mkt-ink)] shadow-[0_12px_32px_-14px_rgba(107,168,50,0.55)] transition-colors hover:bg-[var(--mkt-green-deep)] hover:text-white sm:w-auto">
                 {hero.primaryCta}
-              </Link>
+              </TrialSignupLink>
             </motion.div>
             <motion.div
               whileHover={reduce ? undefined : { scale: 1.02 }}

@@ -1,4 +1,3 @@
-import { Link } from "@tanstack/react-router";
 import { Check } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 
@@ -7,6 +6,7 @@ import {
   StaggerItem,
   StaggerReveal,
 } from "@/components/marketing/SectionReveal";
+import { TrialSignupLink } from "@/components/marketing/TrialSignupLink";
 import { formatInr, MARKETING } from "@/lib/marketing-content";
 
 const { pricing } = MARKETING;
@@ -127,8 +127,7 @@ export function Pricing() {
                   ))}
                 </ul>
 
-                <Link
-                  to="/signup"
+                <TrialSignupLink
                   className={
                     plan.highlight
                       ? "mt-6 inline-flex h-11 items-center justify-center rounded-full bg-[var(--mkt-green)] text-[13px] font-semibold text-[var(--mkt-ink)] transition-colors hover:bg-[var(--mkt-green-deep)] hover:text-white"
@@ -136,7 +135,7 @@ export function Pricing() {
                   }
                 >
                   Start 14-day trial
-                </Link>
+                </TrialSignupLink>
               </motion.div>
             </StaggerItem>
           ))}

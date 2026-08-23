@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "motion/react";
 
 import { SectionReveal } from "@/components/marketing/SectionReveal";
+import { TrialSignupLink } from "@/components/marketing/TrialSignupLink";
 import { BRAND } from "@/lib/brand";
 import { MARKETING } from "@/lib/marketing-content";
 
@@ -41,12 +42,9 @@ export function FinalCta() {
                 whileHover={reduce ? undefined : { scale: 1.03 }}
                 whileTap={reduce ? undefined : { scale: 0.98 }}
               >
-                <Link
-                  to="/signup"
-                  className="inline-flex h-12 w-full items-center justify-center rounded-full bg-[var(--mkt-ink)] px-6 text-[14px] font-semibold text-white transition-colors hover:bg-black sm:w-auto"
-                >
+                <TrialSignupLink className="inline-flex h-12 w-full items-center justify-center rounded-full bg-[var(--mkt-ink)] px-6 text-[14px] font-semibold text-white transition-colors hover:bg-black sm:w-auto">
                   {finalCta.primaryCta}
-                </Link>
+                </TrialSignupLink>
               </motion.div>
               <motion.div
                 whileHover={reduce ? undefined : { scale: 1.03 }}
