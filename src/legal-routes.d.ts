@@ -1,5 +1,5 @@
 /**
- * Ensures TanStack Router IDE types include legal routes even when
+ * Ensures TanStack Router IDE types include public routes even when
  * routeTree.gen.ts (@ts-nocheck) lags in the language service.
  */
 declare module "@tanstack/react-router" {
@@ -22,6 +22,20 @@ declare module "@tanstack/react-router" {
       id: "/signup";
       path: "/signup";
       fullPath: "/signup";
+      preLoaderRoute: unknown;
+      parentRoute: unknown;
+    };
+    "/signup/": {
+      id: "/signup/";
+      path: "/";
+      fullPath: "/signup/";
+      preLoaderRoute: unknown;
+      parentRoute: unknown;
+    };
+    "/signup/$step": {
+      id: "/signup/$step";
+      path: "/$step";
+      fullPath: "/signup/$step";
       preLoaderRoute: unknown;
       parentRoute: unknown;
     };

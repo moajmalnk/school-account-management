@@ -49,28 +49,44 @@ export function SignupShell({
             {SIGNUP_STEPS.map((s, i) => {
               const done = step > s.id;
               const active = step === s.id;
+              const clickable = done || active;
+              const marker = (
+                <>
+                  <span
+                    className={cn(
+                      "grid h-8 w-8 place-items-center rounded-full text-[13px] font-bold",
+                      done || active
+                        ? "bg-[#6BA832] text-white"
+                        : "bg-[#E8EEF5] text-black/45",
+                    )}
+                  >
+                    {s.id}
+                  </span>
+                  <span
+                    className={cn(
+                      "hidden text-center text-[10px] font-semibold sm:block",
+                      active || done ? "text-black/75" : "text-black/40",
+                    )}
+                  >
+                    {s.label}
+                  </span>
+                </>
+              );
               return (
                 <li key={s.id} className="flex min-w-0 flex-1 items-center">
-                  <div className="flex min-w-0 flex-col items-center gap-1.5">
-                    <span
-                      className={cn(
-                        "grid h-8 w-8 place-items-center rounded-full text-[13px] font-bold",
-                        done || active
-                          ? "bg-[#6BA832] text-white"
-                          : "bg-[#E8EEF5] text-black/45",
-                      )}
+                  {clickable ? (
+                    <a
+                      href={`/signup/${s.slug}`}
+                      className="flex min-w-0 flex-col items-center gap-1.5"
+                      aria-current={active ? "step" : undefined}
                     >
-                      {s.id}
-                    </span>
-                    <span
-                      className={cn(
-                        "hidden text-center text-[10px] font-semibold sm:block",
-                        active || done ? "text-black/75" : "text-black/40",
-                      )}
-                    >
-                      {s.label}
-                    </span>
-                  </div>
+                      {marker}
+                    </a>
+                  ) : (
+                    <div className="flex min-w-0 flex-col items-center gap-1.5">
+                      {marker}
+                    </div>
+                  )}
                   {i < SIGNUP_STEPS.length - 1 ? (
                     <div
                       className={cn(
@@ -122,4 +138,12 @@ export function FieldLabel({
 export const fieldClass =
   "h-11 w-full rounded-xl border border-black/10 bg-white px-3.5 text-[14px] text-black outline-none transition-[border-color,box-shadow] placeholder:text-black/35 focus:border-[#0F766E]/50 focus:ring-2 focus:ring-[#0F766E]/15";
 
-export const selectClass = fieldClass + " appearance-none pr-9";
+/** Match signup text inputs for Radix Select triggers. */
+export const signupSelectTriggerClass =
+  "h-11 w-full rounded-xl border border-black/10 bg-white px-3.5 text-[14px] font-normal text-black shadow-none focus:border-[#0F766E]/50 focus:ring-2 focus:ring-[#0F766E]/15 data-[placeholder]:text-black/35";
+
+export const signupSelectContentClass =
+  "z-[80] max-h-64 rounded-xl border border-black/10 bg-white text-black shadow-[0_16px_40px_-20px_rgba(0,0,0,0.35)]";
+
+export const signupSelectItemClass =
+  "cursor-pointer rounded-lg py-2 pl-3 pr-8 text-[13.5px] focus:bg-[#F4FBF0] focus:text-black";

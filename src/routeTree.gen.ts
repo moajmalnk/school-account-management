@@ -21,6 +21,7 @@ import { Route as DataDeletionRouteImport } from './routes/data-deletion'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TenantIndexRouteImport } from './routes/tenant/index'
 import { Route as SuperAdminIndexRouteImport } from './routes/super-admin/index'
+import { Route as SignupIndexRouteImport } from './routes/signup/index'
 import { Route as TenantStudentsRouteImport } from './routes/tenant/students'
 import { Route as TenantStaffRouteImport } from './routes/tenant/staff'
 import { Route as TenantSettingsRouteImport } from './routes/tenant/settings'
@@ -32,6 +33,7 @@ import { Route as SuperAdminTenantsRouteImport } from './routes/super-admin/tena
 import { Route as SuperAdminSupportRouteImport } from './routes/super-admin/support'
 import { Route as SuperAdminPlansRouteImport } from './routes/super-admin/plans'
 import { Route as SuperAdminOverviewRouteImport } from './routes/super-admin/overview'
+import { Route as SignupStepRouteImport } from './routes/signup/$step'
 import { Route as SuperAdminSupportIndexRouteImport } from './routes/super-admin/support/index'
 import { Route as TenantStudentsEditRouteImport } from './routes/tenant/students_.edit'
 import { Route as TenantStudentsAdmitRouteImport } from './routes/tenant/students_.admit'
@@ -101,6 +103,11 @@ const SuperAdminIndexRoute = SuperAdminIndexRouteImport.update({
   path: '/',
   getParentRoute: () => SuperAdminRoute,
 } as any)
+const SignupIndexRoute = SignupIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SignupRoute,
+} as any)
 const TenantStudentsRoute = TenantStudentsRouteImport.update({
   id: '/students',
   path: '/students',
@@ -156,6 +163,11 @@ const SuperAdminOverviewRoute = SuperAdminOverviewRouteImport.update({
   path: '/overview',
   getParentRoute: () => SuperAdminRoute,
 } as any)
+const SignupStepRoute = SignupStepRouteImport.update({
+  id: '/$step',
+  path: '/$step',
+  getParentRoute: () => SignupRoute,
+} as any)
 const SuperAdminSupportIndexRoute = SuperAdminSupportIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -207,9 +219,10 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/signup': typeof SignupRoute
+  '/signup': typeof SignupRouteWithChildren
   '/super-admin': typeof SuperAdminRouteWithChildren
   '/tenant': typeof TenantRouteWithChildren
+  '/signup/$step': typeof SignupStepRoute
   '/super-admin/overview': typeof SuperAdminOverviewRoute
   '/super-admin/plans': typeof SuperAdminPlansRoute
   '/super-admin/support': typeof SuperAdminSupportRouteWithChildren
@@ -221,6 +234,7 @@ export interface FileRoutesByFullPath {
   '/tenant/settings': typeof TenantSettingsRoute
   '/tenant/staff': typeof TenantStaffRoute
   '/tenant/students': typeof TenantStudentsRoute
+  '/signup/': typeof SignupIndexRoute
   '/super-admin/': typeof SuperAdminIndexRoute
   '/tenant/': typeof TenantIndexRoute
   '/parent/student/$token': typeof ParentStudentTokenRoute
@@ -240,7 +254,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/signup': typeof SignupRoute
+  '/signup/$step': typeof SignupStepRoute
   '/super-admin/overview': typeof SuperAdminOverviewRoute
   '/super-admin/plans': typeof SuperAdminPlansRoute
   '/super-admin/tenants': typeof SuperAdminTenantsRoute
@@ -251,6 +265,7 @@ export interface FileRoutesByTo {
   '/tenant/settings': typeof TenantSettingsRoute
   '/tenant/staff': typeof TenantStaffRoute
   '/tenant/students': typeof TenantStudentsRoute
+  '/signup': typeof SignupIndexRoute
   '/super-admin': typeof SuperAdminIndexRoute
   '/tenant': typeof TenantIndexRoute
   '/parent/student/$token': typeof ParentStudentTokenRoute
@@ -271,9 +286,10 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/signup': typeof SignupRoute
+  '/signup': typeof SignupRouteWithChildren
   '/super-admin': typeof SuperAdminRouteWithChildren
   '/tenant': typeof TenantRouteWithChildren
+  '/signup/$step': typeof SignupStepRoute
   '/super-admin/overview': typeof SuperAdminOverviewRoute
   '/super-admin/plans': typeof SuperAdminPlansRoute
   '/super-admin/support': typeof SuperAdminSupportRouteWithChildren
@@ -285,6 +301,7 @@ export interface FileRoutesById {
   '/tenant/settings': typeof TenantSettingsRoute
   '/tenant/staff': typeof TenantStaffRoute
   '/tenant/students': typeof TenantStudentsRoute
+  '/signup/': typeof SignupIndexRoute
   '/super-admin/': typeof SuperAdminIndexRoute
   '/tenant/': typeof TenantIndexRoute
   '/parent/student/$token': typeof ParentStudentTokenRoute
@@ -309,6 +326,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/super-admin'
     | '/tenant'
+    | '/signup/$step'
     | '/super-admin/overview'
     | '/super-admin/plans'
     | '/super-admin/support'
@@ -320,6 +338,7 @@ export interface FileRouteTypes {
     | '/tenant/settings'
     | '/tenant/staff'
     | '/tenant/students'
+    | '/signup/'
     | '/super-admin/'
     | '/tenant/'
     | '/parent/student/$token'
@@ -339,7 +358,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/privacy'
     | '/reset-password'
-    | '/signup'
+    | '/signup/$step'
     | '/super-admin/overview'
     | '/super-admin/plans'
     | '/super-admin/tenants'
@@ -350,6 +369,7 @@ export interface FileRouteTypes {
     | '/tenant/settings'
     | '/tenant/staff'
     | '/tenant/students'
+    | '/signup'
     | '/super-admin'
     | '/tenant'
     | '/parent/student/$token'
@@ -372,6 +392,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/super-admin'
     | '/tenant'
+    | '/signup/$step'
     | '/super-admin/overview'
     | '/super-admin/plans'
     | '/super-admin/support'
@@ -383,6 +404,7 @@ export interface FileRouteTypes {
     | '/tenant/settings'
     | '/tenant/staff'
     | '/tenant/students'
+    | '/signup/'
     | '/super-admin/'
     | '/tenant/'
     | '/parent/student/$token'
@@ -403,7 +425,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   PrivacyRoute: typeof PrivacyRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
-  SignupRoute: typeof SignupRoute
+  SignupRoute: typeof SignupRouteWithChildren
   SuperAdminRoute: typeof SuperAdminRouteWithChildren
   TenantRoute: typeof TenantRouteWithChildren
   ParentStudentTokenRoute: typeof ParentStudentTokenRoute
@@ -495,6 +517,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SuperAdminIndexRouteImport
       parentRoute: typeof SuperAdminRoute
     }
+    '/signup/': {
+      id: '/signup/'
+      path: '/'
+      fullPath: '/signup/'
+      preLoaderRoute: typeof SignupIndexRouteImport
+      parentRoute: typeof SignupRoute
+    }
     '/tenant/students': {
       id: '/tenant/students'
       path: '/students'
@@ -572,6 +601,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SuperAdminOverviewRouteImport
       parentRoute: typeof SuperAdminRoute
     }
+    '/signup/$step': {
+      id: '/signup/$step'
+      path: '/$step'
+      fullPath: '/signup/$step'
+      preLoaderRoute: typeof SignupStepRouteImport
+      parentRoute: typeof SignupRoute
+    }
     '/super-admin/support/': {
       id: '/super-admin/support/'
       path: '/'
@@ -630,6 +666,19 @@ declare module '@tanstack/react-router' {
     }
   }
 }
+
+interface SignupRouteChildren {
+  SignupStepRoute: typeof SignupStepRoute
+  SignupIndexRoute: typeof SignupIndexRoute
+}
+
+const SignupRouteChildren: SignupRouteChildren = {
+  SignupStepRoute: SignupStepRoute,
+  SignupIndexRoute: SignupIndexRoute,
+}
+
+const SignupRouteWithChildren =
+  SignupRoute._addFileChildren(SignupRouteChildren)
 
 interface SuperAdminSupportRouteChildren {
   SuperAdminSupportTicketIdRoute: typeof SuperAdminSupportTicketIdRoute
@@ -707,7 +756,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   PrivacyRoute: PrivacyRoute,
   ResetPasswordRoute: ResetPasswordRoute,
-  SignupRoute: SignupRoute,
+  SignupRoute: SignupRouteWithChildren,
   SuperAdminRoute: SuperAdminRouteWithChildren,
   TenantRoute: TenantRouteWithChildren,
   ParentStudentTokenRoute: ParentStudentTokenRoute,

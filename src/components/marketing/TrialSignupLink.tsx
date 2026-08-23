@@ -2,9 +2,8 @@ import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
 /**
- * Marketing CTA to the trial signup route.
- * Cast keeps the IDE happy when routeTree.gen.ts (@ts-nocheck) lags the language service;
- * the runtime path remains `/signup` (registered in routeTree.gen.ts).
+ * Marketing CTA → signup (index redirects to /signup/school).
+ * Cast keeps the IDE happy when routeTree.gen.ts lags the language service.
  */
 export function TrialSignupLink({
   className,

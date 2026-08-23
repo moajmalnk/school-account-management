@@ -1,16 +1,14 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { Outlet, createFileRoute } from "@tanstack/react-router";
 import { useEffect } from "react";
 
-import { SignupWizard } from "@/components/signup/SignupWizard";
-
 export const Route = createFileRoute("/signup")({
-  component: SignupPage,
+  component: SignupLayout,
 });
 
-function SignupPage() {
+function SignupLayout() {
   useEffect(() => {
     document.title = "Feezo · Start 14-day trial";
   }, []);
 
-  return <SignupWizard />;
+  return <Outlet />;
 }

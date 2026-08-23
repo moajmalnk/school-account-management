@@ -10,12 +10,42 @@ export const SCHOOL_TYPES = [
   "Other",
 ] as const;
 
-export const SIGNUP_STEPS = [
-  { id: 1, label: "School Info" },
-  { id: 2, label: "Administrator" },
-  { id: 3, label: "Choose Package" },
-  { id: 4, label: "Create Tenant" },
+/** URL segment → wizard step */
+export const SIGNUP_STEP_SLUGS = [
+  "school",
+  "admin",
+  "package",
+  "review",
+  "success",
 ] as const;
+
+export type SignupStepSlug = (typeof SIGNUP_STEP_SLUGS)[number];
+
+export const SIGNUP_STEPS = [
+  { id: 1, slug: "school" as const, label: "School Info", path: "/signup/school" },
+  { id: 2, slug: "admin" as const, label: "Administrator", path: "/signup/admin" },
+  { id: 3, slug: "package" as const, label: "Choose Package", path: "/signup/package" },
+  { id: 4, slug: "review" as const, label: "Create Tenant", path: "/signup/review" },
+] as const;
+
+export const SIGNUP_SUCCESS_PATH = "/signup/success";
+
+export function isSignupStepSlug(value: string): value is SignupStepSlug {
+  return (SIGNUP_STEP_SLUGS as readonly string[]).includes(value);
+}
+
+export function stepNumberFromSlug(slug: string): number {
+  if (slug === "success") return 4;
+  const found = SIGNUP_STEPS.find((s) => s.slug === slug);
+  return found?.id ?? 1;
+}
+
+export function slugFromStepNumber(
+  step: number,
+): Exclude<SignupStepSlug, "success"> {
+  const found = SIGNUP_STEPS.find((s) => s.id === step);
+  return found?.slug ?? "school";
+}
 
 export const SIGNUP_PLANS = MARKETING.pricing.plans.map((p) => ({
   name: p.name as "Basic" | "Premium" | "Enterprise",
@@ -57,7 +87,6 @@ export type SignupFormState = {
   address: string;
   district: string;
   state: string;
-  country: string;
   schoolEmail: string;
   website: string;
   subdomain: string;
@@ -78,7 +107,6 @@ export const EMPTY_SIGNUP: SignupFormState = {
   address: "",
   district: "",
   state: "",
-  country: "India",
   schoolEmail: "",
   website: "",
   subdomain: "",
@@ -90,3 +118,63 @@ export const EMPTY_SIGNUP: SignupFormState = {
   tier: "Premium",
   agreeTerms: false,
 };
+
+const DRAFT_KEY = "feezo-signup-draft-v1";
+
+export function loadSignupDraft(): SignupFormState {
+  if (typeof window === "undefined") return EMPTY_SIGNUP;
+  try {
+    const raw = window.sessionStorage.getItem(DRAFT_KEY);
+    if (!raw) return EMPTY_SIGNUP;
+    const parsed = JSON.parse(raw) as Partial<SignupFormState>;
+    return { ...EMPTY_SIGNUP, ...parsed, agreeTerms: Boolean(parsed.agreeTerms) };
+  } catch {
+    return EMPTY_SIGNUP;
+  }
+}
+
+export function saveSignupDraft(form: SignupFormState) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify(form));
+  } catch {
+    // ignore quota
+  }
+}
+
+export function clearSignupDraft() {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(DRAFT_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+/** Highest step the user may open based on saved draft completeness. */
+export function maxAllowedSignupStep(form: SignupFormState): number {
+  if (
+    !form.schoolName.trim() ||
+    !form.schoolCode.trim() ||
+    !form.schoolType ||
+    !form.phone.trim() ||
+    !form.address.trim() ||
+    !form.state ||
+    !form.district ||
+    !form.schoolEmail.trim() ||
+    !form.subdomain.trim()
+  ) {
+    return 1;
+  }
+  if (
+    !form.adminName.trim() ||
+    !form.adminMobile.trim() ||
+    !form.adminEmail.trim() ||
+    form.password.length < 8 ||
+    form.passwordConfirm !== form.password
+  ) {
+    return 2;
+  }
+  if (!form.tier) return 3;
+  return 4;
+}

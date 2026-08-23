@@ -7,8 +7,17 @@ import {
   FieldLabel,
   SignupShell,
   fieldClass,
-  selectClass,
+  signupSelectContentClass,
+  signupSelectItemClass,
+  signupSelectTriggerClass,
 } from "@/components/signup/SignupShell";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ApiError } from "@/lib/api/client";
 import { apiRegisterTrial } from "@/lib/api/auth";
 import { homePathForSession, useAuth } from "@/lib/auth";
@@ -19,17 +28,35 @@ import {
   EMPTY_SIGNUP,
   SCHOOL_TYPES,
   SIGNUP_PLANS,
+  clearSignupDraft,
+  loadSignupDraft,
   passwordStrength,
+  saveSignupDraft,
+  slugFromStepNumber,
   slugifySchoolName,
+  stepNumberFromSlug,
   type SignupFormState,
+  type SignupStepSlug,
 } from "@/lib/signup-content";
 import { cn } from "@/lib/utils";
 
-export function SignupWizard() {
+function goToSignupStep(
+  navigate: ReturnType<typeof useNavigate>,
+  step: SignupStepSlug,
+  replace = false,
+) {
+  void navigate({
+    href: `/signup/${step}`,
+    replace,
+  });
+}
+
+export function SignupWizard({ stepSlug }: { stepSlug: string }) {
   const navigate = useNavigate();
   const { acceptLoginResponse, session, hydrated } = useAuth();
-  const [step, setStep] = useState(1);
-  const [form, setForm] = useState<SignupFormState>(EMPTY_SIGNUP);
+  const step = stepNumberFromSlug(stepSlug);
+  const isSuccess = stepSlug === "success";
+  const [form, setForm] = useState<SignupFormState>(() => loadSignupDraft());
   const [errors, setErrors] = useState<Partial<Record<keyof SignupFormState, string>>>({});
   const [showPw, setShowPw] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -46,10 +73,14 @@ export function SignupWizard() {
   const strength = passwordStrength(form.password);
 
   useEffect(() => {
-    if (hydrated && session && !success && !submitting) {
+    saveSignupDraft(form);
+  }, [form]);
+
+  useEffect(() => {
+    if (hydrated && session && !isSuccess && !submitting && !success) {
       navigate({ to: homePathForSession(session), replace: true });
     }
-  }, [hydrated, session, success, submitting, navigate]);
+  }, [hydrated, session, isSuccess, success, submitting, navigate]);
 
   const patch = <K extends keyof SignupFormState>(key: K, value: SignupFormState[K]) => {
     setForm((prev) => {
@@ -108,10 +139,16 @@ export function SignupWizard() {
 
   const next = () => {
     if (!validateStep(step)) return;
-    setStep((x) => Math.min(4, x + 1));
+    saveSignupDraft(form);
+    const nextSlug = slugFromStepNumber(Math.min(4, step + 1));
+    goToSignupStep(navigate, nextSlug);
   };
 
-  const back = () => setStep((x) => Math.max(1, x - 1));
+  const back = () => {
+    saveSignupDraft(form);
+    const prevSlug = slugFromStepNumber(Math.max(1, step - 1));
+    goToSignupStep(navigate, prevSlug);
+  };
 
   const createAccount = async () => {
     if (!validateStep(4)) return;
@@ -125,7 +162,7 @@ export function SignupWizard() {
         address: form.address.trim(),
         district: form.district,
         state: form.state,
-        country: form.country || "India",
+        country: "India",
         affiliationNo: form.schoolCode.trim(),
         website: form.website.trim() || undefined,
         schoolEmail: form.schoolEmail.trim().toLowerCase(),
@@ -140,11 +177,13 @@ export function SignupWizard() {
         toast.error(result.error);
         return;
       }
+      clearSignupDraft();
       setSuccess({
         tenantName: data.tenant?.name ?? form.schoolName,
         tier: data.tenant?.tier ?? form.tier,
         redirect: result.redirect,
       });
+      goToSignupStep(navigate, "success", true);
       toast.success("Your Feezo workspace is live");
     } catch (err) {
       const msg =
@@ -157,7 +196,12 @@ export function SignupWizard() {
     }
   };
 
-  if (success) {
+  if (isSuccess || success) {
+    const info = success ?? {
+      tenantName: form.schoolName || "Your school",
+      tier: form.tier,
+      redirect: "/tenant/dashboard",
+    };
     return (
       <div className="min-h-dvh bg-[#F4F6F9] px-3 py-[calc(1rem+env(safe-area-inset-top))] sm:px-6 sm:py-10">
         <div className="mx-auto w-full max-w-lg">
@@ -182,17 +226,17 @@ export function SignupWizard() {
               been created successfully.
             </p>
             <div className="mt-6 space-y-2 rounded-2xl bg-[#F4FBF0] px-4 py-4 text-left text-[13px]">
-              <Row label="Active Tenant Workspace" value={success.tenantName} />
+              <Row label="Active Tenant Workspace" value={info.tenantName} />
               <Row label="Access Role" value="Super Administrator" />
               <Row
                 label="Trial Status"
-                value={`${success.tier} · 14 Days Active (Full Access)`}
+                value={`${info.tier} · 14 Days Active (Full Access)`}
                 accent
               />
             </div>
             <button
               type="button"
-              onClick={() => navigate({ to: success.redirect })}
+              onClick={() => navigate({ to: info.redirect as "/tenant/dashboard" })}
               className="mt-8 inline-flex h-12 w-full items-center justify-center rounded-full bg-[#6BA832] text-[14px] font-semibold text-white shadow-[0_12px_28px_-14px_rgba(107,168,50,0.7)] transition-colors hover:bg-[#5a9429]"
             >
               Go to Dashboard →
@@ -245,21 +289,25 @@ export function SignupWizard() {
               required
               error={errors.schoolType}
             >
-              <div className="relative">
-                <select
-                  id="schoolType"
-                  className={selectClass}
-                  value={form.schoolType}
-                  onChange={(e) => patch("schoolType", e.target.value)}
-                >
-                  <option value="">Select School Type</option>
+              <Select
+                value={form.schoolType || undefined}
+                onValueChange={(v) => patch("schoolType", v)}
+              >
+                <SelectTrigger id="schoolType" className={signupSelectTriggerClass}>
+                  <SelectValue placeholder="Select School Type" />
+                </SelectTrigger>
+                <SelectContent className={signupSelectContentClass}>
                   {SCHOOL_TYPES.map((t) => (
-                    <option key={t} value={t}>
+                    <SelectItem
+                      key={t}
+                      value={t}
+                      className={signupSelectItemClass}
+                    >
                       {t}
-                    </option>
+                    </SelectItem>
                   ))}
-                </select>
-              </div>
+                </SelectContent>
+              </Select>
             </Field>
             <Field id="phone" label="Phone Number" required error={errors.phone}>
               <input
@@ -280,49 +328,56 @@ export function SignupWizard() {
               onChange={(e) => patch("address", e.target.value)}
             />
           </Field>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2">
             <Field id="state" label="State" required error={errors.state}>
-              <select
-                id="state"
-                className={selectClass}
-                value={form.state}
-                onChange={(e) => patch("state", e.target.value)}
+              <Select
+                value={form.state || undefined}
+                onValueChange={(v) => patch("state", v)}
               >
-                <option value="">Select state</option>
-                {INDIA_STATES.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger id="state" className={signupSelectTriggerClass}>
+                  <SelectValue placeholder="Select state" />
+                </SelectTrigger>
+                <SelectContent className={signupSelectContentClass}>
+                  {INDIA_STATES.map((s) => (
+                    <SelectItem
+                      key={s}
+                      value={s}
+                      className={signupSelectItemClass}
+                    >
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Field>
             <Field id="district" label="District" required error={errors.district}>
-              <select
-                id="district"
-                className={selectClass}
-                value={form.district}
+              <Select
+                value={form.district || undefined}
+                onValueChange={(v) => patch("district", v)}
                 disabled={!form.state}
-                onChange={(e) => patch("district", e.target.value)}
               >
-                <option value="">
-                  {form.state ? "Select district" : "Select state first"}
-                </option>
-                {districts.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field id="country" label="Country" required>
-              <select
-                id="country"
-                className={selectClass}
-                value={form.country}
-                onChange={(e) => patch("country", e.target.value)}
-              >
-                <option value="India">India</option>
-              </select>
+                <SelectTrigger
+                  id="district"
+                  className={signupSelectTriggerClass}
+                >
+                  <SelectValue
+                    placeholder={
+                      form.state ? "Select district" : "Select state first"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent className={signupSelectContentClass}>
+                  {districts.map((d) => (
+                    <SelectItem
+                      key={d}
+                      value={d}
+                      className={signupSelectItemClass}
+                    >
+                      {d}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Field>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
