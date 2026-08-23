@@ -142,7 +142,7 @@ export function PlatformDocumentPreview({
                   {isReceipt ? "Subscription settlement" : "SaaS subscription billing"}
                 </div>
                 <div className="mt-0.5 text-[12px] text-black/55">
-                  {isReceipt ? "accounts@schoolaccounts.in" : "support@schoolaccounts.in"}
+                  {isReceipt ? "accounts@schoolaccounts.in" : "support@feezo.app"}
                 </div>
               </div>
             </div>

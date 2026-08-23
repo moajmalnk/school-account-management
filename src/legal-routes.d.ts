@@ -18,6 +18,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: unknown;
       parentRoute: unknown;
     };
+    "/signup": {
+      id: "/signup";
+      path: "/signup";
+      fullPath: "/signup";
+      preLoaderRoute: unknown;
+      parentRoute: unknown;
+    };
   }
 }
 

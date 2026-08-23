@@ -128,7 +128,7 @@ export function Pricing() {
                 </ul>
 
                 <Link
-                  to="/login"
+                  to="/signup"
                   className={
                     plan.highlight
                       ? "mt-6 inline-flex h-11 items-center justify-center rounded-full bg-[var(--mkt-green)] text-[13px] font-semibold text-[var(--mkt-ink)] transition-colors hover:bg-[var(--mkt-green-deep)] hover:text-white"

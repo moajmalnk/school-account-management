@@ -111,6 +111,60 @@ export async function apiResetPassword(
   });
 }
 
+export type RegisterTrialPayload = {
+  name: string;
+  subdomain: string;
+  schoolType: string;
+  phone: string;
+  address: string;
+  district: string;
+  state: string;
+  country?: string;
+  affiliationNo?: string;
+  website?: string;
+  schoolEmail: string;
+  adminName: string;
+  adminMobile?: string;
+  adminEmail: string;
+  password: string;
+  tier: "Basic" | "Premium" | "Enterprise";
+};
+
+export type RegisterTrialResponse = ApiLoginResponse & {
+  tenant?: {
+    name: string;
+    subdomain: string;
+    tier: string;
+    status: string;
+    publicId: string;
+  };
+};
+
+export async function apiRegisterTrial(
+  payload: RegisterTrialPayload,
+): Promise<RegisterTrialResponse> {
+  const data = await apiRequest<RegisterTrialResponse>(
+    "/api/auth/register-trial.php",
+    {
+      method: "POST",
+      body: {
+        ...payload,
+        deviceId: getOrCreateDeviceId(),
+        deviceName: guessDeviceName(),
+      },
+      auth: false,
+    },
+  );
+  persistAuthSecrets({
+    token: data.token,
+    refreshToken: data.refreshToken ?? null,
+    sessionId: data.sessionId ?? null,
+    deviceId: data.deviceId ?? null,
+  });
+  resetUnauthorizedGate();
+  return data;
+}
+
 export type DataDeletionRequestPayload = {
   fullName: string;
   email: string;

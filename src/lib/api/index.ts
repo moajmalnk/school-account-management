@@ -14,11 +14,14 @@ export {
   apiLogoutCurrentDevice,
   apiForgotPassword,
   apiResetPassword,
+  apiRegisterTrial,
   apiRequestDataDeletion,
 } from "@/lib/api/auth";
 export type {
   DataDeletionRequestPayload,
   DataDeletionRequestResult,
+  RegisterTrialPayload,
+  RegisterTrialResponse,
 } from "@/lib/api/auth";
 export {
   fetchBranchOperationalBundle,

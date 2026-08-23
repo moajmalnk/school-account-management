@@ -240,7 +240,7 @@ export const MARKETING = {
   },
   finalCta: {
     title: "Ready to simplify school accounts?",
-    body: "Sign in to start your 14-day trial. No complicated setup — just open Feezo and go.",
+    body: "Start your 14-day trial in a few steps — school details, admin login, and package. Or sign in if you already have access.",
     primaryCta: "Start 14-day trial",
     secondaryCta: "Sign in",
   },

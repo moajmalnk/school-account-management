@@ -114,7 +114,7 @@ export function SupportDeskView() {
   const { section, ticketId } = supportLocation(pathname);
 
   const [settings, setSettings] = useState<SupportSettings>({
-    supportEmail: "support@schoolaccounts.in",
+    supportEmail: "support@feezo.app",
     whatsappE164: SUPPORT_DEFAULT_WHATSAPP_E164,
     greeting: "",
   });
@@ -831,7 +831,7 @@ export function SupportDeskView() {
                 type="email"
                 value={settings.supportEmail}
                 onChange={(e) => setSettings((prev) => ({ ...prev, supportEmail: e.target.value }))}
-                placeholder="support@schoolaccounts.in"
+                placeholder="support@feezo.app"
                 className="h-9 rounded-lg"
               />
               <p className="text-[11px] text-black/40">Opens Gmail when a school taps Email.</p>

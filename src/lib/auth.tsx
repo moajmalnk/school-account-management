@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 
-import { apiLogin, apiLogoutCurrentDevice, apiMe } from "@/lib/api/auth";
+import { apiLogin, apiLogoutCurrentDevice, apiMe, type ApiLoginResponse } from "@/lib/api/auth";
 import {
   ACCESS_TOKEN_KEY,
   ApiError,
@@ -76,6 +76,8 @@ type AuthState = {
   session: Session | null;
   hydrated: boolean;
   login: (email: string, password: string) => Promise<LoginResult>;
+  /** Apply tokens already persisted by apiRegisterTrial / similar. */
+  acceptLoginResponse: (data: ApiLoginResponse) => LoginResult;
   logout: () => void;
   updateSession: (
     patch: Partial<
@@ -132,6 +134,46 @@ function loginFailureMessage(err: unknown): string {
     return API_UNREACHABLE_MESSAGE;
   }
   return INVALID_CREDENTIALS_MESSAGE;
+}
+
+function sessionFromApiLogin(
+  data: ApiLoginResponse,
+  setSession: (s: Session) => void,
+): LoginResult {
+  const apiRole: Role =
+    data.session.role === "super_admin"
+      ? "super_admin"
+      : data.session.role === "school_admin"
+        ? "school_admin"
+        : "tenant_user";
+  const rawPerms = data.session.permissions;
+  const permissions: PermissionSet =
+    apiRole === "super_admin" ||
+    apiRole === "school_admin" ||
+    (Array.isArray(rawPerms) && (rawPerms as string[]).includes("*"))
+      ? ALL_PERMISSIONS
+      : Array.isArray(rawPerms)
+        ? (rawPerms as PermissionKey[])
+        : [];
+  const next: Session = {
+    role: apiRole,
+    email: data.session.email,
+    displayName: data.session.displayName,
+    tenantName: data.session.tenantName,
+    tenantId: data.session.tenantId,
+    issuedAt: Date.now(),
+    userId: data.session.userId,
+    staffId: data.session.staffId || undefined,
+    permissions,
+    tier: data.session.tier,
+    planName: data.session.planName,
+    planFlags: data.session.planFlags
+      ? normalizePlanFlags(data.session.planFlags)
+      : undefined,
+  };
+  writeSession(next);
+  setSession(next);
+  return { ok: true, redirect: homePathForSession(next), session: next };
 }
 
 function isSessionRole(value: unknown): value is Role {
@@ -482,44 +524,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       const data = await apiLogin(normalizedEmail, password);
-      const apiRole: Role =
-        data.session.role === "super_admin"
-          ? "super_admin"
-          : data.session.role === "school_admin"
-            ? "school_admin"
-            : "tenant_user";
-      const rawPerms = data.session.permissions;
-      const permissions: PermissionSet =
-        apiRole === "super_admin" ||
-        apiRole === "school_admin" ||
-        (Array.isArray(rawPerms) && (rawPerms as string[]).includes("*"))
-          ? ALL_PERMISSIONS
-          : Array.isArray(rawPerms)
-            ? (rawPerms as PermissionKey[])
-            : [];
-      const next: Session = {
-        role: apiRole,
-        email: data.session.email,
-        displayName: data.session.displayName,
-        tenantName: data.session.tenantName,
-        tenantId: data.session.tenantId,
-        issuedAt: Date.now(),
-        userId: data.session.userId,
-        staffId: data.session.staffId || undefined,
-        permissions,
-        tier: data.session.tier,
-        planName: data.session.planName,
-        planFlags: data.session.planFlags
-          ? normalizePlanFlags(data.session.planFlags)
-          : undefined,
-      };
-      writeSession(next);
-      setSession(next);
-      return { ok: true, redirect: homePathForSession(next), session: next };
+      return sessionFromApiLogin(data, setSession);
     } catch (err) {
       return { ok: false, error: loginFailureMessage(err) };
     }
   }, []);
+
+  const acceptLoginResponse = useCallback<AuthState["acceptLoginResponse"]>(
+    (data) => sessionFromApiLogin(data, setSession),
+    [],
+  );
 
   const logout = useCallback(() => {
     // Exiting an impersonated tab restores the underlying admin login.
@@ -551,8 +565,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthState>(
-    () => ({ session, hydrated, login, logout, updateSession }),
-    [session, hydrated, login, logout, updateSession],
+    () => ({ session, hydrated, login, acceptLoginResponse, logout, updateSession }),
+    [session, hydrated, login, acceptLoginResponse, logout, updateSession],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -142,7 +142,7 @@ export function CustomerSupportCard({ onBackToSettings }: { onBackToSettings?: (
   };
 
   const openGmail = () => {
-    const email = settings?.supportEmail || "support@schoolaccounts.in";
+    const email = settings?.supportEmail || "support@feezo.app";
     const href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(
       `Support · ${schoolName}`,
     )}&body=${encodeURIComponent(channelMessage())}`;

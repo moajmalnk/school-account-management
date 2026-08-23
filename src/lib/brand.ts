@@ -9,6 +9,6 @@ export const BRAND = {
     dataDeletionPath: "/data-deletion",
     privacyUrl: "https://www.feezo.app/privacy",
     dataDeletionUrl: "https://www.feezo.app/data-deletion",
-    supportEmail: "support@schoolaccounts.in",
+    supportEmail: "support@feezo.app",
   },
 } as const;

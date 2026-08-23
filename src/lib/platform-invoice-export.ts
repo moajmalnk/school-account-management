@@ -383,7 +383,7 @@ function buildInvoiceDoc(
       lines: [
         "Feezo",
         "SaaS subscription billing",
-        "support@schoolaccounts.in",
+        "support@feezo.app",
       ],
     },
   );

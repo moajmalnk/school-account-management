@@ -90,7 +90,7 @@ export function Hero() {
               whileTap={reduce ? undefined : { scale: 0.98 }}
             >
               <Link
-                to="/login"
+                to="/signup"
                 className="inline-flex h-12 w-full items-center justify-center rounded-full bg-[var(--mkt-green)] px-6 text-[14px] font-semibold text-[var(--mkt-ink)] shadow-[0_12px_32px_-14px_rgba(107,168,50,0.55)] transition-colors hover:bg-[var(--mkt-green-deep)] hover:text-white sm:w-auto"
               >
                 {hero.primaryCta}
@@ -109,7 +109,7 @@ export function Hero() {
             </motion.div>
           </div>
           <p className="mt-4 text-[12px] font-medium text-[var(--mkt-muted)]">
-            14-day trial · No public signup form · Sign in when ready
+            14-day trial · Create your school in minutes
           </p>
         </motion.div>
 

@@ -88,7 +88,7 @@ export async function fetchSupportDesk(): Promise<SupportDesk> {
   const data = await apiRequest<SupportDesk>("/api/support/desk.php");
   return {
     settings: {
-      supportEmail: data.settings?.supportEmail || "support@schoolaccounts.in",
+      supportEmail: data.settings?.supportEmail || "support@feezo.app",
       whatsappE164: data.settings?.whatsappE164 || SUPPORT_DEFAULT_WHATSAPP_E164,
       greeting:
         data.settings?.greeting ||
@@ -225,7 +225,7 @@ export async function fetchSuperAdminSupport(status?: string): Promise<SuperAdmi
   const data = await apiRequest<SuperAdminSupportDesk>(`/api/super-admin/support.php${qs}`);
   return {
     settings: data.settings ?? {
-      supportEmail: "support@schoolaccounts.in",
+      supportEmail: "support@feezo.app",
       whatsappE164: SUPPORT_DEFAULT_WHATSAPP_E164,
       greeting: "",
     },

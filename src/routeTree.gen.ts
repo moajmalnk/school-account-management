@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TenantRouteImport } from './routes/tenant'
 import { Route as SuperAdminRouteImport } from './routes/super-admin'
+import { Route as SignupRouteImport } from './routes/signup'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as LoginRouteImport } from './routes/login'
@@ -48,6 +49,11 @@ const TenantRoute = TenantRouteImport.update({
 const SuperAdminRoute = SuperAdminRouteImport.update({
   id: '/super-admin',
   path: '/super-admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -201,6 +207,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/signup': typeof SignupRoute
   '/super-admin': typeof SuperAdminRouteWithChildren
   '/tenant': typeof TenantRouteWithChildren
   '/super-admin/overview': typeof SuperAdminOverviewRoute
@@ -233,6 +240,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/signup': typeof SignupRoute
   '/super-admin/overview': typeof SuperAdminOverviewRoute
   '/super-admin/plans': typeof SuperAdminPlansRoute
   '/super-admin/tenants': typeof SuperAdminTenantsRoute
@@ -263,6 +271,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/signup': typeof SignupRoute
   '/super-admin': typeof SuperAdminRouteWithChildren
   '/tenant': typeof TenantRouteWithChildren
   '/super-admin/overview': typeof SuperAdminOverviewRoute
@@ -297,6 +306,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/privacy'
     | '/reset-password'
+    | '/signup'
     | '/super-admin'
     | '/tenant'
     | '/super-admin/overview'
@@ -329,6 +339,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/privacy'
     | '/reset-password'
+    | '/signup'
     | '/super-admin/overview'
     | '/super-admin/plans'
     | '/super-admin/tenants'
@@ -358,6 +369,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/privacy'
     | '/reset-password'
+    | '/signup'
     | '/super-admin'
     | '/tenant'
     | '/super-admin/overview'
@@ -391,6 +403,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   PrivacyRoute: typeof PrivacyRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  SignupRoute: typeof SignupRoute
   SuperAdminRoute: typeof SuperAdminRouteWithChildren
   TenantRoute: typeof TenantRouteWithChildren
   ParentStudentTokenRoute: typeof ParentStudentTokenRoute
@@ -410,6 +423,13 @@ declare module '@tanstack/react-router' {
       path: '/super-admin'
       fullPath: '/super-admin'
       preLoaderRoute: typeof SuperAdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reset-password': {
@@ -687,6 +707,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   PrivacyRoute: PrivacyRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  SignupRoute: SignupRoute,
   SuperAdminRoute: SuperAdminRouteWithChildren,
   TenantRoute: TenantRouteWithChildren,
   ParentStudentTokenRoute: ParentStudentTokenRoute,

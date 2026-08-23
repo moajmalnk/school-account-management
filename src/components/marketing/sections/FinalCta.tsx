@@ -42,7 +42,7 @@ export function FinalCta() {
                 whileTap={reduce ? undefined : { scale: 0.98 }}
               >
                 <Link
-                  to="/login"
+                  to="/signup"
                   className="inline-flex h-12 w-full items-center justify-center rounded-full bg-[var(--mkt-ink)] px-6 text-[14px] font-semibold text-white transition-colors hover:bg-black sm:w-auto"
                 >
                   {finalCta.primaryCta}
