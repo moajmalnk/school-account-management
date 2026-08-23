@@ -10,7 +10,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
-import { fetchBranchOperationalBundle, fetchRemoteTenantBundle } from "@/lib/api/tenant-sync";
+import { fetchBranchOperationalBundle, fetchRemoteTenantBundle, branchCatalogWriteEpochValue } from "@/lib/api/tenant-sync";
 import { getApiToken } from "@/lib/api/client";
 import {
   apiDeleteFeeTerm,
@@ -1324,6 +1324,12 @@ export function isMainCampusBranch(
   return all.length <= 1;
 }
 
+function branchListFingerprint(list: CampusBranch[]): string {
+  return list
+    .map((b) => `${b.id}\0${b.name}\0${b.code}\0${b.isActive === false ? 0 : 1}`)
+    .join("\n");
+}
+
 export function normalizeCampusBranch(raw: unknown): CampusBranch | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
@@ -2377,11 +2383,10 @@ function normalizeTenantNotification(raw: unknown): TenantNotification | null {
 }
 
 function normalizeNotifications(raw: unknown): TenantNotification[] {
-  if (!Array.isArray(raw)) return [...SEED_NOTIFICATIONS];
-  const items = raw
+  if (!Array.isArray(raw)) return [];
+  return raw
     .map(normalizeTenantNotification)
     .filter((n): n is TenantNotification => n !== null);
-  return items.length > 0 ? items : [...SEED_NOTIFICATIONS];
 }
 
 export const SEED_STUDENTS: Student[] = [
@@ -4325,6 +4330,12 @@ export function TenantStoreProvider({
     }),
     [tenantName],
   );
+  const liveApiRef = useRef(liveApi);
+  liveApiRef.current = liveApi;
+  const tenantNameRef = useRef(tenantName);
+  tenantNameRef.current = tenantName;
+  const blankSchoolRef = useRef(blankSchool);
+  blankSchoolRef.current = blankSchool;
 
   const cachedSnapshot = useMemo(() => readSnapshot(storeKey), [storeKey]);
 
@@ -4414,8 +4425,11 @@ export function TenantStoreProvider({
   const [hydrated, setHydrated] = useState(() => !liveApi || cachedSnapshot !== null);
   const [branchSyncing, setBranchSyncing] = useState(false);
   const branchSwitchSeq = useRef(0);
+  const branchesRef = useRef(branches);
+  branchesRef.current = branches;
 
   const applySnapshot = useCallback((snap: Snapshot) => {
+    const apiLive = liveApiRef.current;
     setStudents(Array.isArray(snap.students) ? snap.students : []);
     setStaff(
       Array.isArray(snap.staff)
@@ -4427,7 +4441,7 @@ export function TenantStoreProvider({
     setPayments(snap.payments);
     setDepartments(snap.departments);
     setRoles(snap.roles);
-    setTenantUsers(snap.tenantUsers ?? (liveApi ? [] : SEED_TENANT_USERS));
+    setTenantUsers(snap.tenantUsers ?? (apiLive ? [] : SEED_TENANT_USERS));
     setClasses(
       Array.isArray(snap.classes)
         ? snap.classes.map((c) =>
@@ -4439,7 +4453,7 @@ export function TenantStoreProvider({
               snap.feeTerms ?? [],
             ),
           )
-        : liveApi
+        : apiLive
           ? []
           : SEED_CLASSES,
     );
@@ -4453,14 +4467,14 @@ export function TenantStoreProvider({
               normalizeFeeTerm(t as Partial<FeeTerm> & Pick<FeeTerm, "id" | "label">),
             )
             .filter((t): t is FeeTerm => t !== null)
-        : liveApi
+        : apiLive
           ? []
           : SEED_FEE_TERMS,
     );
     setStudentYearLedgers(
       snap.studentYearLedgers?.length
         ? snap.studentYearLedgers
-        : liveApi
+        : apiLive
           ? []
           : SEED_STUDENT_YEAR_LEDGERS,
     );
@@ -4472,9 +4486,12 @@ export function TenantStoreProvider({
     setDashboardTodos(snap.dashboardTodos);
     setDashboardNote(snap.dashboardNote);
     setNotifications(snap.notifications);
-    setBranches(Array.isArray(snap.branches) ? snap.branches : []);
+    setBranches((prev) => {
+      const next = Array.isArray(snap.branches) ? snap.branches : [];
+      return branchListFingerprint(prev) === branchListFingerprint(next) ? prev : next;
+    });
     setActiveBranchIdState(snap.activeBranchId ?? "");
-  }, [liveApi]);
+  }, []);
 
   const applyBranchOperationalData = useCallback(
     (data: {
@@ -4498,7 +4515,7 @@ export function TenantStoreProvider({
       setStudentYearLedgers(
         data.studentYearLedgers?.length
           ? data.studentYearLedgers
-          : liveApi
+          : liveApiRef.current
             ? []
             : SEED_STUDENT_YEAR_LEDGERS,
       );
@@ -4506,13 +4523,14 @@ export function TenantStoreProvider({
       setDashboardNote(data.dashboardNote);
       setActiveBranchIdState(data.activeBranchId);
     },
-    [liveApi],
+    [],
   );
 
   useEffect(() => {
     activeStoreKey = storeKey;
     setBranchContext(tenantId ?? null, readStoredBranchPublicId(tenantId));
     let cancelled = false;
+    const branchEpochAtStart = branchCatalogWriteEpochValue();
     const localSnap = readSnapshot(storeKey);
     if (localSnap) {
       applySnapshot({
@@ -4534,6 +4552,10 @@ export function TenantStoreProvider({
         try {
           const remote = await fetchRemoteTenantBundle(undefined, { tenantId });
           if (!cancelled && remote) {
+            const keepLocalBranches = branchCatalogWriteEpochValue() > branchEpochAtStart;
+            const mergedBranches = keepLocalBranches
+              ? branchesRef.current
+              : remote.branches;
             // Year enrollments live in localStorage (API has no per-AY ledger yet).
             // Merge local books over the remote placeholder so hard refresh keeps
             // empty years empty and does not move all students into the active AY.
@@ -4542,6 +4564,7 @@ export function TenantStoreProvider({
               localLedgers,
               remote.studentYearLedgers,
             );
+            const sessionTenantName = tenantNameRef.current?.trim() || "";
             applySnapshot({
               students: remote.students,
               staff: remote.staff,
@@ -4566,14 +4589,14 @@ export function TenantStoreProvider({
                 ...remote.schoolDetails,
                 name:
                   remote.schoolDetails.name?.trim() ||
-                  tenantName?.trim() ||
+                  sessionTenantName ||
                   remote.schoolDetails.name,
               },
               dashboardTodos: remote.dashboardTodos,
               dashboardNote: remote.dashboardNote,
               notifications: remote.notifications,
               tenantUsers: remote.tenantUsers,
-              branches: remote.branches,
+              branches: mergedBranches,
               activeBranchId: remote.activeBranchId,
             });
             if (remote.activeBranchId) {
@@ -4614,7 +4637,7 @@ export function TenantStoreProvider({
             closedAcademicYears: [],
             academicYear: SEED_ACADEMIC_YEAR,
             themeSettings: SEED_THEME_SETTINGS,
-            schoolDetails: blankSchool,
+            schoolDetails: blankSchoolRef.current,
             dashboardTodos: [...DEFAULT_DASHBOARD_TODOS],
             dashboardNote: "",
             notifications: [],
@@ -4646,7 +4669,7 @@ export function TenantStoreProvider({
     return () => {
       cancelled = true;
     };
-  }, [applySnapshot, blankSchool, storeKey, tenantName, tenantId]);
+  }, [applySnapshot, storeKey, tenantId]);
 
   useEffect(() => {
     applyWorkspaceThemeMode(themeSettings.mode);
@@ -5217,14 +5240,14 @@ export function TenantStoreProvider({
                   ...remote.schoolDetails,
                   name:
                     remote.schoolDetails.name?.trim() ||
-                    tenantName?.trim() ||
+                    tenantNameRef.current?.trim() ||
                     remote.schoolDetails.name,
                 },
                 dashboardTodos: remote.dashboardTodos,
                 dashboardNote: remote.dashboardNote,
                 notifications: remote.notifications,
                 tenantUsers: remote.tenantUsers,
-                branches: remote.branches.length ? remote.branches : branches,
+                branches: remote.branches.length ? remote.branches : branchesRef.current,
                 activeBranchId: nextId,
               });
             } catch {
@@ -5244,14 +5267,7 @@ export function TenantStoreProvider({
 
       return { students: 0, receipts: 0 };
     },
-    [
-      academicYear,
-      applyBranchOperationalData,
-      applySnapshot,
-      branches,
-      tenantId,
-      tenantName,
-    ],
+    [academicYear, applyBranchOperationalData, applySnapshot, branches, tenantId],
   );
 
   const value = useMemo<TenantStoreValue>(

@@ -12428,6 +12428,10 @@ export function SchoolSettings() {
               roles={roles}
               staff={staff}
               canAddUser={planAllowsExtraUsers(session?.planFlags)}
+              currentUser={{
+                userId: session?.userId,
+                email: session?.email,
+              }}
             />
           </div>,
           "Loading users",

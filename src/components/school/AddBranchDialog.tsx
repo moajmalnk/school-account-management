@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -19,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { invalidateRemoteTenantBundleCache } from "@/lib/api/tenant-sync";
 import { apiUpsertBranch } from "@/lib/api/settings";
 import { getApiToken } from "@/lib/api/client";
 import { planAllowsMultipleBranches } from "@/lib/permissions";
@@ -114,6 +116,7 @@ export function AddBranchDialog({
           lng: payload.lng ?? null,
           isActive: true,
         };
+        invalidateRemoteTenantBundleCache();
         if (editing) {
           setBranches((prev) => prev.map((b) => (b.id === editing.id ? normalized : b)));
           toast.success(`Campus updated · ${name}`);
@@ -181,6 +184,11 @@ export function AddBranchDialog({
       >
         <DialogHeader>
           <DialogTitle>{editing ? "Edit Branch" : "Add Branch"}</DialogTitle>
+          <DialogDescription className="text-[13px] text-black/55">
+            {editing
+              ? "Update this campus name, contact details, and map location."
+              : "Add a new campus. Classes and fee catalogs can be copied from an existing branch."}
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={(e) => void submit(e)} className="grid grid-cols-12 gap-3">
           <div className="col-span-12 space-y-1.5 sm:col-span-6">

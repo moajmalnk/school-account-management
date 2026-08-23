@@ -29,12 +29,38 @@ const DialogOverlay = React.forwardRef<
 ));
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
+function nodeContainsDialogDescription(node: React.ReactNode): boolean {
+  for (const child of React.Children.toArray(node)) {
+    if (!React.isValidElement(child)) continue;
+    const type = child.type as { displayName?: string };
+    if (
+      child.type === DialogPrimitive.Description ||
+      type.displayName === DialogPrimitive.Description.displayName
+    ) {
+      return true;
+    }
+    const nested = (child.props as { children?: React.ReactNode }).children;
+    if (nested && nodeContainsDialogDescription(nested)) return true;
+  }
+  return false;
+}
+
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
     showCloseButton?: boolean;
   }
->(({ className, children, showCloseButton = true, ...props }, ref) => (
+>(({ className, children, showCloseButton = true, ...props }, ref) => {
+  const hasDescription = nodeContainsDialogDescription(children);
+  const { "aria-describedby": ariaDescribedBy, ...contentProps } = props;
+  const ariaProps =
+    ariaDescribedBy !== undefined
+      ? { "aria-describedby": ariaDescribedBy }
+      : hasDescription
+        ? {}
+        : { "aria-describedby": undefined };
+
+  return (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -43,7 +69,8 @@ const DialogContent = React.forwardRef<
         "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-border bg-background p-6 text-foreground shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-lg",
         className,
       )}
-      {...props}
+      {...contentProps}
+      {...ariaProps}
     >
       {children}
       {showCloseButton ? (
@@ -54,7 +81,8 @@ const DialogContent = React.forwardRef<
       ) : null}
     </DialogPrimitive.Content>
   </DialogPortal>
-));
+  );
+});
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (

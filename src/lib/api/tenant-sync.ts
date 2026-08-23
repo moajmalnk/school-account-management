@@ -122,6 +122,19 @@ async function getSafe<T>(path: string, fallback: T): Promise<T> {
 /** Dedupe concurrent hydrates (React Strict Mode mounts twice in dev). */
 let inflightBundle: Promise<RemoteTenantBundle | null> | null = null;
 let inflightKey: string | null = null;
+/** Bumped when branches are edited locally so stale hydrates keep the new names. */
+let branchCatalogWriteEpoch = 0;
+
+/** Clear cached tenant bundle fetches after branch catalog edits. */
+export function invalidateRemoteTenantBundleCache(): void {
+  inflightBundle = null;
+  inflightKey = null;
+  branchCatalogWriteEpoch += 1;
+}
+
+export function branchCatalogWriteEpochValue(): number {
+  return branchCatalogWriteEpoch;
+}
 
 function pickActiveBranchId(
   branches: CampusBranch[],

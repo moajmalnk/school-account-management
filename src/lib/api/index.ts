@@ -26,6 +26,7 @@ export type {
 export {
   fetchBranchOperationalBundle,
   fetchRemoteTenantBundle,
+  invalidateRemoteTenantBundleCache,
 } from "@/lib/api/tenant-sync";
 export { fetchTenantSubscription } from "@/lib/api/subscription";
 export type { TenantSubscription } from "@/lib/api/subscription";

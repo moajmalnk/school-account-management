@@ -92,17 +92,46 @@ export function SettingsUsersCard({
   roles,
   staff,
   canAddUser = true,
+  currentUser,
 }: {
   tenantUsers: TenantUser[];
   setTenantUsers: React.Dispatch<React.SetStateAction<TenantUser[]>>;
   roles: Role[];
   staff: Staff[];
   canAddUser?: boolean;
+  /** Signed-in workspace user — excluded from this management list */
+  currentUser?: { userId?: string; email?: string };
 }) {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<TenantUser | null>(null);
   const [form, setForm] = useState(emptyForm);
+
+  const isSignedInUser = (user: TenantUser) => {
+    if (!currentUser) return false;
+    if (currentUser.userId && user.id === currentUser.userId) return true;
+    if (
+      currentUser.email &&
+      user.email.trim().toLowerCase() === currentUser.email.trim().toLowerCase()
+    ) {
+      return true;
+    }
+    return false;
+  };
+
+  const teamUsers = useMemo(() => {
+    if (!currentUser?.userId && !currentUser?.email) return tenantUsers;
+    return tenantUsers.filter((u) => {
+      if (currentUser.userId && u.id === currentUser.userId) return false;
+      if (
+        currentUser.email &&
+        u.email.trim().toLowerCase() === currentUser.email.trim().toLowerCase()
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [tenantUsers, currentUser?.userId, currentUser?.email]);
 
   const liveStaff = useMemo(
     () => staff.filter((s) => !s.deletedAt).sort((a, b) => a.name.localeCompare(b.name)),
@@ -289,6 +318,11 @@ export function SettingsUsersCard({
 
   const confirmDelete = () => {
     if (!pendingDelete) return;
+    if (isSignedInUser(pendingDelete)) {
+      toast.error("You cannot remove your own account from here");
+      setPendingDelete(null);
+      return;
+    }
     const id = pendingDelete.id;
     const name = pendingDelete.displayName;
     setTenantUsers((prev) => prev.filter((u) => u.id !== id));
@@ -303,25 +337,32 @@ export function SettingsUsersCard({
     <>
       <OrganicCard tone="white" cornerSide="bl" padded className="min-w-0">
         <CardHeader
-          title="Users"
+          title="Team access"
           subtitle={
             !canAddUser
-              ? "This plan includes the school admin login only · upgrade to Premium to add workspace users"
-              : `${tenantUsers.length} workspace logins · assign modules & finance permissions`
+              ? "This plan includes your administrator login only · upgrade to Premium to add team logins"
+              : teamUsers.length === 0
+                ? "No additional team logins yet · add users with limited module access"
+                : `${teamUsers.length} team login${teamUsers.length === 1 ? "" : "s"} · assign modules & finance permissions`
           }
           actionLabel={canAddUser ? "Add User" : undefined}
           onAction={canAddUser ? startCreate : undefined}
         />
 
+        <p className="mt-3 text-[11.5px] leading-relaxed text-black/45 dark:text-zinc-500">
+          Your signed-in administrator account is not listed here and cannot be edited or removed
+          from this screen.
+        </p>
+
         <div className="mt-4 space-y-2">
-          {tenantUsers.length === 0 && (
+          {teamUsers.length === 0 && (
             <div className="rounded-lg border border-dashed border-black/15 bg-[#F4F4F5]/40 px-4 py-8 text-center text-[12px] text-black/55 dark:text-zinc-400">
               {canAddUser
-                ? "No workspace users yet · create one to grant limited access"
-                : "School admin can sign in · extra logins require Premium or Enterprise"}
+                ? "No team logins yet · add a user to grant staff limited workspace access"
+                : "Upgrade to Premium or Enterprise to add fee clerks, coordinators, and other logins"}
             </div>
           )}
-          {tenantUsers.map((user) => {
+          {teamUsers.map((user) => {
             const roleTitle = roles.find((r) => r.id === user.roleId)?.title;
             const linkedStaff = staff.find((s) => s.id === user.staffId);
             return (

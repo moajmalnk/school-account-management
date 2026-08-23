@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { OrganicCard } from "@/components/ui/organic-card";
+import { invalidateRemoteTenantBundleCache } from "@/lib/api/tenant-sync";
 import { apiDeleteBranch } from "@/lib/api/settings";
 import { getApiToken } from "@/lib/api/client";
 import {
@@ -103,6 +104,7 @@ export function SettingsBranchesCard({
       if (getApiToken()) {
         await apiDeleteBranch(pendingDelete.id);
       }
+      invalidateRemoteTenantBundleCache();
       const remaining = branches.filter((b) => b.id !== pendingDelete.id);
       setBranches(remaining);
       if (pendingDelete.id === activeBranchId && remaining[0]) {
