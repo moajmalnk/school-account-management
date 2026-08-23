@@ -615,20 +615,54 @@ export function studentSchedulePeriodLabels(input: {
   academicYear: string;
   kind: "tuition" | "vehicle" | "both";
 }): string[] {
+  return studentSchedulePeriodOptions(input).map((o) => o.label);
+}
+
+export type StudentSchedulePeriodOption = {
+  label: string;
+  mode: "term" | "month";
+  amount: number;
+  kind: "tuition" | "vehicle";
+};
+
+function inferPeriodMode(label: string, feeTerms: FeeTerm[]): "term" | "month" {
+  const needle = label.trim().toLowerCase();
+  const hit = feeTerms.find((t) => t.label.trim().toLowerCase() === needle);
+  if (hit) return hit.periodMode === "month" ? "month" : "term";
+  if (/^term\s*\d+/i.test(label) || /annual/i.test(label)) return "term";
+  return "month";
+}
+
+/** Structured schedule periods (terms / months) with amounts for pickers. */
+export function studentSchedulePeriodOptions(input: {
+  student: Student;
+  classes: ClassConfig[];
+  feeTerms: FeeTerm[];
+  transportRoutes?: TransportRoute[];
+  academicYear: string;
+  kind: "tuition" | "vehicle" | "both";
+}): StudentSchedulePeriodOption[] {
   const yearTerms = filterByAcademicYear(input.feeTerms, input.academicYear);
   const classConfig = input.classes.find((c) => c.className === input.student.cls);
-  const labels: string[] = [];
+  const out: StudentSchedulePeriodOption[] = [];
   const seen = new Set<string>();
-  const push = (label: string) => {
-    const key = label.trim().toLowerCase();
-    if (!key || seen.has(key)) return;
+
+  const push = (label: string, amount: number, kind: "tuition" | "vehicle") => {
+    const trimmed = label.trim();
+    const key = `${kind}::${trimmed.toLowerCase()}`;
+    if (!trimmed || seen.has(key)) return;
     seen.add(key);
-    labels.push(label.trim());
+    out.push({
+      label: trimmed,
+      mode: inferPeriodMode(trimmed, yearTerms),
+      amount: Math.max(0, Math.round(amount)),
+      kind,
+    });
   };
 
   if (input.kind === "tuition" || input.kind === "both") {
     for (const line of expectedTuitionChargeLines(classConfig, yearTerms)) {
-      push(line.periodLabel || line.desc);
+      push(line.periodLabel || line.desc, line.charge, "tuition");
     }
   }
   if (input.kind === "vehicle" || input.kind === "both") {
@@ -638,10 +672,10 @@ export function studentSchedulePeriodLabels(input: {
       input.transportRoutes ?? [],
       yearTerms,
     )) {
-      push(line.periodLabel || line.desc);
+      push(line.periodLabel || line.desc, line.charge, "vehicle");
     }
   }
-  return labels;
+  return out;
 }
 
 /**

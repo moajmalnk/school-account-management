@@ -44,12 +44,13 @@ import {
 import {
   buildStudentFeeStatement,
   studentFeeBreaksForYear,
-  studentSchedulePeriodLabels,
+  studentSchedulePeriodOptions,
   unpaidAmountCoveredByBreak,
   type StudentLedgerRow as LedgerRow,
   type StudentLedgerStatus as LedgerStatus,
   type StudentReceipt as Receipt,
 } from "@/lib/student-fees";
+import { FeePeriodChecklist } from "@/components/school/FeePeriodChecklist";
 import { ShareParentLinkDialog } from "@/components/school/ShareParentLinkDialog";
 import { downloadReceiptPdf, downloadStudentFeeReportPdf, receiptBrandingFromSchool } from "@/lib/finance-export";
 import { sendWhatsAppNotify, toNotifyWhatsAppNumber } from "@/lib/whatsapp-notify";
@@ -1199,7 +1200,7 @@ function FeeBreaksManageDialog({
 
   const periodOptions = useMemo(
     () =>
-      studentSchedulePeriodLabels({
+      studentSchedulePeriodOptions({
         student,
         classes,
         feeTerms,
@@ -1210,6 +1211,11 @@ function FeeBreaksManageDialog({
     [student, classes, feeTerms, transportRoutes, academicYear, appliesTo],
   );
 
+  const periodLabels = useMemo(
+    () => periodOptions.map((o) => o.label),
+    [periodOptions],
+  );
+
   useEffect(() => {
     if (!open) return;
     setAppliesTo("both");
@@ -1218,14 +1224,8 @@ function FeeBreaksManageDialog({
   }, [open, student.id]);
 
   useEffect(() => {
-    setSelectedPeriods((prev) => prev.filter((p) => periodOptions.includes(p)));
-  }, [periodOptions]);
-
-  const togglePeriod = (label: string) => {
-    setSelectedPeriods((prev) =>
-      prev.includes(label) ? prev.filter((p) => p !== label) : [...prev, label],
-    );
-  };
+    setSelectedPeriods((prev) => prev.filter((p) => periodLabels.includes(p)));
+  }, [periodLabels]);
 
   const applyDueToStudent = (nextDue: number) => {
     setStudents((prev) =>
@@ -1418,35 +1418,17 @@ function FeeBreaksManageDialog({
 
             <div>
               <div className={META_LABEL}>Fee period(s)</div>
-              {periodOptions.length === 0 ? (
-                <p className="mt-1.5 text-[13px] text-black/50">
-                  No schedule periods found for this student.
-                </p>
-              ) : (
-                <div className="mt-1.5 flex flex-wrap gap-2">
-                  {periodOptions.map((label) => {
-                    const checked = selectedPeriods.includes(label);
-                    return (
-                      <label
-                        key={label}
-                        className={cn(
-                          "inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors",
-                          checked
-                            ? "border-[#0F766E] bg-[#CCFBF1] text-[#0F766E]"
-                            : "border-[#E5E5E5] bg-white text-black/70 hover:border-black/20",
-                        )}
-                      >
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={() => togglePeriod(label)}
-                          className="h-3.5 w-3.5"
-                        />
-                        {label}
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
+              <p className="mt-1 mb-2 text-[12px] text-black/50 dark:text-zinc-400">
+                Choose terms and/or months to pause. They will not appear in Fee Collection
+                or overdue.
+              </p>
+              <FeePeriodChecklist
+                options={periodOptions}
+                selected={selectedPeriods}
+                onChange={setSelectedPeriods}
+                mode="select"
+                disabled={saving}
+              />
             </div>
 
             <div>

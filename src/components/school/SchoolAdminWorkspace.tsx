@@ -8259,6 +8259,10 @@ function ReceivePayment() {
   >(null);
   const [newCategoryLabel, setNewCategoryLabel] = useState("");
   const [savingCategory, setSavingCategory] = useState(false);
+  const deepLinkCollectRef = useRef<{
+    feeKind?: "tuition" | "vehicle";
+    periods: string[];
+  } | null>(null);
 
   const isExternal = payerSource === "external";
   const selected = !isExternal
@@ -8491,14 +8495,33 @@ function ReceivePayment() {
     if (editingPayment || !search.studentId) return;
     const student = students.find((s) => s.id === search.studentId);
     if (!student) return;
+    const periods = (search.periods ?? "")
+      .split(",")
+      .map((p) => p.trim())
+      .filter(Boolean);
+    deepLinkCollectRef.current = {
+      feeKind: search.feeKind,
+      periods,
+    };
     setPayerSource("student");
     setCls(student.cls);
     setStu(student.name);
     navigate({ to: "/tenant/finance", search: { tab: "receive" }, replace: true });
-  }, [search.studentId, students, editingPayment, navigate]);
+  }, [
+    search.studentId,
+    search.feeKind,
+    search.periods,
+    students,
+    editingPayment,
+    navigate,
+  ]);
 
   useEffect(() => {
     if (isExternal || editingPayment || !selected) return;
+
+    const deepLink = deepLinkCollectRef.current;
+    const preferVehicle =
+      deepLink?.feeKind === "vehicle" || (deepLink?.periods.length ?? 0) > 0;
 
     setFeeItems((prev) => {
       const nonVehicle = prev.filter((item) => !isVehicleFeeCategory(item.description));
@@ -8506,10 +8529,57 @@ function ReceivePayment() {
       const needsTransport = studentNeedsTransport(selected);
 
       if (!needsTransport) {
+        deepLinkCollectRef.current = null;
         if (!existingVehicle) return prev;
         return nonVehicle.length > 0
           ? nonVehicle
           : [createFeeLineItem({ description: defaultCategory })];
+      }
+
+      // Deep-link: open one fee line per requested vehicle period
+      if (preferVehicle && deepLink && deepLink.periods.length > 0) {
+        const choices = feePeriodChoices(
+          feeTerms,
+          vehicleCategoryLabel,
+          vehiclePeriodOpts ?? periodOpts,
+          matchedClass,
+          matchedRoute,
+        );
+        const lines = deepLink.periods.map((periodLabel) => {
+          const match =
+            choices.find(
+              (c) => c.period.trim().toLowerCase() === periodLabel.trim().toLowerCase(),
+            ) ?? null;
+          const kind =
+            match?.kind ?? (matchedRoute?.billingCycle === "Term" ? "term" : "month");
+          const period = match?.period ?? periodLabel;
+          let line = createFeeLineItem({
+            description: vehicleCategoryLabel,
+            feePeriodKind: kind,
+            feePeriod: period,
+          });
+          const prefill = prefillAmountForFeeLine(
+            line,
+            matchedClass,
+            feeTerms,
+            tuitionFee,
+            vehicleFee,
+            collectionStartMonth,
+            matchedRoute,
+            transportShift,
+            getPrefillBalanceContext([line]),
+          );
+          if (prefill !== undefined) {
+            line = { ...line, amount: String(prefill) };
+          }
+          return line;
+        });
+        deepLinkCollectRef.current = null;
+        return lines.length > 0 ? lines : prev;
+      }
+
+      if (preferVehicle && deepLink?.feeKind === "vehicle") {
+        deepLinkCollectRef.current = null;
       }
 
       const balanceCtx = getPrefillBalanceContext(prev);
@@ -8560,12 +8630,16 @@ function ReceivePayment() {
         feePeriod: vehicleLine.feePeriod.trim() ? vehicleLine.feePeriod : vehiclePeriod.feePeriod,
       };
 
-      const tuitionLines =
-        nonVehicle.length > 0
+      const tuitionLines = preferVehicle
+        ? []
+        : nonVehicle.length > 0
           ? nonVehicle
           : [createFeeLineItem({ description: defaultCategory })];
 
-      const next = [...tuitionLines, vehicleLine];
+      const next =
+        preferVehicle && tuitionLines.length === 0
+          ? [vehicleLine]
+          : [...tuitionLines, vehicleLine];
 
       if (!vehicleLine.amount.trim()) {
         const prefill = prefillAmountForFeeLine(
@@ -15256,11 +15330,12 @@ function TransportCard({
   feeTerms: FeeTerm[];
   listLayout?: "cards" | "table";
 }) {
-  type RouteFeeDraftRow = { id: string; label: string; amount: string };
+  type RouteFeeDraftRow = { id: string; label: string; amount: string; dueDate: string };
 
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<TransportRoute | null>(null);
+  const [vehicleQuery, setVehicleQuery] = useState("");
   const [form, setForm] = useState({
     mapFrom: "",
     mapTo: "",
@@ -15276,6 +15351,7 @@ function TransportCard({
     feeCollectionStartMonth: defaultFeeCollectionStartMonth(feeTerms),
     installmentCount: "12",
     installments: [] as RouteFeeDraftRow[],
+    vehicleIds: [] as string[],
   });
 
   const defaultInstallmentCount = (cycle: Extract<ClassBillingCycle, "Monthly" | "Term">) => {
@@ -15285,17 +15361,55 @@ function TransportCard({
     return cycle === "Term" ? "4" : "12";
   };
 
+  const ensureInstallmentRows = (
+    prev: typeof form,
+    count: number,
+    mode: ClassFeeAmountMode = prev.feeAmountMode,
+  ): RouteFeeDraftRow[] =>
+    Array.from({ length: Math.max(1, count) }, (_, index) => {
+      const existing = prev.installments[index];
+      return {
+        id: existing?.id || `fl-i-${index + 1}`,
+        label: existing?.label || installmentLabel(index, prev.billingCycle),
+        amount:
+          mode === "fixed"
+            ? prev.bothFee
+            : existing?.amount || prev.bothFee || "",
+        dueDate: existing?.dueDate || "",
+      };
+    });
+
   const schedulePreview = useMemo(() => {
     const count = Math.max(1, Math.floor(Number(form.installmentCount) || 0));
     const bothAmount = Math.max(0, Math.round(Number(form.bothFee) || 0));
+    const rows =
+      form.installments.length > 0
+        ? form.installments
+        : Array.from({ length: count }, (_, index) => ({
+            id: `fl-i-${index + 1}`,
+            label: installmentLabel(index, form.billingCycle),
+            amount: form.bothFee,
+            dueDate: "",
+          }));
     const bothLines =
       form.feeAmountMode === "fixed"
-        ? buildFixedInstallments(count, bothAmount, form.billingCycle)
-        : form.installments.map((row, index) => ({
+        ? Array.from({ length: count }, (_, index) => {
+            const row = rows[index];
+            return {
+              id: row?.id || `fl-i-${index + 1}`,
+              kind: "installment" as const,
+              label:
+                row?.label?.trim() || installmentLabel(index, form.billingCycle),
+              amount: bothAmount,
+              ...(row?.dueDate?.trim() ? { dueDate: row.dueDate.trim() } : {}),
+            };
+          })
+        : rows.map((row, index) => ({
             id: row.id || `fl-i-${index + 1}`,
             kind: "installment" as const,
             label: row.label.trim() || installmentLabel(index, form.billingCycle),
             amount: Math.max(0, Math.round(Number(row.amount) || 0)),
+            ...(row.dueDate ? { dueDate: row.dueDate } : {}),
           }));
     return {
       bothLines: bothLines.filter((line) => line.amount > 0),
@@ -15303,8 +15417,93 @@ function TransportCard({
     };
   }, [form]);
 
+  const termScheduleRows = useMemo(() => {
+    const count = Math.max(1, Math.floor(Number(form.installmentCount) || 0));
+    return Array.from({ length: count }, (_, index) => {
+      const existing = form.installments[index];
+      return {
+        id: existing?.id || `fl-i-${index + 1}`,
+        label: existing?.label || installmentLabel(index, form.billingCycle),
+        amount:
+          form.feeAmountMode === "fixed" ? form.bothFee : existing?.amount || "",
+        dueDate: existing?.dueDate || "",
+      };
+    });
+  }, [form]);
+
+  const patchInstallmentRow = (index: number, patch: Partial<RouteFeeDraftRow>) => {
+    setForm((prev) => {
+      const count = Math.max(1, Math.floor(Number(prev.installmentCount) || 0));
+      const rows = ensureInstallmentRows(prev, count);
+      rows[index] = { ...rows[index], ...patch };
+      const nextBoth =
+        prev.feeAmountMode === "fixed" && patch.amount !== undefined
+          ? patch.amount
+          : prev.bothFee;
+      return {
+        ...prev,
+        bothFee: nextBoth,
+        installments:
+          prev.feeAmountMode === "fixed"
+            ? rows.map((row) => ({ ...row, amount: nextBoth }))
+            : rows,
+        installmentCount: String(rows.length),
+      };
+    });
+  };
+
   const vehiclesForRoute = (routeId: string) =>
     transportVehicles.filter((v) => v.routeIds.includes(routeId));
+
+  const selectableVehicles = useMemo(
+    () =>
+      transportVehicles
+        .filter((v) => v.active !== false)
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [transportVehicles],
+  );
+
+  const filteredVehicles = useMemo(() => {
+    const q = vehicleQuery.trim().toLowerCase();
+    if (!q) return selectableVehicles;
+    return selectableVehicles.filter(
+      (v) =>
+        v.name.toLowerCase().includes(q) ||
+        v.registrationNo.toLowerCase().includes(q) ||
+        (v.driverName ?? "").toLowerCase().includes(q),
+    );
+  }, [selectableVehicles, vehicleQuery]);
+
+  const toggleVehicle = (vehicleId: string) => {
+    setForm((prev) => ({
+      ...prev,
+      vehicleIds: prev.vehicleIds.includes(vehicleId)
+        ? prev.vehicleIds.filter((id) => id !== vehicleId)
+        : [...prev.vehicleIds, vehicleId],
+    }));
+  };
+
+  const syncRouteVehicles = (routeId: string, selectedIds: string[]) => {
+    const selected = new Set(selectedIds);
+    setTransportVehicles((prev) =>
+      prev.map((v) => {
+        const has = v.routeIds.includes(routeId);
+        const should = selected.has(v.id);
+        if (has === should) return v;
+        const updated = {
+          ...v,
+          routeIds: should
+            ? [...v.routeIds.filter((id) => id !== routeId), routeId]
+            : v.routeIds.filter((id) => id !== routeId),
+        };
+        void apiUpsertVehicle(updated).catch((err) =>
+          toast.error(err instanceof Error ? err.message : "Could not sync vehicle"),
+        );
+        return updated;
+      }),
+    );
+  };
 
   const emptyForm = () => ({
     mapFrom: "",
@@ -15321,10 +15520,12 @@ function TransportCard({
     feeCollectionStartMonth: defaultFeeCollectionStartMonth(feeTerms),
     installmentCount: defaultInstallmentCount("Monthly"),
     installments: [] as RouteFeeDraftRow[],
+    vehicleIds: [] as string[],
   });
 
   const startCreate = () => {
     setEditingId(null);
+    setVehicleQuery("");
     setForm(emptyForm());
     setOpen(true);
   };
@@ -15336,6 +15537,7 @@ function TransportCard({
     const installments = normalized.bothFeeSchedule.filter((line) => line.kind === "installment");
     const uniqueAmounts = [...new Set(installments.map((line) => line.amount))];
     setEditingId(r.id);
+    setVehicleQuery("");
     setForm({
       mapFrom: normalized.mapFrom,
       mapTo: normalized.mapTo,
@@ -15357,7 +15559,9 @@ function TransportCard({
         id: line.id,
         label: line.label,
         amount: line.amount ? String(line.amount) : "",
+        dueDate: line.dueDate ?? "",
       })),
+      vehicleIds: vehiclesForRoute(r.id).map((v) => v.id),
     });
     setOpen(true);
   };
@@ -15381,27 +15585,17 @@ function TransportCard({
       toast.error("Add at least one installment amount for both shifts");
       return;
     }
-    const count = Math.max(1, Math.floor(Number(form.installmentCount) || 0));
-    const bothFeeSchedule =
-      form.feeAmountMode === "fixed"
-        ? buildFixedInstallments(count, bothFee, form.billingCycle)
-        : schedulePreview.bothLines;
-    const morningFeeSchedule =
-      form.feeAmountMode === "fixed"
-        ? buildFixedInstallments(count, morningFee, form.billingCycle)
-        : bothFeeSchedule.map((line, index) => ({
-            ...line,
-            id: `fl-m-${index + 1}`,
-            amount: morningFee,
-          }));
-    const eveningFeeSchedule =
-      form.feeAmountMode === "fixed"
-        ? buildFixedInstallments(count, eveningFee, form.billingCycle)
-        : bothFeeSchedule.map((line, index) => ({
-            ...line,
-            id: `fl-e-${index + 1}`,
-            amount: eveningFee,
-          }));
+    const bothFeeSchedule = schedulePreview.bothLines;
+    const morningFeeSchedule = bothFeeSchedule.map((line, index) => ({
+      ...line,
+      id: `fl-m-${index + 1}`,
+      amount: morningFee,
+    }));
+    const eveningFeeSchedule = bothFeeSchedule.map((line, index) => ({
+      ...line,
+      id: `fl-e-${index + 1}`,
+      amount: eveningFee,
+    }));
     const payload: Omit<TransportRoute, "id"> = {
       mapFrom,
       mapTo,
@@ -15432,6 +15626,7 @@ function TransportCard({
       void apiUpsertTransportRoute(updated).catch((err) =>
         toast.error(err instanceof Error ? err.message : "Could not sync route"),
       );
+      syncRouteVehicles(editingId, form.vehicleIds);
       toast.success(`Route updated · ${mapFrom} → ${mapTo}`);
     } else {
       const nextId = `TR-${(transportRoutes.length + 1).toString().padStart(3, "0")}`;
@@ -15440,6 +15635,7 @@ function TransportCard({
       void apiUpsertTransportRoute(created).catch((err) =>
         toast.error(err instanceof Error ? err.message : "Could not sync route"),
       );
+      syncRouteVehicles(nextId, form.vehicleIds);
       toast.success(`Route added · ${mapFrom} → ${mapTo}`);
     }
     setOpen(false);
@@ -15762,7 +15958,17 @@ function TransportCard({
       />
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent
+          className="max-h-[85vh] overflow-y-auto sm:max-w-2xl"
+          onPointerDownOutside={(e) => {
+            const target = e.target as HTMLElement | null;
+            if (target?.closest("[data-radix-popper-content-wrapper]")) e.preventDefault();
+          }}
+          onInteractOutside={(e) => {
+            const target = e.target as HTMLElement | null;
+            if (target?.closest("[data-radix-popper-content-wrapper]")) e.preventDefault();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>{editingId ? "Edit Route" : "Add Transport Route"}</DialogTitle>
             <DialogDescription>
@@ -15848,14 +16054,80 @@ function TransportCard({
               </div>
             </div>
 
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                Assigned vehicles
+              </Label>
+              {selectableVehicles.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-[#E5E5E5] px-3 py-4 text-center text-[12px] text-black/45">
+                  No vehicles yet — add one under Vehicles, then assign it here.
+                </p>
+              ) : (
+                <div className="overflow-hidden rounded-lg border border-[#E5E5E5] bg-[#FAFAFA]">
+                  <div className="relative border-b border-[#E5E5E5] bg-white p-2">
+                    <Search className="pointer-events-none absolute left-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-black/40" />
+                    <Input
+                      value={vehicleQuery}
+                      onChange={(e) => setVehicleQuery(e.target.value)}
+                      placeholder="Search vehicle, reg. no, driver…"
+                      className="h-9 border-[#E5E5E5] bg-white pl-8 text-[12px]"
+                    />
+                  </div>
+                  <div className="max-h-40 space-y-1 overflow-y-auto p-2">
+                    {filteredVehicles.length === 0 ? (
+                      <p className="px-2 py-3 text-center text-[12px] text-black/45">
+                        No vehicles match “{vehicleQuery.trim()}”
+                      </p>
+                    ) : (
+                      filteredVehicles.map((v) => {
+                        const checked = form.vehicleIds.includes(v.id);
+                        return (
+                          <label
+                            key={v.id}
+                            className={cn(
+                              "flex cursor-pointer items-start gap-2.5 rounded-xl px-2.5 py-2 transition-colors",
+                              checked
+                                ? "bg-[#CCFBF1] dark:bg-[#0F766E]/40"
+                                : "hover:bg-white dark:hover:bg-white/5",
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleVehicle(v.id)}
+                              className="mt-0.5 h-4 w-4 shrink-0 rounded border-black/20 accent-[#0F766E]"
+                            />
+                            <span className="min-w-0">
+                              <span className="block text-[12px] font-medium leading-snug text-black dark:text-zinc-100">
+                                {v.name}
+                              </span>
+                              <span className="block text-[11px] text-black/50 dark:text-zinc-400">
+                                {v.registrationNo}
+                                {v.driverName ? ` · ${v.driverName}` : ""}
+                              </span>
+                            </span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+              <p className="text-[10.5px] text-black/45">
+                {form.vehicleIds.length === 0
+                  ? "No vehicles assigned to this route"
+                  : `${form.vehicleIds.length} vehicle${form.vehicleIds.length === 1 ? "" : "s"} selected`}
+              </p>
+            </div>
+
             <div className="space-y-3 rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] p-3.5">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
                   Fee structure
                 </p>
                 <p className="mt-1 text-[12px] leading-snug text-black/50">
-                  Monthly or term installments for vehicle fee collection — same pattern as class
-                  tier.
+                  Same pattern as class tier — same amount for every period, or different amounts,
+                  each with its own due date.
                 </p>
               </div>
 
@@ -15878,15 +16150,30 @@ function TransportCard({
                         aria-selected={active}
                         onClick={() => {
                           const count = defaultInstallmentCount(cycle);
-                          setForm((prev) => ({
-                            ...prev,
-                            billingCycle: cycle,
-                            installmentCount: prev.installmentCount || count,
-                            installments: prev.installments.map((row, index) => ({
-                              ...row,
-                              label: installmentLabel(index, cycle),
-                            })),
-                          }));
+                          setForm((prev) => {
+                            const nextCount = Math.max(
+                              1,
+                              Math.floor(Number(prev.installmentCount) || 0) || Number(count),
+                            );
+                            const rows = Array.from({ length: nextCount }, (_, index) => {
+                              const existing = prev.installments[index];
+                              return {
+                                id: existing?.id || `fl-i-${index + 1}`,
+                                label: installmentLabel(index, cycle),
+                                amount:
+                                  prev.feeAmountMode === "fixed"
+                                    ? prev.bothFee
+                                    : existing?.amount || prev.bothFee || "",
+                                dueDate: existing?.dueDate || "",
+                              };
+                            });
+                            return {
+                              ...prev,
+                              billingCycle: cycle,
+                              installmentCount: String(nextCount),
+                              installments: rows,
+                            };
+                          });
                         }}
                         className={cn(
                           "relative min-w-0 flex-1 px-2 py-2.5 text-center text-[12.5px] font-semibold tracking-tight transition-colors",
@@ -15912,8 +16199,20 @@ function TransportCard({
                 <div className="flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
                   {(
                     [
-                      { key: "fixed" as const, label: "Fixed" },
-                      { key: "custom" as const, label: "Different" },
+                      {
+                        key: "fixed" as const,
+                        label:
+                          form.billingCycle === "Term"
+                            ? "Same for every term"
+                            : "Same each month",
+                      },
+                      {
+                        key: "custom" as const,
+                        label:
+                          form.billingCycle === "Term"
+                            ? "Different per term"
+                            : "Different per month",
+                      },
                     ] as const
                   ).map((option) => {
                     const active = form.feeAmountMode === option.key;
@@ -15923,24 +16222,32 @@ function TransportCard({
                         type="button"
                         onClick={() => {
                           setForm((prev) => {
-                            if (option.key === "custom" && prev.installments.length === 0) {
-                              const count = Math.max(
-                                1,
-                                Math.floor(Number(prev.installmentCount) || 0),
-                              );
-                              const amount = prev.bothFee;
+                            const count = Math.max(
+                              1,
+                              Math.floor(Number(prev.installmentCount) || 0) ||
+                                Number(defaultInstallmentCount(prev.billingCycle)),
+                            );
+                            const rows = Array.from({ length: count }, (_, index) => {
+                              const existing = prev.installments[index];
                               return {
-                                ...prev,
-                                feeAmountMode: "custom",
-                                installments: Array.from({ length: count }, (_, index) => ({
-                                  id: `fl-i-${index + 1}`,
-                                  label: installmentLabel(index, prev.billingCycle),
-                                  amount,
-                                  dueDate: "",
-                                })),
+                                id: existing?.id || `fl-i-${index + 1}`,
+                                label:
+                                  existing?.label ||
+                                  installmentLabel(index, prev.billingCycle),
+                                amount:
+                                  option.key === "fixed"
+                                    ? prev.bothFee || existing?.amount || ""
+                                    : existing?.amount || prev.bothFee || "",
+                                dueDate: existing?.dueDate || "",
                               };
-                            }
-                            return { ...prev, feeAmountMode: option.key };
+                            });
+                            return {
+                              ...prev,
+                              feeAmountMode: option.key,
+                              installmentCount: String(count),
+                              bothFee: prev.bothFee || rows[0]?.amount || "",
+                              installments: rows,
+                            };
                           });
                         }}
                         className={cn(
@@ -15953,27 +16260,35 @@ function TransportCard({
                     );
                   })}
                 </div>
+                <p className="text-[11px] text-black/45">
+                  {form.feeAmountMode === "fixed"
+                    ? "One both-shift amount applies to every period. Set a due date for each below."
+                    : "Enter a separate both-shift amount and due date for each period."}
+                </p>
               </div>
 
-              {form.feeAmountMode === "fixed" ? (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                      {form.billingCycle === "Term" ? "Terms" : "Installments"}
-                    </Label>
-                    <Input
-                      inputMode="numeric"
-                      value={form.installmentCount}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          installmentCount: e.target.value.replace(/[^0-9]/g, ""),
-                        })
-                      }
-                      placeholder={form.billingCycle === "Term" ? "4" : "12"}
-                      className="font-mono bg-white"
-                    />
-                  </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                    {form.billingCycle === "Term" ? "Number of terms" : "Number of installments"}
+                  </Label>
+                  <Input
+                    inputMode="numeric"
+                    value={form.installmentCount}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/[^0-9]/g, "");
+                      const count = Math.max(1, Math.floor(Number(raw) || 0));
+                      setForm((prev) => ({
+                        ...prev,
+                        installmentCount: raw,
+                        installments: ensureInstallmentRows(prev, count),
+                      }));
+                    }}
+                    placeholder={form.billingCycle === "Term" ? "4" : "12"}
+                    className="font-mono bg-white"
+                  />
+                </div>
+                {form.feeAmountMode === "fixed" ? (
                   <div className="space-y-1.5">
                     <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                       Both shifts · amount each (₹)
@@ -15981,98 +16296,175 @@ function TransportCard({
                     <Input
                       inputMode="numeric"
                       value={form.bothFee}
-                      onChange={(e) =>
-                        setForm({ ...form, bothFee: e.target.value.replace(/[^0-9]/g, "") })
-                      }
+                      onChange={(e) => {
+                        const amount = e.target.value.replace(/[^0-9]/g, "");
+                        setForm((prev) => {
+                          const count = Math.max(
+                            1,
+                            Math.floor(Number(prev.installmentCount) || 0),
+                          );
+                          return {
+                            ...prev,
+                            bothFee: amount,
+                            installments: ensureInstallmentRows(
+                              { ...prev, bothFee: amount },
+                              count,
+                              "fixed",
+                            ),
+                          };
+                        });
+                      }}
                       placeholder="0"
                       className="font-mono bg-white"
                     />
                   </div>
+                ) : (
+                  <div className="flex items-end">
+                    <p className="pb-2 text-[12px] text-black/45">
+                      Set each {form.billingCycle === "Term" ? "term" : "installment"} amount in
+                      the schedule below.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2 rounded-xl border border-[#E8E8EA] bg-white p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    {form.billingCycle === "Term" ? "Term schedule" : "Installment schedule"}
+                  </Label>
+                  {form.feeAmountMode === "custom" ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm((prev) => {
+                          const rows = [
+                            ...ensureInstallmentRows(
+                              prev,
+                              Math.max(1, Math.floor(Number(prev.installmentCount) || 0)),
+                            ),
+                            {
+                              id: `fl-i-${prev.installments.length + 1}-${Date.now()}`,
+                              label: installmentLabel(
+                                Math.max(1, Math.floor(Number(prev.installmentCount) || 0)),
+                                prev.billingCycle,
+                              ),
+                              amount: prev.bothFee,
+                              dueDate: "",
+                            },
+                          ];
+                          return {
+                            ...prev,
+                            installments: rows,
+                            installmentCount: String(rows.length),
+                          };
+                        })
+                      }
+                      className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#0F766E] hover:underline"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Add {form.billingCycle === "Term" ? "term" : "installment"}
+                    </button>
+                  ) : null}
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  {form.installments.map((row, index) => (
-                    <div key={row.id} className="grid grid-cols-[1fr_7rem_auto] items-end gap-2">
-                      <div className="space-y-1">
-                        {index === 0 && (
-                          <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                            Label
-                          </Label>
-                        )}
-                        <Input
-                          value={row.label}
-                          onChange={(e) =>
-                            setForm({
-                              ...form,
-                              installments: form.installments.map((item) =>
-                                item.id === row.id ? { ...item, label: e.target.value } : item,
-                              ),
-                            })
-                          }
-                          className="h-9 bg-white text-[13px]"
-                        />
+
+                <div
+                  className={cn(
+                    "grid items-end gap-2 px-0.5 text-[10px] font-semibold uppercase tracking-wider text-black/40",
+                    form.feeAmountMode === "custom"
+                      ? "grid-cols-[minmax(0,1fr)_6.5rem_minmax(10rem,1fr)_auto]"
+                      : "grid-cols-[minmax(0,1fr)_6.5rem_minmax(10rem,1fr)]",
+                  )}
+                >
+                  <span>Label</span>
+                  <span>Both (₹)</span>
+                  <span>Due date</span>
+                  {form.feeAmountMode === "custom" ? <span className="sr-only">Remove</span> : null}
+                </div>
+
+                {termScheduleRows.map((row, index) => (
+                  <div
+                    key={row.id}
+                    className={cn(
+                      "grid items-center gap-2",
+                      form.feeAmountMode === "custom"
+                        ? "grid-cols-[minmax(0,1fr)_6.5rem_minmax(10rem,1fr)_auto]"
+                        : "grid-cols-[minmax(0,1fr)_6.5rem_minmax(10rem,1fr)]",
+                    )}
+                  >
+                    <Input
+                      value={row.label}
+                      onChange={(e) => patchInstallmentRow(index, { label: e.target.value })}
+                      className="h-9 bg-[#FAFAFA] text-[13px]"
+                    />
+                    {form.feeAmountMode === "fixed" ? (
+                      <div className="flex h-9 items-center rounded-md border border-[#EFEFEF] bg-[#F7F7F8] px-2.5 font-mono text-[13px] text-black/70">
+                        {row.amount ? `₹ ${Number(row.amount).toLocaleString("en-IN")}` : "—"}
                       </div>
-                      <div className="space-y-1">
-                        {index === 0 && (
-                          <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                            Both (₹)
-                          </Label>
-                        )}
-                        <Input
-                          inputMode="numeric"
-                          value={row.amount}
-                          onChange={(e) =>
-                            setForm({
-                              ...form,
-                              installments: form.installments.map((item) =>
-                                item.id === row.id
-                                  ? { ...item, amount: e.target.value.replace(/[^0-9]/g, "") }
-                                  : item,
-                              ),
-                            })
-                          }
-                          className="h-9 font-mono bg-white"
-                        />
-                      </div>
+                    ) : (
+                      <Input
+                        inputMode="numeric"
+                        value={row.amount}
+                        onChange={(e) =>
+                          patchInstallmentRow(index, {
+                            amount: e.target.value.replace(/[^0-9]/g, ""),
+                          })
+                        }
+                        placeholder="0"
+                        className="h-9 font-mono bg-white"
+                      />
+                    )}
+                    <DatePicker
+                      value={row.dueDate}
+                      onChange={(dueDate) => patchInstallmentRow(index, { dueDate })}
+                      placeholder="dd/mm/yyyy"
+                      valueFormat="iso"
+                      className="h-9 text-[12px]"
+                      quickPicks={[
+                        { label: "Today", getDate: (t) => t },
+                        {
+                          label: "+30d",
+                          getDate: (t) =>
+                            new Date(t.getFullYear(), t.getMonth(), t.getDate() + 30),
+                        },
+                      ]}
+                    />
+                    {form.feeAmountMode === "custom" ? (
                       <button
                         type="button"
                         aria-label={`Remove ${row.label}`}
                         onClick={() =>
-                          setForm({
-                            ...form,
-                            installments: form.installments.filter((item) => item.id !== row.id),
-                            installmentCount: String(Math.max(1, form.installments.length - 1)),
+                          setForm((prev) => {
+                            const rows = ensureInstallmentRows(
+                              prev,
+                              Math.max(1, Math.floor(Number(prev.installmentCount) || 0)),
+                            ).filter((_, i) => i !== index);
+                            const nextRows =
+                              rows.length > 0
+                                ? rows
+                                : [
+                                    {
+                                      id: `fl-i-1`,
+                                      label: installmentLabel(0, prev.billingCycle),
+                                      amount: prev.bothFee,
+                                      dueDate: "",
+                                    },
+                                  ];
+                            return {
+                              ...prev,
+                              installments: nextRows,
+                              installmentCount: String(nextRows.length),
+                            };
                           })
                         }
-                        className="mb-0.5 grid h-9 w-9 place-items-center rounded-full text-black/40 hover:bg-[#FEE2E2] hover:text-[#EF4444]"
+                        className="grid h-9 w-9 place-items-center rounded-full text-black/40 hover:bg-[#FEE2E2] hover:text-[#EF4444]"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setForm({
-                        ...form,
-                        installments: [
-                          ...form.installments,
-                          {
-                            id: `fl-i-${form.installments.length + 1}-${Date.now()}`,
-                            label: installmentLabel(form.installments.length, form.billingCycle),
-                            amount: form.bothFee,
-                          },
-                        ],
-                        installmentCount: String(form.installments.length + 1),
-                      })
-                    }
-                    className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#0F766E] hover:underline"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Add installment
-                  </button>
-                </div>
-              )}
+                    ) : null}
+                  </div>
+                ))}
+              </div>
 
               {form.billingCycle === "Monthly" ? (
                 <div className="space-y-1.5">

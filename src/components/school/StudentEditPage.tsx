@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { FieldSelect, classSelectOptions } from "@/components/school/SchoolAdminWorkspace";
+import { FeePeriodChecklist } from "@/components/school/FeePeriodChecklist";
 import {
   BLOOD_GROUPS,
   DEFAULT_STUDENT_DOCUMENTS,
@@ -40,8 +41,13 @@ import {
   useTenantStore,
   type GuardianRelation,
   type Student,
+  type StudentFeeBreak,
 } from "@/lib/tenant-store";
-import { apiUpsertStudent } from "@/lib/api/records";
+import {
+  apiCreateFeeBreak,
+  apiDeleteFeeBreak,
+  apiUpsertStudent,
+} from "@/lib/api/records";
 import { apiUpsertClass } from "@/lib/api/settings";
 import { getApiToken } from "@/lib/api/client";
 import {
@@ -51,6 +57,12 @@ import {
 } from "@/lib/student-csv";
 import { toDobIso } from "@/lib/dates";
 import { cn, glassCardClass } from "@/lib/utils";
+import {
+  isPeriodOnBreak,
+  studentFeeBreaksForYear,
+  studentSchedulePeriodOptions,
+  unpaidAmountCoveredByBreak,
+} from "@/lib/student-fees";
 
 type StudentDraft = {
   name: string;
@@ -178,6 +190,11 @@ export function StudentEditPage() {
     classes,
     setClasses,
     transportRoutes,
+    academicYear,
+    activeFeeTerms,
+    activePayments,
+    studentFeeBreaks,
+    setStudentFeeBreaks,
   } = useTenantStore();
 
   const student = useMemo(
@@ -193,6 +210,11 @@ export function StudentEditPage() {
   const [newClassSection, setNewClassSection] = useState("");
   const [savingClass, setSavingClass] = useState(false);
   const [saving, setSaving] = useState(false);
+  /** Periods that remain billable for vehicle fees (unchecked = on break). */
+  const [billableVehiclePeriods, setBillableVehiclePeriods] = useState<string[]>([]);
+  const [collectDialogOpen, setCollectDialogOpen] = useState(false);
+  const [collectPeriods, setCollectPeriods] = useState<string[]>([]);
+  const [pendingCollectStudent, setPendingCollectStudent] = useState<Student | null>(null);
 
   useEffect(() => {
     if (student) setDraft(draftFromStudent(student));
@@ -228,9 +250,51 @@ export function StudentEditPage() {
         },
         transportRoutes,
         matchedClass,
+        undefined,
+        activeFeeTerms,
       ),
-    [draft, transportRoutes, matchedClass],
+    [draft, transportRoutes, matchedClass, activeFeeTerms],
   );
+
+  const draftAsStudent = useMemo((): Student | null => {
+    if (!student) return null;
+    return applyDraftToStudent(student, draft);
+  }, [student, draft]);
+
+  const vehiclePeriodOptions = useMemo(() => {
+    if (!draftAsStudent || !draft.needsBus) return [];
+    return studentSchedulePeriodOptions({
+      student: draftAsStudent,
+      classes,
+      feeTerms: activeFeeTerms,
+      transportRoutes,
+      academicYear,
+      kind: "vehicle",
+    });
+  }, [draftAsStudent, draft.needsBus, classes, activeFeeTerms, transportRoutes, academicYear]);
+
+  // Sync billable periods when student / schedule changes (not on every break write).
+  const vehicleScheduleKey = vehiclePeriodOptions.map((o) => o.label).join("|");
+  useEffect(() => {
+    if (!student || !draft.needsBus || vehiclePeriodOptions.length === 0) {
+      setBillableVehiclePeriods([]);
+      return;
+    }
+    const labels = vehiclePeriodOptions.map((o) => o.label);
+    const billable = labels.filter(
+      (label) =>
+        !isPeriodOnBreak(
+          studentFeeBreaks,
+          student.id,
+          academicYear,
+          "vehicle",
+          label,
+        ),
+    );
+    setBillableVehiclePeriods(billable);
+    // Intentionally omit studentFeeBreaks so saving breaks does not wipe in-progress edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- schedule + student identity only
+  }, [student?.id, draft.needsBus, academicYear, vehicleScheduleKey]);
 
   const patchDraft = <K extends keyof StudentDraft>(key: K, value: StudentDraft[K]) => {
     setDraft((prev) => ({ ...prev, [key]: value }));
@@ -244,11 +308,125 @@ export function StudentEditPage() {
     navigate({ to: "/tenant/students", search: {} });
   };
 
-  const openCollectVehicleFee = (target: Student) => {
+  const openCollectVehicleFee = (target: Student, periods?: string[]) => {
     navigate({
       to: "/tenant/finance",
-      search: { tab: "receive", studentId: target.id },
+      search: {
+        tab: "receive",
+        studentId: target.id,
+        feeKind: "vehicle",
+        ...(periods?.length ? { periods: periods.join(",") } : {}),
+      },
     });
+  };
+
+  /** Persist vehicle-only fee breaks so unchecked periods are not billed / overdue. */
+  const syncVehicleFeeBreaks = async (target: Student) => {
+    const scheduleLabels = vehiclePeriodOptions.map((o) => o.label);
+    if (scheduleLabels.length === 0) return;
+
+    const billableSet = new Set(
+      billableVehiclePeriods.map((p) => p.trim().toLowerCase()),
+    );
+    const breakPeriods = scheduleLabels.filter(
+      (label) => !billableSet.has(label.trim().toLowerCase()),
+    );
+
+    const existingVehicleBreaks = studentFeeBreaksForYear(
+      studentFeeBreaks,
+      target.id,
+      academicYear,
+    ).filter((b) => b.appliesTo === "vehicle");
+
+    let workingBreaks = studentFeeBreaks;
+    let workingDue = target.due;
+
+    for (const row of existingVehicleBreaks) {
+      const restore = unpaidAmountCoveredByBreak({
+        student: { ...target, due: workingDue },
+        payments: activePayments,
+        classes,
+        feeTerms: activeFeeTerms,
+        transportRoutes,
+        academicYear,
+        appliesTo: "vehicle",
+        periods: row.periods,
+        feeBreaks: workingBreaks.filter((b) => b.id !== row.id),
+      });
+      if (getApiToken()) {
+        const result = await apiDeleteFeeBreak(row.id, { dueAdjustment: restore });
+        if (typeof result.studentDue === "number") workingDue = result.studentDue;
+        else workingDue = Math.max(0, workingDue + restore);
+      } else {
+        workingDue = Math.max(0, workingDue + restore);
+      }
+      workingBreaks = workingBreaks.filter((b) => b.id !== row.id);
+    }
+
+    if (breakPeriods.length > 0) {
+      const dueAdjustment = -unpaidAmountCoveredByBreak({
+        student: { ...target, due: workingDue },
+        payments: activePayments,
+        classes,
+        feeTerms: activeFeeTerms,
+        transportRoutes,
+        academicYear,
+        appliesTo: "vehicle",
+        periods: breakPeriods,
+        feeBreaks: workingBreaks,
+      });
+
+      if (getApiToken()) {
+        const saved = await apiCreateFeeBreak({
+          studentId: target.id,
+          academicYear,
+          appliesTo: "vehicle",
+          periods: breakPeriods,
+          reason: "Transport billing periods",
+          dueAdjustment,
+        });
+        const mapped: StudentFeeBreak = {
+          id: saved.id,
+          studentId: saved.studentId,
+          academicYear: saved.academicYear,
+          appliesTo: saved.appliesTo,
+          periods: saved.periods,
+          reason: saved.reason,
+          createdAt: saved.createdAt,
+          updatedAt: saved.updatedAt,
+        };
+        workingBreaks = [
+          mapped,
+          ...workingBreaks.filter(
+            (b) =>
+              !(
+                b.studentId === target.id &&
+                b.academicYear === academicYear &&
+                b.appliesTo === "vehicle"
+              ),
+          ),
+        ];
+        if (typeof saved.studentDue === "number") workingDue = saved.studentDue;
+        else workingDue = Math.max(0, workingDue + dueAdjustment);
+      } else {
+        const local: StudentFeeBreak = {
+          id: `sfb_${Date.now().toString(36)}`,
+          studentId: target.id,
+          academicYear,
+          appliesTo: "vehicle",
+          periods: breakPeriods,
+          reason: "Transport billing periods",
+          createdAt: new Date().toISOString(),
+        };
+        workingBreaks = [local, ...workingBreaks];
+        workingDue = Math.max(0, workingDue + dueAdjustment);
+      }
+    }
+
+    setStudentFeeBreaks(workingBreaks);
+    setStudents((prev) =>
+      prev.map((s) => (s.id === target.id ? { ...s, due: workingDue } : s)),
+    );
   };
 
   const submitNewClass = async (e: FormEvent) => {
@@ -335,7 +513,16 @@ export function StudentEditPage() {
     try {
       const updated = applyDraftToStudent(student, draft);
       await persistStudent(updated);
-      const fee = resolveTransportFeeForStudent(updated, transportRoutes, matchedClass);
+      if (updated.needsBus) {
+        await syncVehicleFeeBreaks(updated);
+      }
+      const fee = resolveTransportFeeForStudent(
+        updated,
+        transportRoutes,
+        matchedClass,
+        undefined,
+        activeFeeTerms,
+      );
       const canCollect = studentNeedsTransport(updated) && Boolean(fee.amount && fee.amount > 0);
       toast.success("Profile updated", {
         description: `${updated.name} · ${updated.id}`,
@@ -343,12 +530,45 @@ export function StudentEditPage() {
           ? {
               action: {
                 label: "Collect fee",
-                onClick: () => openCollectVehicleFee(updated),
+                onClick: () => {
+                  setPendingCollectStudent(updated);
+                  setCollectPeriods([...billableVehiclePeriods]);
+                  setCollectDialogOpen(true);
+                },
               },
             }
           : {}),
       });
       navigate({ to: "/tenant/students", search: { id: updated.id } });
+    } catch {
+      /* toast already shown */
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveAndOpenCollect = async () => {
+    if (!student) return;
+    if (!draft.name.trim() || !draft.guardian.trim() || !draft.cls.trim()) {
+      toast.error("Fill required fields before collecting fee");
+      return;
+    }
+    setSaving(true);
+    try {
+      const updated = applyDraftToStudent(student, draft);
+      await persistStudent(updated);
+      if (updated.needsBus) {
+        await syncVehicleFeeBreaks(updated);
+      }
+      setPendingCollectStudent(updated);
+      setCollectPeriods(
+        billableVehiclePeriods.length
+          ? [...billableVehiclePeriods]
+          : vehiclePeriodOptions.map((o) => o.label),
+      );
+      setCollectDialogOpen(true);
+    } catch {
+      /* toast already shown */
     } finally {
       setSaving(false);
     }
@@ -706,12 +926,39 @@ export function StudentEditPage() {
           )}
 
           {draft.needsBus && draftTransportFee.amount && draftTransportFee.amount > 0 ? (
-            <div className="rounded-xl border border-[#CCFBF1] bg-[#F0FDFA]/70 px-3.5 py-3 text-[12px] text-slate-600 dark:border-teal-500/30 dark:bg-teal-950/40 dark:text-zinc-300">
-              Vehicle fee for selected route:{" "}
-              <span className="font-mono font-semibold text-slate-900 dark:text-teal-50">
-                ₹ {draftTransportFee.amount.toLocaleString("en-IN")}
-              </span>
-              . Save changes, then collect in Finance.
+            <div className="space-y-3 rounded-xl border border-[#CCFBF1] bg-[#F0FDFA]/70 px-3.5 py-3 dark:border-teal-500/30 dark:bg-teal-950/40">
+              <div className="text-[12px] text-slate-600 dark:text-zinc-300">
+                Vehicle fee for selected route:{" "}
+                <span className="font-mono font-semibold text-slate-900 dark:text-teal-50">
+                  ₹ {draftTransportFee.amount.toLocaleString("en-IN")}
+                </span>
+                <span className="text-slate-500 dark:text-zinc-400">
+                  {" "}
+                  per period · uncheck terms/months that should not be billed
+                </span>
+              </div>
+              {vehiclePeriodOptions.length > 0 ? (
+                <div>
+                  <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+                    Vehicle billing periods · {academicYear}
+                  </div>
+                  <FeePeriodChecklist
+                    options={vehiclePeriodOptions}
+                    selected={billableVehiclePeriods}
+                    onChange={setBillableVehiclePeriods}
+                    mode="billable"
+                    disabled={saving}
+                  />
+                  <p className="mt-2 text-[11px] leading-relaxed text-slate-500 dark:text-zinc-400">
+                    Unchecked periods are on fee break — not collectible and never overdue.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-[12px] text-slate-500 dark:text-zinc-400">
+                  Save changes, then collect in Finance. Period schedule appears once the route
+                  fee installments are configured.
+                </p>
+              )}
             </div>
           ) : null}
 
@@ -729,21 +976,7 @@ export function StudentEditPage() {
                 type="button"
                 variant="outline"
                 disabled={saving}
-                onClick={async () => {
-                  if (!student) return;
-                  if (!draft.name.trim() || !draft.guardian.trim() || !draft.cls.trim()) {
-                    toast.error("Fill required fields before collecting fee");
-                    return;
-                  }
-                  setSaving(true);
-                  try {
-                    const updated = applyDraftToStudent(student, draft);
-                    await persistStudent(updated);
-                    openCollectVehicleFee(updated);
-                  } finally {
-                    setSaving(false);
-                  }
-                }}
+                onClick={() => void saveAndOpenCollect()}
                 className="h-9 min-w-0 flex-1 rounded-full px-2 text-[11px] sm:h-10 sm:flex-none sm:px-4 sm:text-sm"
               >
                 <ClipboardList className="mr-1 h-3.5 w-3.5 shrink-0 sm:mr-1.5" />
@@ -767,6 +1000,49 @@ export function StudentEditPage() {
           </div>
         </form>
       </section>
+
+      <Dialog open={collectDialogOpen} onOpenChange={setCollectDialogOpen}>
+        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto rounded-xl border border-[#E5E5E5] bg-white p-0 dark:border-white/10 dark:bg-[#171717]">
+          <DialogHeader className="border-b border-[#EFEFEF] px-5 py-4 dark:border-white/10">
+            <DialogTitle className="text-[18px] font-semibold text-black dark:text-zinc-50">
+              Collect vehicle fee
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60 dark:text-zinc-400">
+              Choose which terms or months to collect for{" "}
+              {pendingCollectStudent?.name ?? "this student"}. Only billable periods are listed.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="px-5 py-4">
+            <FeePeriodChecklist
+              options={vehiclePeriodOptions.filter((o) =>
+                billableVehiclePeriods.some(
+                  (p) => p.trim().toLowerCase() === o.label.trim().toLowerCase(),
+                ),
+              )}
+              selected={collectPeriods}
+              onChange={setCollectPeriods}
+              mode="select"
+            />
+          </div>
+          <DialogFooter className="border-t border-[#EFEFEF] px-5 py-4 dark:border-white/10">
+            <Button type="button" variant="outline" onClick={() => setCollectDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={collectPeriods.length === 0 || !pendingCollectStudent}
+              className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+              onClick={() => {
+                if (!pendingCollectStudent) return;
+                setCollectDialogOpen(false);
+                openCollectVehicleFee(pendingCollectStudent, collectPeriods);
+              }}
+            >
+              Continue to Fee Collection
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={addClassOpen}

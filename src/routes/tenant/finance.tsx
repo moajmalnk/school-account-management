@@ -13,6 +13,10 @@ type FinanceSearch = {
   amount?: string;
   /** Payroll month · YYYY-MM */
   month?: string;
+  /** Prefill fee category kind · tuition | vehicle */
+  feeKind?: "tuition" | "vehicle";
+  /** Comma-separated fee period labels to open as collect lines */
+  periods?: string;
 };
 
 function optionalString(value: unknown): string | undefined {
@@ -20,16 +24,23 @@ function optionalString(value: unknown): string | undefined {
 }
 
 export const Route = createFileRoute("/tenant/finance")({
-  validateSearch: (search: Record<string, unknown>): FinanceSearch => ({
-    tab: isFinanceTab(search.tab) ? search.tab : undefined,
-    staffId: optionalString(search.staffId),
-    studentId: optionalString(search.studentId),
-    amount: optionalString(search.amount),
-    month:
-      typeof search.month === "string" && /^\d{4}-\d{2}$/.test(search.month.trim())
-        ? search.month.trim()
-        : undefined,
-  }),
+  validateSearch: (search: Record<string, unknown>): FinanceSearch => {
+    const feeKindRaw = optionalString(search.feeKind)?.toLowerCase();
+    const feeKind =
+      feeKindRaw === "tuition" || feeKindRaw === "vehicle" ? feeKindRaw : undefined;
+    return {
+      tab: isFinanceTab(search.tab) ? search.tab : undefined,
+      staffId: optionalString(search.staffId),
+      studentId: optionalString(search.studentId),
+      amount: optionalString(search.amount),
+      month:
+        typeof search.month === "string" && /^\d{4}-\d{2}$/.test(search.month.trim())
+          ? search.month.trim()
+          : undefined,
+      feeKind,
+      periods: optionalString(search.periods),
+    };
+  },
   component: FinanceRoute,
 });
 
