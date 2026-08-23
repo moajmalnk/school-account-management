@@ -110,3 +110,26 @@ export async function apiResetPassword(
     auth: false,
   });
 }
+
+export type DataDeletionRequestPayload = {
+  fullName: string;
+  email: string;
+  schoolName?: string;
+  details?: string;
+};
+
+export type DataDeletionRequestResult = {
+  message: string;
+  emailed: boolean;
+};
+
+/** Public App Store / Play Console account & data deletion request. */
+export async function apiRequestDataDeletion(
+  payload: DataDeletionRequestPayload,
+): Promise<DataDeletionRequestResult> {
+  return apiRequest<DataDeletionRequestResult>("/api/auth/data-deletion-request.php", {
+    method: "POST",
+    body: payload,
+    auth: false,
+  });
+}

@@ -901,6 +901,16 @@ export function TenantDesktopTopBar() {
               Are you sure you want to sign out of {tenantName}?
             </DialogDescription>
           </DialogHeader>
+          <p className="mt-3 text-[12px] text-slate-500">
+            Need to remove your login?{" "}
+            <a
+              href="/data-deletion"
+              className="font-medium text-[#0F766E] hover:underline"
+              onClick={() => setPendingLogout(false)}
+            >
+              Request account deletion
+            </a>
+          </p>
           <DialogFooter className="mt-5 flex-row justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => setPendingLogout(false)}>
               Cancel

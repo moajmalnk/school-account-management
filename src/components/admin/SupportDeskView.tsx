@@ -422,7 +422,6 @@ export function SupportDeskView() {
   if (loading) {
     return (
       <div className="grid grid-cols-12 gap-3 sm:gap-4 lg:gap-5" aria-busy="true">
-        <div className="col-span-12 h-8 w-64 animate-pulse rounded-lg bg-black/[0.07]" />
         <div className="col-span-12 h-9 animate-pulse rounded-full bg-black/[0.05] sm:col-span-6 lg:col-span-4" />
         <div className="col-span-12 h-80 animate-pulse rounded-3xl bg-black/[0.05]" />
       </div>
@@ -432,13 +431,6 @@ export function SupportDeskView() {
   return (
     <>
     <div className="grid grid-cols-12 gap-3 sm:gap-4 lg:gap-5">
-      <div className="col-span-12">
-        <h1 className="text-heading">Customer Support</h1>
-        <p className="mt-2 text-[14px] text-black/55">
-          Reply to schools, keep help answers, and set email and WhatsApp.
-        </p>
-      </div>
-
       <div className="col-span-12 flex flex-wrap items-center gap-2">
         {SECTIONS.map((item) => (
           <button

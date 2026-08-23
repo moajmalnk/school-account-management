@@ -12,9 +12,11 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as TenantRouteImport } from './routes/tenant'
 import { Route as SuperAdminRouteImport } from './routes/super-admin'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ImpersonateRouteImport } from './routes/impersonate'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as DataDeletionRouteImport } from './routes/data-deletion'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TenantIndexRouteImport } from './routes/tenant/index'
 import { Route as SuperAdminIndexRouteImport } from './routes/super-admin/index'
@@ -53,6 +55,11 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
   path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -66,6 +73,11 @@ const ImpersonateRoute = ImpersonateRouteImport.update({
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   id: '/forgot-password',
   path: '/forgot-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DataDeletionRoute = DataDeletionRouteImport.update({
+  id: '/data-deletion',
+  path: '/data-deletion',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -183,9 +195,11 @@ const ParentStudentTokenRoute = ParentStudentTokenRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/data-deletion': typeof DataDeletionRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/impersonate': typeof ImpersonateRoute
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/super-admin': typeof SuperAdminRouteWithChildren
   '/tenant': typeof TenantRouteWithChildren
@@ -213,9 +227,11 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/data-deletion': typeof DataDeletionRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/impersonate': typeof ImpersonateRoute
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/super-admin/overview': typeof SuperAdminOverviewRoute
   '/super-admin/plans': typeof SuperAdminPlansRoute
@@ -241,9 +257,11 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/data-deletion': typeof DataDeletionRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/impersonate': typeof ImpersonateRoute
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/super-admin': typeof SuperAdminRouteWithChildren
   '/tenant': typeof TenantRouteWithChildren
@@ -273,9 +291,11 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/data-deletion'
     | '/forgot-password'
     | '/impersonate'
     | '/login'
+    | '/privacy'
     | '/reset-password'
     | '/super-admin'
     | '/tenant'
@@ -303,9 +323,11 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/data-deletion'
     | '/forgot-password'
     | '/impersonate'
     | '/login'
+    | '/privacy'
     | '/reset-password'
     | '/super-admin/overview'
     | '/super-admin/plans'
@@ -330,9 +352,11 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/data-deletion'
     | '/forgot-password'
     | '/impersonate'
     | '/login'
+    | '/privacy'
     | '/reset-password'
     | '/super-admin'
     | '/tenant'
@@ -361,9 +385,11 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DataDeletionRoute: typeof DataDeletionRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   ImpersonateRoute: typeof ImpersonateRoute
   LoginRoute: typeof LoginRoute
+  PrivacyRoute: typeof PrivacyRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SuperAdminRoute: typeof SuperAdminRouteWithChildren
   TenantRoute: typeof TenantRouteWithChildren
@@ -393,6 +419,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -412,6 +445,13 @@ declare module '@tanstack/react-router' {
       path: '/forgot-password'
       fullPath: '/forgot-password'
       preLoaderRoute: typeof ForgotPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/data-deletion': {
+      id: '/data-deletion'
+      path: '/data-deletion'
+      fullPath: '/data-deletion'
+      preLoaderRoute: typeof DataDeletionRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -641,9 +681,11 @@ const TenantRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DataDeletionRoute: DataDeletionRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   ImpersonateRoute: ImpersonateRoute,
   LoginRoute: LoginRoute,
+  PrivacyRoute: PrivacyRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SuperAdminRoute: SuperAdminRouteWithChildren,
   TenantRoute: TenantRouteWithChildren,

@@ -1,0 +1,24 @@
+/**
+ * Ensures TanStack Router IDE types include legal routes even when
+ * routeTree.gen.ts (@ts-nocheck) lags in the language service.
+ */
+declare module "@tanstack/react-router" {
+  interface FileRoutesByPath {
+    "/privacy": {
+      id: "/privacy";
+      path: "/privacy";
+      fullPath: "/privacy";
+      preLoaderRoute: unknown;
+      parentRoute: unknown;
+    };
+    "/data-deletion": {
+      id: "/data-deletion";
+      path: "/data-deletion";
+      fullPath: "/data-deletion";
+      preLoaderRoute: unknown;
+      parentRoute: unknown;
+    };
+  }
+}
+
+export {};

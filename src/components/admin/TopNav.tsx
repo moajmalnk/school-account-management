@@ -133,6 +133,9 @@ export function TopNav() {
               >
                 <UserCog className="mr-2 h-3.5 w-3.5" /> Account settings
               </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <a href="/data-deletion">Delete my account</a>
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={handleLogout}

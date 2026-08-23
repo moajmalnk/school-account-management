@@ -8,7 +8,18 @@ export {
   onUnauthorized,
   isAuthExpiredError,
 } from "@/lib/api/client";
-export { apiLogin, apiMe, apiLogoutCurrentDevice, apiForgotPassword, apiResetPassword } from "@/lib/api/auth";
+export {
+  apiLogin,
+  apiMe,
+  apiLogoutCurrentDevice,
+  apiForgotPassword,
+  apiResetPassword,
+  apiRequestDataDeletion,
+} from "@/lib/api/auth";
+export type {
+  DataDeletionRequestPayload,
+  DataDeletionRequestResult,
+} from "@/lib/api/auth";
 export {
   fetchBranchOperationalBundle,
   fetchRemoteTenantBundle,

@@ -204,6 +204,9 @@ export function SuperAdminSidebar() {
           >
             <Settings className="mr-2 h-3.5 w-3.5" /> Account settings
           </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <a href="/data-deletion">Delete my account</a>
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleLogout} className="text-rose-600 focus:text-rose-600">
             <LogOut className="mr-2 h-3.5 w-3.5" /> Logout
