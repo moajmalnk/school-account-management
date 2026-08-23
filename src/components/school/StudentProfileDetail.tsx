@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState, startTransition, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, startTransition, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
+  CalendarOff,
   Camera,
   Download,
   ExternalLink,
@@ -17,6 +18,7 @@ import {
   ClipboardList,
   Upload,
   X,
+  Trash2,
 } from "lucide-react";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
@@ -55,7 +57,6 @@ import {
   apiCreateFeeBreak,
   apiDeleteFeeBreak,
   apiDeleteStudent,
-  apiUpdateFeeBreak,
   apiUpsertStudent,
 } from "@/lib/api/records";
 import { getApiToken } from "@/lib/api/client";
@@ -400,13 +401,23 @@ export function StudentProfileDetail({
   onBack: () => void;
 }) {
   const navigate = useNavigate();
-  const { setStudents, academicYear, schoolDetails, classes: classConfigs, activePayments, activeFeeTerms, transportRoutes } =
-    useTenantStore();
+  const {
+    setStudents,
+    academicYear,
+    schoolDetails,
+    classes: classConfigs,
+    activePayments,
+    activeFeeTerms,
+    transportRoutes,
+    studentFeeBreaks,
+    setStudentFeeBreaks,
+  } = useTenantStore();
   const { session } = useAuth();
   const schoolName = schoolDetails.name || session?.tenantName || "Silver Hills Global";
   const [shareOpen, setShareOpen] = useState(false);
   const [shareToken, setShareToken] = useState(student.shareToken ?? "");
   const [activeTab, setActiveTab] = useState<ProfileDetailTabId>("profile");
+  const [feeBreaksOpen, setFeeBreaksOpen] = useState(false);
 
   const busPointOptions = useMemo(() => {
     const { pickups, drops } = transportBusPointOptions(transportRoutes);
@@ -455,8 +466,21 @@ export function StudentProfileDetail({
         feeTerms: activeFeeTerms,
         transportRoutes,
         academicYear,
+        feeBreaks: studentFeeBreaks,
       }),
-    [student, activePayments, classConfigs, activeFeeTerms, transportRoutes, academicYear],
+    [
+      student,
+      activePayments,
+      classConfigs,
+      activeFeeTerms,
+      transportRoutes,
+      academicYear,
+      studentFeeBreaks,
+    ],
+  );
+  const studentBreaks = useMemo(
+    () => studentFeeBreaksForYear(studentFeeBreaks, student.id, academicYear),
+    [studentFeeBreaks, student.id, academicYear],
   );
   const fees = feeStatement;
   const ledger = feeStatement.tuition.ledger;
@@ -979,15 +1003,31 @@ export function StudentProfileDetail({
           <section className={CARD_FRAME}>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <h2 className="text-base font-semibold text-black">Fees Overview</h2>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full shrink-0 rounded-full sm:w-auto"
-                onClick={() => void handleDownloadParentFeeReport()}
-              >
-                <Download className="h-3.5 w-3.5" />
-                Download report for parents
-              </Button>
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full shrink-0 rounded-full sm:w-auto"
+                  onClick={() => setFeeBreaksOpen(true)}
+                >
+                  <CalendarOff className="h-3.5 w-3.5" />
+                  Manage fee breaks
+                  {studentBreaks.length > 0 ? (
+                    <span className="ml-1 rounded-full bg-[#CCFBF1] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[#0F766E]">
+                      {studentBreaks.length}
+                    </span>
+                  ) : null}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full shrink-0 rounded-full sm:w-auto"
+                  onClick={() => void handleDownloadParentFeeReport()}
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Download report for parents
+                </Button>
+              </div>
             </div>
             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
               <FeeStatBox label="Total Fee" value={inr(fees.totalFee)} />
@@ -1096,6 +1136,21 @@ export function StudentProfileDetail({
         </ProfileTabPanel>
       </ProfileDetailTabs>
 
+      <FeeBreaksManageDialog
+        open={feeBreaksOpen}
+        onOpenChange={setFeeBreaksOpen}
+        student={student}
+        academicYear={academicYear}
+        breaks={studentBreaks}
+        allBreaks={studentFeeBreaks}
+        setStudentFeeBreaks={setStudentFeeBreaks}
+        setStudents={setStudents}
+        classes={classConfigs}
+        feeTerms={activeFeeTerms}
+        transportRoutes={transportRoutes}
+        payments={activePayments}
+      />
+
       <ProfileAccountActions
         name={student.name}
         recordId={student.id}
@@ -1106,6 +1161,321 @@ export function StudentProfileDetail({
       />
 
     </div>
+  );
+}
+
+function FeeBreaksManageDialog({
+  open,
+  onOpenChange,
+  student,
+  academicYear,
+  breaks,
+  allBreaks,
+  setStudentFeeBreaks,
+  setStudents,
+  classes,
+  feeTerms,
+  transportRoutes,
+  payments,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  student: Student;
+  academicYear: string;
+  breaks: StudentFeeBreak[];
+  allBreaks: StudentFeeBreak[];
+  setStudentFeeBreaks: Dispatch<SetStateAction<StudentFeeBreak[]>>;
+  setStudents: Dispatch<SetStateAction<Student[]>>;
+  classes: import("@/lib/tenant-store").ClassConfig[];
+  feeTerms: import("@/lib/tenant-store").FeeTerm[];
+  transportRoutes: import("@/lib/tenant-store").TransportRoute[];
+  payments: import("@/lib/tenant-store").Payment[];
+}) {
+  const [appliesTo, setAppliesTo] = useState<StudentFeeBreakAppliesTo>("both");
+  const [selectedPeriods, setSelectedPeriods] = useState<string[]>([]);
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+
+  const periodOptions = useMemo(
+    () =>
+      studentSchedulePeriodLabels({
+        student,
+        classes,
+        feeTerms,
+        transportRoutes,
+        academicYear,
+        kind: appliesTo,
+      }),
+    [student, classes, feeTerms, transportRoutes, academicYear, appliesTo],
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    setAppliesTo("both");
+    setSelectedPeriods([]);
+    setReason("");
+  }, [open, student.id]);
+
+  useEffect(() => {
+    setSelectedPeriods((prev) => prev.filter((p) => periodOptions.includes(p)));
+  }, [periodOptions]);
+
+  const togglePeriod = (label: string) => {
+    setSelectedPeriods((prev) =>
+      prev.includes(label) ? prev.filter((p) => p !== label) : [...prev, label],
+    );
+  };
+
+  const applyDueToStudent = (nextDue: number) => {
+    setStudents((prev) =>
+      prev.map((s) => (s.id === student.id ? { ...s, due: Math.max(0, nextDue) } : s)),
+    );
+  };
+
+  const handleSave = async () => {
+    if (selectedPeriods.length === 0) {
+      toast.error("Select at least one fee period");
+      return;
+    }
+    const dueAdjustment = -unpaidAmountCoveredByBreak({
+      student,
+      payments,
+      classes,
+      feeTerms,
+      transportRoutes,
+      academicYear,
+      appliesTo,
+      periods: selectedPeriods,
+      feeBreaks: allBreaks,
+    });
+    setSaving(true);
+    try {
+      if (getApiToken()) {
+        const saved = await apiCreateFeeBreak({
+          studentId: student.id,
+          academicYear,
+          appliesTo,
+          periods: selectedPeriods,
+          reason: reason.trim() || null,
+          dueAdjustment,
+        });
+        const mapped: StudentFeeBreak = {
+          id: saved.id,
+          studentId: saved.studentId,
+          academicYear: saved.academicYear,
+          appliesTo: saved.appliesTo,
+          periods: saved.periods,
+          reason: saved.reason,
+          createdAt: saved.createdAt,
+          updatedAt: saved.updatedAt,
+        };
+        setStudentFeeBreaks((prev) => [mapped, ...prev.filter((b) => b.id !== mapped.id)]);
+        if (typeof saved.studentDue === "number") {
+          applyDueToStudent(saved.studentDue);
+        } else if (dueAdjustment !== 0) {
+          applyDueToStudent(student.due + dueAdjustment);
+        }
+      } else {
+        const local: StudentFeeBreak = {
+          id: `sfb_${Date.now().toString(36)}`,
+          studentId: student.id,
+          academicYear,
+          appliesTo,
+          periods: selectedPeriods,
+          reason: reason.trim() || null,
+          createdAt: new Date().toISOString(),
+        };
+        setStudentFeeBreaks((prev) => [local, ...prev]);
+        if (dueAdjustment !== 0) {
+          applyDueToStudent(student.due + dueAdjustment);
+        }
+      }
+      toast.success("Fee break saved", {
+        description: `${selectedPeriods.join(", ")} · ${appliesTo === "both" ? "Tuition & vehicle" : appliesTo === "tuition" ? "Tuition" : "Vehicle"}`,
+      });
+      setSelectedPeriods([]);
+      setReason("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save fee break");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRemove = async (breakRow: StudentFeeBreak) => {
+    const restoreAmount = unpaidAmountCoveredByBreak({
+      student,
+      payments,
+      classes,
+      feeTerms,
+      transportRoutes,
+      academicYear,
+      appliesTo: breakRow.appliesTo,
+      periods: breakRow.periods,
+      feeBreaks: allBreaks.filter((b) => b.id !== breakRow.id),
+    });
+    setRemovingId(breakRow.id);
+    try {
+      if (getApiToken()) {
+        const result = await apiDeleteFeeBreak(breakRow.id, {
+          dueAdjustment: restoreAmount,
+        });
+        setStudentFeeBreaks((prev) => prev.filter((b) => b.id !== breakRow.id));
+        if (typeof result.studentDue === "number") {
+          applyDueToStudent(result.studentDue);
+        } else if (restoreAmount !== 0) {
+          applyDueToStudent(student.due + restoreAmount);
+        }
+      } else {
+        setStudentFeeBreaks((prev) => prev.filter((b) => b.id !== breakRow.id));
+        if (restoreAmount !== 0) {
+          applyDueToStudent(student.due + restoreAmount);
+        }
+      }
+      toast.success("Fee break removed");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not remove fee break");
+    } finally {
+      setRemovingId(null);
+    }
+  };
+
+  const appliesLabel = (v: StudentFeeBreakAppliesTo) =>
+    v === "both" ? "Tuition & vehicle" : v === "tuition" ? "Tuition" : "Vehicle";
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto rounded-xl border border-[#E5E5E5] bg-white p-0 dark:border-white/10 dark:bg-[#171717]">
+        <DialogHeader className="border-b border-[#EFEFEF] px-5 py-4 dark:border-white/10">
+          <DialogTitle className="text-[18px] font-semibold text-black dark:text-zinc-50">
+            Fee breaks
+          </DialogTitle>
+          <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60 dark:text-zinc-400">
+            Pause tuition or vehicle fees for selected periods. Broken periods are not
+            collectible and never show as overdue for {student.name}.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-5 px-5 py-4">
+          {breaks.length > 0 ? (
+            <div className="space-y-2">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                Active breaks · {academicYear}
+              </div>
+              {breaks.map((row) => (
+                <div
+                  key={row.id}
+                  className="flex items-start justify-between gap-3 rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] px-3 py-2.5 dark:border-white/10 dark:bg-zinc-900/50"
+                >
+                  <div className="min-w-0">
+                    <div className="text-[13px] font-semibold text-black dark:text-zinc-100">
+                      {row.periods.join(", ")}
+                    </div>
+                    <div className="mt-0.5 text-[12px] text-black/55 dark:text-zinc-400">
+                      {appliesLabel(row.appliesTo)}
+                      {row.reason ? ` · ${row.reason}` : ""}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={removingId === row.id}
+                    onClick={() => void handleRemove(row)}
+                    aria-label="Remove fee break"
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:bg-[#FEE2E2] disabled:opacity-50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="rounded-lg border border-dashed border-[#E5E5E5] bg-[#FAFAFA] px-3 py-4 text-center text-[13px] text-black/55 dark:border-white/10 dark:bg-zinc-900/40 dark:text-zinc-400">
+              No fee breaks yet for this year.
+            </p>
+          )}
+
+          <div className="space-y-3 border-t border-[#EFEFEF] pt-4 dark:border-white/10">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
+              Add break
+            </div>
+            <div>
+              <div className={META_LABEL}>Applies to</div>
+              <Select
+                value={appliesTo}
+                onValueChange={(v) => setAppliesTo(v as StudentFeeBreakAppliesTo)}
+              >
+                <SelectTrigger className="mt-1.5 h-10 w-full rounded-lg border-[#E5E5E5] bg-white text-[13px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="z-[250] rounded-lg border border-[#E5E5E5] bg-white">
+                  <SelectItem value="both">Tuition &amp; vehicle</SelectItem>
+                  <SelectItem value="tuition">Tuition only</SelectItem>
+                  <SelectItem value="vehicle">Vehicle only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <div className={META_LABEL}>Fee period(s)</div>
+              {periodOptions.length === 0 ? (
+                <p className="mt-1.5 text-[13px] text-black/50">
+                  No schedule periods found for this student.
+                </p>
+              ) : (
+                <div className="mt-1.5 flex flex-wrap gap-2">
+                  {periodOptions.map((label) => {
+                    const checked = selectedPeriods.includes(label);
+                    return (
+                      <label
+                        key={label}
+                        className={cn(
+                          "inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors",
+                          checked
+                            ? "border-[#0F766E] bg-[#CCFBF1] text-[#0F766E]"
+                            : "border-[#E5E5E5] bg-white text-black/70 hover:border-black/20",
+                        )}
+                      >
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={() => togglePeriod(label)}
+                          className="h-3.5 w-3.5"
+                        />
+                        {label}
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <div className={META_LABEL}>Reason (optional)</div>
+              <Input
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="e.g. Summer break · family travel"
+                className="mt-1.5 h-10 rounded-lg border-[#E5E5E5] text-[13px]"
+              />
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter className="border-t border-[#EFEFEF] px-5 py-4 dark:border-white/10">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Close
+          </Button>
+          <Button
+            type="button"
+            disabled={saving || selectedPeriods.length === 0}
+            className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+            onClick={() => void handleSave()}
+          >
+            {saving ? "Saving…" : "Save break"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1871,6 +2241,10 @@ const STATUS_STYLE: Record<LedgerStatus, { wrap: string; dot: string }> = {
   Overdue: {
     wrap: "bg-[#0F766E] text-white",
     dot: "bg-black",
+  },
+  "On Break": {
+    wrap: "bg-[#E0F2FE] text-[#0C4A6E]",
+    dot: "bg-[#0284C7]",
   },
 };
 

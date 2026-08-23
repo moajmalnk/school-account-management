@@ -14039,8 +14039,17 @@ function ClassesCard({
                     Add fee
                   </button>
                 </div>
+                <div className="grid grid-cols-[minmax(0,1fr)_6.5rem_minmax(10rem,1fr)_auto] items-end gap-2 px-0.5 text-[10px] font-semibold uppercase tracking-wider text-black/40">
+                  <span>Fee</span>
+                  <span>Amount</span>
+                  <span>Due date</span>
+                  <span className="sr-only">Remove</span>
+                </div>
                 {form.oneTimeFees.map((row) => (
-                  <div key={row.id} className="grid grid-cols-[1fr_7rem_auto] items-center gap-2">
+                  <div
+                    key={row.id}
+                    className="grid grid-cols-[minmax(0,1fr)_6.5rem_minmax(10rem,1fr)_auto] items-center gap-2"
+                  >
                     <Input
                       value={row.label}
                       onChange={(e) =>
@@ -14070,6 +14079,28 @@ function ClassesCard({
                       placeholder="0"
                       className="h-9 font-mono bg-white"
                     />
+                    <DatePicker
+                      value={row.dueDate}
+                      onChange={(dueDate) =>
+                        setForm({
+                          ...form,
+                          oneTimeFees: form.oneTimeFees.map((item) =>
+                            item.id === row.id ? { ...item, dueDate } : item,
+                          ),
+                        })
+                      }
+                      placeholder="dd/mm/yyyy"
+                      valueFormat="iso"
+                      className="h-9 text-[12px]"
+                      quickPicks={[
+                        { label: "Today", getDate: (t) => t },
+                        {
+                          label: "+30d",
+                          getDate: (t) =>
+                            new Date(t.getFullYear(), t.getMonth(), t.getDate() + 30),
+                        },
+                      ]}
+                    />
                     <button
                       type="button"
                       aria-label={`Remove ${row.label || "fee"}`}
@@ -14085,7 +14116,9 @@ function ClassesCard({
                     </button>
                   </div>
                 ))}
-                <p className="text-[10.5px] text-black/40">Leave amount blank to skip a row.</p>
+                <p className="text-[10.5px] text-black/40">
+                  Leave amount blank to skip a row. Due date is optional.
+                </p>
               </div>
 
               <div className="flex items-center justify-between rounded-lg border border-[#D1FAE5] bg-white px-3 py-2.5">
