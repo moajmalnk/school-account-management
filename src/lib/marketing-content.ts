@@ -12,13 +12,18 @@ export const MARKETING = {
       "Fees, receipts, follow-ups, and school accounts in one clear platform — ready in minutes.",
     primaryCta: "Start 14-day trial",
     secondaryCta: "Sign in",
-    image: "/marketing/hero-dashboard.jpg",
-    imageAlt: "Feezo school accounts dashboard illustration",
+    /** Illustrated brand creative */
+    brandArt: "/marketing/hero-dashboard.jpg",
+    brandArtAlt: "Feezo school accounts brand illustration",
+    /** Live product UI */
+    productImage: "/marketing/product-dashboard.jpg",
+    productImageAlt: "Feezo tenant dashboard with income, expenses, and cash position",
   },
   nav: [
     { id: "problems", label: "Why Feezo" },
+    { id: "product", label: "Product" },
     { id: "features", label: "Features" },
-    { id: "compare", label: "Compare" },
+    { id: "setup", label: "Setup" },
     { id: "pricing", label: "Pricing" },
   ] as const,
   problems: {
@@ -39,6 +44,46 @@ export const MARKETING = {
       },
     ],
   },
+  product: {
+    eyebrow: "See the product",
+    title: "Built for how schools actually work",
+    subtitle:
+      "Dashboard, students, subscriptions, support, and setup — one workspace your team can open on day one.",
+    tabs: [
+      {
+        id: "dashboard",
+        label: "Dashboard",
+        title: "Financial overview at a glance",
+        body: "Income, expenses, outstanding fees, cash and bank — plus quick actions to receive or make payments.",
+        image: "/marketing/product-dashboard.jpg",
+        alt: "Feezo school dashboard",
+      },
+      {
+        id: "students",
+        label: "Students",
+        title: "Directory with fees and follow-up",
+        body: "Search, filter by class, call or WhatsApp guardians, and see overdue fees without leaving the list.",
+        image: "/marketing/product-students.png",
+        alt: "Feezo students directory",
+      },
+      {
+        id: "subscriptions",
+        label: "Plans",
+        title: "Trial and subscription clarity",
+        body: "See your plan, renewal price, and every included module — start on a 14-day trial with confidence.",
+        image: "/marketing/product-subscriptions.png",
+        alt: "Feezo subscriptions page",
+      },
+      {
+        id: "support",
+        label: "Support",
+        title: "Help when you need it",
+        body: "Ask Feezo assistant, email, or WhatsApp — common tasks like admitting a student are one tap away.",
+        image: "/marketing/product-support.png",
+        alt: "Feezo in-app support assistant",
+      },
+    ],
+  },
   features: {
     eyebrow: "Everything in one place",
     title: "A mini ERP for your school",
@@ -54,6 +99,19 @@ export const MARKETING = {
       { title: "Vehicle Management", hint: "Transport in the same workspace" },
       { title: "Financial Insights", hint: "See trends, not just totals" },
     ],
+  },
+  setup: {
+    eyebrow: "Expert-ready setup",
+    title: "Brand your school in minutes",
+    body: "Upload logo, letterhead, seal, and signature. Set school details, branches, and users — then you’re ready for receipts and day-to-day ops.",
+    highlights: [
+      "Logo, letterhead, seal & signature",
+      "School profile, phone & email",
+      "Branches, classes, departments",
+      "Users and roles ready for your team",
+    ],
+    image: "/marketing/product-setup.png",
+    imageAlt: "Feezo school details and branding setup",
   },
   compare: {
     eyebrow: "From manual to digital",

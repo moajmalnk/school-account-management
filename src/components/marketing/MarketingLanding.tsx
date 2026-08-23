@@ -8,6 +8,8 @@ import { FollowUp } from "@/components/marketing/sections/FollowUp";
 import { Hero } from "@/components/marketing/sections/Hero";
 import { Pricing } from "@/components/marketing/sections/Pricing";
 import { Problems } from "@/components/marketing/sections/Problems";
+import { ProductTour } from "@/components/marketing/sections/ProductTour";
+import { Setup } from "@/components/marketing/sections/Setup";
 import { MARKETING } from "@/lib/marketing-content";
 
 export function MarketingLanding() {
@@ -21,7 +23,9 @@ export function MarketingLanding() {
     <MarketingShell>
       <Hero />
       <Problems />
+      <ProductTour />
       <Features />
+      <Setup />
       <Compare />
       <FollowUp />
       <Pricing />

@@ -17,7 +17,7 @@ const MKT_VARS = {
 export function MarketingShell({ children }: { children: ReactNode }) {
   return (
     <div
-      className="marketing-root min-h-dvh bg-white text-[var(--mkt-ink)] antialiased"
+      className="marketing-root min-h-dvh scroll-smooth bg-white text-[var(--mkt-ink)] antialiased"
       style={MKT_VARS}
     >
       <a
@@ -27,25 +27,25 @@ export function MarketingShell({ children }: { children: ReactNode }) {
         Skip to content
       </a>
 
-      <header className="sticky top-0 z-50 border-b border-[var(--mkt-line)] bg-white/90 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
+      <header className="sticky top-0 z-50 border-b border-[var(--mkt-line)] bg-white/90 backdrop-blur-xl supports-[backdrop-filter]:bg-white/75">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4 sm:h-16 sm:gap-4 sm:px-6">
           <Link
             to="/"
             className="shrink-0 rounded-lg outline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--mkt-green)]"
             aria-label={`${BRAND.name} home`}
           >
-            <FeezoBrand markClassName="h-9 w-9" />
+            <FeezoBrand markClassName="h-8 w-8 sm:h-9 sm:w-9" />
           </Link>
 
           <nav
-            className="hidden items-center gap-1 md:flex"
+            className="hidden items-center gap-0.5 lg:flex"
             aria-label="Page sections"
           >
             {MARKETING.nav.map((item) => (
               <a
                 key={item.id}
                 href={`#${item.id}`}
-                className="rounded-lg px-3 py-2 text-[13px] font-medium text-[var(--mkt-muted)] transition-colors hover:text-[var(--mkt-ink)]"
+                className="rounded-lg px-2.5 py-2 text-[13px] font-medium text-[var(--mkt-muted)] transition-colors hover:text-[var(--mkt-ink)] xl:px-3"
               >
                 {item.label}
               </a>
@@ -54,13 +54,13 @@ export function MarketingShell({ children }: { children: ReactNode }) {
 
           <Link
             to="/login"
-            className="inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-[var(--mkt-ink)] px-4 text-[13px] font-semibold text-white transition-colors hover:bg-black"
+            className="inline-flex h-9 shrink-0 items-center justify-center rounded-full bg-[var(--mkt-ink)] px-3.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-black sm:h-10 sm:px-4 sm:text-[13px]"
           >
             Sign in
           </Link>
         </div>
         <nav
-          className="flex gap-1 overflow-x-auto border-t border-[var(--mkt-line)] px-4 py-2 md:hidden"
+          className="flex gap-1 overflow-x-auto border-t border-[var(--mkt-line)] px-4 py-2 lg:hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           aria-label="Page sections"
         >
           {MARKETING.nav.map((item) => (

@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "motion/react";
 
+import { SectionReveal } from "@/components/marketing/SectionReveal";
 import { BRAND } from "@/lib/brand";
 import { MARKETING } from "@/lib/marketing-content";
 
@@ -11,17 +12,11 @@ export function FinalCta() {
 
   return (
     <section
-      className="bg-white py-16 sm:py-20"
+      className="bg-white py-14 sm:py-20 lg:py-24"
       aria-labelledby="final-cta-heading"
     >
-      <motion.div
-        initial={reduce ? false : { opacity: 0, y: 12 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: "-60px" }}
-        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-        className="mx-auto max-w-6xl px-4 sm:px-6"
-      >
-        <div className="relative overflow-hidden rounded-[28px] bg-[var(--mkt-green)] px-6 py-12 text-center sm:px-10 sm:py-14">
+      <SectionReveal className="mx-auto max-w-6xl px-4 sm:px-6">
+        <div className="relative overflow-hidden rounded-[24px] bg-[var(--mkt-green)] px-5 py-12 text-center sm:rounded-[28px] sm:px-10 sm:py-14">
           <div
             className="pointer-events-none absolute inset-0 opacity-40"
             aria-hidden
@@ -34,26 +29,36 @@ export function FinalCta() {
           <div className="relative">
             <h2
               id="final-cta-heading"
-              className="text-[clamp(1.55rem,3.5vw,2.1rem)] font-bold tracking-tight text-[var(--mkt-ink)]"
+              className="text-[clamp(1.45rem,3.5vw,2.1rem)] font-bold tracking-tight text-[var(--mkt-ink)]"
             >
               {finalCta.title}
             </h2>
             <p className="mx-auto mt-3 max-w-lg text-[15px] leading-relaxed text-[var(--mkt-ink)]/75">
               {finalCta.body}
             </p>
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-              <Link
-                to="/login"
-                className="inline-flex h-12 items-center justify-center rounded-full bg-[var(--mkt-ink)] px-6 text-[14px] font-semibold text-white transition-colors hover:bg-black"
+            <div className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
+              <motion.div
+                whileHover={reduce ? undefined : { scale: 1.03 }}
+                whileTap={reduce ? undefined : { scale: 0.98 }}
               >
-                {finalCta.primaryCta}
-              </Link>
-              <Link
-                to="/login"
-                className="inline-flex h-12 items-center justify-center rounded-full border border-[var(--mkt-ink)]/20 bg-white/80 px-6 text-[14px] font-semibold text-[var(--mkt-ink)] backdrop-blur transition-colors hover:bg-white"
+                <Link
+                  to="/login"
+                  className="inline-flex h-12 w-full items-center justify-center rounded-full bg-[var(--mkt-ink)] px-6 text-[14px] font-semibold text-white transition-colors hover:bg-black sm:w-auto"
+                >
+                  {finalCta.primaryCta}
+                </Link>
+              </motion.div>
+              <motion.div
+                whileHover={reduce ? undefined : { scale: 1.03 }}
+                whileTap={reduce ? undefined : { scale: 0.98 }}
               >
-                {finalCta.secondaryCta}
-              </Link>
+                <Link
+                  to="/login"
+                  className="inline-flex h-12 w-full items-center justify-center rounded-full border border-[var(--mkt-ink)]/20 bg-white/80 px-6 text-[14px] font-semibold text-[var(--mkt-ink)] backdrop-blur transition-colors hover:bg-white sm:w-auto"
+                >
+                  {finalCta.secondaryCta}
+                </Link>
+              </motion.div>
             </div>
             <p className="mt-6 text-[13px] text-[var(--mkt-ink)]/60">
               Need help?{" "}
@@ -66,7 +71,7 @@ export function FinalCta() {
             </p>
           </div>
         </div>
-      </motion.div>
+      </SectionReveal>
     </section>
   );
 }

@@ -220,6 +220,7 @@ import {
 import { StudentProfileDetail } from "@/components/school/StudentProfileDetail";
 import { ShareParentLinkDialog } from "@/components/school/ShareParentLinkDialog";
 import { StaffProfileDetail } from "@/components/school/StaffProfileDetail";
+import { StaffOrgQuickCreateDialogs } from "@/components/school/StaffOrgQuickCreate";
 import { AttachmentPreviewDialog } from "@/components/school/AttachmentPreviewDialog";
 import {
   TenantDashboardSkeleton,
@@ -304,6 +305,7 @@ import {
   apiUpsertClass,
   apiUpsertDepartment,
   apiUpsertPaymentCategory,
+  apiUpsertRole,
   apiUpsertTransportRoute,
   apiUpsertVehicle,
 } from "@/lib/api/settings";
@@ -4126,6 +4128,8 @@ export function StaffRoster() {
   const recruitPhotoRef = useRef<HTMLInputElement>(null);
   const staffImportRef = useRef<HTMLInputElement>(null);
   const attendanceImportRef = useRef<HTMLInputElement>(null);
+  const [createRoleOpen, setCreateRoleOpen] = useState(false);
+  const [createDeptOpen, setCreateDeptOpen] = useState(false);
 
   useEffect(() => {
     setForm((prev) => ({
@@ -5589,12 +5593,10 @@ export function StaffRoster() {
                 value={form.role}
                 onValueChange={(role) => setForm({ ...form, role })}
                 options={roles.map((r) => ({ value: r.title, label: r.title }))}
-                placeholder="No roles configured"
-                disabled={roles.length === 0}
+                placeholder="Select or add a role"
+                onAddNew={() => setCreateRoleOpen(true)}
+                addNewLabel="Add new role"
               />
-              <p className="text-[10.5px] text-black/45">
-                Manage role catalogue under Settings · Roles
-              </p>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
@@ -5605,8 +5607,9 @@ export function StaffRoster() {
                   value={form.dept}
                   onValueChange={(dept) => setForm({ ...form, dept })}
                   options={departments.map((d) => ({ value: d.name, label: d.name }))}
-                  placeholder="No departments configured"
-                  disabled={departments.length === 0}
+                  placeholder="Select or add a department"
+                  onAddNew={() => setCreateDeptOpen(true)}
+                  addNewLabel="Add new department"
                 />
               </div>
               <div className="space-y-1.5">
@@ -5686,6 +5689,15 @@ export function StaffRoster() {
           setForm((prev) => ({ ...prev, photoUrl: dataUrl }));
         }}
         onRetake={() => recruitPhotoRef.current?.click()}
+      />
+
+      <StaffOrgQuickCreateDialogs
+        roleOpen={createRoleOpen}
+        onRoleOpenChange={setCreateRoleOpen}
+        departmentOpen={createDeptOpen}
+        onDepartmentOpenChange={setCreateDeptOpen}
+        onRoleCreated={(role) => setForm((prev) => ({ ...prev, role: role.title }))}
+        onDepartmentCreated={(dept) => setForm((prev) => ({ ...prev, dept: dept.name }))}
       />
 
       <DirectoryFloatingAddButton label="Recruit Staff" onClick={() => setOpen(true)} />
@@ -12968,20 +12980,26 @@ function RolesCard({
     }
     if (editingId) {
       const previous = roles.find((r) => r.id === editingId);
+      const updated = { id: editingId, title, departmentId: form.departmentId };
       setRoles((prev) =>
-        prev.map((r) =>
-          r.id === editingId ? { ...r, title, departmentId: form.departmentId } : r,
-        ),
+        prev.map((r) => (r.id === editingId ? updated : r)),
       );
       if (previous && previous.title !== title) {
         setStaff((prev) =>
           prev.map((s) => (s.role === previous.title ? { ...s, role: title } : s)),
         );
       }
+      void apiUpsertRole(updated).catch((err) =>
+        toast.error(err instanceof Error ? err.message : "Could not sync role"),
+      );
       toast.success(`Role updated · ${title}`);
     } else {
       const nextId = `ROL-${(roles.length + 1).toString().padStart(3, "0")}`;
-      setRoles((prev) => [...prev, { id: nextId, title, departmentId: form.departmentId }]);
+      const created = { id: nextId, title, departmentId: form.departmentId };
+      setRoles((prev) => [...prev, created]);
+      void apiUpsertRole(created).catch((err) =>
+        toast.error(err instanceof Error ? err.message : "Could not sync role"),
+      );
       toast.success(`Role added · ${title}`);
     }
     setOpen(false);

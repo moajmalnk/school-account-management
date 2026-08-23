@@ -3,6 +3,7 @@ import type {
   ClassConfig,
   Department,
   PaymentCategory,
+  Role,
   SchoolDetails,
   ThemeSettings,
   TransportRoute,
@@ -201,6 +202,31 @@ export async function apiUpsertDepartment(dept: Department): Promise<Department>
 export async function apiDeleteDepartment(id: string): Promise<void> {
   if (!hasToken()) return;
   await apiRequest(`/api/settings/departments.php?id=${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function apiUpsertRole(role: Role): Promise<Role> {
+  if (!hasToken()) return role;
+  const list = await apiRequest<Role[]>("/api/settings/roles.php");
+  const exists = list.some((r) => r.id === role.id);
+  const raw = await apiRequest<Role[] | Role>("/api/settings/roles.php", {
+    method: exists ? "PUT" : "POST",
+    body: role,
+  });
+  if (Array.isArray(raw)) {
+    return (
+      raw.find((r) => r.id === role.id) ??
+      raw.find((r) => r.title === role.title && r.departmentId === role.departmentId) ??
+      role
+    );
+  }
+  return raw;
+}
+
+export async function apiDeleteRole(id: string): Promise<void> {
+  if (!hasToken()) return;
+  await apiRequest(`/api/settings/roles.php?id=${encodeURIComponent(id)}`, {
     method: "DELETE",
   });
 }

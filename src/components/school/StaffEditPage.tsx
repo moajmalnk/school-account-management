@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
 import { ImageCropDialog } from "@/components/ui/image-crop-dialog";
 import { FieldSelect } from "@/components/school/SchoolAdminWorkspace";
+import { StaffOrgQuickCreateDialogs } from "@/components/school/StaffOrgQuickCreate";
 import { apiUpsertStaff } from "@/lib/api/records";
 import { apiUploadDataUrl } from "@/lib/api/settings";
 import { useTenantStore, type Staff } from "@/lib/tenant-store";
@@ -80,6 +81,8 @@ export function StaffEditPage() {
   );
   const [cropSrc, setCropSrc] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [createRoleOpen, setCreateRoleOpen] = useState(false);
+  const [createDeptOpen, setCreateDeptOpen] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -241,12 +244,10 @@ export function StaffEditPage() {
               value={draft.role}
               onValueChange={(role) => patchDraft("role", role)}
               options={roles.map((r) => ({ value: r.title, label: r.title }))}
-              placeholder="No roles configured"
-              disabled={roles.length === 0}
+              placeholder="Select or add a role"
+              onAddNew={() => setCreateRoleOpen(true)}
+              addNewLabel="Add new role"
             />
-            <p className="text-[10.5px] text-black/45">
-              Manage role catalogue under Settings · Roles
-            </p>
           </FormField>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -255,8 +256,9 @@ export function StaffEditPage() {
                 value={draft.dept}
                 onValueChange={(dept) => patchDraft("dept", dept)}
                 options={departments.map((d) => ({ value: d.name, label: d.name }))}
-                placeholder="No departments configured"
-                disabled={departments.length === 0}
+                placeholder="Select or add a department"
+                onAddNew={() => setCreateDeptOpen(true)}
+                addNewLabel="Add new department"
               />
             </FormField>
             <FormField label="Employee ID">
@@ -334,6 +336,15 @@ export function StaffEditPage() {
           patchDraft("photoUrl", dataUrl);
         }}
         onRetake={() => photoRef.current?.click()}
+      />
+
+      <StaffOrgQuickCreateDialogs
+        roleOpen={createRoleOpen}
+        onRoleOpenChange={setCreateRoleOpen}
+        departmentOpen={createDeptOpen}
+        onDepartmentOpenChange={setCreateDeptOpen}
+        onRoleCreated={(role) => patchDraft("role", role.title)}
+        onDepartmentCreated={(dept) => patchDraft("dept", dept.name)}
       />
     </div>
   );
