@@ -48,7 +48,7 @@ export const MARKETING = {
     eyebrow: "See the product",
     title: "Built for how schools actually work",
     subtitle:
-      "Dashboard, students, subscriptions, support, and setup — one workspace your team can open on day one.",
+      "Dashboard, students, fees, staff, plans, and support — one workspace your team can open on day one.",
     tabs: [
       {
         id: "dashboard",
@@ -65,6 +65,22 @@ export const MARKETING = {
         body: "Search, filter by class, call or WhatsApp guardians, and see overdue fees without leaving the list.",
         image: "/marketing/product-students.png",
         alt: "Feezo students directory",
+      },
+      {
+        id: "payments",
+        label: "Payments",
+        title: "Student fees, installment by installment",
+        body: "See total fee, paid, and due. Collect payments, flag overdue installments, and WhatsApp parents from the profile.",
+        image: "/marketing/product-student-payments.png",
+        alt: "Feezo student payments and fees overview",
+      },
+      {
+        id: "staff",
+        label: "Staff",
+        title: "Staff profiles ready for payroll",
+        body: "Personal info, department, attendance tabs, documents, and workspace login — all in one staff profile.",
+        image: "/marketing/product-staff-profile.png",
+        alt: "Feezo staff profile",
       },
       {
         id: "subscriptions",
@@ -84,6 +100,43 @@ export const MARKETING = {
       },
     ],
   },
+  setup: {
+    eyebrow: "Expert-ready setup",
+    title: "From school brand to day-one profiles",
+    body: "Configure branding once, then run students, fees, and staff from the same workspace — ready for a 14-day trial.",
+    highlights: [
+      "Logo, letterhead, seal & signature",
+      "School profile, phone & email",
+      "Student fee schedules & collection",
+      "Staff profiles, roles & login",
+    ],
+    steps: [
+      {
+        id: "branding",
+        label: "Branding",
+        title: "School details & assets",
+        body: "Upload logo, letterhead, seal, and signature. Set name, address, and registration — receipts look official from day one.",
+        image: "/marketing/product-setup.png",
+        alt: "Feezo school details and branding setup",
+      },
+      {
+        id: "student-fees",
+        label: "Student fees",
+        title: "Payments on every profile",
+        body: "Fees overview, installment table, overdue badges, and WhatsApp reminders — collect without leaving the student.",
+        image: "/marketing/product-student-payments.png",
+        alt: "Feezo student payments profile",
+      },
+      {
+        id: "staff",
+        label: "Staff",
+        title: "Staff setup that scales",
+        body: "Create staff profiles with role, department, and optional workspace login — attendance and documents in the same place.",
+        image: "/marketing/product-staff-profile.png",
+        alt: "Feezo staff profile setup",
+      },
+    ],
+  },
   features: {
     eyebrow: "Everything in one place",
     title: "A mini ERP for your school",
@@ -99,19 +152,6 @@ export const MARKETING = {
       { title: "Vehicle Management", hint: "Transport in the same workspace" },
       { title: "Financial Insights", hint: "See trends, not just totals" },
     ],
-  },
-  setup: {
-    eyebrow: "Expert-ready setup",
-    title: "Brand your school in minutes",
-    body: "Upload logo, letterhead, seal, and signature. Set school details, branches, and users — then you’re ready for receipts and day-to-day ops.",
-    highlights: [
-      "Logo, letterhead, seal & signature",
-      "School profile, phone & email",
-      "Branches, classes, departments",
-      "Users and roles ready for your team",
-    ],
-    image: "/marketing/product-setup.png",
-    imageAlt: "Feezo school details and branding setup",
   },
   compare: {
     eyebrow: "From manual to digital",
