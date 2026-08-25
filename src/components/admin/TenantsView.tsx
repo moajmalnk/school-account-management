@@ -77,25 +77,19 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { Tone, CornerSide } from "@/lib/utils";
+import type { CornerSide } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
 const TIER_STYLE: Record<Tier, { bg: string; fg: string }> = {
-  Basic: { bg: "#F4F4F5", fg: "#000000" },
-  Premium: { bg: "#CCFBF1", fg: "#000000" },
-  Enterprise: { bg: "#000000", fg: "#FFFFFF" },
+  Basic: { bg: "#F4F4F5", fg: "#3F3F46" },
+  Premium: { bg: "#CCFBF1", fg: "#0F766E" },
+  Enterprise: { bg: "#0F172A", fg: "#FFFFFF" },
 };
 const STATUS_STYLE: Record<Status, { bg: string; fg: string; dot: string }> = {
-  Active: { bg: "#F4F4F5", fg: "#000000", dot: "#000000" },
-  Trial: { bg: "#CCFBF1", fg: "#000000", dot: "#000000" },
-  Overdue: { bg: "#000000", fg: "#EF4444", dot: "#EF4444" },
-  Suspended: { bg: "#FEE2E2", fg: "#EF4444", dot: "#EF4444" },
-};
-/** Card surface follows subscription tier — same tones as Plans matrix. */
-const TIER_TONE: Record<Tier, Tone> = {
-  Basic: "white",
-  Premium: "lime",
-  Enterprise: "black",
+  Active: { bg: "#ECFDF5", fg: "#047857", dot: "#10B981" },
+  Trial: { bg: "#EEF2FF", fg: "#4338CA", dot: "#6366F1" },
+  Overdue: { bg: "#FEF3C7", fg: "#B45309", dot: "#F59E0B" },
+  Suspended: { bg: "#FEF2F2", fg: "#B91C1C", dot: "#EF4444" },
 };
 const STATUS_TOOLTIP: Record<Status, string> = {
   Active:
@@ -410,34 +404,16 @@ export function TenantsView({
       {/* Cards */}
       <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">
         {filtered.map((t, i) => {
-          const pct = Math.round((t.students / t.capacity) * 100);
+          const capacity = Math.max(t.capacity, 0);
+          const pct = capacity > 0 ? Math.round((t.students / capacity) * 100) : 0;
           const sStyle = STATUS_STYLE[t.status];
-          const tone = TIER_TONE[t.tier];
+          const tStyle = TIER_STYLE[t.tier];
           const cornerSide: CornerSide = i % 2 === 0 ? "tr" : "bl";
-          const isLight = tone === "white";
-          const isLime = tone === "lime";
-          const isBlack = tone === "black";
-          const onDark = isLime || isBlack;
-          const subText = onDark ? "text-white/65" : "text-black/55";
-          const hostText = isBlack
-            ? "text-[#5EEAD4]"
-            : isLime
-              ? "text-white/80"
-              : "text-black/65";
-          const tierBadge = isLight
-            ? { bg: TIER_STYLE[t.tier].bg, fg: TIER_STYLE[t.tier].fg }
-            : isLime
-              ? { bg: "rgba(255,255,255,0.18)", fg: "#FFFFFF" }
-              : { bg: "rgba(255,255,255,0.12)", fg: "#FFFFFF" };
-          const statusBadge = onDark
-            ? t.status === "Suspended" || t.status === "Overdue"
-              ? { bg: "rgba(239,68,68,0.22)", fg: "#FCA5A5", dot: "#F87171" }
-              : { bg: "rgba(255,255,255,0.14)", fg: "#FFFFFF", dot: "#FFFFFF" }
-            : sStyle;
+          const initials = tenantInitials(t.name);
           return (
             <OrganicCard
               key={t.id}
-              tone={tone}
+              tone="white"
               cornerSide={cornerSide}
               padded
               role="button"
@@ -454,87 +430,83 @@ export function TenantsView({
                   setDetailTarget(t);
                 }
               }}
-              className="cursor-pointer space-y-4 transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-[0_1px_2px_rgba(0,0,0,0.05),0_28px_64px_-28px_rgba(15,23,42,0.28)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]/40 focus-visible:ring-offset-2"
+              className="cursor-pointer space-y-4 transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-[0_1px_2px_rgba(0,0,0,0.05),0_28px_64px_-28px_rgba(15,23,42,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]/40 focus-visible:ring-offset-2"
             >
-              <div>
-                <div className="text-[15px] font-semibold leading-tight">{t.name}</div>
-                <div className={`mt-1 font-mono text-[11px] ${subText}`}>
-                  {t.id} · {t.uuid}
-                </div>
-                <div className={`mt-0.5 font-mono text-[11px] ${hostText}`}>
-                  {t.subdomain}.schoolaccounts.in
+              <div className="flex items-start gap-3">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-[#0F766E] to-[#115E59] text-[13px] font-bold tracking-wide text-white">
+                  {initials}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[15px] font-semibold leading-tight tracking-tight text-black">
+                    {t.name}
+                  </div>
+                  <div className="mt-0.5 truncate font-mono text-[11px] text-[#0F766E]">
+                    {t.subdomain}.schoolaccounts.in
+                  </div>
+                  <div className="mt-0.5 font-mono text-[11px] text-black/40">{t.id}</div>
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <span
-                  className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
-                  style={{ backgroundColor: tierBadge.bg, color: tierBadge.fg }}
+                  className="rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider"
+                  style={{ backgroundColor: tStyle.bg, color: tStyle.fg }}
                 >
                   {t.tier}
                 </span>
                 <span
-                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
-                  style={{ backgroundColor: statusBadge.bg, color: statusBadge.fg }}
+                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider"
+                  style={{ backgroundColor: sStyle.bg, color: sStyle.fg }}
+                  title={STATUS_TOOLTIP[t.status]}
                 >
                   <span
                     className="h-1.5 w-1.5 rounded-full"
-                    style={{ backgroundColor: statusBadge.dot }}
+                    style={{ backgroundColor: sStyle.dot }}
                   />
                   {t.status}
                 </span>
               </div>
 
-              <div>
-                <div
-                  className={`flex items-center justify-between font-mono text-[11px] ${subText}`}
-                >
-                  <span>
-                    {t.students.toLocaleString()} / {t.capacity.toLocaleString()}
+              <div className="rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] px-3 py-2.5">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-semibold uppercase tracking-wider text-black/40">
+                    Seat usage
                   </span>
-                  <span>{pct}%</span>
+                  <span className="font-mono font-semibold tabular-nums text-black/70">{pct}%</span>
                 </div>
-                <div
-                  className={`mt-1.5 h-1.5 overflow-hidden rounded-full ${
-                    onDark ? "bg-white/15" : "bg-[#F4F4F5]"
-                  }`}
-                >
+                <div className="mt-1.5 flex items-baseline justify-between text-[12px] text-black/65">
+                  <span>
+                    <span className="font-semibold tabular-nums text-black">
+                      {t.students.toLocaleString("en-IN")}
+                    </span>{" "}
+                    enrolled
+                  </span>
+                  <span className="tabular-nums text-black/45">
+                    {capacity.toLocaleString("en-IN")} seats
+                  </span>
+                </div>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white ring-1 ring-black/5">
                   <div
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${pct}%`,
-                      backgroundColor: isLime
-                        ? "#FFFFFF"
-                        : isBlack
-                          ? "#0F766E"
-                          : pct > 90
-                            ? "#000000"
-                            : pct > 70
-                              ? "#0F766E"
-                              : "#000000",
-                    }}
+                    className="h-full rounded-full bg-[#0F766E] transition-[width]"
+                    style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
                   />
                 </div>
               </div>
 
               <div
-                className={`flex flex-wrap items-center justify-between gap-2 border-t pt-3 ${
-                  onDark ? "border-white/10" : "border-black/8"
-                }`}
+                className="flex flex-wrap items-center justify-between gap-2 border-t border-[#EFEFEF] pt-3"
                 onClick={(e) => e.stopPropagation()}
                 onKeyDown={(e) => e.stopPropagation()}
               >
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1">
                   <TenantAction
                     icon={Pencil}
-                    label="Edit Tenant Meta"
-                    tone={tone}
+                    label="Edit tenant"
                     onClick={() => setEditTarget(t)}
                   />
                   <TenantAction
                     icon={FileText}
-                    label="View Tenant Details"
-                    tone={tone}
+                    label="View details"
                     onClick={() => {
                       setDetailTab("overview");
                       setDetailTarget(t);
@@ -542,14 +514,12 @@ export function TenantsView({
                   />
                   <TenantAction
                     icon={ScrollText}
-                    label="Audit Connection Logs"
-                    tone={tone}
+                    label="Audit logs"
                     onClick={() => setAuditTarget(t)}
                   />
                   <TenantAction
                     icon={Trash2}
-                    label="Delete Tenant"
-                    tone={tone}
+                    label="Delete tenant"
                     onClick={() => setPendingDelete(t)}
                   />
                 </div>
@@ -559,13 +529,7 @@ export function TenantsView({
                     e.stopPropagation();
                     onImpersonate?.(t);
                   }}
-                  className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[11.5px] font-semibold shadow-[0_6px_18px_-10px_rgba(0,0,0,0.5)] transition-colors ${
-                    isBlack
-                      ? "bg-[#0F766E] text-white hover:bg-white hover:text-black"
-                      : isLime
-                        ? "bg-white text-[#0F766E] hover:bg-black hover:text-white"
-                        : "bg-black text-white hover:bg-black/85"
-                  }`}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-[#0F766E] px-3.5 py-1.5 text-[11.5px] font-semibold text-white shadow-[0_6px_18px_-10px_rgba(15,118,110,0.7)] transition-colors hover:bg-[#0D9488]"
                 >
                   <KeyRound className="h-3 w-3" /> Impersonate
                 </button>
@@ -693,23 +657,25 @@ export function TenantsView({
   );
 }
 
+function tenantInitials(name: string): string {
+  const parts = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word[0] ?? "")
+    .join("")
+    .replace(/[^A-Za-z0-9]/g, "");
+  return (parts.slice(0, 2) || "SC").toUpperCase();
+}
+
 function TenantAction({
   icon: Icon,
   label,
-  tone,
   onClick,
 }: {
   icon: typeof Pencil;
   label: string;
-  tone: Tone;
   onClick: () => void;
 }) {
-  const palette =
-    tone === "black"
-      ? "bg-white/10 text-white hover:bg-white hover:text-black"
-      : tone === "lime"
-        ? "bg-white/15 text-white hover:bg-white hover:text-[#0F766E]"
-        : "bg-[#F4F4F5] text-black/70 hover:bg-black hover:text-white";
   return (
     <button
       type="button"
@@ -719,7 +685,7 @@ function TenantAction({
       }}
       aria-label={label}
       title={label}
-      className={`grid h-8 w-8 place-items-center rounded-full transition-colors ${palette}`}
+      className="grid h-8 w-8 place-items-center rounded-full bg-[#F4F4F5] text-black/60 transition-colors hover:bg-[#0F766E] hover:text-white"
     >
       <Icon className="h-3.5 w-3.5" />
     </button>

@@ -12,27 +12,30 @@ function Bone({ className }: { className?: string }) {
 function TenantCardSkeleton({ cornerSide }: { cornerSide: CornerSide }) {
   return (
     <OrganicCard tone="white" cornerSide={cornerSide} padded className="space-y-4">
-      <div className="space-y-2">
-        <Bone className="h-4 w-[62%] rounded-md" />
-        <Bone className={cn("h-3 w-[78%] rounded-md", boneSoft)} />
-        <Bone className={cn("h-3 w-[48%] rounded-md", boneSoft)} />
+      <div className="flex items-start gap-3">
+        <Bone className="h-11 w-11 shrink-0 rounded-2xl" />
+        <div className="min-w-0 flex-1 space-y-2">
+          <Bone className="h-4 w-[70%] rounded-md" />
+          <Bone className={cn("h-3 w-[58%] rounded-md", boneSoft)} />
+          <Bone className={cn("h-3 w-[28%] rounded-md", boneSoft)} />
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Bone className="h-6 w-16 rounded-full" />
+        <Bone className="h-6 w-20 rounded-full" />
         <Bone className="h-6 w-16 rounded-full" />
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-2 rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] px-3 py-2.5">
         <div className="flex items-center justify-between gap-3">
-          <Bone className={cn("h-3 w-24 rounded-md", boneSoft)} />
+          <Bone className={cn("h-3 w-20 rounded-md", boneSoft)} />
           <Bone className={cn("h-3 w-8 rounded-md", boneSoft)} />
         </div>
         <Bone className="h-1.5 w-full rounded-full" />
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-black/8 pt-3">
-        <div className="flex items-center gap-1.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#EFEFEF] pt-3">
+        <div className="flex items-center gap-1">
           {Array.from({ length: 4 }).map((_, i) => (
             <Bone key={i} className="h-8 w-8 rounded-full" />
           ))}
