@@ -1,5 +1,5 @@
 import { filterByAcademicYear } from "@/lib/academic-year";
-import { formatEventDate } from "@/lib/dates";
+import { formatEventDate, parseFlexibleDate } from "@/lib/dates";
 import {
   categoryFeeTermKind,
   isVehicleFeeCategory,
@@ -36,6 +36,8 @@ export type StudentLedgerRow = {
   status: StudentLedgerStatus;
   /** Schedule period label when known (Term 2, May, …) */
   periodLabel?: string;
+  /** ISO `YYYY-MM-DD` for chronological sort (display `due` may be "Today"). */
+  dueIso?: string;
 };
 
 export type StudentReceipt = {
@@ -413,6 +415,8 @@ function leftoverPaymentLine(payment: Payment): ChargeDraft {
 }
 
 function toLedgerRow(draft: ChargeDraft): StudentLedgerRow {
+  const dueRaw = (draft.due ?? "").trim();
+  const dueIso = /^\d{4}-\d{2}-\d{2}/.test(dueRaw) ? dueRaw.slice(0, 10) : undefined;
   if (draft.onBreak) {
     return {
       date: draft.date,
@@ -423,6 +427,7 @@ function toLedgerRow(draft: ChargeDraft): StudentLedgerRow {
       balance: 0,
       status: "On Break",
       periodLabel: draft.periodLabel,
+      dueIso,
     };
   }
   const charge = Math.max(draft.charge, draft.paid);
@@ -436,15 +441,28 @@ function toLedgerRow(draft: ChargeDraft): StudentLedgerRow {
     balance,
     status: ledgerStatus(charge, draft.paid, draft.due),
     periodLabel: draft.periodLabel,
+    dueIso,
   };
+}
+
+function ledgerDueTime(row: StudentLedgerRow): number {
+  // Prefer preserved ISO, then display due/date labels.
+  const parsed =
+    parseFlexibleDate(row.dueIso) ??
+    parseFlexibleDate(row.due) ??
+    parseFlexibleDate(row.date);
+  return parsed?.getTime() ?? Number.POSITIVE_INFINITY;
 }
 
 function sortLedger(rows: StudentLedgerRow[]): StudentLedgerRow[] {
   return rows.slice().sort((a, b) => {
-    // Keep On Break after payable rows, but still group by balance then name
+    // Keep On Break after payable rows, then chronological by due date
+    // (not by label — "AUG"/"DEC"/"FEB" alphabetical order is wrong).
     const aBreak = a.status === "On Break" ? 1 : 0;
     const bBreak = b.status === "On Break" ? 1 : 0;
     if (aBreak !== bBreak) return aBreak - bBreak;
+    const dueDiff = ledgerDueTime(a) - ledgerDueTime(b);
+    if (dueDiff !== 0) return dueDiff;
     if (a.balance !== b.balance) return b.balance - a.balance;
     return a.desc.localeCompare(b.desc);
   });

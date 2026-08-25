@@ -2,6 +2,7 @@ import { apiRequest, getApiToken } from "@/lib/api/client";
 import type {
   ClassConfig,
   Department,
+  LeaveType,
   PaymentCategory,
   Role,
   SchoolDetails,
@@ -202,6 +203,23 @@ export async function apiUpsertDepartment(dept: Department): Promise<Department>
 export async function apiDeleteDepartment(id: string): Promise<void> {
   if (!hasToken()) return;
   await apiRequest(`/api/settings/departments.php?id=${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function apiUpsertLeaveType(leaveType: LeaveType): Promise<LeaveType> {
+  if (!hasToken()) return leaveType;
+  const list = await apiRequest<LeaveType[]>("/api/settings/leave-types.php");
+  const exists = list.some((t) => t.id === leaveType.id);
+  return apiRequest<LeaveType>("/api/settings/leave-types.php", {
+    method: exists ? "PUT" : "POST",
+    body: leaveType,
+  });
+}
+
+export async function apiDeleteLeaveType(id: string): Promise<void> {
+  if (!hasToken()) return;
+  await apiRequest(`/api/settings/leave-types.php?id=${encodeURIComponent(id)}`, {
     method: "DELETE",
   });
 }

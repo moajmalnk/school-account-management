@@ -198,6 +198,8 @@ import {
   type ClassFeeAmountMode,
   type ClassConfig,
   type Department,
+  type LeaveType,
+  DEFAULT_LEAVE_TYPE_STARTERS,
   type FeePeriodKind,
   type FeePeriodMode,
   type FeeTerm,
@@ -259,6 +261,7 @@ import {
 } from "@/lib/download-names";
 import { PwaInstallCard } from "@/components/pwa/PwaInstallBanner";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import {
   sessionCanAccessSettings,
   sessionCanAccessSettingsTab,
@@ -300,12 +303,14 @@ import {
 import {
   apiDeleteClass,
   apiDeleteDepartment,
+  apiDeleteLeaveType,
   apiDeletePaymentCategory,
   apiDeleteTransportRoute,
   apiDeleteVehicle,
   apiSaveSchoolDetails,
   apiUpsertClass,
   apiUpsertDepartment,
+  apiUpsertLeaveType,
   apiUpsertPaymentCategory,
   apiUpsertRole,
   apiUpsertTransportRoute,
@@ -4715,20 +4720,30 @@ export function StaffRoster() {
             s.id,
             s.name,
             payrollMonth,
-            String(22 - (index % 3)),
+            String(20 - (index % 3)),
             "24",
+            String(index % 2 === 0 ? 2 : 0),
+            String(index % 3 === 0 ? 1 : 0),
           ])
         : [
-            ["STF-018", "Anika Roy", payrollMonth, "22", "24"],
-            ["STF-019", "Sample Staff", payrollMonth, "20", "24"],
+            ["STF-018", "Anika Roy", payrollMonth, "20", "24", "2", "0"],
+            ["STF-019", "Sample Staff", payrollMonth, "18", "24", "0", "2"],
           ];
     downloadCsv(
       `staff-attendance-demo-${payrollMonth}.csv`,
-      ["Staff ID", "Name", "Month", "Days Present", "Working Days"],
+      [
+        "Staff ID",
+        "Name",
+        "Month",
+        "Days Present",
+        "Working Days",
+        "Paid Leave Days",
+        "Unpaid Leave Days",
+      ],
       rows,
     );
     toast.success("Attendance demo downloaded", {
-      description: "Fill Days Present / Working Days, then Upload attendance CSV",
+      description: "Fill Present / Working / Leave days, then Upload attendance CSV",
     });
   };
 
@@ -4759,7 +4774,7 @@ export function StaffRoster() {
           skipped += 1;
           continue;
         }
-        const [staffId, , monthRaw, presentRaw, workingRaw] = cells;
+        const [staffId, , monthRaw, presentRaw, workingRaw, paidLeaveRaw, unpaidLeaveRaw] = cells;
         const member = byId.get((staffId || "").toLowerCase());
         if (!member) {
           skipped += 1;
@@ -4774,10 +4789,14 @@ export function StaffRoster() {
         }
         const daysPresent = Number(presentRaw);
         const workingDays = Number(workingRaw || presentRaw);
+        const paidLeaveDays = Number(paidLeaveRaw || 0);
+        const unpaidLeaveDays = Number(unpaidLeaveRaw || 0);
         const normalized = normalizeStaffAttendanceMonth({
           month,
           daysPresent,
           workingDays,
+          paidLeaveDays: Number.isFinite(paidLeaveDays) ? paidLeaveDays : 0,
+          unpaidLeaveDays: Number.isFinite(unpaidLeaveDays) ? unpaidLeaveDays : 0,
         });
         if (!normalized) {
           skipped += 1;
@@ -4808,7 +4827,7 @@ export function StaffRoster() {
           description: [
             months.map((m) => formatPayrollMonthLabel(m)).join(", "),
             skipped > 0 ? `${skipped} row${skipped === 1 ? "" : "s"} skipped` : null,
-            "Payroll now uses days present ÷ working days",
+            "Payroll uses (present + paid leave) ÷ working days",
           ]
             .filter(Boolean)
             .join(" · "),
@@ -10890,6 +10909,8 @@ function MakePayment() {
   );
   const [daysPresent, setDaysPresent] = useState("");
   const [workingDays, setWorkingDays] = useState("");
+  const [paidLeaveDays, setPaidLeaveDays] = useState("");
+  const [unpaidLeaveDays, setUnpaidLeaveDays] = useState("");
   const [beneficiary, setBeneficiary] = useState("");
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState(search.amount ?? "");
@@ -10984,6 +11005,8 @@ function MakePayment() {
       skipToast?: boolean;
       daysPresent?: number;
       workingDays?: number;
+      paidLeaveDays?: number;
+      unpaidLeaveDays?: number;
     },
   ) => {
     const member = activeStaff.find((s) => s.id === memberId);
@@ -10995,7 +11018,7 @@ function MakePayment() {
     setSelectedStaffId(member.id);
     setBeneficiary(member.name);
     setSalaryMonth(month);
-    const { payable, gross, attendance } = staffPayableSalary(member, month);
+    const { payable, gross, attendance, payableDays } = staffPayableSalary(member, month);
     const present =
       opts?.daysPresent ??
       attendance?.daysPresent ??
@@ -11004,19 +11027,31 @@ function MakePayment() {
       opts?.workingDays ??
       attendance?.workingDays ??
       26;
+    const paidLeave =
+      opts?.paidLeaveDays ??
+      attendance?.paidLeaveDays ??
+      0;
+    const unpaidLeave =
+      opts?.unpaidLeaveDays ??
+      attendance?.unpaidLeaveDays ??
+      0;
     setDaysPresent(String(present));
     setWorkingDays(String(working));
-    const computed =
+    setPaidLeaveDays(String(paidLeave));
+    setUnpaidLeaveDays(String(unpaidLeave));
+    const payDays =
       working > 0
-        ? Math.round(gross * (Math.max(0, Math.min(present, working)) / working))
-        : gross;
-    const nextAmount = opts?.amount ?? computed;
+        ? Math.max(0, Math.min(present + paidLeave, working))
+        : 0;
+    const computed =
+      working > 0 ? Math.round(gross * (payDays / working)) : gross;
+    const nextAmount = opts?.amount ?? (attendance ? computed : payable);
     if (nextAmount > 0) {
       setAmount(String(nextAmount));
     }
     const attendanceNote =
       working > 0
-        ? ` · ${Math.max(0, Math.min(present, working))}/${working} days · ${formatPayrollMonthLabel(month)}`
+        ? ` · ${payDays}/${working} payable days · ${formatPayrollMonthLabel(month)}`
         : ` · ${formatPayrollMonthLabel(month)}`;
     if (!description.trim() || /salary|payroll|staff|bus diesel/i.test(description)) {
       setDescription(
@@ -11030,7 +11065,7 @@ function MakePayment() {
       computed !== gross
     ) {
       toast.message("Payroll adjusted for attendance", {
-        description: `Gross ₹ ${gross.toLocaleString("en-IN")} → payable ₹ ${computed.toLocaleString("en-IN")}`,
+        description: `Gross ₹ ${gross.toLocaleString("en-IN")} → payable ₹ ${computed.toLocaleString("en-IN")} (${payDays || payableDays}/${working})`,
       });
     }
   };
@@ -11038,6 +11073,8 @@ function MakePayment() {
   const recalcSalaryFromAttendance = (
     presentRaw: string,
     workingRaw: string,
+    paidLeaveRaw = paidLeaveDays,
+    unpaidLeaveRaw = unpaidLeaveDays,
     memberId = selectedStaffId,
   ) => {
     const member = activeStaff.find((s) => s.id === memberId);
@@ -11045,15 +11082,18 @@ function MakePayment() {
     const gross = staffGrossSalary(member);
     const working = Number(workingRaw);
     const present = Number(presentRaw);
+    const paidLeave = Number(paidLeaveRaw || 0);
     if (!Number.isFinite(working) || working <= 0) {
       setAmount(String(gross));
       return;
     }
-    const safePresent = Math.max(0, Math.min(Number.isFinite(present) ? present : 0, working));
-    setAmount(String(Math.round(gross * (safePresent / working))));
+    const safePresent = Math.max(0, Number.isFinite(present) ? present : 0);
+    const safePaid = Math.max(0, Number.isFinite(paidLeave) ? paidLeave : 0);
+    const payableDays = Math.max(0, Math.min(safePresent + safePaid, working));
+    setAmount(String(Math.round(gross * (payableDays / working))));
     if (!description.trim() || /salary|payroll|staff/i.test(description)) {
       setDescription(
-        `Salary · ${member.role}${member.dept ? ` · ${member.dept}` : ""} · ${safePresent}/${working} days · ${formatPayrollMonthLabel(salaryMonth)}`,
+        `Salary · ${member.role}${member.dept ? ` · ${member.dept}` : ""} · ${payableDays}/${working} payable days · ${formatPayrollMonthLabel(salaryMonth)}`,
       );
     }
   };
@@ -11301,22 +11341,30 @@ function MakePayment() {
     if (payeeType === "Salary" && selectedStaffId) {
       const paidAt = new Date().toISOString().slice(0, 10);
       const working = Math.max(0, Math.round(Number(workingDays) || 0));
-      const present = Math.max(
-        0,
-        Math.min(Math.round(Number(daysPresent) || 0), working || Number.MAX_SAFE_INTEGER),
-      );
+      const present = Math.max(0, Math.round(Number(daysPresent) || 0));
+      const paidLeave = Math.max(0, Math.round(Number(paidLeaveDays) || 0));
+      const unpaidLeave = Math.max(0, Math.round(Number(unpaidLeaveDays) || 0));
+      const attendanceRow =
+        working > 0
+          ? normalizeStaffAttendanceMonth({
+              month: salaryMonth,
+              daysPresent: present,
+              workingDays: working,
+              paidLeaveDays: paidLeave,
+              unpaidLeaveDays: unpaidLeave,
+            })
+          : null;
       setStaff((prev) =>
         prev.map((member) =>
           member.id === selectedStaffId
             ? {
                 ...member,
-                ...(working > 0
+                ...(attendanceRow
                   ? {
-                      attendanceByMonth: upsertStaffAttendanceMonth(member.attendanceByMonth, {
-                        month: salaryMonth,
-                        daysPresent: present,
-                        workingDays: working,
-                      }),
+                      attendanceByMonth: upsertStaffAttendanceMonth(
+                        member.attendanceByMonth,
+                        attendanceRow,
+                      ),
                     }
                   : {}),
                 salaryHistory: [
@@ -11338,13 +11386,12 @@ function MakePayment() {
       if (member) {
         const nextMember = {
           ...member,
-          ...(working > 0
+          ...(attendanceRow
             ? {
-                attendanceByMonth: upsertStaffAttendanceMonth(member.attendanceByMonth, {
-                  month: salaryMonth,
-                  daysPresent: present,
-                  workingDays: working,
-                }),
+                attendanceByMonth: upsertStaffAttendanceMonth(
+                  member.attendanceByMonth,
+                  attendanceRow,
+                ),
               }
             : {}),
         };
@@ -11647,7 +11694,7 @@ function MakePayment() {
             )}
           </div>
           {payeeType === "Salary" && (
-            <div className="grid grid-cols-1 gap-4 sm:col-span-2 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:col-span-2 sm:grid-cols-2 lg:grid-cols-5">
               <div className="min-w-0">
                 <FieldLabel>Salary month</FieldLabel>
                 <MonthPicker
@@ -11668,7 +11715,37 @@ function MakePayment() {
                   onChange={(e) => {
                     const next = e.target.value.replace(/[^0-9]/g, "");
                     setDaysPresent(next);
-                    recalcSalaryFromAttendance(next, workingDays);
+                    recalcSalaryFromAttendance(next, workingDays, paidLeaveDays, unpaidLeaveDays);
+                  }}
+                  placeholder="0"
+                  className="font-mono"
+                  disabled={!selectedStaffId}
+                />
+              </div>
+              <div className="min-w-0">
+                <FieldLabel>Paid Leave</FieldLabel>
+                <Input
+                  inputMode="numeric"
+                  value={paidLeaveDays}
+                  onChange={(e) => {
+                    const next = e.target.value.replace(/[^0-9]/g, "");
+                    setPaidLeaveDays(next);
+                    recalcSalaryFromAttendance(daysPresent, workingDays, next, unpaidLeaveDays);
+                  }}
+                  placeholder="0"
+                  className="font-mono"
+                  disabled={!selectedStaffId}
+                />
+              </div>
+              <div className="min-w-0">
+                <FieldLabel>Unpaid Leave</FieldLabel>
+                <Input
+                  inputMode="numeric"
+                  value={unpaidLeaveDays}
+                  onChange={(e) => {
+                    const next = e.target.value.replace(/[^0-9]/g, "");
+                    setUnpaidLeaveDays(next);
+                    recalcSalaryFromAttendance(daysPresent, workingDays, paidLeaveDays, next);
                   }}
                   placeholder="0"
                   className="font-mono"
@@ -11683,7 +11760,7 @@ function MakePayment() {
                   onChange={(e) => {
                     const next = e.target.value.replace(/[^0-9]/g, "");
                     setWorkingDays(next);
-                    recalcSalaryFromAttendance(daysPresent, next);
+                    recalcSalaryFromAttendance(daysPresent, next, paidLeaveDays, unpaidLeaveDays);
                   }}
                   placeholder="26"
                   className="font-mono"
@@ -12305,6 +12382,8 @@ export function SchoolSettings() {
   const {
     departments,
     setDepartments,
+    leaveTypes,
+    setLeaveTypes,
     roles,
     setRoles,
     tenantUsers,
@@ -12351,6 +12430,7 @@ export function SchoolSettings() {
       { id: "classes", label: "Class Tier" },
       { id: "departments", label: "Departments" },
       { id: "roles", label: "Positions" },
+      { id: "leave", label: "Leave Management" },
       { id: "users", label: "Users" },
       { id: "vehicles", label: "Vehicles" },
       { id: "transport", label: "Transport" },
@@ -12552,6 +12632,17 @@ export function SchoolSettings() {
               setStaff={setStaff}
             />,
             "Loading positions",
+            listLayout,
+          )}
+        </>
+      )}
+
+      {activeTab === "leave" && (
+        <>
+          {campusHint}
+          {renderSettingsPanel(
+            <LeaveTypesCard leaveTypes={leaveTypes} setLeaveTypes={setLeaveTypes} />,
+            "Loading leave types",
             listLayout,
           )}
         </>
@@ -13263,6 +13354,354 @@ function RolesCard({
               </Button>
               <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
                 {editingId ? "Save" : "Add Role"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </OrganicCard>
+  );
+}
+
+function LeaveTypesCard({
+  leaveTypes,
+  setLeaveTypes,
+}: {
+  leaveTypes: LeaveType[];
+  setLeaveTypes: React.Dispatch<React.SetStateAction<LeaveType[]>>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<LeaveType | null>(null);
+  const [form, setForm] = useState({
+    name: "",
+    code: "",
+    isPaid: true,
+    annualAllowanceDays: "",
+    active: true,
+  });
+
+  const sorted = useMemo(
+    () =>
+      [...leaveTypes].sort(
+        (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name),
+      ),
+    [leaveTypes],
+  );
+
+  const startCreate = () => {
+    setEditingId(null);
+    setForm({
+      name: "",
+      code: "",
+      isPaid: true,
+      annualAllowanceDays: "",
+      active: true,
+    });
+    setOpen(true);
+  };
+
+  const startEdit = (t: LeaveType) => {
+    setEditingId(t.id);
+    setForm({
+      name: t.name,
+      code: t.code,
+      isPaid: t.isPaid,
+      annualAllowanceDays:
+        t.annualAllowanceDays !== null && t.annualAllowanceDays !== undefined
+          ? String(t.annualAllowanceDays)
+          : "",
+      active: t.active,
+    });
+    setOpen(true);
+  };
+
+  const persist = (next: LeaveType) => {
+    void apiUpsertLeaveType(next).catch((err) =>
+      toast.error(err instanceof Error ? err.message : "Could not sync leave type"),
+    );
+  };
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = form.name.trim();
+    const code = form.code.trim().toUpperCase();
+    if (!name || !code) {
+      toast.error("Leave name and code are required");
+      return;
+    }
+    if (
+      leaveTypes.some(
+        (t) => t.code === code && t.id !== editingId,
+      )
+    ) {
+      toast.error("Leave code already exists on this campus");
+      return;
+    }
+    const annualRaw = form.annualAllowanceDays.trim();
+    const annualAllowanceDays =
+      annualRaw === "" ? null : Math.max(0, Math.round(Number(annualRaw)));
+    if (annualRaw !== "" && !Number.isFinite(annualAllowanceDays)) {
+      toast.error("Annual allowance must be a number");
+      return;
+    }
+
+    if (editingId) {
+      const previous = leaveTypes.find((t) => t.id === editingId);
+      const updated: LeaveType = {
+        id: editingId,
+        name,
+        code,
+        isPaid: form.isPaid,
+        annualAllowanceDays,
+        active: form.active,
+        sortOrder: previous?.sortOrder ?? 0,
+      };
+      setLeaveTypes((prev) => prev.map((t) => (t.id === editingId ? updated : t)));
+      persist(updated);
+      toast.success(`Leave type updated · ${name}`);
+    } else {
+      const nextId = nextPrefixedId(
+        "LVT",
+        leaveTypes.map((t) => t.id),
+        3,
+      );
+      const created: LeaveType = {
+        id: nextId,
+        name,
+        code,
+        isPaid: form.isPaid,
+        annualAllowanceDays,
+        active: form.active,
+        sortOrder: leaveTypes.length,
+      };
+      setLeaveTypes((prev) => [...prev, created]);
+      persist(created);
+      toast.success(`Leave type added · ${name}`);
+    }
+    setOpen(false);
+  };
+
+  const remove = (t: LeaveType) => {
+    setLeaveTypes((prev) => prev.filter((x) => x.id !== t.id));
+    void apiDeleteLeaveType(t.id).catch((err) =>
+      toast.error(err instanceof Error ? err.message : "Could not delete leave type"),
+    );
+    toast.error(`${t.name} removed`);
+  };
+
+  const confirmDelete = () => {
+    if (!pendingDelete) return;
+    remove(pendingDelete);
+    setPendingDelete(null);
+  };
+
+  const addStarterPack = () => {
+    const existingCodes = new Set(leaveTypes.map((t) => t.code));
+    const created: LeaveType[] = [];
+    DEFAULT_LEAVE_TYPE_STARTERS.forEach((starter, index) => {
+      if (existingCodes.has(starter.code)) return;
+      const id = nextPrefixedId(
+        "LVT",
+        [...leaveTypes, ...created].map((t) => t.id),
+        3,
+      );
+      created.push({
+        id,
+        ...starter,
+        sortOrder: leaveTypes.length + index,
+      });
+    });
+    if (created.length === 0) {
+      toast.message("Starter leave types already exist");
+      return;
+    }
+    setLeaveTypes((prev) => [...prev, ...created]);
+    created.forEach(persist);
+    toast.success(
+      `Added ${created.length} leave type${created.length === 1 ? "" : "s"}`,
+    );
+  };
+
+  return (
+    <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
+      <CardHeader
+        title="Leave Management"
+        subtitle={`${leaveTypes.length} leave types · paid leave counts toward salary · unpaid leave is loss of pay`}
+        actionLabel="Add Leave Type"
+        onAction={startCreate}
+      />
+
+      <div className="mt-4 space-y-2">
+        {leaveTypes.length === 0 && (
+          <div className="rounded-xl border border-dashed border-[#E5E5E5] bg-[#FAFAFA] px-4 py-5 dark:border-white/15 dark:bg-zinc-900/50">
+            <p className="text-[13px] font-medium text-black/70 dark:text-zinc-300">
+              No leave types yet for this campus
+            </p>
+            <p className="mt-1 text-[12px] text-black/45 dark:text-zinc-500">
+              Create Casual, Sick, Personal, or any custom leave with paid or unpaid status.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-3 rounded-full"
+              onClick={addStarterPack}
+            >
+              Add Casual · Sick · Personal
+            </Button>
+          </div>
+        )}
+        {sorted.map((t) => (
+          <div
+            key={t.id}
+            className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5 dark:border-white/10 dark:bg-zinc-900/70"
+          >
+            <div className="flex min-w-0 items-center gap-2.5">
+              <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[#0F766E] text-[10.5px] font-semibold text-white">
+                {t.code.slice(0, 3)}
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-[13px] font-semibold text-black dark:text-zinc-100">
+                  {t.name}
+                  {!t.active ? (
+                    <span className="ml-2 text-[10px] font-medium uppercase tracking-wider text-black/40 dark:text-zinc-500">
+                      Inactive
+                    </span>
+                  ) : null}
+                </div>
+                <div className="font-mono text-[10.5px] uppercase tracking-wider text-black/45 dark:text-zinc-400">
+                  {t.code}
+                  {t.annualAllowanceDays !== null
+                    ? ` · ${t.annualAllowanceDays} days / year`
+                    : ""}
+                </div>
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+              <span
+                className={
+                  t.isPaid
+                    ? "rounded-full bg-[#CCFBF1] px-2 py-0.5 font-mono text-[10px] font-semibold text-black dark:bg-[#0F766E]/35 dark:text-[#5EEAD4] sm:px-2.5 sm:text-[11px]"
+                    : "rounded-full bg-[#FEE2E2] px-2 py-0.5 font-mono text-[10px] font-semibold text-[#B91C1C] dark:bg-rose-950/50 dark:text-rose-300 sm:px-2.5 sm:text-[11px]"
+                }
+              >
+                {t.isPaid ? "Paid" : "Unpaid"}
+              </span>
+              <button
+                type="button"
+                onClick={() => startEdit(t)}
+                aria-label={`Edit ${t.name}`}
+                className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black dark:border-white/15 dark:bg-zinc-950 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-zinc-100"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingDelete(t)}
+                aria-label={`Delete ${t.name}`}
+                className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2] dark:border-rose-500/40 dark:bg-rose-950/50 dark:text-rose-300 dark:hover:bg-rose-950/80"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <DeleteConfirmDialog
+        open={Boolean(pendingDelete)}
+        onOpenChange={(next) => {
+          if (!next) setPendingDelete(null);
+        }}
+        title="Delete Leave Type"
+        description={
+          pendingDelete
+            ? `Are you sure you want to delete ${pendingDelete.name} (${pendingDelete.code})? This action cannot be undone.`
+            : "Are you sure you want to delete this leave type?"
+        }
+        onConfirm={confirmDelete}
+      />
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingId ? "Edit Leave Type" : "Add Leave Type"}</DialogTitle>
+            <DialogDescription>
+              Paid leave days count toward salary payable. Unpaid leave is treated as loss of pay
+              when recording monthly attendance.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={submit} className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                Leave Name
+              </Label>
+              <Input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="e.g. Casual Leave"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                Code
+              </Label>
+              <Input
+                value={form.code}
+                onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
+                placeholder="e.g. CL"
+                className="font-mono uppercase"
+              />
+            </div>
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3 py-2.5 dark:border-white/10 dark:bg-zinc-900/70">
+              <div>
+                <div className="text-[13px] font-semibold text-black dark:text-zinc-100">
+                  Paid leave
+                </div>
+                <div className="text-[11.5px] text-black/55 dark:text-zinc-400">
+                  Counts toward salary when marked in attendance
+                </div>
+              </div>
+              <Switch
+                checked={form.isPaid}
+                onCheckedChange={(isPaid) => setForm({ ...form, isPaid })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                Annual allowance (days)
+              </Label>
+              <Input
+                value={form.annualAllowanceDays}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    annualAllowanceDays: e.target.value.replace(/[^0-9]/g, ""),
+                  })
+                }
+                placeholder="Optional · e.g. 12"
+                inputMode="numeric"
+              />
+            </div>
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3 py-2.5 dark:border-white/10 dark:bg-zinc-900/70">
+              <div>
+                <div className="text-[13px] font-semibold text-black dark:text-zinc-100">Active</div>
+                <div className="text-[11.5px] text-black/55 dark:text-zinc-400">
+                  Inactive types stay in history but are hidden from new entries
+                </div>
+              </div>
+              <Switch
+                checked={form.active}
+                onCheckedChange={(active) => setForm({ ...form, active })}
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
+                {editingId ? "Save" : "Add Leave Type"}
               </Button>
             </DialogFooter>
           </form>

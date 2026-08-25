@@ -1170,7 +1170,10 @@ function buildSalaryComponents(staff: SalarySlipStaff | null | undefined, netPai
   const gross = earnings.reduce((sum, row) => sum + row.amount, 0);
   const deductions: { label: string; amount: number }[] = [];
   if (gross > 0 && netPaid < gross) {
-    deductions.push({ label: "Loss of pay (LOP)", amount: gross - netPaid });
+    deductions.push({
+      label: "Loss of pay (LOP / unpaid leave & absence)",
+      amount: gross - netPaid,
+    });
   } else if (gross > 0 && netPaid > gross) {
     earnings.push({ label: "Arrears / additional", amount: netPaid - gross });
   }

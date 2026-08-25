@@ -251,6 +251,10 @@ export type StaffAttendanceMonth = {
   month: string;
   daysPresent: number;
   workingDays: number;
+  /** Days on paid leave (count toward payable salary) */
+  paidLeaveDays: number;
+  /** Days on unpaid leave (do not count toward payable) */
+  unpaidLeaveDays: number;
 };
 
 export type StaffStatusEvent = {
@@ -317,7 +321,7 @@ export function getStaffAttendanceForMonth(
 
 /**
  * Payable salary for a month.
- * With attendance: gross × (daysPresent / workingDays).
+ * With attendance: gross × ((daysPresent + paidLeaveDays) / workingDays).
  * Without attendance: full gross (unchanged behaviour).
  */
 export function staffPayableSalary(
@@ -327,6 +331,7 @@ export function staffPayableSalary(
   gross: number;
   payable: number;
   ratio: number;
+  payableDays: number;
   attendance?: StaffAttendanceMonth;
 } {
   const gross = staffGrossSalary(staff);
@@ -336,12 +341,17 @@ export function staffPayableSalary(
     !Number.isFinite(attendance.workingDays) ||
     attendance.workingDays <= 0
   ) {
-    return { gross, payable: gross, ratio: 1 };
+    return { gross, payable: gross, ratio: 1, payableDays: 0 };
   }
-  const present = Math.max(0, Math.min(attendance.daysPresent, attendance.workingDays));
-  const ratio = present / attendance.workingDays;
+  const paidLeave = Math.max(0, attendance.paidLeaveDays || 0);
+  const present = Math.max(0, attendance.daysPresent);
+  const payableDays = Math.max(
+    0,
+    Math.min(present + paidLeave, attendance.workingDays),
+  );
+  const ratio = payableDays / attendance.workingDays;
   const payable = Math.round(gross * ratio);
-  return { gross, payable, ratio, attendance };
+  return { gross, payable, ratio, payableDays, attendance };
 }
 
 const MONTH_NAME_TO_INDEX: Record<string, number> = {
@@ -414,19 +424,48 @@ export function normalizeStaffAttendanceMonth(
       ? raw.month.trim()
       : null;
   if (!month) return null;
-  const daysPresent =
-    typeof raw.daysPresent === "number" && Number.isFinite(raw.daysPresent)
-      ? Math.max(0, Math.round(raw.daysPresent))
-      : 0;
   const workingDays =
     typeof raw.workingDays === "number" && Number.isFinite(raw.workingDays)
       ? Math.max(0, Math.round(raw.workingDays))
       : 0;
   if (workingDays <= 0) return null;
+  const daysPresent =
+    typeof raw.daysPresent === "number" && Number.isFinite(raw.daysPresent)
+      ? Math.max(0, Math.round(raw.daysPresent))
+      : 0;
+  const paidLeaveDays =
+    typeof raw.paidLeaveDays === "number" && Number.isFinite(raw.paidLeaveDays)
+      ? Math.max(0, Math.round(raw.paidLeaveDays))
+      : 0;
+  const unpaidLeaveDays =
+    typeof raw.unpaidLeaveDays === "number" && Number.isFinite(raw.unpaidLeaveDays)
+      ? Math.max(0, Math.round(raw.unpaidLeaveDays))
+      : 0;
+  // Clamp so present + paid + unpaid never exceed working days.
+  let present = daysPresent;
+  let paid = paidLeaveDays;
+  let unpaid = unpaidLeaveDays;
+  let allocated = present + paid + unpaid;
+  if (allocated > workingDays) {
+    const overflow = allocated - workingDays;
+    const cutUnpaid = Math.min(unpaid, overflow);
+    unpaid -= cutUnpaid;
+    allocated -= cutUnpaid;
+    if (allocated > workingDays) {
+      const cutPaid = Math.min(paid, allocated - workingDays);
+      paid -= cutPaid;
+      allocated -= cutPaid;
+    }
+    if (allocated > workingDays) {
+      present = Math.max(0, present - (allocated - workingDays));
+    }
+  }
   return {
     month,
-    daysPresent: Math.min(daysPresent, workingDays),
+    daysPresent: present,
     workingDays,
+    paidLeaveDays: paid,
+    unpaidLeaveDays: unpaid,
   };
 }
 
@@ -1346,6 +1385,70 @@ export type Department = {
   name: string;
   code: string;
 };
+
+/** Branch-scoped staff leave catalog entry (Casual / Sick / Personal / custom). */
+export type LeaveType = {
+  id: string;
+  name: string;
+  code: string;
+  isPaid: boolean;
+  annualAllowanceDays: number | null;
+  active: boolean;
+  sortOrder: number;
+};
+
+export const DEFAULT_LEAVE_TYPE_STARTERS: Omit<LeaveType, "id">[] = [
+  {
+    name: "Casual Leave",
+    code: "CL",
+    isPaid: true,
+    annualAllowanceDays: 12,
+    active: true,
+    sortOrder: 0,
+  },
+  {
+    name: "Sick Leave",
+    code: "SL",
+    isPaid: true,
+    annualAllowanceDays: 12,
+    active: true,
+    sortOrder: 1,
+  },
+  {
+    name: "Personal Leave",
+    code: "PL",
+    isPaid: false,
+    annualAllowanceDays: 6,
+    active: true,
+    sortOrder: 2,
+  },
+];
+
+export function normalizeLeaveType(raw: unknown): LeaveType | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.id !== "string" || !r.id.trim() || typeof r.name !== "string" || !r.name.trim()) {
+    return null;
+  }
+  const code =
+    typeof r.code === "string" && r.code.trim() ? r.code.trim().toUpperCase() : "LV";
+  const annual =
+    typeof r.annualAllowanceDays === "number" && Number.isFinite(r.annualAllowanceDays)
+      ? Math.max(0, Math.round(r.annualAllowanceDays))
+      : null;
+  return {
+    id: r.id.trim(),
+    name: r.name.trim(),
+    code,
+    isPaid: r.isPaid !== false,
+    annualAllowanceDays: annual,
+    active: r.active !== false,
+    sortOrder:
+      typeof r.sortOrder === "number" && Number.isFinite(r.sortOrder)
+        ? Math.round(r.sortOrder)
+        : 0,
+  };
+}
 
 /** Physical campus under a tenant (Malappuram, Kozhikode, …). */
 export type CampusBranch = {
@@ -3585,6 +3688,7 @@ type Snapshot = {
   staff: Staff[];
   payments: Payment[];
   departments: Department[];
+  leaveTypes: LeaveType[];
   roles: Role[];
   classes: ClassConfig[];
   transportRoutes: TransportRoute[];
@@ -3620,6 +3724,8 @@ type TenantStoreValue = {
   activePayments: Payment[];
   departments: Department[];
   setDepartments: Dispatch<SetStateAction<Department[]>>;
+  leaveTypes: LeaveType[];
+  setLeaveTypes: Dispatch<SetStateAction<LeaveType[]>>;
   roles: Role[];
   setRoles: Dispatch<SetStateAction<Role[]>>;
   tenantUsers: TenantUser[];
@@ -3930,6 +4036,11 @@ function parseSnapshot(raw: string): Snapshot | null {
     staff: parsed.staff.map((s) => normalizeStaff(s as Staff)),
     payments,
     departments: parsed.departments,
+    leaveTypes: Array.isArray((parsed as Partial<Snapshot>).leaveTypes)
+      ? ((parsed as Partial<Snapshot>).leaveTypes as unknown[])
+          .map(normalizeLeaveType)
+          .filter((t): t is LeaveType => t !== null)
+      : [],
     roles: parsed.roles,
     classes: Array.isArray(parsed.classes)
       ? parsed.classes.map((c) =>
@@ -4410,6 +4521,9 @@ export function TenantStoreProvider({
   const [departments, setDepartments] = useState<Department[]>(() =>
     liveApi ? (cachedSnapshot?.departments ?? []) : SEED_DEPARTMENTS,
   );
+  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>(() =>
+    liveApi ? (cachedSnapshot?.leaveTypes ?? []) : [],
+  );
   const [roles, setRoles] = useState<Role[]>(() =>
     liveApi ? (cachedSnapshot?.roles ?? []) : SEED_ROLES,
   );
@@ -4502,6 +4616,13 @@ export function TenantStoreProvider({
     );
     setPayments(snap.payments);
     setDepartments(snap.departments);
+    setLeaveTypes(
+      Array.isArray(snap.leaveTypes)
+        ? snap.leaveTypes
+            .map(normalizeLeaveType)
+            .filter((t): t is LeaveType => t !== null)
+        : [],
+    );
     setRoles(snap.roles);
     setTenantUsers(snap.tenantUsers ?? (apiLive ? [] : SEED_TENANT_USERS));
     setClasses(
@@ -4655,6 +4776,7 @@ export function TenantStoreProvider({
               staff: remote.staff,
               payments: remote.payments,
               departments: remote.departments,
+              leaveTypes: remote.leaveTypes,
               roles: remote.roles,
               classes: remote.classes,
               transportRoutes: remote.transportRoutes,
@@ -4712,6 +4834,7 @@ export function TenantStoreProvider({
             staff: [],
             payments: [],
             departments: [],
+            leaveTypes: [],
             roles: [],
             classes: [],
             transportRoutes: [],
@@ -4842,6 +4965,7 @@ export function TenantStoreProvider({
         staff,
         payments,
         departments,
+        leaveTypes,
         roles,
         classes,
         transportRoutes,
@@ -4870,6 +4994,7 @@ export function TenantStoreProvider({
     staff,
     payments,
     departments,
+    leaveTypes,
     roles,
     classes,
     transportRoutes,
@@ -5186,6 +5311,7 @@ export function TenantStoreProvider({
     setStaff(SEED_STAFF);
     setPayments(SEED_PAYMENTS);
     setDepartments(SEED_DEPARTMENTS);
+    setLeaveTypes([]);
     setRoles(SEED_ROLES);
     setTenantUsers(SEED_TENANT_USERS);
     setClasses(SEED_CLASSES);
@@ -5210,6 +5336,7 @@ export function TenantStoreProvider({
       staff: SEED_STAFF,
       payments: SEED_PAYMENTS,
       departments: SEED_DEPARTMENTS,
+      leaveTypes: [],
       roles: SEED_ROLES,
       classes: SEED_CLASSES,
       transportRoutes: SEED_TRANSPORT,
@@ -5314,6 +5441,7 @@ export function TenantStoreProvider({
                 staff: remote.staff,
                 payments: remote.payments,
                 departments: remote.departments,
+                leaveTypes: remote.leaveTypes,
                 roles: remote.roles,
                 classes: remote.classes,
                 transportRoutes: remote.transportRoutes,
@@ -5376,6 +5504,8 @@ export function TenantStoreProvider({
       activePayments,
       departments,
       setDepartments,
+      leaveTypes,
+      setLeaveTypes,
       roles,
       setRoles,
       tenantUsers,
@@ -5434,6 +5564,7 @@ export function TenantStoreProvider({
       payments,
       activePayments,
       departments,
+      leaveTypes,
       roles,
       tenantUsers,
       classes,

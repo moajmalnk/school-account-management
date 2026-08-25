@@ -24,6 +24,7 @@ import {
   type ClassConfig,
   type Department,
   type FeeTerm,
+  type LeaveType,
   type Payment,
   type PaymentCategory,
   type Role,
@@ -59,6 +60,7 @@ export type RemoteTenantBundle = {
   staff: Staff[];
   payments: Payment[];
   departments: Department[];
+  leaveTypes: LeaveType[];
   roles: Role[];
   classes: ClassConfig[];
   transportRoutes: TransportRoute[];
@@ -256,6 +258,10 @@ export async function fetchRemoteTenantBundle(
       "/api/settings/departments.php",
       [],
     );
+    const leaveTypes = await getSafe<LeaveType[]>(
+      "/api/settings/leave-types.php",
+      [],
+    );
     const roles = await getSafe<Role[]>("/api/settings/roles.php", []);
     const classes = await getSafe<ClassConfig[]>(
       "/api/settings/classes.php",
@@ -301,6 +307,7 @@ export async function fetchRemoteTenantBundle(
       staff,
       payments,
       departments,
+      leaveTypes,
       roles,
       classes,
       transportRoutes: routes,
@@ -345,6 +352,7 @@ export function seedTenantBundle(): RemoteTenantBundle {
     staff: SEED_STAFF,
     payments: SEED_PAYMENTS,
     departments: SEED_DEPARTMENTS,
+    leaveTypes: [],
     roles: SEED_ROLES,
     classes: SEED_CLASSES,
     transportRoutes: SEED_TRANSPORT,

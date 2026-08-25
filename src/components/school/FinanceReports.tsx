@@ -1499,7 +1499,12 @@ export function SalaryReport() {
           payable: pay.payable,
           attendance: pay.attendance,
           attendanceLabel: pay.attendance
-            ? `${pay.attendance.daysPresent}/${pay.attendance.workingDays}`
+            ? `${pay.payableDays}/${pay.attendance.workingDays} payable${
+                (pay.attendance.paidLeaveDays || 0) > 0 ||
+                (pay.attendance.unpaidLeaveDays || 0) > 0
+                  ? ` · ${pay.attendance.paidLeaveDays || 0} paid / ${pay.attendance.unpaidLeaveDays || 0} unpaid leave`
+                  : ""
+              }`
             : "—",
         };
       }),
@@ -1706,7 +1711,7 @@ export function SalaryReport() {
           <div className="min-w-0 flex-1">
             <ExportBar title="Salary Report" onCsv={handleCsv} onPdf={handlePdf} onPrint={handlePrint} />
             <p className="mt-1 text-[12px] text-black/55">
-              Monthly payroll · attendance adjusts payable · {academicYear}
+              Monthly payroll · present + paid leave adjust payable · {academicYear}
             </p>
           </div>
           <div className="w-full shrink-0 sm:w-[200px]">

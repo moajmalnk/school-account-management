@@ -68,7 +68,14 @@ function attendanceLabelForMonth(
   pay: ReturnType<typeof staffPayableSalary>,
 ): string {
   if (!pay.attendance) return "Full gross · no attendance";
-  return `${pay.attendance.daysPresent}/${pay.attendance.workingDays} days · ${Math.round(pay.ratio * 100)}%`;
+  const paidLeave = pay.attendance.paidLeaveDays || 0;
+  const unpaidLeave = pay.attendance.unpaidLeaveDays || 0;
+  const leaveBits = [
+    paidLeave > 0 ? `${paidLeave} paid leave` : null,
+    unpaidLeave > 0 ? `${unpaidLeave} unpaid leave` : null,
+  ].filter(Boolean);
+  const leaveSuffix = leaveBits.length ? ` · ${leaveBits.join(" · ")}` : "";
+  return `${pay.payableDays}/${pay.attendance.workingDays} payable days${leaveSuffix} · ${Math.round(pay.ratio * 100)}%`;
 }
 
 function mapPayment(entry: StaffSalaryHistoryEntry): StaffPayrollPayment {

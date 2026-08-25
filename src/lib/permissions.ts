@@ -112,6 +112,7 @@ export type SettingsTabId =
   | "classes"
   | "departments"
   | "roles"
+  | "leave"
   | "vehicles"
   | "transport"
   | "system"
@@ -186,6 +187,7 @@ const SETTINGS_TAB_PLAN_FLAG: Partial<Record<SettingsTabId, keyof PlanFlags>> = 
   classes: "classes",
   departments: "staff",
   roles: "staff",
+  leave: "staff",
   vehicles: "vehicle",
   transport: "vehicle",
   users: "extraUsers",

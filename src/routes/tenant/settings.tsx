@@ -9,6 +9,7 @@ export const SETTINGS_TABS = [
   "classes",
   "departments",
   "roles",
+  "leave",
   "users",
   "vehicles",
   "transport",

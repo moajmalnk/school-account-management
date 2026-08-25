@@ -574,6 +574,8 @@ export function StaffProfileDetail({
     month: payrollMonth,
     daysPresent: "",
     workingDays: "24",
+    paidLeaveDays: "",
+    unpaidLeaveDays: "",
   });
   const [pendingDeleteMonth, setPendingDeleteMonth] = useState<string | null>(null);
 
@@ -585,6 +587,8 @@ export function StaffProfileDetail({
       ...prev,
       daysPresent: existing ? String(existing.daysPresent) : "",
       workingDays: existing ? String(existing.workingDays) : prev.workingDays || "24",
+      paidLeaveDays: existing ? String(existing.paidLeaveDays || 0) : "",
+      unpaidLeaveDays: existing ? String(existing.unpaidLeaveDays || 0) : "",
     }));
     // Sync fields when month or staff changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -592,17 +596,27 @@ export function StaffProfileDetail({
 
   const saveAttendanceMonth = (e: React.FormEvent) => {
     e.preventDefault();
+    const working = Number(attendanceForm.workingDays);
+    const present = Number(attendanceForm.daysPresent);
+    const paidLeave = Number(attendanceForm.paidLeaveDays || 0);
+    const unpaidLeave = Number(attendanceForm.unpaidLeaveDays || 0);
+    if (
+      Number.isFinite(working) &&
+      working > 0 &&
+      present + paidLeave + unpaidLeave > working
+    ) {
+      toast.error("Present + paid leave + unpaid leave cannot exceed working days");
+      return;
+    }
     const normalized = normalizeStaffAttendanceMonth({
       month: attendanceForm.month,
-      daysPresent: Number(attendanceForm.daysPresent),
-      workingDays: Number(attendanceForm.workingDays),
+      daysPresent: present,
+      workingDays: working,
+      paidLeaveDays: paidLeave,
+      unpaidLeaveDays: unpaidLeave,
     });
     if (!normalized) {
       toast.error("Enter a valid month and working days");
-      return;
-    }
-    if (normalized.daysPresent > normalized.workingDays) {
-      toast.error("Days present cannot exceed working days");
       return;
     }
     const updated: Staff = {
@@ -610,8 +624,9 @@ export function StaffProfileDetail({
       attendanceByMonth: upsertStaffAttendanceMonth(staff.attendanceByMonth, normalized),
     };
     syncStaff(updated);
+    const payableDays = normalized.daysPresent + normalized.paidLeaveDays;
     toast.success(`Attendance saved · ${formatPayrollMonthLabel(normalized.month)}`, {
-      description: `${normalized.daysPresent}/${normalized.workingDays} days · payroll payable updates automatically`,
+      description: `${payableDays}/${normalized.workingDays} payable days · payroll updates automatically`,
     });
   };
 
@@ -1002,6 +1017,22 @@ export function StaffProfileDetail({
                         {attendancePay.attendance.workingDays}
                       </div>
                     </div>
+                    <div className="rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-3">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                        Paid leave
+                      </div>
+                      <div className="mt-1 font-mono text-[22px] font-bold text-black">
+                        {attendancePay.attendance.paidLeaveDays || 0}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-3">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                        Unpaid leave
+                      </div>
+                      <div className="mt-1 font-mono text-[22px] font-bold text-black">
+                        {attendancePay.attendance.unpaidLeaveDays || 0}
+                      </div>
+                    </div>
                   </div>
                   <div className="rounded-lg border border-[#D1FAE5] bg-[#F0FDFA] px-3.5 py-3">
                     <div className="text-[10px] font-semibold uppercase tracking-wider text-[#0F766E]">
@@ -1012,7 +1043,8 @@ export function StaffProfileDetail({
                     </div>
                     <p className="mt-1 text-[11px] text-black/50">
                       Gross ₹ {staffGrossSalary(staff).toLocaleString("en-IN")} ×{" "}
-                      {Math.round(attendancePay.ratio * 100)}% attendance
+                      {attendancePay.payableDays}/{attendancePay.attendance.workingDays} payable
+                      days ({Math.round(attendancePay.ratio * 100)}%)
                     </p>
                     {currentMonthSettled ? (
                       <div className="mt-3 space-y-2">
@@ -1070,14 +1102,14 @@ export function StaffProfileDetail({
                 <div>
                   <h2 className="text-base font-semibold text-black">Record Attendance</h2>
                   <p className="mt-1 text-[12.5px] text-black/50">
-                    Save days present for any month. Payroll uses present ÷ working days.
+                    Payable days = present + paid leave. Unpaid leave is loss of pay.
                   </p>
                 </div>
               </div>
 
               <form
                 onSubmit={saveAttendanceMonth}
-                className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-4 sm:items-end"
+                className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-6 sm:items-end"
               >
                 <div className="space-y-1.5 sm:col-span-1">
                   <Label className={META_LABEL} htmlFor="attendance-month">
@@ -1110,9 +1142,45 @@ export function StaffProfileDetail({
                         daysPresent: e.target.value.replace(/[^0-9]/g, ""),
                       }))
                     }
-                    placeholder="22"
+                    placeholder="20"
                     className="h-10 font-mono"
                     required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className={META_LABEL} htmlFor="paid-leave-days">
+                    Paid Leave
+                  </Label>
+                  <Input
+                    id="paid-leave-days"
+                    inputMode="numeric"
+                    value={attendanceForm.paidLeaveDays}
+                    onChange={(e) =>
+                      setAttendanceForm((prev) => ({
+                        ...prev,
+                        paidLeaveDays: e.target.value.replace(/[^0-9]/g, ""),
+                      }))
+                    }
+                    placeholder="0"
+                    className="h-10 font-mono"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className={META_LABEL} htmlFor="unpaid-leave-days">
+                    Unpaid Leave
+                  </Label>
+                  <Input
+                    id="unpaid-leave-days"
+                    inputMode="numeric"
+                    value={attendanceForm.unpaidLeaveDays}
+                    onChange={(e) =>
+                      setAttendanceForm((prev) => ({
+                        ...prev,
+                        unpaidLeaveDays: e.target.value.replace(/[^0-9]/g, ""),
+                      }))
+                    }
+                    placeholder="0"
+                    className="h-10 font-mono"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -1163,17 +1231,19 @@ export function StaffProfileDetail({
                   </div>
                 ) : (
                   <div className="mt-3 overflow-x-auto rounded-lg border border-slate-100 dark:border-white/10">
-                    <table className="w-full min-w-[480px] text-left text-[12.5px]">
+                    <table className="w-full min-w-[620px] text-left text-[12.5px]">
                       <thead>
                         <tr className="border-b border-slate-100 bg-slate-50 dark:border-white/10 dark:bg-zinc-900/70">
-                          {["Month", "Present", "Working", "Rate", "Payable", ""].map((header) => (
-                            <th
-                              key={header || "actions"}
-                              className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/50 dark:text-zinc-400"
-                            >
-                              {header}
-                            </th>
-                          ))}
+                          {["Month", "Present", "Paid", "Unpaid", "Working", "Rate", "Payable", ""].map(
+                            (header) => (
+                              <th
+                                key={header || "actions"}
+                                className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/50 dark:text-zinc-400"
+                              >
+                                {header}
+                              </th>
+                            ),
+                          )}
                         </tr>
                       </thead>
                       <tbody>
@@ -1214,6 +1284,12 @@ export function StaffProfileDetail({
                                 {row.daysPresent}
                               </td>
                               <td className="px-3 py-3 font-mono text-black/70">
+                                {row.paidLeaveDays || 0}
+                              </td>
+                              <td className="px-3 py-3 font-mono text-black/70">
+                                {row.unpaidLeaveDays || 0}
+                              </td>
+                              <td className="px-3 py-3 font-mono text-black/70">
                                 {row.workingDays}
                               </td>
                               <td className="px-3 py-3 font-mono text-black/70">
@@ -1248,6 +1324,8 @@ export function StaffProfileDetail({
                                         month: row.month,
                                         daysPresent: String(row.daysPresent),
                                         workingDays: String(row.workingDays),
+                                        paidLeaveDays: String(row.paidLeaveDays || 0),
+                                        unpaidLeaveDays: String(row.unpaidLeaveDays || 0),
                                       })
                                     }
                                     className="grid h-8 w-8 place-items-center rounded-full text-black/45 transition-colors hover:bg-[#0F766E] hover:text-white"
