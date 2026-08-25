@@ -11349,6 +11349,10 @@ function MakePayment() {
       toast.error("Enter a valid amount");
       return;
     }
+    if (!splitOk) {
+      toast.error("Bank and cash amounts must add up to the total");
+      return;
+    }
     // Ensure salary month is reflected on the disbursal line
     if (
       payeeType === "Salary" &&
@@ -11667,16 +11671,26 @@ function MakePayment() {
   const openEditDisbursal = (payment: MadePayment) => {
     setEditingDisbursal(payment);
     const parts = parseReceiptDateTimeParts(payment.time);
+    const parsed = parseStoredReceiptNarration(payment.desc);
     setDisbursalEditForm({
       payee: payment.payee,
-      desc: payment.desc,
+      desc: parsed.note || payment.desc,
       amount: String(payment.amount),
-      mode: payment.mode,
+      mode: MAKE_PAYMENT_MODES.includes(payment.mode as (typeof MAKE_PAYMENT_MODES)[number])
+        ? payment.mode
+        : payment.mode || "Bank",
       payeeType: payment.payeeType,
       status: payment.status,
       date: parts.date,
       clock: parts.clock,
     });
+    if (payment.mode === "Both") {
+      setBankSplitAmount(parsed.bankSplit);
+      setCashSplitAmount(parsed.cashSplit);
+    } else {
+      setBankSplitAmount("");
+      setCashSplitAmount("");
+    }
   };
 
   const saveEditedDisbursal = (e: React.FormEvent) => {
@@ -11705,15 +11719,38 @@ function MakePayment() {
       toast.error("Payment mode is required");
       return;
     }
+    if (
+      modeValue === "Both" &&
+      !splitMatchesTotal(
+        modeValue,
+        bankSplitAmount,
+        cashSplitAmount,
+        nextAmount,
+      )
+    ) {
+      toast.error("Bank and cash amounts must add up to the total");
+      return;
+    }
     if (!disbursalEditForm.date || !disbursalEditForm.clock) {
       toast.error("Date and time are required");
       return;
     }
 
+    let nextDesc = desc;
+    if (modeValue === "Both") {
+      nextDesc = [
+        desc,
+        `Bank ₹${Number(bankSplitAmount).toLocaleString("en-IN")}`,
+        `Cash ₹${Number(cashSplitAmount).toLocaleString("en-IN")}`,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+    }
+
     const nextDisbursal: MadePayment = {
       ...editingDisbursal,
       payee,
-      desc,
+      desc: nextDesc,
       amount: nextAmount,
       mode: modeValue,
       payeeType: disbursalEditForm.payeeType,
@@ -12151,7 +12188,11 @@ function MakePayment() {
       <Dialog
         open={Boolean(editingDisbursal)}
         onOpenChange={(open) => {
-          if (!open) setEditingDisbursal(null);
+          if (!open) {
+            setEditingDisbursal(null);
+            setBankSplitAmount("");
+            setCashSplitAmount("");
+          }
         }}
       >
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
@@ -12248,36 +12289,33 @@ function MakePayment() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                  Mode
-                </Label>
-                <Select
-                  value={disbursalEditForm.mode}
-                  onValueChange={(modeValue) =>
-                    setDisbursalEditForm({ ...disbursalEditForm, mode: modeValue })
-                  }
-                >
-                  <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Array.from(
-                      new Set([
-                        "Bank",
-                        "UPI",
-                        "Cheque",
-                        "Cash",
-                        "UPI Business",
-                        "Bank Transfer · NEFT",
-                        disbursalEditForm.mode,
-                      ].filter(Boolean)),
-                    ).map((m) => (
-                      <SelectItem key={m} value={m}>
-                        {m}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <PaymentModeControls
+                  mode={disbursalEditForm.mode}
+                  onModeChange={(modeValue) => {
+                    setDisbursalEditForm({ ...disbursalEditForm, mode: modeValue });
+                    if (modeValue !== "Both") {
+                      setBankSplitAmount("");
+                      setCashSplitAmount("");
+                    }
+                  }}
+                  bankSplitAmount={bankSplitAmount}
+                  cashSplitAmount={cashSplitAmount}
+                  onBankChange={setBankSplitAmount}
+                  onCashChange={setCashSplitAmount}
+                />
+                {disbursalEditForm.mode === "Both" &&
+                  !splitMatchesTotal(
+                    disbursalEditForm.mode,
+                    bankSplitAmount,
+                    cashSplitAmount,
+                    Number(disbursalEditForm.amount) || 0,
+                  ) &&
+                  Number(disbursalEditForm.amount) > 0 && (
+                    <p className="text-[10.5px] text-red-600">
+                      Bank + Cash must equal ₹{" "}
+                      {Number(disbursalEditForm.amount).toLocaleString("en-IN")}
+                    </p>
+                  )}
               </div>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
