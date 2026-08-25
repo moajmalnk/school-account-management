@@ -329,17 +329,27 @@ export function LocationPicker({
     }
   };
 
+  const suggestionsVisible =
+    openSuggestions && (suggestions.length > 0 || searching);
+
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between gap-2">
-        <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+    <div
+      className={cn(
+        "space-y-1.5",
+        // Raise this picker above the next Map To / fees when suggestions are open
+        // (absolute z-index alone loses to the next sibling stacking context).
+        suggestionsVisible ? "relative z-40" : "relative z-0",
+      )}
+    >
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <Label className="min-w-0 truncate text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
           {label}
         </Label>
         <button
           type="button"
           onClick={() => setMapOpen((v) => !v)}
           className={cn(
-            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider transition-colors",
+            "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider transition-colors",
             mapOpen
               ? "bg-[#0F766E] text-white"
               : "bg-[#F4F4F5] text-black/60 hover:bg-[#E8E8EA] hover:text-black",
@@ -350,7 +360,7 @@ export function LocationPicker({
         </button>
       </div>
 
-      <div className="relative z-20 isolate">
+      <div className="relative">
         <Input
           value={value}
           onChange={(e) => {
@@ -374,17 +384,18 @@ export function LocationPicker({
           aria-controls={listId}
           aria-autocomplete="list"
           className={cn(
-            openSuggestions &&
-              (suggestions.length > 0 || searching) &&
-              "rounded-b-none border-b-0",
+            "min-w-0",
+            suggestionsVisible && "rounded-b-none border-b-0",
           )}
         />
 
-        {openSuggestions && (suggestions.length > 0 || searching) ? (
+        {suggestionsVisible ? (
           <ul
             id={listId}
             role="listbox"
-            className="absolute left-0 right-0 top-full z-50 max-h-52 overflow-y-auto rounded-b-xl rounded-t-none border border-t-0 border-[#E5E5E5] bg-white py-1 shadow-[0_16px_40px_-12px_rgba(15,23,42,0.28)] ring-1 ring-black/[0.04] dark:border-white/10 dark:bg-zinc-950 dark:ring-white/10"
+            // Keep in document flow so the list does not paint over the next
+            // LocationPicker (Map To) and look like one overlapping field.
+            className="relative z-50 max-h-[min(13rem,40vh)] overflow-y-auto overscroll-contain rounded-b-xl rounded-t-none border border-t-0 border-[#E5E5E5] bg-white py-1 shadow-[0_16px_40px_-12px_rgba(15,23,42,0.28)] ring-1 ring-black/[0.04] dark:border-white/10 dark:bg-zinc-950 dark:ring-white/10"
           >
             {searching && suggestions.length === 0 ? (
               <li className="px-3 py-2.5 text-[12px] text-black/45 dark:text-zinc-400">Searching…</li>
@@ -398,7 +409,9 @@ export function LocationPicker({
                     onClick={() => pickSuggestion(item)}
                   >
                     <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#0F766E]" />
-                    <span className="line-clamp-2 leading-snug">{item.display_name}</span>
+                    <span className="min-w-0 break-words leading-snug [overflow-wrap:anywhere]">
+                      {item.display_name}
+                    </span>
                   </button>
                 </li>
               ))
@@ -408,10 +421,10 @@ export function LocationPicker({
       </div>
 
       {hasPin ? (
-        <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-[#F4F4F5] px-2.5 py-0.5 font-mono text-[10.5px] text-black/70">
-            <MapPin className="h-3 w-3" />
-            {formatCoords(lat!, lng!)}
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-[#F4F4F5] px-2.5 py-0.5 font-mono text-[10.5px] text-black/70">
+            <MapPin className="h-3 w-3 shrink-0" />
+            <span className="truncate">{formatCoords(lat!, lng!)}</span>
           </span>
           <Button
             type="button"
@@ -430,7 +443,7 @@ export function LocationPicker({
         <div className="relative z-0 overflow-hidden rounded-lg border border-[#E5E5E5] dark:border-white/10">
           <div
             ref={mapContainerRef}
-            className="h-[180px] w-full bg-[#F4F4F5] dark:bg-zinc-900"
+            className="h-[min(180px,36vw)] min-h-[140px] w-full bg-[#F4F4F5] sm:h-[180px] dark:bg-zinc-900"
             aria-label={`${label} map`}
           />
           <div className="border-t border-[#EFEFEF] px-3 py-1.5 text-[10px] text-black/40 dark:border-white/10 dark:text-zinc-500">

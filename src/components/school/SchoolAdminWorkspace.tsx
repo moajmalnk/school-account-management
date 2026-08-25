@@ -16398,7 +16398,7 @@ function TransportCard({
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
-          className="max-h-[85vh] overflow-y-auto sm:max-w-2xl"
+          className="flex max-h-[min(85vh,720px)] w-[calc(100vw-1.5rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
           onPointerDownOutside={(e) => {
             const target = e.target as HTMLElement | null;
             if (target?.closest("[data-radix-popper-content-wrapper]")) e.preventDefault();
@@ -16408,46 +16408,48 @@ function TransportCard({
             if (target?.closest("[data-radix-popper-content-wrapper]")) e.preventDefault();
           }}
         >
-          <DialogHeader>
+          <DialogHeader className="shrink-0 space-y-1.5 border-b border-[#EFEFEF] px-4 py-3 pr-12 sm:px-6 sm:py-4 dark:border-white/10">
             <DialogTitle>{editingId ? "Edit Route" : "Add Transport Route"}</DialogTitle>
-            <DialogDescription>
-              Set pickup → drop pairs with separate morning, evening, and combined shift fees. The
-              both-shift fee prefills Vehicle Fee on Receive Payment. Search or pick each end on the
-              map to save coordinates.
+            <DialogDescription className="text-[12.5px] leading-relaxed">
+              Each route is a pickup → drop pair (same two points students pick as Bus Point 1 and Bus
+              Point 2). Set morning, evening, and both-shift fees. Search or pin each end on the map.
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={submit} className="space-y-3">
-            <LocationPicker
-              label="Map From (Pickup Hub)"
-              value={form.mapFrom}
-              lat={form.fromLat}
-              lng={form.fromLng}
-              autoFocus
-              placeholder="Search pickup location…"
-              onChange={({ label, lat, lng }) =>
-                setForm((prev) => ({
-                  ...prev,
-                  mapFrom: label,
-                  fromLat: lat,
-                  fromLng: lng,
-                }))
-              }
-            />
-            <LocationPicker
-              label="Map To (Destination Node)"
-              value={form.mapTo}
-              lat={form.toLat}
-              lng={form.toLng}
-              placeholder="Search destination…"
-              onChange={({ label, lat, lng }) =>
-                setForm((prev) => ({
-                  ...prev,
-                  mapTo: label,
-                  toLat: lat,
-                  toLng: lng,
-                }))
-              }
-            />
+          <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-3 sm:px-6 sm:py-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+              <LocationPicker
+                label="Map From · Bus Point 1 (pickup)"
+                value={form.mapFrom}
+                lat={form.fromLat}
+                lng={form.fromLng}
+                autoFocus
+                placeholder="Search pickup location…"
+                onChange={({ label, lat, lng }) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    mapFrom: label,
+                    fromLat: lat,
+                    fromLng: lng,
+                  }))
+                }
+              />
+              <LocationPicker
+                label="Map To · Bus Point 2 (drop)"
+                value={form.mapTo}
+                lat={form.toLat}
+                lng={form.toLng}
+                placeholder="Search destination…"
+                onChange={({ label, lat, lng }) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    mapTo: label,
+                    toLat: lat,
+                    toLng: lng,
+                  }))
+                }
+              />
+            </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
@@ -16927,8 +16929,9 @@ function TransportCard({
                 </span>
               </div>
             </div>
+            </div>
 
-            <DialogFooter>
+            <DialogFooter className="shrink-0 flex-row justify-end gap-2 border-t border-[#EFEFEF] bg-white px-4 py-3 sm:px-6 dark:border-white/10 dark:bg-zinc-950">
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
