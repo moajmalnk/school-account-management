@@ -1069,14 +1069,18 @@ export function StudentProfileDetail({
                 </Button>
               </div>
             </div>
-            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <FeeStatBox label="Total Fee" value={inr(fees.totalFee)} />
               <FeeStatBox
                 label="Total Paid"
                 value={inr(fees.totalPaid)}
                 valueClassName="text-[#10B981]"
               />
-              <FeeDueBox totalDue={fees.totalDue} overdue={fees.overdue} />
+              <FeeDueBox
+                totalDue={Math.max(0, fees.totalDue - fees.overdueDue)}
+                overdue={false}
+              />
+              <FeeOverdueBox overdueDue={fees.overdueDue} />
             </div>
             {vehicleFees.applicable ? (
               <div className="mt-4 rounded-lg border border-[#D1FAE5] bg-[#F0FDFA] px-4 py-3">
@@ -1536,40 +1540,67 @@ function FeeStatBox({
 function FeeDueBox({ totalDue, overdue }: { totalDue: number; overdue: boolean }) {
   const cleared = totalDue <= 0;
   return (
-    <div
-      className={cn(
-        "rounded-lg p-4",
-        !cleared && overdue ? "bg-[#EF4444]" : "bg-slate-50 dark:bg-zinc-900/70",
-      )}
-    >
-      <div
-        className={cn(
-          "flex items-start justify-between",
-          !cleared && overdue ? "text-white/75" : "text-black/55 dark:text-zinc-400",
-        )}
-      >
+    <div className="rounded-lg bg-slate-50 p-4 dark:bg-zinc-900/70">
+      <div className="flex items-start justify-between text-black/55 dark:text-zinc-400">
         <div className="text-[11px] font-semibold uppercase tracking-wider">Total Due</div>
-        {!cleared && overdue ? (
-          <AlertTriangle className="h-4 w-4 text-[#EF4444]" />
+        {cleared ? (
+          <CheckCircle2 className="h-4 w-4 text-[#10B981]" />
         ) : (
-          <CheckCircle2 className="h-4 w-4 text-black" />
+          <AlertTriangle className="h-4 w-4 text-[#F59E0B]" />
         )}
       </div>
-      <div
-        className={cn(
-          "mt-2 font-mono text-xl font-semibold tracking-tight",
-          !cleared && overdue ? "text-white" : "text-black dark:text-zinc-100",
-        )}
-      >
+      <div className="mt-2 font-mono text-xl font-semibold tracking-tight text-black dark:text-zinc-100">
         {inr(totalDue)}
       </div>
       <span
         className={cn(
           "mt-2 inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider",
-          cleared ? "bg-[#0F172A] text-[#10B981]" : overdue ? "bg-[#0F172A] text-[#EF4444]" : "bg-[#0F172A] text-[#F59E0B]",
+          cleared
+            ? "bg-[#0F172A] text-[#10B981]"
+            : overdue
+              ? "bg-[#0F172A] text-[#EF4444]"
+              : "bg-[#0F172A] text-[#F59E0B]",
         )}
       >
         {cleared ? "[ CLEARED ]" : overdue ? "[ OVERDUE ]" : "[ PENDING ]"}
+      </span>
+    </div>
+  );
+}
+
+function FeeOverdueBox({ overdueDue }: { overdueDue: number }) {
+  const active = overdueDue > 0;
+  return (
+    <div
+      className={cn(
+        "rounded-lg p-4",
+        active ? "bg-[#EF4444]" : "bg-slate-50 dark:bg-zinc-900/70",
+      )}
+    >
+      <div
+        className={cn(
+          "flex items-start justify-between",
+          active ? "text-white/75" : "text-black/55 dark:text-zinc-400",
+        )}
+      >
+        <div className="text-[11px] font-semibold uppercase tracking-wider">Over Due</div>
+        <AlertTriangle className={cn("h-4 w-4", active ? "text-white" : "text-[#EF4444]")} />
+      </div>
+      <div
+        className={cn(
+          "mt-2 font-mono text-xl font-semibold tracking-tight",
+          active ? "text-white" : "text-black dark:text-zinc-100",
+        )}
+      >
+        {inr(overdueDue)}
+      </div>
+      <span
+        className={cn(
+          "mt-2 inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider",
+          active ? "bg-[#0F172A] text-[#EF4444]" : "bg-[#0F172A] text-[#10B981]",
+        )}
+      >
+        {active ? "[ OVERDUE ]" : "[ NONE ]"}
       </span>
     </div>
   );

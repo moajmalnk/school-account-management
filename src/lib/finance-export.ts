@@ -21,6 +21,7 @@ import {
   svgMarkupToPng,
 } from "@/lib/school-marks";
 import { formatDownloadFilename, slugYear, todayStamp } from "@/lib/download-names";
+import { resolveStudentLedgerStatus } from "@/lib/student-fees";
 
 function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -1622,6 +1623,7 @@ export type StudentFeeReportInput = {
       paid: number;
       balance: number;
       status: string;
+      dueIso?: string;
     }[];
     receipts: {
       id: string;
@@ -1671,15 +1673,22 @@ function appendFeeLedgerTable(
     margin: { left: margin, right: margin },
     tableWidth: contentWidth,
     head: [["Date", "Description", "Due Date", "Charge", "Paid", "Balance", "Status"]],
-    body: rows.map((row) => [
-      pdfSafe(row.date),
-      pdfSafe(row.desc),
-      pdfSafe(row.due),
-      row.charge.toLocaleString("en-IN"),
-      row.paid.toLocaleString("en-IN"),
-      row.balance.toLocaleString("en-IN"),
-      pdfSafe(row.status),
-    ]),
+    body: rows.map((row) => {
+      // Recompute from amounts so PDF never shows Partially Paid when Paid is 0.
+      const status =
+        row.status === "On Break"
+          ? "On Break"
+          : resolveStudentLedgerStatus(row.charge, row.paid, row.dueIso || row.due);
+      return [
+        pdfSafe(row.date),
+        pdfSafe(row.desc),
+        pdfSafe(row.due),
+        row.charge.toLocaleString("en-IN"),
+        row.paid.toLocaleString("en-IN"),
+        row.balance.toLocaleString("en-IN"),
+        pdfSafe(status),
+      ];
+    }),
     theme: "grid",
     styles: {
       fontSize: 8.5,

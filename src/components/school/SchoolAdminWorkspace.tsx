@@ -7174,8 +7174,12 @@ const FIELD_SELECT_ADD_NEW = "__field_select_add_new__";
 
 function blurActiveElement() {
   if (typeof document === "undefined") return;
-  const active = document.activeElement;
-  if (active instanceof HTMLElement) active.blur();
+  // Only dismiss soft keyboards — bluring on every desktop select close causes
+  // visible focus-ring / field "blink" flashes.
+  if (typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches) {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement) active.blur();
+  }
 }
 
 function feeDescriptionSelectOptions(
@@ -8458,6 +8462,19 @@ function ReceivePayment() {
     [isExternal, selected, payments, academicYear, editingPayment?.id],
   );
 
+  // Stable fingerprint so background store churn does not re-run prefill effects
+  // (those re-renders make fee dropdowns / amounts look like they "blink").
+  const paymentsSyncKey = useMemo(
+    () =>
+      payments
+        .map(
+          (p) =>
+            `${p.id}:${p.amount}:${p.cat ?? ""}:${resolvePaymentFeePeriod(p) ?? ""}:${p.name ?? ""}`,
+        )
+        .join("|"),
+    [payments],
+  );
+
   const periodOpts = useMemo(() => {
     if (!matchedClass || isExternal) return undefined;
     const scheduled = withClassFeeSchedule(matchedClass, feeTerms);
@@ -8770,7 +8787,7 @@ function ReceivePayment() {
   useEffect(() => {
     if (isExternal || editingPayment) return;
     setFeeItems((prev) => applyPrefillToLines(prev));
-  }, [applyPrefillToLines, isExternal, selected?.id, editingPayment, payments]);
+  }, [applyPrefillToLines, isExternal, selected?.id, editingPayment, paymentsSyncKey]);
 
   useEffect(() => {
     if (isExternal || editingPayment || !selected) return;
@@ -8860,7 +8877,7 @@ function ReceivePayment() {
     });
   }, [
     selected?.id,
-    payments,
+    paymentsSyncKey,
     isExternal,
     editingPayment,
     feeTerms,
@@ -10209,7 +10226,7 @@ function ReceivePayment() {
                           <FieldSelect
                             value={item.description}
                             onValueChange={(next) => updateFeeLine(item.id, { description: next })}
-                            options={feeDescriptionSelectOptions(descriptionOptions, item.description)}
+                            options={descriptionOptions}
                             placeholder="Select fee"
                             triggerClassName="h-11 sm:h-10"
                             onAddNew={() => openAddCategoryDialog({ type: "feeLine", id: item.id })}
@@ -10230,7 +10247,7 @@ function ReceivePayment() {
                                 }
                                 disabled={periodChoices.length === 0}
                               />
-                              <p className="mt-1 text-[10.5px] text-black/45 dark:text-zinc-500">
+                              <p className="mt-1 min-h-[1rem] text-[10.5px] text-black/45 dark:text-zinc-500">
                                 {periodChoices.length === 0
                                   ? selected
                                     ? "All periods for this fee are on break — manage breaks on the student Payments tab"
@@ -10257,8 +10274,9 @@ function ReceivePayment() {
                             placeholder="0"
                             className="h-11 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 font-mono text-[15px] font-semibold dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 sm:h-10 sm:text-[13px] sm:font-normal"
                           />
+                          <div className="mt-1.5 min-h-[2.75rem]">
                           {balanceSummary && balanceSummary.paid > 0 ? (
-                            <p className="mt-1.5 text-[11px] leading-snug text-black/55 dark:text-zinc-400">
+                            <p className="text-[11px] leading-snug text-black/55 dark:text-zinc-400">
                               Fee{" "}
                               <span className="font-mono font-semibold text-black/70 dark:text-zinc-200">
                                 ₹ {balanceSummary.scheduled.toLocaleString("en-IN")}
@@ -10275,10 +10293,11 @@ function ReceivePayment() {
                               </span>
                             </p>
                           ) : balanceSummary && balanceSummary.scheduled > 0 ? (
-                            <p className="mt-1.5 text-[11px] text-black/45 dark:text-zinc-500">
+                            <p className="text-[11px] text-black/45 dark:text-zinc-500">
                               Scheduled fee ₹ {balanceSummary.scheduled.toLocaleString("en-IN")}
                             </p>
                           ) : null}
+                          </div>
                         </div>
                         {isOtherFeeDescription(item.description) ? (
                           <div className="col-span-12 min-w-0">
@@ -18822,13 +18841,25 @@ export function FeePeriodMultiSelect({
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const label = formatFeePeriodMultiSelectLabel(selectedValues, choices);
+  const choicesKey = choices.map((c) => `${c.value}\0${c.label}`).join("\n");
+  const stableChoices = useMemo(
+    () => choices,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- content fingerprint
+    [choicesKey],
+  );
+  const selectedKey = selectedValues.join("\n");
+  const stableSelected = useMemo(
+    () => selectedValues,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedKey],
+  );
+  const label = formatFeePeriodMultiSelectLabel(stableSelected, stableChoices);
 
   const toggle = (value: string) => {
-    const next = selectedValues.includes(value)
-      ? selectedValues.filter((item) => item !== value)
-      : [...selectedValues, value];
-    onChange(next.length ? next : choices.slice(0, 1).map((choice) => choice.value));
+    const next = stableSelected.includes(value)
+      ? stableSelected.filter((item) => item !== value)
+      : [...stableSelected, value];
+    onChange(next.length ? next : stableChoices.slice(0, 1).map((choice) => choice.value));
   };
 
   return (
@@ -18841,7 +18872,7 @@ export function FeePeriodMultiSelect({
           disabled={disabled}
           className={cn(
             "flex h-11 w-full min-w-0 items-center justify-between rounded-lg border border-[#E5E5E5] bg-white px-3 text-left text-[13px] shadow-sm transition-colors hover:bg-[#FAFAFA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-zinc-900 dark:hover:bg-zinc-800 sm:h-10",
-            selectedValues.length ? "text-black dark:text-zinc-100" : "text-black/45 dark:text-zinc-500",
+            stableSelected.length ? "text-black dark:text-zinc-100" : "text-black/45 dark:text-zinc-500",
           )}
         >
           <span className="truncate">{label}</span>
@@ -18853,8 +18884,8 @@ export function FeePeriodMultiSelect({
         className="z-[250] w-[var(--radix-popover-trigger-width)] min-w-[min(100vw-1.5rem,20rem)] overflow-hidden p-0"
       >
         <div className="max-h-64 overflow-y-auto p-2">
-          {choices.map((choice) => {
-            const checked = selectedValues.includes(choice.value);
+          {stableChoices.map((choice) => {
+            const checked = stableSelected.includes(choice.value);
             return (
               <button
                 key={choice.value}
@@ -18925,6 +18956,9 @@ export function FieldSelect({
     );
 
   const [open, setOpen] = useState(false);
+  // Fingerprint options by content so parent re-creates of the same list
+  // do not remount Select items (that flash looks like "blinking").
+  const optionsKey = options.map((o) => `${o.value}\0${o.label}`).join("\n");
   const uniqueOptions = useMemo(() => {
     const seen = new Set<string>();
     return options.filter((opt) => {
@@ -18932,7 +18966,8 @@ export function FieldSelect({
       seen.add(opt.value);
       return true;
     });
-  }, [options]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- optionsKey is the stable content fingerprint
+  }, [optionsKey]);
   const displayOptions = useMemo(() => {
     if (!value || uniqueOptions.some((o) => o.value === value)) {
       return uniqueOptions;
@@ -18945,7 +18980,8 @@ export function FieldSelect({
 
   const closeSelect = () => {
     setOpen(false);
-    blurActiveElement();
+    // Defer blur so Radix can finish close animation without a focus flash.
+    window.setTimeout(() => blurActiveElement(), 0);
   };
 
   const handleValueChange = (next: string) => {
@@ -18980,11 +19016,8 @@ export function FieldSelect({
       <div className={cn("min-w-0", className)}>
         <Select
           open={open}
-          onOpenChange={(next) => {
-            setOpen(next);
-            if (!next) blurActiveElement();
-          }}
-          value={value}
+          onOpenChange={setOpen}
+          value={value || undefined}
           onValueChange={handleValueChange}
           disabled={disabled}
         >
@@ -18995,9 +19028,7 @@ export function FieldSelect({
               triggerClassName,
             )}
           >
-            <SelectValue placeholder={placeholder}>
-              {selectedLabel ? <span className="block truncate">{selectedLabel}</span> : null}
-            </SelectValue>
+            <SelectValue placeholder={placeholder} />
           </SelectTrigger>
           <SelectContent
             position="popper"
@@ -19036,13 +19067,7 @@ export function FieldSelect({
 
   return (
     <div className={cn("min-w-0", className)}>
-      <Popover
-        open={open}
-        onOpenChange={(next) => {
-          setOpen(next);
-          if (!next) blurActiveElement();
-        }}
-      >
+      <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button
             type="button"

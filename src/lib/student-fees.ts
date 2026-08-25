@@ -1,5 +1,5 @@
 import { filterByAcademicYear } from "@/lib/academic-year";
-import { formatEventDate, parseFlexibleDate } from "@/lib/dates";
+import { formatEventDate, parseEventDate, parseFlexibleDate, toIsoDate } from "@/lib/dates";
 import {
   categoryFeeTermKind,
   isVehicleFeeCategory,
@@ -53,6 +53,10 @@ export type StudentFeeSection = {
   totalFee: number;
   totalPaid: number;
   totalDue: number;
+  /** Outstanding balance on installments past due date. */
+  overdueDue: number;
+  /** Outstanding balance on installments due today (Asia/Kolkata). */
+  dueToday: number;
   overdue: boolean;
   ledger: StudentLedgerRow[];
   receipts: StudentReceipt[];
@@ -82,13 +86,55 @@ function formatDisplayDate(isoOrLabel?: string): string {
 function isPastDue(dueIsoOrLabel: string, now = new Date()): boolean {
   const raw = dueIsoOrLabel.trim();
   if (!raw || raw === "—" || raw === "-") return false;
+  if (/^today\b/i.test(raw)) return false;
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
     const due = new Date(`${raw}T23:59:59`);
     return !Number.isNaN(due.getTime()) && due.getTime() < now.getTime();
   }
-  const parsed = Date.parse(raw);
-  if (Number.isFinite(parsed)) return parsed < now.getTime();
+  const parsed = parseFlexibleDate(raw) ?? parseEventDate(raw, now);
+  if (parsed) {
+    const todayIso = toIsoDate(now);
+    const dueIso = toIsoDate(parsed);
+    if (dueIso === todayIso) return false;
+    const dueEnd = new Date(`${dueIso}T23:59:59`);
+    return !Number.isNaN(dueEnd.getTime()) && dueEnd.getTime() < now.getTime();
+  }
+  const legacy = Date.parse(raw);
+  if (Number.isFinite(legacy)) return legacy < now.getTime();
   return false;
+}
+
+function isDueToday(dueIsoOrLabel: string, now = new Date()): boolean {
+  const raw = dueIsoOrLabel.trim();
+  if (!raw || raw === "—" || raw === "-") return false;
+  if (/^today\b/i.test(raw)) return true;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return raw.slice(0, 10) === toIsoDate(now);
+  }
+  const parsed = parseFlexibleDate(raw) ?? parseEventDate(raw, now);
+  if (!parsed) return false;
+  return toIsoDate(parsed) === toIsoDate(now);
+}
+
+/** Split outstanding ledger balances into overdue vs due-today buckets. */
+export function summarizeStudentDueBuckets(
+  ledger: StudentLedgerRow[],
+  now = new Date(),
+): { overdueDue: number; dueToday: number } {
+  let overdueDue = 0;
+  let dueToday = 0;
+  for (const row of ledger) {
+    if (row.status === "On Break" || row.status === "Paid") continue;
+    const balance = Math.max(0, row.balance);
+    if (balance <= 0) continue;
+    const dueRef = row.dueIso || row.due;
+    if (row.status === "Overdue" || isPastDue(dueRef, now)) {
+      overdueDue += balance;
+    } else if (isDueToday(dueRef, now)) {
+      dueToday += balance;
+    }
+  }
+  return { overdueDue, dueToday };
 }
 
 /**
@@ -96,7 +142,11 @@ function isPastDue(dueIsoOrLabel: string, now = new Date()): boolean {
  * Due = unpaid, not yet past due date · Overdue = unpaid past due ·
  * Partially Paid = some payment received, balance remains.
  */
-function ledgerStatus(charge: number, paid: number, dueLabel: string): StudentLedgerStatus {
+export function resolveStudentLedgerStatus(
+  charge: number,
+  paid: number,
+  dueLabel: string,
+): StudentLedgerStatus {
   const safeCharge = Math.max(0, charge);
   const safePaid = Math.max(0, paid);
   const balance = Math.max(0, safeCharge - safePaid);
@@ -439,7 +489,7 @@ function toLedgerRow(draft: ChargeDraft): StudentLedgerRow {
     charge,
     paid: draft.paid,
     balance,
-    status: ledgerStatus(charge, draft.paid, draft.due),
+    status: resolveStudentLedgerStatus(charge, draft.paid, draft.due),
     periodLabel: draft.periodLabel,
     dueIso,
   };
@@ -505,11 +555,14 @@ function summarizeSection(
   );
   const ledgerOutstanding = billable.reduce((s, r) => s + r.balance, 0);
   const totalDue = Math.max(ledgerOutstanding, Math.max(0, totalFee - totalPaid));
+  const { overdueDue, dueToday } = summarizeStudentDueBuckets(ledger, new Date());
 
   return {
     totalFee,
     totalPaid,
     totalDue,
+    overdueDue,
+    dueToday,
     overdue: totalDue > 0 && billable.some((r) => r.status === "Overdue"),
     ledger,
     receipts,
@@ -534,11 +587,14 @@ function mergeSections(
     Math.max(0, studentDue),
     Math.max(0, totalFee - totalPaid),
   );
+  const { overdueDue, dueToday } = summarizeStudentDueBuckets(ledger, new Date());
 
   return {
     totalFee,
     totalPaid,
     totalDue,
+    overdueDue,
+    dueToday,
     overdue: totalDue > 0 && billable.some((r) => r.status === "Overdue"),
     ledger,
     receipts,
@@ -635,6 +691,10 @@ export function buildStudentFeeStatement(input: {
       combined.totalDue > 0 &&
       combined.ledger.some((r) => r.status === "Overdue");
   }
+
+  const dueBuckets = summarizeStudentDueBuckets(combined.ledger);
+  combined.overdueDue = dueBuckets.overdueDue;
+  combined.dueToday = dueBuckets.dueToday;
 
   return {
     ...combined,
