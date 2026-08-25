@@ -4,8 +4,16 @@ import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import {
+  DEFAULT_FEE_COLLECTION_START_MONTH,
   FEE_MONTHS,
   installmentLabel,
   type ClassBillingCycle,
@@ -32,7 +40,7 @@ export function emptyFeeScheduleDraft(startMonth?: string): FeeScheduleDraft {
   const month =
     startMonth && FEE_MONTHS.some((m) => m.toLowerCase() === startMonth.toLowerCase())
       ? FEE_MONTHS.find((m) => m.toLowerCase() === startMonth.toLowerCase())!
-      : FEE_MONTHS[5] ?? FEE_MONTHS[0];
+      : DEFAULT_FEE_COLLECTION_START_MONTH;
   return {
     billingModeChosen: false,
     billingCycle: "Monthly",
@@ -78,8 +86,7 @@ export function draftFromFeeSchedule(input: {
     feeCollectionStartMonth:
       input.feeCollectionStartMonth?.trim() ||
       input.startMonthFallback ||
-      FEE_MONTHS[5] ||
-      FEE_MONTHS[0],
+      DEFAULT_FEE_COLLECTION_START_MONTH,
     installments,
   };
 }
@@ -154,7 +161,7 @@ export function FeeScheduleEditor({
       installments: rebuildRows(value, count, cycle, value.feeAmountMode, cycleChanged),
       feeCollectionStartMonth:
         cycle === "Monthly"
-          ? value.feeCollectionStartMonth || FEE_MONTHS[5] || FEE_MONTHS[0]
+          ? value.feeCollectionStartMonth || DEFAULT_FEE_COLLECTION_START_MONTH
           : value.feeCollectionStartMonth,
     });
   };
@@ -491,19 +498,23 @@ export function FeeScheduleEditor({
               <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                 Fee collection starts from
               </Label>
-              <select
+              <Select
                 value={value.feeCollectionStartMonth}
-                onChange={(e) =>
-                  onChange({ ...value, feeCollectionStartMonth: e.target.value })
+                onValueChange={(month) =>
+                  onChange({ ...value, feeCollectionStartMonth: month })
                 }
-                className="flex h-9 w-full rounded-md border border-input bg-white px-3 text-[13px] outline-none focus-visible:ring-1 focus-visible:ring-ring dark:bg-zinc-950"
               >
-                {FEE_MONTHS.map((month) => (
-                  <option key={month} value={month}>
-                    {month}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="h-9 bg-white text-[13px] dark:bg-zinc-950">
+                  <SelectValue placeholder="Select month" />
+                </SelectTrigger>
+                <SelectContent>
+                  {FEE_MONTHS.map((month) => (
+                    <SelectItem key={month} value={month}>
+                      {month}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <p className="text-[11px] text-black/45 dark:text-zinc-500">
                 Total · ₹{" "}
                 <span className="font-mono font-semibold text-[#0F766E]">

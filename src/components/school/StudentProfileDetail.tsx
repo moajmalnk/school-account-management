@@ -1525,7 +1525,7 @@ function FeeDueBox({ totalDue, overdue }: { totalDue: number; overdue: boolean }
     <div
       className={cn(
         "rounded-lg p-4",
-        !cleared && overdue ? "bg-[#0F766E]" : "bg-slate-50 dark:bg-zinc-900/70",
+        !cleared && overdue ? "bg-[#EF4444]" : "bg-slate-50 dark:bg-zinc-900/70",
       )}
     >
       <div
@@ -2271,7 +2271,7 @@ const STATUS_STYLE: Record<LedgerStatus, { wrap: string; dot: string }> = {
     dot: "bg-[#F59E0B]",
   },
   Overdue: {
-    wrap: "bg-[#0F766E] text-white",
+    wrap: "bg-[#EF4444] text-white",
     dot: "bg-white",
   },
   "On Break": {

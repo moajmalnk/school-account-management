@@ -840,6 +840,9 @@ export const FEE_MONTHS = [
   "March",
 ] as const;
 
+/** Default "Fee collection starts from" for new class / category / route schedules */
+export const DEFAULT_FEE_COLLECTION_START_MONTH: (typeof FEE_MONTHS)[number] = "June";
+
 export type FeePeriodKind = "month" | "term";
 export type FeeTermKind = "tuition" | "vehicle";
 /** Whether this period is a multi-month term or a single calendar month */
@@ -977,10 +980,8 @@ export function installmentIndexForFeeMonth(startMonth: string, feeMonth: string
   return diff;
 }
 
-export function defaultFeeCollectionStartMonth(feeTerms: FeeTerm[]): string {
-  const months = filterFeePeriods(feeTerms, "month", "tuition");
-  if (months[0]?.label) return months[0].label;
-  return FEE_MONTHS[0];
+export function defaultFeeCollectionStartMonth(_feeTerms?: FeeTerm[]): string {
+  return DEFAULT_FEE_COLLECTION_START_MONTH;
 }
 
 function parseIsoDateParts(iso?: string): { y: number; m: number; d: number } | null {
