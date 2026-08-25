@@ -8,7 +8,7 @@ import tsConfigPaths from "vite-tsconfig-paths";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const apiProxyTarget = (
-    env.VITE_API_BASE_URL?.trim() || "https://spi.macadz.com"
+    env.VITE_API_BASE_URL?.trim() || "https://api.feezo.app"
   ).replace(/\/$/, "");
   const apiProxySecure = apiProxyTarget.startsWith("https://");
 
@@ -122,7 +122,7 @@ export default defineConfig(({ mode }) => {
             },
           },
           {
-            // Only same-origin /api — never intercept https://spi.macadz.com (breaks CORS in the SW).
+            // Only same-origin /api — never intercept https://api.feezo.app (breaks CORS in the SW).
             urlPattern: ({ sameOrigin, url }) =>
               sameOrigin && url.pathname.startsWith("/api/"),
             handler: "NetworkOnly",

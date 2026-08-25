@@ -16822,7 +16822,7 @@ function SchoolDetailsCard({
       updateSession({ tenantName: saved.name });
       toast.success("School details saved", {
         description: getApiToken()
-          ? `${saved.name} · synced to spi.macadz.com`
+          ? `${saved.name} · synced to api.feezo.app`
           : saved.name,
       });
       return true;

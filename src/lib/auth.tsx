@@ -115,7 +115,7 @@ export const INVALID_CREDENTIALS_MESSAGE =
   "Invalid email or password. Please review your credentials and try again.";
 
 export const API_UNREACHABLE_MESSAGE =
-  "Cannot reach the API server. Check your network or Hostinger status for spi.macadz.com.";
+  "Cannot reach the API server. Check your network or Hostinger status for api.feezo.app.";
 
 function loginFailureMessage(err: unknown): string {
   if (err instanceof ApiError) {

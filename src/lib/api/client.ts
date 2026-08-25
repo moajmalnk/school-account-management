@@ -28,9 +28,9 @@ export {
 } from "@/lib/api/persistent-auth";
 
 /** Hostinger production API — used by local Vite and production builds. */
-export const PRODUCTION_API_BASE_URL = "https://spi.macadz.com";
+export const PRODUCTION_API_BASE_URL = "https://api.feezo.app";
 
-/** API base URL for School Admin Console backend (spi.macadz.com). */
+/** API base URL for School Admin Console backend (api.feezo.app). */
 export function apiBaseUrl(): string {
   const raw = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
   if (raw) return raw.replace(/\/$/, "");
