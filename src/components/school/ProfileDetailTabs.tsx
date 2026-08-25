@@ -20,12 +20,24 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
-export type ProfileDetailTabId =
-  | "profile"
-  | "professional"
-  | "documents"
-  | "payments"
-  | "attendance";
+export const STUDENT_PROFILE_TAB_IDS = [
+  "profile",
+  "academic",
+  "documents",
+  "payments",
+] as const;
+
+export const STAFF_PROFILE_TAB_IDS = [
+  "profile",
+  "professional",
+  "attendance",
+  "documents",
+  "payments",
+] as const;
+
+export type StudentProfileTabId = (typeof STUDENT_PROFILE_TAB_IDS)[number];
+export type StaffProfileTabId = (typeof STAFF_PROFILE_TAB_IDS)[number];
+export type ProfileDetailTabId = StudentProfileTabId | StaffProfileTabId;
 
 export type ProfileDetailTab = {
   id: ProfileDetailTabId;
@@ -36,7 +48,7 @@ export type ProfileDetailTab = {
 
 export const STUDENT_PROFILE_TABS: ProfileDetailTab[] = [
   { id: "profile", label: "Profile", icon: UserRound },
-  { id: "professional", label: "Academic", shortLabel: "Academic", icon: GraduationCap },
+  { id: "academic", label: "Academic", shortLabel: "Academic", icon: GraduationCap },
   { id: "documents", label: "Documents", shortLabel: "Docs", icon: FileText },
   { id: "payments", label: "Payments", icon: Wallet },
 ];
@@ -48,6 +60,14 @@ export const STAFF_PROFILE_TABS: ProfileDetailTab[] = [
   { id: "documents", label: "Documents", shortLabel: "Docs", icon: FileText },
   { id: "payments", label: "Payments", icon: Wallet },
 ];
+
+export function isStudentProfileTab(value: unknown): value is StudentProfileTabId {
+  return typeof value === "string" && (STUDENT_PROFILE_TAB_IDS as readonly string[]).includes(value);
+}
+
+export function isStaffProfileTab(value: unknown): value is StaffProfileTabId {
+  return typeof value === "string" && (STAFF_PROFILE_TAB_IDS as readonly string[]).includes(value);
+}
 
 const TAB_SHELL =
   "rounded-2xl border border-slate-200/70 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.06)] dark:border-white/10 dark:bg-[#171717] dark:shadow-black/40";

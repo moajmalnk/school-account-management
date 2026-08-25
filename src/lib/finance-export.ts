@@ -410,6 +410,7 @@ export type ReceiptBranding = {
   registrationNo?: string;
   studentContact?: string;
   studentPlace?: string;
+  studentId?: string;
 };
 
 export function receiptBrandingFromSchool(
@@ -427,7 +428,7 @@ export function receiptBrandingFromSchool(
     | "affiliationNo"
     | "registrationNo"
   >,
-  student?: Pick<Student, "phone" | "address">,
+  student?: Pick<Student, "id" | "phone" | "address">,
 ): ReceiptBranding {
   return {
     logoUrl: school.logoUrl,
@@ -443,6 +444,7 @@ export function receiptBrandingFromSchool(
     registrationNo: school.registrationNo,
     studentContact: student?.phone,
     studentPlace: student?.address,
+    studentId: student?.id,
   };
 }
 
@@ -659,6 +661,7 @@ export async function downloadReceiptPdf(
     doc,
     formatDownloadFilename("receipt", "pdf", {
       id: payment.id,
+      studentId: branding?.studentId,
       name: payment.name,
       school: schoolName,
       year: slugYear(academicYear),
@@ -1874,9 +1877,10 @@ export async function downloadStudentFeeReportPdf(
 
   emitPdf(
     doc,
-    formatDownloadFilename("reports", "pdf", {
+    formatDownloadFilename("studentFeeReport", "pdf", {
       report: "student-fee",
       id: student.id,
+      studentId: student.id,
       name: student.name,
       school: schoolName,
       year: slugYear(academicYear),

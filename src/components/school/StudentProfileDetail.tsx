@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, startTransition, type Dispatch, type ReactNode, type SetStateAction } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
   CalendarOff,
@@ -86,7 +86,9 @@ import {
   ProfileDetailTabs,
   ProfileTabPanel,
   STUDENT_PROFILE_TABS,
+  isStudentProfileTab,
   type ProfileDetailTabId,
+  type StudentProfileTabId,
 } from "@/components/school/ProfileDetailTabs";
 import { cn } from "@/lib/utils";
 import { formatDobDisplay } from "@/lib/dates";
@@ -403,6 +405,7 @@ export function StudentProfileDetail({
   onBack: () => void;
 }) {
   const navigate = useNavigate();
+  const search = useSearch({ from: "/tenant/students" });
   const {
     setStudents,
     academicYear,
@@ -418,7 +421,18 @@ export function StudentProfileDetail({
   const schoolName = schoolDetails.name || session?.tenantName || "Silver Hills Global";
   const [shareOpen, setShareOpen] = useState(false);
   const [shareToken, setShareToken] = useState(student.shareToken ?? "");
-  const [activeTab, setActiveTab] = useState<ProfileDetailTabId>("profile");
+  const activeTab: StudentProfileTabId = isStudentProfileTab(search.tab) ? search.tab : "profile";
+  const setActiveTab = (tab: ProfileDetailTabId) => {
+    if (!isStudentProfileTab(tab)) return;
+    navigate({
+      to: "/tenant/students",
+      search: {
+        id: student.id,
+        ...(tab !== "profile" ? { tab } : {}),
+      },
+      replace: true,
+    });
+  };
   const [feeBreaksOpen, setFeeBreaksOpen] = useState(false);
 
   const busPointOptions = useMemo(() => {
@@ -846,7 +860,7 @@ export function StudentProfileDetail({
           </div>
         </ProfileTabPanel>
 
-        <ProfileTabPanel value="professional">
+        <ProfileTabPanel value="academic">
           <div className="grid grid-cols-1 gap-4 sm:gap-5">
             <ProfileDataTable
               title="Academic Placement"

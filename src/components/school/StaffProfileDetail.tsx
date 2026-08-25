@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
   Pencil,
@@ -64,7 +64,9 @@ import {
   ProfileDetailTabs,
   ProfileTabPanel,
   STAFF_PROFILE_TABS,
+  isStaffProfileTab,
   type ProfileDetailTabId,
+  type StaffProfileTabId,
 } from "@/components/school/ProfileDetailTabs";
 import { formatEventDateTime, formatInAppZone } from "@/lib/dates";
 import { cn } from "@/lib/utils";
@@ -293,6 +295,7 @@ export function StaffProfileDetail({
   onBack: () => void;
 }) {
   const navigate = useNavigate();
+  const search = useSearch({ from: "/tenant/staff" });
   const { session } = useAuth();
   const { setStaff, departments, roles, tenantUsers, setTenantUsers, schoolDetails } =
     useTenantStore();
@@ -425,7 +428,18 @@ export function StaffProfileDetail({
     toast.error("Workspace login removed", { description: staff.name });
     setPendingRemoveLogin(false);
   };
-  const [activeTab, setActiveTab] = useState<ProfileDetailTabId>("profile");
+  const activeTab: StaffProfileTabId = isStaffProfileTab(search.tab) ? search.tab : "profile";
+  const setActiveTab = (tab: ProfileDetailTabId) => {
+    if (!isStaffProfileTab(tab)) return;
+    navigate({
+      to: "/tenant/staff",
+      search: {
+        id: staff.id,
+        ...(tab !== "profile" ? { tab } : {}),
+      },
+      replace: true,
+    });
+  };
   useEffect(() => {
     const needsNormalize =
       !staff.documents?.length ||

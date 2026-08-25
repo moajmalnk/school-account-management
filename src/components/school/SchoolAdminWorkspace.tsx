@@ -61,6 +61,7 @@ import {
   MapPin,
   Route,
   Scan,
+  CircleHelp,
 } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, XAxis, YAxis } from "recharts";
 import {
@@ -252,8 +253,11 @@ import { DefaultSchoolSeal } from "@/components/school/DefaultSchoolSeal";
 import { BRAND_PRESETS, FONT_FAMILY_OPTIONS, FONT_SIZE_OPTIONS, normalizeHexColor } from "@/lib/brand-theme";
 import {
   DEFAULT_FILE_NAMES,
+  DOWNLOAD_KIND_HINTS,
   DOWNLOAD_KIND_LABELS,
+  DOWNLOAD_KIND_TOKENS,
   DOWNLOAD_KINDS,
+  DOWNLOAD_TOKEN_HELP,
   DOWNLOAD_TOKENS,
   formatDownloadFilename,
   previewDownloadFilename,
@@ -264,6 +268,12 @@ import {
 import { PwaInstallCard } from "@/components/pwa/PwaInstallBanner";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   sessionCanAccessSettings,
   sessionCanAccessSettingsTab,
@@ -18482,8 +18492,32 @@ function CategoriesCard({
             Downloads
           </div>
           <p className="mt-1.5 text-[10.5px] leading-relaxed text-black/45 dark:text-zinc-500">
-            File names for each download. Tokens: {DOWNLOAD_TOKENS.join(" ")}. Extension is added automatically.
+            File names for each download. Hover the{" "}
+            <CircleHelp className="inline h-3 w-3 align-text-bottom text-black/40" /> help icon on a
+            field for tokens and examples. Extension is added automatically.
           </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {DOWNLOAD_TOKENS.map((token) => (
+              <TooltipProvider key={token} delayDuration={150}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="rounded-md border border-[#E5E5E5] bg-white px-1.5 py-0.5 font-mono text-[10px] font-medium text-[#0F766E] transition-colors hover:border-[#0F766E]/40 hover:bg-[#F0FDFA] dark:border-white/10 dark:bg-zinc-950 dark:hover:bg-teal-950/40"
+                    >
+                      {token}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="bottom"
+                    className="max-w-[260px] border border-[#E5E5E5] bg-white px-3 py-2 text-[11px] leading-snug text-black shadow-md dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100"
+                  >
+                    {DOWNLOAD_TOKEN_HELP[token]}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ))}
+          </div>
           <div className="mt-3 grid grid-cols-12 gap-3">
             {DOWNLOAD_KINDS.map((kind) => (
               <div key={kind} className="col-span-12 min-w-0 sm:col-span-6 lg:col-span-4 xl:col-span-3">
@@ -18616,7 +18650,6 @@ function ThemePatternField({
   onChange: (next: string) => void;
 }) {
   const [draft, setDraft] = useState(value);
-  const [focused, setFocused] = useState(false);
   useEffect(() => {
     setDraft(value);
   }, [value]);
@@ -18632,20 +18665,58 @@ function ThemePatternField({
       ? "csv"
       : "pdf";
   const example = previewDownloadFilename(kind, draft || DEFAULT_FILE_NAMES[kind], ext);
+  const tokens = DOWNLOAD_KIND_TOKENS[kind];
+  const hint = DOWNLOAD_KIND_HINTS[kind];
 
   return (
     <label className="space-y-1.5">
-      <span className="block text-[10px] font-semibold uppercase tracking-wider text-black/45">
-        {label}
+      <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-black/45">
+        <span className="min-w-0 truncate">{label}</span>
+        <TooltipProvider delayDuration={150}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-black/35 transition-colors hover:bg-[#F0FDFA] hover:text-[#0F766E] dark:hover:bg-teal-950/40 dark:hover:text-[#5EEAD4]"
+                aria-label={`Help for ${label} file name`}
+                onClick={(e) => e.preventDefault()}
+              >
+                <CircleHelp className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent
+              side="top"
+              align="start"
+              className="max-w-[300px] space-y-2 border border-[#E5E5E5] bg-white px-3 py-2.5 text-left shadow-md dark:border-white/10 dark:bg-zinc-900"
+            >
+              <p className="text-[11px] leading-snug text-black/80 dark:text-zinc-200">{hint}</p>
+              <div className="space-y-1 border-t border-[#EFEFEF] pt-2 dark:border-white/10">
+                <p className="text-[9px] font-semibold uppercase tracking-wider text-black/40 dark:text-zinc-500">
+                  Tokens for this file
+                </p>
+                <ul className="space-y-1">
+                  {tokens.map((token) => (
+                    <li key={token} className="text-[10.5px] leading-snug text-black/70 dark:text-zinc-300">
+                      <span className="font-mono font-semibold text-[#0F766E] dark:text-[#5EEAD4]">
+                        {token}
+                      </span>
+                      {" — "}
+                      {DOWNLOAD_TOKEN_HELP[token]}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <p className="border-t border-[#EFEFEF] pt-2 font-mono text-[10px] text-black/45 dark:border-white/10 dark:text-zinc-500">
+                Preview: {example}
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </span>
       <Input
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
-        onFocus={() => setFocused(true)}
-        onBlur={() => {
-          setFocused(false);
-          commit(draft);
-        }}
+        onBlur={() => commit(draft)}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
             e.preventDefault();
@@ -18655,11 +18726,9 @@ function ThemePatternField({
         spellCheck={false}
         className="h-9 rounded-lg border-[#E5E5E5] bg-white px-2.5 font-mono text-[12px] font-medium dark:border-white/10 dark:bg-zinc-900"
       />
-      {focused ? (
-        <span className="block font-mono text-[10px] text-black/40 dark:text-zinc-500">
-          {example}
-        </span>
-      ) : null}
+      <span className="block truncate font-mono text-[10px] text-black/40 dark:text-zinc-500">
+        {example}
+      </span>
     </label>
   );
 }
