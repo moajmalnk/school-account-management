@@ -7161,6 +7161,7 @@ type FeeLineItem = {
 };
 
 const RECEIVE_PAYMENT_MODES = ["Bank", "Cash", "Both"] as const;
+const MAKE_PAYMENT_MODES = RECEIVE_PAYMENT_MODES;
 
 function newFeeLineId() {
   return `fl-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
@@ -10988,6 +10989,8 @@ function MakePayment() {
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState(search.amount ?? "");
   const [mode, setMode] = useState("Bank");
+  const [bankSplitAmount, setBankSplitAmount] = useState("");
+  const [cashSplitAmount, setCashSplitAmount] = useState("");
   const [attachments, setAttachments] = useState<PaymentAttachment[]>([]);
   const [pendingAuthorisation, setPendingAuthorisation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -11006,6 +11009,16 @@ function MakePayment() {
     clock: toClockLocal(new Date()),
   });
   const prefillAppliedRef = useRef(false);
+  const paymentTotal = Number(amount.replace(/[^0-9]/g, "")) || 0;
+  const splitOk = splitMatchesTotal(mode, bankSplitAmount, cashSplitAmount, paymentTotal);
+
+  const handleModeChange = (next: string) => {
+    setMode(next);
+    if (next !== "Both") {
+      setBankSplitAmount("");
+      setCashSplitAmount("");
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -11235,6 +11248,8 @@ function MakePayment() {
     setDescription("");
     setAmount("");
     setMode("Bank");
+    setBankSplitAmount("");
+    setCashSplitAmount("");
     setAttachments([]);
   };
 
@@ -11362,10 +11377,21 @@ function MakePayment() {
       setObligations((prev) => prev.filter((item) => item.id !== selectedObligationId));
     }
 
+    let desc = description.trim();
+    if (mode === "Both") {
+      desc = [
+        desc,
+        `Bank ₹${Number(bankSplitAmount).toLocaleString("en-IN")}`,
+        `Cash ₹${Number(cashSplitAmount).toLocaleString("en-IN")}`,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+    }
+
     const disbursal: MadePayment = {
       id: `DISB-${Date.now().toString().slice(-6)}`,
       payee: beneficiary.trim(),
-      desc: description.trim(),
+      desc,
       amount: value,
       mode,
       payeeType,
@@ -11863,28 +11889,19 @@ function MakePayment() {
               />
             </div>
             <div>
-              <FieldLabel>Mode</FieldLabel>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {["Bank", "UPI", "Cheque", "Cash"].map((m) => {
-                  const active = mode === m;
-                  return (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => setMode(m)}
-                      className={cn(
-                        "h-11 w-full rounded-lg px-2 text-center text-[12px] font-medium leading-tight whitespace-nowrap transition-colors sm:px-3",
-                        active
-                          ? "bg-[#0F766E] text-white shadow-sm"
-                          : "bg-[#CCFBF1]/50 text-slate-700 hover:bg-[#CCFBF1] dark:bg-white/10 dark:text-zinc-200 dark:hover:bg-white/15",
-                      )}
-                      title={m}
-                    >
-                      {m}
-                    </button>
-                  );
-                })}
-              </div>
+              <PaymentModeControls
+                mode={mode}
+                onModeChange={handleModeChange}
+                bankSplitAmount={bankSplitAmount}
+                cashSplitAmount={cashSplitAmount}
+                onBankChange={setBankSplitAmount}
+                onCashChange={setCashSplitAmount}
+              />
+              {mode === "Both" && !splitOk && paymentTotal > 0 && (
+                <p className="mt-1.5 text-[10.5px] text-red-600">
+                  Bank + Cash must equal ₹ {paymentTotal.toLocaleString("en-IN")}
+                </p>
+              )}
             </div>
           </div>
 
