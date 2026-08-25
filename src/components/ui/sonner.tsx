@@ -1,25 +1,25 @@
 import { Toaster as Sonner } from "sonner";
 
 /**
- * Compact Hostinger-style toast: dark pill, bottom-center, short message.
+ * Compact Hostinger-style toast: dark pill, top-right (clears bottom nav dock).
  */
 const Toaster = ({ ...props }: React.ComponentProps<typeof Sonner>) => {
   return (
     <Sonner
       className="toaster group"
       theme="dark"
-      position="bottom-center"
+      position="top-right"
       closeButton
       richColors={false}
       expand={false}
-      offset={24}
+      offset={{ top: 16, right: 16 }}
       gap={8}
       visibleToasts={3}
       duration={3200}
       toastOptions={{
         classNames: {
           toast:
-            "group toast sa-toast !flex !w-fit !min-w-[280px] !max-w-[min(420px,calc(100vw-2rem))] !flex-row !items-center !gap-2.5 !rounded-full !border-0 !bg-[#1C1C1E] !px-4 !py-2.5 !text-[13px] !font-medium !text-white !shadow-[0_8px_28px_rgba(0,0,0,0.28)] has-[[data-button]]:!max-w-[min(480px,calc(100vw-2rem))] has-[[data-button]]:!rounded-2xl has-[[data-button]]:!px-3.5 has-[[data-button]]:!py-3",
+            "group toast sa-toast !flex !w-fit !min-w-[280px] !max-w-[min(420px,calc(100vw-2rem))] !flex-row !items-center !gap-2.5 !rounded-full !border-0 !bg-[#1C1C1E] !px-4 !py-2.5 !text-[13px] !font-medium !text-white !shadow-[0_8px_28px_rgba(0,0,0,0.28)] has-[[data-button]]:!max-w-[min(480px,calc(100vw-2rem))] has-[[data-button]]:!rounded-2xl has-[[data-button]]:!px-3.5 has-[[data-button]]:!py-3 !ml-auto",
           title:
             "sa-toast-title !m-0 !min-w-0 !flex-1 !text-[13px] !font-medium !leading-snug !tracking-tight !text-white group-has-[[data-button]]:!whitespace-nowrap group-has-[[data-button]]:!overflow-hidden group-has-[[data-button]]:!text-ellipsis",
           description:
