@@ -26,6 +26,7 @@ import { apiDeletePaymentCategory, apiUpsertPaymentCategory } from "@/lib/api/se
 import { nextPrefixedId } from "@/lib/student-csv";
 import {
   defaultFeeCollectionStartMonth,
+  installmentLabel,
   sumFeeSchedule,
   type FeeTerm,
   type PaymentCategory,
@@ -151,6 +152,10 @@ export function FeeCategoriesCard({
       toast.error("A fee category with this name already exists");
       return;
     }
+    if (!schedule.billingModeChosen) {
+      toast.error("Choose monthly or term fee billing");
+      return;
+    }
     const feeSchedule = feeScheduleFromDraft(schedule);
     if (!feeSchedule.length || feeSchedule.every((l) => l.amount <= 0)) {
       toast.error("Add at least one installment with an amount");
@@ -224,7 +229,18 @@ export function FeeCategoriesCard({
       toast.message("Hostel Fee already exists");
       return;
     }
-    const draft = emptyFeeScheduleDraft(startMonthFallback);
+    const draft = draftFromFeeSchedule({
+      billingCycle: "Monthly",
+      feeAmountMode: "fixed",
+      feeSchedule: Array.from({ length: 10 }, (_, index) => ({
+        id: `fl-i-${index + 1}`,
+        kind: "installment" as const,
+        label: installmentLabel(index, "Monthly"),
+        amount: 1000,
+      })),
+      feeCollectionStartMonth: startMonthFallback,
+      startMonthFallback,
+    });
     const feeSchedule = feeScheduleFromDraft(draft);
     const id = nextPrefixedId(
       "CAT",

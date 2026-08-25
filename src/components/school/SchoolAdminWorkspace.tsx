@@ -1717,7 +1717,7 @@ export function SchoolDashboard() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-     
+
       <PremiumDashboard
         students={students}
         staff={staff}
@@ -12475,7 +12475,7 @@ export function SchoolSettings() {
       { id: "branches", label: "Branches" },
       { id: "classes", label: "Class Tier" },
       { id: "departments", label: "Departments" },
-      { id: "leave", label: "Leave Management" },
+      { id: "leave", label: "Leave" },
       { id: "fees", label: "Fee Category" },
       { id: "users", label: "Users" },
       { id: "transport", label: "Bus Point" },
@@ -14170,19 +14170,27 @@ function ClassesCard({
       />
 
       <div className="mt-4 overflow-x-auto rounded-lg border border-[#EFEFEF]">
-        <table className="w-full min-w-[720px] border-collapse text-left">
+        <table className="w-full min-w-[720px] table-fixed border-collapse text-center">
+          <colgroup>
+            <col className="w-[8%]" />
+            <col className="w-[14%]" />
+            <col className="w-[8%]" />
+            <col className="w-[12%]" />
+            <col className="w-[14%]" />
+            <col className="w-[14%]" />
+            <col className="w-[18%]" />
+            <col className="w-[12%]" />
+          </colgroup>
           <thead>
             <tr className="bg-[#F4F4F5] text-[10px] font-semibold uppercase tracking-wider text-black/55 dark:bg-white/5 dark:text-zinc-400">
-              <th className="whitespace-nowrap px-3 py-2.5 font-semibold">Sl. No</th>
-              <th className="whitespace-nowrap px-3 py-2.5 font-semibold">Class</th>
-              <th className="whitespace-nowrap px-3 py-2.5 font-semibold">Div</th>
-              <th className="whitespace-nowrap px-3 py-2.5 text-right font-semibold">
-                No. of students
-              </th>
-              <th className="whitespace-nowrap px-3 py-2.5 text-right font-semibold">Total fee</th>
-              <th className="whitespace-nowrap px-3 py-2.5 font-semibold">Term / month</th>
-              <th className="whitespace-nowrap px-3 py-2.5 font-semibold">Class teacher</th>
-              <th className="whitespace-nowrap px-3 py-2.5 text-right font-semibold">Action</th>
+              <th className="px-2 py-2.5 font-semibold">Sl. No</th>
+              <th className="px-2 py-2.5 font-semibold">Class</th>
+              <th className="px-2 py-2.5 font-semibold">Div</th>
+              <th className="px-2 py-2.5 font-semibold">No. of students</th>
+              <th className="px-2 py-2.5 font-semibold">Total fee</th>
+              <th className="px-2 py-2.5 font-semibold">Term / month</th>
+              <th className="px-2 py-2.5 font-semibold">Class teacher</th>
+              <th className="px-2 py-2.5 font-semibold">Action</th>
             </tr>
           </thead>
           <tbody>
@@ -14208,29 +14216,29 @@ function ClassesCard({
                     key={c.id}
                     className="border-t border-[#EFEFEF] text-[12.5px] transition-colors hover:bg-[#F8F8F9] dark:border-white/10 dark:hover:bg-white/[0.03]"
                   >
-                    <td className="px-3 py-2.5 align-middle font-mono text-black/60 dark:text-zinc-400">
+                    <td className="px-2 py-2.5 align-middle font-mono text-black/60 dark:text-zinc-400">
                       {index + 1}
                     </td>
-                    <td className="px-3 py-2.5 align-middle font-semibold text-black dark:text-zinc-100">
+                    <td className="px-2 py-2.5 align-middle font-semibold text-black dark:text-zinc-100">
                       {grade || "—"}
                     </td>
-                    <td className="px-3 py-2.5 align-middle text-black/80 dark:text-zinc-300">
+                    <td className="px-2 py-2.5 align-middle text-black/80 dark:text-zinc-300">
                       {div || "—"}
                     </td>
-                    <td className="px-3 py-2.5 align-middle text-right font-mono text-black dark:text-zinc-100">
+                    <td className="px-2 py-2.5 align-middle font-mono text-black dark:text-zinc-100">
                       {count}
                     </td>
-                    <td className="px-3 py-2.5 align-middle text-right font-mono font-medium text-black dark:text-zinc-100">
+                    <td className="px-2 py-2.5 align-middle font-mono font-medium text-black dark:text-zinc-100">
                       ₹ {normalized.tuitionFeeAmount.toLocaleString("en-IN")}
                     </td>
-                    <td className="px-3 py-2.5 align-middle text-black/75 dark:text-zinc-300">
+                    <td className="px-2 py-2.5 align-middle text-black/75 dark:text-zinc-300">
                       {termMonthLabel(c)}
                     </td>
-                    <td className="max-w-[10rem] truncate px-3 py-2.5 align-middle text-black/75 dark:text-zinc-300">
+                    <td className="truncate px-2 py-2.5 align-middle text-black/75 dark:text-zinc-300">
                       {teacher || "—"}
                     </td>
-                    <td className="px-3 py-2.5 align-middle">
-                      <div className="flex items-center justify-end gap-1.5">
+                    <td className="px-2 py-2.5 align-middle">
+                      <div className="flex items-center justify-center gap-1.5">
                         <button
                           type="button"
                           onClick={() => startEdit(c)}
