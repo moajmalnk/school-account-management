@@ -14049,12 +14049,19 @@ function ClassesCard({
       toast.error("Choose monthly or term fee billing");
       return;
     }
+    const className = composeClassName(grade, section);
+    const duplicate = matchExistingClass(classes, className);
+    if (duplicate && duplicate.id !== editingId) {
+      toast.error(`${duplicate.className} already exists`, {
+        description: "Each grade and division can only be added once",
+      });
+      return;
+    }
     const { feeSchedule, total } = schedulePreview;
     if (total <= 0) {
       toast.error("Add at least one fee amount");
       return;
     }
-    const className = composeClassName(grade, section);
     const classTeacherId = form.classTeacherId || undefined;
     const existing = editingId ? classes.find((c) => c.id === editingId) : undefined;
     const next: Omit<ClassConfig, "id"> = {
