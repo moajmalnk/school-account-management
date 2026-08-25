@@ -37,6 +37,7 @@ import {
   splitClassName,
   studentNeedsTransport,
   transportBusPointOptions,
+  withCurrentBusPointOption,
   upsertStudentInSnapshot,
   useTenantStore,
   type GuardianRelation,
@@ -227,15 +228,14 @@ export function StudentEditPage() {
 
   const busPointOptions = useMemo(() => {
     const { pickups, drops } = transportBusPointOptions(transportRoutes);
-    const withCurrent = (current: string, pool: string[]) => {
-      const value = current.trim();
-      if (value && !pool.includes(value)) return [value, ...pool];
-      return pool;
-    };
     const dropPool = drops.length > 0 ? drops : pickups;
+    const point1 = withCurrentBusPointOption(draft.busPoint1, pickups);
+    const point2 = withCurrentBusPointOption(draft.busPoint2, dropPool);
     return {
-      point1: withCurrent(draft.busPoint1, pickups),
-      point2: withCurrent(draft.busPoint2, dropPool),
+      point1: point1.options,
+      point2: point2.options,
+      orphanPickup: point1.orphan,
+      orphanDrop: point2.orphan,
     };
   }, [draft.busPoint1, draft.busPoint2, transportRoutes]);
 
@@ -877,6 +877,7 @@ export function StudentEditPage() {
           </label>
 
           {draft.needsBus && (
+            <div className="space-y-3">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <FormField label="Bus Point 1">
                 <Select
@@ -894,7 +895,16 @@ export function StudentEditPage() {
                     </SelectItem>
                     {busPointOptions.point1.map((point) => (
                       <SelectItem key={point} value={point}>
-                        {point}
+                        {busPointOptions.orphanPickup === point ? (
+                          <span>
+                            {point}
+                            <span className="ml-1 text-[11px] font-medium text-amber-700">
+                              · not in routes
+                            </span>
+                          </span>
+                        ) : (
+                          point
+                        )}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -916,12 +926,33 @@ export function StudentEditPage() {
                     </SelectItem>
                     {busPointOptions.point2.map((point) => (
                       <SelectItem key={point} value={point}>
-                        {point}
+                        {busPointOptions.orphanDrop === point ? (
+                          <span>
+                            {point}
+                            <span className="ml-1 text-[11px] font-medium text-amber-700">
+                              · not in routes
+                            </span>
+                          </span>
+                        ) : (
+                          point
+                        )}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </FormField>
+            </div>
+            {busPointOptions.orphanPickup || busPointOptions.orphanDrop ? (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] leading-snug text-amber-900">
+                {[busPointOptions.orphanPickup, busPointOptions.orphanDrop]
+                  .filter(Boolean)
+                  .map((p) => `“${p}”`)
+                  .join(" and ")}{" "}
+                {busPointOptions.orphanPickup && busPointOptions.orphanDrop ? "are" : "is"} saved
+                on this student but not in Transport Routes. Add a matching route in Settings, or
+                pick University / another route point.
+              </p>
+            ) : null}
             </div>
           )}
 

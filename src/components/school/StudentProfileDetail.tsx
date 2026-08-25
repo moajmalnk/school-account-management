@@ -66,6 +66,7 @@ import {
   createStudentShareToken,
   DEFAULT_STUDENT_DOCUMENTS,
   transportBusPointOptions,
+  withCurrentBusPointOption,
   resolveTransportFeeForStudent,
   studentNeedsTransport,
   upsertStudentInSnapshot,
@@ -422,15 +423,14 @@ export function StudentProfileDetail({
 
   const busPointOptions = useMemo(() => {
     const { pickups, drops } = transportBusPointOptions(transportRoutes);
-    const withCurrent = (current: string, pool: string[]) => {
-      const value = current.trim();
-      if (value && !pool.includes(value)) return [value, ...pool];
-      return pool;
-    };
     const dropPool = drops.length > 0 ? drops : pickups;
+    const point1 = withCurrentBusPointOption(student.busPoint1, pickups);
+    const point2 = withCurrentBusPointOption(student.busPoint2, dropPool);
     return {
-      point1: withCurrent(student.busPoint1 ?? "", pickups),
-      point2: withCurrent(student.busPoint2 ?? "", dropPool),
+      point1: point1.options,
+      point2: point2.options,
+      orphanPickup: point1.orphan,
+      orphanDrop: point2.orphan,
     };
   }, [student.busPoint1, student.busPoint2, transportRoutes]);
 
@@ -906,6 +906,11 @@ export function StudentProfileDetail({
                           })
                         }
                         options={busPointOptions.point1}
+                        orphanValues={
+                          busPointOptions.orphanPickup
+                            ? new Set([busPointOptions.orphanPickup])
+                            : undefined
+                        }
                         placeholder="Select pickup point"
                         allowNone
                         noneLabel="No pickup point"
@@ -922,11 +927,31 @@ export function StudentProfileDetail({
                           })
                         }
                         options={busPointOptions.point2}
+                        orphanValues={
+                          busPointOptions.orphanDrop
+                            ? new Set([busPointOptions.orphanDrop])
+                            : undefined
+                        }
                         placeholder="Select drop point"
                         allowNone
                         noneLabel="No drop point"
                       />
                     </div>
+                    {busPointOptions.orphanPickup || busPointOptions.orphanDrop ? (
+                      <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] leading-snug text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+                        {[busPointOptions.orphanPickup, busPointOptions.orphanDrop]
+                          .filter(Boolean)
+                          .map((p) => `“${p}”`)
+                          .join(" and ")}{" "}
+                        {busPointOptions.orphanPickup && busPointOptions.orphanDrop
+                          ? "are"
+                          : "is"}{" "}
+                        saved on this student but{" "}
+                        <span className="font-semibold">not in Transport Routes</span>. Add a
+                        route in Settings with matching Map From / Map To, or pick a route point
+                        from the list (e.g. University).
+                      </p>
+                    ) : null}
                     {studentTransportFee.amount && studentTransportFee.amount > 0 ? (
                       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#CCFBF1] bg-[#F0FDFA]/70 px-3.5 py-3 dark:border-teal-500/30 dark:bg-teal-950/40">
                         <div>
@@ -1542,6 +1567,7 @@ function MetaSelect({
   editing,
   onChange,
   options,
+  orphanValues,
   placeholder,
   allowNone = false,
   noneLabel = "None",
@@ -1551,6 +1577,8 @@ function MetaSelect({
   editing: boolean;
   onChange: (value: string) => void;
   options: string[];
+  /** Values kept only because they are saved on the student — not route endpoints. */
+  orphanValues?: Set<string>;
   placeholder?: string;
   allowNone?: boolean;
   noneLabel?: string;
@@ -1582,7 +1610,16 @@ function MetaSelect({
               )}
               {options.map((option) => (
                 <SelectItem key={option} value={option}>
-                  {option}
+                  {orphanValues?.has(option) ? (
+                    <span>
+                      {option}
+                      <span className="ml-1 text-[11px] font-medium text-amber-700">
+                        · not in routes
+                      </span>
+                    </span>
+                  ) : (
+                    option
+                  )}
                 </SelectItem>
               ))}
             </SelectContent>

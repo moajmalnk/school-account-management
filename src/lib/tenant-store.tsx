@@ -4233,6 +4233,45 @@ export function transportBusPointOptions(routes: TransportRoute[]): {
   };
 }
 
+/**
+ * Keep a student's currently saved bus point selectable even if that route
+ * endpoint was renamed/deleted — otherwise the Select shows blank.
+ * Callers should warn when `orphan` is set.
+ */
+export function withCurrentBusPointOption(
+  current: string | undefined,
+  pool: string[],
+): { options: string[]; orphan: string | null } {
+  const value = (current ?? "").trim();
+  if (value && !pool.includes(value)) {
+    return { options: [value, ...pool], orphan: value };
+  }
+  return { options: pool, orphan: null };
+}
+
+/** Student bus points that are not Map From / Map To on any transport route. */
+export function collectOrphanedStudentBusPoints(
+  students: readonly Pick<Student, "needsBus" | "busPoint1" | "busPoint2">[],
+  routes: TransportRoute[],
+): { pickups: string[]; drops: string[] } {
+  const { pickups, drops } = transportBusPointOptions(routes);
+  const pickupSet = new Set(pickups);
+  const dropSet = new Set(drops.length > 0 ? drops : pickups);
+  const orphanPickups = new Set<string>();
+  const orphanDrops = new Set<string>();
+  for (const student of students) {
+    if (!studentNeedsTransport(student)) continue;
+    const p1 = student.busPoint1?.trim();
+    const p2 = student.busPoint2?.trim();
+    if (p1 && !pickupSet.has(p1)) orphanPickups.add(p1);
+    if (p2 && !dropSet.has(p2)) orphanDrops.add(p2);
+  }
+  return {
+    pickups: Array.from(orphanPickups).sort((a, b) => a.localeCompare(b, "en")),
+    drops: Array.from(orphanDrops).sort((a, b) => a.localeCompare(b, "en")),
+  };
+}
+
 function normalizeBusPointLabel(value: string | undefined): string {
   return (value ?? "").trim().toLowerCase();
 }

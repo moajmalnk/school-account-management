@@ -162,6 +162,7 @@ import {
   VEHICLE_DOCUMENT_LABELS,
   DEFAULT_VEHICLE_NOTIFY_DAYS,
   FEE_MONTHS,
+  collectOrphanedStudentBusPoints,
   FEE_TERM_KIND_LABELS,
   FEE_PERIOD_MODE_LABELS,
   currentFeeMonth,
@@ -15771,6 +15772,12 @@ function TransportCard({
 }) {
   type RouteFeeDraftRow = { id: string; label: string; amount: string; dueDate: string };
 
+  const { students } = useTenantStore();
+  const orphanedBusPoints = useMemo(
+    () => collectOrphanedStudentBusPoints(students, transportRoutes),
+    [students, transportRoutes],
+  );
+
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<TransportRoute | null>(null);
@@ -16117,6 +16124,28 @@ function TransportCard({
         actionLabel="Add Route"
         onAction={startCreate}
       />
+
+      {orphanedBusPoints.pickups.length > 0 || orphanedBusPoints.drops.length > 0 ? (
+        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-[12.5px] leading-snug text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-50">
+          <p className="font-semibold">Student bus points missing from routes</p>
+          <p className="mt-1 text-amber-900/80 dark:text-amber-100/80">
+            These names are saved on students but are not Map From / Map To on any route. Add a
+            route (or rename an existing one) so fees match.
+          </p>
+          <ul className="mt-2 space-y-1 font-mono text-[12px]">
+            {orphanedBusPoints.pickups.map((p) => (
+              <li key={`p-${p}`}>
+                Pickup (Bus Point 1): <span className="font-semibold">{p}</span>
+              </li>
+            ))}
+            {orphanedBusPoints.drops.map((p) => (
+              <li key={`d-${p}`}>
+                Drop (Bus Point 2): <span className="font-semibold">{p}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {listLayout === "cards" ? (
       <div className="mt-4 space-y-2.5">
