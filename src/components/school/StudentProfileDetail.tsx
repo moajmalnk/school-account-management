@@ -2227,11 +2227,15 @@ const STATUS_STYLE: Record<LedgerStatus, { wrap: string; dot: string }> = {
   },
   "Partially Paid": {
     wrap: "bg-[#CCFBF1] text-black",
-    dot: "bg-black",
+    dot: "bg-[#0F766E]",
+  },
+  Due: {
+    wrap: "bg-[#FEF3C7] text-[#92400E]",
+    dot: "bg-[#F59E0B]",
   },
   Overdue: {
     wrap: "bg-[#0F766E] text-white",
-    dot: "bg-black",
+    dot: "bg-white",
   },
   "On Break": {
     wrap: "bg-[#E0F2FE] text-[#0C4A6E]",

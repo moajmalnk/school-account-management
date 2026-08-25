@@ -19,7 +19,12 @@ import {
   type TransportRoute,
 } from "@/lib/tenant-store";
 
-export type StudentLedgerStatus = "Paid" | "Partially Paid" | "Overdue" | "On Break";
+export type StudentLedgerStatus =
+  | "Paid"
+  | "Partially Paid"
+  | "Due"
+  | "Overdue"
+  | "On Break";
 
 export type StudentLedgerRow = {
   date: string;
@@ -73,18 +78,32 @@ function formatDisplayDate(isoOrLabel?: string): string {
 }
 
 function isPastDue(dueIsoOrLabel: string, now = new Date()): boolean {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(dueIsoOrLabel)) {
-    const due = new Date(dueIsoOrLabel + "T23:59:59");
+  const raw = dueIsoOrLabel.trim();
+  if (!raw || raw === "—" || raw === "-") return false;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const due = new Date(`${raw}T23:59:59`);
     return !Number.isNaN(due.getTime()) && due.getTime() < now.getTime();
   }
-  return true;
+  const parsed = Date.parse(raw);
+  if (Number.isFinite(parsed)) return parsed < now.getTime();
+  return false;
 }
 
+/**
+ * Paid amount drives status — never mark a ₹0 paid line as Partially Paid.
+ * Due = unpaid, not yet past due date · Overdue = unpaid past due ·
+ * Partially Paid = some payment received, balance remains.
+ */
 function ledgerStatus(charge: number, paid: number, dueLabel: string): StudentLedgerStatus {
-  const balance = Math.max(0, charge - paid);
-  if (balance <= 0) return "Paid";
-  if (paid > 0) return "Partially Paid";
-  return isPastDue(dueLabel) ? "Overdue" : "Partially Paid";
+  const safeCharge = Math.max(0, charge);
+  const safePaid = Math.max(0, paid);
+  const balance = Math.max(0, safeCharge - safePaid);
+  if (balance <= 0 && safeCharge > 0) return "Paid";
+  if (safePaid > 0 && balance > 0) return "Partially Paid";
+  if (safePaid <= 0 && balance > 0) {
+    return isPastDue(dueLabel) ? "Overdue" : "Due";
+  }
+  return "Due";
 }
 
 function paymentMatchesStudent(payment: Payment, student: Student): boolean {

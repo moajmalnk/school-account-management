@@ -17,18 +17,18 @@ export type FinanceDisbursement = Pick<
   "id" | "payee" | "desc" | "amount" | "mode" | "payeeType" | "time" | "status"
 >;
 
-export type PayeeType = "Salary" | "Supplier";
+export type PayeeType = "Salary" | "Other Expense";
 
-/** Map stored payee types, including the legacy "Vendor" label. */
+/** Map stored payee types, including legacy "Supplier" / "Vendor" labels. */
 export function normalizePayeeType(value: string | undefined | null): PayeeType {
-  return /salary|payroll/i.test((value ?? "").trim()) ? "Salary" : "Supplier";
+  return /salary|payroll/i.test((value ?? "").trim()) ? "Salary" : "Other Expense";
 }
 
 function asTimedPayment(row: FinanceDisbursement): Payment {
   return {
     id: row.id || `tmp-${row.payee}-${row.amount}-${row.time || ""}`,
     name: row.payee,
-    cat: row.payeeType ? normalizePayeeType(row.payeeType) : "Supplier",
+    cat: row.payeeType ? normalizePayeeType(row.payeeType) : "Other Expense",
     mode: row.mode || "Bank",
     amount: row.amount,
     time: row.time || "",

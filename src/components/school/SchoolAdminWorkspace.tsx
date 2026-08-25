@@ -1307,7 +1307,7 @@ function PremiumDashboard({
                   Make payment
                 </div>
                 <p className="mt-0.5 text-[11px] leading-snug text-rose-900/65 dark:text-rose-100/60">
-                  Pay salaries and suppliers
+                  Pay salaries and other expenses
                 </p>
               </div>
             </button>
@@ -6378,7 +6378,7 @@ function FinanceOverview({
             </span>
             <div className="relative min-w-0">
               <div className="text-[15px] font-bold tracking-tight text-white">Make payment</div>
-              <p className="mt-0.5 text-[12px] text-white/85">Pay salaries and suppliers</p>
+              <p className="mt-0.5 text-[12px] text-white/85">Pay salaries and other expenses</p>
             </div>
           </button>
         )}
@@ -10906,7 +10906,7 @@ function MakePayment() {
     desc: "",
     amount: "",
     mode: "UPI Business",
-    payeeType: "Supplier" as PayeeType,
+    payeeType: "Other Expense" as PayeeType,
     status: "Queued" as "Queued" | "Cleared",
     date: toIsoDate(new Date()),
     clock: toClockLocal(new Date()),
@@ -11128,7 +11128,7 @@ function MakePayment() {
   const setPayeeTypeAndClear = (next: PayeeType) => {
     setPayeeType(next);
     setSelectedObligationId(null);
-    if (next === "Supplier") {
+    if (next === "Other Expense") {
       setSelectedStaffId("");
       if (selectedStaffId) {
         setBeneficiary("");
@@ -11210,7 +11210,7 @@ function MakePayment() {
       }
     }
     if (!beneficiary.trim()) {
-      toast.error(payeeType === "Salary" ? "Choose a staff member" : "Supplier name is required");
+      toast.error(payeeType === "Salary" ? "Choose a staff member" : "Payee name is required");
       return;
     }
     if (!description.trim()) {
@@ -11608,7 +11608,7 @@ function MakePayment() {
           <div>
             <FieldLabel>Payee Type</FieldLabel>
             <div className="flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
-              {(["Salary", "Supplier"] as const).map((p) => {
+              {(["Salary", "Other Expense"] as const).map((p) => {
                 const active = payeeType === p;
                 return (
                   <button
@@ -11626,7 +11626,7 @@ function MakePayment() {
             </div>
           </div>
           <div>
-            <FieldLabel>{payeeType === "Salary" ? "Staff" : "Supplier"}</FieldLabel>
+            <FieldLabel>{payeeType === "Salary" ? "Staff" : "Paid to"}</FieldLabel>
             {payeeType === "Salary" ? (
               <StaffSearchSelect
                 staff={activeStaff}
@@ -11638,7 +11638,7 @@ function MakePayment() {
               <Input
                 value={beneficiary}
                 onChange={(e) => setBeneficiary(e.target.value)}
-                placeholder="e.g. BrightBus Logistics Pvt. Ltd."
+                placeholder="e.g. electricity, books, transport"
               />
             )}
             {payeeType === "Salary" && selectedStaffId && (
@@ -12038,7 +12038,7 @@ function MakePayment() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Salary">Salary</SelectItem>
-                    <SelectItem value="Supplier">Supplier</SelectItem>
+                    <SelectItem value="Other Expense">Other Expense</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
