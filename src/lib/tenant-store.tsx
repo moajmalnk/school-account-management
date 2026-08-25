@@ -1284,9 +1284,42 @@ export function normalizePaymentCategoryLabel(label: string): string {
 export function normalizePaymentCategory(
   raw: Partial<PaymentCategory> & Pick<PaymentCategory, "id">,
 ): PaymentCategory {
+  const label = normalizePaymentCategoryLabel(typeof raw.label === "string" ? raw.label : "");
+  const billing =
+    raw.billingCycle === "Term" || raw.billingCycle === "Monthly" ? raw.billingCycle : undefined;
+  const feeSchedule = Array.isArray(raw.feeSchedule)
+    ? parseClassFeeSchedule(raw.feeSchedule)
+    : [];
+  const lower = label.toLowerCase();
+  const inferredSystem =
+    raw.isSystem === true ||
+    lower.includes("tuition") ||
+    lower.includes("tution") ||
+    lower.includes("vehicle") ||
+    lower.includes("transport");
   return {
     id: raw.id.trim(),
-    label: normalizePaymentCategoryLabel(typeof raw.label === "string" ? raw.label : ""),
+    label,
+    slug:
+      typeof raw.slug === "string" && raw.slug.trim()
+        ? raw.slug.trim().toLowerCase()
+        : inferredSystem
+          ? lower.includes("vehicle") || lower.includes("transport")
+            ? "vehicle"
+            : lower.includes("tuition") || lower.includes("tution")
+              ? "tuition"
+              : null
+          : null,
+    isSystem: inferredSystem,
+    hasSchedule: raw.hasSchedule === true || feeSchedule.length > 0,
+    billingCycle: billing,
+    feeAmountMode: raw.feeAmountMode === "custom" ? "custom" : "fixed",
+    feeSchedule,
+    feeCollectionStartMonth:
+      typeof raw.feeCollectionStartMonth === "string" && raw.feeCollectionStartMonth.trim()
+        ? raw.feeCollectionStartMonth.trim()
+        : undefined,
+    active: raw.active !== false,
   };
 }
 
@@ -1997,6 +2030,14 @@ export type TransportRoute = {
 export type PaymentCategory = {
   id: string;
   label: string;
+  slug?: string | null;
+  isSystem?: boolean;
+  hasSchedule?: boolean;
+  billingCycle?: Extract<ClassBillingCycle, "Monthly" | "Term">;
+  feeAmountMode?: ClassFeeAmountMode;
+  feeSchedule?: ClassFeeLine[];
+  feeCollectionStartMonth?: string;
+  active?: boolean;
 };
 
 export type ThemeSettings = {
@@ -3398,10 +3439,10 @@ export const SEED_VEHICLES: TransportVehicle[] = [
 ];
 
 export const SEED_PAYMENT_CATEGORIES: PaymentCategory[] = [
-  { id: "PC-001", label: "Tuition Fee" },
-  { id: "PC-002", label: "Vehicle Fee" },
-  { id: "PC-003", label: "Donation" },
-  { id: "PC-004", label: "Other" },
+  { id: "PC-001", label: "Tuition Fee", slug: "tuition", isSystem: true, hasSchedule: false, active: true },
+  { id: "PC-002", label: "Vehicle Fee", slug: "vehicle", isSystem: true, hasSchedule: false, active: true },
+  { id: "PC-003", label: "Donation", hasSchedule: false, active: true },
+  { id: "PC-004", label: "Other", hasSchedule: false, active: true },
 ];
 
 function buildSeedAcademicFeeMonths(
@@ -4251,15 +4292,19 @@ export function withCurrentBusPointOption(
 
 /** Student bus points that are not Map From / Map To on any transport route. */
 export function collectOrphanedStudentBusPoints(
-  students: readonly Pick<Student, "needsBus" | "busPoint1" | "busPoint2">[],
+  students: readonly Pick<
+    Student,
+    "needsBus" | "busPoint1" | "busPoint2" | "deletedAt"
+  >[],
   routes: TransportRoute[],
 ): { pickups: string[]; drops: string[] } {
   const { pickups, drops } = transportBusPointOptions(routes);
-  const pickupSet = new Set(pickups);
-  const dropSet = new Set(drops.length > 0 ? drops : pickups);
+  const pickupSet = new Set(pickups.map((p) => p.trim()));
+  const dropSet = new Set((drops.length > 0 ? drops : pickups).map((p) => p.trim()));
   const orphanPickups = new Set<string>();
   const orphanDrops = new Set<string>();
   for (const student of students) {
+    if (student.deletedAt) continue;
     if (!studentNeedsTransport(student)) continue;
     const p1 = student.busPoint1?.trim();
     const p2 = student.busPoint2?.trim();

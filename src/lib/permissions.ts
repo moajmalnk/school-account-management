@@ -113,6 +113,7 @@ export type SettingsTabId =
   | "departments"
   | "roles"
   | "leave"
+  | "fees"
   | "vehicles"
   | "transport"
   | "system"
@@ -188,6 +189,7 @@ const SETTINGS_TAB_PLAN_FLAG: Partial<Record<SettingsTabId, keyof PlanFlags>> = 
   departments: "staff",
   roles: "staff",
   leave: "staff",
+  fees: "feeCollection",
   vehicles: "vehicle",
   transport: "vehicle",
   users: "extraUsers",
@@ -205,6 +207,10 @@ export function planAllowsSettingsTab(
   if (tab === "users") return true;
   // Branches tab stays visible so the main campus can be edited.
   if (tab === "branches") return true;
+  // Fee categories: feeCollection or finance plan flag.
+  if (tab === "fees") {
+    return Boolean(resolved.feeCollection || resolved.finance);
+  }
   return Boolean(resolved[required]);
 }
 
@@ -239,6 +245,9 @@ export function canAccessSettingsTab(
   if (hasFullAccess(permissions)) return true;
   if (tab === "users") {
     return hasPermission(permissions, "settings.users") || hasPermission(permissions, "settings");
+  }
+  if (tab === "fees") {
+    return hasPermission(permissions, "settings.fees") || hasPermission(permissions, "settings");
   }
   return hasPermission(permissions, "settings");
 }
