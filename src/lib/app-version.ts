@@ -2,6 +2,9 @@
 export const APP_BUILD_ID =
   typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "dev";
 
+/** version.json is only emitted on production builds — skip polling in Vite dev. */
+export const isAppVersionCheckEnabled = import.meta.env.PROD && APP_BUILD_ID !== "dev";
+
 export type RemoteAppVersion = {
   buildId: string;
   builtAt?: string;
@@ -13,6 +16,8 @@ const VERSION_URL = "/version.json";
 export async function fetchRemoteAppVersion(
   signal?: AbortSignal,
 ): Promise<RemoteAppVersion | null> {
+  if (!isAppVersionCheckEnabled) return null;
+
   try {
     const res = await fetch(`${VERSION_URL}?_=${Date.now()}`, {
       cache: "no-store",
@@ -29,8 +34,8 @@ export async function fetchRemoteAppVersion(
 }
 
 export function isNewerBuild(remote: RemoteAppVersion | null): boolean {
+  if (!isAppVersionCheckEnabled) return false;
   if (!remote?.buildId) return false;
-  if (APP_BUILD_ID === "dev") return false;
   return remote.buildId !== APP_BUILD_ID;
 }
 

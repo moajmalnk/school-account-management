@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import {
   fetchRemoteAppVersion,
   hardRefreshApp,
+  isAppVersionCheckEnabled,
   isNewerBuild,
 } from "@/lib/app-version";
 import { cn } from "@/lib/utils";
@@ -50,7 +51,7 @@ export function PwaUpdateToast() {
   });
 
   const checkRemoteVersion = useCallback(async () => {
-    if (checkingRef.current) return;
+    if (!isAppVersionCheckEnabled || checkingRef.current) return;
     checkingRef.current = true;
     try {
       const remote = await fetchRemoteAppVersion();
@@ -61,6 +62,8 @@ export function PwaUpdateToast() {
   }, []);
 
   useEffect(() => {
+    if (!isAppVersionCheckEnabled) return;
+
     void checkRemoteVersion();
     const id = window.setInterval(() => void checkRemoteVersion(), UPDATE_CHECK_MS);
     const onVisible = () => {
