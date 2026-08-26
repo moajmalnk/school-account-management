@@ -1096,9 +1096,12 @@ async function drawSealFooter(
   compact = false,
   branding?: ReceiptBranding,
 ) {
-  const markH = compact ? 18 : 24;
-  const sealSize = markH;
-  const signW = compact ? 42 : 52;
+  // Official rubber-stamp size on A4 (mm) — shared across receipts, slips, reports.
+  const sealSize = compact ? 30 : 38;
+  const signW = compact ? 48 : 58;
+  const signH = sealSize * 0.55;
+  const footerBlock = sealSize + (compact ? 10 : 22);
+  const y = Math.min(startY, pageHeight - margin - footerBlock);
   const [seal, signature] = await Promise.all([
     loadReceiptSealPng(schoolName, branding),
     loadSchoolMarkPng(
@@ -1111,7 +1114,7 @@ async function drawSealFooter(
 
   if (seal) {
     try {
-      doc.addImage(seal.dataUrl, "PNG", margin, startY, sealSize, sealSize);
+      doc.addImage(seal.dataUrl, "PNG", margin, y, sealSize, sealSize);
     } catch {
       /* skip unreadable seal */
     }
@@ -1122,9 +1125,9 @@ async function drawSealFooter(
         signature.dataUrl,
         "PNG",
         pageWidth - margin - signW,
-        startY + (markH - markH * 0.72) / 2,
+        y + (sealSize - signH) / 2,
         signW,
-        markH * 0.72,
+        signH,
       );
     } catch {
       /* skip unreadable signature */
@@ -1133,7 +1136,7 @@ async function drawSealFooter(
 
   doc.setFont(pdfFontName(), "normal");
   doc.setTextColor(...receiptInk().muted);
-  const labelY = startY + markH + 5;
+  const labelY = y + sealSize + 4.5;
   doc.setFontSize(compact ? 8 : 8.5);
   doc.text("Signature", pageWidth - margin - signW / 2, labelY, { align: "center" });
   if (!compact) {
@@ -1876,7 +1879,7 @@ export async function downloadStudentFeeReportPdf(
     pageWidth,
     pageHeight,
     margin,
-    Math.min(tableStart, pageHeight - 42),
+    Math.min(tableStart, pageHeight - 58),
     generatedAt,
     displayName,
     `This statement is issued for parent reference. For fee queries, contact ${displayName}.`,
@@ -2087,7 +2090,7 @@ export async function downloadStaffPayrollReportPdf(
     pageWidth,
     pageHeight,
     margin,
-    Math.min(tableStart, pageHeight - 42),
+    Math.min(tableStart, pageHeight - 58),
     generatedAt,
     displayName,
     `This payroll statement is issued for employee records. For salary queries, contact ${displayName}.`,

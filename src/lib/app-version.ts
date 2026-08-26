@@ -12,7 +12,10 @@ export type RemoteAppVersion = {
 
 const VERSION_URL = "/version.json";
 const LAST_BUILD_KEY = "school-accounts/app-build-id/v1";
+const UPDATE_COOLDOWN_KEY = "school-accounts/app-update-cooldown/v1";
 const TENANT_STORE_PREFIX = "school-accounts/tenant-store/";
+/** After an Update now, ignore version prompts briefly to avoid blink loops. */
+const UPDATE_COOLDOWN_MS = 3 * 60_000;
 
 /** Fetch the deployed build id (never from HTTP cache). */
 export async function fetchRemoteAppVersion(
@@ -39,6 +42,35 @@ export function isNewerBuild(remote: RemoteAppVersion | null): boolean {
   if (!isAppVersionCheckEnabled) return false;
   if (!remote?.buildId) return false;
   return remote.buildId !== APP_BUILD_ID;
+}
+
+export function isUpdatePromptOnCooldown(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = window.sessionStorage.getItem(UPDATE_COOLDOWN_KEY);
+    if (!raw) return false;
+    const until = Number(raw);
+    if (!Number.isFinite(until)) return false;
+    if (Date.now() >= until) {
+      window.sessionStorage.removeItem(UPDATE_COOLDOWN_KEY);
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function markUpdateCooldown(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(
+      UPDATE_COOLDOWN_KEY,
+      String(Date.now() + UPDATE_COOLDOWN_MS),
+    );
+  } catch {
+    /* ignore */
+  }
 }
 
 /** Drop cached tenant snapshots so a new deploy rehydrates from the API. */
@@ -73,6 +105,17 @@ export function syncClientStateToCurrentBuild(): void {
   } catch {
     /* ignore */
   }
+
+  // Strip one-shot refresh query so reloads don't keep appending noise.
+  try {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("_refresh")) {
+      url.searchParams.delete("_refresh");
+      window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+    }
+  } catch {
+    /* ignore */
+  }
 }
 
 /**
@@ -82,7 +125,8 @@ export function syncClientStateToCurrentBuild(): void {
 export async function hardRefreshApp(opts?: {
   updateServiceWorker?: (reloadPage?: boolean) => Promise<void>;
 }): Promise<void> {
-  // Always clear caches first — iOS/Android PWAs otherwise keep the old shell.
+  markUpdateCooldown();
+
   try {
     if ("caches" in window) {
       const keys = await caches.keys();
@@ -94,12 +138,16 @@ export async function hardRefreshApp(opts?: {
 
   clearTenantStoreSnapshots();
 
+  let swReloading = false;
   try {
     if (opts?.updateServiceWorker) {
+      swReloading = true;
       await opts.updateServiceWorker(true);
-      // updateServiceWorker(true) should reload; if not, fall through.
+      // vite-plugin-pwa reloads the page; give it a moment before falling back.
+      await new Promise((r) => window.setTimeout(r, 1200));
     }
   } catch (error) {
+    swReloading = false;
     console.warn("[app-version] SW update failed, falling back to hard reload", error);
   }
 
@@ -111,6 +159,9 @@ export async function hardRefreshApp(opts?: {
   } catch {
     /* ignore */
   }
+
+  // If SW already navigated away, don't force another reload (blink loop).
+  if (swReloading && document.visibilityState === "hidden") return;
 
   const url = new URL(window.location.href);
   url.searchParams.set("_refresh", Date.now().toString());

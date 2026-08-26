@@ -121,17 +121,22 @@ export function defaultSealSvg(
     <clipPath id="${clipId}"><circle cx="${SEAL_CX}" cy="${SEAL_CY}" r="${SEAL_LOGO_R}"/></clipPath>
   </defs>
   <circle cx="${SEAL_CX}" cy="${SEAL_CY}" r="160" fill="#fff"/>
-  <circle cx="${SEAL_CX}" cy="${SEAL_CY}" r="157.2" fill="none" stroke="${fill}" stroke-width="3.6"/>
-  <circle cx="${SEAL_CX}" cy="${SEAL_CY}" r="150.6" fill="none" stroke="${fill}" stroke-width="1.7"/>
-  <circle cx="${SEAL_CX}" cy="${SEAL_CY}" r="99.5" fill="none" stroke="${fill}" stroke-width="1.55"/>
+  <!-- Outer stamp ring (thick) -->
+  <circle cx="${SEAL_CX}" cy="${SEAL_CY}" r="154" fill="none" stroke="${fill}" stroke-width="9"/>
+  <!-- Inner twin rings -->
+  <circle cx="${SEAL_CX}" cy="${SEAL_CY}" r="145.5" fill="none" stroke="${fill}" stroke-width="2.4"/>
+  <circle cx="${SEAL_CX}" cy="${SEAL_CY}" r="140.5" fill="none" stroke="${fill}" stroke-width="1.4"/>
+  <!-- Logo / emblem ring -->
+  <circle cx="${SEAL_CX}" cy="${SEAL_CY}" r="99.5" fill="none" stroke="${fill}" stroke-width="2.2"/>
+  <circle cx="${SEAL_CX}" cy="${SEAL_CY}" r="94.5" fill="none" stroke="${fill}" stroke-width="1.1" opacity="0.85"/>
   <text fill="${fill}" font-family="Inter, Arial, Helvetica, sans-serif" font-size="${nameSize.toFixed(1)}" font-weight="800" letter-spacing="${nameTrack}" text-anchor="middle">
     <textPath href="#${topId}" xlink:href="#${topId}" startOffset="50%">${escapeXml(name)}</textPath>
   </text>
   <text fill="${fill}" font-family="'Arial Narrow', 'Helvetica Condensed', Arial, sans-serif" font-size="${detailSize.toFixed(1)}" font-weight="600" letter-spacing="${detailTrack}" text-anchor="middle">
     <textPath href="#${botId}" xlink:href="#${botId}" startOffset="50%">${escapeXml(details)}</textPath>
   </text>
-  <path d="${starPath(leftStar.x, leftStar.y, 7.1)}" fill="${fill}"/>
-  <path d="${starPath(rightStar.x, rightStar.y, 7.1)}" fill="${fill}"/>
+  <path d="${starPath(leftStar.x, leftStar.y, 7.6)}" fill="${fill}"/>
+  <path d="${starPath(rightStar.x, rightStar.y, 7.6)}" fill="${fill}"/>
   ${showLogo ? logo : ""}
   ${
     showInitials

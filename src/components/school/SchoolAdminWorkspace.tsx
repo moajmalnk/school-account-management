@@ -17437,12 +17437,12 @@ const SCHOOL_BRAND_MEDIA_SPECS = {
     usage: "Top banner on receipts and PDF exports",
   },
   seal: {
-    outputWidth: 512,
-    outputHeight: 512,
-    aspectLabel: "1:1 · circle",
+    outputWidth: 640,
+    outputHeight: 640,
+    aspectLabel: "1:1 · circle · ~38mm on print",
     formats: "PNG · transparent",
     maxMb: 2,
-    usage: "Official stamp on fee receipts",
+    usage: "Official stamp on fee receipts, salary slips, and reports",
   },
   signature: {
     outputWidth: 960,
@@ -17974,14 +17974,14 @@ function SchoolDetailsCard({
                 <img
                   src={resolveSealDisplaySrc(draft.name, draft.sealUrl)}
                   alt="School seal"
-                  className="h-20 w-20 rounded-full object-contain p-1"
+                  className="h-24 w-24 rounded-full object-contain p-0.5 ring-1 ring-[#1D4ED8]/25"
                 />
               ) : (
                 <DefaultSchoolSeal
                   name={draft.name}
                   details={draft.address}
                   logoUrl={draft.logoUrl}
-                  className="h-20 w-20 rounded-full"
+                  className="h-24 w-24 rounded-full ring-1 ring-[#1D4ED8]/25"
                 />
               )
             }
