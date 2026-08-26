@@ -223,7 +223,7 @@ import {
   type VehicleOwnership,
 } from "@/lib/tenant-store";
 import { StudentProfileDetail } from "@/components/school/StudentProfileDetail";
-import { isPeriodOnBreak } from "@/lib/student-fees";
+import { isPeriodOnBreak, buildStudentFeeStatement } from "@/lib/student-fees";
 import { ShareParentLinkDialog } from "@/components/school/ShareParentLinkDialog";
 import { StaffProfileDetail } from "@/components/school/StaffProfileDetail";
 import { StaffOrgQuickCreateDialogs } from "@/components/school/StaffOrgQuickCreate";
@@ -2818,6 +2818,10 @@ export function StudentsLedger() {
     academicYear,
     hydrated,
     branchSyncing,
+    activePayments,
+    activeFeeTerms,
+    transportRoutes,
+    studentFeeBreaks,
   } =
     useTenantStore();
   const navigate = useNavigate();
@@ -3199,6 +3203,41 @@ export function StudentsLedger() {
     [liveStudents],
   );
 
+  /** Same totals as each student Payments tab, summed across the active-year roster. */
+  const feeTotals = useMemo(() => {
+    let totalFee = 0;
+    let totalPaid = 0;
+    let totalDue = 0;
+    let overdueDue = 0;
+    for (const student of liveStudents) {
+      const statement = buildStudentFeeStatement({
+        student,
+        payments: activePayments,
+        classes,
+        feeTerms: activeFeeTerms,
+        transportRoutes,
+        academicYear,
+        feeBreaks: studentFeeBreaks,
+      });
+      totalFee += statement.totalFee;
+      totalPaid += statement.totalPaid;
+      totalDue += Math.max(0, statement.totalDue - statement.overdueDue);
+      overdueDue += statement.overdueDue;
+    }
+    return { totalFee, totalPaid, totalDue, overdueDue };
+  }, [
+    liveStudents,
+    activePayments,
+    classes,
+    activeFeeTerms,
+    transportRoutes,
+    academicYear,
+    studentFeeBreaks,
+  ]);
+
+  const feeTotalDueCleared = feeTotals.totalDue <= 0;
+  const feeOverdueActive = feeTotals.overdueDue > 0;
+
   const exportCsv = () => {
     if (!filtered.length) {
       toast.error("Nothing to export · current filter is empty");
@@ -3551,59 +3590,124 @@ export function StudentsLedger() {
 
   return (
     <div className="w-full min-w-0 max-w-full space-y-3 overflow-x-clip lg:space-y-6">
-      <MobileStatsOverview
-        items={[
-          {
-            label: "Paid",
-            value: analytics.paid,
-            icon: CheckCircle2,
-            iconClass: "text-[#10B981]",
-          },
-          {
-            label: "Overdue",
-            value: analytics.overdue,
-            icon: AlertTriangle,
-            iconClass: "text-[#EF4444]",
-          },
-          {
-            label: "Total",
-            value: analytics.total,
-            icon: Users,
-            iconClass: "text-[#0F766E]",
-          },
-        ]}
-      />
-
-      <div className="hidden w-full grid-cols-3 gap-3 lg:grid">
+      <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
         <div className={cn(glassCardClass, directoryStatCardClass)}>
           <div className="flex min-w-0 flex-1 items-center justify-between gap-1 md:items-start md:gap-2">
-            <div className={cn(directoryStatLabelClass, "text-slate-500")}>Paid</div>
-            <CheckCircle2 className="h-3 w-3 shrink-0 text-[#10B981] md:h-4 md:w-4" />
+            <div className={cn(directoryStatLabelClass, "text-slate-500")}>Total Fee</div>
+            <Wallet className="h-3 w-3 shrink-0 text-[#0F766E] md:h-4 md:w-4" />
           </div>
-          <div className={directoryStatValueClass}>{analytics.paid}</div>
-        </div>
-
-        <div className={cn(glassCardClass, directoryStatCardClass)}>
-          <div className="flex min-w-0 flex-1 items-center justify-between gap-1 md:items-start md:gap-2">
-            <div className={cn(directoryStatLabelClass, "text-slate-500")}>Overdue</div>
-            <AlertTriangle className="h-3 w-3 shrink-0 text-[#EF4444] md:h-4 md:w-4" />
+          <div className="min-w-0 shrink-0 text-right md:text-left">
+            <div
+              className={cn(
+                directoryStatValueClass,
+                "max-w-full break-words text-[15px] sm:text-[18px] md:text-[26px] lg:text-[32px]",
+              )}
+            >
+              {formatInr(feeTotals.totalFee)}
+            </div>
+            <div className="mt-0.5 font-mono text-[9px] text-slate-500 md:mt-1.5 md:text-[11px]">
+              {analytics.total} students · {analytics.male}M · {analytics.female}F
+            </div>
           </div>
-          <div className={directoryStatValueClass}>{analytics.overdue}</div>
         </div>
 
         <div className={cn(glassCardClass, directoryStatCardClass, "bg-[#CCFBF1]/40")}>
           <div className="flex min-w-0 flex-1 items-center justify-between gap-1 md:items-start md:gap-2">
-            <div className={cn(directoryStatLabelClass, "text-slate-600")}>
-              <span className="md:hidden">Total</span>
-              <span className="hidden md:inline">Total Students</span>
-            </div>
-            <Users className="h-3 w-3 shrink-0 text-slate-400 md:h-4 md:w-4" />
+            <div className={cn(directoryStatLabelClass, "text-slate-600")}>Total Paid</div>
+            <CheckCircle2 className="h-3 w-3 shrink-0 text-[#10B981] md:h-4 md:w-4" />
           </div>
-          <div className="shrink-0 text-right md:text-left">
-            <div className={directoryStatValueClass}>{analytics.total}</div>
-            <div className="mt-0.5 font-mono text-[9px] text-slate-500 md:mt-1.5 md:text-[11px]">
-              {analytics.male}M · {analytics.female}F
+          <div className="min-w-0 shrink-0 text-right md:text-left">
+            <div
+              className={cn(
+                directoryStatValueClass,
+                "max-w-full break-words text-[15px] text-[#10B981] sm:text-[18px] md:text-[26px] lg:text-[32px]",
+              )}
+            >
+              {formatInr(feeTotals.totalPaid)}
             </div>
+            <div className="mt-0.5 font-mono text-[9px] text-slate-500 md:mt-1.5 md:text-[11px]">
+              {analytics.paid} paid students
+            </div>
+          </div>
+        </div>
+
+        <div className={cn(glassCardClass, directoryStatCardClass)}>
+          <div className="flex min-w-0 flex-1 items-center justify-between gap-1 md:items-start md:gap-2">
+            <div className={cn(directoryStatLabelClass, "text-slate-500")}>Total Due</div>
+            {feeTotalDueCleared ? (
+              <CheckCircle2 className="h-3 w-3 shrink-0 text-[#10B981] md:h-4 md:w-4" />
+            ) : (
+              <AlertTriangle className="h-3 w-3 shrink-0 text-[#F59E0B] md:h-4 md:w-4" />
+            )}
+          </div>
+          <div className="min-w-0 shrink-0 text-right md:text-left">
+            <div
+              className={cn(
+                directoryStatValueClass,
+                "max-w-full break-words text-[15px] sm:text-[18px] md:text-[26px] lg:text-[32px]",
+              )}
+            >
+              {formatInr(feeTotals.totalDue)}
+            </div>
+            <span
+              className={cn(
+                "mt-1 inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider md:mt-1.5 md:text-[10px]",
+                feeTotalDueCleared
+                  ? "bg-[#0F172A] text-[#10B981]"
+                  : "bg-[#0F172A] text-[#F59E0B]",
+              )}
+            >
+              {feeTotalDueCleared ? "[ CLEARED ]" : "[ PENDING ]"}
+            </span>
+          </div>
+        </div>
+
+        <div
+          className={cn(
+            glassCardClass,
+            directoryStatCardClass,
+            feeOverdueActive &&
+              "border-transparent bg-[#EF4444] text-white shadow-[0_10px_30px_-12px_rgba(239,68,68,0.38)] dark:bg-[#EF4444]",
+          )}
+        >
+          <div className="flex min-w-0 flex-1 items-center justify-between gap-1 md:items-start md:gap-2">
+            <div
+              className={cn(
+                directoryStatLabelClass,
+                feeOverdueActive ? "text-white/80" : "text-slate-500",
+              )}
+            >
+              Over Due
+            </div>
+            <AlertTriangle
+              className={cn(
+                "h-3 w-3 shrink-0 md:h-4 md:w-4",
+                feeOverdueActive ? "text-white" : "text-[#EF4444]",
+              )}
+            />
+          </div>
+          <div className="min-w-0 shrink-0 text-right md:text-left">
+            <div
+              className={cn(
+                directoryStatValueClass,
+                "max-w-full break-words text-[15px] sm:text-[18px] md:text-[26px] lg:text-[32px]",
+                feeOverdueActive && "text-white dark:text-white",
+              )}
+            >
+              {formatInr(feeTotals.overdueDue)}
+            </div>
+            <span
+              className={cn(
+                "mt-1 inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider md:mt-1.5 md:text-[10px]",
+                feeOverdueActive
+                  ? "bg-[#0F172A] text-[#EF4444]"
+                  : "bg-[#0F172A] text-[#10B981]",
+              )}
+            >
+              {feeOverdueActive
+                ? `[ ${analytics.overdue} OVERDUE ]`
+                : "[ NONE ]"}
+            </span>
           </div>
         </div>
       </div>

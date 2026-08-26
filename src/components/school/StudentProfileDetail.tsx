@@ -17,6 +17,7 @@ import {
   Send,
   ClipboardList,
   Upload,
+  Wallet,
   X,
   Trash2,
 } from "lucide-react";
@@ -90,7 +91,7 @@ import {
   type ProfileDetailTabId,
   type StudentProfileTabId,
 } from "@/components/school/ProfileDetailTabs";
-import { cn } from "@/lib/utils";
+import { cn, glassCardClass } from "@/lib/utils";
 import { formatDobDisplay } from "@/lib/dates";
 
 function emptyToUndefined(value: string): string | undefined {
@@ -108,6 +109,19 @@ const todayISO = () => {
 
 const CARD_FRAME =
   "rounded-xl border border-slate-100 bg-white p-4 shadow-sm sm:p-6 dark:border-white/10 dark:bg-[#171717] dark:text-zinc-100 dark:shadow-black/40";
+
+/** Match Students Directory summary cards — compact on phone, tall glass tiles on desktop. */
+const feeStatCardClass = cn(
+  glassCardClass,
+  "flex min-w-0 w-full flex-col justify-between gap-2 overflow-hidden p-3 sm:min-h-[108px] sm:gap-3 sm:p-5 md:p-6",
+);
+const feeStatLabelClass =
+  "min-w-0 text-[9px] font-semibold uppercase leading-tight tracking-wider text-slate-500 dark:text-zinc-400 sm:text-[10px]";
+const feeStatValueClass =
+  "min-w-0 max-w-full break-words font-mono text-[17px] font-semibold leading-none tracking-tight tabular-nums text-black dark:text-zinc-50 sm:text-[26px] md:text-[32px]";
+const feeStatBadgeClass =
+  "mt-1.5 inline-flex max-w-full items-center rounded-full px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider sm:mt-2 sm:text-[10px]";
+
 const profileBottomPad = "pb-[calc(5.75rem+env(safe-area-inset-bottom))] md:pb-0";
 const MAX_FILES_PER_DOC = 8;
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
@@ -1069,12 +1083,20 @@ export function StudentProfileDetail({
                 </Button>
               </div>
             </div>
-            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <FeeStatBox label="Total Fee" value={inr(fees.totalFee)} />
+            <div className="mt-4 grid w-full min-w-0 grid-cols-2 gap-2 sm:mt-5 sm:gap-3 xl:grid-cols-4">
+              <FeeStatBox
+                label="Total Fee"
+                value={inr(fees.totalFee)}
+                icon={Wallet}
+                iconClass="text-[#0F766E]"
+              />
               <FeeStatBox
                 label="Total Paid"
                 value={inr(fees.totalPaid)}
                 valueClassName="text-[#10B981]"
+                icon={CheckCircle2}
+                iconClass="text-[#10B981]"
+                accentClass="bg-[#CCFBF1]/40"
               />
               <FeeDueBox
                 totalDue={Math.max(0, fees.totalDue - fees.overdueDue)}
@@ -1517,22 +1539,24 @@ function FeeStatBox({
   label,
   value,
   valueClassName,
+  icon: Icon = Wallet,
+  iconClass = "text-slate-400",
+  accentClass,
 }: {
   label: string;
   value: string;
   valueClassName?: string;
+  icon?: typeof CheckCircle2;
+  iconClass?: string;
+  accentClass?: string;
 }) {
   return (
-    <div className="rounded-lg bg-slate-50 p-4 dark:bg-zinc-900/70">
-      <div className={META_LABEL}>{label}</div>
-      <div
-        className={cn(
-          "mt-2 font-mono text-xl font-semibold tracking-tight text-black dark:text-zinc-100",
-          valueClassName,
-        )}
-      >
-        {value}
+    <div className={cn(feeStatCardClass, accentClass)}>
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <div className={feeStatLabelClass}>{label}</div>
+        <Icon className={cn("h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4", iconClass)} strokeWidth={2.25} />
       </div>
+      <div className={cn(feeStatValueClass, valueClassName)}>{value}</div>
     </div>
   );
 }
@@ -1540,30 +1564,30 @@ function FeeStatBox({
 function FeeDueBox({ totalDue, overdue }: { totalDue: number; overdue: boolean }) {
   const cleared = totalDue <= 0;
   return (
-    <div className="rounded-lg bg-slate-50 p-4 dark:bg-zinc-900/70">
-      <div className="flex items-start justify-between text-black/55 dark:text-zinc-400">
-        <div className="text-[11px] font-semibold uppercase tracking-wider">Total Due</div>
+    <div className={feeStatCardClass}>
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <div className={feeStatLabelClass}>Total Due</div>
         {cleared ? (
-          <CheckCircle2 className="h-4 w-4 text-[#10B981]" />
+          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[#10B981] sm:h-4 sm:w-4" />
         ) : (
-          <AlertTriangle className="h-4 w-4 text-[#F59E0B]" />
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[#F59E0B] sm:h-4 sm:w-4" />
         )}
       </div>
-      <div className="mt-2 font-mono text-xl font-semibold tracking-tight text-black dark:text-zinc-100">
-        {inr(totalDue)}
+      <div>
+        <div className={feeStatValueClass}>{inr(totalDue)}</div>
+        <span
+          className={cn(
+            feeStatBadgeClass,
+            cleared
+              ? "bg-[#0F172A] text-[#10B981]"
+              : overdue
+                ? "bg-[#0F172A] text-[#EF4444]"
+                : "bg-[#0F172A] text-[#F59E0B]",
+          )}
+        >
+          {cleared ? "[ CLEARED ]" : overdue ? "[ OVERDUE ]" : "[ PENDING ]"}
+        </span>
       </div>
-      <span
-        className={cn(
-          "mt-2 inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider",
-          cleared
-            ? "bg-[#0F172A] text-[#10B981]"
-            : overdue
-              ? "bg-[#0F172A] text-[#EF4444]"
-              : "bg-[#0F172A] text-[#F59E0B]",
-        )}
-      >
-        {cleared ? "[ CLEARED ]" : overdue ? "[ OVERDUE ]" : "[ PENDING ]"}
-      </span>
     </div>
   );
 }
@@ -1573,35 +1597,41 @@ function FeeOverdueBox({ overdueDue }: { overdueDue: number }) {
   return (
     <div
       className={cn(
-        "rounded-lg p-4",
-        active ? "bg-[#EF4444]" : "bg-slate-50 dark:bg-zinc-900/70",
+        feeStatCardClass,
+        active
+          ? "border-transparent bg-[#EF4444] text-white shadow-[0_10px_30px_-12px_rgba(239,68,68,0.38)] dark:bg-[#EF4444]"
+          : undefined,
       )}
     >
-      <div
-        className={cn(
-          "flex items-start justify-between",
-          active ? "text-white/75" : "text-black/55 dark:text-zinc-400",
-        )}
-      >
-        <div className="text-[11px] font-semibold uppercase tracking-wider">Over Due</div>
-        <AlertTriangle className={cn("h-4 w-4", active ? "text-white" : "text-[#EF4444]")} />
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <div
+          className={cn(
+            feeStatLabelClass,
+            active && "text-white/80 dark:text-white/80",
+          )}
+        >
+          Over Due
+        </div>
+        <AlertTriangle
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4",
+            active ? "text-white" : "text-[#EF4444]",
+          )}
+        />
       </div>
-      <div
-        className={cn(
-          "mt-2 font-mono text-xl font-semibold tracking-tight",
-          active ? "text-white" : "text-black dark:text-zinc-100",
-        )}
-      >
-        {inr(overdueDue)}
+      <div>
+        <div className={cn(feeStatValueClass, active && "text-white dark:text-white")}>
+          {inr(overdueDue)}
+        </div>
+        <span
+          className={cn(
+            feeStatBadgeClass,
+            active ? "bg-[#0F172A] text-[#EF4444]" : "bg-[#0F172A] text-[#10B981]",
+          )}
+        >
+          {active ? "[ OVERDUE ]" : "[ NONE ]"}
+        </span>
       </div>
-      <span
-        className={cn(
-          "mt-2 inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider",
-          active ? "bg-[#0F172A] text-[#EF4444]" : "bg-[#0F172A] text-[#10B981]",
-        )}
-      >
-        {active ? "[ OVERDUE ]" : "[ NONE ]"}
-      </span>
     </div>
   );
 }
