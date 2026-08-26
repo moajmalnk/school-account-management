@@ -74,6 +74,20 @@ export async function apiDeleteStudent(
   });
 }
 
+/** Upsert academic-year ledger rows so every device shares the same enrollment set. */
+export async function apiSyncStudentYearFields(
+  entries: Array<{
+    studentId: string;
+    academicYear: string;
+    cls: string;
+    due: number;
+    active: boolean;
+  }>,
+): Promise<void> {
+  if (!hasToken() || entries.length === 0) return;
+  await mutate("/api/students/year-fields.php", { entries });
+}
+
 export async function apiUpsertStaff(staff: Staff): Promise<Staff> {
   if (!hasToken()) {
     throw new Error("Not signed in to API — log in again to save staff changes");

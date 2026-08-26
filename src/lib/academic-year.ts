@@ -492,6 +492,10 @@ export function mergeStudentYearLedgers(
  * When the API roster has students but no year enrollments exist yet (common for
  * live tenants — enrollments are client-side only), seed the active year so lists
  * and dashboards are not stuck at zero.
+ *
+ * Also auto-enrolls any live student missing from *every* year book into the
+ * active year — keeps multi-device dashboards aligned when admits land on one
+ * browser but another still has a stale partial ledger.
  */
 export function reconcileLedgersWithStudents<T extends {
   id: string;
@@ -516,38 +520,139 @@ export function reconcileLedgersWithStudents<T extends {
   next = ensureYearLedger(pruneLedgersToStudents(ledgers, students), year);
   const activeLedger = getYearLedger(next, year);
   const activeEnrolled = Object.keys(activeLedger.byStudentId).length;
-  if (activeEnrolled > 0 || live.length === 0) return next;
 
-  const totalEnrolled = next.reduce(
-    (sum, ledger) => sum + Object.keys(ledger.byStudentId).length,
-    0,
-  );
-  const enrolledIds = new Set(next.flatMap((ledger) => Object.keys(ledger.byStudentId)));
-  const rosterUnmapped = live.every((student) => !enrolledIds.has(student.id));
-
-  const seedActiveYear = (byStudentId: Record<string, StudentYearFields>) =>
-    next.map((ledger) =>
-      ledger.academicYear === year ? { academicYear: year, byStudentId } : ledger,
+  if (activeEnrolled === 0 && live.length > 0) {
+    const totalEnrolled = next.reduce(
+      (sum, ledger) => sum + Object.keys(ledger.byStudentId).length,
+      0,
     );
+    const enrolledIds = new Set(next.flatMap((ledger) => Object.keys(ledger.byStudentId)));
+    const rosterUnmapped = live.every((student) => !enrolledIds.has(student.id));
 
-  if (totalEnrolled === 0 || rosterUnmapped) {
-    return seedActiveYear(buildLedgerFromStudents(live, year).byStudentId);
+    const seedActiveYear = (byStudentId: Record<string, StudentYearFields>) =>
+      next.map((ledger) =>
+        ledger.academicYear === year ? { academicYear: year, byStudentId } : ledger,
+      );
+
+    if (totalEnrolled === 0 || rosterUnmapped) {
+      next = seedActiveYear(buildLedgerFromStudents(live, year).byStudentId);
+    } else {
+      const source = next.reduce((best, ledger) =>
+        Object.keys(ledger.byStudentId).length > Object.keys(best.byStudentId).length
+          ? ledger
+          : best,
+      );
+      const liveIds = new Set(live.map((student) => student.id));
+      const carried: Record<string, StudentYearFields> = {};
+      for (const [id, fields] of Object.entries(source.byStudentId)) {
+        if (liveIds.has(id)) carried[id] = { ...fields };
+      }
+      next =
+        Object.keys(carried).length === 0
+          ? seedActiveYear(buildLedgerFromStudents(live, year).byStudentId)
+          : seedActiveYear(carried);
+    }
   }
 
-  const source = next.reduce((best, ledger) =>
-    Object.keys(ledger.byStudentId).length > Object.keys(best.byStudentId).length
-      ? ledger
-      : best,
+  // Students present on the API roster but not enrolled in any year → active year.
+  const enrolledAnywhere = new Set(next.flatMap((ledger) => Object.keys(ledger.byStudentId)));
+  const missing = live.filter((s) => !enrolledAnywhere.has(s.id));
+  if (missing.length === 0) return next;
+
+  return next.map((ledger) => {
+    if (ledger.academicYear !== year) return ledger;
+    const byStudentId = { ...ledger.byStudentId };
+    for (const s of missing) {
+      byStudentId[s.id] = {
+        cls: s.cls,
+        due: s.due,
+        active: s.active !== false,
+      };
+    }
+    return { academicYear: year, byStudentId };
+  });
+}
+
+/** Convert API `/students/year-fields` rows into per-year ledger books. */
+export function ledgersFromYearFieldRows(
+  rows: Array<{
+    studentId?: string;
+    academicYear?: string;
+    cls?: string;
+    due?: number;
+    active?: boolean;
+  }>,
+): StudentYearLedger[] {
+  const byYear = new Map<string, Record<string, StudentYearFields>>();
+  for (const row of rows) {
+    const studentId = typeof row.studentId === "string" ? row.studentId.trim() : "";
+    const academicYear = typeof row.academicYear === "string" ? row.academicYear.trim() : "";
+    if (!studentId || !academicYear) continue;
+    const bucket = byYear.get(academicYear) ?? {};
+    bucket[studentId] = {
+      cls: typeof row.cls === "string" ? row.cls : "",
+      due: typeof row.due === "number" && Number.isFinite(row.due) ? row.due : 0,
+      active: row.active !== false,
+    };
+    byYear.set(academicYear, bucket);
+  }
+  return Array.from(byYear.entries()).map(([academicYear, byStudentId]) => ({
+    academicYear,
+    byStudentId,
+  }));
+}
+
+/** Flat entries for POSTing ledger rows back to the API. */
+export function yearFieldEntriesFromLedgers(
+  ledgers: StudentYearLedger[],
+): Array<{
+  studentId: string;
+  academicYear: string;
+  cls: string;
+  due: number;
+  active: boolean;
+}> {
+  const out: Array<{
+    studentId: string;
+    academicYear: string;
+    cls: string;
+    due: number;
+    active: boolean;
+  }> = [];
+  for (const ledger of ledgers) {
+    for (const [studentId, fields] of Object.entries(ledger.byStudentId)) {
+      out.push({
+        studentId,
+        academicYear: ledger.academicYear,
+        cls: fields.cls,
+        due: fields.due,
+        active: fields.active !== false,
+      });
+    }
+  }
+  return out;
+}
+
+/** Diff: entries present in `next` but missing from `prev` (by year+student). */
+export function yearFieldEntriesMissingFrom(
+  prev: StudentYearLedger[],
+  next: StudentYearLedger[],
+): Array<{
+  studentId: string;
+  academicYear: string;
+  cls: string;
+  due: number;
+  active: boolean;
+}> {
+  const prevKeys = new Set<string>();
+  for (const ledger of prev) {
+    for (const studentId of Object.keys(ledger.byStudentId)) {
+      prevKeys.add(`${ledger.academicYear}\0${studentId}`);
+    }
+  }
+  return yearFieldEntriesFromLedgers(next).filter(
+    (entry) => !prevKeys.has(`${entry.academicYear}\0${entry.studentId}`),
   );
-  const liveIds = new Set(live.map((student) => student.id));
-  const carried: Record<string, StudentYearFields> = {};
-  for (const [id, fields] of Object.entries(source.byStudentId)) {
-    if (liveIds.has(id)) carried[id] = { ...fields };
-  }
-  if (Object.keys(carried).length === 0) {
-    return seedActiveYear(buildLedgerFromStudents(live, year).byStudentId);
-  }
-  return seedActiveYear(carried);
 }
 
 export function applyLedgerToStudent<T extends {

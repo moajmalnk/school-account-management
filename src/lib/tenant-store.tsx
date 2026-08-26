@@ -19,6 +19,7 @@ import {
   apiSyncThemeSettings,
   apiUpsertFeeTerm,
 } from "@/lib/api/settings";
+import { apiSyncStudentYearFields } from "@/lib/api/records";
 import {
   applyWorkspaceBrand,
   clearWorkspaceBrand,
@@ -61,6 +62,7 @@ import {
   studentsForAcademicYear,
   syncLedgerFromActiveStudents,
   upsertStudentYearFields,
+  yearFieldEntriesMissingFrom,
   yearHasBookData,
   type StudentYearFields,
   type StudentYearLedger,
@@ -4847,14 +4849,28 @@ export function TenantStoreProvider({
             const mergedBranches = keepLocalBranches
               ? branchesRef.current
               : remote.branches;
-            // Year enrollments live in localStorage (API has no per-AY ledger yet).
-            // Merge local books over the remote placeholder so hard refresh keeps
-            // empty years empty and does not move all students into the active AY.
+            // Prefer server year ledgers so every browser sees the same roster.
+            // Fall back to localStorage only when the API has no year-field rows yet.
             const localLedgers = readSnapshot(storeKey)?.studentYearLedgers ?? [];
-            const mergedLedgers = mergeStudentYearLedgers(
-              localLedgers,
-              remote.studentYearLedgers,
+            const remoteLedgers = remote.studentYearLedgers ?? [];
+            const mergedLedgers =
+              remoteLedgers.length > 0
+                ? mergeStudentYearLedgers(remoteLedgers, localLedgers)
+                : mergeStudentYearLedgers(localLedgers, remoteLedgers);
+            const reconciledLedgers = reconcileLedgersWithStudents(
+              remote.students,
+              mergedLedgers,
+              remote.academicYear,
             );
+            const missingYearEntries = yearFieldEntriesMissingFrom(
+              remoteLedgers,
+              reconciledLedgers,
+            );
+            if (missingYearEntries.length > 0) {
+              void apiSyncStudentYearFields(missingYearEntries).catch(() => {
+                /* local reconcile still applied */
+              });
+            }
             const sessionTenantName = tenantNameRef.current?.trim() || "";
             applySnapshot({
               students: remote.students,
@@ -4869,11 +4885,7 @@ export function TenantStoreProvider({
               paymentCategories: remote.paymentCategories,
               feeTerms: remote.feeTerms,
               studentFeeBreaks: remote.studentFeeBreaks ?? [],
-              studentYearLedgers: reconcileLedgersWithStudents(
-                remote.students,
-                mergedLedgers,
-                remote.academicYear,
-              ),
+              studentYearLedgers: reconciledLedgers,
               academicYears: remote.academicYears,
               closedAcademicYears: remote.closedAcademicYears ?? [],
               academicYear: remote.academicYear,
@@ -5374,6 +5386,19 @@ export function TenantStoreProvider({
             : s,
         ),
       );
+      if (getApiToken()) {
+        void apiSyncStudentYearFields([
+          {
+            studentId,
+            academicYear,
+            cls: fields.cls,
+            due: fields.due,
+            active: fields.active !== false,
+          },
+        ]).catch(() => {
+          /* local ledger kept */
+        });
+      }
     },
     [academicYear],
   );
@@ -5386,6 +5411,19 @@ export function TenantStoreProvider({
       );
       setStudents((prev) => [enrolled, ...prev.filter((s) => s.id !== enrolled.id)]);
       upsertStudentInSnapshot(enrolled, { academicYear, fields });
+      if (getApiToken()) {
+        void apiSyncStudentYearFields([
+          {
+            studentId: enrolled.id,
+            academicYear,
+            cls: fields.cls,
+            due: fields.due,
+            active: fields.active !== false,
+          },
+        ]).catch(() => {
+          /* local ledger kept */
+        });
+      }
       return enrolled;
     },
     [academicYear],
@@ -5489,6 +5527,15 @@ export function TenantStoreProvider({
             operational.studentYearLedgers,
             academicYear,
           );
+          const missingYearEntries = yearFieldEntriesMissingFrom(
+            operational.studentYearLedgers,
+            ledgers,
+          );
+          if (missingYearEntries.length > 0) {
+            void apiSyncStudentYearFields(missingYearEntries).catch(() => {
+              /* local reconcile still applied */
+            });
+          }
           applyBranchOperationalData({
             students: operational.students,
             staff: operational.staff,

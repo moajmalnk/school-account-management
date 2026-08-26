@@ -41,6 +41,7 @@ import {
 } from "@/lib/tenant-store";
 import {
   buildLedgerFromStudents,
+  ledgersFromYearFieldRows,
   type StudentYearLedger,
 } from "@/lib/academic-year";
 import { readStoredBranchPublicId, setActiveBranchPublicId } from "@/lib/branch-context";
@@ -79,7 +80,7 @@ export type RemoteTenantBundle = {
   dashboardNote: string;
   branches: CampusBranch[];
   activeBranchId: string;
-  /** Year enrollments are client-scoped today; API returns [] so local ledgers can win. */
+  /** Year enrollments — prefer server rows so every device sees the same roster. */
   studentYearLedgers: StudentYearLedger[];
 };
 
@@ -161,11 +162,20 @@ export async function fetchBranchOperationalBundle(): Promise<BranchOperationalB
   if (!token) return null;
 
   try {
-    const [students, staff, payments, feeBreaks, todos] = await Promise.all([
+    const [students, staff, payments, feeBreaks, yearFields, todos] = await Promise.all([
       getSafe<Student[]>("/api/students/list.php?includeDeleted=1", []),
       getSafe<Staff[]>("/api/staff/list.php?includeDeleted=1", []),
       getSafe<Payment[]>("/api/finance/payments.php", []),
       getSafe<StudentFeeBreak[]>("/api/finance/fee-breaks.php", []),
+      getSafe<
+        Array<{
+          studentId: string;
+          academicYear: string;
+          cls: string;
+          due: number;
+          active: boolean;
+        }>
+      >("/api/students/year-fields.php", []),
       getSafe<{ dashboardTodos: string[]; dashboardNote: string } | null>(
         "/api/dashboard/todos.php",
         null,
@@ -180,7 +190,7 @@ export async function fetchBranchOperationalBundle(): Promise<BranchOperationalB
         ? todos.dashboardTodos
         : ["", "", "", "", ""],
       dashboardNote: typeof todos?.dashboardNote === "string" ? todos.dashboardNote : "",
-      studentYearLedgers: [],
+      studentYearLedgers: ledgersFromYearFieldRows(Array.isArray(yearFields) ? yearFields : []),
       studentFeeBreaks: Array.isArray(feeBreaks) ? feeBreaks : [],
     };
   } catch (err) {
@@ -252,6 +262,15 @@ export async function fetchRemoteTenantBundle(
       "/api/students/list.php?includeDeleted=1",
       [],
     );
+    const yearFieldRows = await getSafe<
+      Array<{
+        studentId: string;
+        academicYear: string;
+        cls: string;
+        due: number;
+        active: boolean;
+      }>
+    >("/api/students/year-fields.php", []);
     const staff = await getSafe<Staff[]>("/api/staff/list.php?includeDeleted=1", []);
     const payments = await getSafe<Payment[]>("/api/finance/payments.php", []);
     const departments = await getSafe<Department[]>(
@@ -328,7 +347,9 @@ export async function fetchRemoteTenantBundle(
       dashboardNote: typeof todos?.dashboardNote === "string" ? todos.dashboardNote : "",
       branches,
       activeBranchId,
-      studentYearLedgers: [],
+      studentYearLedgers: ledgersFromYearFieldRows(
+        Array.isArray(yearFieldRows) ? yearFieldRows : [],
+      ),
     };
     } catch (err) {
       if (isAuthExpiredError(err)) return null;
