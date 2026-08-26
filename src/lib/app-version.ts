@@ -11,6 +11,8 @@ export type RemoteAppVersion = {
 };
 
 const VERSION_URL = "/version.json";
+const LAST_BUILD_KEY = "school-accounts/app-build-id/v1";
+const TENANT_STORE_PREFIX = "school-accounts/tenant-store/";
 
 /** Fetch the deployed build id (never from HTTP cache). */
 export async function fetchRemoteAppVersion(
@@ -39,6 +41,40 @@ export function isNewerBuild(remote: RemoteAppVersion | null): boolean {
   return remote.buildId !== APP_BUILD_ID;
 }
 
+/** Drop cached tenant snapshots so a new deploy rehydrates from the API. */
+function clearTenantStoreSnapshots(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (key && key.startsWith(TENANT_STORE_PREFIX)) keys.push(key);
+    }
+    for (const key of keys) window.localStorage.removeItem(key);
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+/**
+ * Call once at boot. When the installed JS build changes (mobile PWA finally
+ * picks up a deploy), wipe stale localStorage ledgers so laptop/mobile match.
+ */
+export function syncClientStateToCurrentBuild(): void {
+  if (typeof window === "undefined") return;
+  if (!isAppVersionCheckEnabled) return;
+
+  try {
+    const previous = window.localStorage.getItem(LAST_BUILD_KEY);
+    if (previous && previous !== APP_BUILD_ID) {
+      clearTenantStoreSnapshots();
+    }
+    window.localStorage.setItem(LAST_BUILD_KEY, APP_BUILD_ID);
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
  * Tear down SW + Cache Storage then reload so the user always gets the
  * latest index.html and hashed assets after a deploy.
@@ -46,15 +82,7 @@ export function isNewerBuild(remote: RemoteAppVersion | null): boolean {
 export async function hardRefreshApp(opts?: {
   updateServiceWorker?: (reloadPage?: boolean) => Promise<void>;
 }): Promise<void> {
-  try {
-    if (opts?.updateServiceWorker) {
-      await opts.updateServiceWorker(true);
-      return;
-    }
-  } catch (error) {
-    console.warn("[app-version] SW update failed, falling back to hard reload", error);
-  }
-
+  // Always clear caches first — iOS/Android PWAs otherwise keep the old shell.
   try {
     if ("caches" in window) {
       const keys = await caches.keys();
@@ -62,6 +90,17 @@ export async function hardRefreshApp(opts?: {
     }
   } catch {
     /* ignore */
+  }
+
+  clearTenantStoreSnapshots();
+
+  try {
+    if (opts?.updateServiceWorker) {
+      await opts.updateServiceWorker(true);
+      // updateServiceWorker(true) should reload; if not, fall through.
+    }
+  } catch (error) {
+    console.warn("[app-version] SW update failed, falling back to hard reload", error);
   }
 
   try {
