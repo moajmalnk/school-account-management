@@ -2879,15 +2879,19 @@ export function StudentsLedger() {
   );
 
   const classDivisionIndex = useMemo(() => {
-    const names = [
-      ...classes.map((c) => c.className),
-      ...liveStudents.map((s) => s.cls),
-    ];
-    return buildClassDivisionIndex(names);
-  }, [classes, liveStudents]);
+    // Class Tier settings are the source of truth — do not pull orphan labels
+    // like "Grade 1" from old student.cls values into the filter dropdown.
+    const names = classes.map((c) => {
+      const parts = splitClassName(c.className);
+      const grade = (c.grade || parts.grade || "").trim();
+      const section = (c.section || parts.section || "").trim();
+      return composeClassName(grade, section) || c.className.trim();
+    });
+    return buildClassDivisionIndex(names.filter(Boolean));
+  }, [classes]);
 
   const gradeOptions = useMemo(
-    () => Array.from(classDivisionIndex.keys()).sort((a, b) => a.localeCompare(b, "en")),
+    () => Array.from(classDivisionIndex.keys()).sort((a, b) => a.localeCompare(b, "en", { numeric: true })),
     [classDivisionIndex],
   );
 
@@ -2895,10 +2899,28 @@ export function StudentsLedger() {
     if (gradeFilter === "all") {
       const divisions = new Set<string>();
       classDivisionIndex.forEach((set) => set.forEach((d) => divisions.add(d)));
-      return Array.from(divisions).sort();
+      return Array.from(divisions).sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
     }
-    return Array.from(classDivisionIndex.get(gradeFilter) ?? []).sort();
+    return Array.from(classDivisionIndex.get(gradeFilter) ?? []).sort((a, b) =>
+      a.localeCompare(b, "en", { numeric: true }),
+    );
   }, [classDivisionIndex, gradeFilter]);
+
+  // Drop stale filters when Class Tier is edited (e.g. Grade 1 removed → TLC).
+  useEffect(() => {
+    if (gradeFilter !== "all" && !classDivisionIndex.has(gradeFilter)) {
+      setGradeFilter("all");
+      setDivisionFilter("all");
+      return;
+    }
+    if (
+      divisionFilter !== "all" &&
+      gradeFilter !== "all" &&
+      !(classDivisionIndex.get(gradeFilter)?.has(divisionFilter) ?? false)
+    ) {
+      setDivisionFilter("all");
+    }
+  }, [classDivisionIndex, gradeFilter, divisionFilter]);
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
