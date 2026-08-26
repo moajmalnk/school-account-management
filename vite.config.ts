@@ -1,3 +1,6 @@
+import { writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+import type { Plugin } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import viteReact from "@vitejs/plugin-react";
@@ -5,14 +8,45 @@ import { defineConfig, loadEnv } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import tsConfigPaths from "vite-tsconfig-paths";
 
+/** Stable id per deploy — prefer git SHA on Vercel, else timestamp. */
+function resolveBuildId(): string {
+  return (
+    process.env.VERCEL_GIT_COMMIT_SHA?.trim() ||
+    process.env.CF_PAGES_COMMIT_SHA?.trim() ||
+    process.env.COMMIT_REF?.trim() ||
+    `b${Date.now().toString(36)}`
+  );
+}
+
+/** Writes dist/version.json so clients can detect a new deploy without a full SW cycle. */
+function appVersionPlugin(buildId: string): Plugin {
+  const payload = JSON.stringify(
+    { buildId, builtAt: new Date().toISOString() },
+    null,
+    0,
+  );
+  return {
+    name: "feezo-app-version",
+    apply: "build",
+    writeBundle(outputOptions) {
+      const outDir = outputOptions.dir || resolve(process.cwd(), "dist");
+      writeFileSync(resolve(outDir, "version.json"), payload, "utf8");
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const apiProxyTarget = (
     env.VITE_API_BASE_URL?.trim() || "https://api.feezo.app"
   ).replace(/\/$/, "");
   const apiProxySecure = apiProxyTarget.startsWith("https://");
+  const buildId = resolveBuildId();
 
   return {
+  define: {
+    __APP_BUILD_ID__: JSON.stringify(mode === "production" ? buildId : "dev"),
+  },
   server: {
     host: "::",
     port: 8080,
@@ -56,6 +90,7 @@ export default defineConfig(({ mode }) => {
     tailwindcss(),
     tsConfigPaths({ projects: ["./tsconfig.json"] }),
     viteReact(),
+    appVersionPlugin(buildId),
     VitePWA({
       registerType: "prompt",
       includeAssets: ["favicon.svg", "icons/**/*"],
@@ -102,8 +137,23 @@ export default defineConfig(({ mode }) => {
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2,webp}"],
         navigateFallback: "/index.html",
-        navigateFallbackDenylist: [/^\/api\//],
+        navigateFallbackDenylist: [
+          /^\/api\//,
+          /^\/manifest\.webmanifest$/,
+          /^\/version\.json$/,
+          /^\/sw\.js$/,
+          /^\/workbox-.*\.js$/,
+        ],
         runtimeCaching: [
+          {
+            // Always hit the network for deploy version — never serve stale build id.
+            urlPattern: ({ sameOrigin, url }) =>
+              sameOrigin && url.pathname === "/version.json",
+            handler: "NetworkOnly",
+            options: {
+              cacheName: "app-version-network-only",
+            },
+          },
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
             handler: "CacheFirst",

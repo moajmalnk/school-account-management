@@ -24,6 +24,10 @@
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
     },
     {
+      "source": "/version.json",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
+    },
+    {
       "source": "/workbox-(.*).js",
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
     },
@@ -34,7 +38,7 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!api/).*)",
+      "source": "/((?!api/|manifest\\.webmanifest|version\\.json|sw\\.js|workbox-).*)",
       "destination": "/index.html"
     }
   ]
