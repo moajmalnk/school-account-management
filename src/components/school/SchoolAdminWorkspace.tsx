@@ -339,6 +339,11 @@ import {
   nextPrefixedId,
   parseStudentCsv,
 } from "@/lib/student-csv";
+import {
+  isDuplicateStaff,
+  parseStaffCsv,
+  staffFromCsvRow,
+} from "@/lib/staff-csv";
 import { resolveMediaUrl, fetchMediaBlob } from "@/lib/media";
 import { defaultSealToPng, resolveSealDisplaySrc, resolveSignatureDisplaySrc } from "@/lib/school-marks";
 import {
@@ -4262,6 +4267,7 @@ export function StaffRoster() {
   const attendanceImportRef = useRef<HTMLInputElement>(null);
   const [createRoleOpen, setCreateRoleOpen] = useState(false);
   const [createDeptOpen, setCreateDeptOpen] = useState(false);
+  const [importingStaff, setImportingStaff] = useState(false);
 
   useEffect(() => {
     setForm((prev) => ({
@@ -4720,13 +4726,31 @@ export function StaffRoster() {
         year: slugYear(academicYear),
         date: todayStamp(),
       }),
-      ["ID", "Name", "Role", "Department", "Status"],
+      [
+        "ID",
+        "Name",
+        "Role",
+        "Department",
+        "Phone",
+        "AltPhone",
+        "GuardianPhone",
+        "Status",
+        "JoinedAt",
+        "BasicSalary",
+        "AdditionalAllowances",
+      ],
       filteredStaff.map((member) => [
         member.id,
         member.name,
         member.role,
         member.dept,
+        member.phone ?? "",
+        member.altPhone ?? "",
+        member.guardianPhone ?? "",
         member.active ? "Active" : "Inactive",
+        member.joinedAt,
+        String(member.basicSalary ?? 0),
+        String(member.additionalAllowances ?? 0),
       ]),
     );
     toast.success("Staff directory exported", {
@@ -4737,7 +4761,19 @@ export function StaffRoster() {
   const downloadStaffTemplate = () => {
     downloadCsv(
       "staff-bulk-upload-template.csv",
-      ["Name", "Role", "Department", "Phone", "AltPhone", "GuardianPhone", "ID"],
+      [
+        "Name",
+        "Role",
+        "Department",
+        "Phone",
+        "AltPhone",
+        "GuardianPhone",
+        "ID",
+        "Status",
+        "JoinedAt",
+        "BasicSalary",
+        "AdditionalAllowances",
+      ],
       [
         [
           "Ananya Menon",
@@ -4747,8 +4783,24 @@ export function StaffRoster() {
           "9810098765",
           "9876500001",
           "",
+          "Active",
+          new Date().toISOString().slice(0, 10),
+          "8000",
+          "0",
         ],
-        ["Rahul Nair", "Accountant", "Administrative", "9876501122", "", "9876501123", ""],
+        [
+          "Rahul Nair",
+          "Accountant",
+          "Administrative",
+          "9876501122",
+          "",
+          "9876501123",
+          "",
+          "Active",
+          new Date().toISOString().slice(0, 10),
+          "12000",
+          "500",
+        ],
       ],
     );
     toast.success("Staff template downloaded", {
@@ -4761,75 +4813,117 @@ export function StaffRoster() {
   const handleStaffImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (/\.xlsx?$/i.test(file.name)) {
+      toast.error("Excel files are not supported yet", {
+        description: "Open the sheet in Excel/Sheets and Save as CSV, then upload",
+      });
+      if (staffImportRef.current) staffImportRef.current.value = "";
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
-      const text = String(reader.result ?? "");
-      const lines = text.trim().split(/\r?\n/);
-      if (!lines.length) {
-        toast.error("Empty CSV file");
-        return;
-      }
-      const start = /name|role|staff/i.test(lines[0] ?? "") ? 1 : 0;
-      const existingIds = new Set(staff.map((s) => s.id.toLowerCase()));
-      const fresh: Staff[] = [];
-      let nextSeq = staff.length + 22;
-      for (let i = start; i < lines.length; i++) {
-        const cells = lines[i].split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
-        let name = "";
-        let role = "";
-        let dept = "";
-        let phone = "";
-        let altPhone = "";
-        let guardianPhone = "";
-        let idCell = "";
-        if (cells.length >= 7) {
-          [name, role, dept, phone, altPhone, guardianPhone, idCell] = cells;
-        } else if (cells.length >= 5) {
-          [name, role, dept, phone, idCell] = cells;
-        } else {
-          [name, role, dept, phone] = cells;
+      void (async () => {
+        const parsed = parseStaffCsv(String(reader.result ?? ""));
+        if (!parsed.ok) {
+          toast.error(parsed.error, {
+            description: parsed.description,
+          });
+          if (staffImportRef.current) staffImportRef.current.value = "";
+          return;
         }
-        if (!name) continue;
-        let empId = (idCell || "").trim();
-        if (!empId || existingIds.has(empId.toLowerCase())) {
-          do {
-            empId = `STF-${String(nextSeq++).padStart(3, "0")}`;
-          } while (existingIds.has(empId.toLowerCase()));
+
+        setImportingStaff(true);
+        try {
+          const live = staff.filter((s) => !isRecordDeleted(s.deletedAt));
+          const byId = new Map(live.map((s) => [s.id.toLowerCase(), s]));
+          let usedIds = staff.map((s) => s.id);
+          const created: Staff[] = [];
+          const updated: Staff[] = [];
+          let skipped = 0;
+
+          for (const row of parsed.rows) {
+            const idCell = row.id.trim();
+            const existingById = idCell ? byId.get(idCell.toLowerCase()) : undefined;
+
+            if (!existingById && !idCell) {
+              if (
+                isDuplicateStaff(live, row) ||
+                isDuplicateStaff(created, row) ||
+                isDuplicateStaff(updated, row)
+              ) {
+                skipped += 1;
+                continue;
+              }
+            }
+
+            if (existingById) {
+              const next = staffFromCsvRow(row, {
+                id: existingById.id,
+                defaultRole,
+                defaultDept,
+                existing: existingById,
+              });
+              updated.push(next);
+              byId.set(next.id.toLowerCase(), next);
+              continue;
+            }
+
+            const empId = idCell || nextPrefixedId("STF", usedIds, 3);
+            usedIds = [...usedIds, empId];
+            const draft = staffFromCsvRow(row, {
+              id: empId,
+              defaultRole,
+              defaultDept,
+            });
+            created.push(draft);
+            byId.set(draft.id.toLowerCase(), draft);
+          }
+
+          if (!created.length && !updated.length) {
+            toast.error("No staff to import", {
+              description:
+                skipped > 0
+                  ? `${skipped} row${skipped === 1 ? "" : "s"} skipped · already on roster`
+                  : "Check the CSV columns and try again",
+            });
+            return;
+          }
+
+          if (created.length || updated.length) {
+            setStaff((prev) => {
+              const map = new Map(prev.map((s) => [s.id, s]));
+              for (const member of updated) map.set(member.id, member);
+              const next = Array.from(map.values());
+              return [...created, ...next.filter((s) => !created.some((c) => c.id === s.id))];
+            });
+          }
+
+          for (const member of [...created, ...updated]) {
+            await apiUpsertStaff(member).catch((err) => {
+              toast.error(
+                err instanceof Error ? err.message : `Could not sync ${member.name}`,
+              );
+            });
+          }
+
+          const parts = [
+            created.length
+              ? `${created.length} added`
+              : null,
+            updated.length
+              ? `${updated.length} updated`
+              : null,
+            skipped > 0 ? `${skipped} skipped` : null,
+          ].filter(Boolean);
+          toast.success(
+            `${created.length + updated.length} staff imported`,
+            { description: parts.join(" · ") || "Synced to staff directory" },
+          );
+        } finally {
+          setImportingStaff(false);
+          if (staffImportRef.current) staffImportRef.current.value = "";
         }
-        existingIds.add(empId.toLowerCase());
-        fresh.push({
-          id: empId,
-          name,
-          role: role || defaultRole,
-          dept: dept || defaultDept,
-          active: true,
-          joinedAt: new Date().toISOString().slice(0, 10),
-          phone: phone || undefined,
-          altPhone: altPhone || undefined,
-          guardianPhone: guardianPhone || undefined,
-          basicSalary: 8000,
-          additionalAllowances: 0,
-          documents: DEFAULT_STAFF_DOCUMENTS.map((d) => ({ ...d })),
-          salaryHistory: [],
-          statusHistory: [
-            {
-              id: `EVT-${empId}-joined`,
-              type: "joined" as const,
-              at: new Date().toISOString(),
-              note: "Joined the school roster",
-            },
-          ],
-        });
-      }
-      if (!fresh.length) {
-        toast.error("CSV had no parsable rows");
-      } else {
-        setStaff((prev) => [...fresh, ...prev]);
-        toast.success(`${fresh.length} staff imported`, {
-          description: "Appended to the staff directory",
-        });
-      }
-      if (staffImportRef.current) staffImportRef.current.value = "";
+      })();
     };
     reader.onerror = () => toast.error("Could not read the selected file");
     reader.readAsText(file);
@@ -4879,86 +4973,100 @@ export function StaffRoster() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const text = String(reader.result ?? "");
-      const lines = text.trim().split(/\r?\n/).filter((line) => line.trim());
-      if (!lines.length) {
-        toast.error("Empty CSV file");
-        return;
-      }
-      const header = (lines[0] ?? "").toLowerCase();
-      const start = /staff\s*id|employee|days\s*present|working\s*days|month/i.test(header)
-        ? 1
-        : 0;
-      const byId = new Map(staff.map((s) => [s.id.toLowerCase(), s]));
-      const updates = new Map<string, StaffAttendanceMonth>();
-      let skipped = 0;
+      void (async () => {
+        const text = String(reader.result ?? "");
+        const lines = text.trim().split(/\r?\n/).filter((line) => line.trim());
+        if (!lines.length) {
+          toast.error("Empty CSV file");
+          return;
+        }
+        const header = (lines[0] ?? "").toLowerCase();
+        const start = /staff\s*id|employee|days\s*present|working\s*days|month/i.test(header)
+          ? 1
+          : 0;
+        const byId = new Map(staff.map((s) => [s.id.toLowerCase(), s]));
+        const updates = new Map<string, StaffAttendanceMonth>();
+        let skipped = 0;
 
-      for (let i = start; i < lines.length; i++) {
-        const cells = lines[i].split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
-        if (cells.length < 4) {
-          skipped += 1;
-          continue;
+        for (let i = start; i < lines.length; i++) {
+          const cells = lines[i].split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
+          if (cells.length < 4) {
+            skipped += 1;
+            continue;
+          }
+          const [staffId, , monthRaw, presentRaw, workingRaw, paidLeaveRaw, unpaidLeaveRaw] = cells;
+          const member = byId.get((staffId || "").toLowerCase());
+          if (!member) {
+            skipped += 1;
+            continue;
+          }
+          let month = (monthRaw || "").trim();
+          if (/^\d{4}-\d{1,2}$/.test(month)) {
+            const [y, m] = month.split("-");
+            month = `${y}-${m.padStart(2, "0")}`;
+          } else if (!/^\d{4}-\d{2}$/.test(month)) {
+            month = payrollMonth;
+          }
+          const daysPresent = Number(presentRaw);
+          const workingDays = Number(workingRaw || presentRaw);
+          const paidLeaveDays = Number(paidLeaveRaw || 0);
+          const unpaidLeaveDays = Number(unpaidLeaveRaw || 0);
+          const normalized = normalizeStaffAttendanceMonth({
+            month,
+            daysPresent,
+            workingDays,
+            paidLeaveDays: Number.isFinite(paidLeaveDays) ? paidLeaveDays : 0,
+            unpaidLeaveDays: Number.isFinite(unpaidLeaveDays) ? unpaidLeaveDays : 0,
+          });
+          if (!normalized) {
+            skipped += 1;
+            continue;
+          }
+          updates.set(member.id, normalized);
         }
-        const [staffId, , monthRaw, presentRaw, workingRaw, paidLeaveRaw, unpaidLeaveRaw] = cells;
-        const member = byId.get((staffId || "").toLowerCase());
-        if (!member) {
-          skipped += 1;
-          continue;
-        }
-        let month = (monthRaw || "").trim();
-        if (/^\d{4}-\d{1,2}$/.test(month)) {
-          const [y, m] = month.split("-");
-          month = `${y}-${m.padStart(2, "0")}`;
-        } else if (!/^\d{4}-\d{2}$/.test(month)) {
-          month = payrollMonth;
-        }
-        const daysPresent = Number(presentRaw);
-        const workingDays = Number(workingRaw || presentRaw);
-        const paidLeaveDays = Number(paidLeaveRaw || 0);
-        const unpaidLeaveDays = Number(unpaidLeaveRaw || 0);
-        const normalized = normalizeStaffAttendanceMonth({
-          month,
-          daysPresent,
-          workingDays,
-          paidLeaveDays: Number.isFinite(paidLeaveDays) ? paidLeaveDays : 0,
-          unpaidLeaveDays: Number.isFinite(unpaidLeaveDays) ? unpaidLeaveDays : 0,
-        });
-        if (!normalized) {
-          skipped += 1;
-          continue;
-        }
-        updates.set(member.id, normalized);
-      }
 
-      if (!updates.size) {
-        toast.error("No matching staff rows found", {
-          description: "Use Staff ID from the directory · download the demo CSV first",
-        });
-      } else {
-        setStaff((prev) =>
-          prev.map((member) => {
-            const row = updates.get(member.id);
-            if (!row) return member;
-            return {
-              ...member,
-              attendanceByMonth: upsertStaffAttendanceMonth(member.attendanceByMonth, row),
-            };
-          }),
-        );
-        const months = Array.from(
-          new Set(Array.from(updates.values()).map((row) => row.month)),
-        );
-        toast.success(`Attendance imported · ${updates.size} staff`, {
-          description: [
-            months.map((m) => formatPayrollMonthLabel(m)).join(", "),
-            skipped > 0 ? `${skipped} row${skipped === 1 ? "" : "s"} skipped` : null,
-            "Payroll uses (present + paid leave) ÷ working days",
-          ]
-            .filter(Boolean)
-            .join(" · "),
-        });
-      }
-      if (attendanceImportRef.current) attendanceImportRef.current.value = "";
+        if (!updates.size) {
+          toast.error("No matching staff rows found", {
+            description: "Use Staff ID from the directory · download the demo CSV first",
+          });
+        } else {
+          const synced = staff
+            .filter((member) => updates.has(member.id))
+            .map((member) => {
+              const row = updates.get(member.id)!;
+              return {
+                ...member,
+                attendanceByMonth: upsertStaffAttendanceMonth(member.attendanceByMonth, row),
+              };
+            });
+          setStaff((prev) =>
+            prev.map((member) => {
+              const next = synced.find((s) => s.id === member.id);
+              return next ?? member;
+            }),
+          );
+          for (const member of synced) {
+            await apiUpsertStaff(member).catch((err) => {
+              toast.error(
+                err instanceof Error ? err.message : `Could not sync attendance for ${member.name}`,
+              );
+            });
+          }
+          const months = Array.from(
+            new Set(Array.from(updates.values()).map((row) => row.month)),
+          );
+          toast.success(`Attendance imported · ${updates.size} staff`, {
+            description: [
+              months.map((m) => formatPayrollMonthLabel(m)).join(", "),
+              skipped > 0 ? `${skipped} row${skipped === 1 ? "" : "s"} skipped` : null,
+              "Payroll uses (present + paid leave) ÷ working days",
+            ]
+              .filter(Boolean)
+              .join(" · "),
+          });
+        }
+        if (attendanceImportRef.current) attendanceImportRef.current.value = "";
+      })();
     };
     reader.onerror = () => toast.error("Could not read the selected file");
     reader.readAsText(file);
@@ -5132,14 +5240,19 @@ export function StaffRoster() {
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              <button type="button" onClick={handleExport} className={directoryToolbarBtn}>
+              <button
+                type="button"
+                onClick={handleExport}
+                disabled={importingStaff}
+                className={directoryToolbarBtn}
+              >
                 <Download className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate">Export</span>
               </button>
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button type="button" className={directoryToolbarBtn}>
+                  <button type="button" className={directoryToolbarBtn} disabled={importingStaff}>
                     <Upload className="h-3.5 w-3.5 shrink-0" />
                     <span className="truncate sm:hidden">Upload</span>
                     <span className="hidden truncate sm:inline">Bulk Upload</span>
@@ -5160,6 +5273,7 @@ export function StaffRoster() {
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={handleStaffImportClick}
+                    disabled={importingStaff}
                     className="cursor-pointer gap-2 rounded-xl text-[13px]"
                   >
                     <Upload className="h-3.5 w-3.5" />
@@ -5232,6 +5346,28 @@ export function StaffRoster() {
         className="hidden"
         onChange={handleAttendanceImport}
       />
+
+      <Dialog open={importingStaff}>
+        <DialogContent
+          showCloseButton={false}
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+          className="max-w-[min(22rem,calc(100%-2rem))] rounded-2xl border border-[#E5E5E5] bg-white p-8 text-center shadow-[0_24px_64px_-16px_rgba(0,0,0,0.28)] sm:max-w-sm"
+        >
+          <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-[#0F766E]/10">
+            <Loader2 className="h-7 w-7 animate-spin text-[#0F766E]" />
+          </div>
+          <DialogHeader className="space-y-2 text-center sm:text-center">
+            <DialogTitle className="text-[18px] font-semibold tracking-tight text-black">
+              Importing staff
+            </DialogTitle>
+            <DialogDescription className="text-[13px] leading-relaxed text-black/55">
+              Saving records to the staff directory. Please keep this window open.
+            </DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
 
       {showRecycleBin ? (
         <div className="space-y-3">
