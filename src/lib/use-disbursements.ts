@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import {
-  apiListDisbursements,
-  type DisbursementPayload,
-} from "@/lib/api/records";
+import { apiListDisbursements, type DisbursementPayload } from "@/lib/api/records";
 import { useTenantStore } from "@/lib/tenant-store";
 
 /**

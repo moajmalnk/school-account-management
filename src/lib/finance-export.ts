@@ -15,11 +15,7 @@ import {
   type Student,
 } from "@/lib/tenant-store";
 import { getActiveBrandPalette, pdfFontName } from "@/lib/brand-theme";
-import {
-  defaultSealToPng,
-  defaultSignatureSvg,
-  svgMarkupToPng,
-} from "@/lib/school-marks";
+import { defaultSealToPng, defaultSignatureSvg, svgMarkupToPng } from "@/lib/school-marks";
 import { formatDownloadFilename, slugYear, todayStamp } from "@/lib/download-names";
 import { resolveStudentLedgerStatus } from "@/lib/student-fees";
 
@@ -239,7 +235,8 @@ function formatReceiptIssuedAt(raw: string | undefined, fallback: string): strin
     d.setDate(d.getDate() - 1);
     return formatInAppZone(d, { dateStyle: "medium", timeStyle: "short" });
   }
-  const dt = parseAppInstant(v) ?? (v.match(/^\d{4}-\d{2}-\d{2}$/) ? new Date(`${v}T12:00:00+05:30`) : null);
+  const dt =
+    parseAppInstant(v) ?? (v.match(/^\d{4}-\d{2}-\d{2}$/) ? new Date(`${v}T12:00:00+05:30`) : null);
   if (dt && !Number.isNaN(dt.getTime()) && dt.getFullYear() > 1970) {
     return formatInAppZone(dt, { dateStyle: "medium", timeStyle: "short" });
   }
@@ -449,10 +446,7 @@ export function receiptBrandingFromSchool(
   };
 }
 
-export function findReceiptStudent(
-  students: Student[],
-  payment: Payment,
-): Student | undefined {
+export function findReceiptStudent(students: Student[], payment: Payment): Student | undefined {
   if (payment.payerType === "external") return undefined;
   const name = payment.name.trim().toLowerCase();
   const named = students.filter((s) => s.name.trim().toLowerCase() === name);
@@ -815,14 +809,7 @@ function drawLogoPlate(
   }
 
   if (logo) {
-    doc.addImage(
-      logo.dataUrl,
-      "PNG",
-      x + slot.offsetX,
-      y + slot.offsetY,
-      slot.drawW,
-      slot.drawH,
-    );
+    doc.addImage(logo.dataUrl, "PNG", x + slot.offsetX, y + slot.offsetY, slot.drawW, slot.drawH);
   } else {
     const inset = 1.6;
     doc.setFillColor(...(opts?.fallbackFill ?? receiptInk().teal));
@@ -1742,7 +1729,9 @@ export async function downloadStudentFeeReportPdf(
     ? drawUploadedLetterheadBanner(doc, pageWidth, letterhead, margin)
     : drawReceiptLetterheadHeader(doc, pageWidth, displayName, branding, logo);
 
-  const barY = drawDocumentTitleBar(doc, pageWidth, contentWidth, "Student Fee Statement", headerBottom + 2) + 6;
+  const barY =
+    drawDocumentTitleBar(doc, pageWidth, contentWidth, "Student Fee Statement", headerBottom + 2) +
+    6;
   doc.setFont(pdfFontName(), "normal");
   doc.setFontSize(8.5);
   doc.setTextColor(...receiptInk().muted);
@@ -1956,11 +1945,20 @@ export async function downloadStaffPayrollReportPdf(
     ? drawUploadedLetterheadBanner(doc, pageWidth, letterhead, margin)
     : drawReceiptLetterheadHeader(doc, pageWidth, displayName, branding, logo);
 
-  const barY = drawDocumentTitleBar(doc, pageWidth, contentWidth, "Staff Payroll Statement", headerBottom + 2) + 6;
+  const barY =
+    drawDocumentTitleBar(
+      doc,
+      pageWidth,
+      contentWidth,
+      "Staff Payroll Statement",
+      headerBottom + 2,
+    ) + 6;
   doc.setFont(pdfFontName(), "normal");
   doc.setFontSize(8.5);
   doc.setTextColor(...receiptInk().muted);
-  doc.text(`Payroll period: ${pdfSafe(payrollMonthLabel)}`, pageWidth / 2, barY, { align: "center" });
+  doc.text(`Payroll period: ${pdfSafe(payrollMonthLabel)}`, pageWidth / 2, barY, {
+    align: "center",
+  });
 
   const metaTop = barY + 8;
   const leftRows: [string, string][] = [

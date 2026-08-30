@@ -26,8 +26,7 @@ function optionalString(value: unknown): string | undefined {
 export const Route = createFileRoute("/tenant/finance")({
   validateSearch: (search: Record<string, unknown>): FinanceSearch => {
     const feeKindRaw = optionalString(search.feeKind)?.toLowerCase();
-    const feeKind =
-      feeKindRaw === "tuition" || feeKindRaw === "vehicle" ? feeKindRaw : undefined;
+    const feeKind = feeKindRaw === "tuition" || feeKindRaw === "vehicle" ? feeKindRaw : undefined;
     return {
       tab: isFinanceTab(search.tab) ? search.tab : undefined,
       staffId: optionalString(search.staffId),

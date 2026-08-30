@@ -190,9 +190,7 @@ export function SuperAdminSidebar() {
             <span className="text-[12px] font-semibold text-slate-900">
               {session?.displayName ?? "Super Admin"}
             </span>
-            <span className="font-mono text-[10.5px] text-slate-500">
-              {session?.email ?? "—"}
-            </span>
+            <span className="font-mono text-[10.5px] text-slate-500">{session?.email ?? "—"}</span>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem

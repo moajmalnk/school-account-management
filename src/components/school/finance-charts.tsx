@@ -43,10 +43,15 @@ export function FinanceDonutCard({
       padded
       className="flex h-full min-h-0 flex-col p-4 sm:min-h-[300px] sm:p-6"
     >
-      <div className="text-[15px] font-semibold leading-tight text-black sm:text-title">{title}</div>
+      <div className="text-[15px] font-semibold leading-tight text-black sm:text-title">
+        {title}
+      </div>
       <div className="mt-3 flex flex-1 flex-col gap-3 sm:mt-4 sm:gap-4">
         <div className="relative mx-auto w-full max-w-[200px] shrink-0 sm:max-w-[240px]">
-          <ChartContainer config={chartConfig} className="aspect-square w-full min-h-[140px] max-h-[200px] sm:max-h-[240px]">
+          <ChartContainer
+            config={chartConfig}
+            className="aspect-square w-full min-h-[140px] max-h-[200px] sm:max-h-[240px]"
+          >
             <PieChart>
               <ChartTooltip
                 content={
@@ -86,7 +91,10 @@ export function FinanceDonutCard({
           {colored.map((segment) => {
             const pct = total > 0 ? Math.round((segment.value / total) * 100) : 0;
             return (
-              <div key={segment.label} className="min-w-0 rounded-xl bg-[#F4F4F5] px-2 py-1.5 sm:rounded-lg sm:px-2.5 sm:py-2">
+              <div
+                key={segment.label}
+                className="min-w-0 rounded-xl bg-[#F4F4F5] px-2 py-1.5 sm:rounded-lg sm:px-2.5 sm:py-2"
+              >
                 <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px]">
                   <span
                     className="h-2 w-2 shrink-0 rounded-sm"
@@ -129,18 +137,26 @@ export function FinanceBarCard({
       tone="white"
       cornerSide={cornerSide}
       padded
-      className={cn(
-        "flex h-full min-h-0 flex-col p-4 sm:min-h-[300px] sm:p-6",
-        className,
-      )}
+      className={cn("flex h-full min-h-0 flex-col p-4 sm:min-h-[300px] sm:p-6", className)}
     >
-      <div className="text-[15px] font-semibold leading-tight text-black sm:text-title">{title}</div>
+      <div className="text-[15px] font-semibold leading-tight text-black sm:text-title">
+        {title}
+      </div>
       <ChartContainer
         config={chartConfig}
         className="mt-3 aspect-auto h-[180px] w-full flex-1 sm:mt-4 sm:h-[220px] sm:min-h-[220px]"
       >
-        <BarChart data={segments} layout="vertical" margin={{ top: 4, right: 8, left: 4, bottom: 4 }}>
-          <CartesianGrid horizontal={false} strokeDasharray="4 4" stroke="#E5E5E5" className="dark:stroke-white/15" />
+        <BarChart
+          data={segments}
+          layout="vertical"
+          margin={{ top: 4, right: 8, left: 4, bottom: 4 }}
+        >
+          <CartesianGrid
+            horizontal={false}
+            strokeDasharray="4 4"
+            stroke="#E5E5E5"
+            className="dark:stroke-white/15"
+          />
           <XAxis type="number" hide />
           <YAxis
             type="category"

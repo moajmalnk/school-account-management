@@ -75,10 +75,7 @@ export function TenantsViewSkeleton({ cardCount = 6 }: { cardCount?: number }) {
 
       <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">
         {Array.from({ length: cardCount }).map((_, i) => (
-          <TenantCardSkeleton
-            key={i}
-            cornerSide={i % 2 === 0 ? "tr" : "bl"}
-          />
+          <TenantCardSkeleton key={i} cornerSide={i % 2 === 0 ? "tr" : "bl"} />
         ))}
       </div>
     </div>

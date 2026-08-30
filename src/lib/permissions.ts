@@ -72,10 +72,7 @@ export const PERMISSION_LABELS: Record<PermissionKey, string> = {
 
 export const ALL_PERMISSIONS: PermissionSet = ["*"];
 
-export const FINANCE_ONLY_PRESET: PermissionKey[] = [
-  ...FINANCE_PERMISSION_KEYS,
-  "settings.fees",
-];
+export const FINANCE_ONLY_PRESET: PermissionKey[] = [...FINANCE_PERMISSION_KEYS, "settings.fees"];
 
 export function isPermissionKey(value: unknown): value is PermissionKey {
   return typeof value === "string" && (PERMISSION_KEYS as readonly string[]).includes(value);
@@ -295,9 +292,7 @@ export function canAccessFinanceView(
   return hasPermission(permissions, FINANCE_VIEW_PERMISSION[view]);
 }
 
-export function firstAllowedTenantPath(
-  permissions: PermissionSet | undefined | null,
-): string {
+export function firstAllowedTenantPath(permissions: PermissionSet | undefined | null): string {
   if (hasPermission(permissions, "dashboard") || hasFullAccess(permissions)) {
     return "/tenant/dashboard";
   }

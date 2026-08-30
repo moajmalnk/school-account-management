@@ -153,10 +153,7 @@ export function PwaInstallButton({
         size={compact ? "sm" : "default"}
         disabled={installing}
         onClick={onClick}
-        className={cn(
-          "rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]",
-          className,
-        )}
+        className={cn("rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]", className)}
       >
         <Download className={cn("h-3.5 w-3.5", !compact && "mr-1.5")} />
         {!compact && (installing ? "Opening…" : label)}
@@ -207,8 +204,7 @@ export function PwaInstallCard({ className }: { className?: string }) {
               Progressive Web App
             </div>
             <p className="mt-1 text-[12.5px] leading-relaxed text-slate-500 dark:text-zinc-400">
-              Download Feezo to your device for a native-like experience with offline shell
-              caching.
+              Download Feezo to your device for a native-like experience with offline shell caching.
             </p>
             <div className="mt-3">
               <Button
@@ -251,8 +247,7 @@ function IosInstallDialog({
             Install on iPhone / iPad
           </DialogTitle>
           <DialogDescription className="mt-1 text-[13px] leading-relaxed text-slate-500 dark:text-zinc-400">
-            Safari doesn’t show a native install prompt. Add Feezo to your Home Screen
-            instead.
+            Safari doesn’t show a native install prompt. Add Feezo to your Home Screen instead.
           </DialogDescription>
         </DialogHeader>
         <ol className="mt-4 space-y-3 text-[13px] text-slate-700 dark:text-zinc-200">

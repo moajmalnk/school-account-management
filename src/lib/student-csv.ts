@@ -176,10 +176,7 @@ export function parseClassLabel(raw: string): {
   };
 }
 
-export function matchExistingClass(
-  classes: ClassConfig[],
-  label: string,
-): ClassConfig | undefined {
+export function matchExistingClass(classes: ClassConfig[], label: string): ClassConfig | undefined {
   const parsed = parseClassLabel(label);
   const needle = parsed.className.toLowerCase();
   return classes.find((cls) => {

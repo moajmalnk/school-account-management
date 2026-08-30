@@ -35,10 +35,7 @@ export type ApiLoginResponse = {
   session: ApiLoginSession;
 };
 
-export async function apiLogin(
-  email: string,
-  password: string,
-): Promise<ApiLoginResponse> {
+export async function apiLogin(email: string, password: string): Promise<ApiLoginResponse> {
   const data = await apiRequest<ApiLoginResponse>("/api/auth/login.php", {
     method: "POST",
     body: {
@@ -143,18 +140,15 @@ export type RegisterTrialResponse = ApiLoginResponse & {
 export async function apiRegisterTrial(
   payload: RegisterTrialPayload,
 ): Promise<RegisterTrialResponse> {
-  const data = await apiRequest<RegisterTrialResponse>(
-    "/api/auth/register-trial.php",
-    {
-      method: "POST",
-      body: {
-        ...payload,
-        deviceId: getOrCreateDeviceId(),
-        deviceName: guessDeviceName(),
-      },
-      auth: false,
+  const data = await apiRequest<RegisterTrialResponse>("/api/auth/register-trial.php", {
+    method: "POST",
+    body: {
+      ...payload,
+      deviceId: getOrCreateDeviceId(),
+      deviceName: guessDeviceName(),
     },
-  );
+    auth: false,
+  });
   persistAuthSecrets({
     token: data.token,
     refreshToken: data.refreshToken ?? null,

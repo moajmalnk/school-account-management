@@ -152,7 +152,10 @@ function boundsFromStartMonth(startYear: number, month: number): AcademicYearBou
   return boundsFromMonthKeys(startKey, defaultClosingMonthKey(startKey));
 }
 
-function namedMonthYear(yearToken: string, monthToken: string): { year: number; month: number } | null {
+function namedMonthYear(
+  yearToken: string,
+  monthToken: string,
+): { year: number; month: number } | null {
   const month = monthIndexFromName(monthToken);
   const year = Number(yearToken);
   if (!month || !Number.isFinite(year)) return null;
@@ -175,10 +178,9 @@ export function parseAcademicYearBounds(label: string): AcademicYearBounds | nul
   const trimmed = label.trim().replace(/\s+/g, " ");
   if (!trimmed) return null;
 
-  const range =
-    trimmed.match(
-      /^(?:AY\s*)?(\d{4}\s+[A-Za-z]+|[A-Za-z]+\s+\d{4})\s*[–-]\s*(\d{4}\s+[A-Za-z]+|[A-Za-z]+\s+\d{4})$/i,
-    );
+  const range = trimmed.match(
+    /^(?:AY\s*)?(\d{4}\s+[A-Za-z]+|[A-Za-z]+\s+\d{4})\s*[–-]\s*(\d{4}\s+[A-Za-z]+|[A-Za-z]+\s+\d{4})$/i,
+  );
   if (range) {
     const start = parseNamedMonthYear(range[1]);
     const end = parseNamedMonthYear(range[2]);
@@ -238,7 +240,20 @@ export function suggestNextBooksMonthKey(currentLabel: string, extraYears: strin
 export function academicYearCoverageCaption(label: string): string | null {
   const bounds = parseAcademicYearBounds(label);
   if (!bounds) return null;
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
   const fmt = (iso: string) => {
     const [y, m, d] = iso.split("-").map(Number);
     if (!y || !m || !d) return iso;
@@ -253,9 +268,16 @@ export function normalizeAcademicYearLabel(input: string): string | null {
   if (!trimmed) return null;
 
   const rangeBounds = parseAcademicYearBounds(trimmed);
-  if (trimmed.includes("–") || /[A-Za-z]+\s+\d{4}\s*-\s*\d{4}\s+[A-Za-z]+/i.test(trimmed) || /\d{4}\s+[A-Za-z]+\s*-\s*\d{4}\s+[A-Za-z]+/i.test(trimmed)) {
+  if (
+    trimmed.includes("–") ||
+    /[A-Za-z]+\s+\d{4}\s*-\s*\d{4}\s+[A-Za-z]+/i.test(trimmed) ||
+    /\d{4}\s+[A-Za-z]+\s*-\s*\d{4}\s+[A-Za-z]+/i.test(trimmed)
+  ) {
     if (rangeBounds) {
-      return formatBooksRangeLabel(rangeBounds.startDate.slice(0, 7), rangeBounds.endDate.slice(0, 7));
+      return formatBooksRangeLabel(
+        rangeBounds.startDate.slice(0, 7),
+        rangeBounds.endDate.slice(0, 7),
+      );
     }
   }
 
@@ -287,18 +309,12 @@ export function filterByAcademicYear<T extends { academicYear?: string }>(
   return items.filter((item) => (item.academicYear ?? "") === year);
 }
 
-export function ensureYearLedger(
-  ledgers: StudentYearLedger[],
-  year: string,
-): StudentYearLedger[] {
+export function ensureYearLedger(ledgers: StudentYearLedger[], year: string): StudentYearLedger[] {
   if (ledgers.some((l) => l.academicYear === year)) return ledgers;
   return [...ledgers, { academicYear: year, byStudentId: {} }];
 }
 
-export function getYearLedger(
-  ledgers: StudentYearLedger[],
-  year: string,
-): StudentYearLedger {
+export function getYearLedger(ledgers: StudentYearLedger[], year: string): StudentYearLedger {
   return (
     ledgers.find((l) => l.academicYear === year) ?? {
       academicYear: year,
@@ -355,18 +371,15 @@ export function academicYearStartYear(label: string): number | null {
 }
 
 /** Clone fee-period templates from `fromYear` into `toYear`, shifting dates. */
-export function cloneFeeTermsForYear<T extends {
-  id: string;
-  startDate?: string;
-  endDate?: string;
-  coverage?: string;
-  academicYear?: string;
-}>(
-  terms: T[],
-  fromYear: string,
-  toYear: string,
-  idPrefix: string,
-): T[] {
+export function cloneFeeTermsForYear<
+  T extends {
+    id: string;
+    startDate?: string;
+    endDate?: string;
+    coverage?: string;
+    academicYear?: string;
+  },
+>(terms: T[], fromYear: string, toYear: string, idPrefix: string): T[] {
   const fromStart = academicYearStartYear(fromYear);
   const toStart = academicYearStartYear(toYear);
   if (fromStart == null || toStart == null) return [];
@@ -376,9 +389,7 @@ export function cloneFeeTermsForYear<T extends {
     const startDate = shiftIsoDateYears(term.startDate, delta);
     const endDate = shiftIsoDateYears(term.endDate, delta);
     const coverage =
-      startDate && endDate
-        ? formatShiftedCoverage(startDate, endDate)
-        : term.coverage;
+      startDate && endDate ? formatShiftedCoverage(startDate, endDate) : term.coverage;
     return {
       ...term,
       id: `${idPrefix}-${index + 1}`,
@@ -434,13 +445,15 @@ export function yearHasBookData(input: {
   return Object.keys(ledger.byStudentId).length > 0;
 }
 
-export function buildLedgerFromStudents<T extends {
-  id: string;
-  cls: string;
-  due: number;
-  active?: boolean;
-  deletedAt?: string;
-}>(students: T[], year: string): StudentYearLedger {
+export function buildLedgerFromStudents<
+  T extends {
+    id: string;
+    cls: string;
+    due: number;
+    active?: boolean;
+    deletedAt?: string;
+  },
+>(students: T[], year: string): StudentYearLedger {
   const byStudentId: Record<string, StudentYearFields> = {};
   for (const s of students) {
     if (s.deletedAt) continue;
@@ -497,17 +510,15 @@ export function mergeStudentYearLedgers(
  * active year — keeps multi-device dashboards aligned when admits land on one
  * browser but another still has a stale partial ledger.
  */
-export function reconcileLedgersWithStudents<T extends {
-  id: string;
-  cls: string;
-  due: number;
-  active?: boolean;
-  deletedAt?: string;
-}>(
-  students: T[],
-  ledgers: StudentYearLedger[],
-  year: string,
-): StudentYearLedger[] {
+export function reconcileLedgersWithStudents<
+  T extends {
+    id: string;
+    cls: string;
+    due: number;
+    active?: boolean;
+    deletedAt?: string;
+  },
+>(students: T[], ledgers: StudentYearLedger[], year: string): StudentYearLedger[] {
   const live = students.filter((s) => !s.deletedAt);
 
   let next: StudentYearLedger[];
@@ -603,9 +614,7 @@ export function ledgersFromYearFieldRows(
 }
 
 /** Flat entries for POSTing ledger rows back to the API. */
-export function yearFieldEntriesFromLedgers(
-  ledgers: StudentYearLedger[],
-): Array<{
+export function yearFieldEntriesFromLedgers(ledgers: StudentYearLedger[]): Array<{
   studentId: string;
   academicYear: string;
   cls: string;
@@ -655,12 +664,14 @@ export function yearFieldEntriesMissingFrom(
   );
 }
 
-export function applyLedgerToStudent<T extends {
-  id: string;
-  cls: string;
-  due: number;
-  active?: boolean;
-}>(student: T, fields: StudentYearFields | undefined): T {
+export function applyLedgerToStudent<
+  T extends {
+    id: string;
+    cls: string;
+    due: number;
+    active?: boolean;
+  },
+>(student: T, fields: StudentYearFields | undefined): T {
   if (!fields) return student;
   return {
     ...student,
@@ -670,13 +681,15 @@ export function applyLedgerToStudent<T extends {
   };
 }
 
-export function studentsForAcademicYear<T extends {
-  id: string;
-  cls: string;
-  due: number;
-  active?: boolean;
-  deletedAt?: string;
-}>(students: T[], ledgers: StudentYearLedger[], year: string): T[] {
+export function studentsForAcademicYear<
+  T extends {
+    id: string;
+    cls: string;
+    due: number;
+    active?: boolean;
+    deletedAt?: string;
+  },
+>(students: T[], ledgers: StudentYearLedger[], year: string): T[] {
   const ledger = getYearLedger(ledgers, year);
   const out: T[] = [];
   for (const [studentId, fields] of Object.entries(ledger.byStudentId)) {
@@ -688,16 +701,14 @@ export function studentsForAcademicYear<T extends {
 }
 
 /** Sync year-scoped fields from a student list into the active year ledger (enrolled only). */
-export function syncLedgerFromActiveStudents<T extends {
-  id: string;
-  cls: string;
-  due: number;
-  active?: boolean;
-}>(
-  ledgers: StudentYearLedger[],
-  year: string,
-  activeStudents: T[],
-): StudentYearLedger[] {
+export function syncLedgerFromActiveStudents<
+  T extends {
+    id: string;
+    cls: string;
+    due: number;
+    active?: boolean;
+  },
+>(ledgers: StudentYearLedger[], year: string, activeStudents: T[]): StudentYearLedger[] {
   const byStudentId: Record<string, StudentYearFields> = {};
   for (const s of activeStudents) {
     byStudentId[s.id] = {

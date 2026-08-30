@@ -1,22 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import {
-  AlertTriangle,
-  ArrowLeft,
-  Ban,
-  KeyRound,
-  Loader2,
-  ShieldAlert,
-  UserX,
-} from "lucide-react";
+import { AlertTriangle, ArrowLeft, Ban, KeyRound, Loader2, ShieldAlert, UserX } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ApiError, setImpersonationApiToken } from "@/lib/api/client";
 import { impersonateSuperAdminTenant } from "@/lib/api/super-admin";
-import {
-  readPersistentSession,
-  writeImpersonationSession,
-} from "@/lib/auth";
+import { readPersistentSession, writeImpersonationSession } from "@/lib/auth";
 import {
   ALL_PERMISSIONS,
   firstAllowedTenantPath,
@@ -184,8 +173,7 @@ function ImpersonatePage() {
                 ? (rawPerms as PermissionKey[])
                 : ALL_PERMISSIONS;
           writeImpersonationSession({
-            role:
-              data.session.role === "school_admin" ? "school_admin" : "tenant_user",
+            role: data.session.role === "school_admin" ? "school_admin" : "tenant_user",
             email: data.session.email,
             displayName: data.session.displayName,
             tenantName: data.session.tenantName || tenantId,
@@ -205,8 +193,7 @@ function ImpersonatePage() {
           window.location.replace("/tenant/dashboard");
         } catch (err) {
           if (cancelled) return;
-          const msg =
-            err instanceof ApiError ? err.message : "Impersonation failed";
+          const msg = err instanceof ApiError ? err.message : "Impersonation failed";
           setError(msg);
         }
         return;
@@ -219,9 +206,7 @@ function ImpersonatePage() {
           return;
         }
         if (!user.active) {
-          setError(
-            `${user.displayName} is inactive. Activate the user before impersonating.`,
-          );
+          setError(`${user.displayName} is inactive. Activate the user before impersonating.`);
           return;
         }
         writeImpersonationSession({
@@ -267,17 +252,10 @@ function ImpersonatePage() {
     };
   }, [userId, perms, name, tenantId]);
 
-  const info = useMemo(
-    () => (error ? interpretError(error) : null),
-    [error],
-  );
+  const info = useMemo(() => (error ? interpretError(error) : null), [error]);
 
   const Icon =
-    info?.tone === "danger"
-      ? Ban
-      : info?.tone === "warning"
-        ? ShieldAlert
-        : AlertTriangle;
+    info?.tone === "danger" ? Ban : info?.tone === "warning" ? ShieldAlert : AlertTriangle;
 
   const iconWrap =
     info?.tone === "danger"
@@ -292,7 +270,9 @@ function ImpersonatePage() {
         <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-[#E5E5E5] bg-white shadow-[0_20px_50px_-28px_rgba(15,23,42,0.35)]">
           <div className="border-b border-[#E5E5E5] bg-[#FAFAFA] px-6 py-5">
             <div className="flex items-start gap-3">
-              <div className={cn("grid h-11 w-11 shrink-0 place-items-center rounded-2xl", iconWrap)}>
+              <div
+                className={cn("grid h-11 w-11 shrink-0 place-items-center rounded-2xl", iconWrap)}
+              >
                 <Icon className="h-5 w-5" />
               </div>
               <div className="min-w-0">
@@ -303,9 +283,7 @@ function ImpersonatePage() {
                   {info.title}
                 </h1>
                 {tenantId ? (
-                  <p className="mt-1 font-mono text-[11px] text-black/50">
-                    Tenant · {tenantId}
-                  </p>
+                  <p className="mt-1 font-mono text-[11px] text-black/50">Tenant · {tenantId}</p>
                 ) : null}
               </div>
             </div>

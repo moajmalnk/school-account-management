@@ -51,13 +51,9 @@ export function PlatformDocumentPreview({
 
   const isReceipt = kind === "receipt";
   const title = isReceipt ? "Payment receipt" : "Tax invoice";
-  const refNo = isReceipt
-    ? invoice.receiptNumber || invoice.invoiceNumber
-    : invoice.invoiceNumber;
+  const refNo = isReceipt ? invoice.receiptNumber || invoice.invoiceNumber : invoice.invoiceNumber;
   const school = invoice.tenantName || "School tenant";
-  const paidAt = invoice.paidAt
-    ? String(invoice.paidAt).slice(0, 16).replace("T", " ")
-    : "—";
+  const paidAt = invoice.paidAt ? String(invoice.paidAt).slice(0, 16).replace("T", " ") : "—";
   const totalLabel = isReceipt ? "Amount received" : "Total due";
 
   const onDownload = () => {
@@ -135,9 +131,7 @@ export function PlatformDocumentPreview({
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
                   {isReceipt ? "Received by" : "From"}
                 </div>
-                <div className="mt-1 text-[14px] font-semibold text-black">
-                  Feezo
-                </div>
+                <div className="mt-1 text-[14px] font-semibold text-black">Feezo</div>
                 <div className="mt-0.5 text-[12px] text-black/55">
                   {isReceipt ? "Subscription settlement" : "SaaS subscription billing"}
                 </div>
@@ -154,20 +148,14 @@ export function PlatformDocumentPreview({
                   <MetaCell label="Paid at" value={paidAt} />
                   <MetaCell label="Method" value={invoice.paymentMethod || "—"} />
                   <MetaCell label="Reference" value={invoice.paymentRef || "—"} />
-                  <MetaCell
-                    label="Period"
-                    value={invoice.periodLabel || invoice.billingCycle}
-                  />
+                  <MetaCell label="Period" value={invoice.periodLabel || invoice.billingCycle} />
                   <MetaCell label="Cycle" value={invoice.billingCycle} />
                 </>
               ) : (
                 <>
                   <MetaCell label="Issue date" value={invoice.issueDate} />
                   <MetaCell label="Due date" value={invoice.dueDate} />
-                  <MetaCell
-                    label="Period"
-                    value={invoice.periodLabel || invoice.billingCycle}
-                  />
+                  <MetaCell label="Period" value={invoice.periodLabel || invoice.billingCycle} />
                   <MetaCell label="Cycle" value={invoice.billingCycle} />
                 </>
               )}

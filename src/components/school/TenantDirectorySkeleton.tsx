@@ -9,11 +9,7 @@ function Bone({ className }: { className?: string }) {
 }
 
 /** Matches Students / Staff directory layout while tenant store hydrates. */
-export function TenantDirectorySkeleton({
-  label = "Loading directory",
-}: {
-  label?: string;
-}) {
+export function TenantDirectorySkeleton({ label = "Loading directory" }: { label?: string }) {
   return (
     <div
       className="w-full min-w-0 max-w-full space-y-3 overflow-x-clip lg:space-y-6"
@@ -57,7 +53,10 @@ export function TenantDirectorySkeleton({
         <Bone className="h-5 w-40 rounded-lg sm:h-8 sm:w-64" />
         <div className="flex w-full gap-1.5 sm:w-auto sm:flex-wrap sm:gap-2">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Bone key={i} className="h-8 min-w-0 flex-1 rounded-full sm:h-10 sm:w-24 sm:flex-none" />
+            <Bone
+              key={i}
+              className="h-8 min-w-0 flex-1 rounded-full sm:h-10 sm:w-24 sm:flex-none"
+            />
           ))}
         </div>
       </div>

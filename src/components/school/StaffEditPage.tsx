@@ -72,7 +72,7 @@ export function StaffEditPage() {
   const { staff, setStaff, departments, roles } = useTenantStore();
 
   const member = useMemo(
-    () => (search.id ? staff.find((s) => s.id === search.id) ?? null : null),
+    () => (search.id ? (staff.find((s) => s.id === search.id) ?? null) : null),
     [search.id, staff],
   );
 
@@ -170,7 +170,12 @@ export function StaffEditPage() {
         <p className="mt-2 text-[13px] text-slate-500">
           This profile may have been removed or the link is invalid.
         </p>
-        <Button type="button" variant="outline" className="mt-4 rounded-full" onClick={backToProfile}>
+        <Button
+          type="button"
+          variant="outline"
+          className="mt-4 rounded-full"
+          onClick={backToProfile}
+        >
           Back to staff
         </Button>
       </div>

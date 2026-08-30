@@ -46,11 +46,7 @@ export function parseFlexibleDate(value?: string | null): Date | null {
     const d = Number(iso[3]);
     if (!y || !m || !d) return null;
     const date = new Date(y, m - 1, d);
-    if (
-      date.getFullYear() !== y ||
-      date.getMonth() !== m - 1 ||
-      date.getDate() !== d
-    ) {
+    if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) {
       return null;
     }
     return date;
@@ -59,17 +55,11 @@ export function parseFlexibleDate(value?: string | null): Date | null {
   const display = trimmed.match(/^(\d{1,2})\s+([A-Za-z]{3}),?\s+(\d{4})$/);
   if (!display) return null;
   const day = Number(display[1]);
-  const monthIdx = MONTH_ABBR.findIndex(
-    (m) => m.toLowerCase() === display[2].toLowerCase(),
-  );
+  const monthIdx = MONTH_ABBR.findIndex((m) => m.toLowerCase() === display[2].toLowerCase());
   const year = Number(display[3]);
   if (monthIdx < 0 || !day || !year) return null;
   const date = new Date(year, monthIdx, day);
-  if (
-    date.getFullYear() !== year ||
-    date.getMonth() !== monthIdx ||
-    date.getDate() !== day
-  ) {
+  if (date.getFullYear() !== year || date.getMonth() !== monthIdx || date.getDate() !== day) {
     return null;
   }
   return date;
@@ -186,7 +176,10 @@ export function formatChatStamp(raw: string, variant: "list" | "bubble" = "list"
   });
 }
 
-function extractClock(raw: string, fallback: Date): { hours: number; minutes: number; seconds: number; found: boolean } {
+function extractClock(
+  raw: string,
+  fallback: Date,
+): { hours: number; minutes: number; seconds: number; found: boolean } {
   const match = raw.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?/i);
   if (!match) {
     const p = partsInAppZone(fallback);
@@ -232,11 +225,7 @@ export function parseEventDate(value?: string | Date | null, reference = new Dat
     if (!y || y < 1970 || !m || !d) return null;
     if (!hasTime) {
       const date = new Date(y, m - 1, d);
-      if (
-        date.getFullYear() !== y ||
-        date.getMonth() !== m - 1 ||
-        date.getDate() !== d
-      ) {
+      if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) {
         return null;
       }
       return date;
@@ -284,11 +273,7 @@ export function parseEventDate(value?: string | Date | null, reference = new Dat
         clock.found ? clock.minutes : 0,
         clock.found ? clock.seconds : 0,
       );
-      if (
-        date.getFullYear() === year &&
-        date.getMonth() === monthIdx &&
-        date.getDate() === day
-      ) {
+      if (date.getFullYear() === year && date.getMonth() === monthIdx && date.getDate() === day) {
         return date;
       }
     }
@@ -320,7 +305,8 @@ export function formatEventDate(value?: string | Date | null, reference = new Da
   const raw = (value ?? "").trim();
   if (!raw || isBlankDate(raw)) return "—";
   const parsed = parseEventDate(raw, reference);
-  if (!parsed) return /^0{4}-0{2}-0{2}/.test(raw) ? "—" : raw.replace(/\s*·\s*.*$/, "").trim() || "—";
+  if (!parsed)
+    return /^0{4}-0{2}-0{2}/.test(raw) ? "—" : raw.replace(/\s*·\s*.*$/, "").trim() || "—";
   return labelForDate(parsed, reference, false);
 }
 

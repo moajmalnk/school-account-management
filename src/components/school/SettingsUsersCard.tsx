@@ -33,12 +33,7 @@ import {
   type PermissionKey,
   type PermissionSet,
 } from "@/lib/permissions";
-import {
-  normalizeTenantUser,
-  type Role,
-  type Staff,
-  type TenantUser,
-} from "@/lib/tenant-store";
+import { normalizeTenantUser, type Role, type Staff, type TenantUser } from "@/lib/tenant-store";
 import { cn } from "@/lib/utils";
 import { SettingsResponsiveCardHeader } from "@/components/school/SettingsMobileNav";
 
@@ -206,16 +201,12 @@ export function SettingsUsersCard({
       toast.error("Password must be at least 4 characters");
       return;
     }
-    const permissions: PermissionSet = form.allFunctions
-      ? ALL_PERMISSIONS
-      : form.permissions;
+    const permissions: PermissionSet = form.allFunctions ? ALL_PERMISSIONS : form.permissions;
     if (!form.allFunctions && form.permissions.length === 0) {
       toast.error("Assign at least one permission or choose All functions");
       return;
     }
-    const duplicate = tenantUsers.some(
-      (u) => u.email === email && u.id !== editingId,
-    );
+    const duplicate = tenantUsers.some((u) => u.email === email && u.id !== editingId);
     if (duplicate) {
       toast.error("Email already used by another user");
       return;
@@ -225,9 +216,7 @@ export function SettingsUsersCard({
       return;
     }
     if (form.staffId) {
-      const staffTaken = tenantUsers.some(
-        (u) => u.staffId === form.staffId && u.id !== editingId,
-      );
+      const staffTaken = tenantUsers.some((u) => u.staffId === form.staffId && u.id !== editingId);
       if (staffTaken) {
         toast.error("That staff member already has a login");
         return;
@@ -245,12 +234,9 @@ export function SettingsUsersCard({
         permissions,
         active: form.active,
         createdAt:
-          tenantUsers.find((u) => u.id === editingId)?.createdAt ??
-          new Date().toISOString(),
+          tenantUsers.find((u) => u.id === editingId)?.createdAt ?? new Date().toISOString(),
       });
-      setTenantUsers((prev) =>
-        prev.map((u) => (u.id === editingId ? updated : u)),
-      );
+      setTenantUsers((prev) => prev.map((u) => (u.id === editingId ? updated : u)));
       void apiUpsertTenantUser(updated).catch((err) =>
         toast.error(err instanceof Error ? err.message : "Could not sync user"),
       );
@@ -378,9 +364,7 @@ export function SettingsUsersCard({
                     <span
                       className={cn(
                         "rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                        user.active
-                          ? "bg-[#CCFBF1] text-[#0F766E]"
-                          : "bg-black/8 text-black/45",
+                        user.active ? "bg-[#CCFBF1] text-[#0F766E]" : "bg-black/8 text-black/45",
                       )}
                     >
                       {user.active ? "Active" : "Inactive"}
@@ -472,9 +456,7 @@ export function SettingsUsersCard({
                 <Label>Position / Role</Label>
                 <Select
                   value={form.roleId || "__none__"}
-                  onValueChange={(v) =>
-                    setForm({ ...form, roleId: v === "__none__" ? "" : v })
-                  }
+                  onValueChange={(v) => setForm({ ...form, roleId: v === "__none__" ? "" : v })}
                 >
                   <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
                     <SelectValue placeholder="Optional role" />
@@ -493,9 +475,7 @@ export function SettingsUsersCard({
                 <Label>Link staff (optional)</Label>
                 <Select
                   value={form.staffId || "__none__"}
-                  onValueChange={(v) =>
-                    setForm({ ...form, staffId: v === "__none__" ? "" : v })
-                  }
+                  onValueChange={(v) => setForm({ ...form, staffId: v === "__none__" ? "" : v })}
                 >
                   <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
                     <SelectValue placeholder="Optional staff" />
@@ -547,8 +527,7 @@ export function SettingsUsersCard({
                   </div>
                   <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                     {group.keys.map((key) => {
-                      const checked =
-                        form.allFunctions || form.permissions.includes(key);
+                      const checked = form.allFunctions || form.permissions.includes(key);
                       return (
                         <label
                           key={key}
@@ -591,7 +570,10 @@ export function SettingsUsersCard({
                 <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                   Cancel
                 </Button>
-                <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
+                <Button
+                  type="submit"
+                  className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+                >
                   {editingId ? "Save changes" : "Create user"}
                 </Button>
               </div>
@@ -608,9 +590,7 @@ export function SettingsUsersCard({
       >
         <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6">
           <DialogHeader>
-            <DialogTitle className="text-[22px] font-semibold text-black">
-              Delete User
-            </DialogTitle>
+            <DialogTitle className="text-[22px] font-semibold text-black">Delete User</DialogTitle>
             <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60 dark:text-zinc-400">
               {pendingDelete
                 ? `Remove login for ${pendingDelete.displayName} (${pendingDelete.email})?`

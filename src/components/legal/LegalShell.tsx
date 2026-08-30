@@ -58,13 +58,7 @@ export function LegalShell({
   );
 }
 
-export function LegalSection({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
+export function LegalSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="space-y-2">
       <h2 className="text-[15px] font-semibold tracking-tight text-black">{title}</h2>

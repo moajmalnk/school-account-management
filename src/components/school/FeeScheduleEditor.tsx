@@ -100,9 +100,7 @@ export function feeScheduleFromDraft(draft: FeeScheduleDraft): ClassFeeLine[] {
   return Array.from({ length: count }, (_, index) => {
     const row = draft.installments[index];
     const amount =
-      draft.feeAmountMode === "fixed"
-        ? fixed
-        : Math.max(0, Math.round(Number(row?.amount) || 0));
+      draft.feeAmountMode === "fixed" ? fixed : Math.max(0, Math.round(Number(row?.amount) || 0));
     const dueDate = row?.dueDate?.trim();
     return {
       id: row?.id || `fl-i-${index + 1}`,
@@ -125,8 +123,7 @@ export function FeeScheduleEditor({
   onChange,
   amountLabel = "Amount each (₹)",
 }: FeeScheduleEditorProps) {
-  const defaultCount = (cycle: FeeScheduleDraft["billingCycle"]) =>
-    cycle === "Term" ? 4 : 10;
+  const defaultCount = (cycle: FeeScheduleDraft["billingCycle"]) => (cycle === "Term" ? 4 : 10);
 
   const rebuildRows = (
     prev: FeeScheduleDraft,
@@ -172,16 +169,11 @@ export function FeeScheduleEditor({
   ) => {
     onChange({
       ...value,
-      installments: value.installments.map((row, i) =>
-        i === index ? { ...row, ...patch } : row,
-      ),
+      installments: value.installments.map((row, i) => (i === index ? { ...row, ...patch } : row)),
     });
   };
 
-  const scheduleTotal = feeScheduleFromDraft(value).reduce(
-    (sum, line) => sum + line.amount,
-    0,
-  );
+  const scheduleTotal = feeScheduleFromDraft(value).reduce((sum, line) => sum + line.amount, 0);
 
   return (
     <div className="space-y-3 rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] p-3.5 dark:border-white/10 dark:bg-zinc-900/50">
@@ -264,16 +256,12 @@ export function FeeScheduleEditor({
                   {
                     key: "fixed" as const,
                     label:
-                      value.billingCycle === "Term"
-                        ? "Same for every term"
-                        : "Same each month",
+                      value.billingCycle === "Term" ? "Same for every term" : "Same each month",
                   },
                   {
                     key: "custom" as const,
                     label:
-                      value.billingCycle === "Term"
-                        ? "Different per term"
-                        : "Different per month",
+                      value.billingCycle === "Term" ? "Different per term" : "Different per month",
                   },
                 ] as const
               ).map((option) => {
@@ -292,12 +280,7 @@ export function FeeScheduleEditor({
                         ...value,
                         feeAmountMode: option.key,
                         installmentCount: String(count),
-                        installments: rebuildRows(
-                          value,
-                          count,
-                          value.billingCycle,
-                          option.key,
-                        ),
+                        installments: rebuildRows(value, count, value.billingCycle, option.key),
                       });
                     }}
                     className={cn(
@@ -322,9 +305,7 @@ export function FeeScheduleEditor({
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                {value.billingCycle === "Term"
-                  ? "Number of terms"
-                  : "Number of installments"}
+                {value.billingCycle === "Term" ? "Number of terms" : "Number of installments"}
               </Label>
               <Input
                 inputMode="numeric"
@@ -419,9 +400,7 @@ export function FeeScheduleEditor({
                 <span>Label</span>
                 <span>Amount (₹)</span>
                 <span>Due date</span>
-                {value.feeAmountMode === "custom" ? (
-                  <span className="sr-only">Remove</span>
-                ) : null}
+                {value.feeAmountMode === "custom" ? <span className="sr-only">Remove</span> : null}
               </div>
               <div className="divide-y divide-[#F0F0F0] dark:divide-white/10">
                 {value.installments.map((row, index) => (
@@ -463,9 +442,7 @@ export function FeeScheduleEditor({
                     )}
                     <DatePicker
                       value={row.dueDate || undefined}
-                      onChange={(dueDate) =>
-                        patchInstallment(index, { dueDate: dueDate || "" })
-                      }
+                      onChange={(dueDate) => patchInstallment(index, { dueDate: dueDate || "" })}
                       placeholder="Due date"
                       className="h-8"
                     />
@@ -500,9 +477,7 @@ export function FeeScheduleEditor({
               </Label>
               <Select
                 value={value.feeCollectionStartMonth}
-                onValueChange={(month) =>
-                  onChange({ ...value, feeCollectionStartMonth: month })
-                }
+                onValueChange={(month) => onChange({ ...value, feeCollectionStartMonth: month })}
               >
                 <SelectTrigger className="h-9 bg-white text-[13px] dark:bg-zinc-950">
                   <SelectValue placeholder="Select month" />

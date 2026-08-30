@@ -47,6 +47,5 @@ export const glassPanelClass = "glass-panel rounded-2xl";
 export const glassCardClass = "glass-card rounded-2xl";
 export const glassInsetClass = "glass-inset rounded-xl";
 export const glassNavTileClass = "glass-nav-tile rounded-xl";
-export const glassTableWrapClass =
-  "glass-card overflow-hidden rounded-2xl border border-white/70";
+export const glassTableWrapClass = "glass-card overflow-hidden rounded-2xl border border-white/70";
 export const dashCardClass = "dash-card";

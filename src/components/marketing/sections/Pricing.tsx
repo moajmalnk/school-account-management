@@ -1,11 +1,7 @@
 import { Check } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 
-import {
-  SectionReveal,
-  StaggerItem,
-  StaggerReveal,
-} from "@/components/marketing/SectionReveal";
+import { SectionReveal, StaggerItem, StaggerReveal } from "@/components/marketing/SectionReveal";
 import { TrialSignupLink } from "@/components/marketing/TrialSignupLink";
 import { formatInr, MARKETING } from "@/lib/marketing-content";
 
@@ -22,20 +18,14 @@ export function Pricing() {
     >
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <SectionReveal className="mx-auto max-w-2xl text-center">
-          <p className="text-[12px] font-semibold uppercase tracking-wider text-[var(--mkt-green-deep)]">
-            {pricing.eyebrow}
-          </p>
           <h2
             id="pricing-heading"
-            className="mt-2 text-[clamp(1.55rem,3.8vw,2.25rem)] font-bold tracking-tight text-[var(--mkt-ink)]"
+            className="text-[clamp(1.75rem,4vw,2.5rem)] font-bold tracking-tight text-[var(--mkt-ink)]"
           >
-            {pricing.title}
+            Start with a <span className="inline-block px-3 py-1 rounded bg-[var(--mkt-green)] text-white ml-1">14-day trial</span>
           </h2>
-          <p className="mt-3 text-[15px] leading-relaxed text-[var(--mkt-muted)]">
-            {pricing.subtitle}
-          </p>
-          <p className="mt-4 inline-flex rounded-full border border-[var(--mkt-green)]/40 bg-white px-3.5 py-1.5 text-[12px] font-semibold text-[var(--mkt-green-deep)]">
-            {pricing.trialBadge}
+          <p className="mt-4 text-[13px] leading-relaxed text-[var(--mkt-ink)] font-medium max-w-[280px] mx-auto">
+            Every plan includes a full evaluation period.<br/>Sign in when your school is ready.
           </p>
         </SectionReveal>
 
@@ -47,79 +37,38 @@ export function Pricing() {
                 transition={{ type: "spring", stiffness: 320, damping: 26 }}
                 className={
                   plan.highlight
-                    ? "relative flex h-full flex-col rounded-3xl bg-[var(--mkt-ink)] p-6 text-white shadow-[0_28px_70px_-36px_rgba(26,28,44,0.6)]"
-                    : "flex h-full flex-col rounded-3xl border border-[var(--mkt-line)] bg-white p-6"
+                    ? "relative flex h-full flex-col rounded-[24px] bg-white p-6 shadow-md border-2 border-[var(--mkt-green)] pt-10"
+                    : "flex h-full flex-col rounded-[24px] border border-[var(--mkt-line)] bg-white p-6 pt-10"
                 }
               >
-                {"badge" in plan && plan.badge ? (
-                  <span className="absolute -top-3 left-6 rounded-full bg-[var(--mkt-green)] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-[var(--mkt-ink)]">
-                    {plan.badge}
-                  </span>
+                {plan.highlight ? (
+                  <div className="absolute top-0 inset-x-0 h-8 bg-[var(--mkt-green)] text-white flex items-center justify-center text-[11px] font-bold uppercase tracking-wider rounded-t-[21px]">
+                    Most Popular <Check className="w-3.5 h-3.5 ml-1 inline" />
+                  </div>
                 ) : null}
 
-                <h3
-                  className={
-                    plan.highlight
-                      ? "text-[15px] font-semibold text-white/90"
-                      : "text-[15px] font-semibold text-[var(--mkt-ink)]"
-                  }
-                >
+                <h3 className="text-[15px] font-bold text-[var(--mkt-ink)]">
                   {plan.name}
                 </h3>
-                <p
-                  className={
-                    plan.highlight
-                      ? "mt-3 text-[2rem] font-bold tracking-tight"
-                      : "mt-3 text-[2rem] font-bold tracking-tight text-[var(--mkt-ink)]"
-                  }
-                >
+                <p className="mt-3 text-[2.25rem] font-bold tracking-tight text-[var(--mkt-ink)] leading-none">
                   ₹{formatInr(plan.monthly)}
-                  <span
-                    className={
-                      plan.highlight
-                        ? "text-[14px] font-medium text-white/55"
-                        : "text-[14px] font-medium text-[var(--mkt-muted)]"
-                    }
-                  >
-                    {" "}
-                    / mo
+                  <span className="text-[12px] font-medium text-[var(--mkt-muted)] ml-1 tracking-normal">
+                    / month
                   </span>
                 </p>
-                <p
-                  className={
-                    plan.highlight
-                      ? "mt-1 text-[12px] text-white/50"
-                      : "mt-1 text-[12px] text-[var(--mkt-muted)]"
-                  }
-                >
-                  Offer ₹{formatInr(plan.annuallyOffer)} / year
-                </p>
-                <p
-                  className={
-                    plan.highlight
-                      ? "mt-3 text-[13px] leading-relaxed text-white/70"
-                      : "mt-3 text-[13px] leading-relaxed text-[var(--mkt-muted)]"
-                  }
-                >
+                
+                <p className="mt-5 text-[12px] leading-relaxed text-[var(--mkt-ink)] font-medium">
                   {plan.blurb}
                 </p>
 
-                <ul className="mt-5 flex-1 space-y-2.5">
+                <ul className="mt-6 flex-1 space-y-3">
                   {plan.features.map((f) => (
                     <li
                       key={f}
-                      className={
-                        plan.highlight
-                          ? "flex items-start gap-2 text-[13px] text-white/85"
-                          : "flex items-start gap-2 text-[13px] text-[var(--mkt-ink)]"
-                      }
+                      className="flex items-start gap-2.5 text-[12px] text-[var(--mkt-muted)]"
                     >
                       <Check
-                        className={
-                          plan.highlight
-                            ? "mt-0.5 h-4 w-4 shrink-0 text-[var(--mkt-green)]"
-                            : "mt-0.5 h-4 w-4 shrink-0 text-[var(--mkt-green-deep)]"
-                        }
+                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--mkt-green)]"
                         aria-hidden
                       />
                       {f}
@@ -128,11 +77,7 @@ export function Pricing() {
                 </ul>
 
                 <TrialSignupLink
-                  className={
-                    plan.highlight
-                      ? "mt-6 inline-flex h-11 items-center justify-center rounded-full bg-[var(--mkt-green)] text-[13px] font-semibold text-[var(--mkt-ink)] transition-colors hover:bg-[var(--mkt-green-deep)] hover:text-white"
-                      : "mt-6 inline-flex h-11 items-center justify-center rounded-full bg-[var(--mkt-ink)] text-[13px] font-semibold text-white transition-colors hover:bg-black"
-                  }
+                  className="mt-8 inline-flex h-10 items-center justify-center rounded-sm bg-[var(--mkt-green)] text-[13px] font-bold text-white transition-opacity hover:opacity-90 w-full"
                 >
                   Start 14-day trial
                 </TrialSignupLink>

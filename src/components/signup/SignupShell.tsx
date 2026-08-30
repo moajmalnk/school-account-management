@@ -55,9 +55,7 @@ export function SignupShell({
                   <span
                     className={cn(
                       "grid h-8 w-8 place-items-center rounded-full text-[13px] font-bold",
-                      done || active
-                        ? "bg-[#6BA832] text-white"
-                        : "bg-[#E8EEF5] text-black/45",
+                      done || active ? "bg-[#6BA832] text-white" : "bg-[#E8EEF5] text-black/45",
                     )}
                   >
                     {s.id}
@@ -84,9 +82,7 @@ export function SignupShell({
                       {marker}
                     </Link>
                   ) : (
-                    <div className="flex min-w-0 flex-col items-center gap-1.5">
-                      {marker}
-                    </div>
+                    <div className="flex min-w-0 flex-col items-center gap-1.5">{marker}</div>
                   )}
                   {i < SIGNUP_STEPS.length - 1 ? (
                     <div
@@ -126,10 +122,7 @@ export function FieldLabel({
   required?: boolean;
 }) {
   return (
-    <label
-      htmlFor={htmlFor}
-      className="mb-1.5 block text-[12px] font-semibold text-black/80"
-    >
+    <label htmlFor={htmlFor} className="mb-1.5 block text-[12px] font-semibold text-black/80">
       {children}
       {required ? <span className="text-red-500"> *</span> : null}
     </label>

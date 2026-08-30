@@ -329,8 +329,7 @@ export function LocationPicker({
     }
   };
 
-  const suggestionsVisible =
-    openSuggestions && (suggestions.length > 0 || searching);
+  const suggestionsVisible = openSuggestions && (suggestions.length > 0 || searching);
 
   return (
     <div
@@ -383,10 +382,7 @@ export function LocationPicker({
           aria-expanded={openSuggestions}
           aria-controls={listId}
           aria-autocomplete="list"
-          className={cn(
-            "min-w-0",
-            suggestionsVisible && "rounded-b-none border-b-0",
-          )}
+          className={cn("min-w-0", suggestionsVisible && "rounded-b-none border-b-0")}
         />
 
         {suggestionsVisible ? (
@@ -398,7 +394,9 @@ export function LocationPicker({
             className="relative z-50 max-h-[min(13rem,40vh)] overflow-y-auto overscroll-contain rounded-b-xl rounded-t-none border border-t-0 border-[#E5E5E5] bg-white py-1 shadow-[0_16px_40px_-12px_rgba(15,23,42,0.28)] ring-1 ring-black/[0.04] dark:border-white/10 dark:bg-zinc-950 dark:ring-white/10"
           >
             {searching && suggestions.length === 0 ? (
-              <li className="px-3 py-2.5 text-[12px] text-black/45 dark:text-zinc-400">Searching…</li>
+              <li className="px-3 py-2.5 text-[12px] text-black/45 dark:text-zinc-400">
+                Searching…
+              </li>
             ) : (
               suggestions.map((item) => (
                 <li key={item.place_id} role="option">

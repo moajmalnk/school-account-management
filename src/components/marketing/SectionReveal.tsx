@@ -51,13 +51,7 @@ export function StaggerReveal({
   );
 }
 
-export function StaggerItem({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
+export function StaggerItem({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <motion.div className={cn(className)} variants={fadeUp}>
       {children}

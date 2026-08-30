@@ -3,10 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { School, IndianRupee, TrendingUp, Activity, CheckCircle2, Clock } from "lucide-react";
 import { OrganicCard } from "@/components/ui/organic-card";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  fetchSuperAdminOverview,
-  type SuperAdminOverview,
-} from "@/lib/api/super-admin";
+import { fetchSuperAdminOverview, type SuperAdminOverview } from "@/lib/api/super-admin";
 import { ApiError, getApiToken } from "@/lib/api/client";
 import { cn, type Tone, type CornerSide } from "@/lib/utils";
 
@@ -195,10 +192,7 @@ export function OverviewView() {
     () => weeklyBars.reduce((m, b, i, a) => (b.v > a[m].v ? i : m), 0),
     [weeklyBars],
   );
-  const weekTotal = useMemo(
-    () => weeklyBars.reduce((s, b) => s + b.v, 0),
-    [weeklyBars],
-  );
+  const weekTotal = useMemo(() => weeklyBars.reduce((s, b) => s + b.v, 0), [weeklyBars]);
   const maxBar = Math.max(1, ...weeklyBars.map((b) => b.v));
   const spark = sparkFromWeekly(weeklyBars);
   const planRows = overview.planDistribution?.length
@@ -217,11 +211,8 @@ export function OverviewView() {
           <p className="mt-2 text-[14px] text-black/55">
             {trialCount > 0 ? (
               <>
-                You have{" "}
-                <span className="font-semibold text-black">
-                  {trialCount} trial
-                </span>{" "}
-                tenant{trialCount === 1 ? "" : "s"} on the platform.
+                You have <span className="font-semibold text-black">{trialCount} trial</span> tenant
+                {trialCount === 1 ? "" : "s"} on the platform.
               </>
             ) : (
               <>Live metrics from your provisioned school tenants.</>
@@ -392,7 +383,10 @@ export function OverviewView() {
             </div>
           ) : (
             overview.recentRegistrations.map((r) => (
-              <div key={`${r.domain}-${r.time}`} className="flex items-center justify-between py-3.5">
+              <div
+                key={`${r.domain}-${r.time}`}
+                className="flex items-center justify-between py-3.5"
+              >
                 <div className="flex items-center gap-3">
                   <div className="grid h-10 w-10 place-items-center rounded-2xl bg-[#F4F4F5] text-black/65">
                     <School className="h-4 w-4" />

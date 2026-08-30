@@ -47,7 +47,18 @@ import { formatEventDate, formatEventDateTime } from "@/lib/dates";
 import { downloadCsv, downloadTablePdf } from "@/lib/finance-export";
 import { formatDownloadFilename, slugYear, todayStamp } from "@/lib/download-names";
 import { useDisbursements } from "@/lib/use-disbursements";
-import { useTenantStore, normalizePaymentCategoryLabel, resolvePaymentFeePeriod, currentPayrollMonth, formatPayrollMonthLabel, staffPayableSalary, salaryHistoryPayrollMonth, isSalaryMonthSettled, type Payment, type Student } from "@/lib/tenant-store";
+import {
+  useTenantStore,
+  normalizePaymentCategoryLabel,
+  resolvePaymentFeePeriod,
+  currentPayrollMonth,
+  formatPayrollMonthLabel,
+  staffPayableSalary,
+  salaryHistoryPayrollMonth,
+  isSalaryMonthSettled,
+  type Payment,
+  type Student,
+} from "@/lib/tenant-store";
 import { cn } from "@/lib/utils";
 
 export type LedgerRow = {
@@ -276,9 +287,7 @@ function ReportTable({
               const lastPair = detailPairs[detailPairs.length - 1];
               const isAmountHeavy =
                 detailPairs.length <= 3 ||
-                /amount|due|payable|gross|balance|receipt|payment/i.test(
-                  lastPair?.header ?? "",
-                );
+                /amount|due|payable|gross|balance|receipt|payment/i.test(lastPair?.header ?? "");
 
               return (
                 <article
@@ -547,9 +556,7 @@ export function GeneralLedgerReport() {
       return haystack.includes(q);
     });
     // Recompute running balance for the visible set so the ledger stays coherent when filtered.
-    return withRunningBalance(
-      matched.map(({ balance: _balance, ...rest }) => rest),
-    );
+    return withRunningBalance(matched.map(({ balance: _balance, ...rest }) => rest));
   }, [allRows, query, entryType, account]);
 
   const totalDebit = filteredRows.reduce((s, r) => s + r.debit, 0);
@@ -622,7 +629,12 @@ export function GeneralLedgerReport() {
   return (
     <div className="grid grid-cols-12 gap-4 sm:gap-5">
       <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12">
-        <ExportBar title="General Ledger" onCsv={handleCsv} onPdf={handlePdf} onPrint={handlePrint} />
+        <ExportBar
+          title="General Ledger"
+          onCsv={handleCsv}
+          onPdf={handlePdf}
+          onPrint={handlePrint}
+        />
         <p className="mt-1 text-[12px] text-black/55">
           Chronological double-entry view · {filteredRows.length}
           {filtersActive ? ` of ${allRows.length}` : ""} postings · {academicYear}
@@ -665,10 +677,7 @@ export function GeneralLedgerReport() {
               placeholder="Search voucher, particulars, account, amount…"
             />
           </div>
-          <Select
-            value={entryType}
-            onValueChange={(v) => setEntryType(v as typeof entryType)}
-          >
+          <Select value={entryType} onValueChange={(v) => setEntryType(v as typeof entryType)}>
             <SelectTrigger className="h-10 w-full rounded-xl border-[#E5E5E5] bg-white">
               <SelectValue placeholder="All entries" />
             </SelectTrigger>
@@ -781,7 +790,12 @@ export function ProfitLossReport() {
   return (
     <div className="grid grid-cols-12 gap-4 sm:gap-5">
       <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12 lg:col-span-8">
-        <ExportBar title="Profit & Loss Account" onCsv={handleCsv} onPdf={handlePdf} onPrint={handlePrint} />
+        <ExportBar
+          title="Profit & Loss Account"
+          onCsv={handleCsv}
+          onPdf={handlePdf}
+          onPrint={handlePrint}
+        />
         <p className="mt-1 text-[12px] text-black/55">
           Income from fee receipts vs operating expenditure · {academicYear}
         </p>
@@ -851,8 +865,12 @@ export function ProfitLossReport() {
 }
 
 export function BalanceSheetReport() {
-  const { activePayments: payments, activeStudents: students, academicYear, schoolDetails } =
-    useTenantStore();
+  const {
+    activePayments: payments,
+    activeStudents: students,
+    academicYear,
+    schoolDetails,
+  } = useTenantStore();
   const { disbursements } = useDisbursements();
   const schoolName = schoolDetails.name || "School";
   const openPayables = useMemo(() => queuedPayables(disbursements), [disbursements]);
@@ -866,10 +884,7 @@ export function BalanceSheetReport() {
     [payments],
   );
   const receivables = useMemo(
-    () =>
-      students
-        .filter((st) => !isRecordDeleted(st.deletedAt))
-        .reduce((s, st) => s + st.due, 0),
+    () => students.filter((st) => !isRecordDeleted(st.deletedAt)).reduce((s, st) => s + st.due, 0),
     [students],
   );
   const payables = totalAccountsPayable(disbursements);
@@ -939,7 +954,12 @@ export function BalanceSheetReport() {
   return (
     <div className="grid grid-cols-12 gap-4 sm:gap-5">
       <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12 lg:col-span-6">
-        <ExportBar title="Balance Sheet" onCsv={handleCsv} onPdf={handlePdf} onPrint={handlePrint} />
+        <ExportBar
+          title="Balance Sheet"
+          onCsv={handleCsv}
+          onPdf={handlePdf}
+          onPrint={handlePrint}
+        />
         <p className="mt-1 text-[12px] text-black/55">
           Position statement as at today · {academicYear}
         </p>
@@ -955,7 +975,9 @@ export function BalanceSheetReport() {
 
       <OrganicCard tone="white" cornerSide="bl" padded className="col-span-12 lg:col-span-6">
         <div className="text-title text-slate-900 dark:text-zinc-50">Outstanding Payables</div>
-        <p className="mt-1 text-[12px] text-black/55">{openPayables.length} open obligation{openPayables.length === 1 ? "" : "s"}</p>
+        <p className="mt-1 text-[12px] text-black/55">
+          {openPayables.length} open obligation{openPayables.length === 1 ? "" : "s"}
+        </p>
         <div className="mt-4 space-y-2">
           {openPayables.length === 0 ? (
             <div className="rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-4 text-center text-[12px] text-black/55">
@@ -963,13 +985,13 @@ export function BalanceSheetReport() {
             </div>
           ) : (
             openPayables.map((p) => (
-            <div
-              key={p.id || p.payee}
-              className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5 text-[12.5px]"
-            >
-              <span className="min-w-0 flex-1 truncate font-medium text-black">{p.payee}</span>
-              <span className="shrink-0 font-mono text-black">{inr(p.amount)}</span>
-            </div>
+              <div
+                key={p.id || p.payee}
+                className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5 text-[12.5px]"
+              >
+                <span className="min-w-0 flex-1 truncate font-medium text-black">{p.payee}</span>
+                <span className="shrink-0 font-mono text-black">{inr(p.amount)}</span>
+              </div>
             ))
           )}
         </div>
@@ -979,7 +1001,9 @@ export function BalanceSheetReport() {
           </div>
           <div className="mt-1 font-mono text-[18px] font-semibold">{inr(receivables)}</div>
           <p className="mt-1 text-[11px] text-black/55">
-            Aggregated from {students.filter((s) => !isRecordDeleted(s.deletedAt) && s.due > 0).length} students with open balances
+            Aggregated from{" "}
+            {students.filter((s) => !isRecordDeleted(s.deletedAt) && s.due > 0).length} students
+            with open balances
           </p>
         </div>
       </OrganicCard>
@@ -1089,8 +1113,12 @@ function resolvePaymentClass(payment: Payment, students: Student[]) {
 }
 
 export function FeesReport() {
-  const { activePayments: payments, activeStudents: students, academicYear, schoolDetails } =
-    useTenantStore();
+  const {
+    activePayments: payments,
+    activeStudents: students,
+    academicYear,
+    schoolDetails,
+  } = useTenantStore();
   const schoolName = schoolDetails.name || "Silver Hills Global";
 
   const [collectionQuery, setCollectionQuery] = useState("");
@@ -1170,7 +1198,14 @@ export function FeesReport() {
       .filter((s) => {
         if (duesClass !== "all" && s.cls !== duesClass) return false;
         if (!q) return true;
-        const haystack = [s.id, s.name, s.cls, s.guardian, String(s.due), s.due.toLocaleString("en-IN")]
+        const haystack = [
+          s.id,
+          s.name,
+          s.cls,
+          s.guardian,
+          String(s.due),
+          s.due.toLocaleString("en-IN"),
+        ]
           .join(" ")
           .toLowerCase();
         return haystack.includes(q);
@@ -1208,13 +1243,7 @@ export function FeesReport() {
     formatEventDateTime(p.time),
   ]);
 
-  const outstandingRows = filteredDues.map((s) => [
-    s.id,
-    s.name,
-    s.cls,
-    s.guardian,
-    inr(s.due),
-  ]);
+  const outstandingRows = filteredDues.map((s) => [s.id, s.name, s.cls, s.guardian, inr(s.due)]);
 
   const clearCollectionFilters = () => {
     setCollectionQuery("");
@@ -1369,7 +1398,16 @@ export function FeesReport() {
           </div>
         ) : (
           <ReportTable
-            headers={["Receipt", "Student", "Class", "Category", "Period", "Mode", "Amount", "Time"]}
+            headers={[
+              "Receipt",
+              "Student",
+              "Class",
+              "Category",
+              "Period",
+              "Mode",
+              "Amount",
+              "Time",
+            ]}
             rows={collectionRows}
           />
         )}
@@ -1430,7 +1468,11 @@ export function FeesReport() {
 
         {byCategory.length > 0 && (
           <div className="min-h-0">
-            <FinanceDonutCard title="Collection by Category" cornerSide="bl" segments={byCategory} />
+            <FinanceDonutCard
+              title="Collection by Category"
+              cornerSide="bl"
+              segments={byCategory}
+            />
           </div>
         )}
       </div>
@@ -1456,10 +1498,7 @@ export function SalaryReport() {
     () => Array.from(new Set(staff.map((s) => s.dept))).sort(),
     [staff],
   );
-  const roleOptions = useMemo(
-    () => Array.from(new Set(staff.map((s) => s.role))).sort(),
-    [staff],
-  );
+  const roleOptions = useMemo(() => Array.from(new Set(staff.map((s) => s.role))).sort(), [staff]);
 
   const filteredStaff = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -1500,8 +1539,7 @@ export function SalaryReport() {
           attendance: pay.attendance,
           attendanceLabel: pay.attendance
             ? `${pay.payableDays}/${pay.attendance.workingDays} payable${
-                (pay.attendance.paidLeaveDays || 0) > 0 ||
-                (pay.attendance.unpaidLeaveDays || 0) > 0
+                (pay.attendance.paidLeaveDays || 0) > 0 || (pay.attendance.unpaidLeaveDays || 0) > 0
                   ? ` · ${pay.attendance.paidLeaveDays || 0} paid / ${pay.attendance.unpaidLeaveDays || 0} unpaid leave`
                   : ""
               }`
@@ -1512,10 +1550,7 @@ export function SalaryReport() {
   );
 
   const totalBasic = payrollRows.reduce((sum, row) => sum + row.staff.basicSalary, 0);
-  const totalAllowances = payrollRows.reduce(
-    (sum, row) => sum + row.staff.additionalAllowances,
-    0,
-  );
+  const totalAllowances = payrollRows.reduce((sum, row) => sum + row.staff.additionalAllowances, 0);
   const totalGross = payrollRows.reduce((sum, row) => sum + row.gross, 0);
   const totalPayable = payrollRows.reduce((sum, row) => sum + row.payable, 0);
 
@@ -1658,10 +1693,23 @@ export function SalaryReport() {
 
   const handlePdf = () => {
     downloadTablePdf({
-      filename: reportDownloadName("salary-report", "pdf", schoolName, academicYear, { name: payrollMonth }),
+      filename: reportDownloadName("salary-report", "pdf", schoolName, academicYear, {
+        name: payrollMonth,
+      }),
       title: `Salary Report · ${payrollMonthLabel}`,
       subtitle: `${schoolName} · ${academicYear} · ${payrollMonth}`,
-      headers: ["ID", "Name", "Role", "Dept", "Attn", "Basic", "Allow.", "Gross", "Payable", "Status"],
+      headers: [
+        "ID",
+        "Name",
+        "Role",
+        "Dept",
+        "Attn",
+        "Basic",
+        "Allow.",
+        "Gross",
+        "Payable",
+        "Status",
+      ],
       rows: payrollRows.map(({ staff: s, gross, payable, attendanceLabel }) => [
         s.id,
         s.name,
@@ -1681,10 +1729,23 @@ export function SalaryReport() {
 
   const handlePrint = () => {
     downloadTablePdf({
-      filename: reportDownloadName("salary-report", "pdf", schoolName, academicYear, { name: payrollMonth }),
+      filename: reportDownloadName("salary-report", "pdf", schoolName, academicYear, {
+        name: payrollMonth,
+      }),
       title: `Salary Report · ${payrollMonthLabel}`,
       subtitle: `${schoolName} · ${academicYear} · ${payrollMonth}`,
-      headers: ["ID", "Name", "Role", "Dept", "Attn", "Basic", "Allow.", "Gross", "Payable", "Status"],
+      headers: [
+        "ID",
+        "Name",
+        "Role",
+        "Dept",
+        "Attn",
+        "Basic",
+        "Allow.",
+        "Gross",
+        "Payable",
+        "Status",
+      ],
       rows: payrollRows.map(({ staff: s, gross, payable, attendanceLabel }) => [
         s.id,
         s.name,
@@ -1703,13 +1764,17 @@ export function SalaryReport() {
     toast.success("Print dialog opened");
   };
 
-
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 sm:gap-5">
       <OrganicCard tone="white" cornerSide="tr" padded className="shrink-0">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 flex-1">
-            <ExportBar title="Salary Report" onCsv={handleCsv} onPdf={handlePdf} onPrint={handlePrint} />
+            <ExportBar
+              title="Salary Report"
+              onCsv={handleCsv}
+              onPdf={handlePdf}
+              onPrint={handlePrint}
+            />
             <p className="mt-1 text-[12px] text-black/55">
               Monthly payroll · present + paid leave adjust payable · {academicYear}
             </p>
@@ -1920,7 +1985,9 @@ export function SalaryReport() {
       <OrganicCard tone="white" cornerSide="bl" padded className="shrink-0">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="text-title text-slate-900 dark:text-zinc-50">Salary Payment History</div>
+            <div className="text-title text-slate-900 dark:text-zinc-50">
+              Salary Payment History
+            </div>
             <p className="mt-1 text-[12px] text-black/55">
               Recent disbursements across staff · {recentSalaryHistory.length} shown
               {historyPaidTotal > 0 ? ` · ${inr(historyPaidTotal)} total` : ""}
@@ -1955,13 +2022,7 @@ type DayBookEntry = {
   narration?: string;
 };
 
-function DayBookEntryCards({
-  entries,
-  footer,
-}: {
-  entries: DayBookEntry[];
-  footer?: ReactNode;
-}) {
+function DayBookEntryCards({ entries, footer }: { entries: DayBookEntry[]; footer?: ReactNode }) {
   return (
     <div className="mt-4 space-y-2.5 md:hidden">
       {entries.map((entry) => {
@@ -1980,9 +2041,7 @@ function DayBookEntryCards({
                   <span
                     className={cn(
                       "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
-                      isReceipt
-                        ? "bg-[#CCFBF1] text-[#0F766E]"
-                        : "bg-[#FFEDD5] text-[#C2410C]",
+                      isReceipt ? "bg-[#CCFBF1] text-[#0F766E]" : "bg-[#FFEDD5] text-[#C2410C]",
                     )}
                   >
                     {entry.type}
@@ -2119,7 +2178,17 @@ export function DayBookReport() {
   const handleCsv = () => {
     downloadCsv(
       reportDownloadName("day-book", "csv", schoolName, academicYear),
-      ["Voucher", "Date/Time", "Particulars", "Account", "Mode", "Type", "Receipt", "Payment", "Narration"],
+      [
+        "Voucher",
+        "Date/Time",
+        "Particulars",
+        "Account",
+        "Mode",
+        "Type",
+        "Receipt",
+        "Payment",
+        "Narration",
+      ],
       filtered.map((e) => [
         e.id,
         e.time,
@@ -2140,7 +2209,16 @@ export function DayBookReport() {
       filename: reportDownloadName("day-book", "pdf", schoolName, academicYear),
       title: "Day Book",
       subtitle: `${schoolName} · ${academicYear}`,
-      headers: ["Voucher", "Date/Time", "Particulars", "Account", "Mode", "Type", "Receipt", "Payment"],
+      headers: [
+        "Voucher",
+        "Date/Time",
+        "Particulars",
+        "Account",
+        "Mode",
+        "Type",
+        "Receipt",
+        "Payment",
+      ],
       rows: filtered.map((e) => [
         e.id,
         e.time,
@@ -2161,7 +2239,16 @@ export function DayBookReport() {
       filename: reportDownloadName("day-book", "pdf", schoolName, academicYear),
       title: "Day Book",
       subtitle: `${schoolName} · ${academicYear}`,
-      headers: ["Voucher", "Date/Time", "Particulars", "Account", "Mode", "Type", "Receipt", "Payment"],
+      headers: [
+        "Voucher",
+        "Date/Time",
+        "Particulars",
+        "Account",
+        "Mode",
+        "Type",
+        "Receipt",
+        "Payment",
+      ],
       rows: filtered.map((e) => [
         e.id,
         e.time,
@@ -2221,10 +2308,7 @@ export function DayBookReport() {
               placeholder="Search voucher, particulars, account, narration…"
             />
           </div>
-          <Select
-            value={entryType}
-            onValueChange={(v) => setEntryType(v as typeof entryType)}
-          >
+          <Select value={entryType} onValueChange={(v) => setEntryType(v as typeof entryType)}>
             <SelectTrigger className="h-10 w-full rounded-xl border-[#E5E5E5] bg-white">
               <SelectValue placeholder="All types" />
             </SelectTrigger>
@@ -2359,7 +2443,8 @@ export function BankReconciliationReport() {
   const unclearedTotal = bookBalance - clearedTotal;
   const unclearedCount = pending.size;
 
-  const statementBalance = statementInput.trim() === "" ? clearedTotal : Number(statementInput) || 0;
+  const statementBalance =
+    statementInput.trim() === "" ? clearedTotal : Number(statementInput) || 0;
   const difference = statementBalance - clearedTotal;
   const reconciled = Math.abs(difference) < 0.5;
 
@@ -2436,7 +2521,12 @@ export function BankReconciliationReport() {
   return (
     <div className="grid grid-cols-12 gap-4 sm:gap-5">
       <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12 lg:col-span-7">
-        <ExportBar title="Bank Reconciliation" onCsv={handleCsv} onPdf={handlePdf} onPrint={handlePrint} />
+        <ExportBar
+          title="Bank Reconciliation"
+          onCsv={handleCsv}
+          onPdf={handlePdf}
+          onPrint={handlePrint}
+        />
         <p className="mt-1 text-[12px] text-black/55">
           Match recorded bank &amp; UPI receipts against the bank statement · {academicYear}
         </p>
@@ -2510,7 +2600,9 @@ export function BankReconciliationReport() {
       <OrganicCard tone="white" cornerSide="bl" padded className="col-span-12 lg:col-span-5">
         <div className="flex items-center gap-2">
           <Landmark className="h-4 w-4 text-black/45" />
-          <div className="text-title text-slate-900 dark:text-zinc-50">Reconciliation Statement</div>
+          <div className="text-title text-slate-900 dark:text-zinc-50">
+            Reconciliation Statement
+          </div>
         </div>
         <p className="mt-1 text-[12px] text-black/55">Bank statement to book balance</p>
         <div className="mt-4 overflow-hidden rounded-lg border border-[#E5E5E5]">
@@ -2522,7 +2614,8 @@ export function BankReconciliationReport() {
                 key={i}
                 className={cn(
                   "flex items-center justify-between gap-3 px-3.5 py-2.5 text-[12.5px]",
-                  i !== reconStatementRows.length - 1 && "border-b border-[#F0F0F0] dark:border-white/10",
+                  i !== reconStatementRows.length - 1 &&
+                    "border-b border-[#F0F0F0] dark:border-white/10",
                   isTotal && "bg-[#F4F4F5] font-semibold dark:bg-white/10",
                   isDiff &&
                     (reconciled
@@ -2558,7 +2651,9 @@ export function BankReconciliationReport() {
       <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="text-title text-slate-900 dark:text-zinc-50">Bank &amp; UPI Transactions</div>
+            <div className="text-title text-slate-900 dark:text-zinc-50">
+              Bank &amp; UPI Transactions
+            </div>
             <p className="mt-1 text-[12px] text-black/55">
               {filtered.length} of {bankTxns.length} · {unclearedCount} marked uncleared
             </p>
@@ -2706,7 +2801,9 @@ export function BankReconciliationReport() {
                           <div className="text-[11px] text-black/45">{t.cat}</div>
                         </td>
                         <td className="px-3 py-2.5 text-black/70">{t.mode}</td>
-                        <td className="px-3 py-2.5 font-mono text-[11px] text-black/55">{t.time}</td>
+                        <td className="px-3 py-2.5 font-mono text-[11px] text-black/55">
+                          {t.time}
+                        </td>
                         <td className="px-3 py-2.5 text-right font-mono font-semibold text-black">
                           {inr(t.amount)}
                         </td>

@@ -58,7 +58,10 @@ function MessageActionSheet({
 }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="rounded-t-2xl px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-5">
+      <SheetContent
+        side="bottom"
+        className="rounded-t-2xl px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-5"
+      >
         <SheetHeader className="sr-only">
           <SheetTitle>Message actions</SheetTitle>
           <SheetDescription>Edit or delete this message</SheetDescription>

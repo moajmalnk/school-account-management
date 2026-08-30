@@ -20,12 +20,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
-export const STUDENT_PROFILE_TAB_IDS = [
-  "profile",
-  "academic",
-  "documents",
-  "payments",
-] as const;
+export const STUDENT_PROFILE_TAB_IDS = ["profile", "academic", "documents", "payments"] as const;
 
 export const STAFF_PROFILE_TAB_IDS = [
   "profile",
@@ -62,7 +57,9 @@ export const STAFF_PROFILE_TABS: ProfileDetailTab[] = [
 ];
 
 export function isStudentProfileTab(value: unknown): value is StudentProfileTabId {
-  return typeof value === "string" && (STUDENT_PROFILE_TAB_IDS as readonly string[]).includes(value);
+  return (
+    typeof value === "string" && (STUDENT_PROFILE_TAB_IDS as readonly string[]).includes(value)
+  );
 }
 
 export function isStaffProfileTab(value: unknown): value is StaffProfileTabId {

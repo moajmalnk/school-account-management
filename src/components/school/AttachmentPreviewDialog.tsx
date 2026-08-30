@@ -144,7 +144,10 @@ export function AttachmentPreviewDialog({
             </Button>
           </div>
           <div className="col-span-7 sm:col-span-8 sm:flex sm:justify-end">
-            <Button asChild className="w-full rounded-full bg-black text-white hover:bg-black/85 sm:w-auto">
+            <Button
+              asChild
+              className="w-full rounded-full bg-black text-white hover:bg-black/85 sm:w-auto"
+            >
               <a href={file.dataUrl} download={file.name}>
                 <Download className="h-3.5 w-3.5" />
                 Download file

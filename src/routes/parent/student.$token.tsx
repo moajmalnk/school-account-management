@@ -248,11 +248,7 @@ function ParentStudentPage() {
             <div className="flex items-center gap-4 rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] p-3">
               <div className="relative h-14 w-14 shrink-0">
                 {form.photoUrl ? (
-                  <img
-                    src={form.photoUrl}
-                    alt=""
-                    className="h-14 w-14 rounded-2xl object-cover"
-                  />
+                  <img src={form.photoUrl} alt="" className="h-14 w-14 rounded-2xl object-cover" />
                 ) : (
                   <div className="grid h-14 w-14 place-items-center rounded-2xl bg-[#0F766E] text-sm font-semibold text-white">
                     {personInitials(locked.name)}
@@ -485,9 +481,7 @@ function ParentStudentPage() {
                   setForm({
                     ...form,
                     needsBus: checked === true,
-                    ...(checked === true
-                      ? {}
-                      : { busPoint1: "", busPoint2: "" }),
+                    ...(checked === true ? {} : { busPoint1: "", busPoint2: "" }),
                   })
                 }
                 className="mt-0.5 h-5 w-5 rounded-md border-slate-300"
@@ -595,7 +589,8 @@ function FormSelect({
   allowNone?: boolean;
   noneLabel?: string;
 }) {
-  const resolved = value && options.includes(value) ? value : allowNone && !value ? "__none__" : undefined;
+  const resolved =
+    value && options.includes(value) ? value : allowNone && !value ? "__none__" : undefined;
   return (
     <Select value={resolved} onValueChange={onValueChange}>
       <SelectTrigger className="h-10 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 text-[13px] shadow-none focus:ring-2 focus:ring-[#0F766E] focus:ring-offset-0">
@@ -624,15 +619,7 @@ function FormSelect({
   );
 }
 
-function LockedField({
-  label,
-  value,
-  icon,
-}: {
-  label: string;
-  value: string;
-  icon?: ReactNode;
-}) {
+function LockedField({ label, value, icon }: { label: string; value: string; icon?: ReactNode }) {
   return (
     <div className="rounded-2xl border border-slate-100 bg-slate-50/80 px-3.5 py-3">
       <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">

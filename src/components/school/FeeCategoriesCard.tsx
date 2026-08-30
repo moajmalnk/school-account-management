@@ -87,9 +87,7 @@ export function FeeCategoriesCard({
   );
   const customRows = useMemo(
     () =>
-      paymentCategories
-        .filter((c) => !c.isSystem)
-        .sort((a, b) => a.label.localeCompare(b.label)),
+      paymentCategories.filter((c) => !c.isSystem).sort((a, b) => a.label.localeCompare(b.label)),
     [paymentCategories],
   );
 
@@ -144,9 +142,7 @@ export function FeeCategoriesCard({
     }
     if (
       paymentCategories.some(
-        (c) =>
-          c.id !== editingId &&
-          c.label.trim().toLowerCase() === label.toLowerCase(),
+        (c) => c.id !== editingId && c.label.trim().toLowerCase() === label.toLowerCase(),
       )
     ) {
       toast.error("A fee category with this name already exists");
@@ -174,14 +170,10 @@ export function FeeCategoriesCard({
         feeAmountMode: schedule.feeAmountMode,
         feeSchedule,
         feeCollectionStartMonth:
-          schedule.billingCycle === "Monthly"
-            ? schedule.feeCollectionStartMonth
-            : undefined,
+          schedule.billingCycle === "Monthly" ? schedule.feeCollectionStartMonth : undefined,
         active,
       };
-      setPaymentCategories((prev) =>
-        prev.map((c) => (c.id === editingId ? updated : c)),
-      );
+      setPaymentCategories((prev) => prev.map((c) => (c.id === editingId ? updated : c)));
       persist(updated);
       toast.success(`Fee category updated · ${label}`);
     } else {
@@ -200,9 +192,7 @@ export function FeeCategoriesCard({
         feeAmountMode: schedule.feeAmountMode,
         feeSchedule,
         feeCollectionStartMonth:
-          schedule.billingCycle === "Monthly"
-            ? schedule.feeCollectionStartMonth
-            : undefined,
+          schedule.billingCycle === "Monthly" ? schedule.feeCollectionStartMonth : undefined,
         active,
       };
       setPaymentCategories((prev) => [...prev, created]);
@@ -268,9 +258,7 @@ export function FeeCategoriesCard({
     <OrganicCard tone="white" cornerSide="tr" padded className="w-full">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-[16px] font-semibold text-black dark:text-zinc-100">
-            Fee Category
-          </h2>
+          <h2 className="text-[16px] font-semibold text-black dark:text-zinc-100">Fee Category</h2>
           <p className="mt-1 text-[12.5px] text-black/50 dark:text-zinc-400">
             Create campus fees like Hostel with the same monthly or term structure as Class Tier.
             Tuition and Vehicle stay on Class Tier / Transport.
@@ -404,17 +392,12 @@ export function FeeCategoriesCard({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="flex max-h-[min(90vh,760px)] w-[calc(100vw-1.5rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
           <DialogHeader className="shrink-0 space-y-1.5 border-b border-[#EFEFEF] px-4 py-3 pr-12 sm:px-6 sm:py-4 dark:border-white/10">
-            <DialogTitle>
-              {editingId ? "Edit Fee Category" : "Add Fee Category"}
-            </DialogTitle>
+            <DialogTitle>{editingId ? "Edit Fee Category" : "Add Fee Category"}</DialogTitle>
             <DialogDescription>
               Name the fee and set installments. Student assignment and dues come in a later update.
             </DialogDescription>
           </DialogHeader>
-          <form
-            onSubmit={submit}
-            className="flex min-h-0 flex-1 flex-col"
-          >
+          <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-3 sm:px-6 sm:py-4">
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">

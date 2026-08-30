@@ -44,10 +44,7 @@ function toIsoDate(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-export function addBillingPeriod(
-  fromIso: string | null,
-  cycle: SubscriptionCycle,
-): string {
+export function addBillingPeriod(fromIso: string | null, cycle: SubscriptionCycle): string {
   const today = startOfDay(new Date());
   let base = fromIso ? startOfDay(parseIsoDate(fromIso)) : today;
   if (Number.isNaN(base.getTime()) || base < today) {

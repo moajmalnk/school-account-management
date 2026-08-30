@@ -85,10 +85,7 @@ export function PwaUpdateToast() {
     setOfflineReady(false);
   }, [offlineReady, setOfflineReady]);
 
-  const showBanner =
-    !dismissed &&
-    !isUpdatePromptOnCooldown() &&
-    (needRefresh || versionOutdated);
+  const showBanner = !dismissed && !isUpdatePromptOnCooldown() && (needRefresh || versionOutdated);
 
   const onUpdateNow = async () => {
     if (updating) return;

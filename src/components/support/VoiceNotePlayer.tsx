@@ -38,8 +38,7 @@ export function VoiceNotePlayer({
     );
   };
 
-  const ratio =
-    knownDuration > 0 ? Math.min(1, elapsed / knownDuration) : playing ? 0.08 : 0;
+  const ratio = knownDuration > 0 ? Math.min(1, elapsed / knownDuration) : playing ? 0.08 : 0;
 
   return (
     <div
@@ -77,7 +76,10 @@ export function VoiceNotePlayer({
       </button>
       <div className="min-w-0 flex-1">
         <div
-          className={cn("h-1 overflow-hidden rounded-full", inverted ? "bg-white/25" : "bg-black/10 dark:bg-white/15")}
+          className={cn(
+            "h-1 overflow-hidden rounded-full",
+            inverted ? "bg-white/25" : "bg-black/10 dark:bg-white/15",
+          )}
         >
           <div
             className={cn("h-full rounded-full", inverted ? "bg-white" : "bg-[#0F766E]")}

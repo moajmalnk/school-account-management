@@ -210,9 +210,7 @@ export function CreateRoleDialog({
       <DialogContent className="z-[110] sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Add Position / Role</DialogTitle>
-          <DialogDescription>
-            Create a role and select it for this staff profile.
-          </DialogDescription>
+          <DialogDescription>Create a role and select it for this staff profile.</DialogDescription>
         </DialogHeader>
         <form onSubmit={(e) => void submit(e)} className="space-y-3">
           <div className="space-y-1.5">

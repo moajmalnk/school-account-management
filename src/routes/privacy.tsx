@@ -38,8 +38,8 @@ function PrivacyPolicyPage() {
         </p>
         <p>
           For student, parent, fee, and attendance records entered by a School, that School is
-          generally the organisation responsible for deciding why and how that data is processed.
-          We process that data as a service provider on the School’s instructions.
+          generally the organisation responsible for deciding why and how that data is processed. We
+          process that data as a service provider on the School’s instructions.
         </p>
       </LegalSection>
 

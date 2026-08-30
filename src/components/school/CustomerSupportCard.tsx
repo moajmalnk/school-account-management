@@ -3,7 +3,11 @@ import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { ArrowLeft, Loader2, Mail, Plus } from "lucide-react";
 import { toast } from "sonner";
 
-import { SupportChatBubble, SupportChatShell, ConversationMeta } from "@/components/support/SupportChatBubble";
+import {
+  SupportChatBubble,
+  SupportChatShell,
+  ConversationMeta,
+} from "@/components/support/SupportChatBubble";
 import { SupportComposer } from "@/components/support/SupportComposer";
 import { Button } from "@/components/ui/button";
 import {
@@ -120,9 +124,7 @@ export function CustomerSupportCard({ onBackToSettings }: { onBackToSettings?: (
       setFaqs(desk.faqs);
       setTickets(nextTickets);
       setChat((prev) =>
-        prev.length
-          ? prev
-          : [{ id: "greet", role: "bot", body: desk.settings.greeting }],
+        prev.length ? prev : [{ id: "greet", role: "bot", body: desk.settings.greeting }],
       );
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Could not load support";
@@ -151,7 +153,11 @@ export function CustomerSupportCard({ onBackToSettings }: { onBackToSettings?: (
 
   const openWhatsApp = () => {
     const digits = whatsappDigits(settings?.whatsappE164);
-    window.open(`https://wa.me/${digits}?text=${encodeURIComponent(channelMessage())}`, "_blank", "noopener,noreferrer");
+    window.open(
+      `https://wa.me/${digits}?text=${encodeURIComponent(channelMessage())}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
   };
 
   const ask = async (text: string, faqId?: string) => {
@@ -198,7 +204,11 @@ export function CustomerSupportCard({ onBackToSettings }: { onBackToSettings?: (
       setChat((prev) =>
         prev.map((line) =>
           line.id === lineId
-            ? { ...line, pendingTicket: undefined, body: `${line.body}\n\nSent to Feezo as ${ticket.id}.` }
+            ? {
+                ...line,
+                pendingTicket: undefined,
+                body: `${line.body}\n\nSent to Feezo as ${ticket.id}.`,
+              }
             : line,
         ),
       );
@@ -212,7 +222,8 @@ export function CustomerSupportCard({ onBackToSettings }: { onBackToSettings?: (
   };
 
   const composing = chatId === "new" || (!chatId && tickets.length === 0);
-  const activeTicket = chatId && chatId !== "new" ? tickets.find((t) => t.id === chatId) ?? null : null;
+  const activeTicket =
+    chatId && chatId !== "new" ? (tickets.find((t) => t.id === chatId) ?? null) : null;
   const onMobileThread = Boolean(activeTicket) || composing;
 
   useEffect(() => {
@@ -350,7 +361,9 @@ export function CustomerSupportCard({ onBackToSettings }: { onBackToSettings?: (
     if (!ticket.schoolUnread && !(ticket.schoolUnreadCount ?? 0)) return;
     void markSupportTicketRead(chatId)
       .then((next) => {
-        setTickets((prev) => prev.map((item) => (item.id === next.id ? { ...item, ...next } : item)));
+        setTickets((prev) =>
+          prev.map((item) => (item.id === next.id ? { ...item, ...next } : item)),
+        );
       })
       .catch(() => {
         // ignore
@@ -363,7 +376,12 @@ export function CustomerSupportCard({ onBackToSettings }: { onBackToSettings?: (
 
   if (loading) {
     return (
-      <OrganicCard tone="white" cornerSide="tr" padded={false} className={cn(workspacePanelClass, "overflow-hidden p-0")}>
+      <OrganicCard
+        tone="white"
+        cornerSide="tr"
+        padded={false}
+        className={cn(workspacePanelClass, "overflow-hidden p-0")}
+      >
         <div
           className={cn(
             "flex min-h-[22rem] items-center justify-center gap-2 text-[13px] text-black/45 dark:text-zinc-400",
@@ -379,17 +397,17 @@ export function CustomerSupportCard({ onBackToSettings }: { onBackToSettings?: (
   return (
     <>
       <OrganicCard
-      tone="white"
-      cornerSide="br"
-      padded={false}
-      className={cn(workspacePanelClass, "col-span-12 overflow-hidden p-0")}
-    >
-      <div
-        className={cn(
-          "flex min-h-[22rem] flex-col lg:h-[min(calc(100dvh-11rem),760px)] lg:flex-row",
-          mobileShellHeight,
-        )}
+        tone="white"
+        cornerSide="br"
+        padded={false}
+        className={cn(workspacePanelClass, "col-span-12 overflow-hidden p-0")}
       >
+        <div
+          className={cn(
+            "flex min-h-[22rem] flex-col lg:h-[min(calc(100dvh-11rem),760px)] lg:flex-row",
+            mobileShellHeight,
+          )}
+        >
           <div
             className={cn(
               "flex w-full shrink-0 flex-col border-[#EFEFEF] bg-white dark:border-white/10 dark:bg-zinc-950 lg:w-[300px] lg:border-r",
@@ -448,8 +466,7 @@ export function CustomerSupportCard({ onBackToSettings }: { onBackToSettings?: (
                 tickets.map((ticket) => {
                   const active = ticket.id === chatId;
                   const preview = ticket.lastMessage?.body || ticket.subject;
-                  const unread =
-                    ticket.schoolUnreadCount ?? (ticket.schoolUnread ? 1 : 0);
+                  const unread = ticket.schoolUnreadCount ?? (ticket.schoolUnread ? 1 : 0);
                   const messageCount = ticket.messageCount ?? ticket.messages?.length ?? 0;
                   return (
                     <li key={ticket.id}>
@@ -526,7 +543,9 @@ export function CustomerSupportCard({ onBackToSettings }: { onBackToSettings?: (
                     <div className="truncate text-[15px] font-semibold text-black dark:text-zinc-100">
                       {activeTicket.subject || "Feezo"}
                     </div>
-                    <div className="text-[12px] text-black/45 dark:text-zinc-400">{STATUS_LABEL[activeTicket.status]}</div>
+                    <div className="text-[12px] text-black/45 dark:text-zinc-400">
+                      {STATUS_LABEL[activeTicket.status]}
+                    </div>
                   </div>
                   {activeTicket.status === "closed" ? (
                     <Button
@@ -564,18 +583,14 @@ export function CustomerSupportCard({ onBackToSettings }: { onBackToSettings?: (
                         updatedAt={msg.updatedAt}
                         body={msg.body}
                         attachments={msg.attachments}
-                        canEdit={
-                          activeTicket.status !== "closed" && canEditMessage(msg)
-                        }
+                        canEdit={activeTicket.status !== "closed" && canEditMessage(msg)}
                         canDelete={canDeleteMessage(msg)}
                         onEdit={
                           activeTicket.status !== "closed" && canEditMessage(msg)
                             ? () => setEditingMessage(msg)
                             : undefined
                         }
-                        onDelete={
-                          canDeleteMessage(msg) ? () => setDeletingMessage(msg) : undefined
-                        }
+                        onDelete={canDeleteMessage(msg) ? () => setDeletingMessage(msg) : undefined}
                       />
                     ))}
                   </div>
@@ -618,7 +633,9 @@ export function CustomerSupportCard({ onBackToSettings }: { onBackToSettings?: (
                     F
                   </span>
                   <div className="min-w-0 flex-1">
-                    <div className="text-[15px] font-semibold text-black dark:text-zinc-100">Feezo</div>
+                    <div className="text-[15px] font-semibold text-black dark:text-zinc-100">
+                      Feezo
+                    </div>
                     <div className="text-[12px] text-black/45 dark:text-zinc-400">
                       Tap to type — or use Email / WhatsApp
                     </div>

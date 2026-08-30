@@ -125,12 +125,7 @@ function createLayout(): Layout {
   };
 }
 
-function drawDocHeader(
-  layout: Layout,
-  title: string,
-  leftMeta: string,
-  rightMeta: string,
-) {
+function drawDocHeader(layout: Layout, title: string, leftMeta: string, rightMeta: string) {
   const { doc, pageW, margin, contentW } = layout;
   doc.setFillColor(...INK.teal);
   doc.rect(0, 0, pageW, 26, "F");
@@ -351,10 +346,7 @@ function totalBar(
   });
 }
 
-function buildInvoiceDoc(
-  invoice: PlatformInvoiceDoc,
-  opts?: { schoolHost?: string },
-): jsPDF {
+function buildInvoiceDoc(invoice: PlatformInvoiceDoc, opts?: { schoolHost?: string }): jsPDF {
   const layout = createLayout();
   const { doc, margin, contentW } = layout;
   const school = invoice.tenantName || "School tenant";
@@ -380,11 +372,7 @@ function buildInvoiceDoc(
     },
     {
       title: "From",
-      lines: [
-        "Feezo",
-        "SaaS subscription billing",
-        "support@feezo.app",
-      ],
+      lines: ["Feezo", "SaaS subscription billing", "support@feezo.app"],
     },
   );
 
@@ -401,10 +389,7 @@ function buildInvoiceDoc(
       `Discount (${invoice.discountPercent}%)`,
       `- ${platformMoney(invoice.currency, invoice.discountAmount)}`,
     ],
-    [
-      `Tax / GST (${invoice.taxPercent}%)`,
-      platformMoney(invoice.currency, invoice.taxAmount),
-    ],
+    [`Tax / GST (${invoice.taxPercent}%)`, platformMoney(invoice.currency, invoice.taxAmount)],
   ]);
 
   totalBar(
@@ -420,10 +405,7 @@ function buildInvoiceDoc(
   return doc;
 }
 
-function buildReceiptDoc(
-  invoice: PlatformInvoiceDoc,
-  opts?: { schoolHost?: string },
-): jsPDF {
+function buildReceiptDoc(invoice: PlatformInvoiceDoc, opts?: { schoolHost?: string }): jsPDF {
   if (invoice.status !== "Paid" || !invoice.receiptNumber) {
     throw new Error("Receipt is only available for paid invoices");
   }
@@ -431,9 +413,7 @@ function buildReceiptDoc(
   const layout = createLayout();
   const { doc, margin, contentW } = layout;
   const school = invoice.tenantName || "School tenant";
-  const paidAt = invoice.paidAt
-    ? String(invoice.paidAt).slice(0, 16).replace("T", " ")
-    : "-";
+  const paidAt = invoice.paidAt ? String(invoice.paidAt).slice(0, 16).replace("T", " ") : "-";
 
   drawDocHeader(
     layout,
@@ -456,11 +436,7 @@ function buildReceiptDoc(
     },
     {
       title: "Received by",
-      lines: [
-        "Feezo",
-        "Subscription settlement",
-        "accounts@schoolaccounts.in",
-      ],
+      lines: ["Feezo", "Subscription settlement", "accounts@schoolaccounts.in"],
     },
   );
 

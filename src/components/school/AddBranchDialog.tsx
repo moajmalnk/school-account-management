@@ -25,11 +25,7 @@ import { apiUpsertBranch } from "@/lib/api/settings";
 import { getApiToken } from "@/lib/api/client";
 import { planAllowsMultipleBranches } from "@/lib/permissions";
 import { useAuth } from "@/lib/auth";
-import {
-  normalizeCampusBranch,
-  useTenantStore,
-  type CampusBranch,
-} from "@/lib/tenant-store";
+import { normalizeCampusBranch, useTenantStore, type CampusBranch } from "@/lib/tenant-store";
 
 const emptyForm = () => ({
   name: "",

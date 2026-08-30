@@ -67,10 +67,7 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
     redirect: string;
   } | null>(null);
 
-  const districts = useMemo(
-    () => districtsForState(form.state),
-    [form.state],
-  );
+  const districts = useMemo(() => districtsForState(form.state), [form.state]);
   const strength = passwordStrength(form.password);
 
   useEffect(() => {
@@ -220,9 +217,7 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
       toast.success("Your Feezo workspace is live");
     } catch (err) {
       const msg =
-        err instanceof ApiError
-          ? err.message
-          : "Could not create your school. Please try again.";
+        err instanceof ApiError ? err.message : "Could not create your school. Please try again.";
       toast.error(msg);
     } finally {
       setSubmitting(false);
@@ -255,8 +250,8 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
               Welcome to Feezo Edu Books!
             </h2>
             <p className="mt-2 text-[14px] leading-relaxed text-black/60">
-              Your dedicated school account and isolated tenant workspace have
-              been created successfully.
+              Your dedicated school account and isolated tenant workspace have been created
+              successfully.
             </p>
             <div className="mt-6 space-y-2 rounded-2xl bg-[#F4FBF0] px-4 py-4 text-left text-[13px]">
               <Row label="Active Tenant Workspace" value={info.tenantName} />
@@ -284,16 +279,9 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
     <SignupShell step={step}>
       {step === 1 ? (
         <div className="space-y-4">
-          <h2 className="text-[15px] font-semibold text-black">
-            Step 1 — School Information
-          </h2>
+          <h2 className="text-[15px] font-semibold text-black">Step 1 — School Information</h2>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field
-              id="schoolName"
-              label="School Name"
-              required
-              error={errors.schoolName}
-            >
+            <Field id="schoolName" label="School Name" required error={errors.schoolName}>
               <input
                 id="schoolName"
                 className={fieldClass}
@@ -316,16 +304,8 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
                 onChange={(e) => patch("schoolCode", e.target.value)}
               />
             </Field>
-            <Field
-              id="schoolType"
-              label="School Type"
-              required
-              error={errors.schoolType}
-            >
-              <Select
-                value={form.schoolType}
-                onValueChange={(v) => patch("schoolType", v)}
-              >
+            <Field id="schoolType" label="School Type" required error={errors.schoolType}>
+              <Select value={form.schoolType} onValueChange={(v) => patch("schoolType", v)}>
                 <SelectTrigger
                   id="schoolType"
                   data-signup-field="schoolType"
@@ -335,11 +315,7 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
                 </SelectTrigger>
                 <SelectContent className={signupSelectContentClass}>
                   {SCHOOL_TYPES.map((t) => (
-                    <SelectItem
-                      key={t}
-                      value={t}
-                      className={signupSelectItemClass}
-                    >
+                    <SelectItem key={t} value={t} className={signupSelectItemClass}>
                       {t}
                     </SelectItem>
                   ))}
@@ -367,10 +343,7 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field id="state" label="State" required error={errors.state}>
-              <Select
-                value={form.state}
-                onValueChange={(v) => patch("state", v)}
-              >
+              <Select value={form.state} onValueChange={(v) => patch("state", v)}>
                 <SelectTrigger
                   id="state"
                   data-signup-field="state"
@@ -380,11 +353,7 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
                 </SelectTrigger>
                 <SelectContent className={signupSelectContentClass}>
                   {INDIA_STATES.map((s) => (
-                    <SelectItem
-                      key={s}
-                      value={s}
-                      className={signupSelectItemClass}
-                    >
+                    <SelectItem key={s} value={s} className={signupSelectItemClass}>
                       {s}
                     </SelectItem>
                   ))}
@@ -403,18 +372,12 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
                   className={signupSelectTriggerClass}
                 >
                   <SelectValue
-                    placeholder={
-                      form.state ? "Select district" : "Select state first"
-                    }
+                    placeholder={form.state ? "Select district" : "Select state first"}
                   />
                 </SelectTrigger>
                 <SelectContent className={signupSelectContentClass}>
                   {districts.map((d) => (
-                    <SelectItem
-                      key={d}
-                      value={d}
-                      className={signupSelectItemClass}
-                    >
+                    <SelectItem key={d} value={d} className={signupSelectItemClass}>
                       {d}
                     </SelectItem>
                   ))}
@@ -448,27 +411,17 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
               />
             </Field>
           </div>
-          <Field
-            id="subdomain"
-            label="Workspace URL"
-            required
-            error={errors.subdomain}
-          >
+          <Field id="subdomain" label="Workspace URL" required error={errors.subdomain}>
             <div className="flex items-center gap-2">
               <input
                 id="subdomain"
                 className={fieldClass}
                 value={form.subdomain}
                 onChange={(e) =>
-                  patch(
-                    "subdomain",
-                    e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""),
-                  )
+                  patch("subdomain", e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))
                 }
               />
-              <span className="shrink-0 text-[12px] text-black/45">
-                .feezo.app
-              </span>
+              <span className="shrink-0 text-[12px] text-black/45">.feezo.app</span>
             </div>
           </Field>
           <NavRow onBack={null} onNext={next} nextLabel="Next: Administrator Details →" />
@@ -481,12 +434,7 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
             Step 2 — Administrator Information
           </h2>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field
-              id="adminName"
-              label="Administrator Full Name"
-              required
-              error={errors.adminName}
-            >
+            <Field id="adminName" label="Administrator Full Name" required error={errors.adminName}>
               <input
                 id="adminName"
                 className={fieldClass}
@@ -529,12 +477,7 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
             </p>
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field
-              id="password"
-              label="Create Master Password"
-              required
-              error={errors.password}
-            >
+            <Field id="password" label="Create Master Password" required error={errors.password}>
               <div className="relative">
                 <input
                   id="password"
@@ -550,16 +493,10 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
                   onClick={() => setShowPw((v) => !v)}
                   aria-label={showPw ? "Hide password" : "Show password"}
                 >
-                  {showPw ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
+                  {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-              <p className="mt-1.5 text-[12px] text-black/45">
-                Strength: {strength.label}
-              </p>
+              <p className="mt-1.5 text-[12px] text-black/45">Strength: {strength.label}</p>
             </Field>
             <Field
               id="passwordConfirm"
@@ -577,19 +514,13 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
               />
             </Field>
           </div>
-          <NavRow
-            onBack={back}
-            onNext={next}
-            nextLabel="Next: Choose Package →"
-          />
+          <NavRow onBack={back} onNext={next} nextLabel="Next: Choose Package →" />
         </div>
       ) : null}
 
       {step === 3 ? (
         <div className="space-y-4">
-          <h2 className="text-[15px] font-semibold text-black">
-            Step 3 — Choose Your Package
-          </h2>
+          <h2 className="text-[15px] font-semibold text-black">Step 3 — Choose Your Package</h2>
           <p className="text-[13px] text-black/55">
             All plans include a 14-day full-feature trial. You can change later.
           </p>
@@ -618,21 +549,12 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
                   </span>
                   <span className="mt-2 text-[1.35rem] font-bold text-[#6BA832]">
                     ₹{formatInr(plan.monthly)}
-                    <span className="text-[12px] font-medium text-black/45">
-                      {" "}
-                      / mo
-                    </span>
+                    <span className="text-[12px] font-medium text-black/45"> / mo</span>
                   </span>
                   <ul className="mt-3 space-y-1.5">
                     {plan.features.slice(0, 3).map((f) => (
-                      <li
-                        key={f}
-                        className="flex items-start gap-1.5 text-[12px] text-black/70"
-                      >
-                        <Check
-                          className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#6BA832]"
-                          aria-hidden
-                        />
+                      <li key={f} className="flex items-start gap-1.5 text-[12px] text-black/70">
+                        <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#6BA832]" aria-hidden />
                         {f}
                       </li>
                     ))}
@@ -641,37 +563,23 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
               );
             })}
           </div>
-          <NavRow
-            onBack={back}
-            onNext={next}
-            nextLabel="Next: Review & Create →"
-          />
+          <NavRow onBack={back} onNext={next} nextLabel="Next: Review & Create →" />
         </div>
       ) : null}
 
       {step === 4 ? (
         <div className="space-y-4">
-          <h2 className="text-[15px] font-semibold text-black">
-            Step 4 — Create School Tenant
-          </h2>
+          <h2 className="text-[15px] font-semibold text-black">Step 4 — Create School Tenant</h2>
           <p className="text-[13px] text-black/55">
-            Review your school account profile before creating your dedicated
-            isolated workspace.
+            Review your school account profile before creating your dedicated isolated workspace.
           </p>
           <div className="grid gap-3 rounded-2xl border border-black/10 bg-[#FAFBFC] p-4 sm:grid-cols-2">
             <Summary label="School Name" value={form.schoolName} />
             <Summary label="School Code" value={form.schoolCode} />
-            <Summary
-              label="Location"
-              value={`${form.district}, ${form.state}`}
-            />
+            <Summary label="Location" value={`${form.district}, ${form.state}`} />
             <Summary label="Administrator" value={form.adminName} />
             <Summary label="Login Email" value={form.adminEmail} />
-            <Summary
-              label="Selected Package"
-              value={`${form.tier} (14-Day Full Trial)`}
-              accent
-            />
+            <Summary label="Selected Package" value={`${form.tier} (14-Day Full Trial)`} accent />
           </div>
           <label className="flex items-start gap-2.5 text-[13px] text-black/70">
             <input
@@ -692,18 +600,14 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
               </a>{" "}
               standards.
               {errors.agreeTerms ? (
-                <span className="mt-1 block text-[12px] text-red-500">
-                  {errors.agreeTerms}
-                </span>
+                <span className="mt-1 block text-[12px] text-red-500">{errors.agreeTerms}</span>
               ) : null}
             </span>
           </label>
           <NavRow
             onBack={back}
             onNext={createAccount}
-            nextLabel={
-              submitting ? "Creating…" : "Create My School Account"
-            }
+            nextLabel={submitting ? "Creating…" : "Create My School Account"}
             nextDisabled={submitting}
           />
         </div>
@@ -731,9 +635,7 @@ function Field({
         {label}
       </FieldLabel>
       {children}
-      {error ? (
-        <p className="mt-1 text-[12px] text-red-500">{error}</p>
-      ) : null}
+      {error ? <p className="mt-1 text-[12px] text-red-500">{error}</p> : null}
     </div>
   );
 }
@@ -779,25 +681,14 @@ function NavRow({
   );
 }
 
-function Summary({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: string;
-  accent?: boolean;
-}) {
+function Summary({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
     <div>
       <div className="text-[11px] font-semibold uppercase tracking-wider text-black/40">
         {label}
       </div>
       <div
-        className={cn(
-          "mt-0.5 text-[14px] font-semibold",
-          accent ? "text-[#6BA832]" : "text-black",
-        )}
+        className={cn("mt-0.5 text-[14px] font-semibold", accent ? "text-[#6BA832]" : "text-black")}
       >
         {value || "—"}
       </div>
@@ -805,24 +696,11 @@ function Summary({
   );
 }
 
-function Row({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: string;
-  accent?: boolean;
-}) {
+function Row({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
     <div className="flex justify-between gap-3">
       <span className="text-black/50">{label}</span>
-      <span
-        className={cn(
-          "text-right font-semibold",
-          accent ? "text-[#6BA832]" : "text-black",
-        )}
-      >
+      <span className={cn("text-right font-semibold", accent ? "text-[#6BA832]" : "text-black")}>
         {value}
       </span>
     </div>

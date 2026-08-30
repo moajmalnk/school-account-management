@@ -58,9 +58,7 @@ function ResetPasswordPage() {
       navigate({ to: "/login" });
     } catch (err) {
       const message =
-        err instanceof ApiError
-          ? err.message
-          : "Unable to reset password. Request a new link.";
+        err instanceof ApiError ? err.message : "Unable to reset password. Request a new link.";
       toast.error(message);
     } finally {
       setSubmitting(false);
@@ -107,8 +105,7 @@ function ResetPasswordPage() {
               value={password}
               onChange={(e) => {
                 setPassword(e.target.value);
-                if (fieldErrors.password)
-                  setFieldErrors((f) => ({ ...f, password: undefined }));
+                if (fieldErrors.password) setFieldErrors((f) => ({ ...f, password: undefined }));
               }}
               placeholder="••••••••"
               aria-invalid={!!fieldErrors.password}
@@ -126,9 +123,7 @@ function ResetPasswordPage() {
             </button>
           </div>
           {(fieldErrors.password || strengthHint) && (
-            <div className="text-[11px] text-[#EF4444]">
-              {fieldErrors.password || strengthHint}
-            </div>
+            <div className="text-[11px] text-[#EF4444]">{fieldErrors.password || strengthHint}</div>
           )}
         </div>
 
@@ -147,8 +142,7 @@ function ResetPasswordPage() {
               value={confirm}
               onChange={(e) => {
                 setConfirm(e.target.value);
-                if (fieldErrors.confirm)
-                  setFieldErrors((f) => ({ ...f, confirm: undefined }));
+                if (fieldErrors.confirm) setFieldErrors((f) => ({ ...f, confirm: undefined }));
               }}
               placeholder="••••••••"
               aria-invalid={!!fieldErrors.confirm}

@@ -682,9 +682,7 @@ export function MonthPicker({
     setOpen(false);
   };
 
-  const displayText = selected
-    ? formatMonthDisplay(selected.year, selected.month - 1)
-    : null;
+  const displayText = selected ? formatMonthDisplay(selected.year, selected.month - 1) : null;
 
   return (
     <Popover open={open} onOpenChange={(o) => !disabled && setOpen(o)}>

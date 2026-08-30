@@ -113,10 +113,7 @@ function formatWebhookPayload(payload: unknown): string {
     const obj = payload as Record<string, unknown>;
     if (typeof obj.raw === "string") return obj.raw;
     const tenant =
-      (obj.tenantName as string) ||
-      (obj.tenantId as string) ||
-      (obj.subdomain as string) ||
-      "";
+      (obj.tenantName as string) || (obj.tenantId as string) || (obj.subdomain as string) || "";
     const event = (obj.event as string) || "";
     return [event, tenant].filter(Boolean).join(" · ") || JSON.stringify(payload);
   }
@@ -205,9 +202,7 @@ export async function fetchSuperAdminTenantSnapshot(
   );
 }
 
-export async function provisionSuperAdminTenant(
-  input: ProvisionInput,
-): Promise<ProvisionResult> {
+export async function provisionSuperAdminTenant(input: ProvisionInput): Promise<ProvisionResult> {
   return apiRequest<ProvisionResult>("/api/super-admin/tenants/provision.php", {
     method: "POST",
     body: input,
@@ -227,9 +222,7 @@ export type UpdateTenantInput = {
   password?: string;
 };
 
-export async function updateSuperAdminTenant(
-  input: UpdateTenantInput,
-): Promise<Tenant> {
+export async function updateSuperAdminTenant(input: UpdateTenantInput): Promise<Tenant> {
   return apiRequest<Tenant>("/api/super-admin/tenants/update.php", {
     method: "POST",
     body: input,
@@ -286,9 +279,7 @@ export type PlatformInvoice = {
   tenantName?: string | null;
 };
 
-export async function fetchSuperAdminTenantInvoices(
-  tenantId: string,
-): Promise<PlatformInvoice[]> {
+export async function fetchSuperAdminTenantInvoices(tenantId: string): Promise<PlatformInvoice[]> {
   return apiRequest<PlatformInvoice[]>(
     `/api/super-admin/tenants/invoices.php?tenantId=${encodeURIComponent(tenantId)}`,
   );

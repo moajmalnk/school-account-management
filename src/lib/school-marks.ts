@@ -98,7 +98,7 @@ export function defaultSealSvg(
   const botStart = polar(180 - gap);
   const botEnd = polar(gap);
 
-  const arcLen = SEAL_TEXT_R * ((180 - gap * 2) * Math.PI) / 180;
+  const arcLen = (SEAL_TEXT_R * ((180 - gap * 2) * Math.PI)) / 180;
   const nameSize = fontForArc(name, arcLen, 22, 11, 0.58);
   const detailSize = fontForArc(details, arcLen, 13.5, 8.5, 0.52);
   const nameTrack = trackingForArc(name, arcLen, nameSize, 0.55);

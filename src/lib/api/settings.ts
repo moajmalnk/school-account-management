@@ -57,11 +57,7 @@ export async function apiSaveSchoolDetails(
     next.sealUrl = await apiUploadDataUrl(next.sealUrl!, "seal", "seal.png");
   }
   if (isDataUrl(next.signatureUrl)) {
-    next.signatureUrl = await apiUploadDataUrl(
-      next.signatureUrl!,
-      "signature",
-      "signature.png",
-    );
+    next.signatureUrl = await apiUploadDataUrl(next.signatureUrl!, "signature", "signature.png");
   }
 
   const data = await apiRequest<{
@@ -249,37 +245,30 @@ export async function apiDeleteRole(id: string): Promise<void> {
   });
 }
 
-export async function apiUpsertPaymentCategory(
-  cat: PaymentCategory,
-): Promise<PaymentCategory> {
+export async function apiUpsertPaymentCategory(cat: PaymentCategory): Promise<PaymentCategory> {
   if (!hasToken()) return cat;
-  const list = await apiRequest<PaymentCategory[]>(
-    "/api/settings/fees.php?resource=categories",
-  );
+  const list = await apiRequest<PaymentCategory[]>("/api/settings/fees.php?resource=categories");
   const exists = list.some((c) => c.id === cat.id);
   if (exists) {
-    return apiRequest<PaymentCategory>(
-      "/api/settings/fees.php?resource=categories",
-      { method: "PUT", body: cat },
-    );
+    return apiRequest<PaymentCategory>("/api/settings/fees.php?resource=categories", {
+      method: "PUT",
+      body: cat,
+    });
   }
-  return apiRequest<PaymentCategory>(
-    "/api/settings/fees.php?resource=categories",
-    { method: "POST", body: cat },
-  );
+  return apiRequest<PaymentCategory>("/api/settings/fees.php?resource=categories", {
+    method: "POST",
+    body: cat,
+  });
 }
 
 export async function apiDeletePaymentCategory(id: string): Promise<void> {
   if (!hasToken()) return;
-  await apiRequest(
-    `/api/settings/fees.php?resource=categories&id=${encodeURIComponent(id)}`,
-    { method: "DELETE" },
-  );
+  await apiRequest(`/api/settings/fees.php?resource=categories&id=${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
 }
 
-export async function apiUpsertTransportRoute(
-  route: TransportRoute,
-): Promise<TransportRoute> {
+export async function apiUpsertTransportRoute(route: TransportRoute): Promise<TransportRoute> {
   if (!hasToken()) return route;
   const list = await apiRequest<TransportRoute[]>("/api/settings/transport.php");
   const exists = list.some((r) => r.id === route.id);
@@ -302,32 +291,27 @@ export async function apiDeleteTransportRoute(id: string): Promise<void> {
   });
 }
 
-export async function apiUpsertVehicle(
-  vehicle: TransportVehicle,
-): Promise<TransportVehicle> {
+export async function apiUpsertVehicle(vehicle: TransportVehicle): Promise<TransportVehicle> {
   if (!hasToken()) return vehicle;
-  const list = await apiRequest<TransportVehicle[]>(
-    "/api/settings/transport.php?type=vehicles",
-  );
+  const list = await apiRequest<TransportVehicle[]>("/api/settings/transport.php?type=vehicles");
   const exists = list.some((v) => v.id === vehicle.id);
   if (exists) {
-    return apiRequest<TransportVehicle>(
-      "/api/settings/transport.php?type=vehicles",
-      { method: "PUT", body: vehicle },
-    );
+    return apiRequest<TransportVehicle>("/api/settings/transport.php?type=vehicles", {
+      method: "PUT",
+      body: vehicle,
+    });
   }
-  return apiRequest<TransportVehicle>(
-    "/api/settings/transport.php?type=vehicles",
-    { method: "POST", body: vehicle },
-  );
+  return apiRequest<TransportVehicle>("/api/settings/transport.php?type=vehicles", {
+    method: "POST",
+    body: vehicle,
+  });
 }
 
 export async function apiDeleteVehicle(id: string): Promise<void> {
   if (!hasToken()) return;
-  await apiRequest(
-    `/api/settings/transport.php?type=vehicles&id=${encodeURIComponent(id)}`,
-    { method: "DELETE" },
-  );
+  await apiRequest(`/api/settings/transport.php?type=vehicles&id=${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
 }
 
 export async function apiUpsertTenantUser(user: {

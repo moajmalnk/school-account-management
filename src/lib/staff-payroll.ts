@@ -64,9 +64,7 @@ function ledgerStatus(
   return "Due";
 }
 
-function attendanceLabelForMonth(
-  pay: ReturnType<typeof staffPayableSalary>,
-): string {
+function attendanceLabelForMonth(pay: ReturnType<typeof staffPayableSalary>): string {
   if (!pay.attendance) return "Full gross · no attendance";
   const paidLeave = pay.attendance.paidLeaveDays || 0;
   const unpaidLeave = pay.attendance.unpaidLeaveDays || 0;
@@ -111,9 +109,7 @@ export function buildStaffPayrollStatement(
     .sort((a, b) => b.localeCompare(a))
     .map((month) => {
       const pay = staffPayableSalary(staff, month);
-      const payments = salaryHistory.filter(
-        (entry) => salaryHistoryPayrollMonth(entry) === month,
-      );
+      const payments = salaryHistory.filter((entry) => salaryHistoryPayrollMonth(entry) === month);
       const paid = payments.reduce((sum, entry) => sum + entry.amount, 0);
       const outstanding = Math.max(0, pay.payable - paid);
       return {

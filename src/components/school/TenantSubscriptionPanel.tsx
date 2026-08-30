@@ -10,7 +10,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { PlatformDocumentPreview, type PlatformDocKind } from "@/components/admin/PlatformDocumentPreview";
+import {
+  PlatformDocumentPreview,
+  type PlatformDocKind,
+} from "@/components/admin/PlatformDocumentPreview";
 import {
   SubscriptionRenewDialog,
   type SubscriptionCycle,
@@ -25,10 +28,7 @@ import {
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { ApiError } from "@/lib/api/client";
-import {
-  fetchTenantSubscription,
-  type TenantSubscription,
-} from "@/lib/api/subscription";
+import { fetchTenantSubscription, type TenantSubscription } from "@/lib/api/subscription";
 import type { PlatformInvoice } from "@/lib/api/super-admin";
 import { PLAN_FEATURE_ITEMS } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
@@ -202,8 +202,8 @@ function DocumentsEmptyState({ schoolLabel }: { schoolLabel: string }) {
       </span>
       <p className="mt-4 text-[15px] font-semibold text-black dark:text-zinc-50">No invoices yet</p>
       <p className="mt-1 max-w-[16rem] text-[13px] leading-snug text-black/50 dark:text-zinc-400">
-        Feezo will issue the first invoice and receipt for this plan. Documents for {schoolLabel} will
-        show up here.
+        Feezo will issue the first invoice and receipt for this plan. Documents for {schoolLabel}{" "}
+        will show up here.
       </p>
     </div>
   );
@@ -271,15 +271,11 @@ export function TenantSubscriptionPanel({
     (cycle === "Monthly" ? lastTotal : 0) ||
     (catalogAnnual ? Math.round(catalogAnnual / 12) : 0);
   const annually =
-    catalogAnnual ||
-    (cycle === "Annual" ? lastTotal : 0) ||
-    (monthly > 0 ? monthly * 12 : 0);
+    catalogAnnual || (cycle === "Annual" ? lastTotal : 0) || (monthly > 0 ? monthly * 12 : 0);
   const rowPrice = cycle === "Annual" ? annually || lastTotal : monthly || lastTotal;
   const displayStatus = resolveDisplayStatus(data?.status || "Active", renewalDate, latest);
   const showAlert =
-    displayStatus === "Expires soon" ||
-    displayStatus === "Overdue" ||
-    Boolean(outstanding);
+    displayStatus === "Expires soon" || displayStatus === "Overdue" || Boolean(outstanding);
 
   const schoolLabel = data?.tenantName || tenantName;
   const days = daysUntil(renewalDate);
@@ -405,7 +401,9 @@ export function TenantSubscriptionPanel({
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#FFF4E5] px-4 py-3 dark:bg-[#C2410C]/20">
           <div className="flex min-w-0 items-start gap-2.5">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#C2410C]" />
-            <p className="text-[13px] leading-snug text-[#9A3412] dark:text-[#FDBA74]">{alertCopy}</p>
+            <p className="text-[13px] leading-snug text-[#9A3412] dark:text-[#FDBA74]">
+              {alertCopy}
+            </p>
           </div>
           <Button
             type="button"
@@ -477,7 +475,12 @@ export function TenantSubscriptionPanel({
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-2 lg:justify-end">
-                <span className={cn("flex items-center gap-1.5 text-[13px] font-medium", statusClass(displayStatus))}>
+                <span
+                  className={cn(
+                    "flex items-center gap-1.5 text-[13px] font-medium",
+                    statusClass(displayStatus),
+                  )}
+                >
                   {displayStatus === "Expires soon" || displayStatus === "Overdue" ? (
                     <AlertTriangle className="h-3.5 w-3.5" />
                   ) : null}
@@ -529,7 +532,10 @@ export function TenantSubscriptionPanel({
                   )}
                 >
                   <Check
-                    className={cn("h-3.5 w-3.5 shrink-0", on ? "text-[#0F766E]" : "text-black/25 dark:text-zinc-600")}
+                    className={cn(
+                      "h-3.5 w-3.5 shrink-0",
+                      on ? "text-[#0F766E]" : "text-black/25 dark:text-zinc-600",
+                    )}
                     strokeWidth={2.5}
                     aria-hidden
                   />

@@ -154,7 +154,9 @@ export function buildIncomeExpenseSeries(
 ): IncomeExpensePoint[] {
   const range = getPeriodRange(period, customRange, reference);
   if (!range) {
-    return [{ label: "All", income: payments.reduce((s, p) => s + p.amount, 0), expense: expenseTotal }];
+    return [
+      { label: "All", income: payments.reduce((s, p) => s + p.amount, 0), expense: expenseTotal },
+    ];
   }
 
   const buckets = createPeriodBuckets(period, range.start, range.end, reference);
@@ -174,7 +176,10 @@ export function buildIncomeExpenseSeries(
   }
 
   const weights = buckets.map((b) =>
-    Math.max(1, Math.round((startOfDay(b.end).getTime() - startOfDay(b.start).getTime()) / 86_400_000) + 1),
+    Math.max(
+      1,
+      Math.round((startOfDay(b.end).getTime() - startOfDay(b.start).getTime()) / 86_400_000) + 1,
+    ),
   );
   const weightSum = weights.reduce((s, w) => s + w, 0) || 1;
 
@@ -196,7 +201,11 @@ function createPeriodBuckets(
   if (period === "today") {
     const day = startOfDay(reference);
     return [
-      { label: "AM", start: day, end: new Date(day.getFullYear(), day.getMonth(), day.getDate(), 11, 59, 59, 999) },
+      {
+        label: "AM",
+        start: day,
+        end: new Date(day.getFullYear(), day.getMonth(), day.getDate(), 11, 59, 59, 999),
+      },
       {
         label: "PM",
         start: new Date(day.getFullYear(), day.getMonth(), day.getDate(), 12, 0, 0, 0),

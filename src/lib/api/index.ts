@@ -30,15 +30,8 @@ export {
 } from "@/lib/api/tenant-sync";
 export { fetchTenantSubscription } from "@/lib/api/subscription";
 export type { TenantSubscription } from "@/lib/api/subscription";
-export {
-  fetchSupportDesk,
-  fetchSupportTickets,
-  fetchSuperAdminSupport,
-} from "@/lib/api/support";
-export {
-  apiFetchDashboardTodos,
-  apiSaveDashboardTodos,
-} from "@/lib/api/dashboard";
+export { fetchSupportDesk, fetchSupportTickets, fetchSuperAdminSupport } from "@/lib/api/support";
+export { apiFetchDashboardTodos, apiSaveDashboardTodos } from "@/lib/api/dashboard";
 export {
   fetchSuperAdminTenants,
   provisionSuperAdminTenant,

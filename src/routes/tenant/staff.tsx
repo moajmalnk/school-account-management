@@ -1,10 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { StaffRoster } from "@/components/school/SchoolAdminWorkspace";
-import {
-  isStaffProfileTab,
-  type StaffProfileTabId,
-} from "@/components/school/ProfileDetailTabs";
+import { isStaffProfileTab, type StaffProfileTabId } from "@/components/school/ProfileDetailTabs";
 import { useRequirePermission } from "@/hooks/useRequirePermission";
 
 export type StaffSearch = {

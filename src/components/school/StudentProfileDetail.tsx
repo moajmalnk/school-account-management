@@ -1,4 +1,13 @@
-import { useEffect, useMemo, useRef, useState, startTransition, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  startTransition,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
@@ -53,7 +62,11 @@ import {
 } from "@/lib/student-fees";
 import { FeePeriodChecklist } from "@/components/school/FeePeriodChecklist";
 import { ShareParentLinkDialog } from "@/components/school/ShareParentLinkDialog";
-import { downloadReceiptPdf, downloadStudentFeeReportPdf, receiptBrandingFromSchool } from "@/lib/finance-export";
+import {
+  downloadReceiptPdf,
+  downloadStudentFeeReportPdf,
+  receiptBrandingFromSchool,
+} from "@/lib/finance-export";
 import { sendWhatsAppNotify, toNotifyWhatsAppNumber } from "@/lib/whatsapp-notify";
 import {
   apiCreateFeeBreak,
@@ -213,7 +226,7 @@ function ensureStudentDocuments(student: Student): StaffDocument[] {
       if (!existing) {
         return {
           ...def,
-          number: def.id === "doc-aadhaar" ? student.aadhaar ?? "" : "",
+          number: def.id === "doc-aadhaar" ? (student.aadhaar ?? "") : "",
           levels: def.levels.map((l) => ({ ...l })),
           attachments: [],
         };
@@ -221,8 +234,7 @@ function ensureStudentDocuments(student: Student): StaffDocument[] {
       return {
         ...def,
         number:
-          existing.number?.trim() ||
-          (def.id === "doc-aadhaar" ? student.aadhaar ?? "" : ""),
+          existing.number?.trim() || (def.id === "doc-aadhaar" ? (student.aadhaar ?? "") : ""),
         levels: existing.levels?.length ? existing.levels : def.levels.map((l) => ({ ...l })),
         attachments: Array.isArray(existing.attachments) ? existing.attachments : [],
       };
@@ -230,7 +242,7 @@ function ensureStudentDocuments(student: Student): StaffDocument[] {
   }
   return DEFAULT_STUDENT_DOCUMENTS.map((def) => ({
     ...def,
-    number: def.id === "doc-aadhaar" ? student.aadhaar ?? "" : "",
+    number: def.id === "doc-aadhaar" ? (student.aadhaar ?? "") : "",
     levels: def.levels.map((l) => ({ ...l })),
     attachments: [],
   }));
@@ -329,10 +341,7 @@ function StudentPhotoAvatar({
           busy={uploading}
           className={cn(dim, "rounded-2xl shadow-md ring-2 ring-white")}
           imgClassName="object-cover"
-          initialsClassName={cn(
-            "bg-gradient-to-br from-slate-900 to-slate-700",
-            text,
-          )}
+          initialsClassName={cn("bg-gradient-to-br from-slate-900 to-slate-700", text)}
         />
         <button
           type="button"
@@ -703,7 +712,9 @@ export function StudentProfileDetail({
   const updatePhoto = async (photoUrl: string | undefined) => {
     try {
       await syncStudent({ ...student, photoUrl });
-      toast.success(photoUrl ? `${student.name}'s photo updated` : `${student.name}'s photo removed`);
+      toast.success(
+        photoUrl ? `${student.name}'s photo updated` : `${student.name}'s photo removed`,
+      );
     } catch {
       // Error toast already shown by syncStudent
     }
@@ -768,7 +779,11 @@ export function StudentProfileDetail({
                         : "bg-slate-900 text-white",
                     )}
                   >
-                    {student.gender === "F" ? "Female" : student.gender === "M" ? "Male" : student.gender}
+                    {student.gender === "F"
+                      ? "Female"
+                      : student.gender === "M"
+                        ? "Male"
+                        : student.gender}
                   </span>
                 )}
                 <EnrollmentStatusBadge active={isActive} />
@@ -787,9 +802,7 @@ export function StudentProfileDetail({
             </button>
             <button
               type="button"
-              onClick={() =>
-                navigate({ to: "/tenant/students/edit", search: { id: student.id } })
-              }
+              onClick={() => navigate({ to: "/tenant/students/edit", search: { id: student.id } })}
               className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#0F766E] px-4 text-[13px] font-semibold text-white shadow-sm transition-colors hover:bg-[#0D9488]"
             >
               <Pencil className="h-4 w-4" />
@@ -911,8 +924,8 @@ export function StudentProfileDetail({
                       const needsBus = checked === true;
                       updateTransport({
                         needsBus,
-                        busPoint1: needsBus ? student.busPoint1 ?? "" : "",
-                        busPoint2: needsBus ? student.busPoint2 ?? "" : "",
+                        busPoint1: needsBus ? (student.busPoint1 ?? "") : "",
+                        busPoint2: needsBus ? (student.busPoint2 ?? "") : "",
                       });
                     }}
                   />
@@ -971,13 +984,11 @@ export function StudentProfileDetail({
                           .filter(Boolean)
                           .map((p) => `“${p}”`)
                           .join(" and ")}{" "}
-                        {busPointOptions.orphanPickup && busPointOptions.orphanDrop
-                          ? "are"
-                          : "is"}{" "}
+                        {busPointOptions.orphanPickup && busPointOptions.orphanDrop ? "are" : "is"}{" "}
                         saved on this student but{" "}
-                        <span className="font-semibold">not in Transport Routes</span>. Add a
-                        route in Settings with matching Map From / Map To, or pick a route point
-                        from the list (e.g. University).
+                        <span className="font-semibold">not in Transport Routes</span>. Add a route
+                        in Settings with matching Map From / Map To, or pick a route point from the
+                        list (e.g. University).
                       </p>
                     ) : null}
                     {studentTransportFee.amount && studentTransportFee.amount > 0 ? (
@@ -1020,8 +1031,8 @@ export function StudentProfileDetail({
               <div>
                 <h2 className="text-base font-semibold text-black">Identity Documents</h2>
                 <p className="mt-1 text-[12.5px] text-black/50">
-                  Government ID and supporting records for {student.name}. Attach PDF or image
-                  scans directly here.
+                  Government ID and supporting records for {student.name}. Attach PDF or image scans
+                  directly here.
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2 rounded-lg bg-slate-50 px-4 py-3 dark:bg-zinc-900/70">
@@ -1098,10 +1109,7 @@ export function StudentProfileDetail({
                 iconClass="text-[#10B981]"
                 accentClass="bg-[#CCFBF1]/40"
               />
-              <FeeDueBox
-                totalDue={Math.max(0, fees.totalDue - fees.overdueDue)}
-                overdue={false}
-              />
+              <FeeDueBox totalDue={Math.max(0, fees.totalDue - fees.overdueDue)} overdue={false} />
               <FeeOverdueBox overdueDue={fees.overdueDue} />
             </div>
             {vehicleFees.applicable ? (
@@ -1225,7 +1233,6 @@ export function StudentProfileDetail({
         onToggleActive={toggleActive}
         onDelete={deleteStudent}
       />
-
     </div>
   );
 }
@@ -1282,10 +1289,7 @@ function FeeBreaksManageDialog({
     });
   }, [student, classes, feeTerms, transportRoutes, academicYear, appliesTo]);
 
-  const periodLabels = useMemo(
-    () => periodOptions.map((o) => o.label),
-    [periodOptions],
-  );
+  const periodLabels = useMemo(() => periodOptions.map((o) => o.label), [periodOptions]);
 
   useEffect(() => {
     if (!open) return;
@@ -1336,9 +1340,8 @@ function FeeBreaksManageDialog({
           studentId: saved.studentId || student.id,
           academicYear: saved.academicYear || academicYear,
           appliesTo: saved.appliesTo || appliesTo,
-          periods: Array.isArray(saved.periods) && saved.periods.length
-            ? saved.periods
-            : selectedPeriods,
+          periods:
+            Array.isArray(saved.periods) && saved.periods.length ? saved.periods : selectedPeriods,
           reason: saved.reason,
           createdAt: saved.createdAt,
           updatedAt: saved.updatedAt,
@@ -1426,8 +1429,8 @@ function FeeBreaksManageDialog({
             Fee breaks
           </DialogTitle>
           <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60 dark:text-zinc-400">
-            Pause tuition or vehicle fees for selected periods. Broken periods are not
-            collectible and never show as overdue for {student.name}.
+            Pause tuition or vehicle fees for selected periods. Broken periods are not collectible
+            and never show as overdue for {student.name}.
           </DialogDescription>
         </DialogHeader>
 
@@ -1493,8 +1496,8 @@ function FeeBreaksManageDialog({
             <div>
               <div className={META_LABEL}>Fee period(s)</div>
               <p className="mt-1 mb-2 text-[12px] text-black/50 dark:text-zinc-400">
-                Choose terms and/or months to pause. They will not appear in Fee Collection
-                or overdue.
+                Choose terms and/or months to pause. They will not appear in Fee Collection or
+                overdue.
               </p>
               <FeePeriodChecklist
                 options={periodOptions}
@@ -1604,12 +1607,7 @@ function FeeOverdueBox({ overdueDue }: { overdueDue: number }) {
       )}
     >
       <div className="flex min-w-0 items-start justify-between gap-2">
-        <div
-          className={cn(
-            feeStatLabelClass,
-            active && "text-white/80 dark:text-white/80",
-          )}
-        >
+        <div className={cn(feeStatLabelClass, active && "text-white/80 dark:text-white/80")}>
           Over Due
         </div>
         <AlertTriangle
@@ -1764,7 +1762,9 @@ function MetaField({
             className={cn(
               "text-[14px] font-medium",
               mono && "font-mono",
-              multiline ? "whitespace-pre-line leading-snug text-black/85 dark:text-zinc-200" : "text-black dark:text-zinc-100",
+              multiline
+                ? "whitespace-pre-line leading-snug text-black/85 dark:text-zinc-200"
+                : "text-black dark:text-zinc-100",
             )}
           >
             {value || <span className="font-normal text-black/40 dark:text-zinc-500">—</span>}
@@ -1914,137 +1914,139 @@ function FeesTable({
           </div>
         ) : (
           <>
-        <div className="space-y-2.5 md:hidden">
-          {ledger.map((r, i) => (
-            <button
-              key={i}
-              type="button"
-              onClick={() => setSelectedRow(r)}
-              aria-label={`View details for ${r.desc}`}
-              className="w-full rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 text-left transition-colors hover:border-black/15 hover:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="truncate text-[14px] font-semibold text-black">{r.desc}</div>
-                  <div className="mt-1 font-mono text-[11px] text-black/45">{r.date}</div>
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-1.5">
-                  <StatusBadge status={r.status} />
-                  {r.status === "Overdue" && (
-                    <OverdueWhatsAppButton href={overdueHref(r)} compact />
-                  )}
-                </div>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2.5">
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                    Due Date
-                  </div>
-                  <div className="mt-0.5 font-mono text-[12px] text-black/70">{r.due}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                    Charge
-                  </div>
-                  <div className="mt-0.5 font-mono text-[12px] text-black">{inr(r.charge)}</div>
-                </div>
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                    Paid
-                  </div>
-                  <div className="mt-0.5 font-mono text-[12px] font-medium text-black">
-                    {inr(r.paid)}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                    Balance
-                  </div>
-                  <div
-                    className={`mt-0.5 font-mono text-[12px] ${
-                      r.balance === 0 ? "text-black/40" : "font-semibold text-black"
-                    }`}
-                  >
-                    {inr(r.balance)}
-                  </div>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-
-        <div className="hidden overflow-x-auto md:block">
-          <table className="w-full min-w-[720px] border-collapse text-left">
-            <thead>
-              <tr>
-                <th className="border-b border-[#E5E5E5] pb-4 pl-1 pr-4 text-[11px] font-semibold uppercase tracking-wider text-black/45">
-                  Date
-                </th>
-                <th className="border-b border-[#E5E5E5] px-4 pb-4 text-[11px] font-semibold uppercase tracking-wider text-black/45">
-                  Description
-                </th>
-                <th className="border-b border-[#E5E5E5] px-4 pb-4 text-[11px] font-semibold uppercase tracking-wider text-black/45">
-                  Due Date
-                </th>
-                <th className="border-b border-[#E5E5E5] px-4 pb-4 text-right text-[11px] font-semibold uppercase tracking-wider text-black/45">
-                  Charge Amount
-                </th>
-                <th className="border-b border-[#E5E5E5] px-4 pb-4 text-right text-[11px] font-semibold uppercase tracking-wider text-black/45">
-                  Paid Amount
-                </th>
-                <th className="border-b border-[#E5E5E5] px-4 pb-4 text-right text-[11px] font-semibold uppercase tracking-wider text-black/45">
-                  Balance
-                </th>
-                <th className="border-b border-[#E5E5E5] pb-4 pl-4 pr-1 text-[11px] font-semibold uppercase tracking-wider text-black/45">
-                  Status
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+            <div className="space-y-2.5 md:hidden">
               {ledger.map((r, i) => (
-                <tr
+                <button
                   key={i}
-                  role="button"
-                  tabIndex={0}
+                  type="button"
                   onClick={() => setSelectedRow(r)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      setSelectedRow(r);
-                    }
-                  }}
                   aria-label={`View details for ${r.desc}`}
-                  className="cursor-pointer border-b border-[#F0F0F0] transition-colors last:border-b-0 hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0F766E]"
+                  className="w-full rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 text-left transition-colors hover:border-black/15 hover:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]"
                 >
-                  <td className="py-4 pl-1 pr-4 font-mono text-[13px] text-black/55">{r.date}</td>
-                  <td className="px-4 py-4 text-[13px] font-medium text-black">{r.desc}</td>
-                  <td className="px-4 py-4 font-mono text-[13px] text-black/55">{r.due}</td>
-                  <td className="px-4 py-4 text-right font-mono text-[13px] text-black/75">
-                    {inr(r.charge)}
-                  </td>
-                  <td className="px-4 py-4 text-right font-mono text-[13px] font-medium text-black">
-                    {inr(r.paid)}
-                  </td>
-                  <td
-                    className={`px-4 py-4 text-right font-mono text-[13px] ${
-                      r.balance === 0 ? "text-black/40" : "text-black"
-                    }`}
-                  >
-                    {inr(r.balance)}
-                  </td>
-                  <td className="py-4 pl-4 pr-1">
-                    <div className="flex flex-col items-start gap-1.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-[14px] font-semibold text-black">{r.desc}</div>
+                      <div className="mt-1 font-mono text-[11px] text-black/45">{r.date}</div>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1.5">
                       <StatusBadge status={r.status} />
                       {r.status === "Overdue" && (
                         <OverdueWhatsAppButton href={overdueHref(r)} compact />
                       )}
                     </div>
-                  </td>
-                </tr>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2.5">
+                    <div>
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                        Due Date
+                      </div>
+                      <div className="mt-0.5 font-mono text-[12px] text-black/70">{r.due}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                        Charge
+                      </div>
+                      <div className="mt-0.5 font-mono text-[12px] text-black">{inr(r.charge)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                        Paid
+                      </div>
+                      <div className="mt-0.5 font-mono text-[12px] font-medium text-black">
+                        {inr(r.paid)}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                        Balance
+                      </div>
+                      <div
+                        className={`mt-0.5 font-mono text-[12px] ${
+                          r.balance === 0 ? "text-black/40" : "font-semibold text-black"
+                        }`}
+                      >
+                        {inr(r.balance)}
+                      </div>
+                    </div>
+                  </div>
+                </button>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </div>
+
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full min-w-[720px] border-collapse text-left">
+                <thead>
+                  <tr>
+                    <th className="border-b border-[#E5E5E5] pb-4 pl-1 pr-4 text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                      Date
+                    </th>
+                    <th className="border-b border-[#E5E5E5] px-4 pb-4 text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                      Description
+                    </th>
+                    <th className="border-b border-[#E5E5E5] px-4 pb-4 text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                      Due Date
+                    </th>
+                    <th className="border-b border-[#E5E5E5] px-4 pb-4 text-right text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                      Charge Amount
+                    </th>
+                    <th className="border-b border-[#E5E5E5] px-4 pb-4 text-right text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                      Paid Amount
+                    </th>
+                    <th className="border-b border-[#E5E5E5] px-4 pb-4 text-right text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                      Balance
+                    </th>
+                    <th className="border-b border-[#E5E5E5] pb-4 pl-4 pr-1 text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ledger.map((r, i) => (
+                    <tr
+                      key={i}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedRow(r)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedRow(r);
+                        }
+                      }}
+                      aria-label={`View details for ${r.desc}`}
+                      className="cursor-pointer border-b border-[#F0F0F0] transition-colors last:border-b-0 hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0F766E]"
+                    >
+                      <td className="py-4 pl-1 pr-4 font-mono text-[13px] text-black/55">
+                        {r.date}
+                      </td>
+                      <td className="px-4 py-4 text-[13px] font-medium text-black">{r.desc}</td>
+                      <td className="px-4 py-4 font-mono text-[13px] text-black/55">{r.due}</td>
+                      <td className="px-4 py-4 text-right font-mono text-[13px] text-black/75">
+                        {inr(r.charge)}
+                      </td>
+                      <td className="px-4 py-4 text-right font-mono text-[13px] font-medium text-black">
+                        {inr(r.paid)}
+                      </td>
+                      <td
+                        className={`px-4 py-4 text-right font-mono text-[13px] ${
+                          r.balance === 0 ? "text-black/40" : "text-black"
+                        }`}
+                      >
+                        {inr(r.balance)}
+                      </td>
+                      <td className="py-4 pl-4 pr-1">
+                        <div className="flex flex-col items-start gap-1.5">
+                          <StatusBadge status={r.status} />
+                          {r.status === "Overdue" && (
+                            <OverdueWhatsAppButton href={overdueHref(r)} compact />
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </>
         )}
       </div>
@@ -2262,71 +2264,71 @@ function ReceiptsList({
           </p>
         </div>
       ) : (
-      <ul className="divide-y divide-[#F0F0F0]">
-        {receipts.map((r) => {
-          const isSending = sendingId === r.id;
-          return (
-            <li
-              key={r.id}
-              className="-mx-2 flex items-center gap-3 rounded-lg px-3 py-3.5 transition-colors hover:bg-[#F4F4F5] sm:gap-4"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-[13px] font-semibold text-black">{r.id}</span>
-                  <span className="rounded-full bg-[#F4F4F5] px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-black/65">
-                    {r.mode}
-                  </span>
-                  {r.cat ? (
-                    <span className="truncate text-[11px] text-black/45">{r.cat}</span>
-                  ) : null}
+        <ul className="divide-y divide-[#F0F0F0]">
+          {receipts.map((r) => {
+            const isSending = sendingId === r.id;
+            return (
+              <li
+                key={r.id}
+                className="-mx-2 flex items-center gap-3 rounded-lg px-3 py-3.5 transition-colors hover:bg-[#F4F4F5] sm:gap-4"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-[13px] font-semibold text-black">{r.id}</span>
+                    <span className="rounded-full bg-[#F4F4F5] px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-black/65">
+                      {r.mode}
+                    </span>
+                    {r.cat ? (
+                      <span className="truncate text-[11px] text-black/45">{r.cat}</span>
+                    ) : null}
+                  </div>
+                  <div className="mt-1 font-mono text-[11px] text-black/55">
+                    {r.date}
+                    {r.period ? ` · ${r.period}` : ""}
+                  </div>
                 </div>
-                <div className="mt-1 font-mono text-[11px] text-black/55">
-                  {r.date}
-                  {r.period ? ` · ${r.period}` : ""}
+                <div className="shrink-0 font-mono text-base font-semibold text-black">
+                  {inr(r.amount)}
                 </div>
-              </div>
-              <div className="shrink-0 font-mono text-base font-semibold text-black">
-                {inr(r.amount)}
-              </div>
-              <div className="flex shrink-0 items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => void handleSend(r)}
-                  disabled={isSending || sendingId !== null}
-                  aria-label={`Send receipt ${r.id}`}
-                  title="Send receipt"
-                  className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-[#25D366]/40 bg-[#25D366]/10 px-2.5 text-[11px] font-semibold text-[#128C7E] shadow-sm transition-colors hover:bg-[#25D366]/18 disabled:cursor-not-allowed disabled:opacity-60 sm:px-3"
-                >
-                  {isSending ? (
-                    <span className="font-mono text-[10px]">…</span>
-                  ) : (
-                    <Send className="h-3.5 w-3.5" />
-                  )}
-                  <span className="hidden sm:inline">{isSending ? "Sending" : "Send"}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDownload(r)}
-                  aria-label={`Download receipt ${r.id}`}
-                  title="Download receipt"
-                  className="grid h-10 w-10 place-items-center rounded-lg border border-[#E5E5E5] bg-white text-black/55 shadow-sm transition-colors hover:bg-[#0F766E] hover:text-white"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handlePrint(r)}
-                  aria-label={`Print receipt ${r.id}`}
-                  title="Print receipt"
-                  className="grid h-10 w-10 place-items-center rounded-lg border border-[#E5E5E5] bg-white text-black/55 shadow-sm transition-colors hover:bg-[#0F766E] hover:text-white"
-                >
-                  <Printer className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => void handleSend(r)}
+                    disabled={isSending || sendingId !== null}
+                    aria-label={`Send receipt ${r.id}`}
+                    title="Send receipt"
+                    className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-[#25D366]/40 bg-[#25D366]/10 px-2.5 text-[11px] font-semibold text-[#128C7E] shadow-sm transition-colors hover:bg-[#25D366]/18 disabled:cursor-not-allowed disabled:opacity-60 sm:px-3"
+                  >
+                    {isSending ? (
+                      <span className="font-mono text-[10px]">…</span>
+                    ) : (
+                      <Send className="h-3.5 w-3.5" />
+                    )}
+                    <span className="hidden sm:inline">{isSending ? "Sending" : "Send"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDownload(r)}
+                    aria-label={`Download receipt ${r.id}`}
+                    title="Download receipt"
+                    className="grid h-10 w-10 place-items-center rounded-lg border border-[#E5E5E5] bg-white text-black/55 shadow-sm transition-colors hover:bg-[#0F766E] hover:text-white"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePrint(r)}
+                    aria-label={`Print receipt ${r.id}`}
+                    title="Print receipt"
+                    className="grid h-10 w-10 place-items-center rounded-lg border border-[#E5E5E5] bg-white text-black/55 shadow-sm transition-colors hover:bg-[#0F766E] hover:text-white"
+                  >
+                    <Printer className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </div>
   );
@@ -2435,7 +2437,12 @@ function StudentDocumentCard({
         </p>
       )}
 
-      <div className={cn("border-t border-slate-200/80 pt-4 dark:border-white/10", isOther ? "mt-3" : "mt-4")}>
+      <div
+        className={cn(
+          "border-t border-slate-200/80 pt-4 dark:border-white/10",
+          isOther ? "mt-3" : "mt-4",
+        )}
+      >
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
             <Paperclip className="h-3.5 w-3.5" />
@@ -2493,7 +2500,9 @@ function StudentDocumentCard({
                 >
                   <FileText className="h-3.5 w-3.5 shrink-0 text-black/40 dark:text-zinc-500" />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[12px] font-medium text-black dark:text-zinc-100">{file.name}</div>
+                    <div className="truncate text-[12px] font-medium text-black dark:text-zinc-100">
+                      {file.name}
+                    </div>
                     <div className="font-mono text-[10px] text-black/45 dark:text-zinc-500">
                       {formatFileSize(file.size)}
                     </div>
