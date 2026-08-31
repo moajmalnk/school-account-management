@@ -1063,6 +1063,59 @@ async function loadReceiptSealPng(
   }
 }
 
+type SealFooterAttestation = {
+  title: string;
+  subtitle?: string;
+  summaryLines?: [string, string][];
+};
+
+function paintPdfPageBackground(doc: jsPDF, pageWidth: number, pageHeight: number) {
+  doc.setFillColor(...receiptInk().white);
+  doc.rect(0, 0, pageWidth, pageHeight, "F");
+}
+
+function drawAttestationHeader(
+  doc: jsPDF,
+  pageWidth: number,
+  margin: number,
+  contentWidth: number,
+  attestation: SealFooterAttestation,
+  startY: number,
+): number {
+  let y = startY;
+  doc.setDrawColor(...receiptInk().line);
+  doc.setLineWidth(0.25);
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 10;
+
+  doc.setFont(pdfFontName(), "bold");
+  doc.setFontSize(13);
+  doc.setTextColor(...receiptInk().tealDeep);
+  doc.text(attestation.title, pageWidth / 2, y, { align: "center" });
+  y += 6;
+
+  if (attestation.subtitle) {
+    doc.setFont(pdfFontName(), "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(...receiptInk().muted);
+    doc.text(attestation.subtitle, pageWidth / 2, y, { align: "center" });
+    y += 8;
+  }
+
+  if (attestation.summaryLines?.length) {
+    const boxW = Math.min(contentWidth, 118);
+    const boxX = margin + (contentWidth - boxW) / 2;
+    const boxH = 8 + attestation.summaryLines.length * 6.2;
+    doc.setDrawColor(...receiptInk().line);
+    doc.setLineWidth(0.2);
+    doc.setFillColor(...receiptInk().zebra);
+    doc.roundedRect(boxX, y, boxW, boxH, 2, 2, "FD");
+    y = drawMetaPairs(doc, attestation.summaryLines, y + 5, boxX + 5, boxW - 10) + 4;
+  }
+
+  return y;
+}
+
 async function drawSealFooter(
   doc: jsPDF,
   pageWidth: number,
@@ -1074,13 +1127,40 @@ async function drawSealFooter(
   queryLine: string,
   compact = false,
   branding?: ReceiptBranding,
+  attestation?: SealFooterAttestation,
 ) {
-  // Official rubber-stamp size on A4 (mm) — shared across receipts, slips, reports.
+  const contentWidth = pageWidth - margin * 2;
   const sealSize = compact ? 30 : 38;
   const signW = compact ? 48 : 58;
   const signH = sealSize * 0.55;
   const footerBlock = sealSize + (compact ? 10 : 22);
-  const y = Math.min(startY, pageHeight - margin - footerBlock);
+  const bottomLimit = pageHeight - margin - 4;
+  const attestationBlock = attestation ? 58 : 0;
+  const needsNewPage = startY + footerBlock > bottomLimit || startY + attestationBlock + footerBlock > bottomLimit;
+
+  let y = startY;
+  let useCompact = compact;
+
+  if (needsNewPage) {
+    doc.addPage();
+    paintPdfPageBackground(doc, pageWidth, pageHeight);
+    y = margin + 10;
+    useCompact = false;
+
+    if (attestation) {
+      y = drawAttestationHeader(doc, pageWidth, margin, contentWidth, attestation, y);
+      y += 10;
+    }
+
+    // Place seal and signature in the lower area of the attestation page.
+    const preferredY = pageHeight - margin - footerBlock - 18;
+    y = Math.max(y, preferredY);
+  }
+
+  const drawSealSize = useCompact ? 30 : 38;
+  const drawSignW = useCompact ? 48 : 58;
+  const drawSignH = drawSealSize * 0.55;
+
   const [seal, signature] = await Promise.all([
     loadReceiptSealPng(schoolName, branding),
     loadSchoolMarkPng(
@@ -1093,7 +1173,7 @@ async function drawSealFooter(
 
   if (seal) {
     try {
-      doc.addImage(seal.dataUrl, "PNG", margin, y, sealSize, sealSize);
+      doc.addImage(seal.dataUrl, "PNG", margin, y, drawSealSize, drawSealSize);
     } catch {
       /* skip unreadable seal */
     }
@@ -1103,10 +1183,10 @@ async function drawSealFooter(
       doc.addImage(
         signature.dataUrl,
         "PNG",
-        pageWidth - margin - signW,
-        y + (sealSize - signH) / 2,
-        signW,
-        signH,
+        pageWidth - margin - drawSignW,
+        y + (drawSealSize - drawSignH) / 2,
+        drawSignW,
+        drawSignH,
       );
     } catch {
       /* skip unreadable signature */
@@ -1115,11 +1195,18 @@ async function drawSealFooter(
 
   doc.setFont(pdfFontName(), "normal");
   doc.setTextColor(...receiptInk().muted);
-  const labelY = y + sealSize + 4.5;
-  doc.setFontSize(compact ? 8 : 8.5);
-  doc.text("Signature", pageWidth - margin - signW / 2, labelY, { align: "center" });
-  if (!compact) {
-    doc.setFontSize(7.5);
+  const labelY = y + drawSealSize + 4.5;
+  doc.setFontSize(useCompact ? 8 : 8.5);
+  const signatory = branding?.principalName?.trim();
+  doc.text(
+    signatory ? pdfSafe(signatory) : "Authorized Signatory",
+    pageWidth - margin - drawSignW / 2,
+    labelY,
+    { align: "center" },
+  );
+  doc.setFontSize(useCompact ? 7 : 7.5);
+  doc.text("School Seal", margin + drawSealSize / 2, labelY, { align: "center" });
+  if (!useCompact) {
     doc.text(`Document generated on ${generatedAt}`, margin, labelY + 8);
     doc.text(queryLine.replace("{school}", schoolName), margin, labelY + 12.5);
   }
@@ -1652,8 +1739,9 @@ function appendFeeLedgerTable(
   if (rows.length === 0) return tableStart;
   autoTable(doc, {
     startY: tableStart,
-    margin: { left: margin, right: margin },
+    margin: { left: margin, right: margin, bottom: margin + 6 },
     tableWidth: contentWidth,
+    showHead: "everyPage",
     head: [["Date", "Description", "Due Date", "Charge", "Paid", "Balance", "Status"]],
     body: rows.map((row) => {
       // Recompute from amounts so PDF never shows Partially Paid when Paid is 0.
@@ -1824,8 +1912,9 @@ export async function downloadStudentFeeReportPdf(
     tableStart += 5;
     autoTable(doc, {
       startY: tableStart,
-      margin: { left: margin, right: margin },
+      margin: { left: margin, right: margin, bottom: margin + 6 },
       tableWidth: contentWidth,
+      showHead: "everyPage",
       head: [["Receipt", "Date", "Category", "Mode", "Amount"]],
       body: statement.receipts.map((row) => [
         pdfSafe(row.id),
@@ -1860,12 +1949,22 @@ export async function downloadStudentFeeReportPdf(
     pageWidth,
     pageHeight,
     margin,
-    Math.min(tableStart, pageHeight - 58),
+    tableStart,
     generatedAt,
     displayName,
     `This statement is issued for parent reference. For fee queries, contact ${displayName}.`,
     true,
     branding,
+    {
+      title: "Official Verification",
+      subtitle: "Parent copy — student fee statement",
+      summaryLines: [
+        ["Student", pdfSafe(student.name)],
+        ["Student ID", pdfSafe(student.id)],
+        ["Class", pdfSafe(student.cls || "—")],
+        ["Total Due", formatInrPdf(statement.totalDue)],
+      ],
+    },
   );
 
   emitPdf(
@@ -2080,12 +2179,22 @@ export async function downloadStaffPayrollReportPdf(
     pageWidth,
     pageHeight,
     margin,
-    Math.min(tableStart, pageHeight - 58),
+    tableStart,
     generatedAt,
     displayName,
     `This payroll statement is issued for employee records. For salary queries, contact ${displayName}.`,
     true,
     branding,
+    {
+      title: "Official Verification",
+      subtitle: "Employee payroll statement",
+      summaryLines: [
+        ["Employee", pdfSafe(staff.name)],
+        ["Employee ID", pdfSafe(staff.id)],
+        ["Pay Period", pdfSafe(input.payrollMonthLabel)],
+        ["Total Due", formatInrPdf(statement.totalDue)],
+      ],
+    },
   );
 
   emitPdf(

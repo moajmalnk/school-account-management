@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import type { LucideIcon } from "lucide-react";
 
+import { useTenantNavigationGuard } from "@/components/school/settings-unsaved-guard";
 import { cn } from "@/lib/utils";
 
 export type MobileTabItem = {
@@ -17,6 +18,8 @@ type MobileTabBarProps = {
 };
 
 export function MobileTabBar({ items, pathname, className }: MobileTabBarProps) {
+  const { onGuardedLinkClick } = useTenantNavigationGuard();
+
   return (
     <nav
       className={cn(
@@ -35,6 +38,7 @@ export function MobileTabBar({ items, pathname, className }: MobileTabBarProps) 
             <Link
               key={item.to}
               to={item.to}
+              onClick={(event) => onGuardedLinkClick(item.to, event, active)}
               className={cn(
                 "relative flex min-h-[58px] min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 text-[11px] font-semibold transition-colors duration-200 sm:min-h-[62px]",
                 active

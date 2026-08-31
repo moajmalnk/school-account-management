@@ -34,7 +34,8 @@ export function Hero() {
                 src="/home/home.png"
                 alt="Feezo Dashboard on Laptop and Mobile"
                 className="w-full h-auto object-contain"
-                priority="true"
+                fetchPriority="high"
+                loading="eager"
               />
             </div>
           </div>

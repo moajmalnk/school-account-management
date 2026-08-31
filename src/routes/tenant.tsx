@@ -11,6 +11,10 @@ import {
   useWorkspaceSubViewBack,
 } from "@/components/layout/TenantGlassShell";
 import {
+  SettingsUnsavedProvider,
+  useTenantNavigationGuard,
+} from "@/components/school/settings-unsaved-guard";
+import {
   MobileTabBar,
   mobileMainPadding,
   type MobileTabItem,
@@ -91,7 +95,9 @@ function TenantLayout() {
 
   return (
     <TenantStoreProvider tenantId={session.tenantId} tenantName={session.tenantName}>
-      <TenantShell />
+      <SettingsUnsavedProvider>
+        <TenantShell />
+      </SettingsUnsavedProvider>
     </TenantStoreProvider>
   );
 }
@@ -231,6 +237,7 @@ function ImpersonationBanner() {
 function TenantMobileHeader() {
   const { session } = useAuth();
   const navigate = useNavigate();
+  const { guardedNavigate, tryNavigate } = useTenantNavigationGuard();
   const { notifications, schoolDetails, activeBranch, branches } = useTenantStore();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { showBack, goBack, backLabel } = useWorkspaceSubViewBack();
@@ -261,7 +268,10 @@ function TenantMobileHeader() {
         {showBack ? (
           <button
             type="button"
-            onClick={goBack}
+            onClick={() => {
+              if (tryNavigate) tryNavigate(goBack);
+              else goBack();
+            }}
             aria-label={backLabel}
             className={cn(
               glassInsetClass,
@@ -302,7 +312,7 @@ function TenantMobileHeader() {
         <ThemeModeToggle className="rounded-full border border-white/80 bg-white/70 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-200" />
         <button
           type="button"
-          onClick={() => navigate({ to: "/tenant/notifications" })}
+          onClick={() => guardedNavigate("/tenant/notifications")}
           aria-label="Notifications"
           className="relative grid h-11 w-11 shrink-0 place-items-center rounded-full border border-white/80 bg-white/70 text-slate-600 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-300"
         >

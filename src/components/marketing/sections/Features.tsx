@@ -1,4 +1,4 @@
-import { Calculator, MousePointerClick, Receipt, School, LineChart, GraduationCap, Users, Bus, FileSpreadsheet } from "lucide-react";
+import { Calculator, MousePointerClick, Receipt, School, LineChart, GraduationCap, Users, Bus, FileSpreadsheet, Wallet } from "lucide-react";
 import { MARKETING } from "@/lib/marketing-content";
 
 const ICONS = [Calculator, MousePointerClick, Receipt, School, LineChart, GraduationCap, Users, Bus, FileSpreadsheet];

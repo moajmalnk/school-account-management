@@ -407,6 +407,10 @@ import {
 } from "@/lib/dashboard-finance";
 import { useDisbursements } from "@/lib/use-disbursements";
 import {
+  useSettingsUnsavedGuard,
+  useSettingsUnsavedRegistration,
+} from "@/components/school/settings-unsaved-guard";
+import {
   buildIncomeExpenseSeries,
   filterPaymentsByPeriod,
   PAYMENT_PERIOD_OPTIONS,
@@ -729,11 +733,28 @@ function DashboardAmount({
   value,
   className,
   compact = false,
+  pending = false,
 }: {
   value: number;
   className?: string;
   compact?: boolean;
+  pending?: boolean;
 }) {
+  if (pending) {
+    return (
+      <div
+        className={cn(
+          "min-w-0 max-w-full overflow-hidden font-mono font-bold leading-[1.15] tracking-tight",
+          dashboardAmountSize("₹0", compact),
+          className,
+        )}
+        aria-busy="true"
+        aria-label="Loading amount"
+      >
+        <span className="block h-[1em] w-[4.5rem] max-w-full animate-pulse rounded bg-current/20" />
+      </div>
+    );
+  }
   const formatted = formatInr(value);
   return (
     <div
@@ -755,12 +776,14 @@ function IncomeExpenseSummaryTiles({
   receiptCount,
   paymentCount,
   compact = false,
+  expensePending = false,
 }: {
   income: number;
   expense: number;
   receiptCount: number;
   paymentCount: number;
   compact?: boolean;
+  expensePending?: boolean;
 }) {
   const tileClass = compact
     ? "flex min-h-[84px] min-w-0 flex-col items-center justify-center overflow-hidden rounded-2xl px-2 py-2.5 text-center sm:min-h-[96px] sm:px-3 sm:py-3"
@@ -788,10 +811,17 @@ function IncomeExpenseSummaryTiles({
         <DashboardAmount
           value={expense}
           compact={compact}
+          pending={expensePending}
           className="mt-1.5 w-full text-center text-white"
         />
         <div className="mt-1 text-[10px] font-medium text-rose-100/80">
-          {paymentCount} payment{paymentCount === 1 ? "" : "s"}
+          {expensePending ? (
+            <span className="inline-block h-3 w-14 animate-pulse rounded bg-white/25" />
+          ) : (
+            <>
+              {paymentCount} payment{paymentCount === 1 ? "" : "s"}
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -825,6 +855,7 @@ type PremiumDashboardProps = {
   onViewStaff: () => void;
   onShowReceipt: (payment: Payment) => void;
   onDownloadReceipt: (payment: Payment) => void;
+  expensesReady?: boolean;
 };
 
 /** Isolated from PremiumDashboard so typing todos/notes does not re-render charts. */
@@ -1103,6 +1134,7 @@ function PremiumDashboard({
   onViewStaff,
   onShowReceipt,
   onDownloadReceipt,
+  expensesReady = true,
 }: PremiumDashboardProps) {
   const liveStudents = students.filter((s) => !isRecordDeleted(s.deletedAt));
   const liveStaff = staff.filter((s) => !isRecordDeleted(s.deletedAt));
@@ -1237,6 +1269,7 @@ function PremiumDashboard({
                 expense={expenseTotal}
                 receiptCount={periodReceiptCount}
                 paymentCount={periodExpenseCount}
+                expensePending={!expensesReady}
               />
             </div>
           </section>
@@ -1274,11 +1307,19 @@ function PremiumDashboard({
                 </div>
                 <div className="min-w-0">
                   <div className="text-[11px] font-medium text-slate-500">
-                    {salaryOutstandingStaff > 0
-                      ? `${salaryOutstandingStaff} queued`
-                      : "No payroll created"}
+                    {!expensesReady ? (
+                      <span className="inline-block h-3 w-24 animate-pulse rounded bg-slate-200/80 dark:bg-white/10" />
+                    ) : salaryOutstandingStaff > 0 ? (
+                      `${salaryOutstandingStaff} queued`
+                    ) : (
+                      "No payroll created"
+                    )}
                   </div>
-                  <DashboardAmount value={salaryOutstanding} className="mt-1 text-slate-900" />
+                  <DashboardAmount
+                    value={salaryOutstanding}
+                    pending={!expensesReady}
+                    className="mt-1 text-slate-900"
+                  />
                 </div>
               </div>
             </div>
@@ -1505,6 +1546,7 @@ function PremiumDashboard({
               receiptCount={periodReceiptCount}
               paymentCount={periodExpenseCount}
               compact
+              expensePending={!expensesReady}
             />
           </div>
         </section>
@@ -1782,7 +1824,7 @@ export function SchoolDashboard() {
 
   const recentReceipts = useMemo(() => filteredPayments.slice(0, 5), [filteredPayments]);
 
-  if (!hydrated || branchSyncing || !disbursementsLoaded) {
+  if (!hydrated || branchSyncing) {
     return <TenantDashboardSkeleton />;
   }
 
@@ -1802,6 +1844,7 @@ export function SchoolDashboard() {
         inHand={inHand}
         inBank={inBank}
         totalBalance={totalBalance}
+        expensesReady={disbursementsLoaded}
         overdueStudents={overdueStudents}
         recentReceipts={recentReceipts}
         period={period}
@@ -12715,53 +12758,31 @@ export function SchoolSettings() {
   }, [session, activeTab, navigate, tabParam]);
 
   const [schoolDirty, setSchoolDirty] = useState(false);
-  const [unsavedDialogOpen, setUnsavedDialogOpen] = useState(false);
-  const [unsavedSaving, setUnsavedSaving] = useState(false);
+  const { tryNavigate } = useSettingsUnsavedGuard();
   const schoolActionsRef = useRef<{
     save: () => Promise<boolean>;
     discard: () => void;
   } | null>(null);
-  const pendingNavRef = useRef<(() => void) | null>(null);
+
+  useSettingsUnsavedRegistration(
+    activeTab === "school" && schoolDirty
+      ? {
+          dirty: true,
+          title: "Unsaved school details",
+          description:
+            "You have changes that are not saved yet. Save them before leaving this section, or discard to revert.",
+          save: () => schoolActionsRef.current?.save() ?? Promise.resolve(false),
+          discard: () => schoolActionsRef.current?.discard(),
+        }
+      : null,
+  );
 
   const runOrConfirmLeave = useCallback(
     (action: () => void) => {
-      if (activeTab === "school" && schoolDirty) {
-        pendingNavRef.current = action;
-        setUnsavedDialogOpen(true);
-        return;
-      }
-      action();
+      tryNavigate(action);
     },
-    [activeTab, schoolDirty],
+    [tryNavigate],
   );
-
-  const handleUnsavedCancel = () => {
-    setUnsavedDialogOpen(false);
-    pendingNavRef.current = null;
-  };
-
-  const handleUnsavedDiscard = () => {
-    schoolActionsRef.current?.discard();
-    setUnsavedDialogOpen(false);
-    const action = pendingNavRef.current;
-    pendingNavRef.current = null;
-    action?.();
-  };
-
-  const handleUnsavedSave = async () => {
-    if (!schoolActionsRef.current) return;
-    setUnsavedSaving(true);
-    try {
-      const ok = await schoolActionsRef.current.save();
-      if (!ok) return;
-      setUnsavedDialogOpen(false);
-      const action = pendingNavRef.current;
-      pendingNavRef.current = null;
-      action?.();
-    } finally {
-      setUnsavedSaving(false);
-    }
-  };
 
   const setTab = (tab: SettingsTabId) => {
     runOrConfirmLeave(() => {
@@ -13094,59 +13115,6 @@ export function SchoolSettings() {
       </div>
 
       <div className="col-span-12 hidden min-w-0 lg:block">{renderSettingsContent("table")}</div>
-
-      <AlertDialog
-        open={unsavedDialogOpen}
-        onOpenChange={(open) => {
-          if (!open) handleUnsavedCancel();
-        }}
-      >
-        <AlertDialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6 dark:border-white/10 dark:bg-zinc-900">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-[20px] font-semibold text-black dark:text-zinc-50">
-              Unsaved school details
-            </AlertDialogTitle>
-            <AlertDialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60 dark:text-zinc-400">
-              You have changes that are not saved yet. Save them before leaving, or discard to
-              revert.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="mt-5 flex-col gap-2 sm:flex-row sm:justify-end sm:space-x-0">
-            <AlertDialogCancel
-              disabled={unsavedSaving}
-              className="mt-0 w-full rounded-full sm:w-auto"
-            >
-              Keep editing
-            </AlertDialogCancel>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={unsavedSaving}
-              onClick={handleUnsavedDiscard}
-              className="w-full rounded-full sm:w-auto"
-            >
-              Discard
-            </Button>
-            <AlertDialogAction
-              disabled={unsavedSaving}
-              onClick={(e) => {
-                e.preventDefault();
-                void handleUnsavedSave();
-              }}
-              className="w-full rounded-full bg-[#0F766E] hover:bg-[#0D9488] sm:w-auto"
-            >
-              {unsavedSaving ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving…
-                </>
-              ) : (
-                "Save changes"
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
