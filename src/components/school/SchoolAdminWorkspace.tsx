@@ -399,6 +399,8 @@ import {
   nextPrefixedId,
   normalizeClassLabelKey,
   parseStudentCsv,
+  splitStudentClassForCsv,
+  STUDENT_CSV_HEADERS,
 } from "@/lib/student-csv";
 import { isDuplicateStaff, parseStaffCsv, staffFromCsvRow } from "@/lib/staff-csv";
 import { resolveMediaUrl, fetchMediaBlob } from "@/lib/media";
@@ -3442,10 +3444,18 @@ export function StudentsLedger() {
     }
     const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
     const rows = [
-      "Student,Class,Guardian,Phone,Balance",
-      ...filtered.map((s) =>
-        [escape(s.name), escape(s.cls), escape(s.guardian), escape(s.phone ?? ""), s.due].join(","),
-      ),
+      STUDENT_CSV_HEADERS.join(","),
+      ...filtered.map((s) => {
+        const { grade, division } = splitStudentClassForCsv(s.cls);
+        return [
+          escape(s.name),
+          escape(grade),
+          escape(division),
+          escape(s.guardian),
+          escape(s.phone ?? ""),
+          s.due,
+        ].join(",");
+      }),
     ].join("\n");
     const uri = encodeURI("data:text/csv;charset=utf-8," + rows);
     const a = document.createElement("a");
@@ -3466,17 +3476,20 @@ export function StudentsLedger() {
   const handleImportClick = () => fileInputRef.current?.click();
 
   const downloadStudentTemplate = () => {
+    const sampleGrade = defaultClass ? splitStudentClassForCsv(defaultClass).grade : "Grade 1";
+    const sampleDivision = defaultClass ? splitStudentClassForCsv(defaultClass).division : "";
     downloadCsv(
       "students-bulk-upload-template.csv",
-      ["Name", "Class", "Guardian", "Phone", "Balance"],
+      [...STUDENT_CSV_HEADERS],
       [
-        ["Aarav Sharma", defaultClass || "LKG - A", "Rajesh Sharma", "9810045221", "0"],
-        ["Meera Iyer", "UKG - B", "Priya Iyer", "9876501234", "4500"],
+        ["Aarav Sharma", sampleGrade || "Grade 1", sampleDivision, "Rajesh Sharma", "9810045221", "0"],
+        ["Meera Iyer", "UKG", "B", "Priya Iyer", "9876501234", "4500"],
+        ["Rahul Nair", "TLC", "A", "Suresh Nair", "9895012345", "0"],
       ],
     );
     toast.success("Student template downloaded", {
       description:
-        "Fill Name, Class, Guardian, Phone, Balance · missing classes are created on upload",
+        "Use separate Class and Division columns · missing class tiers are created on upload",
     });
   };
 
@@ -3489,7 +3502,7 @@ export function StudentsLedger() {
         const rows = parseStudentCsv(String(reader.result ?? ""));
         if (!rows.length) {
           toast.error("CSV had no student rows", {
-            description: "Use the template: Name, Class, Guardian, Phone, Balance",
+            description: "Use the template: Name, Class, Division, Guardian, Phone, Balance",
           });
           if (fileInputRef.current) fileInputRef.current.value = "";
           return;
