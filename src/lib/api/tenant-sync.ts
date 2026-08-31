@@ -204,22 +204,15 @@ export async function fetchBranchOperationalBundle(): Promise<BranchOperationalB
  * Requests run one-at-a-time — Hostinger shared MySQL drops sockets under storms
  * (SQLSTATE[HY000] [2002] Operation not permitted).
  */
-export async function fetchRemoteTenantBundle(
-  signal?: AbortSignal,
-  options?: { force?: boolean; tenantId?: string },
+
+/** Max wait for the sequential tenant hydrate — avoids skeleton lock when API is down. */
+const BUNDLE_HYDRATE_TIMEOUT_MS = 28_000;
+
+async function loadRemoteTenantBundle(
+  options?: { tenantId?: string },
 ): Promise<RemoteTenantBundle | null> {
-  const token = getApiToken();
-  if (!token) return null;
-  const cacheKey = `${token}|${options?.force ? Date.now() : "hydrate"}`;
-  if (!options?.force && inflightBundle && inflightKey === token) return inflightBundle;
-
-  inflightKey = token;
-  inflightBundle = (async (): Promise<RemoteTenantBundle | null> => {
-    void signal;
-    void cacheKey;
-
-    try {
-      const school = await getSafe<{
+  try {
+    const school = await getSafe<{
         schoolDetails: SchoolDetails;
         themeSettings: ThemeSettings;
         academicYear: string;
@@ -336,7 +329,29 @@ export async function fetchRemoteTenantBundle(
       if (isAuthExpiredError(err)) return null;
       throw err;
     }
-  })().finally(() => {
+}
+
+export async function fetchRemoteTenantBundle(
+  signal?: AbortSignal,
+  options?: { force?: boolean; tenantId?: string },
+): Promise<RemoteTenantBundle | null> {
+  const token = getApiToken();
+  if (!token) return null;
+  const cacheKey = `${token}|${options?.force ? Date.now() : "hydrate"}`;
+  if (!options?.force && inflightBundle && inflightKey === token) return inflightBundle;
+
+  inflightKey = token;
+  void signal;
+  void cacheKey;
+  inflightBundle = Promise.race([
+    loadRemoteTenantBundle(options),
+    new Promise<RemoteTenantBundle | null>((resolve) => {
+      window.setTimeout(() => {
+        console.warn("[api] tenant bundle hydrate timed out — using local fallback");
+        resolve(null);
+      }, BUNDLE_HYDRATE_TIMEOUT_MS);
+    }),
+  ]).finally(() => {
     if (inflightKey === token) {
       inflightBundle = null;
       inflightKey = null;

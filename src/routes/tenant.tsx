@@ -112,6 +112,7 @@ function TenantShell() {
 
   // Refresh subscription plan flags so Super Admin Plan toggles apply without re-login.
   useEffect(() => {
+    if (session?.impersonated) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -129,7 +130,7 @@ function TenantShell() {
     return () => {
       cancelled = true;
     };
-  }, [updateSession]);
+  }, [session?.impersonated, updateSession]);
 
   return (
     <div className="tenant-canvas flex min-h-dvh flex-col text-slate-900 dark:text-zinc-100">

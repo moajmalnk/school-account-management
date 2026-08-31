@@ -15,7 +15,7 @@ import {
   fetchRemoteTenantBundle,
   branchCatalogWriteEpochValue,
 } from "@/lib/api/tenant-sync";
-import { getApiToken } from "@/lib/api/client";
+import { getApiToken, isImpersonating } from "@/lib/api/client";
 import {
   apiDeleteFeeTerm,
   apiSyncAcademicYears,
@@ -4821,7 +4821,9 @@ export function TenantStoreProvider({
       ? cachedSnapshot?.activeBranchId || readStoredBranchPublicId(tenantId) || ""
       : (SEED_BRANCHES[0]?.id ?? ""),
   );
-  const [hydrated, setHydrated] = useState(() => !liveApi || cachedSnapshot !== null);
+  const [hydrated, setHydrated] = useState(
+    () => !liveApi || cachedSnapshot !== null || isImpersonating(),
+  );
   const [branchSyncing, setBranchSyncing] = useState(false);
   const branchSwitchSeq = useRef(0);
   const branchesRef = useRef(branches);

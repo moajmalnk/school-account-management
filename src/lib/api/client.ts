@@ -30,6 +30,9 @@ export {
 /** Hostinger production API — used by local Vite and production builds. */
 export const PRODUCTION_API_BASE_URL = "https://api.feezo.app";
 
+/** Fail fast when api.feezo.app is unreachable instead of waiting for browser TCP timeout. */
+export const API_REQUEST_TIMEOUT_MS = 12_000;
+
 /** API base URL for School Admin Console backend (api.feezo.app). */
 export function apiBaseUrl(): string {
   const raw = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
@@ -328,7 +331,21 @@ type RequestOptions = {
   /** Logout / one-shot calls: do not trigger a global sign-out. */
   skipUnauthorized?: boolean;
   retried?: boolean;
+  timeoutMs?: number;
 };
+
+function linkAbortSignals(...signals: AbortSignal[]): AbortSignal {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  for (const signal of signals) {
+    if (signal.aborted) {
+      controller.abort();
+      return controller.signal;
+    }
+    signal.addEventListener("abort", abort, { once: true });
+  }
+  return controller.signal;
+}
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const {
@@ -338,6 +355,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     signal,
     skipUnauthorized = false,
     retried = false,
+    timeoutMs = API_REQUEST_TIMEOUT_MS,
   } = options;
 
   if (auth && unauthorizedNotified && !skipUnauthorized) {
@@ -374,16 +392,29 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 
   const url = `${apiBaseUrl()}${path.startsWith("/") ? path : `/${path}`}`;
+  const timeoutController = new AbortController();
+  const timeoutId =
+    timeoutMs > 0
+      ? window.setTimeout(() => timeoutController.abort(), timeoutMs)
+      : undefined;
+  const requestSignal = signal
+    ? linkAbortSignals(signal, timeoutController.signal)
+    : timeoutController.signal;
   let res: Response;
   try {
     res = await fetch(url, {
       method,
       headers,
       body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
-      signal,
+      signal: requestSignal,
     });
   } catch (err) {
+    if (timeoutController.signal.aborted && !signal?.aborted) {
+      throw new ApiError("Request timed out — API may be unreachable", 0);
+    }
     throw err instanceof Error ? err : new Error("Network request failed");
+  } finally {
+    if (timeoutId !== undefined) window.clearTimeout(timeoutId);
   }
 
   const raw = await res.text();

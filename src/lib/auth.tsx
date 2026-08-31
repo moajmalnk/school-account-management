@@ -397,7 +397,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         try {
-          await apiMe();
+          if (!impersonated) {
+            await apiMe();
+          }
           touchLastActive(true);
           if (!cancelled) setSession(readSession() ?? existing);
         } catch (err) {
