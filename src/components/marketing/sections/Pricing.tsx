@@ -25,7 +25,7 @@ export function Pricing() {
             Start with a <span className="inline-block px-3 py-1 rounded bg-[var(--mkt-green)] text-white ml-1">14-day trial</span>
           </h2>
           <p className="mt-4 text-[13px] leading-relaxed text-[var(--mkt-ink)] font-medium max-w-[280px] mx-auto">
-            Every plan includes a full evaluation period.<br/>Sign in when your school is ready.
+            Every plan includes a full evaluation period.<br />Sign in when your school is ready.
           </p>
         </SectionReveal>
 
@@ -56,7 +56,7 @@ export function Pricing() {
                     / month
                   </span>
                 </p>
-                
+
                 <p className="mt-5 text-[12px] leading-relaxed text-[var(--mkt-ink)] font-medium">
                   {plan.blurb}
                 </p>

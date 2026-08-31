@@ -8,6 +8,7 @@ import { DigitalTransformation } from "@/components/marketing/sections/DigitalTr
 import { Testimonials } from "@/components/marketing/sections/Testimonials";
 import { Pricing } from "@/components/marketing/sections/Pricing";
 import { MARKETING } from "@/lib/marketing-content";
+import { IntroAnimation } from "@/components/marketing/IntroAnimation";
 
 export function MarketingLanding() {
   useEffect(() => {
@@ -18,6 +19,7 @@ export function MarketingLanding() {
 
   return (
     <MarketingShell>
+      <IntroAnimation />
       <Hero />
       <HowItWorks />
       <Features />

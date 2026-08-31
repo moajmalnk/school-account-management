@@ -29,9 +29,9 @@ export function Testimonials() {
               <div className="relative flex-shrink-0">
                 <img src={t.image} alt={t.name} className="w-14 h-14 rounded-full object-cover" />
                 <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-sm">
-                   <div className="bg-[var(--mkt-green)] text-white rounded-full w-4 h-4 flex items-center justify-center">
-                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="w-2.5 h-2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                   </div>
+                  <div className="bg-[var(--mkt-green)] text-white rounded-full w-4 h-4 flex items-center justify-center">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="w-2.5 h-2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  </div>
                 </div>
               </div>
               <div>
