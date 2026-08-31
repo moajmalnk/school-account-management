@@ -16,7 +16,7 @@ export function Hero() {
         <motion.div
           initial={reduce ? false : { opacity: 0, y: 22 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: easeOutExpo }}
+          transition={{ duration: 0.8, ease: easeOutExpo, delay: 1.0 }}
           className="relative z-10 flex flex-col items-center text-center w-full"
         >
           <h1
@@ -29,14 +29,19 @@ export function Hero() {
           </h1>
 
           <div className="w-full relative flex justify-center">
-            <div className="relative z-10 w-full max-w-4xl">
+            <motion.div 
+              className="relative z-10 w-full max-w-4xl"
+              initial={reduce ? false : { opacity: 0, y: 40, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.8, ease: easeOutExpo, delay: 1.2 }}
+            >
               <img
                 src="/home/home.png"
                 alt="Feezo Dashboard on Laptop and Mobile"
                 className="w-full h-auto object-contain"
                 priority="true"
               />
-            </div>
+            </motion.div>
           </div>
 
           {/* Bottom text and buttons row */}

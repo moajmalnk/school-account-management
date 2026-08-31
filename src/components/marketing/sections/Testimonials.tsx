@@ -1,4 +1,6 @@
 import { Star, ShieldCheck } from "lucide-react";
+import { motion } from "motion/react";
+import { easeOutExpo } from "@/components/marketing/motion";
 
 export function Testimonials() {
   const testimonials = [
@@ -19,13 +21,26 @@ export function Testimonials() {
   return (
     <section className="bg-white py-14 sm:py-20 lg:py-24">
       <div className="mx-auto max-w-4xl px-4 sm:px-6">
-        <h2 className="text-center text-[clamp(1.5rem,4vw,2rem)] font-bold tracking-tight text-[var(--mkt-ink)] mb-12">
+        <motion.h2 
+          className="text-center text-[clamp(1.5rem,4vw,2rem)] font-bold tracking-tight text-[var(--mkt-ink)] mb-12"
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-100px" }}
+          transition={{ duration: 0.7, ease: easeOutExpo }}
+        >
           testimonials
-        </h2>
+        </motion.h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
-          {testimonials.map((t) => (
-            <div key={t.id} className="rounded-2xl border border-[var(--mkt-line)] bg-white p-6 shadow-sm flex items-start gap-5">
+          {testimonials.map((t, i) => (
+            <motion.div 
+              key={t.id} 
+              className="rounded-2xl border border-[var(--mkt-line)] bg-white p-6 shadow-sm flex items-start gap-5"
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.7, ease: easeOutExpo, delay: i * 0.1 }}
+            >
               <div className="relative flex-shrink-0">
                 <img src={t.image} alt={t.name} className="w-14 h-14 rounded-full object-cover" />
                 <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-sm">
@@ -45,7 +60,7 @@ export function Testimonials() {
                   {t.content}
                 </p>
               </div>
-            </div>
+            </motion.div>
           ))}
         </div>
       </div>

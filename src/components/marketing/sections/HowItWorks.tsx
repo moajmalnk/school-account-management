@@ -8,7 +8,13 @@ export function HowItWorks() {
       <div className="mx-auto max-w-[1080px] px-4 sm:px-6">
 
         {/* Header Section */}
-        <div className="flex flex-col items-center text-center mb-20 relative w-full max-w-3xl mx-auto">
+        <motion.div 
+          className="flex flex-col items-center text-center mb-20 relative w-full max-w-3xl mx-auto"
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-100px" }}
+          transition={{ duration: 0.7, ease: easeOutExpo }}
+        >
 
           {/* Title */}
           <div className="relative inline-flex items-center justify-center mb-10 text-[28px] md:text-[34px] font-bold tracking-wide">
@@ -47,19 +53,31 @@ export function HowItWorks() {
             </div>
           </div>
 
-        </div>
+        </motion.div>
 
         {/* Bento Grid */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-5 auto-rows-[minmax(220px,auto)] mt-32">
 
           {/* Card 1: 80+ Schools */}
-          <div className="md:col-span-3 rounded-3xl border border-[#e5e7eb] bg-white p-8 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-center items-center text-center">
+          <motion.div 
+            className="md:col-span-3 rounded-3xl border border-[#e5e7eb] bg-white p-8 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-center items-center text-center"
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-50px" }}
+            transition={{ duration: 0.7, ease: easeOutExpo, delay: 0.1 }}
+          >
             <div className="text-[4rem] font-bold text-[#5ec45f] leading-none mb-1">80+</div>
             <div className="text-[20px] font-medium text-[#1a1a1a]">Schools</div>
-          </div>
+          </motion.div>
 
           {/* Card 2: Built for */}
-          <div className="md:col-span-6 rounded-3xl border border-[#e5e7eb] bg-white p-8 pl-10 shadow-sm hover:shadow-md transition-shadow flex items-center justify-between overflow-hidden relative">
+          <motion.div 
+            className="md:col-span-6 rounded-3xl border border-[#e5e7eb] bg-white p-8 pl-10 shadow-sm hover:shadow-md transition-shadow flex items-center justify-between overflow-hidden relative"
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-50px" }}
+            transition={{ duration: 0.7, ease: easeOutExpo, delay: 0.2 }}
+          >
             <div className="relative z-10 w-[50%]">
               <h3 className="text-[28px] font-bold leading-[1.1] mb-3">
                 <span className="text-[#1a1a1a]">Built for</span><br />
@@ -70,19 +88,37 @@ export function HowItWorks() {
                 Dashboard, students, fees, staff, plans, and support — one workspace your team can open on day one
               </p>
             </div>
-            <div className="absolute right-0 top-0 bottom-0 w-[55%] flex items-center justify-end">
+            <motion.div 
+              className="absolute right-0 top-0 bottom-0 w-[55%] flex items-center justify-end"
+              initial={{ opacity: 0, x: 30 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.7, ease: easeOutExpo, delay: 0.4 }}
+            >
               <img src="/works/1.png" alt="Platform overview" className="w-full h-[110%] object-contain object-right drop-shadow-sm translate-x-2" />
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
 
           {/* Card 3: 14 Days */}
-          <div className="md:col-span-3 rounded-3xl border border-[#e5e7eb] bg-white p-8 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-center items-center text-center">
+          <motion.div 
+            className="md:col-span-3 rounded-3xl border border-[#e5e7eb] bg-white p-8 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-center items-center text-center"
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-50px" }}
+            transition={{ duration: 0.7, ease: easeOutExpo, delay: 0.3 }}
+          >
             <div className="text-[4rem] font-bold text-[#5ec45f] leading-none mb-1">14</div>
             <div className="text-[20px] font-medium text-[#1a1a1a] leading-tight">Days<br />Free trial</div>
-          </div>
+          </motion.div>
 
           {/* Card 4: Directory */}
-          <div className="md:col-span-6 rounded-3xl border border-[#e5e7eb] bg-white p-8 pl-10 shadow-sm hover:shadow-md transition-shadow flex items-center justify-between overflow-hidden relative min-h-[300px]">
+          <motion.div 
+            className="md:col-span-6 rounded-3xl border border-[#e5e7eb] bg-white p-8 pl-10 shadow-sm hover:shadow-md transition-shadow flex items-center justify-between overflow-hidden relative min-h-[300px]"
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-50px" }}
+            transition={{ duration: 0.7, ease: easeOutExpo, delay: 0.1 }}
+          >
             <div className="relative z-10 w-[45%] h-full flex flex-col justify-center">
               <h3 className="text-[28px] font-bold leading-[1.1] mb-4">
                 <span className="text-[#1a1a1a]">Directory with</span><br />
@@ -93,13 +129,25 @@ export function HowItWorks() {
                 Search, filter by class, call or WhatsApp guardians, and see overdue fees without leaving the list.
               </p>
             </div>
-            <div className="absolute right-0 bottom-0 top-0 w-[55%] flex items-end justify-end pt-8 pr-2">
+            <motion.div 
+              className="absolute right-0 bottom-0 top-0 w-[55%] flex items-end justify-end pt-8 pr-2"
+              initial={{ opacity: 0, y: 30, scale: 0.95 }}
+              whileInView={{ opacity: 1, y: 0, scale: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.7, ease: easeOutExpo, delay: 0.3 }}
+            >
               <img src="/works/2.png" alt="Directory features" className="w-[105%] max-h-full object-contain object-right-bottom drop-shadow-sm" />
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
 
           {/* Card 5: Student Fees */}
-          <div className="md:col-span-6 rounded-3xl border border-[#e5e7eb] bg-white p-8 pl-10 shadow-sm hover:shadow-md transition-shadow flex items-center justify-between overflow-hidden relative min-h-[300px]">
+          <motion.div 
+            className="md:col-span-6 rounded-3xl border border-[#e5e7eb] bg-white p-8 pl-10 shadow-sm hover:shadow-md transition-shadow flex items-center justify-between overflow-hidden relative min-h-[300px]"
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-50px" }}
+            transition={{ duration: 0.7, ease: easeOutExpo, delay: 0.2 }}
+          >
             <div className="relative z-10 w-[50%] h-full flex flex-col justify-center">
               <h3 className="text-[28px] font-bold leading-[1.1] mb-4">
                 <span className="text-[#5ec45f]">Student fees,</span><br />
@@ -110,13 +158,25 @@ export function HowItWorks() {
                 See total fee, paid, and due. Collect payments, flag overdue installments, and WhatsApp parents from the profile.
               </p>
             </div>
-            <div className="absolute right-0 bottom-0 top-0 w-[55%] flex items-end justify-end pt-6">
+            <motion.div 
+              className="absolute right-0 bottom-0 top-0 w-[55%] flex items-end justify-end pt-6"
+              initial={{ opacity: 0, y: 30, scale: 0.95 }}
+              whileInView={{ opacity: 1, y: 0, scale: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.7, ease: easeOutExpo, delay: 0.4 }}
+            >
               <img src="/works/3.png" alt="Student fee management" className="w-full max-h-[105%] object-contain object-right-bottom drop-shadow-sm" />
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
 
           {/* Card 6: Financial Overview */}
-          <div className="md:col-span-9 rounded-3xl border border-[#e5e7eb] bg-white p-10 pl-12 shadow-sm hover:shadow-md transition-shadow flex overflow-hidden relative min-h-[340px]">
+          <motion.div 
+            className="md:col-span-9 rounded-3xl border border-[#e5e7eb] bg-white p-10 pl-12 shadow-sm hover:shadow-md transition-shadow flex overflow-hidden relative min-h-[340px]"
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-50px" }}
+            transition={{ duration: 0.7, ease: easeOutExpo, delay: 0.1 }}
+          >
             <div className="relative z-10 w-[35%] flex flex-col justify-center">
               <h3 className="text-[32px] font-bold leading-[1.1] mb-5">
                 <span className="text-[#5ec45f]">Financial</span><br />
@@ -127,20 +187,32 @@ export function HowItWorks() {
                 Income, expenses, outstanding fees, cash and bank — plus quick actions to receive or make payments.
               </p>
             </div>
-            <div className="absolute right-0 bottom-0 top-0 w-[65%] flex items-end justify-center pt-8 px-6">
+            <motion.div 
+              className="absolute right-0 bottom-0 top-0 w-[65%] flex items-end justify-center pt-8 px-6"
+              initial={{ opacity: 0, y: 40, scale: 0.95 }}
+              whileInView={{ opacity: 1, y: 0, scale: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.8, ease: easeOutExpo, delay: 0.3 }}
+            >
               <img src="/works/5.png" alt="Financial dashboard" className="w-full max-h-[95%] object-contain object-bottom drop-shadow-[0_8px_24px_rgba(0,0,0,0.12)]" />
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
 
           {/* Card 7: Help */}
-          <div className="md:col-span-3 rounded-3xl border border-[#e5e7eb] bg-white p-10 shadow-sm hover:shadow-md transition-shadow flex flex-col min-h-[340px]">
+          <motion.div 
+            className="md:col-span-3 rounded-3xl border border-[#e5e7eb] bg-white p-10 shadow-sm hover:shadow-md transition-shadow flex flex-col min-h-[340px]"
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-50px" }}
+            transition={{ duration: 0.7, ease: easeOutExpo, delay: 0.2 }}
+          >
             <h3 className="text-[30px] font-bold leading-[1.1] mb-6 text-[#1a1a1a]">
               Help when<br />you need it
             </h3>
             <p className="text-[14px] text-[#6b7280] leading-relaxed">
               Dashboard, students, fees, staff, plans, and support — one workspace your team can open on day one.
             </p>
-          </div>
+          </motion.div>
 
         </div>
       </div>

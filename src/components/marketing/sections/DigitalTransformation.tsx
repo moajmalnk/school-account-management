@@ -1,4 +1,6 @@
 import { Bell, Hash, Asterisk } from "lucide-react";
+import { motion } from "motion/react";
+import { easeOutExpo } from "@/components/marketing/motion";
 
 export function DigitalTransformation() {
   return (
@@ -6,7 +8,13 @@ export function DigitalTransformation() {
       <div className="mx-auto max-w-5xl px-4 sm:px-6">
 
         {/* Header */}
-        <div className="flex flex-col items-center text-center mb-16 relative mt-8">
+        <motion.div 
+          className="flex flex-col items-center text-center mb-16 relative mt-8"
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-100px" }}
+          transition={{ duration: 0.7, ease: easeOutExpo }}
+        >
           <div className="relative mb-6">
             <div className="inline-flex items-center justify-center border border-[var(--mkt-line)] rounded-full px-4 py-1.5 text-[13px] font-semibold text-[var(--mkt-ink)] bg-white relative z-10 shadow-sm">
               Your school, Upgraded
@@ -21,13 +29,19 @@ export function DigitalTransformation() {
               to <span className="inline-block px-3 py-0.5 rounded-lg bg-[var(--mkt-green)] text-white ml-1">digital</span>
             </h2>
           </div>
-        </div>
+        </motion.div>
 
         {/* Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
           {/* Top Left: Brand Card */}
-          <div className="rounded-3xl border border-[var(--mkt-line)] bg-gradient-to-br from-white to-[#f4faf1] p-8 shadow-sm flex flex-col min-h-[340px]">
+          <motion.div 
+            className="rounded-3xl border border-[var(--mkt-line)] bg-gradient-to-br from-white to-[#f4faf1] p-8 shadow-sm flex flex-col min-h-[340px]"
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-50px" }}
+            transition={{ duration: 0.7, ease: easeOutExpo, delay: 0.1 }}
+          >
             <h3 className="text-2xl font-bold text-[var(--mkt-ink)] leading-tight mb-2">
               From school brand<br />to day-one profiles
             </h3>
@@ -47,10 +61,16 @@ export function DigitalTransformation() {
                 </div>
               ))}
             </div>
-          </div>
+          </motion.div>
 
           {/* Top Right: Follow up Card */}
-          <div className="rounded-3xl border border-[var(--mkt-line)] bg-[#f6fbf4] p-8 shadow-sm flex overflow-hidden relative min-h-[340px]">
+          <motion.div 
+            className="rounded-3xl border border-[var(--mkt-line)] bg-[#f6fbf4] p-8 shadow-sm flex overflow-hidden relative min-h-[340px]"
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-50px" }}
+            transition={{ duration: 0.7, ease: easeOutExpo, delay: 0.2 }}
+          >
             <div className="relative z-10 w-[55%] flex flex-col">
               <h3 className="text-2xl font-bold text-[var(--mkt-ink)] leading-tight mb-2">
                 One-click<br />follow-up
@@ -72,15 +92,27 @@ export function DigitalTransformation() {
               </div>
             </div>
 
-            <div className="absolute right-0 bottom-0 top-[10%] w-[65%]">
+            <motion.div 
+              className="absolute right-0 bottom-0 top-[10%] w-[65%]"
+              initial={{ opacity: 0, x: 40, scale: 0.95 }}
+              whileInView={{ opacity: 1, x: 0, scale: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.7, ease: easeOutExpo, delay: 0.4 }}
+            >
               <img src="/digital/2.png" alt="Hand holding phone" className="w-full h-full object-contain object-right-bottom drop-shadow-xl translate-x-2 translate-y-4 scale-[1.2]" />
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
 
           {/* Bottom Left Column */}
           <div className="flex flex-col gap-6 h-full">
             {/* Assets Card */}
-            <div className="rounded-3xl border border-[var(--mkt-line)] bg-white p-6 shadow-sm flex items-start justify-between flex-1 min-h-[160px]">
+            <motion.div 
+              className="rounded-3xl border border-[var(--mkt-line)] bg-white p-6 shadow-sm flex items-start justify-between flex-1 min-h-[160px]"
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.7, ease: easeOutExpo, delay: 0.1 }}
+            >
               <div className="w-[65%]">
                 <h3 className="text-xl font-bold text-[var(--mkt-ink)] leading-tight mb-2">
                   School details<br />& assets
@@ -95,10 +127,16 @@ export function DigitalTransformation() {
                   <Bell className="w-5 h-5 text-white" strokeWidth={2.5} />
                 </div>
               </div>
-            </div>
+            </motion.div>
 
             {/* Payments Card */}
-            <div className="rounded-3xl border border-[var(--mkt-line)] bg-white p-6 shadow-sm flex flex-col justify-between flex-1 min-h-[190px]">
+            <motion.div 
+              className="rounded-3xl border border-[var(--mkt-line)] bg-white p-6 shadow-sm flex flex-col justify-between flex-1 min-h-[190px]"
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.7, ease: easeOutExpo, delay: 0.2 }}
+            >
               <div>
                 <div className="flex items-start gap-3 mb-2">
                   <div className="w-6 h-6 rounded-full bg-[#f4fbf0] border border-[#e0eed9] flex items-center justify-center text-[var(--mkt-green)] flex-shrink-0 mt-0.5">
@@ -126,11 +164,17 @@ export function DigitalTransformation() {
                   </svg>
                 </div>
               </div>
-            </div>
+            </motion.div>
           </div>
 
           {/* Bottom Right Column: Staff setup Card */}
-          <div className="rounded-3xl border border-[var(--mkt-line)] bg-white shadow-sm flex flex-col relative overflow-hidden h-full min-h-[374px]">
+          <motion.div 
+            className="rounded-3xl border border-[var(--mkt-line)] bg-white shadow-sm flex flex-col relative overflow-hidden h-full min-h-[374px]"
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-50px" }}
+            transition={{ duration: 0.7, ease: easeOutExpo, delay: 0.3 }}
+          >
             <div className="p-8 pb-2 relative z-10 bg-white">
               <h3 className="text-2xl font-bold text-[var(--mkt-ink)] leading-tight mb-2">
                 Staff setup that scales
@@ -184,7 +228,7 @@ export function DigitalTransformation() {
                 </div>
               </div>
             </div>
-          </div>
+          </motion.div>
         </div>
 
       </div>
