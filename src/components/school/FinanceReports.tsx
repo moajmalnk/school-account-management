@@ -35,6 +35,8 @@ import { MonthPicker } from "@/components/ui/date-picker";
 import { FinanceBarCard, FinanceDonutCard } from "@/components/school/finance-charts";
 import { OrganicCard } from "@/components/ui/organic-card";
 import {
+  bankBalance,
+  cashOnHand,
   expenseSegmentsFromDisbursements,
   isSalaryDisbursement,
   normalizePayeeType,
@@ -875,25 +877,19 @@ export function BalanceSheetReport() {
   const schoolName = schoolDetails.name || "School";
   const openPayables = useMemo(() => queuedPayables(disbursements), [disbursements]);
 
-  const cashOnHand = useMemo(
-    () => payments.filter((p) => p.mode === "Cash").reduce((s, p) => s + p.amount, 0),
-    [payments],
-  );
-  const bankBalance = useMemo(
-    () => payments.filter((p) => p.mode !== "Cash").reduce((s, p) => s + p.amount, 0),
-    [payments],
-  );
+  const cashOnHandTotal = useMemo(() => cashOnHand(payments), [payments]);
+  const bankBalanceTotal = useMemo(() => bankBalance(payments), [payments]);
   const receivables = useMemo(
     () => students.filter((st) => !isRecordDeleted(st.deletedAt)).reduce((s, st) => s + st.due, 0),
     [students],
   );
   const payables = totalAccountsPayable(disbursements);
-  const totalAssets = cashOnHand + bankBalance + receivables;
+  const totalAssets = cashOnHandTotal + bankBalanceTotal + receivables;
   const equity = totalAssets - payables;
 
   const assetRows = [
-    ["Cash in Hand", inr(cashOnHand)],
-    ["Bank & UPI", inr(bankBalance)],
+    ["Cash in Hand", inr(cashOnHandTotal)],
+    ["Bank & UPI", inr(bankBalanceTotal)],
     ["Accounts Receivable (Fees Due)", inr(receivables)],
     ["Total Assets", inr(totalAssets)],
   ];
@@ -915,8 +911,8 @@ export function BalanceSheetReport() {
 
   const handleCsv = () => {
     downloadCsv(reportDownloadName("balance-sheet", "csv", schoolName, academicYear), headers, [
-      ["Cash in Hand", cashOnHand],
-      ["Bank & UPI", bankBalance],
+      ["Cash in Hand", cashOnHandTotal],
+      ["Bank & UPI", bankBalanceTotal],
       ["Accounts Receivable", receivables],
       ["Total Assets", totalAssets],
       ["Accounts Payable", payables],
@@ -1013,8 +1009,8 @@ export function BalanceSheetReport() {
           title="Asset Composition"
           cornerSide="tr"
           segments={[
-            { label: "Cash", value: cashOnHand },
-            { label: "Bank & UPI", value: bankBalance },
+            { label: "Cash", value: cashOnHandTotal },
+            { label: "Bank & UPI", value: bankBalanceTotal },
             { label: "Receivables", value: receivables },
           ]}
         />

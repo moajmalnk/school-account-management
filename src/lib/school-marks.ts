@@ -56,7 +56,13 @@ function starPath(cx: number, cy: number, outerR: number): string {
 
 function fontForArc(text: string, arcLen: number, max: number, min: number, ratio: number): number {
   if (!text) return max;
-  return Math.max(min, Math.min(max, arcLen / (text.length * ratio)));
+  const fit = arcLen / (text.length * ratio);
+  return Math.max(min, Math.min(max, fit));
+}
+
+/** Usable path length — inset so glyphs are not clipped at arc endpoints. */
+function arcTextLength(arcLen: number): number {
+  return +(arcLen * 0.93).toFixed(1);
 }
 
 function trackingForArc(text: string, arcLen: number, fontSize: number, ratio: number): number {
@@ -92,17 +98,19 @@ export function defaultSealSvg(
   const botId = `${uid}-bot`;
   const clipId = `${uid}-clip`;
 
-  const gap = 20;
+  const gap = 16;
   const topStart = polar(180 + gap);
   const topEnd = polar(360 - gap);
   const botStart = polar(180 - gap);
   const botEnd = polar(gap);
 
   const arcLen = (SEAL_TEXT_R * ((180 - gap * 2) * Math.PI)) / 180;
-  const nameSize = fontForArc(name, arcLen, 22, 11, 0.58);
-  const detailSize = fontForArc(details, arcLen, 13.5, 8.5, 0.52);
-  const nameTrack = trackingForArc(name, arcLen, nameSize, 0.55);
-  const detailTrack = trackingForArc(details, arcLen, detailSize, 0.5);
+  const topPathLen = arcTextLength(arcLen);
+  const botPathLen = arcTextLength(arcLen);
+  const nameSize = fontForArc(name, arcLen, 20, 10, 0.66);
+  const detailSize = fontForArc(details, arcLen, 13, 8, 0.56);
+  const nameTrack = trackingForArc(name, topPathLen, nameSize, 0.62);
+  const detailTrack = trackingForArc(details, botPathLen, detailSize, 0.54);
 
   const leftStar = polar(180);
   const rightStar = polar(0);
@@ -129,10 +137,10 @@ export function defaultSealSvg(
   <!-- Logo / emblem ring -->
   <circle cx="${SEAL_CX}" cy="${SEAL_CY}" r="99.5" fill="none" stroke="${fill}" stroke-width="2.2"/>
   <circle cx="${SEAL_CX}" cy="${SEAL_CY}" r="94.5" fill="none" stroke="${fill}" stroke-width="1.1" opacity="0.85"/>
-  <text fill="${fill}" font-family="Inter, Arial, Helvetica, sans-serif" font-size="${nameSize.toFixed(1)}" font-weight="800" letter-spacing="${nameTrack}" text-anchor="middle">
+  <text fill="${fill}" font-family="Inter, Arial, Helvetica, sans-serif" font-size="${nameSize.toFixed(1)}" font-weight="800" letter-spacing="${nameTrack}" text-anchor="middle" textLength="${topPathLen}" lengthAdjust="spacingAndGlyphs">
     <textPath href="#${topId}" xlink:href="#${topId}" startOffset="50%">${escapeXml(name)}</textPath>
   </text>
-  <text fill="${fill}" font-family="'Arial Narrow', 'Helvetica Condensed', Arial, sans-serif" font-size="${detailSize.toFixed(1)}" font-weight="600" letter-spacing="${detailTrack}" text-anchor="middle">
+  <text fill="${fill}" font-family="'Arial Narrow', 'Helvetica Condensed', Arial, sans-serif" font-size="${detailSize.toFixed(1)}" font-weight="600" letter-spacing="${detailTrack}" text-anchor="middle" textLength="${botPathLen}" lengthAdjust="spacingAndGlyphs">
     <textPath href="#${botId}" xlink:href="#${botId}" startOffset="50%">${escapeXml(details)}</textPath>
   </text>
   <path d="${starPath(leftStar.x, leftStar.y, 7.6)}" fill="${fill}"/>
