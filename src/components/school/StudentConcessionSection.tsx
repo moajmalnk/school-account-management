@@ -15,6 +15,7 @@ import {
 import {
   defaultConcessionTierFromClass,
   defaultConcessionTierFromRoute,
+  resolveVehicleConcessionSeed,
 } from "@/lib/student-concession-fees";
 import {
   findTransportRouteForStudent,
@@ -174,7 +175,7 @@ export function StudentConcessionSection({
       const total = fromClass.feeSchedule.reduce((s, l) => s + l.amount, 0);
       return `₹${total.toLocaleString("en-IN")} · class fallback`;
     }
-    return "Not configured";
+    return "Not configured — set a custom schedule below";
   }, [needsBus, busPoint1, busPoint2, matchedClass, transportRoutes, feeTerms]);
 
   const tuitionEnabled = value.concessionFees.tuition?.enabled === true;
@@ -191,19 +192,15 @@ export function StudentConcessionSection({
   };
 
   const seedVehicle = () => {
-    const studentStub = {
-      needsBus: true as const,
+    const seeded = resolveVehicleConcessionSeed(
+      matchedClass,
+      feeTerms,
+      transportRoutes,
       busPoint1,
       busPoint2,
-      cls: matchedClass?.className ?? "",
-    };
-    const shift = resolveTransportFeeShift(studentStub);
-    const route = findTransportRouteForStudent(studentStub, transportRoutes);
-    const seeded =
-      defaultConcessionTierFromRoute(route, shift, feeTerms) ??
-      defaultConcessionTierFromClass(matchedClass, feeTerms, "vehicle");
-    if (!seeded) return;
-    patchFees({ ...value.concessionFees, vehicle: seeded });
+      matchedClass?.className,
+    );
+    patchFees({ ...value.concessionFees, vehicle: { ...seeded, enabled: true } });
   };
 
   const addOtherFee = () => {
@@ -325,7 +322,18 @@ export function StudentConcessionSection({
               enabled={vehicleEnabled}
               onEnabledChange={(checked) => {
                 if (checked && !value.concessionFees.vehicle) {
-                  seedVehicle();
+                  const seeded = resolveVehicleConcessionSeed(
+                    matchedClass,
+                    feeTerms,
+                    transportRoutes,
+                    busPoint1,
+                    busPoint2,
+                    matchedClass?.className,
+                  );
+                  patchFees({
+                    ...value.concessionFees,
+                    vehicle: { ...seeded, enabled: true },
+                  });
                   return;
                 }
                 patchFees({

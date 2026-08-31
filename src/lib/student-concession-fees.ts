@@ -1,5 +1,7 @@
 import {
   classFeePrefillAmount,
+  findTransportRouteForStudent,
+  resolveTransportFeeShift,
   routeScheduleForShift,
   sumFeeSchedule,
   withClassFeeSchedule,
@@ -244,6 +246,45 @@ export function defaultConcessionTierFromRoute(
     ],
     feeCollectionStartMonth: normalized.feeCollectionStartMonth,
   };
+}
+
+export function emptyConcessionVehicleTier(): StudentConcessionFeeTier {
+  return {
+    enabled: true,
+    billingCycle: "Monthly",
+    feeAmountMode: "fixed",
+    feeSchedule: [
+      {
+        id: "fl-vehicle-1",
+        kind: "installment",
+        label: "1st Installment",
+        amount: 0,
+      },
+    ],
+  };
+}
+
+export function resolveVehicleConcessionSeed(
+  matchedClass: ClassConfig | undefined,
+  feeTerms: FeeTerm[],
+  transportRoutes: TransportRoute[],
+  busPoint1?: string,
+  busPoint2?: string,
+  className?: string,
+): StudentConcessionFeeTier {
+  const studentStub = {
+    needsBus: true as const,
+    busPoint1,
+    busPoint2,
+    cls: className ?? matchedClass?.className ?? "",
+  };
+  const shift = resolveTransportFeeShift(studentStub);
+  const route = findTransportRouteForStudent(studentStub, transportRoutes);
+  return (
+    defaultConcessionTierFromRoute(route, shift, feeTerms) ??
+    defaultConcessionTierFromClass(matchedClass, feeTerms, "vehicle") ??
+    emptyConcessionVehicleTier()
+  );
 }
 
 export function validateConcessionFees(
