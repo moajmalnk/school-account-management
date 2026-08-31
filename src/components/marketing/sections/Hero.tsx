@@ -29,7 +29,28 @@ export function Hero({ noDelay = false }: { noDelay?: boolean }) {
           </h1>
 
           <div className="w-full relative flex justify-center">
-            <motion.div 
+            {/* Animated glowing background aura */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[800px] aspect-[2/1] z-0 pointer-events-none">
+              <motion.div 
+                className="absolute inset-0 bg-[var(--mkt-green)]/20 rounded-[100%] blur-[80px]"
+                animate={{ 
+                  scale: [1, 1.1, 1],
+                  opacity: [0.3, 0.6, 0.3],
+                }}
+                transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+              />
+              <motion.div 
+                className="absolute inset-0 bg-blue-500/10 rounded-[100%] blur-[80px]"
+                animate={{ 
+                  scale: [1.1, 1, 1.1],
+                  opacity: [0.2, 0.5, 0.2],
+                  rotate: [0, 90, 0]
+                }}
+                transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+              />
+            </div>
+
+            <motion.div
               className="relative z-10 w-full max-w-4xl"
               initial={reduce ? false : { opacity: 0, y: 40, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
