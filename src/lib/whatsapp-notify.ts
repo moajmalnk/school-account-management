@@ -119,10 +119,7 @@ function academicYearEndLabel(date = new Date()) {
   });
 }
 
-export function resolveStudentDueDate(
-  student: Student,
-  classes?: ClassConfig[],
-): string {
+export function resolveStudentDueDate(student: Student, classes?: ClassConfig[]): string {
   const cls = classes?.find((c) => c.className === student.cls);
   if (cls?.billingCycle === "Annually") return academicYearEndLabel();
   // Monthly and Term: due by end of the current month / period window
@@ -194,9 +191,7 @@ export async function sendPersonalizedWhatsApp(params: {
       }
     } catch (err) {
       failed += 1;
-      errors.push(
-        `${row.number}: ${err instanceof Error ? err.message : "Network error"}`,
-      );
+      errors.push(`${row.number}: ${err instanceof Error ? err.message : "Network error"}`);
     }
     if (i < params.recipients.length - 1 && delayMs > 0) {
       await new Promise((r) => setTimeout(r, delayMs));

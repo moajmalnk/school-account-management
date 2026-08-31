@@ -19,12 +19,7 @@ import {
   type TransportRoute,
 } from "@/lib/tenant-store";
 
-export type StudentLedgerStatus =
-  | "Paid"
-  | "Partially Paid"
-  | "Due"
-  | "Overdue"
-  | "On Break";
+export type StudentLedgerStatus = "Paid" | "Partially Paid" | "Due" | "Overdue" | "On Break";
 
 export type StudentLedgerRow = {
   date: string;
@@ -182,10 +177,16 @@ export function feePeriodLabelMatches(chargeDesc: string, periodLabel: string): 
   const hay = chargeDesc.trim().toLowerCase();
   if (!needle || !hay) return false;
   if (hay === needle) return true;
-  const parts = hay.split(/[·|,/–—-]/).map((p) => p.trim()).filter(Boolean);
+  const parts = hay
+    .split(/[·|,/–—-]/)
+    .map((p) => p.trim())
+    .filter(Boolean);
   if (parts.some((p) => p === needle)) return true;
   // Word-boundary-ish: avoid "May" matching "Maya"
-  const re = new RegExp(`(?:^|[\\s·|,/])${needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:$|[\\s·|,/])`, "i");
+  const re = new RegExp(
+    `(?:^|[\\s·|,/])${needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:$|[\\s·|,/])`,
+    "i",
+  );
   return re.test(` ${hay} `);
 }
 
@@ -342,7 +343,9 @@ function expectedVehicleChargeLines(
       {
         key: "vehicle::flat",
         date: "—",
-        desc: routeLabel ? `Vehicle Fee · ${routeLabel} · ${shiftLabel}` : `Vehicle Fee · ${shiftLabel}`,
+        desc: routeLabel
+          ? `Vehicle Fee · ${routeLabel} · ${shiftLabel}`
+          : `Vehicle Fee · ${shiftLabel}`,
         due: "—",
         charge: transport.amount,
         paid: 0,
@@ -376,14 +379,7 @@ function markBreaksOnCharges(
   kind: "tuition" | "vehicle",
 ): ChargeDraft[] {
   return charges.map((c) => {
-    const onBreak = isChargeOnBreak(
-      breaks,
-      studentId,
-      academicYear,
-      kind,
-      c.desc,
-      c.periodLabel,
-    );
+    const onBreak = isChargeOnBreak(breaks, studentId, academicYear, kind, c.desc, c.periodLabel);
     return onBreak ? { ...c, onBreak: true } : c;
   });
 }
@@ -441,9 +437,7 @@ function allocatePaymentsToCharges(
       ...next[matchedIndex],
       paid: next[matchedIndex].paid + payment.amount,
       date:
-        next[matchedIndex].date === "—"
-          ? formatDisplayDate(payment.time)
-          : next[matchedIndex].date,
+        next[matchedIndex].date === "—" ? formatDisplayDate(payment.time) : next[matchedIndex].date,
     };
   }
 
@@ -498,9 +492,7 @@ function toLedgerRow(draft: ChargeDraft): StudentLedgerRow {
 function ledgerDueTime(row: StudentLedgerRow): number {
   // Prefer preserved ISO, then display due/date labels.
   const parsed =
-    parseFlexibleDate(row.dueIso) ??
-    parseFlexibleDate(row.due) ??
-    parseFlexibleDate(row.date);
+    parseFlexibleDate(row.dueIso) ?? parseFlexibleDate(row.due) ?? parseFlexibleDate(row.date);
   return parsed?.getTime() ?? Number.POSITIVE_INFINITY;
 }
 
@@ -666,9 +658,16 @@ export function buildStudentFeeStatement(input: {
 
   // student.due may still include amounts covered by breaks until adjusted — prefer ledger.
   const combined = mergeSections(tuition, vehicle, 0);
-  if (student.due > 0 && combined.totalDue === 0 && combined.ledger.every((r) => r.status === "On Break" || r.balance <= 0)) {
+  if (
+    student.due > 0 &&
+    combined.totalDue === 0 &&
+    combined.ledger.every((r) => r.status === "On Break" || r.balance <= 0)
+  ) {
     // All remaining schedule is on break / paid — do not surface stale due as overdue.
-  } else if (student.due > combined.totalDue && combined.ledger.filter((r) => r.status !== "On Break").length === 0) {
+  } else if (
+    student.due > combined.totalDue &&
+    combined.ledger.filter((r) => r.status !== "On Break").length === 0
+  ) {
     combined.ledger.push({
       date: "—",
       desc: "Outstanding Balance",
@@ -686,10 +685,11 @@ export function buildStudentFeeStatement(input: {
     const ledgerOutstanding = combined.ledger
       .filter((r) => r.status !== "On Break")
       .reduce((s, r) => s + r.balance, 0);
-    combined.totalDue = Math.max(ledgerOutstanding, Math.max(0, combined.totalFee - combined.totalPaid));
-    combined.overdue =
-      combined.totalDue > 0 &&
-      combined.ledger.some((r) => r.status === "Overdue");
+    combined.totalDue = Math.max(
+      ledgerOutstanding,
+      Math.max(0, combined.totalFee - combined.totalPaid),
+    );
+    combined.overdue = combined.totalDue > 0 && combined.ledger.some((r) => r.status === "Overdue");
   }
 
   const dueBuckets = summarizeStudentDueBuckets(combined.ledger);

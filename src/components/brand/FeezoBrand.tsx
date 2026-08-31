@@ -2,13 +2,7 @@ import { cn } from "@/lib/utils";
 import { BRAND } from "@/lib/brand";
 
 export function FeezoMark({ className }: { className?: string }) {
-  return (
-    <img
-      src={BRAND.mark}
-      alt=""
-      className={cn("h-full w-full object-contain", className)}
-    />
-  );
+  return <img src={BRAND.mark} alt="" className={cn("h-full w-full object-contain", className)} />;
 }
 
 export function FeezoBrand({

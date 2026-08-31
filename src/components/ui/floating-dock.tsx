@@ -41,14 +41,8 @@ export const FloatingDock = ({
 }) => {
   return (
     <>
-      <FloatingDockDesktop
-        items={items}
-        className={desktopClassName}
-        alwaysVisible={desktopOnly}
-      />
-      {!desktopOnly && (
-        <FloatingDockMobile items={items} className={mobileClassName} />
-      )}
+      <FloatingDockDesktop items={items} className={desktopClassName} alwaysVisible={desktopOnly} />
+      {!desktopOnly && <FloatingDockMobile items={items} className={mobileClassName} />}
     </>
   );
 };

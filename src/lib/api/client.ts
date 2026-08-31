@@ -259,7 +259,8 @@ async function postRefresh(refreshToken: string): Promise<{
 async function doRefreshAccessToken(): Promise<TokenRefreshResult> {
   const sent = getRefreshToken();
   if (!sent) {
-    const token = typeof window === "undefined" ? null : window.localStorage.getItem(ACCESS_TOKEN_KEY);
+    const token =
+      typeof window === "undefined" ? null : window.localStorage.getItem(ACCESS_TOKEN_KEY);
     return token && !accessTokenNeedsRefresh(token) ? "ok" : "invalid";
   }
 
@@ -329,10 +330,7 @@ type RequestOptions = {
   retried?: boolean;
 };
 
-export async function apiRequest<T>(
-  path: string,
-  options: RequestOptions = {},
-): Promise<T> {
+export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const {
     method = "GET",
     body,
@@ -400,9 +398,7 @@ export async function apiRequest<T>(
     const snippet = raw.replace(/\s+/g, " ").slice(0, 180);
     const message =
       payload?.error ||
-      (snippet
-        ? `Request failed (${res.status}): ${snippet}`
-        : `Request failed (${res.status})`);
+      (snippet ? `Request failed (${res.status}): ${snippet}` : `Request failed (${res.status})`);
 
     if (auth && res.status === 401 && !skipUnauthorized) {
       if (isImpersonating()) {

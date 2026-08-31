@@ -49,11 +49,7 @@ export function FeePeriodChecklist({
     onChange(all ? [...kept, ...group.map((o) => o.label)] : kept);
   };
 
-  const renderGroup = (
-    title: string,
-    group: StudentSchedulePeriodOption[],
-    hint: string,
-  ) => {
+  const renderGroup = (title: string, group: StudentSchedulePeriodOption[], hint: string) => {
     if (group.length === 0) return null;
     const allSelected = group.every((o) => isOn(o.label));
     const someSelected = group.some((o) => isOn(o.label));
@@ -139,9 +135,7 @@ export function FeePeriodChecklist({
   }
 
   const selectedCount = options.filter((o) => isOn(o.label)).length;
-  const totalAmount = options
-    .filter((o) => isOn(o.label))
-    .reduce((s, o) => s + o.amount, 0);
+  const totalAmount = options.filter((o) => isOn(o.label)).reduce((s, o) => s + o.amount, 0);
 
   return (
     <div className={cn("space-y-4", className)}>
@@ -156,9 +150,7 @@ export function FeePeriodChecklist({
               {totalAmount > 0 ? (
                 <>
                   {" · "}
-                  <span className="font-mono font-semibold text-[#0F766E]">
-                    {inr(totalAmount)}
-                  </span>
+                  <span className="font-mono font-semibold text-[#0F766E]">{inr(totalAmount)}</span>
                 </>
               ) : null}
             </>
@@ -203,16 +195,12 @@ export function FeePeriodChecklist({
       {renderGroup(
         "Terms",
         terms,
-        mode === "billable"
-          ? "Term installments on this schedule"
-          : "Pause one or more terms",
+        mode === "billable" ? "Term installments on this schedule" : "Pause one or more terms",
       )}
       {renderGroup(
         "Months",
         months,
-        mode === "billable"
-          ? "Monthly installments on this schedule"
-          : "Pause one or more months",
+        mode === "billable" ? "Monthly installments on this schedule" : "Pause one or more months",
       )}
     </div>
   );

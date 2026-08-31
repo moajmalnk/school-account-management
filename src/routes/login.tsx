@@ -135,8 +135,7 @@ function LoginPage() {
               value={password}
               onChange={(e) => {
                 setPassword(e.target.value);
-                if (fieldErrors.password)
-                  setFieldErrors((f) => ({ ...f, password: undefined }));
+                if (fieldErrors.password) setFieldErrors((f) => ({ ...f, password: undefined }));
                 if (bannerError) setBannerError(false);
               }}
               placeholder="••••••••"

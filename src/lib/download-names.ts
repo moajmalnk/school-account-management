@@ -74,7 +74,8 @@ export type DownloadToken = (typeof DOWNLOAD_TOKENS)[number];
 
 /** What each token fills in — shown in settings tooltips. */
 export const DOWNLOAD_TOKEN_HELP: Record<DownloadToken, string> = {
-  "{id}": "Record ID — payment (PAY-001), voucher, invoice, or student/staff id when used for that download",
+  "{id}":
+    "Record ID — payment (PAY-001), voucher, invoice, or student/staff id when used for that download",
   "{studentId}": "Student ID (e.g. STU-001) — use on receipts and student fee report",
   "{name}": "Person name (student, staff, or payer)",
   "{date}": "Today’s date as YYYY-MM-DD",
@@ -119,8 +120,7 @@ export function slugYear(year: string): string {
 }
 
 export function normalizeFileNames(value: unknown): Record<DownloadKind, string> {
-  const src =
-    value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const src = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
   const next = { ...DEFAULT_FILE_NAMES };
   for (const kind of DOWNLOAD_KINDS) {
     const raw = src[kind];
@@ -185,7 +185,9 @@ export function formatDownloadFilename(
   vars: DownloadNameVars = {},
   patterns?: Partial<Record<DownloadKind, string>>,
 ): string {
-  const source = patterns ? normalizeFileNames({ ...activeFileNames, ...patterns }) : activeFileNames;
+  const source = patterns
+    ? normalizeFileNames({ ...activeFileNames, ...patterns })
+    : activeFileNames;
   const pattern = source[kind] || DEFAULT_FILE_NAMES[kind];
   const base = fillPattern(pattern, vars);
   const fallback = fillPattern(DEFAULT_FILE_NAMES[kind], vars);

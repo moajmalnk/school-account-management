@@ -83,13 +83,7 @@ type AuthState = {
     patch: Partial<
       Pick<
         Session,
-        | "displayName"
-        | "tenantName"
-        | "permissions"
-        | "staffId"
-        | "tier"
-        | "planName"
-        | "planFlags"
+        "displayName" | "tenantName" | "permissions" | "staffId" | "tier" | "planName" | "planFlags"
       >
     >,
   ) => void;
@@ -127,9 +121,7 @@ function loginFailureMessage(err: unknown): string {
   if (
     err instanceof TypeError ||
     (err instanceof Error &&
-      /failed to fetch|networkerror|load failed|network request failed/i.test(
-        err.message,
-      ))
+      /failed to fetch|networkerror|load failed|network request failed/i.test(err.message))
   ) {
     return API_UNREACHABLE_MESSAGE;
   }
@@ -167,9 +159,7 @@ function sessionFromApiLogin(
     permissions,
     tier: data.session.tier,
     planName: data.session.planName,
-    planFlags: data.session.planFlags
-      ? normalizePlanFlags(data.session.planFlags)
-      : undefined,
+    planFlags: data.session.planFlags ? normalizePlanFlags(data.session.planFlags) : undefined,
   };
   writeSession(next);
   setSession(next);
@@ -187,9 +177,9 @@ function parseSessionRaw(raw: string, impersonated: boolean): Session | null {
     parsed.role === "school_admin" || parsed.role === "super_admin"
       ? ALL_PERMISSIONS
       : Array.isArray(parsed.permissions) && parsed.permissions.length
-        ? ((parsed.permissions as string[]).includes("*")
-            ? ALL_PERMISSIONS
-            : (parsed.permissions as PermissionKey[]))
+        ? (parsed.permissions as string[]).includes("*")
+          ? ALL_PERMISSIONS
+          : (parsed.permissions as PermissionKey[])
         : [];
   return {
     role: parsed.role,
@@ -204,9 +194,7 @@ function parseSessionRaw(raw: string, impersonated: boolean): Session | null {
     tier: typeof parsed.tier === "string" ? parsed.tier : undefined,
     planName: typeof parsed.planName === "string" ? parsed.planName : undefined,
     planFlags: parsed.planFlags ? normalizePlanFlags(parsed.planFlags) : undefined,
-    ...(impersonated || parsed.impersonated
-      ? { impersonated: true as const }
-      : {}),
+    ...(impersonated || parsed.impersonated ? { impersonated: true as const } : {}),
     ...(parsed.impersonationSource === "super_admin" ||
     parsed.impersonationSource === "school_admin"
       ? { impersonationSource: parsed.impersonationSource }
@@ -336,9 +324,7 @@ export function sessionCanAccessSettingsTab(
   return canAccessSettingsTabPerm(session.permissions, tab, session.planFlags);
 }
 
-export function sessionCanAccessSettings(
-  session: Session | null | undefined,
-): boolean {
+export function sessionCanAccessSettings(session: Session | null | undefined): boolean {
   if (!session) return false;
   if (session.role === "school_admin" || session.role === "super_admin") return true;
   return canAccessSettingsModulePerm(session.permissions);

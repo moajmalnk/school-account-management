@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, startTransition, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  startTransition,
+  type ReactNode,
+} from "react";
 import { toast } from "sonner";
 import { useNavigate, useSearch, Link } from "@tanstack/react-router";
 import {
@@ -63,7 +71,20 @@ import {
   Scan,
   CircleHelp,
 } from "lucide-react";
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, XAxis, YAxis } from "recharts";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  XAxis,
+  YAxis,
+} from "recharts";
 import {
   ChartContainer,
   ChartTooltip,
@@ -125,8 +146,16 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { DatePicker, MonthPicker, ReceiptDateTimePicker, TimePicker24 } from "@/components/ui/date-picker";
-import { FinancialYearFields, resolveFinancialYearInput } from "@/components/school/FinancialYearFields";
+import {
+  DatePicker,
+  MonthPicker,
+  ReceiptDateTimePicker,
+  TimePicker24,
+} from "@/components/ui/date-picker";
+import {
+  FinancialYearFields,
+  resolveFinancialYearInput,
+} from "@/components/school/FinancialYearFields";
 import { SignaturePadDialog } from "@/components/school/SignaturePadDialog";
 import { OrganicCard } from "@/components/ui/organic-card";
 import { ImageCropDialog } from "@/components/ui/image-crop-dialog";
@@ -250,7 +279,12 @@ import {
 import { SettingsBranchesCard } from "@/components/school/SettingsBranchesCard";
 import { CustomerSupportCard } from "@/components/school/CustomerSupportCard";
 import { DefaultSchoolSeal } from "@/components/school/DefaultSchoolSeal";
-import { BRAND_PRESETS, FONT_FAMILY_OPTIONS, FONT_SIZE_OPTIONS, normalizeHexColor } from "@/lib/brand-theme";
+import {
+  BRAND_PRESETS,
+  FONT_FAMILY_OPTIONS,
+  FONT_SIZE_OPTIONS,
+  normalizeHexColor,
+} from "@/lib/brand-theme";
 import {
   DEFAULT_FILE_NAMES,
   DOWNLOAD_KIND_HINTS,
@@ -268,19 +302,18 @@ import {
 import { PwaInstallCard } from "@/components/pwa/PwaInstallBanner";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   sessionCanAccessSettings,
   sessionCanAccessSettingsTab,
   sessionCanAccessFinanceView,
   useAuth,
 } from "@/lib/auth";
-import { planAllowsExtraUsers, planAllowsMultipleBranches, type SettingsTabId } from "@/lib/permissions";
+import {
+  planAllowsExtraUsers,
+  planAllowsMultipleBranches,
+  type SettingsTabId,
+} from "@/lib/permissions";
 import {
   sendWhatsAppNotify,
   sendPersonalizedWhatsApp,
@@ -328,7 +361,19 @@ import {
   apiUpsertTransportRoute,
   apiUpsertVehicle,
 } from "@/lib/api/settings";
-import { apiCreateDisbursement, apiCreatePayment, apiDeleteDisbursement, apiDeletePayment, apiDeleteStaff, apiDeleteStudent, apiListDisbursements, apiUpdateDisbursement, apiUpdatePayment, apiUpsertStaff, apiUpsertStudent } from "@/lib/api/records";
+import {
+  apiCreateDisbursement,
+  apiCreatePayment,
+  apiDeleteDisbursement,
+  apiDeletePayment,
+  apiDeleteStaff,
+  apiDeleteStudent,
+  apiListDisbursements,
+  apiUpdateDisbursement,
+  apiUpdatePayment,
+  apiUpsertStaff,
+  apiUpsertStudent,
+} from "@/lib/api/records";
 import { apiSaveDashboardTodos } from "@/lib/api/dashboard";
 import { apiUploadDataUrl } from "@/lib/api/settings";
 import { getApiToken } from "@/lib/api/client";
@@ -339,13 +384,13 @@ import {
   nextPrefixedId,
   parseStudentCsv,
 } from "@/lib/student-csv";
-import {
-  isDuplicateStaff,
-  parseStaffCsv,
-  staffFromCsvRow,
-} from "@/lib/staff-csv";
+import { isDuplicateStaff, parseStaffCsv, staffFromCsvRow } from "@/lib/staff-csv";
 import { resolveMediaUrl, fetchMediaBlob } from "@/lib/media";
-import { defaultSealToPng, resolveSealDisplaySrc, resolveSignatureDisplaySrc } from "@/lib/school-marks";
+import {
+  defaultSealToPng,
+  resolveSealDisplaySrc,
+  resolveSignatureDisplaySrc,
+} from "@/lib/school-marks";
 import {
   bankBalance,
   cashOnHand,
@@ -383,7 +428,17 @@ import {
   toIsoDate,
   toSqlDateTime,
 } from "@/lib/dates";
-import { cn, dashCardClass, glassCardClass, glassInsetClass, glassPanelClass, glassTableWrapClass, premiumCardClass, type CornerSide, type Tone } from "@/lib/utils";
+import {
+  cn,
+  dashCardClass,
+  glassCardClass,
+  glassInsetClass,
+  glassPanelClass,
+  glassTableWrapClass,
+  premiumCardClass,
+  type CornerSide,
+  type Tone,
+} from "@/lib/utils";
 
 type PendingObligation = {
   id: string;
@@ -553,10 +608,7 @@ function MobileCompactStat({
       </div>
       <div className="min-w-0 text-left">
         <div
-          className={cn(
-            "font-mono text-[16px] font-bold leading-none tracking-tight",
-            valueClass,
-          )}
+          className={cn("font-mono text-[16px] font-bold leading-none tracking-tight", valueClass)}
         >
           {value}
         </div>
@@ -600,18 +652,14 @@ const workspacePanelClass = cn(glassCardClass, "rounded-2xl");
 const DASH = {
   overview:
     "border-teal-300/40 bg-gradient-to-br from-[#CCFBF1]/90 via-[#F0FDFA] to-[#99F6E4]/70 dark:border-teal-700/35 dark:from-zinc-900 dark:via-zinc-900 dark:to-[#0F766E]/25",
-  finance:
-    "border-slate-200/50 bg-white/90 dark:border-white/10 dark:bg-zinc-900/90",
+  finance: "border-slate-200/50 bg-white/90 dark:border-white/10 dark:bg-zinc-900/90",
   outstanding:
     "border-orange-300/40 bg-gradient-to-br from-[#FFEDD5] via-[#FED7AA]/55 to-[#FECACA]/45 dark:border-orange-800/35 dark:from-zinc-900 dark:via-zinc-900 dark:to-orange-950/45",
-  cash:
-    "border-violet-300/40 bg-gradient-to-br from-[#EDE9FE]/90 via-[#F5F3FF] to-[#E9D5FF]/70 dark:border-violet-800/35 dark:from-zinc-900 dark:via-zinc-900 dark:to-violet-950/40",
+  cash: "border-violet-300/40 bg-gradient-to-br from-[#EDE9FE]/90 via-[#F5F3FF] to-[#E9D5FF]/70 dark:border-violet-800/35 dark:from-zinc-900 dark:via-zinc-900 dark:to-violet-950/40",
   receive:
     "border-emerald-400/50 bg-gradient-to-br from-[#6EE7B7] via-[#A7F3D0] to-[#D1FAE5] dark:border-emerald-600/40 dark:from-emerald-950/80 dark:via-zinc-900 dark:to-emerald-900/50",
-  pay:
-    "border-rose-400/50 bg-gradient-to-br from-[#FDA4AF] via-[#FECDD3] to-[#FFE4E6] dark:border-rose-700/40 dark:from-rose-950/80 dark:via-zinc-900 dark:to-rose-900/45",
-  todo:
-    "border-teal-300/40 bg-gradient-to-br from-[#CCFBF1]/90 via-[#F0FDFA] to-[#ECFDF5]/80 dark:border-teal-700/30 dark:from-zinc-900 dark:via-zinc-900 dark:to-[#0F766E]/15",
+  pay: "border-rose-400/50 bg-gradient-to-br from-[#FDA4AF] via-[#FECDD3] to-[#FFE4E6] dark:border-rose-700/40 dark:from-rose-950/80 dark:via-zinc-900 dark:to-rose-900/45",
+  todo: "border-teal-300/40 bg-gradient-to-br from-[#CCFBF1]/90 via-[#F0FDFA] to-[#ECFDF5]/80 dark:border-teal-700/30 dark:from-zinc-900 dark:via-zinc-900 dark:to-[#0F766E]/15",
   notes:
     "border-violet-200/50 bg-gradient-to-br from-[#E9D5FF]/70 via-[#EDE9FE]/80 to-white/80 dark:border-violet-800/30 dark:from-zinc-900 dark:via-zinc-900 dark:to-violet-950/30",
   admissions:
@@ -901,8 +949,7 @@ function DashboardTodoNotesPanel() {
   };
 
   const removeTodo = (index: number) => {
-    const next =
-      todos.length <= 1 ? [""] : todos.filter((_, i) => i !== index);
+    const next = todos.length <= 1 ? [""] : todos.filter((_, i) => i !== index);
     persistTodos(next);
   };
 
@@ -1010,7 +1057,12 @@ function DashboardTodoNotesPanel() {
         )}
       </div>
 
-      <div className={cn(DASH.notes, "mt-5 flex min-h-0 flex-1 flex-col rounded-2xl border p-3.5 sm:p-4")}>
+      <div
+        className={cn(
+          DASH.notes,
+          "mt-5 flex min-h-0 flex-1 flex-col rounded-2xl border p-3.5 sm:p-4",
+        )}
+      >
         <DashboardPanelHeading icon={StickyNote} title="Notes" />
         <Textarea
           value={note}
@@ -1190,12 +1242,16 @@ function PremiumDashboard({
           </section>
 
           {/* Outstanding Payments */}
-          <section className={cn(dashCardClass, DASH.outstanding, "flex min-w-0 flex-col p-4 sm:p-5")}>
+          <section
+            className={cn(dashCardClass, DASH.outstanding, "flex min-w-0 flex-col p-4 sm:p-5")}
+          >
             <DashboardPanelHeading icon={HandCoins} title="Outstanding Payments" />
             <div className="mt-4 grid min-w-0 flex-1 grid-cols-1 gap-3">
               <div className="flex min-h-[96px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl bg-white/55 p-3.5 shadow-sm shadow-orange-200/30 dark:ring-1 dark:ring-white/10 sm:min-h-[100px] sm:p-4">
                 <div className="flex items-start justify-between gap-2">
-                  <span className="min-w-0 text-[12px] font-medium text-slate-600 dark:text-zinc-300">Fee Outstanding</span>
+                  <span className="min-w-0 text-[12px] font-medium text-slate-600 dark:text-zinc-300">
+                    Fee Outstanding
+                  </span>
                   <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#FED7AA]/80 text-orange-600 dark:text-amber-300">
                     <HandCoins className="h-4 w-4" />
                   </span>
@@ -1209,7 +1265,9 @@ function PremiumDashboard({
               </div>
               <div className="flex min-h-[96px] min-w-0 flex-col justify-between overflow-hidden rounded-2xl bg-white/55 p-3.5 shadow-sm shadow-orange-200/30 dark:ring-1 dark:ring-white/10 sm:min-h-[100px] sm:p-4">
                 <div className="flex items-start justify-between gap-2">
-                  <span className="min-w-0 text-[12px] font-medium text-slate-600 dark:text-zinc-300">Salary Outstanding</span>
+                  <span className="min-w-0 text-[12px] font-medium text-slate-600 dark:text-zinc-300">
+                    Salary Outstanding
+                  </span>
                   <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300">
                     <Banknote className="h-4 w-4" />
                   </span>
@@ -1339,7 +1397,9 @@ function PremiumDashboard({
         </aside>
 
         {/* Bottom row */}
-        <section className={cn(dashCardClass, DASH.admissions, "flex flex-col p-4 sm:p-5 xl:col-span-4")}>
+        <section
+          className={cn(dashCardClass, DASH.admissions, "flex flex-col p-4 sm:p-5 xl:col-span-4")}
+        >
           <div className="flex items-center justify-between gap-3">
             <DashboardPanelHeading icon={GraduationCap} title="Student Admissions" />
             <span className="rounded-full bg-emerald-100/80 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
@@ -1379,7 +1439,13 @@ function PremiumDashboard({
           </div>
         </section>
 
-        <section className={cn(dashCardClass, DASH.incomeExpense, "flex flex-col p-4 sm:p-5 xl:col-span-4")}>
+        <section
+          className={cn(
+            dashCardClass,
+            DASH.incomeExpense,
+            "flex flex-col p-4 sm:p-5 xl:col-span-4",
+          )}
+        >
           <div className="flex items-center justify-between gap-3">
             <DashboardPanelHeading icon={TrendingUp} title="Income vs Expense" />
             <span className="rounded-full bg-rose-100/80 px-2.5 py-1 text-[10px] font-semibold text-rose-700">
@@ -1443,7 +1509,9 @@ function PremiumDashboard({
           </div>
         </section>
 
-        <section className={cn(dashCardClass, DASH.transactions, "flex flex-col p-4 sm:p-5 xl:col-span-4")}>
+        <section
+          className={cn(dashCardClass, DASH.transactions, "flex flex-col p-4 sm:p-5 xl:col-span-4")}
+        >
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <span className="grid h-8 w-8 place-items-center rounded-xl bg-white/15 text-teal-100">
@@ -1463,7 +1531,9 @@ function PremiumDashboard({
           </div>
           <div className="mt-4 flex-1 divide-y divide-white/10">
             {recentReceipts.length === 0 && (
-              <div className="py-6 text-center text-[12px] text-teal-100/70">No receipts logged yet</div>
+              <div className="py-6 text-center text-[12px] text-teal-100/70">
+                No receipts logged yet
+              </div>
             )}
             {recentReceipts.map((payment) => (
               <div key={payment.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
@@ -1471,7 +1541,9 @@ function PremiumDashboard({
                   <ArrowUpRight className="h-4 w-4" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13px] font-semibold text-white">{payment.name}</div>
+                  <div className="truncate text-[13px] font-semibold text-white">
+                    {payment.name}
+                  </div>
                   <div className="mt-0.5 text-[11px] text-teal-100/70">
                     {payment.cat} · {payment.mode}
                   </div>
@@ -1480,7 +1552,9 @@ function PremiumDashboard({
                   <div className="font-mono text-[13px] font-semibold text-white">
                     {formatInr(payment.amount)}
                   </div>
-                  <div className="mt-0.5 text-[10px] text-teal-100/60">{formatEventDateTime(payment.time)}</div>
+                  <div className="mt-0.5 text-[10px] text-teal-100/60">
+                    {formatEventDateTime(payment.time)}
+                  </div>
                   <div className="mt-1.5 flex items-center justify-end gap-1">
                     <button
                       type="button"
@@ -1512,13 +1586,7 @@ function PremiumDashboard({
   );
 }
 
-function DashboardPanelHeading({
-  icon: Icon,
-  title,
-}: {
-  icon: typeof Users;
-  title: string;
-}) {
+function DashboardPanelHeading({ icon: Icon, title }: { icon: typeof Users; title: string }) {
   return (
     <div className="flex items-center gap-2.5">
       <span className="grid h-8 w-8 place-items-center rounded-xl bg-white/75 text-slate-700 shadow-sm shadow-slate-200/50 dark:bg-white/10 dark:text-zinc-200 dark:shadow-none">
@@ -1553,13 +1621,7 @@ function DashboardStatGrid({
   );
 }
 
-function DashboardSectionHeading({
-  title,
-  className,
-}: {
-  title: string;
-  className?: string;
-}) {
+function DashboardSectionHeading({ title, className }: { title: string; className?: string }) {
   return (
     <h2
       className={cn(
@@ -1715,14 +1777,8 @@ export function SchoolDashboard() {
         .length,
     [disbursements, period, customRange],
   );
-  const salaryOutstandingRows = useMemo(
-    () => queuedSalaryPayables(disbursements),
-    [disbursements],
-  );
-  const salaryOutstanding = useMemo(
-    () => salaryPayable(disbursements),
-    [disbursements],
-  );
+  const salaryOutstandingRows = useMemo(() => queuedSalaryPayables(disbursements), [disbursements]);
+  const salaryOutstanding = useMemo(() => salaryPayable(disbursements), [disbursements]);
 
   const recentReceipts = useMemo(() => filteredPayments.slice(0, 5), [filteredPayments]);
 
@@ -1732,7 +1788,6 @@ export function SchoolDashboard() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-
       <PremiumDashboard
         students={students}
         staff={staff}
@@ -2034,7 +2089,10 @@ function DirectoryRecycleBinList({
         return (
           <div
             key={item.id}
-            className={cn(directoryMobileCardClass, "cursor-default sm:flex-row sm:items-center sm:justify-between")}
+            className={cn(
+              directoryMobileCardClass,
+              "cursor-default sm:flex-row sm:items-center sm:justify-between",
+            )}
           >
             <div className="flex min-w-0 items-center gap-3">
               <DirectoryPersonAvatar name={item.name} photoUrl={item.photoUrl} />
@@ -2164,164 +2222,27 @@ function StudentsDirectoryTable({
         {bulkBar ? (
           <div className={cn(glassCardClass, "overflow-hidden p-0")}>{bulkBar}</div>
         ) : null}
-      <div className={cn(directoryMobileListClass)}>
-        {students.length > 0 && (
-          <div className="flex items-center gap-2 px-0.5 md:col-span-2">
-            <Checkbox
-              checked={allSelected ? true : someSelected ? "indeterminate" : false}
-              onCheckedChange={(v) => onToggleSelectAll(v === true)}
-              aria-label="Select all students"
-            />
-            <span className="text-[12px] font-medium text-slate-500">
-              {allSelected ? "All selected" : someSelected ? `${selectedIds.size} selected` : "Select all"}
-            </span>
-          </div>
-        )}
-        {students.length === 0 && (
-          <div className={cn(directoryEmptyClass, "md:col-span-2")}>
-            No students enrolled for this academic year.
-          </div>
-        )}
-        {students.map((student) => {
-          const digits = phoneDigits(student.phone);
-          const hasPhone = digits.length > 0;
-          const waHref = `https://wa.me/${digits.length === 10 ? "91" : ""}${digits}`;
-          const isSelected = selectedIds.has(student.id);
-          const isActive = isRecordActive(student.active);
-          return (
-            <div
-              key={student.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => onViewProfile(student.id)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onViewProfile(student.id);
-                }
-              }}
-              aria-label={`Open profile for ${student.name}`}
-              className={cn(
-                directoryMobileCardClass,
-                "cursor-pointer",
-                isSelected && "ring-2 ring-[#0F766E]/35",
-              )}
-            >
-              <div className="flex min-w-0 items-start justify-between gap-2">
-                <div className="flex min-w-0 flex-1 items-center gap-2">
-                  <div
-                    onClick={(e) => e.stopPropagation()}
-                    onKeyDown={(e) => e.stopPropagation()}
-                    className="shrink-0"
-                  >
-                    <Checkbox
-                      checked={isSelected}
-                      onCheckedChange={(v) => onToggleSelect(student.id, v === true)}
-                      aria-label={`Select ${student.name}`}
-                    />
-                  </div>
-                  <DirectoryPersonAvatar name={student.name} photoUrl={student.photoUrl} />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13.5px] font-semibold leading-tight text-slate-900 dark:text-zinc-100 sm:text-[14px]">
-                      {student.name}
-                    </div>
-                    <div className="mt-0.5 truncate font-mono text-[10px] text-slate-400 dark:text-zinc-500 sm:text-[10.5px]">
-                      {student.id}
-                    </div>
-                  </div>
-                </div>
-                <div className="shrink-0">
-                  <StudentFeesStatusBadge due={student.due} />
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                <span className={directoryMintChipClass}>{student.cls}</span>
-                <DirectoryEnrollmentStatusControl
-                  active={isActive}
-                  onChange={(next) => onChangeStatus(student.id, next)}
-                />
-              </div>
-
-              <div className="flex items-center justify-between gap-2 border-t border-[#F0F0F0] pt-2 dark:border-white/10 sm:pt-2.5">
-                <div className="min-w-0">
-                  <div className="truncate text-[11.5px] font-medium text-black/75 dark:text-zinc-300 sm:text-[12px]">
-                    {student.guardian}
-                  </div>
-                  <div className="mt-0.5 truncate font-mono text-[10px] text-black/45 dark:text-zinc-500 sm:text-[10.5px]">
-                    {hasPhone ? formatPhone(student.phone) : "No contact on file"}
-                  </div>
-                </div>
-                <div className="flex shrink-0 items-center gap-1.5">
-                  <ContactAction
-                    icon={Phone}
-                    label="Call"
-                    accent="ink"
-                    disabled={!hasPhone}
-                    onClick={() => {
-                      window.location.href = `tel:${digits}`;
-                    }}
-                  />
-                  <ContactAction
-                    icon={MessageCircle}
-                    label="WhatsApp"
-                    accent="emerald"
-                    disabled={!hasPhone}
-                    onClick={() => {
-                      window.open(waHref, "_blank", "noopener,noreferrer");
-                      toast.success(`WhatsApp opened for ${student.guardian}`);
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      </div>
-
-      <div className="mobile-scrollbar-none hidden w-full max-w-full overflow-x-auto lg:block">
-        <div className={glassTableWrapClass}>
-          {bulkBar}
-      <table className="w-full min-w-[900px] table-fixed border-collapse text-left">
-        <colgroup>
-          <col className="w-[44px]" />
-          <col className="w-[20%]" />
-          <col className="w-[15%]" />
-          <col className="w-[12%]" />
-          <col className="w-[21%]" />
-          <col className="w-[28%]" />
-        </colgroup>
-        <thead>
-          <tr>
-            <th className="border-b border-slate-100 px-3 pb-4 pt-4 sm:px-4 lg:px-5 sm:pt-5">
+        <div className={cn(directoryMobileListClass)}>
+          {students.length > 0 && (
+            <div className="flex items-center gap-2 px-0.5 md:col-span-2">
               <Checkbox
                 checked={allSelected ? true : someSelected ? "indeterminate" : false}
                 onCheckedChange={(v) => onToggleSelectAll(v === true)}
                 aria-label="Select all students"
-                disabled={students.length === 0}
               />
-            </th>
-            {["Student", "Class", "Status", "Guardian & Contact", "Fees Status"].map((header) => (
-              <th
-                key={header}
-                className={cn(
-                  "border-b border-slate-100 px-3 pb-4 pt-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400 sm:px-4 lg:px-6 sm:pt-5",
-                  header === "Fees Status" && "text-right",
-                )}
-              >
-                {header}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
+              <span className="text-[12px] font-medium text-slate-500">
+                {allSelected
+                  ? "All selected"
+                  : someSelected
+                    ? `${selectedIds.size} selected`
+                    : "Select all"}
+              </span>
+            </div>
+          )}
           {students.length === 0 && (
-            <tr>
-              <td colSpan={6} className="px-4 py-10 text-center text-[13px] text-black/55 dark:text-zinc-400 sm:px-6">
-                No students enrolled for this academic year.
-              </td>
-            </tr>
+            <div className={cn(directoryEmptyClass, "md:col-span-2")}>
+              No students enrolled for this academic year.
+            </div>
           )}
           {students.map((student) => {
             const digits = phoneDigits(student.phone);
@@ -2330,7 +2251,7 @@ function StudentsDirectoryTable({
             const isSelected = selectedIds.has(student.id);
             const isActive = isRecordActive(student.active);
             return (
-              <tr
+              <div
                 key={student.id}
                 role="button"
                 tabIndex={0}
@@ -2343,115 +2264,268 @@ function StudentsDirectoryTable({
                 }}
                 aria-label={`Open profile for ${student.name}`}
                 className={cn(
-                  "cursor-pointer border-b border-slate-50 transition-colors last:border-0 hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0F766E] dark:border-white/5 dark:hover:bg-white/5 dark:focus-visible:bg-white/5",
-                  isSelected && "bg-[#F0FDFA]/70 hover:bg-[#F0FDFA] dark:bg-[#0F766E]/15 dark:hover:bg-[#0F766E]/25",
+                  directoryMobileCardClass,
+                  "cursor-pointer",
+                  isSelected && "ring-2 ring-[#0F766E]/35",
                 )}
               >
-                <td
-                  className="px-3 py-3.5 align-middle sm:px-4 lg:px-5"
-                  onClick={(e) => e.stopPropagation()}
-                  onKeyDown={(e) => e.stopPropagation()}
-                >
-                  <Checkbox
-                    checked={isSelected}
-                    onCheckedChange={(v) => onToggleSelect(student.id, v === true)}
-                    aria-label={`Select ${student.name}`}
-                  />
-                </td>
-                <td className="px-3 py-3.5 align-middle sm:px-4 lg:px-6">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <ProfileAvatar
-                      name={student.name}
-                      photoUrl={student.photoUrl}
-                      className="h-10 w-10 shrink-0 rounded-xl"
-                      imgClassName="object-cover"
-                      initialsClassName="bg-[#0F766E] text-[12px]"
-                    />
-                    <div className="min-w-0">
-                      <div className="truncate text-[13.5px] font-semibold text-black">
+                <div className="flex min-w-0 items-start justify-between gap-2">
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      className="shrink-0"
+                    >
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={(v) => onToggleSelect(student.id, v === true)}
+                        aria-label={`Select ${student.name}`}
+                      />
+                    </div>
+                    <DirectoryPersonAvatar name={student.name} photoUrl={student.photoUrl} />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[13.5px] font-semibold leading-tight text-slate-900 dark:text-zinc-100 sm:text-[14px]">
                         {student.name}
                       </div>
-                      <div className="mt-0.5 truncate font-mono text-[10.5px] text-black/45">
+                      <div className="mt-0.5 truncate font-mono text-[10px] text-slate-400 dark:text-zinc-500 sm:text-[10.5px]">
                         {student.id}
                       </div>
                     </div>
                   </div>
-                </td>
-                <td className="min-w-0 px-3 py-3.5 align-middle sm:px-4 lg:px-6">
-                  <span title={student.cls} className={cn(directoryMintChipClass, "block w-fit text-[11px] font-medium")}>
-                    {student.cls}
-                  </span>
-                </td>
-                <td className="px-3 py-3.5 align-middle sm:px-4 lg:px-6">
+                  <div className="shrink-0">
+                    <StudentFeesStatusBadge due={student.due} />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                  <span className={directoryMintChipClass}>{student.cls}</span>
                   <DirectoryEnrollmentStatusControl
                     active={isActive}
                     onChange={(next) => onChangeStatus(student.id, next)}
                   />
-                </td>
-                <td className="min-w-0 px-3 py-3.5 align-middle sm:px-4 lg:px-6">
+                </div>
+
+                <div className="flex items-center justify-between gap-2 border-t border-[#F0F0F0] pt-2 dark:border-white/10 sm:pt-2.5">
                   <div className="min-w-0">
-                    <div className="truncate text-[13px] font-medium text-black">
+                    <div className="truncate text-[11.5px] font-medium text-black/75 dark:text-zinc-300 sm:text-[12px]">
                       {student.guardian}
                     </div>
-                    <div className="mt-0.5 truncate font-mono text-[11px] text-black/50">
-                      {hasPhone ? formatPhone(student.phone) : "—"}
+                    <div className="mt-0.5 truncate font-mono text-[10px] text-black/45 dark:text-zinc-500 sm:text-[10.5px]">
+                      {hasPhone ? formatPhone(student.phone) : "No contact on file"}
                     </div>
                   </div>
-                </td>
-                <td className="px-3 py-3.5 align-middle sm:px-4 lg:px-6">
-                  <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
-                    <div className="flex shrink-0 items-center gap-1">
-                      <ContactAction
-                        icon={MessageCircle}
-                        label="WhatsApp"
-                        accent="emerald"
-                        disabled={!hasPhone}
-                        onClick={() => {
-                          window.open(waHref, "_blank", "noopener,noreferrer");
-                          toast.success(`WhatsApp opened for ${student.guardian}`);
-                        }}
-                      />
-                      <ContactAction
-                        icon={Phone}
-                        label="Call"
-                        accent="ink"
-                        disabled={!hasPhone}
-                        onClick={() => {
-                          window.location.href = `tel:${digits}`;
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onEditData(student.id);
-                        }}
-                        aria-label={`Edit data for ${student.name}`}
-                        title="Edit Data"
-                        className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/65 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <ContactAction
-                        icon={MessageSquare}
-                        label="SMS"
-                        accent="ink"
-                        disabled={!hasPhone}
-                        onClick={() => {
-                          window.location.href = `sms:${digits}`;
-                        }}
-                      />
-                    </div>
-                    <div className="flex w-[88px] shrink-0 justify-end">
-                      <StudentFeesStatusBadge due={student.due} />
-                    </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <ContactAction
+                      icon={Phone}
+                      label="Call"
+                      accent="ink"
+                      disabled={!hasPhone}
+                      onClick={() => {
+                        window.location.href = `tel:${digits}`;
+                      }}
+                    />
+                    <ContactAction
+                      icon={MessageCircle}
+                      label="WhatsApp"
+                      accent="emerald"
+                      disabled={!hasPhone}
+                      onClick={() => {
+                        window.open(waHref, "_blank", "noopener,noreferrer");
+                        toast.success(`WhatsApp opened for ${student.guardian}`);
+                      }}
+                    />
                   </div>
-                </td>
-              </tr>
+                </div>
+              </div>
             );
           })}
-        </tbody>
-      </table>
+        </div>
+      </div>
+
+      <div className="mobile-scrollbar-none hidden w-full max-w-full overflow-x-auto lg:block">
+        <div className={glassTableWrapClass}>
+          {bulkBar}
+          <table className="w-full min-w-[900px] table-fixed border-collapse text-left">
+            <colgroup>
+              <col className="w-[44px]" />
+              <col className="w-[20%]" />
+              <col className="w-[15%]" />
+              <col className="w-[12%]" />
+              <col className="w-[21%]" />
+              <col className="w-[28%]" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th className="border-b border-slate-100 px-3 pb-4 pt-4 sm:px-4 lg:px-5 sm:pt-5">
+                  <Checkbox
+                    checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                    onCheckedChange={(v) => onToggleSelectAll(v === true)}
+                    aria-label="Select all students"
+                    disabled={students.length === 0}
+                  />
+                </th>
+                {["Student", "Class", "Status", "Guardian & Contact", "Fees Status"].map(
+                  (header) => (
+                    <th
+                      key={header}
+                      className={cn(
+                        "border-b border-slate-100 px-3 pb-4 pt-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400 sm:px-4 lg:px-6 sm:pt-5",
+                        header === "Fees Status" && "text-right",
+                      )}
+                    >
+                      {header}
+                    </th>
+                  ),
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {students.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="px-4 py-10 text-center text-[13px] text-black/55 dark:text-zinc-400 sm:px-6"
+                  >
+                    No students enrolled for this academic year.
+                  </td>
+                </tr>
+              )}
+              {students.map((student) => {
+                const digits = phoneDigits(student.phone);
+                const hasPhone = digits.length > 0;
+                const waHref = `https://wa.me/${digits.length === 10 ? "91" : ""}${digits}`;
+                const isSelected = selectedIds.has(student.id);
+                const isActive = isRecordActive(student.active);
+                return (
+                  <tr
+                    key={student.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onViewProfile(student.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onViewProfile(student.id);
+                      }
+                    }}
+                    aria-label={`Open profile for ${student.name}`}
+                    className={cn(
+                      "cursor-pointer border-b border-slate-50 transition-colors last:border-0 hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0F766E] dark:border-white/5 dark:hover:bg-white/5 dark:focus-visible:bg-white/5",
+                      isSelected &&
+                        "bg-[#F0FDFA]/70 hover:bg-[#F0FDFA] dark:bg-[#0F766E]/15 dark:hover:bg-[#0F766E]/25",
+                    )}
+                  >
+                    <td
+                      className="px-3 py-3.5 align-middle sm:px-4 lg:px-5"
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                    >
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={(v) => onToggleSelect(student.id, v === true)}
+                        aria-label={`Select ${student.name}`}
+                      />
+                    </td>
+                    <td className="px-3 py-3.5 align-middle sm:px-4 lg:px-6">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <ProfileAvatar
+                          name={student.name}
+                          photoUrl={student.photoUrl}
+                          className="h-10 w-10 shrink-0 rounded-xl"
+                          imgClassName="object-cover"
+                          initialsClassName="bg-[#0F766E] text-[12px]"
+                        />
+                        <div className="min-w-0">
+                          <div className="truncate text-[13.5px] font-semibold text-black">
+                            {student.name}
+                          </div>
+                          <div className="mt-0.5 truncate font-mono text-[10.5px] text-black/45">
+                            {student.id}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="min-w-0 px-3 py-3.5 align-middle sm:px-4 lg:px-6">
+                      <span
+                        title={student.cls}
+                        className={cn(
+                          directoryMintChipClass,
+                          "block w-fit text-[11px] font-medium",
+                        )}
+                      >
+                        {student.cls}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3.5 align-middle sm:px-4 lg:px-6">
+                      <DirectoryEnrollmentStatusControl
+                        active={isActive}
+                        onChange={(next) => onChangeStatus(student.id, next)}
+                      />
+                    </td>
+                    <td className="min-w-0 px-3 py-3.5 align-middle sm:px-4 lg:px-6">
+                      <div className="min-w-0">
+                        <div className="truncate text-[13px] font-medium text-black">
+                          {student.guardian}
+                        </div>
+                        <div className="mt-0.5 truncate font-mono text-[11px] text-black/50">
+                          {hasPhone ? formatPhone(student.phone) : "—"}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-3 py-3.5 align-middle sm:px-4 lg:px-6">
+                      <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
+                        <div className="flex shrink-0 items-center gap-1">
+                          <ContactAction
+                            icon={MessageCircle}
+                            label="WhatsApp"
+                            accent="emerald"
+                            disabled={!hasPhone}
+                            onClick={() => {
+                              window.open(waHref, "_blank", "noopener,noreferrer");
+                              toast.success(`WhatsApp opened for ${student.guardian}`);
+                            }}
+                          />
+                          <ContactAction
+                            icon={Phone}
+                            label="Call"
+                            accent="ink"
+                            disabled={!hasPhone}
+                            onClick={() => {
+                              window.location.href = `tel:${digits}`;
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onEditData(student.id);
+                            }}
+                            aria-label={`Edit data for ${student.name}`}
+                            title="Edit Data"
+                            className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/65 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <ContactAction
+                            icon={MessageSquare}
+                            label="SMS"
+                            accent="ink"
+                            disabled={!hasPhone}
+                            onClick={() => {
+                              window.location.href = `sms:${digits}`;
+                            }}
+                          />
+                        </div>
+                        <div className="flex w-[88px] shrink-0 justify-end">
+                          <StudentFeesStatusBadge due={student.due} />
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
     </>
@@ -2477,9 +2551,7 @@ export function AdmitStudentPage() {
   useEffect(() => {
     if (!defaultClass) return;
     setForm((prev) =>
-      classes.some((c) => c.className === prev.cls)
-        ? prev
-        : { ...prev, cls: defaultClass },
+      classes.some((c) => c.className === prev.cls) ? prev : { ...prev, cls: defaultClass },
     );
   }, [classes, defaultClass]);
 
@@ -2616,8 +2688,8 @@ export function AdmitStudentPage() {
           </div>
 
           <div className="rounded-lg border border-[#CCFBF1] bg-[#F0FDFA]/70 px-3.5 py-3 text-[12px] leading-relaxed text-slate-600 dark:border-teal-500/25 dark:bg-teal-950/40 dark:text-teal-100/90">
-            Administrators enter name, class, guardian, and contact. Parents complete
-            photo, gender, date of birth, email, and address via the collection link.
+            Administrators enter name, class, guardian, and contact. Parents complete photo, gender,
+            date of birth, email, and address via the collection link.
           </div>
 
           <div className="space-y-1.5">
@@ -2809,7 +2881,6 @@ export function AdmitStudentPage() {
   );
 }
 
-
 export function StudentsLedger() {
   const {
     activeStudents: students,
@@ -2827,8 +2898,7 @@ export function StudentsLedger() {
     activeFeeTerms,
     transportRoutes,
     studentFeeBreaks,
-  } =
-    useTenantStore();
+  } = useTenantStore();
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/students" }) as {
     id?: string;
@@ -2838,8 +2908,7 @@ export function StudentsLedger() {
   const schoolName = schoolDetails.name || "Silver Hills Global";
 
   const openStudent = (id: string) => navigate({ to: "/tenant/students", search: { id } });
-  const openStudentEdit = (id: string) =>
-    navigate({ to: "/tenant/students/edit", search: { id } });
+  const openStudentEdit = (id: string) => navigate({ to: "/tenant/students/edit", search: { id } });
   const closeStudent = () => navigate({ to: "/tenant/students", search: {} });
 
   const [gradeFilter, setGradeFilter] = useState<string>("all");
@@ -2877,9 +2946,7 @@ export function StudentsLedger() {
 
   const activeStudent = useMemo(
     () =>
-      activeStudentViewId
-        ? (liveStudents.find((s) => s.id === activeStudentViewId) ?? null)
-        : null,
+      activeStudentViewId ? (liveStudents.find((s) => s.id === activeStudentViewId) ?? null) : null,
     [activeStudentViewId, liveStudents],
   );
 
@@ -2896,7 +2963,10 @@ export function StudentsLedger() {
   }, [classes]);
 
   const gradeOptions = useMemo(
-    () => Array.from(classDivisionIndex.keys()).sort((a, b) => a.localeCompare(b, "en", { numeric: true })),
+    () =>
+      Array.from(classDivisionIndex.keys()).sort((a, b) =>
+        a.localeCompare(b, "en", { numeric: true }),
+      ),
     [classDivisionIndex],
   );
 
@@ -2936,22 +3006,11 @@ export function StudentsLedger() {
       )
       .filter((s) => {
         const active = isRecordActive(s.active);
-        return enrollmentFilter === "all"
-          ? true
-          : enrollmentFilter === "active"
-            ? active
-            : !active;
+        return enrollmentFilter === "all" ? true : enrollmentFilter === "active" ? active : !active;
       })
       .filter((s) => {
         if (!q) return true;
-        const haystack = [
-          s.name,
-          s.id,
-          s.guardian,
-          s.phone ?? "",
-          s.cls,
-          s.email ?? "",
-        ]
+        const haystack = [s.name, s.id, s.guardian, s.phone ?? "", s.cls, s.email ?? ""]
           .join(" ")
           .toLowerCase();
         return haystack.includes(q);
@@ -3041,9 +3100,7 @@ export function StudentsLedger() {
   const restoreStudent = (id: string) => {
     const target = deletedStudents.find((s) => s.id === id);
     if (!target) return;
-    setStudents((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, deletedAt: undefined } : s)),
-    );
+    setStudents((prev) => prev.map((s) => (s.id === id ? { ...s, deletedAt: undefined } : s)));
     void apiDeleteStudent(id, { restore: true }).catch((err) =>
       toast.error("Could not restore student on server", {
         description: err instanceof Error ? err.message : "Restore failed",
@@ -3071,9 +3128,7 @@ export function StudentsLedger() {
       return;
     }
     const ids = selectedIds;
-    setStudents((prev) =>
-      prev.map((s) => (ids.has(s.id) ? { ...s, active: nextActive } : s)),
-    );
+    setStudents((prev) => prev.map((s) => (ids.has(s.id) ? { ...s, active: nextActive } : s)));
     for (const id of ids) {
       const target = liveStudents.find((s) => s.id === id);
       if (!target) continue;
@@ -3095,9 +3150,7 @@ export function StudentsLedger() {
     const ids = new Set(selectedIds);
     const stamp = new Date().toISOString();
     const count = ids.size;
-    setStudents((prev) =>
-      prev.map((s) => (ids.has(s.id) ? { ...s, deletedAt: stamp } : s)),
-    );
+    setStudents((prev) => prev.map((s) => (ids.has(s.id) ? { ...s, deletedAt: stamp } : s)));
     for (const id of ids) {
       void apiDeleteStudent(id).catch((err) =>
         toast.error("Could not delete student on server", {
@@ -3107,10 +3160,9 @@ export function StudentsLedger() {
     }
     clearSelection();
     setPendingBulkDelete(false);
-    toast.success(
-      `${count} student${count === 1 ? "" : "s"} moved to recycle bin`,
-      { description: "Restore anytime from Recycle" },
-    );
+    toast.success(`${count} student${count === 1 ? "" : "s"} moved to recycle bin`, {
+      description: "Restore anytime from Recycle",
+    });
   };
 
   const openBulkWhatsApp = () => {
@@ -3133,7 +3185,9 @@ export function StudentsLedger() {
 
   const insertTemplateVar = (key: string) => {
     const token = `{{${key}}}`;
-    setBulkWhatsAppMsg((prev) => (prev.trim() ? `${prev}${prev.endsWith(" ") ? "" : " "}${token}` : token));
+    setBulkWhatsAppMsg((prev) =>
+      prev.trim() ? `${prev}${prev.endsWith(" ") ? "" : " "}${token}` : token,
+    );
   };
 
   const bulkWhatsAppPreview = useMemo(() => {
@@ -3173,18 +3227,15 @@ export function StudentsLedger() {
           });
           return;
         }
-        toast.success(
-          `WhatsApp sent to ${result.sent} guardian${result.sent === 1 ? "" : "s"}`,
-          {
-            description: [
-              result.failed > 0 ? `${result.failed} failed` : null,
-              skipped > 0 ? `${skipped} skipped · no phone` : null,
-              "Personalized per student",
-            ]
-              .filter(Boolean)
-              .join(" · "),
-          },
-        );
+        toast.success(`WhatsApp sent to ${result.sent} guardian${result.sent === 1 ? "" : "s"}`, {
+          description: [
+            result.failed > 0 ? `${result.failed} failed` : null,
+            skipped > 0 ? `${skipped} skipped · no phone` : null,
+            "Personalized per student",
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        });
       } else {
         const numbers = selectedWithPhone.map((row) => row.number);
         const result = await sendWhatsAppNotify({
@@ -3305,7 +3356,8 @@ export function StudentsLedger() {
       ],
     );
     toast.success("Student template downloaded", {
-      description: "Fill Name, Class, Guardian, Phone, Balance · missing classes are created on upload",
+      description:
+        "Fill Name, Class, Guardian, Phone, Balance · missing classes are created on upload",
     });
   };
 
@@ -3342,7 +3394,11 @@ export function StudentsLedger() {
             let cls = matchExistingClass(classPool, classLabel);
             if (!cls) {
               cls = buildClassFromLabel(
-                nextPrefixedId("CLS", classPool.map((c) => c.id), 3),
+                nextPrefixedId(
+                  "CLS",
+                  classPool.map((c) => c.id),
+                  3,
+                ),
                 classLabel,
               );
               classPool = [...classPool, cls];
@@ -3368,9 +3424,7 @@ export function StudentsLedger() {
               if (student.name.trim().toLowerCase() !== row.name.trim().toLowerCase()) {
                 return false;
               }
-              return phoneDigits
-                ? (student.phone ?? "").replace(/\D/g, "") === phoneDigits
-                : false;
+              return phoneDigits ? (student.phone ?? "").replace(/\D/g, "") === phoneDigits : false;
             });
             if (prior) {
               enrollStudentInActiveYear(prior.id, {
@@ -3433,23 +3487,17 @@ export function StudentsLedger() {
           }
           for (const student of admitted) {
             await apiUpsertStudent(student).catch((err) => {
-              toast.error(
-                err instanceof Error ? err.message : `Could not sync ${student.name}`,
-              );
+              toast.error(err instanceof Error ? err.message : `Could not sync ${student.name}`);
             });
           }
 
           const classNote = createdClasses.length
             ? `${createdClasses.length} class${createdClasses.length === 1 ? "" : "es"} created`
             : null;
-          const skipNote =
-            skipped > 0 ? `${skipped} skipped` : null;
-          toast.success(
-            `${admitted.length} student${admitted.length === 1 ? "" : "s"} admitted`,
-            {
-              description: [classNote, skipNote, academicYear].filter(Boolean).join(" · "),
-            },
-          );
+          const skipNote = skipped > 0 ? `${skipped} skipped` : null;
+          toast.success(`${admitted.length} student${admitted.length === 1 ? "" : "s"} admitted`, {
+            description: [classNote, skipNote, academicYear].filter(Boolean).join(" · "),
+          });
         } finally {
           setImporting(false);
           if (fileInputRef.current) fileInputRef.current.value = "";
@@ -3477,11 +3525,7 @@ export function StudentsLedger() {
         : divisionFilter === "all"
           ? gradeFilter
           : `${gradeFilter} · Div ${divisionFilter}`,
-      statusFilter === "all"
-        ? "All Students"
-        : statusFilter === "paid"
-          ? "Paid"
-          : "Overdue",
+      statusFilter === "all" ? "All Students" : statusFilter === "paid" ? "Paid" : "Overdue",
     ].join(" · ");
     const rowsHtml = filtered
       .map(
@@ -3522,8 +3566,7 @@ export function StudentsLedger() {
     toast.success("Print preview opened", { description: "Save as PDF from your browser dialog" });
   };
 
-  const allShownSelected =
-    filtered.length > 0 && filtered.every((s) => selectedIds.has(s.id));
+  const allShownSelected = filtered.length > 0 && filtered.every((s) => selectedIds.has(s.id));
 
   const studentsBulkBar =
     selectedIds.size > 0 ? (
@@ -3607,12 +3650,7 @@ export function StudentsLedger() {
   }
 
   if (activeStudent) {
-    return (
-      <StudentProfileDetail
-        student={activeStudent}
-        onBack={closeStudent}
-      />
-    );
+    return <StudentProfileDetail student={activeStudent} onBack={closeStudent} />;
   }
 
   return (
@@ -3679,9 +3717,7 @@ export function StudentsLedger() {
             <span
               className={cn(
                 "mt-1 inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider md:mt-1.5 md:text-[10px]",
-                feeTotalDueCleared
-                  ? "bg-[#0F172A] text-[#10B981]"
-                  : "bg-[#0F172A] text-[#F59E0B]",
+                feeTotalDueCleared ? "bg-[#0F172A] text-[#10B981]" : "bg-[#0F172A] text-[#F59E0B]",
               )}
             >
               {feeTotalDueCleared ? "[ CLEARED ]" : "[ PENDING ]"}
@@ -3726,14 +3762,10 @@ export function StudentsLedger() {
             <span
               className={cn(
                 "mt-1 inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider md:mt-1.5 md:text-[10px]",
-                feeOverdueActive
-                  ? "bg-[#0F172A] text-[#EF4444]"
-                  : "bg-[#0F172A] text-[#10B981]",
+                feeOverdueActive ? "bg-[#0F172A] text-[#EF4444]" : "bg-[#0F172A] text-[#10B981]",
               )}
             >
-              {feeOverdueActive
-                ? `[ ${analytics.overdue} OVERDUE ]`
-                : "[ NONE ]"}
+              {feeOverdueActive ? `[ ${analytics.overdue} OVERDUE ]` : "[ NONE ]"}
             </span>
           </div>
         </div>
@@ -3794,7 +3826,11 @@ export function StudentsLedger() {
                     onValueChange={(v) => setStatusFilter(v as StatusFilter)}
                   >
                     {STATUS_TABS.map((t) => (
-                      <DropdownMenuRadioItem key={t.key} value={t.key} className="rounded-xl text-[13px]">
+                      <DropdownMenuRadioItem
+                        key={t.key}
+                        value={t.key}
+                        className="rounded-xl text-[13px]"
+                      >
                         {t.label}
                       </DropdownMenuRadioItem>
                     ))}
@@ -3916,159 +3952,159 @@ export function StudentsLedger() {
         </div>
       ) : (
         <>
-      <div className={cn(glassCardClass, "min-w-0 p-2.5 md:p-5")}>
-        <div className="flex flex-col gap-2 md:gap-3">
-          <div className="min-w-0">
-            <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
-              Search
-            </div>
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400 md:h-4 md:w-4" />
-              <Input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search name, ID, guardian, phone…"
-                className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white pl-9 pr-9 md:h-10"
-                aria-label="Search students"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery("")}
-                  aria-label="Clear search"
-                  className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-end gap-2 lg:gap-4">
-            <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 md:gap-4">
+          <div className={cn(glassCardClass, "min-w-0 p-2.5 md:p-5")}>
+            <div className="flex flex-col gap-2 md:gap-3">
               <div className="min-w-0">
                 <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
-                  Class / Grade
+                  Search
                 </div>
-                <Select value={gradeFilter} onValueChange={setGradeFilter}>
-                  <SelectTrigger
-                    className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
-                    aria-label="Class / Grade"
-                  >
-                    <SelectValue placeholder="All classes" />
-                  </SelectTrigger>
-                  <SelectContent
-                    position="popper"
-                    sideOffset={4}
-                    className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
-                  >
-                    <SelectItem value="all" className="rounded-md">
-                      All classes
-                    </SelectItem>
-                    {gradeOptions.map((grade) => (
-                      <SelectItem key={grade} value={grade} className="rounded-md">
-                        {grade}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400 md:h-4 md:w-4" />
+                  <Input
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search name, ID, guardian, phone…"
+                    className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white pl-9 pr-9 md:h-10"
+                    aria-label="Search students"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery("")}
+                      aria-label="Clear search"
+                      className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
               </div>
 
-              <div className="min-w-0">
-                <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
-                  Division
+              <div className="flex items-end gap-2 lg:gap-4">
+                <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 md:gap-4">
+                  <div className="min-w-0">
+                    <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
+                      Class / Grade
+                    </div>
+                    <Select value={gradeFilter} onValueChange={setGradeFilter}>
+                      <SelectTrigger
+                        className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
+                        aria-label="Class / Grade"
+                      >
+                        <SelectValue placeholder="All classes" />
+                      </SelectTrigger>
+                      <SelectContent
+                        position="popper"
+                        sideOffset={4}
+                        className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
+                      >
+                        <SelectItem value="all" className="rounded-md">
+                          All classes
+                        </SelectItem>
+                        {gradeOptions.map((grade) => (
+                          <SelectItem key={grade} value={grade} className="rounded-md">
+                            {grade}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="min-w-0">
+                    <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
+                      Division
+                    </div>
+                    <Select
+                      value={divisionFilter}
+                      onValueChange={setDivisionFilter}
+                      disabled={gradeFilter === "all" && divisionOptions.length === 0}
+                    >
+                      <SelectTrigger
+                        className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
+                        aria-label="Division"
+                      >
+                        <SelectValue placeholder="All divisions" />
+                      </SelectTrigger>
+                      <SelectContent
+                        position="popper"
+                        sideOffset={4}
+                        className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
+                      >
+                        <SelectItem value="all" className="rounded-md">
+                          All divisions
+                        </SelectItem>
+                        {divisionOptions.map((division) => (
+                          <SelectItem key={division} value={division} className="rounded-md">
+                            {division}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <Select
-                  value={divisionFilter}
-                  onValueChange={setDivisionFilter}
-                  disabled={gradeFilter === "all" && divisionOptions.length === 0}
-                >
-                  <SelectTrigger
-                    className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
-                    aria-label="Division"
-                  >
-                    <SelectValue placeholder="All divisions" />
-                  </SelectTrigger>
-                  <SelectContent
-                    position="popper"
-                    sideOffset={4}
-                    className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
-                  >
-                    <SelectItem value="all" className="rounded-md">
-                      All divisions
-                    </SelectItem>
-                    {divisionOptions.map((division) => (
-                      <SelectItem key={division} value={division} className="rounded-md">
-                        {division}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+
+                <div className="mb-0.5 flex shrink-0 flex-col items-end gap-0.5 lg:mb-1">
+                  <span className="font-mono text-[10px] tabular-nums text-slate-400 md:text-[11px]">
+                    {filtered.length} shown
+                  </span>
+                  {(gradeFilter !== "all" || divisionFilter !== "all" || searchQuery.trim()) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGradeFilter("all");
+                        setDivisionFilter("all");
+                        setSearchQuery("");
+                      }}
+                      className="text-[10px] font-semibold text-slate-500 underline-offset-2 hover:text-slate-900 hover:underline"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
-
-            <div className="mb-0.5 flex shrink-0 flex-col items-end gap-0.5 lg:mb-1">
-              <span className="font-mono text-[10px] tabular-nums text-slate-400 md:text-[11px]">
-                {filtered.length} shown
-              </span>
-              {(gradeFilter !== "all" || divisionFilter !== "all" || searchQuery.trim()) && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setGradeFilter("all");
-                    setDivisionFilter("all");
-                    setSearchQuery("");
-                  }}
-                  className="text-[10px] font-semibold text-slate-500 underline-offset-2 hover:text-slate-900 hover:underline"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
           </div>
-        </div>
-      </div>
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".csv,text/csv"
-        className="hidden"
-        onChange={handleImport}
-      />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={handleImport}
+          />
 
-      <Dialog open={importing}>
-        <DialogContent
-          showCloseButton={false}
-          onPointerDownOutside={(e) => e.preventDefault()}
-          onEscapeKeyDown={(e) => e.preventDefault()}
-          onInteractOutside={(e) => e.preventDefault()}
-          className="max-w-[min(22rem,calc(100%-2rem))] rounded-2xl border border-[#E5E5E5] bg-white p-8 text-center shadow-[0_24px_64px_-16px_rgba(0,0,0,0.28)] sm:max-w-sm"
-        >
-          <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-[#0F766E]/10">
-            <Loader2 className="h-7 w-7 animate-spin text-[#0F766E]" />
-          </div>
-          <DialogHeader className="space-y-2 text-center sm:text-center">
-            <DialogTitle className="text-[18px] font-semibold tracking-tight text-black">
-              Importing students
-            </DialogTitle>
-            <DialogDescription className="text-[13px] leading-relaxed text-black/55">
-              Adding records and creating missing classes. Please keep this window open.
-            </DialogDescription>
-          </DialogHeader>
-        </DialogContent>
-      </Dialog>
+          <Dialog open={importing}>
+            <DialogContent
+              showCloseButton={false}
+              onPointerDownOutside={(e) => e.preventDefault()}
+              onEscapeKeyDown={(e) => e.preventDefault()}
+              onInteractOutside={(e) => e.preventDefault()}
+              className="max-w-[min(22rem,calc(100%-2rem))] rounded-2xl border border-[#E5E5E5] bg-white p-8 text-center shadow-[0_24px_64px_-16px_rgba(0,0,0,0.28)] sm:max-w-sm"
+            >
+              <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-[#0F766E]/10">
+                <Loader2 className="h-7 w-7 animate-spin text-[#0F766E]" />
+              </div>
+              <DialogHeader className="space-y-2 text-center sm:text-center">
+                <DialogTitle className="text-[18px] font-semibold tracking-tight text-black">
+                  Importing students
+                </DialogTitle>
+                <DialogDescription className="text-[13px] leading-relaxed text-black/55">
+                  Adding records and creating missing classes. Please keep this window open.
+                </DialogDescription>
+              </DialogHeader>
+            </DialogContent>
+          </Dialog>
 
-      <StudentsDirectoryTable
-        students={filtered}
-        selectedIds={selectedIds}
-        onToggleSelect={toggleSelect}
-        onToggleSelectAll={toggleSelectAll}
-        onViewProfile={openStudent}
-        onEditData={openStudentEdit}
-        onChangeStatus={changeStudentStatus}
-        bulkBar={studentsBulkBar}
-      />
+          <StudentsDirectoryTable
+            students={filtered}
+            selectedIds={selectedIds}
+            onToggleSelect={toggleSelect}
+            onToggleSelectAll={toggleSelectAll}
+            onViewProfile={openStudent}
+            onEditData={openStudentEdit}
+            onChangeStatus={changeStudentStatus}
+            bulkBar={studentsBulkBar}
+          />
         </>
       )}
 
@@ -4227,15 +4263,23 @@ function isTeachingStaff(member: Staff): boolean {
 }
 
 export function StaffRoster() {
-  const { staff, setStaff, departments, roles, hydrated, branchSyncing, schoolDetails, academicYear } = useTenantStore();
+  const {
+    staff,
+    setStaff,
+    departments,
+    roles,
+    hydrated,
+    branchSyncing,
+    schoolDetails,
+    academicYear,
+  } = useTenantStore();
   const schoolName = schoolDetails.name || "School";
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/staff" }) as { id?: string };
   const activeStaffViewId = search.id ?? null;
 
   const openStaff = (id: string) => navigate({ to: "/tenant/staff", search: { id } });
-  const openStaffEdit = (id: string) =>
-    navigate({ to: "/tenant/staff/edit", search: { id } });
+  const openStaffEdit = (id: string) => navigate({ to: "/tenant/staff/edit", search: { id } });
   const closeStaff = () => navigate({ to: "/tenant/staff", search: {} });
 
   const defaultDept = departments[0]?.name ?? "";
@@ -4277,10 +4321,7 @@ export function StaffRoster() {
     }));
   }, [departments, defaultDept, defaultRole, roles]);
 
-  const liveStaff = useMemo(
-    () => staff.filter((s) => !isRecordDeleted(s.deletedAt)),
-    [staff],
-  );
+  const liveStaff = useMemo(() => staff.filter((s) => !isRecordDeleted(s.deletedAt)), [staff]);
   const deletedStaff = useMemo(
     () =>
       staff
@@ -4290,19 +4331,16 @@ export function StaffRoster() {
   );
 
   const activeStaff = useMemo(
-    () =>
-      activeStaffViewId
-        ? (liveStaff.find((s) => s.id === activeStaffViewId) ?? null)
-        : null,
+    () => (activeStaffViewId ? (liveStaff.find((s) => s.id === activeStaffViewId) ?? null) : null),
     [activeStaffViewId, liveStaff],
   );
 
   const departmentOptions = useMemo(() => {
     const fromStaff = liveStaff.map((s) => s.dept).filter((d): d is string => Boolean(d?.trim()));
-    const fromConfig = departments.map((d) => d.name).filter((d): d is string => Boolean(d?.trim()));
-    return Array.from(new Set([...fromConfig, ...fromStaff])).sort((a, b) =>
-      a.localeCompare(b),
-    );
+    const fromConfig = departments
+      .map((d) => d.name)
+      .filter((d): d is string => Boolean(d?.trim()));
+    return Array.from(new Set([...fromConfig, ...fromStaff])).sort((a, b) => a.localeCompare(b));
   }, [departments, liveStaff]);
 
   const filteredStaff = useMemo(() => {
@@ -4310,8 +4348,7 @@ export function StaffRoster() {
     return liveStaff.filter((member) => {
       const matchesDept = deptFilter === "all" || member.dept === deptFilter;
       const matchesStatus =
-        statusFilter === "all" ||
-        (statusFilter === "active" ? member.active : !member.active);
+        statusFilter === "all" || (statusFilter === "active" ? member.active : !member.active);
       if (!matchesDept || !matchesStatus) return false;
       if (!q) return true;
       const haystack = [
@@ -4422,11 +4459,7 @@ export function StaffRoster() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <button
-              type="button"
-              onClick={openStaffBulkWhatsApp}
-              className={bulkActionWhatsAppBtn}
-            >
+            <button type="button" onClick={openStaffBulkWhatsApp} className={bulkActionWhatsAppBtn}>
               <MessageCircle className="h-3.5 w-3.5" />
               Bulk WhatsApp
             </button>
@@ -4491,18 +4524,14 @@ export function StaffRoster() {
       return;
     }
     const ids = selectedIds;
-    setStaff((prev) =>
-      prev.map((s) => (ids.has(s.id) ? { ...s, active: nextActive } : s)),
-    );
+    setStaff((prev) => prev.map((s) => (ids.has(s.id) ? { ...s, active: nextActive } : s)));
     for (const id of ids) {
       const target = liveStaff.find((s) => s.id === id);
       if (!target) continue;
       void apiUpsertStaff({ ...target, active: nextActive }).catch(() => {});
     }
     toast.success(
-      nextActive
-        ? `${ids.size} staff set to Active`
-        : `${ids.size} staff set to Inactive`,
+      nextActive ? `${ids.size} staff set to Active` : `${ids.size} staff set to Inactive`,
     );
     clearStaffSelection();
   };
@@ -4515,9 +4544,7 @@ export function StaffRoster() {
     const ids = new Set(selectedIds);
     const stamp = new Date().toISOString();
     const count = ids.size;
-    setStaff((prev) =>
-      prev.map((s) => (ids.has(s.id) ? { ...s, deletedAt: stamp } : s)),
-    );
+    setStaff((prev) => prev.map((s) => (ids.has(s.id) ? { ...s, deletedAt: stamp } : s)));
     for (const id of ids) {
       void apiDeleteStaff(id).catch((err) =>
         toast.error("Could not delete staff on server", {
@@ -4527,10 +4554,9 @@ export function StaffRoster() {
     }
     clearStaffSelection();
     setPendingBulkDelete(false);
-    toast.success(
-      `${count} staff member${count === 1 ? "" : "s"} moved to recycle bin`,
-      { description: "Restore anytime from Recycle" },
-    );
+    toast.success(`${count} staff member${count === 1 ? "" : "s"} moved to recycle bin`, {
+      description: "Restore anytime from Recycle",
+    });
   };
 
   const openStaffBulkWhatsApp = () => {
@@ -4544,9 +4570,7 @@ export function StaffRoster() {
       });
       return;
     }
-    setBulkWhatsAppMsg(
-      "Hello, this is a message from the school office.",
-    );
+    setBulkWhatsAppMsg("Hello, this is a message from the school office.");
     setBulkWhatsAppOpen(true);
   };
 
@@ -4611,9 +4635,7 @@ export function StaffRoster() {
   const restoreStaffMember = (id: string) => {
     const target = deletedStaff.find((s) => s.id === id);
     if (!target) return;
-    setStaff((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, deletedAt: undefined } : s)),
-    );
+    setStaff((prev) => prev.map((s) => (s.id === id ? { ...s, deletedAt: undefined } : s)));
     void apiDeleteStaff(id, { restore: true }).catch((err) =>
       toast.error("Could not restore staff on server", {
         description: err instanceof Error ? err.message : "Restore failed",
@@ -4694,9 +4716,7 @@ export function StaffRoster() {
         if (payload.photoUrl?.startsWith("data:")) {
           const url = await apiUploadDataUrl(payload.photoUrl, "photo", "staff-photo.png");
           payload = { ...payload, photoUrl: url };
-          setStaff((prev) =>
-            prev.map((s) => (s.id === payload.id ? { ...s, photoUrl: url } : s)),
-          );
+          setStaff((prev) => prev.map((s) => (s.id === payload.id ? { ...s, photoUrl: url } : s)));
         }
         await apiUpsertStaff(payload);
       } catch (err) {
@@ -4900,25 +4920,18 @@ export function StaffRoster() {
 
           for (const member of [...created, ...updated]) {
             await apiUpsertStaff(member).catch((err) => {
-              toast.error(
-                err instanceof Error ? err.message : `Could not sync ${member.name}`,
-              );
+              toast.error(err instanceof Error ? err.message : `Could not sync ${member.name}`);
             });
           }
 
           const parts = [
-            created.length
-              ? `${created.length} added`
-              : null,
-            updated.length
-              ? `${updated.length} updated`
-              : null,
+            created.length ? `${created.length} added` : null,
+            updated.length ? `${updated.length} updated` : null,
             skipped > 0 ? `${skipped} skipped` : null,
           ].filter(Boolean);
-          toast.success(
-            `${created.length + updated.length} staff imported`,
-            { description: parts.join(" · ") || "Synced to staff directory" },
-          );
+          toast.success(`${created.length + updated.length} staff imported`, {
+            description: parts.join(" · ") || "Synced to staff directory",
+          });
         } finally {
           setImportingStaff(false);
           if (staffImportRef.current) staffImportRef.current.value = "";
@@ -4975,7 +4988,10 @@ export function StaffRoster() {
     reader.onload = () => {
       void (async () => {
         const text = String(reader.result ?? "");
-        const lines = text.trim().split(/\r?\n/).filter((line) => line.trim());
+        const lines = text
+          .trim()
+          .split(/\r?\n/)
+          .filter((line) => line.trim());
         if (!lines.length) {
           toast.error("Empty CSV file");
           return;
@@ -5052,9 +5068,7 @@ export function StaffRoster() {
               );
             });
           }
-          const months = Array.from(
-            new Set(Array.from(updates.values()).map((row) => row.month)),
-          );
+          const months = Array.from(new Set(Array.from(updates.values()).map((row) => row.month)));
           toast.success(`Attendance imported · ${updates.size} staff`, {
             description: [
               months.map((m) => formatPayrollMonthLabel(m)).join(", "),
@@ -5077,9 +5091,7 @@ export function StaffRoster() {
   }
 
   if (activeStaff) {
-    return (
-      <StaffProfileDetail staff={activeStaff} onBack={closeStaff} />
-    );
+    return <StaffProfileDetail staff={activeStaff} onBack={closeStaff} />;
   }
 
   return (
@@ -5387,275 +5399,153 @@ export function StaffRoster() {
         </div>
       ) : (
         <>
-      <div className={cn(glassCardClass, "min-w-0 p-2.5 md:p-5")}>
-        <div className="flex flex-col gap-2 md:gap-3">
-          <div className="min-w-0">
-            <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
-              Search
-            </div>
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400 md:h-4 md:w-4" />
-              <Input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search name, ID, role, phone…"
-                className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white pl-9 pr-9 md:h-10"
-                aria-label="Search staff"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery("")}
-                  aria-label="Clear search"
-                  className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-end gap-2 lg:gap-4">
-            <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 md:gap-4">
+          <div className={cn(glassCardClass, "min-w-0 p-2.5 md:p-5")}>
+            <div className="flex flex-col gap-2 md:gap-3">
               <div className="min-w-0">
                 <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
-                  Department
+                  Search
                 </div>
-                <Select value={deptFilter} onValueChange={setDeptFilter}>
-                  <SelectTrigger
-                    className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
-                    aria-label="Department"
-                  >
-                    <SelectValue placeholder="All departments" />
-                  </SelectTrigger>
-                  <SelectContent
-                    position="popper"
-                    sideOffset={4}
-                    className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
-                  >
-                    <SelectItem value="all" className="rounded-md">
-                      All departments
-                    </SelectItem>
-                    {departmentOptions.map((dept) => (
-                      <SelectItem key={dept} value={dept} className="rounded-md">
-                        {dept}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400 md:h-4 md:w-4" />
+                  <Input
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search name, ID, role, phone…"
+                    className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white pl-9 pr-9 md:h-10"
+                    aria-label="Search staff"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery("")}
+                      aria-label="Clear search"
+                      className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
               </div>
 
-              <div className="min-w-0">
-                <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
-                  Status
-                </div>
-                <Select
-                  value={statusFilter}
-                  onValueChange={(value) => setStatusFilter(value as StaffStatusFilter)}
-                >
-                  <SelectTrigger
-                    className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
-                    aria-label="Status"
-                  >
-                    <SelectValue placeholder="All statuses" />
-                  </SelectTrigger>
-                  <SelectContent
-                    position="popper"
-                    sideOffset={4}
-                    className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
-                  >
-                    <SelectItem value="all" className="rounded-md">
-                      All statuses
-                    </SelectItem>
-                    <SelectItem value="active" className="rounded-md">
-                      Active
-                    </SelectItem>
-                    <SelectItem value="inactive" className="rounded-md">
-                      Inactive
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="mb-0.5 flex shrink-0 flex-col items-end gap-0.5 lg:mb-1">
-              <span className="font-mono text-[10px] tabular-nums text-slate-400 md:text-[11px]">
-                {filteredStaff.length} shown
-              </span>
-              {(deptFilter !== "all" || statusFilter !== "all" || searchQuery.trim()) && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDeptFilter("all");
-                    setStatusFilter("all");
-                    setSearchQuery("");
-                  }}
-                  className="text-[10px] font-semibold text-[#0F766E] underline-offset-2 hover:underline"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {selectedIds.size > 0 ? (
-        <div className={cn(glassCardClass, "overflow-hidden p-0 lg:hidden")}>
-          {renderStaffBulkBar()}
-        </div>
-      ) : null}
-
-      <div className={cn(directoryMobileListClass, "lg:hidden")}>
-        {filteredStaff.length > 0 && (
-          <div className="flex items-center gap-2 px-0.5 md:col-span-2">
-            <Checkbox
-              checked={allStaffSelected ? true : someStaffSelected ? "indeterminate" : false}
-              onCheckedChange={(v) => toggleStaffSelectAll(v === true)}
-              aria-label="Select all staff"
-            />
-            <span className="text-[12px] font-medium text-slate-500">
-              {allStaffSelected
-                ? "All selected"
-                : someStaffSelected
-                  ? `${selectedIds.size} selected`
-                  : "Select all"}
-            </span>
-          </div>
-        )}
-        {filteredStaff.length === 0 && (
-          <div className={cn(directoryEmptyClass, "md:col-span-2")}>
-            No staff records match the current filters.
-          </div>
-        )}
-        {filteredStaff.map((member) => {
-          const digits = phoneDigits(member.phone);
-          const hasPhone = digits.length > 0;
-          const isSelected = selectedIds.has(member.id);
-          return (
-            <div
-              key={member.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => openStaff(member.id)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  openStaff(member.id);
-                }
-              }}
-              aria-label={`Open profile for ${member.name}`}
-              className={cn(
-                directoryMobileCardClass,
-                "cursor-pointer",
-                isSelected && "ring-2 ring-[#0F766E]/35",
-              )}
-            >
-              <div className="flex min-w-0 items-start justify-between gap-2">
-                <div className="flex min-w-0 flex-1 items-center gap-2">
-                  <div
-                    onClick={(e) => e.stopPropagation()}
-                    onKeyDown={(e) => e.stopPropagation()}
-                    className="shrink-0"
-                  >
-                    <Checkbox
-                      checked={isSelected}
-                      onCheckedChange={(v) => toggleStaffSelect(member.id, v === true)}
-                      aria-label={`Select ${member.name}`}
-                    />
+              <div className="flex items-end gap-2 lg:gap-4">
+                <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 md:gap-4">
+                  <div className="min-w-0">
+                    <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
+                      Department
+                    </div>
+                    <Select value={deptFilter} onValueChange={setDeptFilter}>
+                      <SelectTrigger
+                        className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
+                        aria-label="Department"
+                      >
+                        <SelectValue placeholder="All departments" />
+                      </SelectTrigger>
+                      <SelectContent
+                        position="popper"
+                        sideOffset={4}
+                        className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
+                      >
+                        <SelectItem value="all" className="rounded-md">
+                          All departments
+                        </SelectItem>
+                        {departmentOptions.map((dept) => (
+                          <SelectItem key={dept} value={dept} className="rounded-md">
+                            {dept}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <DirectoryPersonAvatar name={member.name} photoUrl={member.photoUrl} />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13.5px] font-semibold leading-tight text-black sm:text-[14px]">
-                      {member.name}
+
+                  <div className="min-w-0">
+                    <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
+                      Status
                     </div>
-                    <div className="mt-0.5 truncate font-mono text-[10px] text-black/45 sm:text-[10.5px]">
-                      {member.id}
-                    </div>
+                    <Select
+                      value={statusFilter}
+                      onValueChange={(value) => setStatusFilter(value as StaffStatusFilter)}
+                    >
+                      <SelectTrigger
+                        className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
+                        aria-label="Status"
+                      >
+                        <SelectValue placeholder="All statuses" />
+                      </SelectTrigger>
+                      <SelectContent
+                        position="popper"
+                        sideOffset={4}
+                        className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
+                      >
+                        <SelectItem value="all" className="rounded-md">
+                          All statuses
+                        </SelectItem>
+                        <SelectItem value="active" className="rounded-md">
+                          Active
+                        </SelectItem>
+                        <SelectItem value="inactive" className="rounded-md">
+                          Inactive
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
-                <div className="shrink-0">
-                  <EnrollmentStatusBadge active={member.active} />
+
+                <div className="mb-0.5 flex shrink-0 flex-col items-end gap-0.5 lg:mb-1">
+                  <span className="font-mono text-[10px] tabular-nums text-slate-400 md:text-[11px]">
+                    {filteredStaff.length} shown
+                  </span>
+                  {(deptFilter !== "all" || statusFilter !== "all" || searchQuery.trim()) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDeptFilter("all");
+                        setStatusFilter("all");
+                        setSearchQuery("");
+                      }}
+                      className="text-[10px] font-semibold text-[#0F766E] underline-offset-2 hover:underline"
+                    >
+                      Clear
+                    </button>
+                  )}
                 </div>
               </div>
+            </div>
+          </div>
 
-              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                <span className={directoryMintChipClass}>{member.role}</span>
-                <span className="inline-flex max-w-full truncate rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-medium text-black/75 dark:bg-white/10 dark:text-zinc-300 sm:px-2.5 sm:py-1 sm:text-[10.5px]">
-                  {member.dept}
+          {selectedIds.size > 0 ? (
+            <div className={cn(glassCardClass, "overflow-hidden p-0 lg:hidden")}>
+              {renderStaffBulkBar()}
+            </div>
+          ) : null}
+
+          <div className={cn(directoryMobileListClass, "lg:hidden")}>
+            {filteredStaff.length > 0 && (
+              <div className="flex items-center gap-2 px-0.5 md:col-span-2">
+                <Checkbox
+                  checked={allStaffSelected ? true : someStaffSelected ? "indeterminate" : false}
+                  onCheckedChange={(v) => toggleStaffSelectAll(v === true)}
+                  aria-label="Select all staff"
+                />
+                <span className="text-[12px] font-medium text-slate-500">
+                  {allStaffSelected
+                    ? "All selected"
+                    : someStaffSelected
+                      ? `${selectedIds.size} selected`
+                      : "Select all"}
                 </span>
               </div>
-
-              <div className="flex items-center justify-between gap-2 border-t border-[#F0F0F0] pt-2 sm:pt-2.5">
-                <div className="min-w-0">
-                  <div className="truncate text-[11.5px] font-medium text-black/75 sm:text-[12px]">{member.role}</div>
-                  <div className="mt-0.5 truncate font-mono text-[10px] text-black/45 sm:text-[10.5px]">
-                    {hasPhone ? formatPhone(member.phone) : "No contact on file"}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openStaffEdit(member.id);
-                  }}
-                  aria-label={`Edit profile for ${member.name}`}
-                  className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-[#E5E5E5] bg-[#F4F4F5] text-black/60 dark:text-zinc-400 transition-colors hover:border-black/20 hover:bg-white hover:text-black sm:h-8 sm:w-8"
-                >
-                  <Pencil className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                </button>
+            )}
+            {filteredStaff.length === 0 && (
+              <div className={cn(directoryEmptyClass, "md:col-span-2")}>
+                No staff records match the current filters.
               </div>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="mobile-scrollbar-none hidden w-full max-w-full overflow-x-auto lg:block">
-        <div className={glassTableWrapClass}>
-          {renderStaffBulkBar()}
-          <table className="w-full min-w-[700px] table-fixed border-collapse text-left">
-            <colgroup>
-              <col className="w-[44px]" />
-              <col className="w-[32%]" />
-              <col className="w-[22%]" />
-              <col className="w-[22%]" />
-              <col className="w-[18%]" />
-            </colgroup>
-            <thead>
-              <tr>
-                <th className="border-b border-slate-100 px-3 pb-4 pt-4 sm:px-4 sm:pt-5">
-                  <Checkbox
-                    checked={allStaffSelected ? true : someStaffSelected ? "indeterminate" : false}
-                    onCheckedChange={(v) => toggleStaffSelectAll(v === true)}
-                    aria-label="Select all staff"
-                    disabled={filteredStaff.length === 0}
-                  />
-                </th>
-                {["Name", "Role", "Department", "Status"].map((header) => (
-                  <th
-                    key={header}
-                    className="border-b border-slate-100 px-4 pb-4 pt-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:border-white/10 dark:text-zinc-400 sm:px-6 sm:pt-5"
-                  >
-                    {header}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filteredStaff.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="px-4 py-10 text-center text-[13px] text-black/55 dark:text-zinc-400 sm:px-6"
-                  >
-                    No staff records match the current filters.
-                  </td>
-                </tr>
-              )}
-              {filteredStaff.map((member) => {
-                const isSelected = selectedIds.has(member.id);
-                return (
-                <tr
+            )}
+            {filteredStaff.map((member) => {
+              const digits = phoneDigits(member.phone);
+              const hasPhone = digits.length > 0;
+              const isSelected = selectedIds.has(member.id);
+              return (
+                <div
                   key={member.id}
                   role="button"
                   tabIndex={0}
@@ -5668,56 +5558,183 @@ export function StaffRoster() {
                   }}
                   aria-label={`Open profile for ${member.name}`}
                   className={cn(
-                    "cursor-pointer border-b border-slate-50 transition-colors last:border-0 hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0F766E] dark:border-white/5 dark:hover:bg-white/5 dark:focus-visible:bg-white/5",
-                    isSelected && "bg-[#F0FDFA]/70 hover:bg-[#F0FDFA] dark:bg-[#0F766E]/15 dark:hover:bg-[#0F766E]/25",
+                    directoryMobileCardClass,
+                    "cursor-pointer",
+                    isSelected && "ring-2 ring-[#0F766E]/35",
                   )}
                 >
-                  <td
-                    className="px-3 py-3.5 align-middle sm:px-4"
-                    onClick={(e) => e.stopPropagation()}
-                    onKeyDown={(e) => e.stopPropagation()}
-                  >
-                    <Checkbox
-                      checked={isSelected}
-                      onCheckedChange={(v) => toggleStaffSelect(member.id, v === true)}
-                      aria-label={`Select ${member.name}`}
-                    />
-                  </td>
-                  <td className="px-4 py-3.5 align-middle sm:px-6">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <ProfileAvatar
-                        name={member.name}
-                        photoUrl={member.photoUrl}
-                        className="h-10 w-10 shrink-0 rounded-xl"
-                        imgClassName="object-cover"
-                        initialsClassName="bg-[#0F766E] text-[12px]"
-                      />
-                      <div className="min-w-0">
-                        <div className="truncate text-[13.5px] font-semibold text-black">
+                  <div className="flex min-w-0 items-start justify-between gap-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        className="shrink-0"
+                      >
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={(v) => toggleStaffSelect(member.id, v === true)}
+                          aria-label={`Select ${member.name}`}
+                        />
+                      </div>
+                      <DirectoryPersonAvatar name={member.name} photoUrl={member.photoUrl} />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[13.5px] font-semibold leading-tight text-black sm:text-[14px]">
                           {member.name}
                         </div>
-                        <div className="mt-0.5 truncate font-mono text-[10.5px] text-black/45">
+                        <div className="mt-0.5 truncate font-mono text-[10px] text-black/45 sm:text-[10.5px]">
                           {member.id}
                         </div>
                       </div>
                     </div>
-                  </td>
-                  <td className="px-4 py-3.5 align-middle text-[13px] text-black/75 dark:text-zinc-300 sm:px-6">
-                    <span className="block truncate">{member.role}</span>
-                  </td>
-                  <td className="px-4 py-3.5 align-middle text-[13px] text-black/75 dark:text-zinc-300 sm:px-6">
-                    <span className="block truncate">{member.dept}</span>
-                  </td>
-                  <td className="px-4 py-3.5 align-middle sm:px-6">
-                    <EnrollmentStatusBadge active={member.active} />
-                  </td>
-                </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                    <div className="shrink-0">
+                      <EnrollmentStatusBadge active={member.active} />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                    <span className={directoryMintChipClass}>{member.role}</span>
+                    <span className="inline-flex max-w-full truncate rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-medium text-black/75 dark:bg-white/10 dark:text-zinc-300 sm:px-2.5 sm:py-1 sm:text-[10.5px]">
+                      {member.dept}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 border-t border-[#F0F0F0] pt-2 sm:pt-2.5">
+                    <div className="min-w-0">
+                      <div className="truncate text-[11.5px] font-medium text-black/75 sm:text-[12px]">
+                        {member.role}
+                      </div>
+                      <div className="mt-0.5 truncate font-mono text-[10px] text-black/45 sm:text-[10.5px]">
+                        {hasPhone ? formatPhone(member.phone) : "No contact on file"}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openStaffEdit(member.id);
+                      }}
+                      aria-label={`Edit profile for ${member.name}`}
+                      className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-[#E5E5E5] bg-[#F4F4F5] text-black/60 dark:text-zinc-400 transition-colors hover:border-black/20 hover:bg-white hover:text-black sm:h-8 sm:w-8"
+                    >
+                      <Pencil className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mobile-scrollbar-none hidden w-full max-w-full overflow-x-auto lg:block">
+            <div className={glassTableWrapClass}>
+              {renderStaffBulkBar()}
+              <table className="w-full min-w-[700px] table-fixed border-collapse text-left">
+                <colgroup>
+                  <col className="w-[44px]" />
+                  <col className="w-[32%]" />
+                  <col className="w-[22%]" />
+                  <col className="w-[22%]" />
+                  <col className="w-[18%]" />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th className="border-b border-slate-100 px-3 pb-4 pt-4 sm:px-4 sm:pt-5">
+                      <Checkbox
+                        checked={
+                          allStaffSelected ? true : someStaffSelected ? "indeterminate" : false
+                        }
+                        onCheckedChange={(v) => toggleStaffSelectAll(v === true)}
+                        aria-label="Select all staff"
+                        disabled={filteredStaff.length === 0}
+                      />
+                    </th>
+                    {["Name", "Role", "Department", "Status"].map((header) => (
+                      <th
+                        key={header}
+                        className="border-b border-slate-100 px-4 pb-4 pt-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:border-white/10 dark:text-zinc-400 sm:px-6 sm:pt-5"
+                      >
+                        {header}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredStaff.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="px-4 py-10 text-center text-[13px] text-black/55 dark:text-zinc-400 sm:px-6"
+                      >
+                        No staff records match the current filters.
+                      </td>
+                    </tr>
+                  )}
+                  {filteredStaff.map((member) => {
+                    const isSelected = selectedIds.has(member.id);
+                    return (
+                      <tr
+                        key={member.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => openStaff(member.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            openStaff(member.id);
+                          }
+                        }}
+                        aria-label={`Open profile for ${member.name}`}
+                        className={cn(
+                          "cursor-pointer border-b border-slate-50 transition-colors last:border-0 hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0F766E] dark:border-white/5 dark:hover:bg-white/5 dark:focus-visible:bg-white/5",
+                          isSelected &&
+                            "bg-[#F0FDFA]/70 hover:bg-[#F0FDFA] dark:bg-[#0F766E]/15 dark:hover:bg-[#0F766E]/25",
+                        )}
+                      >
+                        <td
+                          className="px-3 py-3.5 align-middle sm:px-4"
+                          onClick={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => e.stopPropagation()}
+                        >
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={(v) => toggleStaffSelect(member.id, v === true)}
+                            aria-label={`Select ${member.name}`}
+                          />
+                        </td>
+                        <td className="px-4 py-3.5 align-middle sm:px-6">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <ProfileAvatar
+                              name={member.name}
+                              photoUrl={member.photoUrl}
+                              className="h-10 w-10 shrink-0 rounded-xl"
+                              imgClassName="object-cover"
+                              initialsClassName="bg-[#0F766E] text-[12px]"
+                            />
+                            <div className="min-w-0">
+                              <div className="truncate text-[13.5px] font-semibold text-black">
+                                {member.name}
+                              </div>
+                              <div className="mt-0.5 truncate font-mono text-[10.5px] text-black/45">
+                                {member.id}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3.5 align-middle text-[13px] text-black/75 dark:text-zinc-300 sm:px-6">
+                          <span className="block truncate">{member.role}</span>
+                        </td>
+                        <td className="px-4 py-3.5 align-middle text-[13px] text-black/75 dark:text-zinc-300 sm:px-6">
+                          <span className="block truncate">{member.dept}</span>
+                        </td>
+                        <td className="px-4 py-3.5 align-middle sm:px-6">
+                          <EnrollmentStatusBadge active={member.active} />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </>
       )}
 
@@ -5754,8 +5771,8 @@ export function StaffRoster() {
               Bulk WhatsApp
             </DialogTitle>
             <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60 dark:text-zinc-400">
-              Sends via BugRicer Notify to {selectedStaffWithPhone.length} staff
-              member{selectedStaffWithPhone.length === 1 ? "" : "s"}
+              Sends via BugRicer Notify to {selectedStaffWithPhone.length} staff member
+              {selectedStaffWithPhone.length === 1 ? "" : "s"}
               {selectedStaff.length > selectedStaffWithPhone.length
                 ? ` · ${selectedStaff.length - selectedStaffWithPhone.length} without phone skipped`
                 : ""}
@@ -5948,7 +5965,10 @@ export function StaffRoster() {
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
+              <Button
+                type="submit"
+                className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+              >
                 Recruit Staff
               </Button>
             </DialogFooter>
@@ -6158,7 +6178,8 @@ const FINANCE_REPORT_TILES = [
       "border-teal-200/55 bg-gradient-to-br from-teal-50/95 via-teal-50/35 to-white hover:border-teal-300/60 dark:border-teal-500/20 dark:from-teal-500/[0.14] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-teal-400/30",
     iconWrap:
       "bg-white/95 text-teal-700 ring-1 ring-teal-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-teal-300 dark:ring-teal-500/25",
-    arrowHover: "group-hover:text-teal-600 dark:group-hover:text-teal-400 dark:group-hover:ring-teal-500/30",
+    arrowHover:
+      "group-hover:text-teal-600 dark:group-hover:text-teal-400 dark:group-hover:ring-teal-500/30",
   },
   {
     k: "daybook" as const,
@@ -6169,7 +6190,8 @@ const FINANCE_REPORT_TILES = [
       "border-sky-200/55 bg-gradient-to-br from-sky-50/95 via-sky-50/35 to-white hover:border-sky-300/60 dark:border-sky-500/20 dark:from-sky-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-sky-400/30",
     iconWrap:
       "bg-white/95 text-sky-700 ring-1 ring-sky-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-sky-300 dark:ring-sky-500/25",
-    arrowHover: "group-hover:text-sky-600 dark:group-hover:text-sky-400 dark:group-hover:ring-sky-500/30",
+    arrowHover:
+      "group-hover:text-sky-600 dark:group-hover:text-sky-400 dark:group-hover:ring-sky-500/30",
   },
   {
     k: "analytics" as const,
@@ -6180,7 +6202,8 @@ const FINANCE_REPORT_TILES = [
       "border-amber-200/55 bg-gradient-to-br from-amber-50/95 via-amber-50/35 to-white hover:border-amber-300/60 dark:border-amber-500/20 dark:from-amber-500/[0.11] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-amber-400/30",
     iconWrap:
       "bg-white/95 text-amber-700 ring-1 ring-amber-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-amber-300 dark:ring-amber-500/25",
-    arrowHover: "group-hover:text-amber-600 dark:group-hover:text-amber-400 dark:group-hover:ring-amber-500/30",
+    arrowHover:
+      "group-hover:text-amber-600 dark:group-hover:text-amber-400 dark:group-hover:ring-amber-500/30",
   },
   {
     k: "ledger" as const,
@@ -6191,7 +6214,8 @@ const FINANCE_REPORT_TILES = [
       "border-indigo-200/55 bg-gradient-to-br from-indigo-50/95 via-indigo-50/35 to-white hover:border-indigo-300/60 dark:border-indigo-500/20 dark:from-indigo-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-indigo-400/30",
     iconWrap:
       "bg-white/95 text-indigo-600 ring-1 ring-indigo-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-indigo-300 dark:ring-indigo-500/25",
-    arrowHover: "group-hover:text-indigo-600 dark:group-hover:text-indigo-400 dark:group-hover:ring-indigo-500/30",
+    arrowHover:
+      "group-hover:text-indigo-600 dark:group-hover:text-indigo-400 dark:group-hover:ring-indigo-500/30",
   },
   {
     k: "pl" as const,
@@ -6202,7 +6226,8 @@ const FINANCE_REPORT_TILES = [
       "border-emerald-200/55 bg-gradient-to-br from-emerald-50/95 via-emerald-50/35 to-white hover:border-emerald-300/60 dark:border-emerald-500/20 dark:from-emerald-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-emerald-400/30",
     iconWrap:
       "bg-white/95 text-emerald-700 ring-1 ring-emerald-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-emerald-300 dark:ring-emerald-500/25",
-    arrowHover: "group-hover:text-emerald-600 dark:group-hover:text-emerald-400 dark:group-hover:ring-emerald-500/30",
+    arrowHover:
+      "group-hover:text-emerald-600 dark:group-hover:text-emerald-400 dark:group-hover:ring-emerald-500/30",
   },
   {
     k: "balance" as const,
@@ -6213,7 +6238,8 @@ const FINANCE_REPORT_TILES = [
       "border-rose-200/55 bg-gradient-to-br from-rose-50/95 via-rose-50/35 to-white hover:border-rose-300/60 dark:border-rose-500/20 dark:from-rose-500/[0.11] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-rose-400/30",
     iconWrap:
       "bg-white/95 text-rose-600 ring-1 ring-rose-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-rose-300 dark:ring-rose-500/25",
-    arrowHover: "group-hover:text-rose-600 dark:group-hover:text-rose-400 dark:group-hover:ring-rose-500/30",
+    arrowHover:
+      "group-hover:text-rose-600 dark:group-hover:text-rose-400 dark:group-hover:ring-rose-500/30",
   },
   {
     k: "reconciliation" as const,
@@ -6224,7 +6250,8 @@ const FINANCE_REPORT_TILES = [
       "border-cyan-200/55 bg-gradient-to-br from-cyan-50/95 via-cyan-50/35 to-white hover:border-cyan-300/60 dark:border-cyan-500/20 dark:from-cyan-500/[0.11] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-cyan-400/30",
     iconWrap:
       "bg-white/95 text-cyan-700 ring-1 ring-cyan-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-cyan-300 dark:ring-cyan-500/25",
-    arrowHover: "group-hover:text-cyan-600 dark:group-hover:text-cyan-400 dark:group-hover:ring-cyan-500/30",
+    arrowHover:
+      "group-hover:text-cyan-600 dark:group-hover:text-cyan-400 dark:group-hover:ring-cyan-500/30",
   },
   {
     k: "salary" as const,
@@ -6235,7 +6262,8 @@ const FINANCE_REPORT_TILES = [
       "border-violet-200/55 bg-gradient-to-br from-violet-50/95 via-violet-50/35 to-white hover:border-violet-300/60 dark:border-violet-500/20 dark:from-violet-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-violet-400/30",
     iconWrap:
       "bg-white/95 text-violet-600 ring-1 ring-violet-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-violet-300 dark:ring-violet-500/25",
-    arrowHover: "group-hover:text-violet-600 dark:group-hover:text-violet-400 dark:group-hover:ring-violet-500/30",
+    arrowHover:
+      "group-hover:text-violet-600 dark:group-hover:text-violet-400 dark:group-hover:ring-violet-500/30",
   },
 ] as const;
 
@@ -6266,8 +6294,7 @@ function FinanceOverview({
     schoolDetails,
     activeStudents: students,
   } = useTenantStore();
-  const isAdmin =
-    session?.role === "school_admin" || session?.role === "super_admin";
+  const isAdmin = session?.role === "school_admin" || session?.role === "super_admin";
   const schoolName = schoolDetails.name || "Silver Hills Global";
   const [incomePeriod, setIncomePeriod] = useState<PaymentPeriod>("this_month");
   const [customRange, setCustomRange] = useState<CustomDateRange>({ from: "", to: "" });
@@ -6336,7 +6363,17 @@ function FinanceOverview({
         year: slugYear(academicYear),
         date: todayStamp(),
       }),
-      ["Transaction ID", "Account", "Category", "Fee Period", "Mode", "Amount (INR)", "Time", "Status", "Narration"],
+      [
+        "Transaction ID",
+        "Account",
+        "Category",
+        "Fee Period",
+        "Mode",
+        "Amount (INR)",
+        "Time",
+        "Status",
+        "Narration",
+      ],
       payments.map((p) => [
         p.id,
         p.name,
@@ -6367,7 +6404,17 @@ function FinanceOverview({
       }),
       title: "Finance Transactions",
       subtitle: `${schoolName} · ${academicYear}`,
-      headers: ["ID", "Account", "Category", "Period", "Mode", "Amount", "Time", "Status", "Narration"],
+      headers: [
+        "ID",
+        "Account",
+        "Category",
+        "Period",
+        "Mode",
+        "Amount",
+        "Time",
+        "Status",
+        "Narration",
+      ],
       rows: payments.map((p) => [
         p.id,
         p.name,
@@ -6396,7 +6443,17 @@ function FinanceOverview({
       }),
       title: "Finance Transactions",
       subtitle: `${schoolName} · ${academicYear}`,
-      headers: ["ID", "Account", "Category", "Period", "Mode", "Amount", "Time", "Status", "Narration"],
+      headers: [
+        "ID",
+        "Account",
+        "Category",
+        "Period",
+        "Mode",
+        "Amount",
+        "Time",
+        "Status",
+        "Narration",
+      ],
       rows: payments.map((p) => [
         p.id,
         p.name,
@@ -6473,10 +6530,12 @@ function FinanceOverview({
       `Academic year: ${academicYear}`,
       `${payments.length} receipt${payments.length === 1 ? "" : "s"} · Total ₹ ${total.toLocaleString("en-IN")}`,
       "",
-      ...payments.slice(0, 12).map(
-        (p) =>
-          `• ${p.id} · ${p.name} · ₹ ${p.amount.toLocaleString("en-IN")} · ${formatEventDateTime(p.time)}`,
-      ),
+      ...payments
+        .slice(0, 12)
+        .map(
+          (p) =>
+            `• ${p.id} · ${p.name} · ₹ ${p.amount.toLocaleString("en-IN")} · ${formatEventDateTime(p.time)}`,
+        ),
     ];
     if (payments.length > 12) {
       lines.push(`…and ${payments.length - 12} more`);
@@ -6628,7 +6687,6 @@ function FinanceOverview({
 
   return (
     <div className="w-full space-y-5 pb-24 md:pb-0">
-
       <div className="hidden md:grid md:grid-cols-2 md:gap-4">
         {sessionCanAccessFinanceView(session, "receive") && (
           <button
@@ -6636,7 +6694,10 @@ function FinanceOverview({
             onClick={() => onOpenView("receive")}
             className={financeReceiveActionClass}
           >
-            <span aria-hidden className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-white/20 blur-2xl dark:bg-white/[0.07]" />
+            <span
+              aria-hidden
+              className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-white/20 blur-2xl dark:bg-white/[0.07]"
+            />
             <span className={financeActionIconShell}>
               <ArrowDownToLine className="h-5 w-5 text-white" strokeWidth={2.25} />
             </span>
@@ -6652,7 +6713,10 @@ function FinanceOverview({
             onClick={() => onOpenView("make")}
             className={financeMakeActionClass}
           >
-            <span aria-hidden className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-white/20 blur-2xl dark:bg-white/[0.07]" />
+            <span
+              aria-hidden
+              className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-white/20 blur-2xl dark:bg-white/[0.07]"
+            />
             <span className={financeActionIconShell}>
               <ArrowUpFromLine className="h-5 w-5 text-white" strokeWidth={2.25} />
             </span>
@@ -6726,7 +6790,9 @@ function FinanceOverview({
       </section>
 
       <div className="grid grid-cols-12 gap-5">
-        <section className={cn(glassCardClass, "col-span-12 flex flex-col p-4 sm:p-5 lg:col-span-4")}>
+        <section
+          className={cn(glassCardClass, "col-span-12 flex flex-col p-4 sm:p-5 lg:col-span-4")}
+        >
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <h3 className="text-[15px] font-bold tracking-tight text-slate-900 dark:text-zinc-50">
@@ -6755,21 +6821,23 @@ function FinanceOverview({
               </div>
             ) : (
               incomeSegments.map((segment) => {
-              const pct = incomeTotal > 0 ? Math.round((segment.value / incomeTotal) * 100) : 0;
-              return (
-                <div key={segment.label}>
-                  <div className="mb-1.5 flex items-center justify-between gap-2 text-[12px]">
-                    <span className="font-medium text-slate-700 dark:text-zinc-300">{segment.label}</span>
-                    <span className="font-mono text-slate-500 dark:text-zinc-400">{pct}%</span>
+                const pct = incomeTotal > 0 ? Math.round((segment.value / incomeTotal) * 100) : 0;
+                return (
+                  <div key={segment.label}>
+                    <div className="mb-1.5 flex items-center justify-between gap-2 text-[12px]">
+                      <span className="font-medium text-slate-700 dark:text-zinc-300">
+                        {segment.label}
+                      </span>
+                      <span className="font-mono text-slate-500 dark:text-zinc-400">{pct}%</span>
+                    </div>
+                    <div className="h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-zinc-800">
+                      <div
+                        className="h-full rounded-full bg-[#0F766E] dark:bg-teal-500"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-zinc-800">
-                    <div
-                      className="h-full rounded-full bg-[#0F766E] dark:bg-teal-500"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                </div>
-              );
+                );
               })
             )}
           </div>
@@ -6781,44 +6849,49 @@ function FinanceOverview({
               <h3 className="text-[15px] font-bold tracking-tight text-slate-900 dark:text-zinc-50">
                 Expense
               </h3>
-              <p className="mt-0.5 text-[12px] text-slate-500 dark:text-zinc-400">Operating outflow</p>
+              <p className="mt-0.5 text-[12px] text-slate-500 dark:text-zinc-400">
+                Operating outflow
+              </p>
             </div>
             <span className="inline-flex items-center gap-1 rounded-full border border-white/60 bg-white/60 px-2.5 py-1 text-[10px] font-semibold text-slate-600 dark:border-white/10 dark:bg-zinc-900/60 dark:text-zinc-400">
               <Filter className="h-3 w-3" />
               Filter
             </span>
           </div>
-          <ChartContainer config={expenseChartConfig} className="mx-auto mt-2 h-[180px] w-full max-w-[220px]">
+          <ChartContainer
+            config={expenseChartConfig}
+            className="mx-auto mt-2 h-[180px] w-full max-w-[220px]"
+          >
             {expenseSegments.length === 0 ? (
               <div className="flex h-full items-center justify-center text-center text-[12px] text-slate-500 dark:text-zinc-400">
                 No expenses recorded yet
               </div>
             ) : (
-            <PieChart>
-              <ChartTooltip
-                content={
-                  <ChartTooltipContent
-                    formatter={(value, name) => [formatInr(Number(value)), String(name)]}
-                  />
-                }
-              />
-              <Pie
-                data={expenseSegments}
-                dataKey="value"
-                nameKey="label"
-                innerRadius="58%"
-                outerRadius="88%"
-                paddingAngle={2}
-                strokeWidth={0}
-              >
-                {expenseSegments.map((segment, index) => (
-                  <Cell
-                    key={segment.label}
-                    fill={EXPENSE_CHART_COLORS[index % EXPENSE_CHART_COLORS.length]}
-                  />
-                ))}
-              </Pie>
-            </PieChart>
+              <PieChart>
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      formatter={(value, name) => [formatInr(Number(value)), String(name)]}
+                    />
+                  }
+                />
+                <Pie
+                  data={expenseSegments}
+                  dataKey="value"
+                  nameKey="label"
+                  innerRadius="58%"
+                  outerRadius="88%"
+                  paddingAngle={2}
+                  strokeWidth={0}
+                >
+                  {expenseSegments.map((segment, index) => (
+                    <Cell
+                      key={segment.label}
+                      fill={EXPENSE_CHART_COLORS[index % EXPENSE_CHART_COLORS.length]}
+                    />
+                  ))}
+                </Pie>
+              </PieChart>
             )}
           </ChartContainer>
           <div className="mt-2 grid grid-cols-2 gap-2">
@@ -6833,14 +6906,14 @@ function FinanceOverview({
               </div>
             ) : (
               expenseSegments.slice(0, 4).map((segment) => (
-              <div key={segment.label} className={cn(glassInsetClass, "px-2.5 py-2")}>
-                <div className="truncate text-[10px] font-medium text-slate-500 dark:text-zinc-400">
-                  {segment.label}
+                <div key={segment.label} className={cn(glassInsetClass, "px-2.5 py-2")}>
+                  <div className="truncate text-[10px] font-medium text-slate-500 dark:text-zinc-400">
+                    {segment.label}
+                  </div>
+                  <div className="mt-0.5 truncate font-mono text-[11px] font-semibold text-slate-900 dark:text-zinc-100">
+                    {formatInr(segment.value)}
+                  </div>
                 </div>
-                <div className="mt-0.5 truncate font-mono text-[11px] font-semibold text-slate-900 dark:text-zinc-100">
-                  {formatInr(segment.value)}
-                </div>
-              </div>
               ))
             )}
           </div>
@@ -6865,43 +6938,43 @@ function FinanceOverview({
               </div>
             ) : (
               overdueBills.map((bill, index) => (
-              <div
-                key={bill.id}
-                className={cn(glassInsetClass, "flex flex-col gap-2.5 px-3.5 py-3")}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="truncate text-[13px] font-semibold text-slate-900 dark:text-zinc-50">
-                      {index + 1}. {bill.name}
+                <div
+                  key={bill.id}
+                  className={cn(glassInsetClass, "flex flex-col gap-2.5 px-3.5 py-3")}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-[13px] font-semibold text-slate-900 dark:text-zinc-50">
+                        {index + 1}. {bill.name}
+                      </div>
+                      <div className="mt-0.5 text-[11px] text-slate-500 dark:text-zinc-400">
+                        Due {bill.due} · {bill.type}
+                      </div>
                     </div>
-                    <div className="mt-0.5 text-[11px] text-slate-500 dark:text-zinc-400">
-                      Due {bill.due} · {bill.type}
+                    <div className="shrink-0 font-mono text-[13px] font-semibold text-slate-900 dark:text-zinc-50">
+                      {formatInr(bill.amount)}
                     </div>
                   </div>
-                  <div className="shrink-0 font-mono text-[13px] font-semibold text-slate-900 dark:text-zinc-50">
-                    {formatInr(bill.amount)}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => payOverdueBill(bill)}
+                      className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-full bg-[#0F766E] px-3 text-[11.5px] font-semibold text-white transition-colors hover:bg-[#0D9488] dark:bg-teal-600 dark:hover:bg-teal-500"
+                    >
+                      <HandCoins className="h-3.5 w-3.5" />
+                      Pay
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => shareOverdueBill(bill)}
+                      className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 text-[11.5px] font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-white/20 dark:hover:bg-zinc-800"
+                    >
+                      <Share2 className="h-3.5 w-3.5" />
+                      Share
+                    </button>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => payOverdueBill(bill)}
-                    className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-full bg-[#0F766E] px-3 text-[11.5px] font-semibold text-white transition-colors hover:bg-[#0D9488] dark:bg-teal-600 dark:hover:bg-teal-500"
-                  >
-                    <HandCoins className="h-3.5 w-3.5" />
-                    Pay
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => shareOverdueBill(bill)}
-                    className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 text-[11.5px] font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-white/20 dark:hover:bg-zinc-800"
-                  >
-                    <Share2 className="h-3.5 w-3.5" />
-                    Share
-                  </button>
-                </div>
-              </div>
-            ))
+              ))
             )}
           </div>
         </section>
@@ -6982,8 +7055,12 @@ function FinanceOverview({
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="truncate text-[13.5px] font-semibold text-slate-900">{p.name}</div>
-                  <div className="mt-0.5 truncate font-mono text-[10.5px] text-black/45">{p.id}</div>
+                  <div className="truncate text-[13.5px] font-semibold text-slate-900">
+                    {p.name}
+                  </div>
+                  <div className="mt-0.5 truncate font-mono text-[10.5px] text-black/45">
+                    {p.id}
+                  </div>
                 </div>
                 <div className="shrink-0 text-right">
                   <div className="font-mono text-[14px] font-bold text-slate-900">
@@ -7096,22 +7173,26 @@ function FinanceOverview({
               <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5]">
                 {["Transaction", "Account", "Date / Time", "Amount", "Status", "Actions"].map(
                   (header) => (
-                  <th
-                    key={header}
-                    className={cn(
-                      "px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400",
-                      header === "Actions" && "text-right",
-                    )}
-                  >
-                    {header}
-                  </th>
-                ))}
+                    <th
+                      key={header}
+                      className={cn(
+                        "px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400",
+                        header === "Actions" && "text-right",
+                      )}
+                    >
+                      {header}
+                    </th>
+                  ),
+                )}
               </tr>
             </thead>
             <tbody>
               {payments.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-[12px] text-black/55 dark:text-zinc-400">
+                  <td
+                    colSpan={6}
+                    className="px-3 py-8 text-center text-[12px] text-black/55 dark:text-zinc-400"
+                  >
                     No transactions recorded yet
                   </td>
                 </tr>
@@ -7130,7 +7211,9 @@ function FinanceOverview({
                         : ""}
                     </div>
                   </td>
-                  <td className="px-3 py-3 font-mono text-[11px] text-black/55 dark:text-zinc-400">{formatEventDateTime(p.time)}</td>
+                  <td className="px-3 py-3 font-mono text-[11px] text-black/55 dark:text-zinc-400">
+                    {formatEventDateTime(p.time)}
+                  </td>
                   <td className="px-3 py-3 font-mono font-semibold text-black">
                     ₹ {p.amount.toLocaleString("en-IN")}
                   </td>
@@ -7238,7 +7321,9 @@ function FinanceOverview({
                         setEditForm({
                           ...editForm,
                           cat,
-                          payerType: categorySuggestsExternal(cat) ? "external" : editForm.payerType,
+                          payerType: categorySuggestsExternal(cat)
+                            ? "external"
+                            : editForm.payerType,
                         })
                       }
                     >
@@ -7247,10 +7332,11 @@ function FinanceOverview({
                       </SelectTrigger>
                       <SelectContent>
                         {Array.from(
-                          new Set([
-                            ...paymentCategories.map((c) => c.label),
-                            editForm.cat,
-                          ].filter(Boolean)),
+                          new Set(
+                            [...paymentCategories.map((c) => c.label), editForm.cat].filter(
+                              Boolean,
+                            ),
+                          ),
                         ).map((label) => (
                           <SelectItem key={label} value={label}>
                             {label}
@@ -7344,7 +7430,10 @@ function FinanceOverview({
                   <Button type="button" variant="outline" onClick={() => setEditingPayment(null)}>
                     Cancel
                   </Button>
-                  <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
+                  <Button
+                    type="submit"
+                    className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+                  >
                     Save changes
                   </Button>
                 </DialogFooter>
@@ -7384,13 +7473,7 @@ function FinanceOverview({
   );
 }
 
-function FieldLabel({
-  children,
-  className,
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
+function FieldLabel({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
     <div
       className={cn(
@@ -7550,8 +7633,9 @@ function feePeriodChoices(
     scheduled?.feeSchedule.filter((line) => line.kind === "installment" && line.amount > 0) ?? [];
   const routeNormalized = matchedRoute ? withRouteFeeSchedule(matchedRoute, feeTerms) : undefined;
   const routeInstallments =
-    routeNormalized?.bothFeeSchedule.filter((line) => line.kind === "installment" && line.amount > 0) ??
-    [];
+    routeNormalized?.bothFeeSchedule.filter(
+      (line) => line.kind === "installment" && line.amount > 0,
+    ) ?? [];
 
   const applyFeeBreakFilter = (
     choices: { value: string; label: string; kind: FeePeriodKind; period: string }[],
@@ -7578,7 +7662,11 @@ function feePeriodChoices(
     );
   };
 
-  if (termKind === "tuition" && matchedClass?.billingCycle === "Term" && classInstallments.length > 0) {
+  if (
+    termKind === "tuition" &&
+    matchedClass?.billingCycle === "Term" &&
+    classInstallments.length > 0
+  ) {
     return applyFeeBreakFilter(
       classInstallments.map((line) => ({
         value: `term:${line.label}`,
@@ -7655,9 +7743,9 @@ function feePeriodChoices(
 
   const effectiveCycle: ClassBillingCycle | undefined =
     termKind === "tuition"
-      ? matchedClass?.billingCycle ?? opts?.billingCycle
+      ? (matchedClass?.billingCycle ?? opts?.billingCycle)
       : termKind === "vehicle"
-        ? routeNormalized?.billingCycle ?? matchedClass?.billingCycle ?? opts?.billingCycle
+        ? (routeNormalized?.billingCycle ?? matchedClass?.billingCycle ?? opts?.billingCycle)
         : opts?.billingCycle;
 
   // Never union terms + months: collection periods follow class/route billing cycle only.
@@ -7694,7 +7782,10 @@ function feePeriodChoices(
         return {
           value: `month:${label}`,
           label: monthTerm
-            ? [label, monthTerm.coverage || formatFeeTermCoverage(monthTerm.startDate, monthTerm.endDate)]
+            ? [
+                label,
+                monthTerm.coverage || formatFeeTermCoverage(monthTerm.startDate, monthTerm.endDate),
+              ]
                 .filter(Boolean)
                 .join(" · ")
             : label,
@@ -7727,7 +7818,10 @@ function feePeriodChoices(
       return {
         value: `month:${label}`,
         label: monthTerm
-          ? [label, monthTerm.coverage || formatFeeTermCoverage(monthTerm.startDate, monthTerm.endDate)]
+          ? [
+              label,
+              monthTerm.coverage || formatFeeTermCoverage(monthTerm.startDate, monthTerm.endDate),
+            ]
               .filter(Boolean)
               .join(" · ")
           : label,
@@ -7823,9 +7917,7 @@ function defaultFeePeriod(
 
   const termKind = categoryFeeTermKind(description);
   const effectiveBillingCycle =
-    termKind === "vehicle" && matchedRoute?.billingCycle
-      ? matchedRoute.billingCycle
-      : billingCycle;
+    termKind === "vehicle" && matchedRoute?.billingCycle ? matchedRoute.billingCycle : billingCycle;
   if (effectiveBillingCycle === "Term") {
     const term = choices.find((c) => c.kind === "term");
     if (term) return { feePeriodKind: "term", feePeriod: term.period };
@@ -7939,7 +8031,10 @@ function formatFeePeriodMultiSelectLabel(
 ) {
   if (!selectedValues.length) return "Select period(s)";
   const labels = selectedValues
-    .map((value) => choices.find((choice) => choice.value === value)?.label ?? value.split(":")[1] ?? value)
+    .map(
+      (value) =>
+        choices.find((choice) => choice.value === value)?.label ?? value.split(":")[1] ?? value,
+    )
     .filter(Boolean);
   if (labels.length === 1) return labels[0]!;
   if (labels.length === 2) return labels.join(" · ");
@@ -8000,9 +8095,7 @@ function prefillScheduledAmountForFeeLine(
       periodLabel: item.feePeriod || selectedPeriod?.label,
       periodIndex: periodIndex >= 0 ? periodIndex : undefined,
       collectionStartMonth:
-        collectionStartMonth?.trim() ||
-        matchedClass.feeCollectionStartMonth?.trim() ||
-        undefined,
+        collectionStartMonth?.trim() || matchedClass.feeCollectionStartMonth?.trim() || undefined,
     });
     if (fromSchedule && fromSchedule > 0) return fromSchedule;
   }
@@ -8018,9 +8111,7 @@ function prefillScheduledAmountForFeeLine(
         periodLabel: item.feePeriod || selectedTerm?.label || selectedMonthPeriod?.label,
         periodIndex: routeIndex >= 0 ? routeIndex : undefined,
         collectionStartMonth:
-          collectionStartMonth?.trim() ||
-          matchedRoute.feeCollectionStartMonth?.trim() ||
-          undefined,
+          collectionStartMonth?.trim() || matchedRoute.feeCollectionStartMonth?.trim() || undefined,
       },
       feeTerms,
     );
@@ -8038,7 +8129,10 @@ function prefillScheduledAmountForFeeLine(
 }
 
 function prefillAmountForFeeLine(
-  item: Pick<FeeLineItem, "id" | "description" | "customDescription" | "feePeriodKind" | "feePeriod">,
+  item: Pick<
+    FeeLineItem,
+    "id" | "description" | "customDescription" | "feePeriodKind" | "feePeriod"
+  >,
   matchedClass: ClassConfig | undefined,
   feeTerms: FeeTerm[],
   tuitionFee: number | undefined,
@@ -8101,7 +8195,9 @@ function receiptTimeForForm(raw?: string) {
 }
 
 function parseMoneyPart(part: string): { label: string; amount: number; period?: string } | null {
-  const withPeriod = part.trim().match(/^(.*?)\s+\(([^)]+)\)\s+(?:₹|Rs\.?)\s*([\d,]+(?:\.\d+)?)\s*$/i);
+  const withPeriod = part
+    .trim()
+    .match(/^(.*?)\s+\(([^)]+)\)\s+(?:₹|Rs\.?)\s*([\d,]+(?:\.\d+)?)\s*$/i);
   if (withPeriod) {
     const amount = Number(withPeriod[3].replace(/,/g, ""));
     if (!Number.isFinite(amount) || amount < 0) return null;
@@ -8543,8 +8639,7 @@ function ReceivePayment() {
     academicYear,
     schoolDetails,
   } = useTenantStore();
-  const isAdmin =
-    session?.role === "school_admin" || session?.role === "super_admin";
+  const isAdmin = session?.role === "school_admin" || session?.role === "super_admin";
   const schoolName = schoolDetails.name || "Silver Hills Global";
   const classes = useMemo(() => {
     const fromConfig = classConfigs.map((c) => c.className);
@@ -8606,8 +8701,8 @@ function ReceivePayment() {
 
   const isExternal = payerSource === "external";
   const selected = !isExternal
-    ? studentsInClass.find((s) => s.name === stu) ??
-      (editingPayment ? students.find((s) => s.name === stu) : undefined)
+    ? (studentsInClass.find((s) => s.name === stu) ??
+      (editingPayment ? students.find((s) => s.name === stu) : undefined))
     : undefined;
   receivePaymentBreakCtx = selected
     ? {
@@ -8687,7 +8782,13 @@ function ReceivePayment() {
 
   const transportFeeResolved = useMemo(() => {
     if (!selected) return undefined;
-    return resolveTransportFeeForStudent(selected, transportRoutes, matchedClass, undefined, feeTerms);
+    return resolveTransportFeeForStudent(
+      selected,
+      transportRoutes,
+      matchedClass,
+      undefined,
+      feeTerms,
+    );
   }, [selected, transportRoutes, matchedClass, feeTerms]);
 
   const matchedRoute = transportFeeResolved?.route;
@@ -8768,7 +8869,7 @@ function ReceivePayment() {
 
   const periodOptsForDescription = useCallback(
     (description: string) =>
-      isVehicleFeeCategory(description) ? vehiclePeriodOpts ?? periodOpts : periodOpts,
+      isVehicleFeeCategory(description) ? (vehiclePeriodOpts ?? periodOpts) : periodOpts,
     [periodOpts, vehiclePeriodOpts],
   );
 
@@ -8839,10 +8940,15 @@ function ReceivePayment() {
   useEffect(() => {
     if (editingPayment || isExternal || !matchedClass) return;
     const start =
-      matchedClass.feeCollectionStartMonth?.trim() ||
-      defaultFeeCollectionStartMonth(feeTerms);
+      matchedClass.feeCollectionStartMonth?.trim() || defaultFeeCollectionStartMonth(feeTerms);
     setCollectionStartMonth(start);
-  }, [matchedClass?.id, matchedClass?.feeCollectionStartMonth, feeTerms, editingPayment, isExternal]);
+  }, [
+    matchedClass?.id,
+    matchedClass?.feeCollectionStartMonth,
+    feeTerms,
+    editingPayment,
+    isExternal,
+  ]);
 
   useEffect(() => {
     if (editingPayment || !search.studentId) return;
@@ -8860,21 +8966,13 @@ function ReceivePayment() {
     setCls(student.cls);
     setStu(student.name);
     navigate({ to: "/tenant/finance", search: { tab: "receive" }, replace: true });
-  }, [
-    search.studentId,
-    search.feeKind,
-    search.periods,
-    students,
-    editingPayment,
-    navigate,
-  ]);
+  }, [search.studentId, search.feeKind, search.periods, students, editingPayment, navigate]);
 
   useEffect(() => {
     if (isExternal || editingPayment || !selected) return;
 
     const deepLink = deepLinkCollectRef.current;
-    const preferVehicle =
-      deepLink?.feeKind === "vehicle" || (deepLink?.periods.length ?? 0) > 0;
+    const preferVehicle = deepLink?.feeKind === "vehicle" || (deepLink?.periods.length ?? 0) > 0;
 
     setFeeItems((prev) => {
       const nonVehicle = prev.filter((item) => !isVehicleFeeCategory(item.description));
@@ -8903,8 +9001,7 @@ function ReceivePayment() {
             choices.find(
               (c) => c.period.trim().toLowerCase() === periodLabel.trim().toLowerCase(),
             ) ?? null;
-          const kind =
-            match?.kind ?? (matchedRoute?.billingCycle === "Term" ? "term" : "month");
+          const kind = match?.kind ?? (matchedRoute?.billingCycle === "Term" ? "term" : "month");
           const period = match?.period ?? periodLabel;
           let line = createFeeLineItem({
             description: vehicleCategoryLabel,
@@ -8956,8 +9053,7 @@ function ReceivePayment() {
         periodOptsArg,
       );
       let vehicleLine =
-        existingVehicle ??
-        createFeeLineItem({ description: vehicleCategoryLabel, ...period });
+        existingVehicle ?? createFeeLineItem({ description: vehicleCategoryLabel, ...period });
 
       const vehiclePeriod = defaultFeePeriod(
         feeTerms,
@@ -8969,7 +9065,9 @@ function ReceivePayment() {
         defaultFeePeriodOptsFromReceiveForm(
           balanceCtx,
           prev
-            .filter((line) => line.id !== vehicleLine.id && line.description === vehicleLine.description)
+            .filter(
+              (line) => line.id !== vehicleLine.id && line.description === vehicleLine.description,
+            )
             .map((line) => ({ feePeriodKind: line.feePeriodKind, feePeriod: line.feePeriod })),
           tuitionFee,
           vehicleFee,
@@ -8990,9 +9088,7 @@ function ReceivePayment() {
           : [createFeeLineItem({ description: defaultCategory })];
 
       const next =
-        preferVehicle && tuitionLines.length === 0
-          ? [vehicleLine]
-          : [...tuitionLines, vehicleLine];
+        preferVehicle && tuitionLines.length === 0 ? [vehicleLine] : [...tuitionLines, vehicleLine];
 
       if (!vehicleLine.amount.trim()) {
         const prefill = prefillAmountForFeeLine(
@@ -9111,7 +9207,10 @@ function ReceivePayment() {
           (summary != null && summary.paid > 0 && current === summary.balance);
         const hasPartialBalance = summary != null && summary.paid > 0 && summary.balance > 0;
         const fullyPaid =
-          summary != null && summary.scheduled > 0 && summary.balance <= 0 && summary.paid >= summary.scheduled;
+          summary != null &&
+          summary.scheduled > 0 &&
+          summary.balance <= 0 &&
+          summary.paid >= summary.scheduled;
         const periodMismatch =
           item.feePeriodKind !== pendingPeriod.feePeriodKind ||
           item.feePeriod !== pendingPeriod.feePeriod;
@@ -9192,7 +9291,10 @@ function ReceivePayment() {
                 balanceCtx,
                 prev
                   .filter((line) => line.id !== item.id && line.description === item.description)
-                  .map((line) => ({ feePeriodKind: line.feePeriodKind, feePeriod: line.feePeriod })),
+                  .map((line) => ({
+                    feePeriodKind: line.feePeriodKind,
+                    feePeriod: line.feePeriod,
+                  })),
                 tuitionFee,
                 vehicleFee,
                 collectionStartMonth,
@@ -9329,8 +9431,7 @@ function ReceivePayment() {
       const sameDescItems = prev.filter((item) => item.description === description);
       const newLines: FeeLineItem[] = effectiveSelected.map((choice) => {
         const existing = sameDescItems.find(
-          (item) =>
-            item.feePeriodKind === choice.kind && item.feePeriod === choice.period,
+          (item) => item.feePeriodKind === choice.kind && item.feePeriod === choice.period,
         );
         if (existing) return existing;
         return createFeeLineItem({
@@ -9384,12 +9485,13 @@ function ReceivePayment() {
 
   const updateFeeLine = (id: string, patch: Partial<FeeLineItem>) => {
     setFeeItems((prev) => {
-      if (patch.description && patch.description !== prev.find((line) => line.id === id)?.description) {
+      if (
+        patch.description &&
+        patch.description !== prev.find((line) => line.id === id)?.description
+      ) {
         const target = prev.find((line) => line.id === id);
         if (target && prev.filter((line) => line.description === target.description).length > 1) {
-          prev = prev.filter(
-            (line) => line.description !== target.description || line.id === id,
-          );
+          prev = prev.filter((line) => line.description !== target.description || line.id === id);
         }
       }
       return prev.map((item) => {
@@ -9421,7 +9523,10 @@ function ReceivePayment() {
                 getPrefillBalanceContext(prev),
                 prev
                   .filter((line) => line.id !== id && line.description === patch.description)
-                  .map((line) => ({ feePeriodKind: line.feePeriodKind, feePeriod: line.feePeriod })),
+                  .map((line) => ({
+                    feePeriodKind: line.feePeriodKind,
+                    feePeriod: line.feePeriod,
+                  })),
                 tuitionFee,
                 vehicleFee,
                 collectionStartMonth,
@@ -9434,8 +9539,7 @@ function ReceivePayment() {
             next.customDescription = "";
           }
         }
-        const periodChanged =
-          patch.feePeriodKind !== undefined || patch.feePeriod !== undefined;
+        const periodChanged = patch.feePeriodKind !== undefined || patch.feePeriod !== undefined;
         if (periodChanged || patch.description) {
           const prefill = prefillAmountForFeeLine(
             next,
@@ -9471,16 +9575,13 @@ function ReceivePayment() {
   const addFeeItem = () => {
     const used = new Set(feeItems.map((item) => item.description));
     const ordered = orderedFeeDescriptionOptions(paymentCategories);
-    const nextCat =
-      ordered.find((option) => !used.has(option.value)) ??
+    const nextCat = ordered.find((option) => !used.has(option.value)) ??
       ordered[0] ?? { value: defaultCategory, label: defaultCategory };
     const linePeriodOpts = periodOptsForDescription(nextCat.label);
     const period = defaultFeePeriod(
       feeTerms,
       nextCat.label,
-      isVehicleFeeCategory(nextCat.label)
-        ? matchedRoute?.billingCycle
-        : matchedClass?.billingCycle,
+      isVehicleFeeCategory(nextCat.label) ? matchedRoute?.billingCycle : matchedClass?.billingCycle,
       linePeriodOpts,
       matchedClass,
       isVehicleFeeCategory(nextCat.label) ? matchedRoute : undefined,
@@ -9515,9 +9616,7 @@ function ReceivePayment() {
     setFeeItems((prev) => (prev.length <= 1 ? prev : prev.filter((item) => item.id !== id)));
   };
 
-  const openAddCategoryDialog = (
-    target: { type: "feeLine"; id: string } | { type: "ledger" },
-  ) => {
+  const openAddCategoryDialog = (target: { type: "feeLine"; id: string } | { type: "ledger" }) => {
     blurActiveElement();
     setAddCategoryTarget(target);
     setNewCategoryLabel("");
@@ -9531,9 +9630,7 @@ function ReceivePayment() {
       toast.error("Enter a fee description");
       return;
     }
-    if (
-      paymentCategories.some((c) => c.label.trim().toLowerCase() === label.toLowerCase())
-    ) {
+    if (paymentCategories.some((c) => c.label.trim().toLowerCase() === label.toLowerCase())) {
       toast.error("This fee description already exists");
       return;
     }
@@ -9604,9 +9701,7 @@ function ReceivePayment() {
 
     if (!next.length) return;
     setAttachments((prev) => [...prev, ...next]);
-    toast.success(
-      next.length === 1 ? `${next[0].name} attached` : `${next.length} files attached`,
-    );
+    toast.success(next.length === 1 ? `${next[0].name} attached` : `${next.length} files attached`);
   };
 
   const removeAttachment = (id: string) => {
@@ -9755,12 +9850,13 @@ function ReceivePayment() {
     if (!isExt) {
       const className =
         payment.className ||
-        students.find((s) => s.name.trim().toLowerCase() === payment.name.trim().toLowerCase())?.cls ||
+        students.find((s) => s.name.trim().toLowerCase() === payment.name.trim().toLowerCase())
+          ?.cls ||
         cls;
       setCls(className);
       setStu(payment.name);
       const storedLines = resolvePaymentFeeLines(payment);
-      const lines = (storedLines.length
+      const lines = storedLines.length
         ? storedLines.map((line) =>
             feeLineFromStoredCategory(
               line.description,
@@ -9793,7 +9889,7 @@ function ReceivePayment() {
                 categoryLabels,
                 defaultCategory,
               ),
-            ]);
+            ];
       setFeeItems(
         lines.length
           ? lines
@@ -9878,7 +9974,7 @@ function ReceivePayment() {
     const feeLines = !isExternal ? buildPaymentFeeLines(filledFeeItems) : undefined;
     const nextPayment: Payment = {
       ...editingPayment,
-      name: isExternal ? externalPayer.trim() : selected?.name ?? stu.trim(),
+      name: isExternal ? externalPayer.trim() : (selected?.name ?? stu.trim()),
       cat: primaryCategory,
       mode,
       amount: value,
@@ -9888,7 +9984,7 @@ function ReceivePayment() {
       feePeriod: periodLabel,
       feeMonth: periodLabel,
       payerType: isExternal ? "external" : "student",
-      className: isExternal ? undefined : selected?.cls ?? editingPayment.className ?? cls,
+      className: isExternal ? undefined : (selected?.cls ?? editingPayment.className ?? cls),
       ...(feeLines?.length ? { feeLines } : { feeLines: undefined }),
       ...(note ? { narration: note } : { narration: undefined }),
       ...(receiptAttachments ? { attachments: receiptAttachments } : { attachments: undefined }),
@@ -9989,7 +10085,9 @@ function ReceivePayment() {
         setPayments((prev) => [saved, ...prev.filter((p) => p.id !== saved.id)]);
         toast.success(`Receipt ${saved.id} · ₹ ${value.toLocaleString("en-IN")} captured`, {
           description: `External · ${payer} · ${primaryCategory} · ${periodLabel}${
-            receiptAttachments ? ` · ${receiptAttachments.length} file${receiptAttachments.length === 1 ? "" : "s"}` : ""
+            receiptAttachments
+              ? ` · ${receiptAttachments.length} file${receiptAttachments.length === 1 ? "" : "s"}`
+              : ""
           }`,
         });
         setExternalAmount("");
@@ -10027,13 +10125,7 @@ function ReceivePayment() {
       const kind = categoryFeeTermKind(item.description);
       if (
         (kind === "tuition" || kind === "vehicle") &&
-        isPeriodOnBreak(
-          studentFeeBreaks,
-          selected.id,
-          academicYear,
-          kind,
-          item.feePeriod,
-        )
+        isPeriodOnBreak(studentFeeBreaks, selected.id, academicYear, kind, item.feePeriod)
       ) {
         toast.error(
           `${item.feePeriod} is on fee break for this student — remove the break or pick another period`,
@@ -10113,10 +10205,7 @@ function ReceivePayment() {
   };
 
   const todayTotal = useMemo(
-    () =>
-      payments
-        .filter((p) => isEventToday(p.time))
-        .reduce((sum, p) => sum + p.amount, 0),
+    () => payments.filter((p) => isEventToday(p.time)).reduce((sum, p) => sum + p.amount, 0),
     [payments],
   );
 
@@ -10176,171 +10265,502 @@ function ReceivePayment() {
   return (
     <div className="space-y-4 sm:space-y-5">
       <div ref={recordCardRef}>
-      <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1 pt-0.5">
-            <div className="text-[17px] font-bold leading-tight tracking-tight text-black dark:text-zinc-50 sm:text-title">
-              {editingPayment
-                ? `Edit Receipt ${editingPayment.id}`
-                : isExternal
-                  ? "External payer"
-                  : "Fee Collection"}
+        <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex-1 pt-0.5">
+              <div className="text-[17px] font-bold leading-tight tracking-tight text-black dark:text-zinc-50 sm:text-title">
+                {editingPayment
+                  ? `Edit Receipt ${editingPayment.id}`
+                  : isExternal
+                    ? "External payer"
+                    : "Fee Collection"}
+              </div>
+              {editingPayment && (
+                <p className="mt-1 text-[12px] leading-snug text-black/55 dark:text-zinc-400">
+                  Update this receipt on the same collection form. Student ledger balance adjusts
+                  automatically when the amount changes.
+                </p>
+              )}
             </div>
             {editingPayment && (
-              <p className="mt-1 text-[12px] leading-snug text-black/55 dark:text-zinc-400">
-                Update this receipt on the same collection form. Student ledger balance adjusts
-                automatically when the amount changes.
-              </p>
+              <button
+                type="button"
+                onClick={resetRecordForm}
+                className="inline-flex h-9 shrink-0 items-center rounded-full border border-[#E5E5E5] bg-white px-3.5 text-[12px] font-semibold text-black/70 transition-colors hover:bg-[#F4F4F5] dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200"
+              >
+                Cancel edit
+              </button>
             )}
           </div>
-          {editingPayment && (
-            <button
-              type="button"
-              onClick={resetRecordForm}
-              className="inline-flex h-9 shrink-0 items-center rounded-full border border-[#E5E5E5] bg-white px-3.5 text-[12px] font-semibold text-black/70 transition-colors hover:bg-[#F4F4F5] dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200"
-            >
-              Cancel edit
-            </button>
-          )}
-        </div>
 
-        <input
-          ref={attachmentInputRef}
-          type="file"
-          multiple
-          accept="image/*,.pdf,.jpg,.jpeg,.png,.webp"
-          className="hidden"
-          onChange={(e) => {
-            void addAttachments(e.target.files);
-            e.target.value = "";
-          }}
-        />
+          <input
+            ref={attachmentInputRef}
+            type="file"
+            multiple
+            accept="image/*,.pdf,.jpg,.jpeg,.png,.webp"
+            className="hidden"
+            onChange={(e) => {
+              void addAttachments(e.target.files);
+              e.target.value = "";
+            }}
+          />
 
-        <div className="mt-5 grid grid-cols-12 gap-x-4 gap-y-5 sm:gap-x-5 sm:gap-y-6">
-          <div className="col-span-12">
-            <FieldLabel>Received From</FieldLabel>
-            <div className="flex h-11 w-full gap-1 rounded-full border border-[#E5E5E5] bg-white p-1 dark:border-white/10 dark:bg-zinc-900 sm:h-10">
-              {(
-                [
-                  { key: "student" as const, label: "Student" },
-                  { key: "external" as const, label: "External payer" },
-                ] as const
-              ).map((option) => {
-                const active = payerSource === option.key;
-                return (
-                  <button
-                    key={option.key}
-                    type="button"
-                    onClick={() => setPayerSource(option.key)}
-                    className={cn(
-                      "flex h-full flex-1 items-center justify-center rounded-full px-3 text-[12px] font-medium transition-colors",
-                      active
-                        ? "bg-[#0F766E] text-white"
-                        : "text-black/65 hover:text-black dark:text-zinc-300 dark:hover:text-zinc-50",
-                    )}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
+          <div className="mt-5 grid grid-cols-12 gap-x-4 gap-y-5 sm:gap-x-5 sm:gap-y-6">
+            <div className="col-span-12">
+              <FieldLabel>Received From</FieldLabel>
+              <div className="flex h-11 w-full gap-1 rounded-full border border-[#E5E5E5] bg-white p-1 dark:border-white/10 dark:bg-zinc-900 sm:h-10">
+                {(
+                  [
+                    { key: "student" as const, label: "Student" },
+                    { key: "external" as const, label: "External payer" },
+                  ] as const
+                ).map((option) => {
+                  const active = payerSource === option.key;
+                  return (
+                    <button
+                      key={option.key}
+                      type="button"
+                      onClick={() => setPayerSource(option.key)}
+                      className={cn(
+                        "flex h-full flex-1 items-center justify-center rounded-full px-3 text-[12px] font-medium transition-colors",
+                        active
+                          ? "bg-[#0F766E] text-white"
+                          : "text-black/65 hover:text-black dark:text-zinc-300 dark:hover:text-zinc-50",
+                      )}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
 
-          {isExternal ? (
-            <>
-              <div className="col-span-12 grid grid-cols-12 gap-x-4 gap-y-5 lg:col-span-6 lg:grid-cols-1 lg:gap-y-5">
-                <div className="col-span-12">
-                  <FieldLabel>Donor / payer</FieldLabel>
-                  <Input
-                    value={externalPayer}
-                    onChange={(e) => setExternalPayer(e.target.value)}
-                    placeholder="e.g. Parent Association · Ravi Kumar"
-                    className="h-11 sm:h-10"
+            {isExternal ? (
+              <>
+                <div className="col-span-12 grid grid-cols-12 gap-x-4 gap-y-5 lg:col-span-6 lg:grid-cols-1 lg:gap-y-5">
+                  <div className="col-span-12">
+                    <FieldLabel>Donor / payer</FieldLabel>
+                    <Input
+                      value={externalPayer}
+                      onChange={(e) => setExternalPayer(e.target.value)}
+                      placeholder="e.g. Parent Association · Ravi Kumar"
+                      className="h-11 sm:h-10"
+                    />
+                  </div>
+                  <div className="col-span-12">
+                    <FieldLabel>Amount</FieldLabel>
+                    <input
+                      value={externalAmount}
+                      onChange={(e) => setExternalAmount(e.target.value.replace(/[^0-9]/g, ""))}
+                      inputMode="numeric"
+                      placeholder="0"
+                      className="h-11 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 font-mono text-[15px] font-semibold dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 sm:h-10 sm:text-[13px] sm:font-normal"
+                    />
+                  </div>
+                  <div className="col-span-12 flex flex-col">
+                    <FieldLabel>Narration</FieldLabel>
+                    <Textarea
+                      value={narration}
+                      onChange={(e) => setNarration(e.target.value)}
+                      placeholder="Optional note · purpose, reference, or remarks"
+                      className="min-h-[140px] w-full flex-1 resize-none rounded-lg border border-[#E5E5E5] bg-white px-3 py-2.5 text-[13px]"
+                    />
+                  </div>
+                </div>
+
+                <div className="col-span-12 grid grid-cols-12 gap-x-4 gap-y-5 lg:col-span-6 lg:grid-cols-1">
+                  <div className="col-span-12">
+                    <FieldLabel>Ledger Link</FieldLabel>
+                    <FieldSelect
+                      className="min-w-0"
+                      value={ledgerCategory}
+                      onValueChange={setLedgerCategory}
+                      options={descriptionOptions}
+                      placeholder="Select category"
+                      triggerClassName="h-11 sm:h-10"
+                      onAddNew={() => openAddCategoryDialog({ type: "ledger" })}
+                      addNewLabel="Add new description"
+                    />
+                  </div>
+                  <div className="col-span-12">
+                    <PaymentModeControls
+                      mode={mode}
+                      onModeChange={handleModeChange}
+                      bankSplitAmount={bankSplitAmount}
+                      cashSplitAmount={cashSplitAmount}
+                      onBankChange={setBankSplitAmount}
+                      onCashChange={setCashSplitAmount}
+                    />
+                    {mode === "Both" && !splitOk && recordTotal > 0 && (
+                      <p className="mt-1.5 text-[10.5px] text-red-600">
+                        Bank + Cash must equal ₹ {recordTotal.toLocaleString("en-IN")}
+                      </p>
+                    )}
+                  </div>
+                  <div className="col-span-12 flex flex-col">
+                    <div className="mb-1 flex min-h-[15px] items-center justify-between gap-2">
+                      <FieldLabel className="mb-0">Attachment</FieldLabel>
+                      <span className="text-[10.5px] font-medium text-black/45">
+                        {attachments.length} / {MAX_PAYMENT_ATTACHMENTS}
+                      </span>
+                    </div>
+                    <div className="flex min-h-[140px] flex-1 flex-col rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] p-3 dark:border-white/10 dark:bg-zinc-900/50">
+                      {attachments.length > 0 ? (
+                        <ul className="mb-3 max-h-28 flex-1 space-y-2 overflow-y-auto">
+                          {attachments.map((file) => (
+                            <li
+                              key={file.id}
+                              className="flex items-center gap-2 rounded-lg border border-[#EFEFEF] bg-white px-2.5 py-2 dark:border-white/10 dark:bg-zinc-900"
+                            >
+                              <FileText className="h-3.5 w-3.5 shrink-0 text-black/40" />
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-[12px] font-medium text-black">
+                                  {file.name}
+                                </div>
+                                <div className="font-mono text-[10px] text-black/45">
+                                  {formatAttachmentSize(file.size)}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setPreviewAttachment(file)}
+                                className="inline-flex h-7 items-center rounded-lg border border-slate-200 px-2 text-[10.5px] font-semibold text-black/60 transition-colors hover:bg-slate-50"
+                              >
+                                Open
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => removeAttachment(file.id)}
+                                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-red-200 text-red-600 transition-colors hover:bg-red-50"
+                                aria-label={`Remove ${file.name}`}
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="mb-3 flex-1 text-[12px] leading-snug text-black/45">
+                          Attach bank slips, cheques, or supporting documents.
+                        </p>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => attachmentInputRef.current?.click()}
+                        disabled={attachments.length >= MAX_PAYMENT_ATTACHMENTS}
+                        className="mt-auto inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3.5 text-[12px] font-semibold text-black transition-colors hover:border-black/20 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                      >
+                        <Paperclip className="h-3.5 w-3.5" />
+                        Add files
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="col-span-12 sm:col-span-6">
+                  <FieldLabel>Class</FieldLabel>
+                  <FieldSelect
+                    value={cls}
+                    onValueChange={(next) => {
+                      setCls(next);
+                      if (editingPayment) return;
+                      const first = students
+                        .filter((s) => studentBelongsToClass(s.cls, next))
+                        .sort((a, b) =>
+                          a.name.localeCompare(b.name, "en", { sensitivity: "base" }),
+                        )[0];
+                      setStu(first?.name ?? "");
+                    }}
+                    options={classOptions.map((c) => ({ value: c, label: c }))}
+                    placeholder="Select class"
+                    disabled={classes.length === 0}
+                    searchable
+                    searchPlaceholder="Search class..."
+                    triggerClassName="h-11 sm:h-10"
                   />
                 </div>
-                <div className="col-span-12">
-                  <FieldLabel>Amount</FieldLabel>
-                  <input
-                    value={externalAmount}
-                    onChange={(e) => setExternalAmount(e.target.value.replace(/[^0-9]/g, ""))}
-                    inputMode="numeric"
-                    placeholder="0"
-                    className="h-11 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 font-mono text-[15px] font-semibold dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 sm:h-10 sm:text-[13px] sm:font-normal"
+                <div className="col-span-12 sm:col-span-6">
+                  <FieldLabel>Student</FieldLabel>
+                  <FieldSelect
+                    value={stu}
+                    onValueChange={setStu}
+                    options={studentOptions}
+                    placeholder={
+                      !cls
+                        ? "Select a class first"
+                        : studentsInClass.length
+                          ? "Select student"
+                          : "No students in this class"
+                    }
+                    disabled={!cls || (studentsInClass.length === 0 && !editingPayment)}
+                    searchable
+                    searchPlaceholder="Search student..."
+                    triggerClassName="h-11 sm:h-10"
                   />
                 </div>
-                <div className="col-span-12 flex flex-col">
+
+                {feeItems.map((item, index) => {
+                  const linePeriodOpts = periodOptsForDescription(item.description);
+                  const periodChoices = feePeriodChoices(
+                    feeTerms,
+                    item.description,
+                    linePeriodOpts,
+                    matchedClass,
+                    isVehicleFeeCategory(item.description) ? matchedRoute : undefined,
+                  );
+                  const periodSelectOptions = periodChoices.map((c) => ({
+                    value: c.value,
+                    label: c.label,
+                  }));
+                  const selectedPeriodLabel =
+                    periodChoices.find(
+                      (c) => c.kind === item.feePeriodKind && c.period === item.feePeriod,
+                    )?.label ?? item.feePeriod;
+                  const itemAmount = Number(item.amount) || 0;
+                  const balanceSummary = getFeeLineBalanceSummary(
+                    item,
+                    matchedClass,
+                    feeTerms,
+                    tuitionFee,
+                    vehicleFee,
+                    collectionStartMonth,
+                    matchedRoute,
+                    transportShift,
+                    getPrefillBalanceContext(feeItems),
+                  );
+                  const isPrimaryLine = isPrimaryFeeLineForDescription(feeItems, item.id);
+                  const selectedPeriodValues = selectedPeriodValuesForDescription(
+                    feeItems,
+                    item.description,
+                  );
+                  return (
+                    <div key={item.id} className="col-span-12">
+                      <div className="rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-3.5 shadow-sm dark:border-white/10 dark:bg-zinc-900/50 sm:p-4">
+                        <div className="flex items-start justify-between gap-3 border-b border-[#EFEFEF] pb-3 dark:border-white/10">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[13px] font-semibold text-black dark:text-zinc-100">
+                              Fee item {index + 1}
+                            </div>
+                            <p className="mt-0.5 truncate text-[12px] text-black/50 dark:text-zinc-400">
+                              {feeLineCategoryLabel(item) || "Choose fee and period"}
+                            </p>
+                            {selectedPeriodLabel ? (
+                              <p className="mt-0.5 truncate text-[11px] text-black/40 dark:text-zinc-500">
+                                {selectedPeriodLabel}
+                              </p>
+                            ) : null}
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            {itemAmount > 0 ? (
+                              <span className="rounded-lg bg-white px-2.5 py-1 font-mono text-[13px] font-semibold text-[#0F766E] ring-1 ring-[#99F6E4]/60 dark:bg-zinc-950 dark:text-[#2DD4BF]">
+                                ₹ {itemAmount.toLocaleString("en-IN")}
+                              </span>
+                            ) : null}
+                            {balanceSummary && balanceSummary.paid > 0 ? (
+                              <span className="hidden rounded-lg bg-[#FEF3C7] px-2 py-1 text-[10px] font-semibold text-[#92400E] ring-1 ring-[#FDE68A]/80 sm:inline dark:bg-amber-950/40 dark:text-amber-200">
+                                Bal ₹ {balanceSummary.balance.toLocaleString("en-IN")}
+                              </span>
+                            ) : null}
+                            {feeItems.length > 1 ? (
+                              <button
+                                type="button"
+                                onClick={() => removeFeeItem(item.id)}
+                                aria-label={`Remove fee item ${index + 1}`}
+                                className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:bg-[#FEE2E2] dark:border-rose-500/40 dark:bg-rose-950/50 dark:text-rose-300"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-12 gap-3">
+                          <div className="col-span-12 min-w-0 sm:col-span-5">
+                            <FieldLabel>Fee description</FieldLabel>
+                            <FieldSelect
+                              value={item.description}
+                              onValueChange={(next) =>
+                                updateFeeLine(item.id, { description: next })
+                              }
+                              options={descriptionOptions}
+                              placeholder="Select fee"
+                              triggerClassName="h-11 sm:h-10"
+                              onAddNew={() =>
+                                openAddCategoryDialog({ type: "feeLine", id: item.id })
+                              }
+                              addNewLabel="Add new description"
+                            />
+                          </div>
+                          <div className="col-span-12 min-w-0 sm:col-span-4">
+                            <FieldLabel>
+                              {isPrimaryLine ? "Fee period(s)" : "Fee period"}
+                            </FieldLabel>
+                            {isPrimaryLine ? (
+                              <>
+                                <FeePeriodMultiSelect
+                                  choices={periodSelectOptions}
+                                  selectedValues={selectedPeriodValues}
+                                  onChange={(next) =>
+                                    syncFeePeriodLines(item.description, next, periodChoices)
+                                  }
+                                  disabled={periodChoices.length === 0}
+                                />
+                                <p className="mt-1 min-h-[1rem] text-[10.5px] text-black/45 dark:text-zinc-500">
+                                  {periodChoices.length === 0
+                                    ? selected
+                                      ? "All periods for this fee are on break — manage breaks on the student Payments tab"
+                                      : "No fee periods available"
+                                    : "Select one or more · creates a line for each"}
+                                </p>
+                              </>
+                            ) : (
+                              <div className="flex h-11 items-center rounded-lg border border-[#E5E5E5] bg-[#F4F4F5] px-3 text-[13px] text-black/70 dark:border-white/10 dark:bg-zinc-800/60 dark:text-zinc-300 sm:h-10">
+                                {selectedPeriodLabel || item.feePeriod}
+                              </div>
+                            )}
+                          </div>
+                          <div className="col-span-12 min-w-0 sm:col-span-3">
+                            <FieldLabel>Amount</FieldLabel>
+                            <input
+                              value={item.amount}
+                              onChange={(e) =>
+                                updateFeeLine(item.id, {
+                                  amount: e.target.value.replace(/[^0-9]/g, ""),
+                                })
+                              }
+                              inputMode="numeric"
+                              placeholder="0"
+                              className="h-11 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 font-mono text-[15px] font-semibold dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 sm:h-10 sm:text-[13px] sm:font-normal"
+                            />
+                            <div className="mt-1.5 min-h-[2.75rem]">
+                              {balanceSummary && balanceSummary.paid > 0 ? (
+                                <p className="text-[11px] leading-snug text-black/55 dark:text-zinc-400">
+                                  Fee{" "}
+                                  <span className="font-mono font-semibold text-black/70 dark:text-zinc-200">
+                                    ₹ {balanceSummary.scheduled.toLocaleString("en-IN")}
+                                  </span>
+                                  {" · "}
+                                  Paid{" "}
+                                  <span className="font-mono font-semibold text-[#0F766E]">
+                                    ₹ {balanceSummary.paid.toLocaleString("en-IN")}
+                                  </span>
+                                  {" · "}
+                                  Balance{" "}
+                                  <span className="font-mono font-semibold text-[#B45309] dark:text-amber-300">
+                                    ₹ {balanceSummary.balance.toLocaleString("en-IN")}
+                                  </span>
+                                </p>
+                              ) : balanceSummary && balanceSummary.scheduled > 0 ? (
+                                <p className="text-[11px] text-black/45 dark:text-zinc-500">
+                                  Scheduled fee ₹ {balanceSummary.scheduled.toLocaleString("en-IN")}
+                                </p>
+                              ) : null}
+                            </div>
+                          </div>
+                          {isOtherFeeDescription(item.description) ? (
+                            <div className="col-span-12 min-w-0">
+                              <Input
+                                value={item.customDescription}
+                                onChange={(e) =>
+                                  updateFeeLine(item.id, { customDescription: e.target.value })
+                                }
+                                placeholder="Describe this fee"
+                                className="h-10 border-red-200 text-[12px] text-red-700 placeholder:text-red-400"
+                              />
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                <div className="col-span-12">
+                  <button
+                    type="button"
+                    onClick={addFeeItem}
+                    className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#0F766E]/35 bg-[#F0FDFA]/60 text-[13px] font-semibold text-[#0F766E] transition-colors hover:border-[#0F766E]/50 hover:bg-[#F0FDFA] dark:border-teal-500/30 dark:bg-teal-950/20 dark:text-[#2DD4BF] dark:hover:bg-teal-950/35"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add fee item
+                  </button>
+                </div>
+
+                <div className="col-span-12 flex items-center justify-between gap-4 rounded-xl border border-[#E8E8EA] bg-[#F8F8F9] px-4 py-3.5 dark:border-white/10 dark:bg-zinc-900/80">
+                  <div className="min-w-0">
+                    <FieldLabel className="mb-0.5">Total Amount</FieldLabel>
+                    <div className="text-[13px] text-black/65 dark:text-zinc-300">
+                      {amountToIndianWords(recordTotal)}
+                    </div>
+                  </div>
+                  <div className="shrink-0 rounded-lg border border-[#E5E5E5] bg-white px-3.5 py-2 font-mono text-[16px] font-semibold text-black dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-50">
+                    {recordTotal.toLocaleString("en-IN")}
+                  </div>
+                </div>
+
+                <div className="col-span-12 flex flex-col lg:col-span-7">
                   <FieldLabel>Narration</FieldLabel>
                   <Textarea
                     value={narration}
                     onChange={(e) => setNarration(e.target.value)}
                     placeholder="Optional note · purpose, reference, or remarks"
-                    className="min-h-[140px] w-full flex-1 resize-none rounded-lg border border-[#E5E5E5] bg-white px-3 py-2.5 text-[13px]"
+                    className="min-h-[140px] w-full flex-1 resize-none rounded-lg border border-[#E5E5E5] bg-white px-3 py-2.5 text-[13px] lg:min-h-[168px]"
                   />
                 </div>
-              </div>
 
-              <div className="col-span-12 grid grid-cols-12 gap-x-4 gap-y-5 lg:col-span-6 lg:grid-cols-1">
-                <div className="col-span-12">
-                  <FieldLabel>Ledger Link</FieldLabel>
-                  <FieldSelect
-                    className="min-w-0"
-                    value={ledgerCategory}
-                    onValueChange={setLedgerCategory}
-                    options={descriptionOptions}
-                    placeholder="Select category"
-                    triggerClassName="h-11 sm:h-10"
-                    onAddNew={() => openAddCategoryDialog({ type: "ledger" })}
-                    addNewLabel="Add new description"
-                  />
-                </div>
-                <div className="col-span-12">
-                  <PaymentModeControls
-                    mode={mode}
-                    onModeChange={handleModeChange}
-                    bankSplitAmount={bankSplitAmount}
-                    cashSplitAmount={cashSplitAmount}
-                    onBankChange={setBankSplitAmount}
-                    onCashChange={setCashSplitAmount}
-                  />
-                  {mode === "Both" && !splitOk && recordTotal > 0 && (
-                    <p className="mt-1.5 text-[10.5px] text-red-600">
-                      Bank + Cash must equal ₹ {recordTotal.toLocaleString("en-IN")}
-                    </p>
-                  )}
-                </div>
-                <div className="col-span-12 flex flex-col">
-                  <div className="mb-1 flex min-h-[15px] items-center justify-between gap-2">
-                    <FieldLabel className="mb-0">Attachment</FieldLabel>
-                    <span className="text-[10.5px] font-medium text-black/45">
-                      {attachments.length} / {MAX_PAYMENT_ATTACHMENTS}
-                    </span>
+                <div className="col-span-12 space-y-4 lg:col-span-5">
+                  <div>
+                    <PaymentModeControls
+                      mode={mode}
+                      onModeChange={handleModeChange}
+                      bankSplitAmount={bankSplitAmount}
+                      cashSplitAmount={cashSplitAmount}
+                      onBankChange={setBankSplitAmount}
+                      onCashChange={setCashSplitAmount}
+                    />
+                    {mode === "Both" && !splitOk && recordTotal > 0 && (
+                      <p className="mt-1.5 text-[10.5px] text-red-600">
+                        Bank + Cash must equal ₹ {recordTotal.toLocaleString("en-IN")}
+                      </p>
+                    )}
                   </div>
-                  <div className="flex min-h-[140px] flex-1 flex-col rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] p-3 dark:border-white/10 dark:bg-zinc-900/50">
-                    {attachments.length > 0 ? (
-                      <ul className="mb-3 max-h-28 flex-1 space-y-2 overflow-y-auto">
+                  <div>
+                    <FieldLabel>Date / Time</FieldLabel>
+                    <div className="flex items-center gap-2">
+                      <ReceiptDateTimePicker value={receiptTime} onChange={setReceiptTime} />
+                      <button
+                        type="button"
+                        onClick={() => attachmentInputRef.current?.click()}
+                        disabled={attachments.length >= MAX_PAYMENT_ATTACHMENTS}
+                        className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-[#E5E5E5] bg-white text-black/70 transition-colors hover:bg-[#F4F4F5] disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-zinc-900 sm:h-10 sm:w-10"
+                        aria-label="Add files"
+                        title="Add files"
+                      >
+                        <Paperclip className="h-4 w-4" />
+                      </button>
+                    </div>
+                    {attachments.length > 0 && (
+                      <ul className="mt-2 space-y-1.5">
                         {attachments.map((file) => (
                           <li
                             key={file.id}
-                            className="flex items-center gap-2 rounded-lg border border-[#EFEFEF] bg-white px-2.5 py-2 dark:border-white/10 dark:bg-zinc-900"
+                            className="flex items-center gap-2 rounded-lg border border-[#EFEFEF] bg-white px-2.5 py-1.5 dark:border-white/10 dark:bg-zinc-900"
                           >
                             <FileText className="h-3.5 w-3.5 shrink-0 text-black/40" />
-                            <div className="min-w-0 flex-1">
-                              <div className="truncate text-[12px] font-medium text-black">{file.name}</div>
-                              <div className="font-mono text-[10px] text-black/45">
-                                {formatAttachmentSize(file.size)}
-                              </div>
-                            </div>
+                            <span className="min-w-0 flex-1 truncate text-[12px]">{file.name}</span>
                             <button
                               type="button"
                               onClick={() => setPreviewAttachment(file)}
-                              className="inline-flex h-7 items-center rounded-lg border border-slate-200 px-2 text-[10.5px] font-semibold text-black/60 transition-colors hover:bg-slate-50"
+                              className="text-[10.5px] font-semibold text-black/55 hover:text-black"
                             >
                               Open
                             </button>
                             <button
                               type="button"
                               onClick={() => removeAttachment(file.id)}
-                              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-red-200 text-red-600 transition-colors hover:bg-red-50"
+                              className="text-red-600"
                               aria-label={`Remove ${file.name}`}
                             >
                               <X className="h-3.5 w-3.5" />
@@ -10348,374 +10768,48 @@ function ReceivePayment() {
                           </li>
                         ))}
                       </ul>
-                    ) : (
-                      <p className="mb-3 flex-1 text-[12px] leading-snug text-black/45">
-                        Attach bank slips, cheques, or supporting documents.
-                      </p>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => attachmentInputRef.current?.click()}
-                      disabled={attachments.length >= MAX_PAYMENT_ATTACHMENTS}
-                      className="mt-auto inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3.5 text-[12px] font-semibold text-black transition-colors hover:border-black/20 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-                    >
-                      <Paperclip className="h-3.5 w-3.5" />
-                      Add files
-                    </button>
                   </div>
                 </div>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="col-span-12 sm:col-span-6">
-                <FieldLabel>Class</FieldLabel>
-                <FieldSelect
-                  value={cls}
-                  onValueChange={(next) => {
-                    setCls(next);
-                    if (editingPayment) return;
-                    const first = students
-                      .filter((s) => studentBelongsToClass(s.cls, next))
-                      .sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" }))[0];
-                    setStu(first?.name ?? "");
-                  }}
-                  options={classOptions.map((c) => ({ value: c, label: c }))}
-                  placeholder="Select class"
-                  disabled={classes.length === 0}
-                  searchable
-                  searchPlaceholder="Search class..."
-                  triggerClassName="h-11 sm:h-10"
-                />
-              </div>
-              <div className="col-span-12 sm:col-span-6">
-                <FieldLabel>Student</FieldLabel>
-                <FieldSelect
-                  value={stu}
-                  onValueChange={setStu}
-                  options={studentOptions}
-                  placeholder={
-                    !cls
-                      ? "Select a class first"
-                      : studentsInClass.length
-                        ? "Select student"
-                        : "No students in this class"
-                  }
-                  disabled={!cls || (studentsInClass.length === 0 && !editingPayment)}
-                  searchable
-                  searchPlaceholder="Search student..."
-                  triggerClassName="h-11 sm:h-10"
-                />
-              </div>
-
-              {feeItems.map((item, index) => {
-                const linePeriodOpts = periodOptsForDescription(item.description);
-                const periodChoices = feePeriodChoices(
-                  feeTerms,
-                  item.description,
-                  linePeriodOpts,
-                  matchedClass,
-                  isVehicleFeeCategory(item.description) ? matchedRoute : undefined,
-                );
-                const periodSelectOptions = periodChoices.map((c) => ({
-                  value: c.value,
-                  label: c.label,
-                }));
-                const selectedPeriodLabel =
-                  periodChoices.find(
-                    (c) => c.kind === item.feePeriodKind && c.period === item.feePeriod,
-                  )?.label ?? item.feePeriod;
-                const itemAmount = Number(item.amount) || 0;
-                const balanceSummary = getFeeLineBalanceSummary(
-                  item,
-                  matchedClass,
-                  feeTerms,
-                  tuitionFee,
-                  vehicleFee,
-                  collectionStartMonth,
-                  matchedRoute,
-                  transportShift,
-                  getPrefillBalanceContext(feeItems),
-                );
-                const isPrimaryLine = isPrimaryFeeLineForDescription(feeItems, item.id);
-                const selectedPeriodValues = selectedPeriodValuesForDescription(
-                  feeItems,
-                  item.description,
-                );
-                return (
-                  <div key={item.id} className="col-span-12">
-                    <div className="rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-3.5 shadow-sm dark:border-white/10 dark:bg-zinc-900/50 sm:p-4">
-                      <div className="flex items-start justify-between gap-3 border-b border-[#EFEFEF] pb-3 dark:border-white/10">
-                        <div className="min-w-0 flex-1">
-                          <div className="text-[13px] font-semibold text-black dark:text-zinc-100">
-                            Fee item {index + 1}
-                          </div>
-                          <p className="mt-0.5 truncate text-[12px] text-black/50 dark:text-zinc-400">
-                            {feeLineCategoryLabel(item) || "Choose fee and period"}
-                          </p>
-                          {selectedPeriodLabel ? (
-                            <p className="mt-0.5 truncate text-[11px] text-black/40 dark:text-zinc-500">
-                              {selectedPeriodLabel}
-                            </p>
-                          ) : null}
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          {itemAmount > 0 ? (
-                            <span className="rounded-lg bg-white px-2.5 py-1 font-mono text-[13px] font-semibold text-[#0F766E] ring-1 ring-[#99F6E4]/60 dark:bg-zinc-950 dark:text-[#2DD4BF]">
-                              ₹ {itemAmount.toLocaleString("en-IN")}
-                            </span>
-                          ) : null}
-                          {balanceSummary && balanceSummary.paid > 0 ? (
-                            <span className="hidden rounded-lg bg-[#FEF3C7] px-2 py-1 text-[10px] font-semibold text-[#92400E] ring-1 ring-[#FDE68A]/80 sm:inline dark:bg-amber-950/40 dark:text-amber-200">
-                              Bal ₹ {balanceSummary.balance.toLocaleString("en-IN")}
-                            </span>
-                          ) : null}
-                          {feeItems.length > 1 ? (
-                            <button
-                              type="button"
-                              onClick={() => removeFeeItem(item.id)}
-                              aria-label={`Remove fee item ${index + 1}`}
-                              className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:bg-[#FEE2E2] dark:border-rose-500/40 dark:bg-rose-950/50 dark:text-rose-300"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          ) : null}
-                        </div>
-                      </div>
-
-                      <div className="mt-3 grid grid-cols-12 gap-3">
-                        <div className="col-span-12 min-w-0 sm:col-span-5">
-                          <FieldLabel>Fee description</FieldLabel>
-                          <FieldSelect
-                            value={item.description}
-                            onValueChange={(next) => updateFeeLine(item.id, { description: next })}
-                            options={descriptionOptions}
-                            placeholder="Select fee"
-                            triggerClassName="h-11 sm:h-10"
-                            onAddNew={() => openAddCategoryDialog({ type: "feeLine", id: item.id })}
-                            addNewLabel="Add new description"
-                          />
-                        </div>
-                        <div className="col-span-12 min-w-0 sm:col-span-4">
-                          <FieldLabel>
-                            {isPrimaryLine ? "Fee period(s)" : "Fee period"}
-                          </FieldLabel>
-                          {isPrimaryLine ? (
-                            <>
-                              <FeePeriodMultiSelect
-                                choices={periodSelectOptions}
-                                selectedValues={selectedPeriodValues}
-                                onChange={(next) =>
-                                  syncFeePeriodLines(item.description, next, periodChoices)
-                                }
-                                disabled={periodChoices.length === 0}
-                              />
-                              <p className="mt-1 min-h-[1rem] text-[10.5px] text-black/45 dark:text-zinc-500">
-                                {periodChoices.length === 0
-                                  ? selected
-                                    ? "All periods for this fee are on break — manage breaks on the student Payments tab"
-                                    : "No fee periods available"
-                                  : "Select one or more · creates a line for each"}
-                              </p>
-                            </>
-                          ) : (
-                            <div className="flex h-11 items-center rounded-lg border border-[#E5E5E5] bg-[#F4F4F5] px-3 text-[13px] text-black/70 dark:border-white/10 dark:bg-zinc-800/60 dark:text-zinc-300 sm:h-10">
-                              {selectedPeriodLabel || item.feePeriod}
-                            </div>
-                          )}
-                        </div>
-                        <div className="col-span-12 min-w-0 sm:col-span-3">
-                          <FieldLabel>Amount</FieldLabel>
-                          <input
-                            value={item.amount}
-                            onChange={(e) =>
-                              updateFeeLine(item.id, {
-                                amount: e.target.value.replace(/[^0-9]/g, ""),
-                              })
-                            }
-                            inputMode="numeric"
-                            placeholder="0"
-                            className="h-11 w-full rounded-lg border border-[#E5E5E5] bg-white px-3 font-mono text-[15px] font-semibold dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 sm:h-10 sm:text-[13px] sm:font-normal"
-                          />
-                          <div className="mt-1.5 min-h-[2.75rem]">
-                          {balanceSummary && balanceSummary.paid > 0 ? (
-                            <p className="text-[11px] leading-snug text-black/55 dark:text-zinc-400">
-                              Fee{" "}
-                              <span className="font-mono font-semibold text-black/70 dark:text-zinc-200">
-                                ₹ {balanceSummary.scheduled.toLocaleString("en-IN")}
-                              </span>
-                              {" · "}
-                              Paid{" "}
-                              <span className="font-mono font-semibold text-[#0F766E]">
-                                ₹ {balanceSummary.paid.toLocaleString("en-IN")}
-                              </span>
-                              {" · "}
-                              Balance{" "}
-                              <span className="font-mono font-semibold text-[#B45309] dark:text-amber-300">
-                                ₹ {balanceSummary.balance.toLocaleString("en-IN")}
-                              </span>
-                            </p>
-                          ) : balanceSummary && balanceSummary.scheduled > 0 ? (
-                            <p className="text-[11px] text-black/45 dark:text-zinc-500">
-                              Scheduled fee ₹ {balanceSummary.scheduled.toLocaleString("en-IN")}
-                            </p>
-                          ) : null}
-                          </div>
-                        </div>
-                        {isOtherFeeDescription(item.description) ? (
-                          <div className="col-span-12 min-w-0">
-                            <Input
-                              value={item.customDescription}
-                              onChange={(e) =>
-                                updateFeeLine(item.id, { customDescription: e.target.value })
-                              }
-                              placeholder="Describe this fee"
-                              className="h-10 border-red-200 text-[12px] text-red-700 placeholder:text-red-400"
-                            />
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-
-              <div className="col-span-12">
-                <button
-                  type="button"
-                  onClick={addFeeItem}
-                  className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#0F766E]/35 bg-[#F0FDFA]/60 text-[13px] font-semibold text-[#0F766E] transition-colors hover:border-[#0F766E]/50 hover:bg-[#F0FDFA] dark:border-teal-500/30 dark:bg-teal-950/20 dark:text-[#2DD4BF] dark:hover:bg-teal-950/35"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add fee item
-                </button>
-              </div>
-
-              <div className="col-span-12 flex items-center justify-between gap-4 rounded-xl border border-[#E8E8EA] bg-[#F8F8F9] px-4 py-3.5 dark:border-white/10 dark:bg-zinc-900/80">
-                <div className="min-w-0">
-                  <FieldLabel className="mb-0.5">Total Amount</FieldLabel>
-                  <div className="text-[13px] text-black/65 dark:text-zinc-300">
-                    {amountToIndianWords(recordTotal)}
-                  </div>
-                </div>
-                <div className="shrink-0 rounded-lg border border-[#E5E5E5] bg-white px-3.5 py-2 font-mono text-[16px] font-semibold text-black dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-50">
-                  {recordTotal.toLocaleString("en-IN")}
-                </div>
-              </div>
-
-              <div className="col-span-12 flex flex-col lg:col-span-7">
-                <FieldLabel>Narration</FieldLabel>
-                <Textarea
-                  value={narration}
-                  onChange={(e) => setNarration(e.target.value)}
-                  placeholder="Optional note · purpose, reference, or remarks"
-                  className="min-h-[140px] w-full flex-1 resize-none rounded-lg border border-[#E5E5E5] bg-white px-3 py-2.5 text-[13px] lg:min-h-[168px]"
-                />
-              </div>
-
-              <div className="col-span-12 space-y-4 lg:col-span-5">
-                <div>
-                  <PaymentModeControls
-                    mode={mode}
-                    onModeChange={handleModeChange}
-                    bankSplitAmount={bankSplitAmount}
-                    cashSplitAmount={cashSplitAmount}
-                    onBankChange={setBankSplitAmount}
-                    onCashChange={setCashSplitAmount}
-                  />
-                  {mode === "Both" && !splitOk && recordTotal > 0 && (
-                    <p className="mt-1.5 text-[10.5px] text-red-600">
-                      Bank + Cash must equal ₹ {recordTotal.toLocaleString("en-IN")}
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <FieldLabel>Date / Time</FieldLabel>
-                  <div className="flex items-center gap-2">
-                    <ReceiptDateTimePicker
-                      value={receiptTime}
-                      onChange={setReceiptTime}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => attachmentInputRef.current?.click()}
-                      disabled={attachments.length >= MAX_PAYMENT_ATTACHMENTS}
-                      className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-[#E5E5E5] bg-white text-black/70 transition-colors hover:bg-[#F4F4F5] disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-zinc-900 sm:h-10 sm:w-10"
-                      aria-label="Add files"
-                      title="Add files"
-                    >
-                      <Paperclip className="h-4 w-4" />
-                    </button>
-                  </div>
-                  {attachments.length > 0 && (
-                    <ul className="mt-2 space-y-1.5">
-                      {attachments.map((file) => (
-                        <li
-                          key={file.id}
-                          className="flex items-center gap-2 rounded-lg border border-[#EFEFEF] bg-white px-2.5 py-1.5 dark:border-white/10 dark:bg-zinc-900"
-                        >
-                          <FileText className="h-3.5 w-3.5 shrink-0 text-black/40" />
-                          <span className="min-w-0 flex-1 truncate text-[12px]">{file.name}</span>
-                          <button
-                            type="button"
-                            onClick={() => setPreviewAttachment(file)}
-                            className="text-[10.5px] font-semibold text-black/55 hover:text-black"
-                          >
-                            Open
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => removeAttachment(file.id)}
-                            className="text-red-600"
-                            aria-label={`Remove ${file.name}`}
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="mt-5 flex flex-col gap-3 rounded-xl border border-[#E8E8EA] bg-[#F8F8F9] p-4 dark:border-white/10 dark:bg-zinc-900/80 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:p-5">
-          <div className="min-w-0 text-[13px] leading-relaxed text-black/65 dark:text-zinc-300">
-            <div className="font-semibold text-black dark:text-zinc-50">
-              {editingPayment ? `${editingPayment.id} · ${summaryName}` : summaryName}
-            </div>
-            <div className="mt-0.5 break-words text-[12px]">
-              {isExternal
-                ? `External — ${primaryCategory} ${currentFeeMonth()} — ${mode}`
-                : `${cls} · ${primaryPeriod}`}
-            </div>
-            <div className="mt-0.5 text-[12px] text-black/45">{receiptTime}</div>
+              </>
+            )}
           </div>
-          <div className="flex items-center gap-3 sm:shrink-0">
-            <div className="rounded-lg border border-[#E5E5E5] bg-white px-3.5 py-2 font-mono text-[16px] font-semibold text-black dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-50">
-              {recordTotal.toLocaleString("en-IN")}
+
+          <div className="mt-5 flex flex-col gap-3 rounded-xl border border-[#E8E8EA] bg-[#F8F8F9] p-4 dark:border-white/10 dark:bg-zinc-900/80 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:p-5">
+            <div className="min-w-0 text-[13px] leading-relaxed text-black/65 dark:text-zinc-300">
+              <div className="font-semibold text-black dark:text-zinc-50">
+                {editingPayment ? `${editingPayment.id} · ${summaryName}` : summaryName}
+              </div>
+              <div className="mt-0.5 break-words text-[12px]">
+                {isExternal
+                  ? `External — ${primaryCategory} ${currentFeeMonth()} — ${mode}`
+                  : `${cls} · ${primaryPeriod}`}
+              </div>
+              <div className="mt-0.5 text-[12px] text-black/45">{receiptTime}</div>
             </div>
-            <button
-              type="button"
-              onClick={editingPayment ? saveEditedHistoryPayment : () => void handleRecord()}
-              disabled={!canSubmit || savingReceipt}
-              className="inline-flex h-12 min-w-[140px] flex-1 items-center justify-center rounded-full bg-[#0F766E] px-8 text-[14px] font-semibold tracking-tight text-white shadow-[0_8px_24px_-10px_rgba(15,118,110,0.45)] transition-all hover:bg-[#0D9488] hover:shadow-[0_10px_28px_-10px_rgba(15,118,110,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none sm:flex-none"
-            >
-              {savingReceipt ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : editingPayment ? (
-                "Save changes"
-              ) : isExternal ? (
-                "Record"
-              ) : (
-                "Record Payment"
-              )}
-            </button>
+            <div className="flex items-center gap-3 sm:shrink-0">
+              <div className="rounded-lg border border-[#E5E5E5] bg-white px-3.5 py-2 font-mono text-[16px] font-semibold text-black dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-50">
+                {recordTotal.toLocaleString("en-IN")}
+              </div>
+              <button
+                type="button"
+                onClick={editingPayment ? saveEditedHistoryPayment : () => void handleRecord()}
+                disabled={!canSubmit || savingReceipt}
+                className="inline-flex h-12 min-w-[140px] flex-1 items-center justify-center rounded-full bg-[#0F766E] px-8 text-[14px] font-semibold tracking-tight text-white shadow-[0_8px_24px_-10px_rgba(15,118,110,0.45)] transition-all hover:bg-[#0D9488] hover:shadow-[0_10px_28px_-10px_rgba(15,118,110,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none sm:flex-none"
+              >
+                {savingReceipt ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : editingPayment ? (
+                  "Save changes"
+                ) : isExternal ? (
+                  "Record"
+                ) : (
+                  "Record Payment"
+                )}
+              </button>
+            </div>
           </div>
-        </div>
-      </OrganicCard>
+        </OrganicCard>
       </div>
 
       <OrganicCard tone="white" cornerSide="bl" padded className={workspacePanelClass}>
@@ -10762,9 +10856,7 @@ function ReceivePayment() {
         <div className="mt-4 space-y-2.5 md:hidden">
           {filteredPayments.length === 0 && (
             <div className="rounded-xl border border-dashed border-[#E5E5E5] bg-white/60 px-4 py-8 text-center text-[12px] text-black/55 dark:text-zinc-400">
-              {payments.length === 0
-                ? "No receipts recorded yet"
-                : "No receipts match your search"}
+              {payments.length === 0 ? "No receipts recorded yet" : "No receipts match your search"}
             </div>
           )}
           {filteredPayments.map((p) => (
@@ -10779,7 +10871,9 @@ function ReceivePayment() {
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="truncate text-[13.5px] font-semibold text-slate-900">{p.name}</div>
+                  <div className="truncate text-[13.5px] font-semibold text-slate-900">
+                    {p.name}
+                  </div>
                   <div className="mt-0.5 truncate text-[11px] text-black/45">
                     {p.payerType === "external"
                       ? "External payer"
@@ -10893,23 +10987,28 @@ function ReceivePayment() {
           <table className="w-full min-w-[760px] text-left text-[12.5px]">
             <thead>
               <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5] dark:border-white/10 dark:bg-zinc-800/80">
-                {["Account", "Category", "Period", "Mode", "Amount", "Time", "Actions"].map((header) => (
-                  <th
-                    key={header}
-                    className={cn(
-                      "px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400",
-                      header === "Actions" && "text-right",
-                    )}
-                  >
-                    {header}
-                  </th>
-                ))}
+                {["Account", "Category", "Period", "Mode", "Amount", "Time", "Actions"].map(
+                  (header) => (
+                    <th
+                      key={header}
+                      className={cn(
+                        "px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400",
+                        header === "Actions" && "text-right",
+                      )}
+                    >
+                      {header}
+                    </th>
+                  ),
+                )}
               </tr>
             </thead>
             <tbody>
               {filteredPayments.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-[12px] text-black/55 dark:text-zinc-400">
+                  <td
+                    colSpan={7}
+                    className="px-3 py-8 text-center text-[12px] text-black/55 dark:text-zinc-400"
+                  >
                     {payments.length === 0
                       ? "No receipts recorded yet"
                       : "No receipts match your search"}
@@ -10953,7 +11052,9 @@ function ReceivePayment() {
                   <td className="px-3 py-3 font-mono font-semibold text-black">
                     +₹ {p.amount.toLocaleString("en-IN")}
                   </td>
-                  <td className="px-3 py-3 font-mono text-[11px] text-black/55 dark:text-zinc-400">{formatEventDateTime(p.time)}</td>
+                  <td className="px-3 py-3 font-mono text-[11px] text-black/55 dark:text-zinc-400">
+                    {formatEventDateTime(p.time)}
+                  </td>
                   <td className="px-3 py-3 text-right">
                     <div className="inline-flex items-center justify-end gap-1.5">
                       <button
@@ -11141,11 +11242,7 @@ function StaffSearchSelect({
   const selected = currentStaff.find((member) => member.id === value);
   const formatStaff = (member: Staff) =>
     `${member.name} · ${member.id} · ${member.role}${member.dept ? ` · ${member.dept}` : ""}`;
-  const label = selected
-    ? formatStaff(selected)
-    : allowNone && !value
-      ? noneLabel
-      : placeholder;
+  const label = selected ? formatStaff(selected) : allowNone && !value ? noneLabel : placeholder;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -11187,37 +11284,40 @@ function StaffSearchSelect({
                   className="cursor-pointer rounded-md text-[13px]"
                 >
                   <Check
-                    className={cn("mr-2 h-3.5 w-3.5 shrink-0", !value ? "opacity-100" : "opacity-0")}
+                    className={cn(
+                      "mr-2 h-3.5 w-3.5 shrink-0",
+                      !value ? "opacity-100" : "opacity-0",
+                    )}
                   />
                   {noneLabel}
                 </CommandItem>
               )}
               {currentStaff.map((member) => (
-                  <CommandItem
-                    key={member.id}
-                    value={`${member.name} ${member.id} ${member.role} ${member.dept ?? ""}`}
-                    onSelect={() => {
-                      onChange(member.id);
-                      setOpen(false);
-                    }}
-                    className="cursor-pointer rounded-md text-[13px]"
-                  >
-                    <Check
-                      className={cn(
-                        "mr-2 h-3.5 w-3.5 shrink-0",
-                        value === member.id ? "opacity-100" : "opacity-0",
-                      )}
-                    />
-                    <span className="min-w-0 flex-1 truncate">
-                      <span className="font-medium text-black">{member.name}</span>
-                      <span className="text-black/45">
-                        {" "}
-                        · {member.id} · {member.role}
-                        {member.dept ? ` · ${member.dept}` : ""}
-                      </span>
+                <CommandItem
+                  key={member.id}
+                  value={`${member.name} ${member.id} ${member.role} ${member.dept ?? ""}`}
+                  onSelect={() => {
+                    onChange(member.id);
+                    setOpen(false);
+                  }}
+                  className="cursor-pointer rounded-md text-[13px]"
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-3.5 w-3.5 shrink-0",
+                      value === member.id ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                  <span className="min-w-0 flex-1 truncate">
+                    <span className="font-medium text-black">{member.name}</span>
+                    <span className="text-black/45">
+                      {" "}
+                      · {member.id} · {member.role}
+                      {member.dept ? ` · ${member.dept}` : ""}
                     </span>
-                  </CommandItem>
-                ))}
+                  </span>
+                </CommandItem>
+              ))}
             </CommandGroup>
           </CommandList>
         </Command>
@@ -11236,13 +11336,9 @@ function MakePayment() {
   const [selectedObligationId, setSelectedObligationId] = useState<string | null>(
     search.staffId ? null : null,
   );
-  const [payeeType, setPayeeType] = useState<PayeeType>(
-    search.staffId ? "Salary" : "Salary",
-  );
+  const [payeeType, setPayeeType] = useState<PayeeType>(search.staffId ? "Salary" : "Salary");
   const [selectedStaffId, setSelectedStaffId] = useState<string>(search.staffId ?? "");
-  const [salaryMonth, setSalaryMonth] = useState(
-    () => search.month ?? currentPayrollMonth(),
-  );
+  const [salaryMonth, setSalaryMonth] = useState(() => search.month ?? currentPayrollMonth());
   const [daysPresent, setDaysPresent] = useState("");
   const [workingDays, setWorkingDays] = useState("");
   const [paidLeaveDays, setPaidLeaveDays] = useState("");
@@ -11367,32 +11463,16 @@ function MakePayment() {
     setBeneficiary(member.name);
     setSalaryMonth(month);
     const { payable, gross, attendance, payableDays } = staffPayableSalary(member, month);
-    const present =
-      opts?.daysPresent ??
-      attendance?.daysPresent ??
-      0;
-    const working =
-      opts?.workingDays ??
-      attendance?.workingDays ??
-      26;
-    const paidLeave =
-      opts?.paidLeaveDays ??
-      attendance?.paidLeaveDays ??
-      0;
-    const unpaidLeave =
-      opts?.unpaidLeaveDays ??
-      attendance?.unpaidLeaveDays ??
-      0;
+    const present = opts?.daysPresent ?? attendance?.daysPresent ?? 0;
+    const working = opts?.workingDays ?? attendance?.workingDays ?? 26;
+    const paidLeave = opts?.paidLeaveDays ?? attendance?.paidLeaveDays ?? 0;
+    const unpaidLeave = opts?.unpaidLeaveDays ?? attendance?.unpaidLeaveDays ?? 0;
     setDaysPresent(String(present));
     setWorkingDays(String(working));
     setPaidLeaveDays(String(paidLeave));
     setUnpaidLeaveDays(String(unpaidLeave));
-    const payDays =
-      working > 0
-        ? Math.max(0, Math.min(present + paidLeave, working))
-        : 0;
-    const computed =
-      working > 0 ? Math.round(gross * (payDays / working)) : gross;
+    const payDays = working > 0 ? Math.max(0, Math.min(present + paidLeave, working)) : 0;
+    const computed = working > 0 ? Math.round(gross * (payDays / working)) : gross;
     const nextAmount = opts?.amount ?? (attendance ? computed : payable);
     if (nextAmount > 0) {
       setAmount(String(nextAmount));
@@ -11406,12 +11486,7 @@ function MakePayment() {
         `Salary · ${member.role}${member.dept ? ` · ${member.dept}` : ""}${attendanceNote}`,
       );
     }
-    if (
-      !opts?.skipToast &&
-      opts?.amount === undefined &&
-      working > 0 &&
-      computed !== gross
-    ) {
+    if (!opts?.skipToast && opts?.amount === undefined && working > 0 && computed !== gross) {
       toast.message("Payroll adjusted for attendance", {
         description: `Gross ₹ ${gross.toLocaleString("en-IN")} → payable ₹ ${computed.toLocaleString("en-IN")} (${payDays || payableDays}/${working})`,
       });
@@ -11566,11 +11641,7 @@ function MakePayment() {
 
     if (!next.length) return;
     setAttachments((prev) => [...prev, ...next]);
-    toast.success(
-      next.length === 1
-        ? `${next[0].name} attached`
-        : `${next.length} files attached`,
-    );
+    toast.success(next.length === 1 ? `${next[0].name} attached` : `${next.length} files attached`);
   };
 
   const removeAttachment = (id: string) => {
@@ -11983,12 +12054,7 @@ function MakePayment() {
     }
     if (
       modeValue === "Both" &&
-      !splitMatchesTotal(
-        modeValue,
-        bankSplitAmount,
-        cashSplitAmount,
-        nextAmount,
-      )
+      !splitMatchesTotal(modeValue, bankSplitAmount, cashSplitAmount, nextAmount)
     ) {
       toast.error("Bank and cash amounts must add up to the total");
       return;
@@ -12019,9 +12085,7 @@ function MakePayment() {
       status: disbursalEditForm.status,
       time,
     };
-    setMadePayments((prev) =>
-      prev.map((p) => (p.id === editingDisbursal.id ? nextDisbursal : p)),
-    );
+    setMadePayments((prev) => prev.map((p) => (p.id === editingDisbursal.id ? nextDisbursal : p)));
     void apiUpdateDisbursement(nextDisbursal).catch((err) =>
       toast.error("Could not update disbursement on server", {
         description: err instanceof Error ? err.message : "Save failed",
@@ -12045,7 +12109,12 @@ function MakePayment() {
 
   return (
     <div className="grid grid-cols-12 gap-4 sm:gap-5">
-      <OrganicCard tone="white" cornerSide="tr" padded className={cn(workspacePanelClass, "col-span-12 lg:col-span-8")}>
+      <OrganicCard
+        tone="white"
+        cornerSide="tr"
+        padded
+        className={cn(workspacePanelClass, "col-span-12 lg:col-span-8")}
+      >
         <div className="min-w-0">
           <DashboardPanelHeading icon={ArrowUpFromLine} title="Make Payment" />
         </div>
@@ -12087,8 +12156,7 @@ function MakePayment() {
               />
             )}
             {payeeType === "Salary" && selectedStaffId && (
-              <div className="mt-1.5 text-[11px] text-black/45">
-              </div>
+              <div className="mt-1.5 text-[11px] text-black/45"></div>
             )}
           </div>
           {payeeType === "Salary" && (
@@ -12221,7 +12289,9 @@ function MakePayment() {
                     >
                       <FileText className="h-3.5 w-3.5 shrink-0 text-black/40" />
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-[12px] font-medium text-black">{file.name}</div>
+                        <div className="truncate text-[12px] font-medium text-black">
+                          {file.name}
+                        </div>
                         <div className="font-mono text-[10px] text-black/45">
                           {formatAttachmentSize(file.size)}
                         </div>
@@ -12283,7 +12353,12 @@ function MakePayment() {
         </div>
       </OrganicCard>
 
-      <OrganicCard tone="white" cornerSide="bl" padded className={cn(workspacePanelClass, "col-span-12 lg:col-span-4")}>
+      <OrganicCard
+        tone="white"
+        cornerSide="bl"
+        padded
+        className={cn(workspacePanelClass, "col-span-12 lg:col-span-4")}
+      >
         <DashboardPanelHeading icon={AlertTriangle} title="Top Pending Obligations" />
         <div className="mt-3 space-y-3">
           {obligations.length === 0 && (
@@ -12328,7 +12403,12 @@ function MakePayment() {
         </div>
       </OrganicCard>
 
-      <OrganicCard tone="white" cornerSide="br" padded className={cn(workspacePanelClass, "col-span-12")}>
+      <OrganicCard
+        tone="white"
+        cornerSide="br"
+        padded
+        className={cn(workspacePanelClass, "col-span-12")}
+      >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <DashboardPanelHeading icon={CheckCircle2} title="Made Payment Details" />
@@ -12423,7 +12503,9 @@ function MakePayment() {
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
-                  <span className="font-mono text-[10.5px] text-black/55 dark:text-zinc-400">{formatEventDateTime(payment.time)}</span>
+                  <span className="font-mono text-[10.5px] text-black/55 dark:text-zinc-400">
+                    {formatEventDateTime(payment.time)}
+                  </span>
                 </div>
               </div>
               {(payment.attachments?.length ?? 0) > 0 && (
@@ -12460,9 +12542,7 @@ function MakePayment() {
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Edit Payment</DialogTitle>
-            <DialogDescription>
-              Update disbursal {editingDisbursal?.id}.
-            </DialogDescription>
+            <DialogDescription>Update disbursal {editingDisbursal?.id}.</DialogDescription>
           </DialogHeader>
           <form onSubmit={saveEditedDisbursal} className="space-y-3">
             <div className="space-y-1.5">
@@ -12599,8 +12679,7 @@ function MakePayment() {
                     { label: "Today", getDate: (t) => t },
                     {
                       label: "Yesterday",
-                      getDate: (t) =>
-                        new Date(t.getFullYear(), t.getMonth(), t.getDate() - 1),
+                      getDate: (t) => new Date(t.getFullYear(), t.getMonth(), t.getDate() - 1),
                     },
                   ]}
                 />
@@ -12627,17 +12706,17 @@ function MakePayment() {
             <p className="text-[11px] text-black/45">
               Saves as{" "}
               <span className="font-mono text-black/70">
-                {formatReceiptDateTimeFromParts(
-                  disbursalEditForm.date,
-                  disbursalEditForm.clock,
-                )}
+                {formatReceiptDateTimeFromParts(disbursalEditForm.date, disbursalEditForm.clock)}
               </span>
             </p>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditingDisbursal(null)}>
                 Cancel
               </Button>
-              <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
+              <Button
+                type="submit"
+                className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+              >
                 Save changes
               </Button>
             </DialogFooter>
@@ -12728,11 +12807,7 @@ function LedgerAnalytics() {
   return (
     <div className="grid grid-cols-12 gap-3 sm:gap-4 lg:gap-5">
       <div className="col-span-6 min-w-0">
-        <FinanceDonutCard
-          title="Income Distribution"
-          cornerSide="tr"
-          segments={incomeSegments}
-        />
+        <FinanceDonutCard title="Income Distribution" cornerSide="tr" segments={incomeSegments} />
       </div>
       <div className="col-span-6 min-w-0">
         <FinanceDonutCard
@@ -12742,11 +12817,7 @@ function LedgerAnalytics() {
         />
       </div>
       <div className="col-span-6 min-w-0">
-        <FinanceBarCard
-          title="Income by Category"
-          cornerSide="tr"
-          segments={incomeSegments}
-        />
+        <FinanceBarCard title="Income by Category" cornerSide="tr" segments={incomeSegments} />
       </div>
       <div className="col-span-6 min-w-0">
         <FinanceBarCard
@@ -12963,10 +13034,7 @@ export function SchoolSettings() {
           schoolDetails={schoolDetails}
           setSchoolDetails={setSchoolDetails}
           onDirtyChange={setSchoolDirty}
-          onBindActions={(actions: {
-            save: () => Promise<boolean>;
-            discard: () => void;
-          }) => {
+          onBindActions={(actions: { save: () => Promise<boolean>; discard: () => void }) => {
             schoolActionsRef.current = actions;
           }}
         />
@@ -13103,8 +13171,8 @@ export function SchoolSettings() {
         </>
       )}
 
-      {activeTab === "system" && (
-        hydrated && !branchSyncing ? (
+      {activeTab === "system" &&
+        (hydrated && !branchSyncing ? (
           <div className="grid grid-cols-12 gap-3 sm:gap-4 lg:gap-5">
             <CategoriesCard
               academicYears={academicYears}
@@ -13125,8 +13193,7 @@ export function SchoolSettings() {
           </div>
         ) : (
           <TenantSystemSkeleton />
-        )
-      )}
+        ))}
 
       {activeTab === "support" && <CustomerSupportCard onBackToSettings={backToMenu} />}
     </>
@@ -13150,7 +13217,11 @@ export function SchoolSettings() {
               )}
             >
               {logoUrl ? (
-                <img src={logoUrl} alt={tenantName} className="h-full w-full bg-white object-contain p-0.5" />
+                <img
+                  src={logoUrl}
+                  alt={tenantName}
+                  className="h-full w-full bg-white object-contain p-0.5"
+                />
               ) : (
                 initials
               )}
@@ -13159,19 +13230,26 @@ export function SchoolSettings() {
               <div className="truncate text-[15px] font-semibold text-slate-900 dark:text-zinc-50">
                 {session?.displayName ?? "Admin"}
               </div>
-              <div className="truncate text-[12px] text-slate-500 dark:text-zinc-400">{session?.email}</div>
+              <div className="truncate text-[12px] text-slate-500 dark:text-zinc-400">
+                {session?.email}
+              </div>
             </div>
           </div>
 
           <ul className="border-t border-slate-100 dark:border-white/10">
             {settingsTabs.map((tab) => (
-              <li key={tab.id} className="border-b border-slate-100 last:border-b-0 dark:border-white/10">
+              <li
+                key={tab.id}
+                className="border-b border-slate-100 last:border-b-0 dark:border-white/10"
+              >
                 <button
                   type="button"
                   onClick={() => setTab(tab.id)}
                   className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left transition-colors active:bg-slate-50 dark:active:bg-white/5"
                 >
-                  <span className="text-[15px] font-medium text-slate-900 dark:text-zinc-100">{tab.label}</span>
+                  <span className="text-[15px] font-medium text-slate-900 dark:text-zinc-100">
+                    {tab.label}
+                  </span>
                   <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 dark:text-zinc-500" />
                 </button>
               </li>
@@ -13559,7 +13637,10 @@ function DepartmentsCard({
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
+              <Button
+                type="submit"
+                className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+              >
                 {editingId ? "Save" : "Add Department"}
               </Button>
             </DialogFooter>
@@ -13616,9 +13697,7 @@ function RolesCard({
     if (editingId) {
       const previous = roles.find((r) => r.id === editingId);
       const updated = { id: editingId, title, departmentId: form.departmentId };
-      setRoles((prev) =>
-        prev.map((r) => (r.id === editingId ? updated : r)),
-      );
+      setRoles((prev) => prev.map((r) => (r.id === editingId ? updated : r)));
       if (previous && previous.title !== title) {
         setStaff((prev) =>
           prev.map((s) => (s.role === previous.title ? { ...s, role: title } : s)),
@@ -13675,8 +13754,12 @@ function RolesCard({
               className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5 dark:border-white/10 dark:bg-zinc-900/70"
             >
               <div className="min-w-0">
-                <div className="truncate text-[13px] font-semibold text-black dark:text-zinc-100">{r.title}</div>
-                <div className="text-[11.5px] text-black/55 dark:text-zinc-400">{dept?.name ?? "Unassigned"}</div>
+                <div className="truncate text-[13px] font-semibold text-black dark:text-zinc-100">
+                  {r.title}
+                </div>
+                <div className="text-[11.5px] text-black/55 dark:text-zinc-400">
+                  {dept?.name ?? "Unassigned"}
+                </div>
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
                 <button
@@ -13751,7 +13834,10 @@ function RolesCard({
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
+              <Button
+                type="submit"
+                className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+              >
                 {editingId ? "Save" : "Add Role"}
               </Button>
             </DialogFooter>
@@ -13781,10 +13867,7 @@ function LeaveTypesCard({
   });
 
   const sorted = useMemo(
-    () =>
-      [...leaveTypes].sort(
-        (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name),
-      ),
+    () => [...leaveTypes].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)),
     [leaveTypes],
   );
 
@@ -13829,11 +13912,7 @@ function LeaveTypesCard({
       toast.error("Leave name and code are required");
       return;
     }
-    if (
-      leaveTypes.some(
-        (t) => t.code === code && t.id !== editingId,
-      )
-    ) {
+    if (leaveTypes.some((t) => t.code === code && t.id !== editingId)) {
       toast.error("Leave code already exists on this campus");
       return;
     }
@@ -13917,9 +13996,7 @@ function LeaveTypesCard({
     }
     setLeaveTypes((prev) => [...prev, ...created]);
     created.forEach(persist);
-    toast.success(
-      `Added ${created.length} leave type${created.length === 1 ? "" : "s"}`,
-    );
+    toast.success(`Added ${created.length} leave type${created.length === 1 ? "" : "s"}`);
   };
 
   return (
@@ -13970,9 +14047,7 @@ function LeaveTypesCard({
                 </div>
                 <div className="font-mono text-[10.5px] uppercase tracking-wider text-black/45 dark:text-zinc-400">
                   {t.code}
-                  {t.annualAllowanceDays !== null
-                    ? ` · ${t.annualAllowanceDays} days / year`
-                    : ""}
+                  {t.annualAllowanceDays !== null ? ` · ${t.annualAllowanceDays} days / year` : ""}
                 </div>
               </div>
             </div>
@@ -14085,7 +14160,9 @@ function LeaveTypesCard({
             </div>
             <div className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3 py-2.5 dark:border-white/10 dark:bg-zinc-900/70">
               <div>
-                <div className="text-[13px] font-semibold text-black dark:text-zinc-100">Active</div>
+                <div className="text-[13px] font-semibold text-black dark:text-zinc-100">
+                  Active
+                </div>
                 <div className="text-[11.5px] text-black/55 dark:text-zinc-400">
                   Inactive types stay in history but are hidden from new entries
                 </div>
@@ -14099,7 +14176,10 @@ function LeaveTypesCard({
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
+              <Button
+                type="submit"
+                className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+              >
                 {editingId ? "Save" : "Add Leave Type"}
               </Button>
             </DialogFooter>
@@ -14175,7 +14255,9 @@ function ClassesCard({
   );
 
   const teacherName = (id?: string) =>
-    id ? teacherOptions.find((m) => m.id === id)?.name ?? staff.find((m) => m.id === id)?.name : undefined;
+    id
+      ? (teacherOptions.find((m) => m.id === id)?.name ?? staff.find((m) => m.id === id)?.name)
+      : undefined;
 
   const defaultInstallmentCount = (cycle: Extract<ClassBillingCycle, "Monthly" | "Term">) => {
     const mode = cycle === "Term" ? "term" : "month";
@@ -14203,8 +14285,7 @@ function ClassesCard({
             return {
               id: row?.id || `fl-i-${index + 1}`,
               kind: "installment" as const,
-              label:
-                row?.label?.trim() || installmentLabel(index, form.billingCycle),
+              label: row?.label?.trim() || installmentLabel(index, form.billingCycle),
               amount: fixed,
               ...(row?.dueDate?.trim() ? { dueDate: row.dueDate.trim() } : {}),
             };
@@ -14239,10 +14320,7 @@ function ClassesCard({
       return {
         id: existing?.id || `fl-i-${index + 1}`,
         label: existing?.label || installmentLabel(index, prev.billingCycle),
-        amount:
-          mode === "fixed"
-            ? prev.fixedAmount
-            : existing?.amount || prev.fixedAmount || "",
+        amount: mode === "fixed" ? prev.fixedAmount : existing?.amount || prev.fixedAmount || "",
         dueDate: existing?.dueDate || "",
       };
     });
@@ -14254,19 +14332,13 @@ function ClassesCard({
       return {
         id: existing?.id || `fl-i-${index + 1}`,
         label: existing?.label || installmentLabel(index, form.billingCycle),
-        amount:
-          form.feeAmountMode === "fixed"
-            ? form.fixedAmount
-            : existing?.amount || "",
+        amount: form.feeAmountMode === "fixed" ? form.fixedAmount : existing?.amount || "",
         dueDate: existing?.dueDate || "",
       };
     });
   }, [form]);
 
-  const patchInstallmentRow = (
-    index: number,
-    patch: Partial<FeeDraftRow>,
-  ) => {
+  const patchInstallmentRow = (index: number, patch: Partial<FeeDraftRow>) => {
     setForm((prev) => {
       const count = Math.max(1, Math.floor(Number(prev.installmentCount) || 0));
       const rows = ensureInstallmentRows(prev, count);
@@ -14355,8 +14427,7 @@ function ClassesCard({
       feeAmountMode:
         normalized.feeAmountMode === "custom" || uniqueAmounts.length > 1 ? "custom" : "fixed",
       feeCollectionStartMonth:
-        normalized.feeCollectionStartMonth?.trim() ||
-        defaultFeeCollectionStartMonth(feeTerms),
+        normalized.feeCollectionStartMonth?.trim() || defaultFeeCollectionStartMonth(feeTerms),
       installmentCount: String(installments.length || defaultInstallmentCount(cycle)),
       fixedAmount: String(installments[0]?.amount || ""),
       installments: installments.map((line) => ({
@@ -14426,9 +14497,7 @@ function ClassesCard({
     if (editingId) {
       const previous = classes.find((c) => c.id === editingId);
       const updated = { ...next, id: editingId };
-      setClasses((prev) =>
-        prev.map((c) => (c.id === editingId ? { ...c, ...next } : c)),
-      );
+      setClasses((prev) => prev.map((c) => (c.id === editingId ? { ...c, ...next } : c)));
       if (previous && previous.className !== className) {
         setStudents((prev) =>
           prev.map((s) => (s.cls === previous.className ? { ...s, cls: className } : s)),
@@ -14799,8 +14868,7 @@ function ClassesCard({
                                   return {
                                     id: existing?.id || `fl-i-${index + 1}`,
                                     label:
-                                      existing?.label ||
-                                      installmentLabel(index, prev.billingCycle),
+                                      existing?.label || installmentLabel(index, prev.billingCycle),
                                     amount:
                                       option.key === "fixed"
                                         ? prev.fixedAmount || existing?.amount || ""
@@ -14819,9 +14887,7 @@ function ClassesCard({
                             }}
                             className={cn(
                               "flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors",
-                              active
-                                ? "bg-[#0F766E] text-white"
-                                : "text-black/65 hover:text-black",
+                              active ? "bg-[#0F766E] text-white" : "text-black/65 hover:text-black",
                             )}
                           >
                             {option.label}
@@ -14866,9 +14932,7 @@ function ClassesCard({
                     {form.feeAmountMode === "fixed" ? (
                       <div className="space-y-1.5">
                         <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                          {form.billingCycle === "Term"
-                            ? "Amount per term (₹)"
-                            : "Amount each (₹)"}
+                          {form.billingCycle === "Term" ? "Amount per term (₹)" : "Amount each (₹)"}
                         </Label>
                         <Input
                           inputMode="numeric"
@@ -14899,8 +14963,8 @@ function ClassesCard({
                     ) : (
                       <div className="flex items-end">
                         <p className="pb-2 text-[12px] text-black/45">
-                          Set each {form.billingCycle === "Term" ? "term" : "installment"} amount
-                          in the schedule below.
+                          Set each {form.billingCycle === "Term" ? "term" : "installment"} amount in
+                          the schedule below.
                         </p>
                       </div>
                     )}
@@ -14979,9 +15043,7 @@ function ClassesCard({
                         />
                         {form.feeAmountMode === "fixed" ? (
                           <div className="flex h-9 items-center rounded-md border border-[#EFEFEF] bg-[#F7F7F8] px-2.5 font-mono text-[13px] text-black/70">
-                            {row.amount
-                              ? `₹ ${Number(row.amount).toLocaleString("en-IN")}`
-                              : "—"}
+                            {row.amount ? `₹ ${Number(row.amount).toLocaleString("en-IN")}` : "—"}
                           </div>
                         ) : (
                           <Input
@@ -15154,8 +15216,7 @@ function ClassesCard({
                         { label: "Today", getDate: (t) => t },
                         {
                           label: "+30d",
-                          getDate: (t) =>
-                            new Date(t.getFullYear(), t.getMonth(), t.getDate() + 30),
+                          getDate: (t) => new Date(t.getFullYear(), t.getMonth(), t.getDate() + 30),
                         },
                       ]}
                     />
@@ -15191,7 +15252,10 @@ function ClassesCard({
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
+              <Button
+                type="submit"
+                className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+              >
                 {editingId ? "Save Changes" : "Add Class"}
               </Button>
             </DialogFooter>
@@ -15278,9 +15342,7 @@ function VehicleCard({
   ) => {
     setForm((prev) => ({
       ...prev,
-      documents: prev.documents.map((doc) =>
-        doc.kind === kind ? { ...doc, ...patch } : doc,
-      ),
+      documents: prev.documents.map((doc) => (doc.kind === kind ? { ...doc, ...patch } : doc)),
     }));
   };
 
@@ -15381,9 +15443,7 @@ function VehicleCard({
     };
     if (editingId) {
       const updated: TransportVehicle = { id: editingId, ...payload };
-      setTransportVehicles((prev) =>
-        prev.map((v) => (v.id === editingId ? updated : v)),
-      );
+      setTransportVehicles((prev) => prev.map((v) => (v.id === editingId ? updated : v)));
       void apiUpsertVehicle(updated).catch((err) =>
         toast.error(err instanceof Error ? err.message : "Could not sync vehicle"),
       );
@@ -15435,7 +15495,20 @@ function VehicleCard({
     if (!iso) return null;
     const match = iso.slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (!match) return iso;
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const months = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ];
     return `${Number(match[3])} ${months[Number(match[2]) - 1]} ${match[1]}`;
   };
 
@@ -15461,382 +15534,258 @@ function VehicleCard({
   return (
     <>
       {detailMeta ? (
-      <OrganicCard
-        tone="white"
-        cornerSide="tr"
-        padded
-        className={cn(workspacePanelClass, "col-span-12")}
-      >
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex min-w-0 items-start gap-2.5 sm:gap-3">
-            <button
-              type="button"
-              onClick={() => setDetailId(null)}
-              aria-label="Back to vehicle list"
-              className={cn(
-                glassInsetClass,
-                "inline-flex h-9 w-9 shrink-0 items-center justify-center text-slate-700 transition-colors hover:text-[#0F766E] sm:h-10 sm:w-auto sm:gap-1.5 sm:px-3",
-              )}
-            >
-              <ChevronLeft className="h-4 w-4 shrink-0" />
-              <span className="hidden text-[13px] font-semibold sm:inline">Back</span>
-            </button>
-            <div className="min-w-0 pt-0.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#0F766E] text-white">
-                  <Bus className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="truncate text-[18px] font-bold leading-tight tracking-tight text-black sm:text-[20px]">
-                      {detailMeta.v.name}
-                    </h2>
-                    {detailMeta.alert && (
-                      <AlertTriangle
-                        className={cn(
-                          "h-4 w-4 shrink-0",
-                          detailMeta.alert === "expired" ? "text-[#EF4444]" : "text-[#D97706]",
-                        )}
-                      />
-                    )}
-                  </div>
-                  <p className="mt-0.5 font-mono text-[12px] text-black/50">
-                    {detailMeta.v.registrationNo}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-            <span
-              className={cn(
-                "inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider",
-                detailMeta.v.active ? "bg-[#0F766E] text-white" : "bg-black/10 text-black/50",
-              )}
-            >
-              {detailMeta.v.active ? "Active" : "Idle"}
-            </span>
-            <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-black/60 dark:text-zinc-400">
-              {detailMeta.v.ownership === "rental" ? "Rental" : "Owned"}
-            </span>
-            <button
-              type="button"
-              onClick={() => startEdit(detailMeta.v)}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 text-[12px] font-semibold text-black/70 transition-colors hover:bg-[#F4F4F5] hover:text-black"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-              Edit
-            </button>
-            <button
-              type="button"
-              onClick={() => setPendingDelete(detailMeta.v)}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#FECACA] bg-[#FEF2F2] px-3 text-[12px] font-semibold text-[#EF4444] transition-colors hover:bg-[#FEE2E2]"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              Delete
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-5 grid grid-cols-12 gap-3">
-          <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4 sm:col-span-6 lg:col-span-4">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-              Driver
-            </div>
-            <div className="mt-1.5 text-[14px] font-medium text-black">
-              {detailMeta.v.driverName || (
-                <span className="font-normal text-black/40">Not assigned</span>
-              )}
-            </div>
-            <div className="mt-1 font-mono text-[12px] text-black/55 dark:text-zinc-400">
-              {detailMeta.v.driverPhone || "No phone on file"}
-            </div>
-          </div>
-          <div className="col-span-6 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4 lg:col-span-4">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-              Seat Capacity
-            </div>
-            <div className="mt-1.5 font-mono text-[18px] font-bold text-black">
-              {detailMeta.v.capacity}
-            </div>
-          </div>
-          <div className="col-span-6 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4 lg:col-span-4">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-              Vehicle ID
-            </div>
-            <div className="mt-1.5 font-mono text-[14px] font-semibold text-black">
-              {detailMeta.v.id}
-            </div>
-          </div>
-
-          <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4">
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                Assigned Routes
-              </div>
-              <span className="font-mono text-[10.5px] text-black/45">
-                {detailMeta.assignedRoutes.length} linked
-              </span>
-            </div>
-            {detailMeta.assignedRoutes.length === 0 ? (
-              <p className="mt-3 text-[13px] text-black/45">No routes assigned to this vehicle.</p>
-            ) : (
-              <ul className="mt-3 space-y-2">
-                {detailMeta.assignedRoutes.map((r) => (
-                  <li
-                    key={r.id}
-                    className="rounded-xl border border-[#E8E8EA] bg-white px-3.5 py-2.5 text-[13px] font-medium text-black"
-                  >
-                    {r.mapFrom} → {r.mapTo}
-                    <div className="mt-1 font-mono text-[10.5px] font-normal text-black/45">
-                      Morning ₹{r.morningFee.toLocaleString("en-IN")} · Evening ₹
-                      {r.eveningFee.toLocaleString("en-IN")} · Both ₹
-                      {r.bothFee.toLocaleString("en-IN")}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                <Paperclip className="h-3.5 w-3.5" />
-                Documents & Validity
-              </div>
-              <span className="font-mono text-[10.5px] text-black/45">
-                {detailMeta.docs.filter((d) => d.file || d.validUntil).length} /{" "}
-                {detailMeta.docs.length} on file
-              </span>
-            </div>
-            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {detailMeta.docs.map((doc) => {
-                const days = doc.validUntil ? daysUntilDate(doc.validUntil) : null;
-                const warn = doc.notifyDaysBefore ?? DEFAULT_VEHICLE_NOTIFY_DAYS;
-                const status =
-                  days === null
-                    ? null
-                    : days < 0
-                      ? "expired"
-                      : days <= warn
-                        ? "soon"
-                        : "ok";
-                return (
-                  <div
-                    key={doc.kind}
-                    className="rounded-lg border border-[#E8E8EA] bg-white p-3.5"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="text-[12.5px] font-semibold text-black">
-                        {VEHICLE_DOCUMENT_LABELS[doc.kind]}
-                      </div>
-                      {status && (
-                        <span
-                          className={cn(
-                            "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[9.5px] font-semibold uppercase",
-                            status === "expired"
-                              ? "bg-[#FEE2E2] text-[#B91C1C]"
-                              : status === "soon"
-                                ? "bg-[#FEF3C7] text-[#B45309]"
-                                : "bg-[#D1F2E1] text-[#047857]",
-                          )}
-                        >
-                          {status === "expired"
-                            ? "Expired"
-                            : status === "soon"
-                              ? `${days}d left`
-                              : "Valid"}
-                        </span>
-                      )}
-                    </div>
-                    <div className="mt-2 grid grid-cols-2 gap-2 text-[12px]">
-                      <div>
-                        <div className="text-[10px] font-semibold uppercase tracking-wider text-black/40">
-                          Valid until
-                        </div>
-                        <div className="mt-0.5 font-mono text-black/75">
-                          {formatValidUntil(doc.validUntil) ?? "—"}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-[10px] font-semibold uppercase tracking-wider text-black/40">
-                          Alert window
-                        </div>
-                        <div className="mt-0.5 font-mono text-black/75">
-                          {doc.notifyDaysBefore ?? DEFAULT_VEHICLE_NOTIFY_DAYS} days
-                        </div>
-                      </div>
-                    </div>
-                    <div className="mt-2.5">
-                      {doc.file ? (
-                        <a
-                          href={doc.file.dataUrl}
-                          download={doc.file.name}
-                          target="_blank"
-                          rel="noreferrer noopener"
-                          className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/80 px-2.5 py-2 transition-colors hover:bg-slate-100"
-                        >
-                          <FileText className="h-3.5 w-3.5 shrink-0 text-black/40" />
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate text-[12px] font-medium text-black">
-                              {doc.file.name}
-                            </div>
-                            <div className="font-mono text-[10px] text-black/45">
-                              {formatAttachmentSize(doc.file.size)}
-                            </div>
-                          </div>
-                          <ExternalLink className="h-3.5 w-3.5 shrink-0 text-black/40" />
-                        </a>
-                      ) : (
-                        <p className="rounded-xl border border-dashed border-slate-200 px-2.5 py-2 text-[12px] text-black/40">
-                          No file attached
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </OrganicCard>
-      ) : (
-
-    <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
-      <CardHeader
-        title="Vehicle Management"
-        subtitle={`${activeCount} active · ${transportVehicles.length} total in fleet`}
-        actionLabel="Add Vehicle"
-        onAction={startCreate}
-      />
-
-      {listLayout === "cards" ? (
-      <div className="mt-4 space-y-2.5">
-        {transportVehicles.length === 0 && <EmptyRow label="No vehicles in fleet yet" />}
-        {transportVehicles.map((v) => {
-          const alert = docAlert(v);
-          return (
-            <div
-              key={v.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => setDetailId(v.id)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  setDetailId(v.id);
-                }
-              }}
-              aria-label={`Open details for ${v.name}`}
-              className="flex w-full cursor-pointer flex-col gap-2.5 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 text-left transition-colors active:bg-[#F4F4F5]"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-2.5">
+        <OrganicCard
+          tone="white"
+          cornerSide="tr"
+          padded
+          className={cn(workspacePanelClass, "col-span-12")}
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex min-w-0 items-start gap-2.5 sm:gap-3">
+              <button
+                type="button"
+                onClick={() => setDetailId(null)}
+                aria-label="Back to vehicle list"
+                className={cn(
+                  glassInsetClass,
+                  "inline-flex h-9 w-9 shrink-0 items-center justify-center text-slate-700 transition-colors hover:text-[#0F766E] sm:h-10 sm:w-auto sm:gap-1.5 sm:px-3",
+                )}
+              >
+                <ChevronLeft className="h-4 w-4 shrink-0" />
+                <span className="hidden text-[13px] font-semibold sm:inline">Back</span>
+              </button>
+              <div className="min-w-0 pt-0.5">
+                <div className="flex flex-wrap items-center gap-2">
                   <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#0F766E] text-white">
                     <Bus className="h-5 w-5" />
                   </div>
                   <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="truncate text-[14px] font-semibold text-black">{v.name}</span>
-                      {alert && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="truncate text-[18px] font-bold leading-tight tracking-tight text-black sm:text-[20px]">
+                        {detailMeta.v.name}
+                      </h2>
+                      {detailMeta.alert && (
                         <AlertTriangle
                           className={cn(
-                            "h-3.5 w-3.5 shrink-0",
-                            alert === "expired" ? "text-[#EF4444]" : "text-[#D97706]",
+                            "h-4 w-4 shrink-0",
+                            detailMeta.alert === "expired" ? "text-[#EF4444]" : "text-[#D97706]",
                           )}
                         />
                       )}
                     </div>
-                    <div className="mt-0.5 truncate text-[12px] text-black/50">
-                      {v.driverName ?? "No driver assigned"}
-                    </div>
+                    <p className="mt-0.5 font-mono text-[12px] text-black/50">
+                      {detailMeta.v.registrationNo}
+                    </p>
                   </div>
-                </div>
-                <span
-                  className={cn(
-                    "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider",
-                    v.active ? "bg-[#0F766E] text-white" : "bg-black/10 text-black/50",
-                  )}
-                >
-                  {v.active ? "Active" : "Idle"}
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-1.5 text-[11.5px] text-black/60 dark:text-zinc-400">
-                <span className="font-mono font-medium text-black/75">{v.registrationNo}</span>
-                <span className="text-black/30">·</span>
-                <span>{v.capacity} seats</span>
-                <span className="text-black/30">·</span>
-                <span>{v.ownership === "rental" ? "Rental" : "Owned"}</span>
-              </div>
-              <div className="flex items-center justify-between gap-2 border-t border-[#EFEFEF] pt-2">
-                <span className="min-w-0 truncate text-[11px] text-black/45" title={routesLabel(v.routeIds)}>
-                  {v.routeIds.length === 0 ? "No routes" : routesLabel(v.routeIds)}
-                </span>
-                <div className="flex shrink-0 items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      startEdit(v);
-                    }}
-                    aria-label={`Edit vehicle ${v.name}`}
-                    className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 dark:text-zinc-400"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setPendingDelete(v);
-                    }}
-                    aria-label={`Delete vehicle ${v.name}`}
-                    className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444]"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
                 </div>
               </div>
             </div>
-          );
-        })}
-      </div>
+            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+              <span
+                className={cn(
+                  "inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider",
+                  detailMeta.v.active ? "bg-[#0F766E] text-white" : "bg-black/10 text-black/50",
+                )}
+              >
+                {detailMeta.v.active ? "Active" : "Idle"}
+              </span>
+              <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-black/60 dark:text-zinc-400">
+                {detailMeta.v.ownership === "rental" ? "Rental" : "Owned"}
+              </span>
+              <button
+                type="button"
+                onClick={() => startEdit(detailMeta.v)}
+                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 text-[12px] font-semibold text-black/70 transition-colors hover:bg-[#F4F4F5] hover:text-black"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Edit
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingDelete(detailMeta.v)}
+                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#FECACA] bg-[#FEF2F2] px-3 text-[12px] font-semibold text-[#EF4444] transition-colors hover:bg-[#FEE2E2]"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-5 grid grid-cols-12 gap-3">
+            <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4 sm:col-span-6 lg:col-span-4">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                Driver
+              </div>
+              <div className="mt-1.5 text-[14px] font-medium text-black">
+                {detailMeta.v.driverName || (
+                  <span className="font-normal text-black/40">Not assigned</span>
+                )}
+              </div>
+              <div className="mt-1 font-mono text-[12px] text-black/55 dark:text-zinc-400">
+                {detailMeta.v.driverPhone || "No phone on file"}
+              </div>
+            </div>
+            <div className="col-span-6 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4 lg:col-span-4">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                Seat Capacity
+              </div>
+              <div className="mt-1.5 font-mono text-[18px] font-bold text-black">
+                {detailMeta.v.capacity}
+              </div>
+            </div>
+            <div className="col-span-6 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4 lg:col-span-4">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                Vehicle ID
+              </div>
+              <div className="mt-1.5 font-mono text-[14px] font-semibold text-black">
+                {detailMeta.v.id}
+              </div>
+            </div>
+
+            <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                  Assigned Routes
+                </div>
+                <span className="font-mono text-[10.5px] text-black/45">
+                  {detailMeta.assignedRoutes.length} linked
+                </span>
+              </div>
+              {detailMeta.assignedRoutes.length === 0 ? (
+                <p className="mt-3 text-[13px] text-black/45">
+                  No routes assigned to this vehicle.
+                </p>
+              ) : (
+                <ul className="mt-3 space-y-2">
+                  {detailMeta.assignedRoutes.map((r) => (
+                    <li
+                      key={r.id}
+                      className="rounded-xl border border-[#E8E8EA] bg-white px-3.5 py-2.5 text-[13px] font-medium text-black"
+                    >
+                      {r.mapFrom} → {r.mapTo}
+                      <div className="mt-1 font-mono text-[10.5px] font-normal text-black/45">
+                        Morning ₹{r.morningFee.toLocaleString("en-IN")} · Evening ₹
+                        {r.eveningFee.toLocaleString("en-IN")} · Both ₹
+                        {r.bothFee.toLocaleString("en-IN")}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="col-span-12 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                  <Paperclip className="h-3.5 w-3.5" />
+                  Documents & Validity
+                </div>
+                <span className="font-mono text-[10.5px] text-black/45">
+                  {detailMeta.docs.filter((d) => d.file || d.validUntil).length} /{" "}
+                  {detailMeta.docs.length} on file
+                </span>
+              </div>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {detailMeta.docs.map((doc) => {
+                  const days = doc.validUntil ? daysUntilDate(doc.validUntil) : null;
+                  const warn = doc.notifyDaysBefore ?? DEFAULT_VEHICLE_NOTIFY_DAYS;
+                  const status =
+                    days === null ? null : days < 0 ? "expired" : days <= warn ? "soon" : "ok";
+                  return (
+                    <div
+                      key={doc.kind}
+                      className="rounded-lg border border-[#E8E8EA] bg-white p-3.5"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="text-[12.5px] font-semibold text-black">
+                          {VEHICLE_DOCUMENT_LABELS[doc.kind]}
+                        </div>
+                        {status && (
+                          <span
+                            className={cn(
+                              "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[9.5px] font-semibold uppercase",
+                              status === "expired"
+                                ? "bg-[#FEE2E2] text-[#B91C1C]"
+                                : status === "soon"
+                                  ? "bg-[#FEF3C7] text-[#B45309]"
+                                  : "bg-[#D1F2E1] text-[#047857]",
+                            )}
+                          >
+                            {status === "expired"
+                              ? "Expired"
+                              : status === "soon"
+                                ? `${days}d left`
+                                : "Valid"}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-2 grid grid-cols-2 gap-2 text-[12px]">
+                        <div>
+                          <div className="text-[10px] font-semibold uppercase tracking-wider text-black/40">
+                            Valid until
+                          </div>
+                          <div className="mt-0.5 font-mono text-black/75">
+                            {formatValidUntil(doc.validUntil) ?? "—"}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-semibold uppercase tracking-wider text-black/40">
+                            Alert window
+                          </div>
+                          <div className="mt-0.5 font-mono text-black/75">
+                            {doc.notifyDaysBefore ?? DEFAULT_VEHICLE_NOTIFY_DAYS} days
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-2.5">
+                        {doc.file ? (
+                          <a
+                            href={doc.file.dataUrl}
+                            download={doc.file.name}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/80 px-2.5 py-2 transition-colors hover:bg-slate-100"
+                          >
+                            <FileText className="h-3.5 w-3.5 shrink-0 text-black/40" />
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-[12px] font-medium text-black">
+                                {doc.file.name}
+                              </div>
+                              <div className="font-mono text-[10px] text-black/45">
+                                {formatAttachmentSize(doc.file.size)}
+                              </div>
+                            </div>
+                            <ExternalLink className="h-3.5 w-3.5 shrink-0 text-black/40" />
+                          </a>
+                        ) : (
+                          <p className="rounded-xl border border-dashed border-slate-200 px-2.5 py-2 text-[12px] text-black/40">
+                            No file attached
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </OrganicCard>
       ) : (
-      <div className="mt-4 overflow-x-auto rounded-lg border border-[#EFEFEF]">
-        <table className="w-full min-w-[780px] table-fixed border-collapse text-left">
-          <colgroup>
-            <col className="w-[22%]" />
-            <col className="w-[16%]" />
-            <col className="w-[8%]" />
-            <col className="w-[10%]" />
-            <col className="w-[24%]" />
-            <col className="w-[10%]" />
-            <col className="w-[10%]" />
-          </colgroup>
-          <thead>
-            <tr className="bg-[#F4F4F5] text-[10px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-              <th className="px-3.5 py-2 font-semibold">Vehicle</th>
-              <th className="px-3.5 py-2 font-semibold">Registration</th>
-              <th className="px-3.5 py-2 text-right font-semibold">Seats</th>
-              <th className="px-3.5 py-2 font-semibold">Type</th>
-              <th className="px-3.5 py-2 font-semibold">Assigned Routes</th>
-              <th className="px-3.5 py-2 font-semibold">Status</th>
-              <th className="px-3.5 py-2 text-right font-semibold">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {transportVehicles.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-3.5 py-6 text-center text-[12px] text-black/55 dark:text-zinc-400">
-                  No vehicles in fleet yet
-                </td>
-              </tr>
-            ) : (
-              transportVehicles.map((v) => {
+        <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
+          <CardHeader
+            title="Vehicle Management"
+            subtitle={`${activeCount} active · ${transportVehicles.length} total in fleet`}
+            actionLabel="Add Vehicle"
+            onAction={startCreate}
+          />
+
+          {listLayout === "cards" ? (
+            <div className="mt-4 space-y-2.5">
+              {transportVehicles.length === 0 && <EmptyRow label="No vehicles in fleet yet" />}
+              {transportVehicles.map((v) => {
                 const alert = docAlert(v);
                 return (
-                  <tr
+                  <div
                     key={v.id}
                     role="button"
                     tabIndex={0}
@@ -15848,65 +15797,58 @@ function VehicleCard({
                       }
                     }}
                     aria-label={`Open details for ${v.name}`}
-                    className="cursor-pointer border-t border-[#EFEFEF] text-[12.5px] transition-colors hover:bg-[#F8F8F9] focus-visible:bg-[#F8F8F9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0F766E]"
+                    className="flex w-full cursor-pointer flex-col gap-2.5 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 text-left transition-colors active:bg-[#F4F4F5]"
                   >
-                    <td className="px-3.5 py-2.5 align-middle">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 truncate font-medium text-black">
-                          <Bus className="h-3.5 w-3.5 shrink-0 text-black/40" />
-                          {v.name}
-                          {alert && (
-                            <AlertTriangle
-                              className={cn(
-                                "h-3.5 w-3.5 shrink-0",
-                                alert === "expired" ? "text-[#EF4444]" : "text-[#D97706]",
-                              )}
-                              aria-label={
-                                alert === "expired"
-                                  ? "Document expired"
-                                  : "Document expiring soon"
-                              }
-                            />
-                          )}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#0F766E] text-white">
+                          <Bus className="h-5 w-5" />
                         </div>
-                        <div className="mt-0.5 truncate text-[10.5px] text-black/45">
-                          {v.driverName ?? "No driver assigned"}
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="truncate text-[14px] font-semibold text-black">
+                              {v.name}
+                            </span>
+                            {alert && (
+                              <AlertTriangle
+                                className={cn(
+                                  "h-3.5 w-3.5 shrink-0",
+                                  alert === "expired" ? "text-[#EF4444]" : "text-[#D97706]",
+                                )}
+                              />
+                            )}
+                          </div>
+                          <div className="mt-0.5 truncate text-[12px] text-black/50">
+                            {v.driverName ?? "No driver assigned"}
+                          </div>
                         </div>
                       </div>
-                    </td>
-                    <td className="px-3.5 py-2.5 align-middle">
-                      <span className="block truncate font-mono text-[11.5px] text-black/70">
-                        {v.registrationNo}
-                      </span>
-                    </td>
-                    <td className="px-3.5 py-2.5 text-right align-middle font-mono text-black">
-                      {v.capacity}
-                    </td>
-                    <td className="px-3.5 py-2.5 align-middle">
-                      <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-black/60 dark:bg-white/10 dark:text-zinc-200">
-                        {v.ownership === "rental" ? "Rental" : "Owned"}
-                      </span>
-                    </td>
-                    <td className="px-3.5 py-2.5 align-middle">
-                      <span
-                        className="block truncate text-[11.5px] text-black/70"
-                        title={routesLabel(v.routeIds)}
-                      >
-                        {routesLabel(v.routeIds)}
-                      </span>
-                    </td>
-                    <td className="px-3.5 py-2.5 align-middle">
                       <span
                         className={cn(
-                          "inline-flex rounded-full px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider",
+                          "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider",
                           v.active ? "bg-[#0F766E] text-white" : "bg-black/10 text-black/50",
                         )}
                       >
                         {v.active ? "Active" : "Idle"}
                       </span>
-                    </td>
-                    <td className="px-3.5 py-2.5 align-middle">
-                      <div className="flex items-center justify-end gap-1">
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5 text-[11.5px] text-black/60 dark:text-zinc-400">
+                      <span className="font-mono font-medium text-black/75">
+                        {v.registrationNo}
+                      </span>
+                      <span className="text-black/30">·</span>
+                      <span>{v.capacity} seats</span>
+                      <span className="text-black/30">·</span>
+                      <span>{v.ownership === "rental" ? "Rental" : "Owned"}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 border-t border-[#EFEFEF] pt-2">
+                      <span
+                        className="min-w-0 truncate text-[11px] text-black/45"
+                        title={routesLabel(v.routeIds)}
+                      >
+                        {v.routeIds.length === 0 ? "No routes" : routesLabel(v.routeIds)}
+                      </span>
+                      <div className="flex shrink-0 items-center gap-1">
                         <button
                           type="button"
                           onClick={(e) => {
@@ -15914,7 +15856,7 @@ function VehicleCard({
                             startEdit(v);
                           }}
                           aria-label={`Edit vehicle ${v.name}`}
-                          className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 dark:text-zinc-400 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
+                          className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 dark:text-zinc-400"
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
@@ -15925,21 +15867,157 @@ function VehicleCard({
                             setPendingDelete(v);
                           }}
                           aria-label={`Delete vehicle ${v.name}`}
-                          className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                          className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444]"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>
-                    </td>
-                  </tr>
+                    </div>
+                  </div>
                 );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
-      )}
-    </OrganicCard>
+              })}
+            </div>
+          ) : (
+            <div className="mt-4 overflow-x-auto rounded-lg border border-[#EFEFEF]">
+              <table className="w-full min-w-[780px] table-fixed border-collapse text-left">
+                <colgroup>
+                  <col className="w-[22%]" />
+                  <col className="w-[16%]" />
+                  <col className="w-[8%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[24%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[10%]" />
+                </colgroup>
+                <thead>
+                  <tr className="bg-[#F4F4F5] text-[10px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                    <th className="px-3.5 py-2 font-semibold">Vehicle</th>
+                    <th className="px-3.5 py-2 font-semibold">Registration</th>
+                    <th className="px-3.5 py-2 text-right font-semibold">Seats</th>
+                    <th className="px-3.5 py-2 font-semibold">Type</th>
+                    <th className="px-3.5 py-2 font-semibold">Assigned Routes</th>
+                    <th className="px-3.5 py-2 font-semibold">Status</th>
+                    <th className="px-3.5 py-2 text-right font-semibold">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {transportVehicles.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="px-3.5 py-6 text-center text-[12px] text-black/55 dark:text-zinc-400"
+                      >
+                        No vehicles in fleet yet
+                      </td>
+                    </tr>
+                  ) : (
+                    transportVehicles.map((v) => {
+                      const alert = docAlert(v);
+                      return (
+                        <tr
+                          key={v.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setDetailId(v.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              setDetailId(v.id);
+                            }
+                          }}
+                          aria-label={`Open details for ${v.name}`}
+                          className="cursor-pointer border-t border-[#EFEFEF] text-[12.5px] transition-colors hover:bg-[#F8F8F9] focus-visible:bg-[#F8F8F9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0F766E]"
+                        >
+                          <td className="px-3.5 py-2.5 align-middle">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 truncate font-medium text-black">
+                                <Bus className="h-3.5 w-3.5 shrink-0 text-black/40" />
+                                {v.name}
+                                {alert && (
+                                  <AlertTriangle
+                                    className={cn(
+                                      "h-3.5 w-3.5 shrink-0",
+                                      alert === "expired" ? "text-[#EF4444]" : "text-[#D97706]",
+                                    )}
+                                    aria-label={
+                                      alert === "expired"
+                                        ? "Document expired"
+                                        : "Document expiring soon"
+                                    }
+                                  />
+                                )}
+                              </div>
+                              <div className="mt-0.5 truncate text-[10.5px] text-black/45">
+                                {v.driverName ?? "No driver assigned"}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-3.5 py-2.5 align-middle">
+                            <span className="block truncate font-mono text-[11.5px] text-black/70">
+                              {v.registrationNo}
+                            </span>
+                          </td>
+                          <td className="px-3.5 py-2.5 text-right align-middle font-mono text-black">
+                            {v.capacity}
+                          </td>
+                          <td className="px-3.5 py-2.5 align-middle">
+                            <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-black/60 dark:bg-white/10 dark:text-zinc-200">
+                              {v.ownership === "rental" ? "Rental" : "Owned"}
+                            </span>
+                          </td>
+                          <td className="px-3.5 py-2.5 align-middle">
+                            <span
+                              className="block truncate text-[11.5px] text-black/70"
+                              title={routesLabel(v.routeIds)}
+                            >
+                              {routesLabel(v.routeIds)}
+                            </span>
+                          </td>
+                          <td className="px-3.5 py-2.5 align-middle">
+                            <span
+                              className={cn(
+                                "inline-flex rounded-full px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider",
+                                v.active ? "bg-[#0F766E] text-white" : "bg-black/10 text-black/50",
+                              )}
+                            >
+                              {v.active ? "Active" : "Idle"}
+                            </span>
+                          </td>
+                          <td className="px-3.5 py-2.5 align-middle">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  startEdit(v);
+                                }}
+                                aria-label={`Edit vehicle ${v.name}`}
+                                className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 dark:text-zinc-400 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPendingDelete(v);
+                                }}
+                                aria-label={`Delete vehicle ${v.name}`}
+                                className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </OrganicCard>
       )}
 
       <DeleteConfirmDialog
@@ -16124,27 +16202,16 @@ function VehicleCard({
                   <Paperclip className="h-3.5 w-3.5" />
                   Documents & validity
                 </div>
-                <span className="text-[10px] text-black/40">
-                  Alerts before expiry
-                </span>
+                <span className="text-[10px] text-black/40">Alerts before expiry</span>
               </div>
               <div className="space-y-2.5">
                 {form.documents.map((doc) => {
                   const days = doc.validUntil ? daysUntilDate(doc.validUntil) : null;
                   const warn = doc.notifyDaysBefore ?? DEFAULT_VEHICLE_NOTIFY_DAYS;
                   const status =
-                    days === null
-                      ? null
-                      : days < 0
-                        ? "expired"
-                        : days <= warn
-                          ? "soon"
-                          : "ok";
+                    days === null ? null : days < 0 ? "expired" : days <= warn ? "soon" : "ok";
                   return (
-                    <div
-                      key={doc.kind}
-                      className="rounded-lg border border-[#E8E8EA] bg-white p-3"
-                    >
+                    <div key={doc.kind} className="rounded-lg border border-[#E8E8EA] bg-white p-3">
                       <div className="flex items-start justify-between gap-2">
                         <div className="text-[12px] font-semibold text-black">
                           {VEHICLE_DOCUMENT_LABELS[doc.kind]}
@@ -16283,7 +16350,10 @@ function VehicleCard({
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
+              <Button
+                type="submit"
+                className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+              >
                 {editingId ? "Save" : "Add Vehicle"}
               </Button>
             </DialogFooter>
@@ -16293,7 +16363,6 @@ function VehicleCard({
     </>
   );
 }
-
 
 function TransportCard({
   transportRoutes,
@@ -16361,10 +16430,7 @@ function TransportCard({
       return {
         id: existing?.id || `fl-i-${index + 1}`,
         label: existing?.label || installmentLabel(index, prev.billingCycle),
-        amount:
-          mode === "fixed"
-            ? prev.bothFee
-            : existing?.amount || prev.bothFee || "",
+        amount: mode === "fixed" ? prev.bothFee : existing?.amount || prev.bothFee || "",
         dueDate: existing?.dueDate || "",
       };
     });
@@ -16388,8 +16454,7 @@ function TransportCard({
             return {
               id: row?.id || `fl-i-${index + 1}`,
               kind: "installment" as const,
-              label:
-                row?.label?.trim() || installmentLabel(index, form.billingCycle),
+              label: row?.label?.trim() || installmentLabel(index, form.billingCycle),
               amount: bothAmount,
               ...(row?.dueDate?.trim() ? { dueDate: row.dueDate.trim() } : {}),
             };
@@ -16414,8 +16479,7 @@ function TransportCard({
       return {
         id: existing?.id || `fl-i-${index + 1}`,
         label: existing?.label || installmentLabel(index, form.billingCycle),
-        amount:
-          form.feeAmountMode === "fixed" ? form.bothFee : existing?.amount || "",
+        amount: form.feeAmountMode === "fixed" ? form.bothFee : existing?.amount || "",
         dueDate: existing?.dueDate || "",
       };
     });
@@ -16427,16 +16491,12 @@ function TransportCard({
       const rows = ensureInstallmentRows(prev, count);
       rows[index] = { ...rows[index], ...patch };
       const nextBoth =
-        prev.feeAmountMode === "fixed" && patch.amount !== undefined
-          ? patch.amount
-          : prev.bothFee;
+        prev.feeAmountMode === "fixed" && patch.amount !== undefined ? patch.amount : prev.bothFee;
       return {
         ...prev,
         bothFee: nextBoth,
         installments:
-          prev.feeAmountMode === "fixed"
-            ? rows.map((row) => ({ ...row, amount: nextBoth }))
-            : rows,
+          prev.feeAmountMode === "fixed" ? rows.map((row) => ({ ...row, amount: nextBoth })) : rows,
         installmentCount: String(rows.length),
       };
     });
@@ -16542,8 +16602,7 @@ function TransportCard({
       feeAmountMode:
         normalized.feeAmountMode === "custom" || uniqueAmounts.length > 1 ? "custom" : "fixed",
       feeCollectionStartMonth:
-        normalized.feeCollectionStartMonth?.trim() ||
-        defaultFeeCollectionStartMonth(feeTerms),
+        normalized.feeCollectionStartMonth?.trim() || defaultFeeCollectionStartMonth(feeTerms),
       installmentCount: String(installments.length || defaultInstallmentCount(cycle)),
       installments: installments.map((line) => ({
         id: line.id,
@@ -16567,7 +16626,14 @@ function TransportCard({
       toast.error("Pickup hub and destination are required");
       return;
     }
-    if (!morningFee || morningFee <= 0 || !eveningFee || eveningFee <= 0 || !bothFee || bothFee <= 0) {
+    if (
+      !morningFee ||
+      morningFee <= 0 ||
+      !eveningFee ||
+      eveningFee <= 0 ||
+      !bothFee ||
+      bothFee <= 0
+    ) {
       toast.error("Morning, evening, and both-shift fees must be positive amounts");
       return;
     }
@@ -16610,9 +16676,7 @@ function TransportCard({
       if (form.fromLng == null) delete updated.fromLng;
       if (form.toLat == null) delete updated.toLat;
       if (form.toLng == null) delete updated.toLng;
-      setTransportRoutes((prev) =>
-        prev.map((r) => (r.id !== editingId ? r : updated)),
-      );
+      setTransportRoutes((prev) => prev.map((r) => (r.id !== editingId ? r : updated)));
       void apiUpsertTransportRoute(updated).catch((err) =>
         toast.error(err instanceof Error ? err.message : "Could not sync route"),
       );
@@ -16692,267 +16756,275 @@ function TransportCard({
       ) : null}
 
       {listLayout === "cards" ? (
-      <div className="mt-4 space-y-2.5">
-        {transportRoutes.length === 0 && <EmptyRow label="No routes mapped yet" />}
-        {transportRoutes.map((r) => {
-          const vehicles = vehiclesForRoute(r.id);
-          const vehicleNames =
-            vehicles.length === 0 ? "No vehicles" : vehicles.map((v) => v.name).join(", ");
-          const fromPinned =
-            r.fromLat != null &&
-            r.fromLng != null &&
-            Number.isFinite(r.fromLat) &&
-            Number.isFinite(r.fromLng);
-          const toPinned =
-            r.toLat != null &&
-            r.toLng != null &&
-            Number.isFinite(r.toLat) &&
-            Number.isFinite(r.toLng);
-          const directionsUrl =
-            fromPinned && toPinned
-              ? `https://www.google.com/maps/dir/?api=1&origin=${r.fromLat},${r.fromLng}&destination=${r.toLat},${r.toLng}`
-              : null;
-          return (
-            <div
-              key={r.id}
-              className="rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="flex min-w-0 items-center gap-1">
-                    <div className="truncate text-[14px] font-semibold text-black">{r.mapFrom}</div>
-                    {fromPinned ? (
-                      <a
-                        href={`https://www.google.com/maps?q=${r.fromLat},${r.fromLng}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label={`Open ${r.mapFrom} in Google Maps`}
-                        className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-black/40"
-                      >
-                        <MapPin className="h-3.5 w-3.5" />
-                      </a>
-                    ) : null}
-                  </div>
-                  <div className="mt-0.5 flex min-w-0 items-center gap-1 text-[12px] text-black/50">
-                    <span className="truncate">→ {r.mapTo}</span>
-                    {toPinned ? (
-                      <a
-                        href={`https://www.google.com/maps?q=${r.toLat},${r.toLng}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label={`Open ${r.mapTo} in Google Maps`}
-                        className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-black/40"
-                      >
-                        <MapPin className="h-3.5 w-3.5" />
-                      </a>
-                    ) : null}
-                    {directionsUrl ? (
-                      <a
-                        href={directionsUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label={`Directions from ${r.mapFrom} to ${r.mapTo}`}
-                        className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-black/40"
-                      >
-                        <Route className="h-3.5 w-3.5" />
-                      </a>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => startEdit(r)}
-                    aria-label={`Edit route ${r.mapFrom} to ${r.mapTo}`}
-                    className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 dark:text-zinc-400"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPendingDelete(r)}
-                    aria-label={`Delete route ${r.mapFrom} to ${r.mapTo}`}
-                    className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444]"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-              <div className="mt-2.5 grid grid-cols-3 gap-2">
-                <div className="rounded-lg bg-white px-2.5 py-2">
-                  <div className="text-[9px] font-semibold uppercase tracking-wider text-black/40">
-                    Morning
-                  </div>
-                  <div className="mt-0.5 font-mono text-[12px] font-semibold text-black">
-                    {inr(r.morningFee)}
-                  </div>
-                </div>
-                <div className="rounded-lg bg-white px-2.5 py-2">
-                  <div className="text-[9px] font-semibold uppercase tracking-wider text-black/40">
-                    Evening
-                  </div>
-                  <div className="mt-0.5 font-mono text-[12px] font-semibold text-black">
-                    {inr(r.eveningFee)}
-                  </div>
-                </div>
-                <div className="rounded-lg bg-white px-2.5 py-2">
-                  <div className="text-[9px] font-semibold uppercase tracking-wider text-black/40">
-                    Both
-                  </div>
-                  <div className="mt-0.5 font-mono text-[12px] font-semibold text-black">
-                    {inr(r.bothFee)}
-                  </div>
-                </div>
-              </div>
-              <div className="mt-2 truncate text-[11px] text-black/45 dark:text-zinc-400" title={vehicleNames}>
-                {vehicleNames}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      ) : (
-      <div className="mt-4 overflow-x-auto rounded-lg border border-[#EFEFEF]">
-        <table className="w-full min-w-[760px] table-fixed border-collapse text-left">
-          <colgroup>
-            <col className="w-[20%]" />
-            <col className="w-[20%]" />
-            <col className="w-[11%]" />
-            <col className="w-[11%]" />
-            <col className="w-[11%]" />
-            <col className="w-[15%]" />
-            <col className="w-[12%]" />
-          </colgroup>
-          <thead>
-            <tr className="bg-[#F4F4F5] text-[10px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-              <th className="px-3.5 py-2 font-semibold">From</th>
-              <th className="px-3.5 py-2 font-semibold">To</th>
-              <th className="px-3.5 py-2 text-right font-semibold">Morning</th>
-              <th className="px-3.5 py-2 text-right font-semibold">Evening</th>
-              <th className="px-3.5 py-2 text-right font-semibold">Both</th>
-              <th className="px-3.5 py-2 font-semibold">Vehicles</th>
-              <th className="px-3.5 py-2 text-right font-semibold">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {transportRoutes.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-3.5 py-6 text-center text-[12px] text-black/55 dark:text-zinc-400">
-                  No routes mapped yet
-                </td>
-              </tr>
-            ) : (
-              transportRoutes.map((r) => {
-                const vehicles = vehiclesForRoute(r.id);
-                const vehicleNames =
-                  vehicles.length === 0 ? "—" : vehicles.map((v) => v.name).join(", ");
-                const fromPinned =
-                  r.fromLat != null &&
-                  r.fromLng != null &&
-                  Number.isFinite(r.fromLat) &&
-                  Number.isFinite(r.fromLng);
-                const toPinned =
-                  r.toLat != null &&
-                  r.toLng != null &&
-                  Number.isFinite(r.toLat) &&
-                  Number.isFinite(r.toLng);
-                const directionsUrl =
-                  fromPinned && toPinned
-                    ? `https://www.google.com/maps/dir/?api=1&origin=${r.fromLat},${r.fromLng}&destination=${r.toLat},${r.toLng}`
-                    : null;
-                return (
-                  <tr key={r.id} className="border-t border-[#EFEFEF] text-[12.5px]">
-                    <td className="px-3.5 py-2.5 align-middle">
-                      <div className="flex min-w-0 items-center gap-1.5">
-                        <span className="block truncate text-black" title={r.mapFrom}>
-                          {r.mapFrom}
-                        </span>
-                        {fromPinned ? (
-                          <a
-                            href={`https://www.google.com/maps?q=${r.fromLat},${r.fromLng}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            aria-label={`Open ${r.mapFrom} in Google Maps`}
-                            className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-black/40 transition-colors hover:bg-[#F4F4F5] hover:text-black"
-                            title="Open in Google Maps"
-                          >
-                            <MapPin className="h-3.5 w-3.5" />
-                          </a>
-                        ) : null}
+        <div className="mt-4 space-y-2.5">
+          {transportRoutes.length === 0 && <EmptyRow label="No routes mapped yet" />}
+          {transportRoutes.map((r) => {
+            const vehicles = vehiclesForRoute(r.id);
+            const vehicleNames =
+              vehicles.length === 0 ? "No vehicles" : vehicles.map((v) => v.name).join(", ");
+            const fromPinned =
+              r.fromLat != null &&
+              r.fromLng != null &&
+              Number.isFinite(r.fromLat) &&
+              Number.isFinite(r.fromLng);
+            const toPinned =
+              r.toLat != null &&
+              r.toLng != null &&
+              Number.isFinite(r.toLat) &&
+              Number.isFinite(r.toLng);
+            const directionsUrl =
+              fromPinned && toPinned
+                ? `https://www.google.com/maps/dir/?api=1&origin=${r.fromLat},${r.fromLng}&destination=${r.toLat},${r.toLng}`
+                : null;
+            return (
+              <div key={r.id} className="rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 items-center gap-1">
+                      <div className="truncate text-[14px] font-semibold text-black">
+                        {r.mapFrom}
                       </div>
-                    </td>
-                    <td className="px-3.5 py-2.5 align-middle">
-                      <div className="flex min-w-0 items-center gap-1.5">
-                        <span className="block truncate text-black/75" title={r.mapTo}>
-                          {r.mapTo}
-                        </span>
-                        {toPinned ? (
-                          <a
-                            href={`https://www.google.com/maps?q=${r.toLat},${r.toLng}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            aria-label={`Open ${r.mapTo} in Google Maps`}
-                            className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-black/40 transition-colors hover:bg-[#F4F4F5] hover:text-black"
-                            title="Open in Google Maps"
-                          >
-                            <MapPin className="h-3.5 w-3.5" />
-                          </a>
-                        ) : null}
-                        {directionsUrl ? (
-                          <a
-                            href={directionsUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            aria-label={`Directions from ${r.mapFrom} to ${r.mapTo}`}
-                            className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-black/40 transition-colors hover:bg-[#F4F4F5] hover:text-black"
-                            title="Directions in Google Maps"
-                          >
-                            <Route className="h-3.5 w-3.5" />
-                          </a>
-                        ) : null}
-                      </div>
-                    </td>
-                    <td className="px-3.5 py-2.5 text-right align-middle font-mono text-[11.5px] text-black">
+                      {fromPinned ? (
+                        <a
+                          href={`https://www.google.com/maps?q=${r.fromLat},${r.fromLng}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`Open ${r.mapFrom} in Google Maps`}
+                          className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-black/40"
+                        >
+                          <MapPin className="h-3.5 w-3.5" />
+                        </a>
+                      ) : null}
+                    </div>
+                    <div className="mt-0.5 flex min-w-0 items-center gap-1 text-[12px] text-black/50">
+                      <span className="truncate">→ {r.mapTo}</span>
+                      {toPinned ? (
+                        <a
+                          href={`https://www.google.com/maps?q=${r.toLat},${r.toLng}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`Open ${r.mapTo} in Google Maps`}
+                          className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-black/40"
+                        >
+                          <MapPin className="h-3.5 w-3.5" />
+                        </a>
+                      ) : null}
+                      {directionsUrl ? (
+                        <a
+                          href={directionsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`Directions from ${r.mapFrom} to ${r.mapTo}`}
+                          className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-black/40"
+                        >
+                          <Route className="h-3.5 w-3.5" />
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => startEdit(r)}
+                      aria-label={`Edit route ${r.mapFrom} to ${r.mapTo}`}
+                      className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 dark:text-zinc-400"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPendingDelete(r)}
+                      aria-label={`Delete route ${r.mapFrom} to ${r.mapTo}`}
+                      className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444]"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <div className="mt-2.5 grid grid-cols-3 gap-2">
+                  <div className="rounded-lg bg-white px-2.5 py-2">
+                    <div className="text-[9px] font-semibold uppercase tracking-wider text-black/40">
+                      Morning
+                    </div>
+                    <div className="mt-0.5 font-mono text-[12px] font-semibold text-black">
                       {inr(r.morningFee)}
-                    </td>
-                    <td className="px-3.5 py-2.5 text-right align-middle font-mono text-[11.5px] text-black">
+                    </div>
+                  </div>
+                  <div className="rounded-lg bg-white px-2.5 py-2">
+                    <div className="text-[9px] font-semibold uppercase tracking-wider text-black/40">
+                      Evening
+                    </div>
+                    <div className="mt-0.5 font-mono text-[12px] font-semibold text-black">
                       {inr(r.eveningFee)}
-                    </td>
-                    <td className="px-3.5 py-2.5 text-right align-middle font-mono text-[11.5px] font-semibold text-black">
+                    </div>
+                  </div>
+                  <div className="rounded-lg bg-white px-2.5 py-2">
+                    <div className="text-[9px] font-semibold uppercase tracking-wider text-black/40">
+                      Both
+                    </div>
+                    <div className="mt-0.5 font-mono text-[12px] font-semibold text-black">
                       {inr(r.bothFee)}
-                    </td>
-                    <td className="px-3.5 py-2.5 align-middle">
-                      <span className="block truncate text-[11px] text-black/60 dark:text-zinc-300" title={vehicleNames}>
-                        {vehicleNames}
-                      </span>
-                    </td>
-                    <td className="px-3.5 py-2.5 align-middle">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          type="button"
-                          onClick={() => startEdit(r)}
-                          aria-label={`Edit route ${r.mapFrom} to ${r.mapTo}`}
-                          className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 dark:text-zinc-400 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
+                    </div>
+                  </div>
+                </div>
+                <div
+                  className="mt-2 truncate text-[11px] text-black/45 dark:text-zinc-400"
+                  title={vehicleNames}
+                >
+                  {vehicleNames}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="mt-4 overflow-x-auto rounded-lg border border-[#EFEFEF]">
+          <table className="w-full min-w-[760px] table-fixed border-collapse text-left">
+            <colgroup>
+              <col className="w-[20%]" />
+              <col className="w-[20%]" />
+              <col className="w-[11%]" />
+              <col className="w-[11%]" />
+              <col className="w-[11%]" />
+              <col className="w-[15%]" />
+              <col className="w-[12%]" />
+            </colgroup>
+            <thead>
+              <tr className="bg-[#F4F4F5] text-[10px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                <th className="px-3.5 py-2 font-semibold">From</th>
+                <th className="px-3.5 py-2 font-semibold">To</th>
+                <th className="px-3.5 py-2 text-right font-semibold">Morning</th>
+                <th className="px-3.5 py-2 text-right font-semibold">Evening</th>
+                <th className="px-3.5 py-2 text-right font-semibold">Both</th>
+                <th className="px-3.5 py-2 font-semibold">Vehicles</th>
+                <th className="px-3.5 py-2 text-right font-semibold">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {transportRoutes.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="px-3.5 py-6 text-center text-[12px] text-black/55 dark:text-zinc-400"
+                  >
+                    No routes mapped yet
+                  </td>
+                </tr>
+              ) : (
+                transportRoutes.map((r) => {
+                  const vehicles = vehiclesForRoute(r.id);
+                  const vehicleNames =
+                    vehicles.length === 0 ? "—" : vehicles.map((v) => v.name).join(", ");
+                  const fromPinned =
+                    r.fromLat != null &&
+                    r.fromLng != null &&
+                    Number.isFinite(r.fromLat) &&
+                    Number.isFinite(r.fromLng);
+                  const toPinned =
+                    r.toLat != null &&
+                    r.toLng != null &&
+                    Number.isFinite(r.toLat) &&
+                    Number.isFinite(r.toLng);
+                  const directionsUrl =
+                    fromPinned && toPinned
+                      ? `https://www.google.com/maps/dir/?api=1&origin=${r.fromLat},${r.fromLng}&destination=${r.toLat},${r.toLng}`
+                      : null;
+                  return (
+                    <tr key={r.id} className="border-t border-[#EFEFEF] text-[12.5px]">
+                      <td className="px-3.5 py-2.5 align-middle">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <span className="block truncate text-black" title={r.mapFrom}>
+                            {r.mapFrom}
+                          </span>
+                          {fromPinned ? (
+                            <a
+                              href={`https://www.google.com/maps?q=${r.fromLat},${r.fromLng}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label={`Open ${r.mapFrom} in Google Maps`}
+                              className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-black/40 transition-colors hover:bg-[#F4F4F5] hover:text-black"
+                              title="Open in Google Maps"
+                            >
+                              <MapPin className="h-3.5 w-3.5" />
+                            </a>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="px-3.5 py-2.5 align-middle">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <span className="block truncate text-black/75" title={r.mapTo}>
+                            {r.mapTo}
+                          </span>
+                          {toPinned ? (
+                            <a
+                              href={`https://www.google.com/maps?q=${r.toLat},${r.toLng}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label={`Open ${r.mapTo} in Google Maps`}
+                              className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-black/40 transition-colors hover:bg-[#F4F4F5] hover:text-black"
+                              title="Open in Google Maps"
+                            >
+                              <MapPin className="h-3.5 w-3.5" />
+                            </a>
+                          ) : null}
+                          {directionsUrl ? (
+                            <a
+                              href={directionsUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label={`Directions from ${r.mapFrom} to ${r.mapTo}`}
+                              className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-black/40 transition-colors hover:bg-[#F4F4F5] hover:text-black"
+                              title="Directions in Google Maps"
+                            >
+                              <Route className="h-3.5 w-3.5" />
+                            </a>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="px-3.5 py-2.5 text-right align-middle font-mono text-[11.5px] text-black">
+                        {inr(r.morningFee)}
+                      </td>
+                      <td className="px-3.5 py-2.5 text-right align-middle font-mono text-[11.5px] text-black">
+                        {inr(r.eveningFee)}
+                      </td>
+                      <td className="px-3.5 py-2.5 text-right align-middle font-mono text-[11.5px] font-semibold text-black">
+                        {inr(r.bothFee)}
+                      </td>
+                      <td className="px-3.5 py-2.5 align-middle">
+                        <span
+                          className="block truncate text-[11px] text-black/60 dark:text-zinc-300"
+                          title={vehicleNames}
                         >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setPendingDelete(r)}
-                          aria-label={`Delete route ${r.mapFrom} to ${r.mapTo}`}
-                          className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+                          {vehicleNames}
+                        </span>
+                      </td>
+                      <td className="px-3.5 py-2.5 align-middle">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() => startEdit(r)}
+                            aria-label={`Edit route ${r.mapFrom} to ${r.mapTo}`}
+                            className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 dark:text-zinc-400 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPendingDelete(r)}
+                            aria-label={`Delete route ${r.mapFrom} to ${r.mapTo}`}
+                            className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       )}
 
       <DeleteConfirmDialog
@@ -16984,531 +17056,538 @@ function TransportCard({
           <DialogHeader className="shrink-0 space-y-1.5 border-b border-[#EFEFEF] px-4 py-3 pr-12 sm:px-6 sm:py-4 dark:border-white/10">
             <DialogTitle>{editingId ? "Edit Route" : "Add Transport Route"}</DialogTitle>
             <DialogDescription className="text-[12.5px] leading-relaxed">
-              Each route is a pickup → drop pair (same two points students pick as Bus Point 1 and Bus
-              Point 2). Set morning, evening, and both-shift fees. Search or pin each end on the map.
+              Each route is a pickup → drop pair (same two points students pick as Bus Point 1 and
+              Bus Point 2). Set morning, evening, and both-shift fees. Search or pin each end on the
+              map.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-3 sm:px-6 sm:py-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
-              <LocationPicker
-                label="Map From · Bus Point 1 (pickup)"
-                value={form.mapFrom}
-                lat={form.fromLat}
-                lng={form.fromLng}
-                autoFocus
-                placeholder="Search pickup location…"
-                onChange={({ label, lat, lng }) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    mapFrom: label,
-                    fromLat: lat,
-                    fromLng: lng,
-                  }))
-                }
-              />
-              <LocationPicker
-                label="Map To · Bus Point 2 (drop)"
-                value={form.mapTo}
-                lat={form.toLat}
-                lng={form.toLng}
-                placeholder="Search destination…"
-                onChange={({ label, lat, lng }) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    mapTo: label,
-                    toLat: lat,
-                    toLng: lng,
-                  }))
-                }
-              />
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                  Morning Fee (₹)
-                </Label>
-                <Input
-                  inputMode="numeric"
-                  value={form.morningFee}
-                  onChange={(e) =>
-                    setForm({ ...form, morningFee: e.target.value.replace(/[^0-9]/g, "") })
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+                <LocationPicker
+                  label="Map From · Bus Point 1 (pickup)"
+                  value={form.mapFrom}
+                  lat={form.fromLat}
+                  lng={form.fromLng}
+                  autoFocus
+                  placeholder="Search pickup location…"
+                  onChange={({ label, lat, lng }) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      mapFrom: label,
+                      fromLat: lat,
+                      fromLng: lng,
+                    }))
                   }
-                  placeholder="0"
-                  className="font-mono"
+                />
+                <LocationPicker
+                  label="Map To · Bus Point 2 (drop)"
+                  value={form.mapTo}
+                  lat={form.toLat}
+                  lng={form.toLng}
+                  placeholder="Search destination…"
+                  onChange={({ label, lat, lng }) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      mapTo: label,
+                      toLat: lat,
+                      toLng: lng,
+                    }))
+                  }
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                  Evening Fee (₹)
-                </Label>
-                <Input
-                  inputMode="numeric"
-                  value={form.eveningFee}
-                  onChange={(e) =>
-                    setForm({ ...form, eveningFee: e.target.value.replace(/[^0-9]/g, "") })
-                  }
-                  placeholder="0"
-                  className="font-mono"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                  Both Shifts (₹)
-                </Label>
-                <Input
-                  inputMode="numeric"
-                  value={form.bothFee}
-                  onChange={(e) =>
-                    setForm({ ...form, bothFee: e.target.value.replace(/[^0-9]/g, "") })
-                  }
-                  placeholder="0"
-                  className="font-mono"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                Assigned vehicles
-              </Label>
-              {selectableVehicles.length === 0 ? (
-                <p className="rounded-lg border border-dashed border-[#E5E5E5] px-3 py-4 text-center text-[12px] text-black/45">
-                  No vehicles yet — add one in Vehicle Management below, then assign it here.
-                </p>
-              ) : (
-                <div className="overflow-hidden rounded-lg border border-[#E5E5E5] bg-[#FAFAFA]">
-                  <div className="relative border-b border-[#E5E5E5] bg-white p-2">
-                    <Search className="pointer-events-none absolute left-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-black/40" />
-                    <Input
-                      value={vehicleQuery}
-                      onChange={(e) => setVehicleQuery(e.target.value)}
-                      placeholder="Search vehicle, reg. no, driver…"
-                      className="h-9 border-[#E5E5E5] bg-white pl-8 text-[12px]"
-                    />
-                  </div>
-                  <div className="max-h-40 space-y-1 overflow-y-auto p-2">
-                    {filteredVehicles.length === 0 ? (
-                      <p className="px-2 py-3 text-center text-[12px] text-black/45">
-                        No vehicles match “{vehicleQuery.trim()}”
-                      </p>
-                    ) : (
-                      filteredVehicles.map((v) => {
-                        const checked = form.vehicleIds.includes(v.id);
-                        return (
-                          <label
-                            key={v.id}
-                            className={cn(
-                              "flex cursor-pointer items-start gap-2.5 rounded-xl px-2.5 py-2 transition-colors",
-                              checked
-                                ? "bg-[#CCFBF1] dark:bg-[#0F766E]/40"
-                                : "hover:bg-white dark:hover:bg-white/5",
-                            )}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => toggleVehicle(v.id)}
-                              className="mt-0.5 h-4 w-4 shrink-0 rounded border-black/20 accent-[#0F766E]"
-                            />
-                            <span className="min-w-0">
-                              <span className="block text-[12px] font-medium leading-snug text-black dark:text-zinc-100">
-                                {v.name}
-                              </span>
-                              <span className="block text-[11px] text-black/50 dark:text-zinc-400">
-                                {v.registrationNo}
-                                {v.driverName ? ` · ${v.driverName}` : ""}
-                              </span>
-                            </span>
-                          </label>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-              )}
-              <p className="text-[10.5px] text-black/45">
-                {form.vehicleIds.length === 0
-                  ? "No vehicles assigned to this route"
-                  : `${form.vehicleIds.length} vehicle${form.vehicleIds.length === 1 ? "" : "s"} selected`}
-              </p>
-            </div>
-
-            <div className="space-y-3 rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] p-3.5">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
-                  Fee structure
-                </p>
-                <p className="mt-1 text-[12px] leading-snug text-black/50">
-                  Same pattern as class tier — same amount for every period, or different amounts,
-                  each with its own due date.
-                </p>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                  Billing
-                </Label>
-                <div
-                  role="tablist"
-                  aria-label="Billing cycle"
-                  className="flex border-b border-[#E8E8EA] dark:border-white/10"
-                >
-                  {CLASS_SCHEDULE_CYCLES.map((cycle) => {
-                    const active = form.billingCycle === cycle;
-                    return (
-                      <button
-                        key={cycle}
-                        type="button"
-                        role="tab"
-                        aria-selected={active}
-                        onClick={() => {
-                          const count = defaultInstallmentCount(cycle);
-                          setForm((prev) => {
-                            const nextCount = Math.max(
-                              1,
-                              Math.floor(Number(prev.installmentCount) || 0) || Number(count),
-                            );
-                            const rows = Array.from({ length: nextCount }, (_, index) => {
-                              const existing = prev.installments[index];
-                              return {
-                                id: existing?.id || `fl-i-${index + 1}`,
-                                label: installmentLabel(index, cycle),
-                                amount:
-                                  prev.feeAmountMode === "fixed"
-                                    ? prev.bothFee
-                                    : existing?.amount || prev.bothFee || "",
-                                dueDate: existing?.dueDate || "",
-                              };
-                            });
-                            return {
-                              ...prev,
-                              billingCycle: cycle,
-                              installmentCount: String(nextCount),
-                              installments: rows,
-                            };
-                          });
-                        }}
-                        className={cn(
-                          "relative min-w-0 flex-1 px-2 py-2.5 text-center text-[12.5px] font-semibold tracking-tight transition-colors",
-                          active
-                            ? "text-[#0F766E] dark:text-[#5EEAD4]"
-                            : "text-black/45 hover:text-black/70 dark:text-zinc-500 dark:hover:text-zinc-300",
-                        )}
-                      >
-                        {cycle}
-                        {active && (
-                          <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-[#0F766E] dark:bg-[#2DD4BF]" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                  Amounts
-                </Label>
-                <div className="flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
-                  {(
-                    [
-                      {
-                        key: "fixed" as const,
-                        label:
-                          form.billingCycle === "Term"
-                            ? "Same for every term"
-                            : "Same each month",
-                      },
-                      {
-                        key: "custom" as const,
-                        label:
-                          form.billingCycle === "Term"
-                            ? "Different per term"
-                            : "Different per month",
-                      },
-                    ] as const
-                  ).map((option) => {
-                    const active = form.feeAmountMode === option.key;
-                    return (
-                      <button
-                        key={option.key}
-                        type="button"
-                        onClick={() => {
-                          setForm((prev) => {
-                            const count = Math.max(
-                              1,
-                              Math.floor(Number(prev.installmentCount) || 0) ||
-                                Number(defaultInstallmentCount(prev.billingCycle)),
-                            );
-                            const rows = Array.from({ length: count }, (_, index) => {
-                              const existing = prev.installments[index];
-                              return {
-                                id: existing?.id || `fl-i-${index + 1}`,
-                                label:
-                                  existing?.label ||
-                                  installmentLabel(index, prev.billingCycle),
-                                amount:
-                                  option.key === "fixed"
-                                    ? prev.bothFee || existing?.amount || ""
-                                    : existing?.amount || prev.bothFee || "",
-                                dueDate: existing?.dueDate || "",
-                              };
-                            });
-                            return {
-                              ...prev,
-                              feeAmountMode: option.key,
-                              installmentCount: String(count),
-                              bothFee: prev.bothFee || rows[0]?.amount || "",
-                              installments: rows,
-                            };
-                          });
-                        }}
-                        className={cn(
-                          "flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors",
-                          active ? "bg-[#0F766E] text-white" : "text-black/65 hover:text-black",
-                        )}
-                      >
-                        {option.label}
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="text-[11px] text-black/45">
-                  {form.feeAmountMode === "fixed"
-                    ? "One both-shift amount applies to every period. Set a due date for each below."
-                    : "Enter a separate both-shift amount and due date for each period."}
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="space-y-1.5">
                   <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                    {form.billingCycle === "Term" ? "Number of terms" : "Number of installments"}
+                    Morning Fee (₹)
                   </Label>
                   <Input
                     inputMode="numeric"
-                    value={form.installmentCount}
-                    onChange={(e) => {
-                      const raw = e.target.value.replace(/[^0-9]/g, "");
-                      const count = Math.max(1, Math.floor(Number(raw) || 0));
-                      setForm((prev) => ({
-                        ...prev,
-                        installmentCount: raw,
-                        installments: ensureInstallmentRows(prev, count),
-                      }));
-                    }}
-                    placeholder={form.billingCycle === "Term" ? "4" : "12"}
-                    className="font-mono bg-white"
+                    value={form.morningFee}
+                    onChange={(e) =>
+                      setForm({ ...form, morningFee: e.target.value.replace(/[^0-9]/g, "") })
+                    }
+                    placeholder="0"
+                    className="font-mono"
                   />
                 </div>
-                {form.feeAmountMode === "fixed" ? (
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                    Evening Fee (₹)
+                  </Label>
+                  <Input
+                    inputMode="numeric"
+                    value={form.eveningFee}
+                    onChange={(e) =>
+                      setForm({ ...form, eveningFee: e.target.value.replace(/[^0-9]/g, "") })
+                    }
+                    placeholder="0"
+                    className="font-mono"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                    Both Shifts (₹)
+                  </Label>
+                  <Input
+                    inputMode="numeric"
+                    value={form.bothFee}
+                    onChange={(e) =>
+                      setForm({ ...form, bothFee: e.target.value.replace(/[^0-9]/g, "") })
+                    }
+                    placeholder="0"
+                    className="font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                  Assigned vehicles
+                </Label>
+                {selectableVehicles.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-[#E5E5E5] px-3 py-4 text-center text-[12px] text-black/45">
+                    No vehicles yet — add one in Vehicle Management below, then assign it here.
+                  </p>
+                ) : (
+                  <div className="overflow-hidden rounded-lg border border-[#E5E5E5] bg-[#FAFAFA]">
+                    <div className="relative border-b border-[#E5E5E5] bg-white p-2">
+                      <Search className="pointer-events-none absolute left-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-black/40" />
+                      <Input
+                        value={vehicleQuery}
+                        onChange={(e) => setVehicleQuery(e.target.value)}
+                        placeholder="Search vehicle, reg. no, driver…"
+                        className="h-9 border-[#E5E5E5] bg-white pl-8 text-[12px]"
+                      />
+                    </div>
+                    <div className="max-h-40 space-y-1 overflow-y-auto p-2">
+                      {filteredVehicles.length === 0 ? (
+                        <p className="px-2 py-3 text-center text-[12px] text-black/45">
+                          No vehicles match “{vehicleQuery.trim()}”
+                        </p>
+                      ) : (
+                        filteredVehicles.map((v) => {
+                          const checked = form.vehicleIds.includes(v.id);
+                          return (
+                            <label
+                              key={v.id}
+                              className={cn(
+                                "flex cursor-pointer items-start gap-2.5 rounded-xl px-2.5 py-2 transition-colors",
+                                checked
+                                  ? "bg-[#CCFBF1] dark:bg-[#0F766E]/40"
+                                  : "hover:bg-white dark:hover:bg-white/5",
+                              )}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleVehicle(v.id)}
+                                className="mt-0.5 h-4 w-4 shrink-0 rounded border-black/20 accent-[#0F766E]"
+                              />
+                              <span className="min-w-0">
+                                <span className="block text-[12px] font-medium leading-snug text-black dark:text-zinc-100">
+                                  {v.name}
+                                </span>
+                                <span className="block text-[11px] text-black/50 dark:text-zinc-400">
+                                  {v.registrationNo}
+                                  {v.driverName ? ` · ${v.driverName}` : ""}
+                                </span>
+                              </span>
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
+                <p className="text-[10.5px] text-black/45">
+                  {form.vehicleIds.length === 0
+                    ? "No vehicles assigned to this route"
+                    : `${form.vehicleIds.length} vehicle${form.vehicleIds.length === 1 ? "" : "s"} selected`}
+                </p>
+              </div>
+
+              <div className="space-y-3 rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] p-3.5">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                    Fee structure
+                  </p>
+                  <p className="mt-1 text-[12px] leading-snug text-black/50">
+                    Same pattern as class tier — same amount for every period, or different amounts,
+                    each with its own due date.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                    Billing
+                  </Label>
+                  <div
+                    role="tablist"
+                    aria-label="Billing cycle"
+                    className="flex border-b border-[#E8E8EA] dark:border-white/10"
+                  >
+                    {CLASS_SCHEDULE_CYCLES.map((cycle) => {
+                      const active = form.billingCycle === cycle;
+                      return (
+                        <button
+                          key={cycle}
+                          type="button"
+                          role="tab"
+                          aria-selected={active}
+                          onClick={() => {
+                            const count = defaultInstallmentCount(cycle);
+                            setForm((prev) => {
+                              const nextCount = Math.max(
+                                1,
+                                Math.floor(Number(prev.installmentCount) || 0) || Number(count),
+                              );
+                              const rows = Array.from({ length: nextCount }, (_, index) => {
+                                const existing = prev.installments[index];
+                                return {
+                                  id: existing?.id || `fl-i-${index + 1}`,
+                                  label: installmentLabel(index, cycle),
+                                  amount:
+                                    prev.feeAmountMode === "fixed"
+                                      ? prev.bothFee
+                                      : existing?.amount || prev.bothFee || "",
+                                  dueDate: existing?.dueDate || "",
+                                };
+                              });
+                              return {
+                                ...prev,
+                                billingCycle: cycle,
+                                installmentCount: String(nextCount),
+                                installments: rows,
+                              };
+                            });
+                          }}
+                          className={cn(
+                            "relative min-w-0 flex-1 px-2 py-2.5 text-center text-[12.5px] font-semibold tracking-tight transition-colors",
+                            active
+                              ? "text-[#0F766E] dark:text-[#5EEAD4]"
+                              : "text-black/45 hover:text-black/70 dark:text-zinc-500 dark:hover:text-zinc-300",
+                          )}
+                        >
+                          {cycle}
+                          {active && (
+                            <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-[#0F766E] dark:bg-[#2DD4BF]" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                    Amounts
+                  </Label>
+                  <div className="flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
+                    {(
+                      [
+                        {
+                          key: "fixed" as const,
+                          label:
+                            form.billingCycle === "Term"
+                              ? "Same for every term"
+                              : "Same each month",
+                        },
+                        {
+                          key: "custom" as const,
+                          label:
+                            form.billingCycle === "Term"
+                              ? "Different per term"
+                              : "Different per month",
+                        },
+                      ] as const
+                    ).map((option) => {
+                      const active = form.feeAmountMode === option.key;
+                      return (
+                        <button
+                          key={option.key}
+                          type="button"
+                          onClick={() => {
+                            setForm((prev) => {
+                              const count = Math.max(
+                                1,
+                                Math.floor(Number(prev.installmentCount) || 0) ||
+                                  Number(defaultInstallmentCount(prev.billingCycle)),
+                              );
+                              const rows = Array.from({ length: count }, (_, index) => {
+                                const existing = prev.installments[index];
+                                return {
+                                  id: existing?.id || `fl-i-${index + 1}`,
+                                  label:
+                                    existing?.label || installmentLabel(index, prev.billingCycle),
+                                  amount:
+                                    option.key === "fixed"
+                                      ? prev.bothFee || existing?.amount || ""
+                                      : existing?.amount || prev.bothFee || "",
+                                  dueDate: existing?.dueDate || "",
+                                };
+                              });
+                              return {
+                                ...prev,
+                                feeAmountMode: option.key,
+                                installmentCount: String(count),
+                                bothFee: prev.bothFee || rows[0]?.amount || "",
+                                installments: rows,
+                              };
+                            });
+                          }}
+                          className={cn(
+                            "flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors",
+                            active ? "bg-[#0F766E] text-white" : "text-black/65 hover:text-black",
+                          )}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[11px] text-black/45">
+                    {form.feeAmountMode === "fixed"
+                      ? "One both-shift amount applies to every period. Set a due date for each below."
+                      : "Enter a separate both-shift amount and due date for each period."}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                      Both shifts · amount each (₹)
+                      {form.billingCycle === "Term" ? "Number of terms" : "Number of installments"}
                     </Label>
                     <Input
                       inputMode="numeric"
-                      value={form.bothFee}
+                      value={form.installmentCount}
                       onChange={(e) => {
-                        const amount = e.target.value.replace(/[^0-9]/g, "");
-                        setForm((prev) => {
-                          const count = Math.max(
-                            1,
-                            Math.floor(Number(prev.installmentCount) || 0),
-                          );
-                          return {
-                            ...prev,
-                            bothFee: amount,
-                            installments: ensureInstallmentRows(
-                              { ...prev, bothFee: amount },
-                              count,
-                              "fixed",
-                            ),
-                          };
-                        });
+                        const raw = e.target.value.replace(/[^0-9]/g, "");
+                        const count = Math.max(1, Math.floor(Number(raw) || 0));
+                        setForm((prev) => ({
+                          ...prev,
+                          installmentCount: raw,
+                          installments: ensureInstallmentRows(prev, count),
+                        }));
                       }}
-                      placeholder="0"
+                      placeholder={form.billingCycle === "Term" ? "4" : "12"}
                       className="font-mono bg-white"
                     />
                   </div>
-                ) : (
-                  <div className="flex items-end">
-                    <p className="pb-2 text-[12px] text-black/45">
-                      Set each {form.billingCycle === "Term" ? "term" : "installment"} amount in
-                      the schedule below.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-2 rounded-xl border border-[#E8E8EA] bg-white p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                    {form.billingCycle === "Term" ? "Term schedule" : "Installment schedule"}
-                  </Label>
-                  {form.feeAmountMode === "custom" ? (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setForm((prev) => {
-                          const rows = [
-                            ...ensureInstallmentRows(
-                              prev,
-                              Math.max(1, Math.floor(Number(prev.installmentCount) || 0)),
-                            ),
-                            {
-                              id: `fl-i-${prev.installments.length + 1}-${Date.now()}`,
-                              label: installmentLabel(
-                                Math.max(1, Math.floor(Number(prev.installmentCount) || 0)),
-                                prev.billingCycle,
+                  {form.feeAmountMode === "fixed" ? (
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                        Both shifts · amount each (₹)
+                      </Label>
+                      <Input
+                        inputMode="numeric"
+                        value={form.bothFee}
+                        onChange={(e) => {
+                          const amount = e.target.value.replace(/[^0-9]/g, "");
+                          setForm((prev) => {
+                            const count = Math.max(
+                              1,
+                              Math.floor(Number(prev.installmentCount) || 0),
+                            );
+                            return {
+                              ...prev,
+                              bothFee: amount,
+                              installments: ensureInstallmentRows(
+                                { ...prev, bothFee: amount },
+                                count,
+                                "fixed",
                               ),
-                              amount: prev.bothFee,
-                              dueDate: "",
-                            },
-                          ];
-                          return {
-                            ...prev,
-                            installments: rows,
-                            installmentCount: String(rows.length),
-                          };
-                        })
-                      }
-                      className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#0F766E] hover:underline"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      Add {form.billingCycle === "Term" ? "term" : "installment"}
-                    </button>
-                  ) : null}
-                </div>
-
-                <div
-                  className={cn(
-                    "grid items-end gap-2 px-0.5 text-[10px] font-semibold uppercase tracking-wider text-black/40",
-                    form.feeAmountMode === "custom"
-                      ? "grid-cols-[minmax(0,1fr)_6.5rem_minmax(10rem,1fr)_auto]"
-                      : "grid-cols-[minmax(0,1fr)_6.5rem_minmax(10rem,1fr)]",
+                            };
+                          });
+                        }}
+                        placeholder="0"
+                        className="font-mono bg-white"
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex items-end">
+                      <p className="pb-2 text-[12px] text-black/45">
+                        Set each {form.billingCycle === "Term" ? "term" : "installment"} amount in
+                        the schedule below.
+                      </p>
+                    </div>
                   )}
-                >
-                  <span>Label</span>
-                  <span>Both (₹)</span>
-                  <span>Due date</span>
-                  {form.feeAmountMode === "custom" ? <span className="sr-only">Remove</span> : null}
                 </div>
 
-                {termScheduleRows.map((row, index) => (
+                <div className="space-y-2 rounded-xl border border-[#E8E8EA] bg-white p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                      {form.billingCycle === "Term" ? "Term schedule" : "Installment schedule"}
+                    </Label>
+                    {form.feeAmountMode === "custom" ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setForm((prev) => {
+                            const rows = [
+                              ...ensureInstallmentRows(
+                                prev,
+                                Math.max(1, Math.floor(Number(prev.installmentCount) || 0)),
+                              ),
+                              {
+                                id: `fl-i-${prev.installments.length + 1}-${Date.now()}`,
+                                label: installmentLabel(
+                                  Math.max(1, Math.floor(Number(prev.installmentCount) || 0)),
+                                  prev.billingCycle,
+                                ),
+                                amount: prev.bothFee,
+                                dueDate: "",
+                              },
+                            ];
+                            return {
+                              ...prev,
+                              installments: rows,
+                              installmentCount: String(rows.length),
+                            };
+                          })
+                        }
+                        className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#0F766E] hover:underline"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Add {form.billingCycle === "Term" ? "term" : "installment"}
+                      </button>
+                    ) : null}
+                  </div>
+
                   <div
-                    key={row.id}
                     className={cn(
-                      "grid items-center gap-2",
+                      "grid items-end gap-2 px-0.5 text-[10px] font-semibold uppercase tracking-wider text-black/40",
                       form.feeAmountMode === "custom"
                         ? "grid-cols-[minmax(0,1fr)_6.5rem_minmax(10rem,1fr)_auto]"
                         : "grid-cols-[minmax(0,1fr)_6.5rem_minmax(10rem,1fr)]",
                     )}
                   >
-                    <Input
-                      value={row.label}
-                      onChange={(e) => patchInstallmentRow(index, { label: e.target.value })}
-                      className="h-9 bg-[#FAFAFA] text-[13px]"
-                    />
-                    {form.feeAmountMode === "fixed" ? (
-                      <div className="flex h-9 items-center rounded-md border border-[#EFEFEF] bg-[#F7F7F8] px-2.5 font-mono text-[13px] text-black/70">
-                        {row.amount ? `₹ ${Number(row.amount).toLocaleString("en-IN")}` : "—"}
-                      </div>
-                    ) : (
-                      <Input
-                        inputMode="numeric"
-                        value={row.amount}
-                        onChange={(e) =>
-                          patchInstallmentRow(index, {
-                            amount: e.target.value.replace(/[^0-9]/g, ""),
-                          })
-                        }
-                        placeholder="0"
-                        className="h-9 font-mono bg-white"
-                      />
-                    )}
-                    <DatePicker
-                      value={row.dueDate}
-                      onChange={(dueDate) => patchInstallmentRow(index, { dueDate })}
-                      placeholder="dd/mm/yyyy"
-                      valueFormat="iso"
-                      className="h-9 text-[12px]"
-                      quickPicks={[
-                        { label: "Today", getDate: (t) => t },
-                        {
-                          label: "+30d",
-                          getDate: (t) =>
-                            new Date(t.getFullYear(), t.getMonth(), t.getDate() + 30),
-                        },
-                      ]}
-                    />
+                    <span>Label</span>
+                    <span>Both (₹)</span>
+                    <span>Due date</span>
                     {form.feeAmountMode === "custom" ? (
-                      <button
-                        type="button"
-                        aria-label={`Remove ${row.label}`}
-                        onClick={() =>
-                          setForm((prev) => {
-                            const rows = ensureInstallmentRows(
-                              prev,
-                              Math.max(1, Math.floor(Number(prev.installmentCount) || 0)),
-                            ).filter((_, i) => i !== index);
-                            const nextRows =
-                              rows.length > 0
-                                ? rows
-                                : [
-                                    {
-                                      id: `fl-i-1`,
-                                      label: installmentLabel(0, prev.billingCycle),
-                                      amount: prev.bothFee,
-                                      dueDate: "",
-                                    },
-                                  ];
-                            return {
-                              ...prev,
-                              installments: nextRows,
-                              installmentCount: String(nextRows.length),
-                            };
-                          })
-                        }
-                        className="grid h-9 w-9 place-items-center rounded-full text-black/40 hover:bg-[#FEE2E2] hover:text-[#EF4444]"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      <span className="sr-only">Remove</span>
                     ) : null}
                   </div>
-                ))}
-              </div>
 
-              {form.billingCycle === "Monthly" ? (
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                    Fee collection starts from
-                  </Label>
-                  <FieldSelect
-                    value={form.feeCollectionStartMonth}
-                    onValueChange={(month) => setForm({ ...form, feeCollectionStartMonth: month })}
-                    options={FEE_MONTHS.map((month) => ({ value: month, label: month }))}
-                    placeholder="Select month"
-                    triggerClassName="h-10 bg-white"
-                  />
+                  {termScheduleRows.map((row, index) => (
+                    <div
+                      key={row.id}
+                      className={cn(
+                        "grid items-center gap-2",
+                        form.feeAmountMode === "custom"
+                          ? "grid-cols-[minmax(0,1fr)_6.5rem_minmax(10rem,1fr)_auto]"
+                          : "grid-cols-[minmax(0,1fr)_6.5rem_minmax(10rem,1fr)]",
+                      )}
+                    >
+                      <Input
+                        value={row.label}
+                        onChange={(e) => patchInstallmentRow(index, { label: e.target.value })}
+                        className="h-9 bg-[#FAFAFA] text-[13px]"
+                      />
+                      {form.feeAmountMode === "fixed" ? (
+                        <div className="flex h-9 items-center rounded-md border border-[#EFEFEF] bg-[#F7F7F8] px-2.5 font-mono text-[13px] text-black/70">
+                          {row.amount ? `₹ ${Number(row.amount).toLocaleString("en-IN")}` : "—"}
+                        </div>
+                      ) : (
+                        <Input
+                          inputMode="numeric"
+                          value={row.amount}
+                          onChange={(e) =>
+                            patchInstallmentRow(index, {
+                              amount: e.target.value.replace(/[^0-9]/g, ""),
+                            })
+                          }
+                          placeholder="0"
+                          className="h-9 font-mono bg-white"
+                        />
+                      )}
+                      <DatePicker
+                        value={row.dueDate}
+                        onChange={(dueDate) => patchInstallmentRow(index, { dueDate })}
+                        placeholder="dd/mm/yyyy"
+                        valueFormat="iso"
+                        className="h-9 text-[12px]"
+                        quickPicks={[
+                          { label: "Today", getDate: (t) => t },
+                          {
+                            label: "+30d",
+                            getDate: (t) =>
+                              new Date(t.getFullYear(), t.getMonth(), t.getDate() + 30),
+                          },
+                        ]}
+                      />
+                      {form.feeAmountMode === "custom" ? (
+                        <button
+                          type="button"
+                          aria-label={`Remove ${row.label}`}
+                          onClick={() =>
+                            setForm((prev) => {
+                              const rows = ensureInstallmentRows(
+                                prev,
+                                Math.max(1, Math.floor(Number(prev.installmentCount) || 0)),
+                              ).filter((_, i) => i !== index);
+                              const nextRows =
+                                rows.length > 0
+                                  ? rows
+                                  : [
+                                      {
+                                        id: `fl-i-1`,
+                                        label: installmentLabel(0, prev.billingCycle),
+                                        amount: prev.bothFee,
+                                        dueDate: "",
+                                      },
+                                    ];
+                              return {
+                                ...prev,
+                                installments: nextRows,
+                                installmentCount: String(nextRows.length),
+                              };
+                            })
+                          }
+                          className="grid h-9 w-9 place-items-center rounded-full text-black/40 hover:bg-[#FEE2E2] hover:text-[#EF4444]"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
+                    </div>
+                  ))}
                 </div>
-              ) : null}
 
-              <div className="flex items-center justify-between rounded-lg border border-[#D1FAE5] bg-white px-3 py-2.5">
-                <span className="text-[12px] text-black/55">Both-shift total</span>
-                <span className="font-mono text-[15px] font-semibold text-[#0F766E]">
-                  ₹ {schedulePreview.total.toLocaleString("en-IN")}
-                </span>
+                {form.billingCycle === "Monthly" ? (
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                      Fee collection starts from
+                    </Label>
+                    <FieldSelect
+                      value={form.feeCollectionStartMonth}
+                      onValueChange={(month) =>
+                        setForm({ ...form, feeCollectionStartMonth: month })
+                      }
+                      options={FEE_MONTHS.map((month) => ({ value: month, label: month }))}
+                      placeholder="Select month"
+                      triggerClassName="h-10 bg-white"
+                    />
+                  </div>
+                ) : null}
+
+                <div className="flex items-center justify-between rounded-lg border border-[#D1FAE5] bg-white px-3 py-2.5">
+                  <span className="text-[12px] text-black/55">Both-shift total</span>
+                  <span className="font-mono text-[15px] font-semibold text-[#0F766E]">
+                    ₹ {schedulePreview.total.toLocaleString("en-IN")}
+                  </span>
+                </div>
               </div>
-            </div>
             </div>
 
             <DialogFooter className="shrink-0 flex-row justify-end gap-2 border-t border-[#EFEFEF] bg-white px-4 py-3 sm:px-6 dark:border-white/10 dark:bg-zinc-950">
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
+              <Button
+                type="submit"
+                className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+              >
                 {editingId ? "Save" : "Add Route"}
               </Button>
             </DialogFooter>
@@ -17519,10 +17598,7 @@ function TransportCard({
   );
 }
 
-function readImageForCrop(
-  file: File,
-  opts: { maxBytes: number; label: string },
-): string {
+function readImageForCrop(file: File, opts: { maxBytes: number; label: string }): string {
   if (!file.type.startsWith("image/")) {
     throw new Error(`Please choose a JPG, PNG, or WebP ${opts.label}`);
   }
@@ -17624,11 +17700,16 @@ function SchoolBrandMediaSpecs({ specs }: { specs: SchoolBrandMediaSpec }) {
       <p className="text-[11px] leading-relaxed text-black/55 dark:text-zinc-400">{specs.usage}</p>
       <dl className="space-y-1.5 rounded-lg border border-black/[0.06] bg-white/80 px-2.5 py-2 text-[10.5px] dark:border-white/10 dark:bg-zinc-900/60">
         {rows.map((row) => (
-          <div key={row.label} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+          <div
+            key={row.label}
+            className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5"
+          >
             <dt className="shrink-0 font-semibold uppercase tracking-wide text-black/40 dark:text-zinc-500">
               {row.label}
             </dt>
-            <dd className="min-w-0 text-right font-mono text-black/75 dark:text-zinc-200">{row.value}</dd>
+            <dd className="min-w-0 text-right font-mono text-black/75 dark:text-zinc-200">
+              {row.value}
+            </dd>
           </div>
         ))}
       </dl>
@@ -17755,10 +17836,7 @@ function SchoolDetailsCard({
   schoolDetails: SchoolDetails;
   setSchoolDetails: React.Dispatch<React.SetStateAction<SchoolDetails>>;
   onDirtyChange?: (dirty: boolean) => void;
-  onBindActions?: (actions: {
-    save: () => Promise<boolean>;
-    discard: () => void;
-  }) => void;
+  onBindActions?: (actions: { save: () => Promise<boolean>; discard: () => void }) => void;
 }) {
   const { updateSession } = useAuth();
   const [draft, setDraft] = useState<SchoolDetails>(schoolDetails);
@@ -17836,9 +17914,7 @@ function SchoolDetailsCard({
       setDraft(saved);
       updateSession({ tenantName: saved.name });
       toast.success("School details saved", {
-        description: getApiToken()
-          ? `${saved.name} · synced to api.feezo.app`
-          : saved.name,
+        description: getApiToken() ? `${saved.name} · synced to api.feezo.app` : saved.name,
       });
       return true;
     } catch (err) {
@@ -18018,7 +18094,9 @@ function SchoolDetailsCard({
           <div className="mb-3 flex items-center gap-1 border-b border-[#EFEFEF] pb-2.5 dark:border-white/10 lg:hidden">
             <SettingsMobileBackButton />
             <div className="min-w-0 flex-1 px-1">
-              <div className="text-[16px] font-semibold text-black dark:text-zinc-100">School Details</div>
+              <div className="text-[16px] font-semibold text-black dark:text-zinc-100">
+                School Details
+              </div>
             </div>
           </div>
         ) : null}
@@ -18060,268 +18138,268 @@ function SchoolDetailsCard({
         ) : null}
 
         <div className="mt-4 space-y-5">
-        <div className="grid grid-cols-12 gap-3">
-          <SchoolDetailsMediaField
-            label="Logo"
-            specs={SCHOOL_BRAND_MEDIA_SPECS.logo}
-            canAdjust={Boolean(draft.logoUrl)}
-            adjustLoading={cropLoading === "logo"}
-            onAdjust={() => void openAdjust("logo")}
-            onUpload={() => logoInputRef.current?.click()}
-            onRemove={draft.logoUrl ? () => patch("logoUrl", undefined) : undefined}
-            removeAriaLabel="Remove logo"
-            preview={
-              draft.logoUrl ? (
+          <div className="grid grid-cols-12 gap-3">
+            <SchoolDetailsMediaField
+              label="Logo"
+              specs={SCHOOL_BRAND_MEDIA_SPECS.logo}
+              canAdjust={Boolean(draft.logoUrl)}
+              adjustLoading={cropLoading === "logo"}
+              onAdjust={() => void openAdjust("logo")}
+              onUpload={() => logoInputRef.current?.click()}
+              onRemove={draft.logoUrl ? () => patch("logoUrl", undefined) : undefined}
+              removeAriaLabel="Remove logo"
+              preview={
+                draft.logoUrl ? (
+                  <img
+                    src={resolveMediaUrl(draft.logoUrl) ?? draft.logoUrl}
+                    alt="School logo"
+                    className="h-16 w-16 object-contain p-1.5"
+                  />
+                ) : (
+                  <div className="grid h-16 w-16 place-items-center bg-gradient-to-br from-[#0F766E] to-[#115E59] text-[13px] font-bold text-white">
+                    {initials}
+                  </div>
+                )
+              }
+            />
+
+            <SchoolDetailsMediaField
+              label="Letterhead"
+              specs={SCHOOL_BRAND_MEDIA_SPECS.letterhead}
+              canAdjust={Boolean(draft.letterheadUrl)}
+              adjustLoading={cropLoading === "letterhead"}
+              onAdjust={() => void openAdjust("letterhead")}
+              onUpload={() => letterheadInputRef.current?.click()}
+              uploadIcon={FileImage}
+              onRemove={draft.letterheadUrl ? () => patch("letterheadUrl", undefined) : undefined}
+              removeAriaLabel="Remove letterhead"
+              preview={
+                draft.letterheadUrl ? (
+                  <img
+                    src={resolveMediaUrl(draft.letterheadUrl) ?? draft.letterheadUrl}
+                    alt="School letterhead"
+                    className="h-16 w-full object-cover object-top lg:h-16 lg:w-48"
+                  />
+                ) : (
+                  <div className="flex h-16 w-full items-center justify-center border border-dashed border-black/10 px-3 text-center text-[10px] text-black/45 dark:border-white/15 dark:text-zinc-400 lg:w-48">
+                    No letterhead
+                  </div>
+                )
+              }
+            />
+          </div>
+
+          <div className="grid grid-cols-12 gap-3">
+            <SchoolDetailsMediaField
+              label="Seal"
+              specs={SCHOOL_BRAND_MEDIA_SPECS.seal}
+              badge={
+                !draft.sealUrl ? (
+                  <span className="rounded-full bg-[#CCFBF1] px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-[#0F766E]">
+                    Default
+                  </span>
+                ) : undefined
+              }
+              adjustLoading={cropLoading === "seal"}
+              onAdjust={() => void openAdjust("seal")}
+              onUpload={() => sealInputRef.current?.click()}
+              onRemove={draft.sealUrl ? () => patch("sealUrl", undefined) : undefined}
+              removeAriaLabel="Reset seal to default"
+              preview={
+                draft.sealUrl ? (
+                  <img
+                    src={resolveSealDisplaySrc(draft.name, draft.sealUrl)}
+                    alt="School seal"
+                    className="h-24 w-24 rounded-full object-contain p-0.5 ring-1 ring-[#1D4ED8]/25"
+                  />
+                ) : (
+                  <DefaultSchoolSeal
+                    name={draft.name}
+                    details={draft.address}
+                    logoUrl={draft.logoUrl}
+                    className="h-24 w-24 rounded-full ring-1 ring-[#1D4ED8]/25"
+                  />
+                )
+              }
+            />
+
+            <SchoolDetailsMediaField
+              label="Signature"
+              specs={SCHOOL_BRAND_MEDIA_SPECS.signature}
+              badge={
+                !draft.signatureUrl ? (
+                  <span className="rounded-full bg-[#CCFBF1] px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-[#0F766E]">
+                    Default
+                  </span>
+                ) : undefined
+              }
+              adjustLoading={cropLoading === "signature"}
+              onAdjust={() => void openAdjust("signature")}
+              onUpload={() => signatureInputRef.current?.click()}
+              extraActions={
+                <button
+                  type="button"
+                  onClick={() => setDrawSignatureOpen(true)}
+                  className={schoolBrandActionBtn}
+                >
+                  <PenLine className="h-3.5 w-3.5" />
+                  Draw
+                </button>
+              }
+              onRemove={draft.signatureUrl ? () => patch("signatureUrl", undefined) : undefined}
+              removeAriaLabel="Reset signature to default"
+              preview={
                 <img
-                  src={resolveMediaUrl(draft.logoUrl) ?? draft.logoUrl}
-                  alt="School logo"
-                  className="h-16 w-16 object-contain p-1.5"
+                  src={resolveSignatureDisplaySrc(draft.principalName, draft.signatureUrl)}
+                  alt="Authorised signature"
+                  className="h-14 w-full max-w-xs object-contain object-left px-2 lg:w-44"
                 />
-              ) : (
-                <div className="grid h-16 w-16 place-items-center bg-gradient-to-br from-[#0F766E] to-[#115E59] text-[13px] font-bold text-white">
-                  {initials}
-                </div>
-              )
-            }
+              }
+            />
+          </div>
+
+          <input
+            ref={logoInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            className="hidden"
+            onChange={onLogo}
+          />
+          <input
+            ref={letterheadInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            className="hidden"
+            onChange={onLetterhead}
+          />
+          <input
+            ref={sealInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            className="hidden"
+            onChange={onSeal}
+          />
+          <input
+            ref={signatureInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            className="hidden"
+            onChange={onSignatureFile}
           />
 
-          <SchoolDetailsMediaField
-            label="Letterhead"
-            specs={SCHOOL_BRAND_MEDIA_SPECS.letterhead}
-            canAdjust={Boolean(draft.letterheadUrl)}
-            adjustLoading={cropLoading === "letterhead"}
-            onAdjust={() => void openAdjust("letterhead")}
-            onUpload={() => letterheadInputRef.current?.click()}
-            uploadIcon={FileImage}
-            onRemove={draft.letterheadUrl ? () => patch("letterheadUrl", undefined) : undefined}
-            removeAriaLabel="Remove letterhead"
-            preview={
-              draft.letterheadUrl ? (
-                <img
-                  src={resolveMediaUrl(draft.letterheadUrl) ?? draft.letterheadUrl}
-                  alt="School letterhead"
-                  className="h-16 w-full object-cover object-top lg:h-16 lg:w-48"
-                />
-              ) : (
-                <div className="flex h-16 w-full items-center justify-center border border-dashed border-black/10 px-3 text-center text-[10px] text-black/45 dark:border-white/15 dark:text-zinc-400 lg:w-48">
-                  No letterhead
-                </div>
-              )
-            }
-          />
-        </div>
-
-        <div className="grid grid-cols-12 gap-3">
-          <SchoolDetailsMediaField
-            label="Seal"
-            specs={SCHOOL_BRAND_MEDIA_SPECS.seal}
-            badge={
-              !draft.sealUrl ? (
-                <span className="rounded-full bg-[#CCFBF1] px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-[#0F766E]">
-                  Default
-                </span>
-              ) : undefined
-            }
-            adjustLoading={cropLoading === "seal"}
-            onAdjust={() => void openAdjust("seal")}
-            onUpload={() => sealInputRef.current?.click()}
-            onRemove={draft.sealUrl ? () => patch("sealUrl", undefined) : undefined}
-            removeAriaLabel="Reset seal to default"
-            preview={
-              draft.sealUrl ? (
-                <img
-                  src={resolveSealDisplaySrc(draft.name, draft.sealUrl)}
-                  alt="School seal"
-                  className="h-24 w-24 rounded-full object-contain p-0.5 ring-1 ring-[#1D4ED8]/25"
-                />
-              ) : (
-                <DefaultSchoolSeal
-                  name={draft.name}
-                  details={draft.address}
-                  logoUrl={draft.logoUrl}
-                  className="h-24 w-24 rounded-full ring-1 ring-[#1D4ED8]/25"
-                />
-              )
-            }
-          />
-
-          <SchoolDetailsMediaField
-            label="Signature"
-            specs={SCHOOL_BRAND_MEDIA_SPECS.signature}
-            badge={
-              !draft.signatureUrl ? (
-                <span className="rounded-full bg-[#CCFBF1] px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-[#0F766E]">
-                  Default
-                </span>
-              ) : undefined
-            }
-            adjustLoading={cropLoading === "signature"}
-            onAdjust={() => void openAdjust("signature")}
-            onUpload={() => signatureInputRef.current?.click()}
-            extraActions={
-              <button
-                type="button"
-                onClick={() => setDrawSignatureOpen(true)}
-                className={schoolBrandActionBtn}
-              >
-                <PenLine className="h-3.5 w-3.5" />
-                Draw
-              </button>
-            }
-            onRemove={draft.signatureUrl ? () => patch("signatureUrl", undefined) : undefined}
-            removeAriaLabel="Reset signature to default"
-            preview={
-              <img
-                src={resolveSignatureDisplaySrc(draft.principalName, draft.signatureUrl)}
-                alt="Authorised signature"
-                className="h-14 w-full max-w-xs object-contain object-left px-2 lg:w-44"
+          <div className="grid grid-cols-12 gap-3">
+            <div className="col-span-12 lg:col-span-4">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                School Name
+              </Label>
+              <Input
+                value={draft.name}
+                onChange={(e) => patch("name", e.target.value)}
+                placeholder="e.g. Silver Hills Global"
+                className="mt-1.5"
               />
-            }
-          />
-        </div>
+            </div>
+            <div className="col-span-12 sm:col-span-6 lg:col-span-4">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                Tagline
+              </Label>
+              <Input
+                value={draft.tagline}
+                onChange={(e) => patch("tagline", e.target.value)}
+                placeholder="Short motto or subtitle"
+                className="mt-1.5"
+              />
+            </div>
+            <div className="col-span-12 sm:col-span-6 lg:col-span-4">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                Website
+              </Label>
+              <Input
+                value={draft.website}
+                onChange={(e) => patch("website", e.target.value)}
+                placeholder="www.…"
+                className="mt-1.5"
+              />
+            </div>
 
-        <input
-          ref={logoInputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/gif"
-          className="hidden"
-          onChange={onLogo}
-        />
-        <input
-          ref={letterheadInputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/gif"
-          className="hidden"
-          onChange={onLetterhead}
-        />
-        <input
-          ref={sealInputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/gif"
-          className="hidden"
-          onChange={onSeal}
-        />
-        <input
-          ref={signatureInputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/gif"
-          className="hidden"
-          onChange={onSignatureFile}
-        />
+            <div className="col-span-12">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                Address
+              </Label>
+              <Textarea
+                value={draft.address}
+                onChange={(e) => patch("address", e.target.value)}
+                placeholder="Campus address"
+                className="mt-1.5 min-h-[72px] resize-none"
+              />
+            </div>
 
-        <div className="grid grid-cols-12 gap-3">
-          <div className="col-span-12 lg:col-span-4">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-              School Name
-            </Label>
-            <Input
-              value={draft.name}
-              onChange={(e) => patch("name", e.target.value)}
-              placeholder="e.g. Silver Hills Global"
-              className="mt-1.5"
-            />
-          </div>
-          <div className="col-span-12 sm:col-span-6 lg:col-span-4">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-              Tagline
-            </Label>
-            <Input
-              value={draft.tagline}
-              onChange={(e) => patch("tagline", e.target.value)}
-              placeholder="Short motto or subtitle"
-              className="mt-1.5"
-            />
-          </div>
-          <div className="col-span-12 sm:col-span-6 lg:col-span-4">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-              Website
-            </Label>
-            <Input
-              value={draft.website}
-              onChange={(e) => patch("website", e.target.value)}
-              placeholder="www.…"
-              className="mt-1.5"
-            />
-          </div>
+            <div className="col-span-12 sm:col-span-6 lg:col-span-3">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                Phone
+              </Label>
+              <Input
+                value={draft.phone}
+                onChange={(e) => patch("phone", e.target.value)}
+                placeholder="+91 …"
+                className="mt-1.5"
+              />
+            </div>
+            <div className="col-span-12 sm:col-span-6 lg:col-span-3">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                Email
+              </Label>
+              <Input
+                type="email"
+                value={draft.email}
+                onChange={(e) => patch("email", e.target.value)}
+                placeholder="office@…"
+                className="mt-1.5"
+              />
+            </div>
+            <div className="col-span-12 sm:col-span-6 lg:col-span-3">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                Registration No.
+              </Label>
+              <Input
+                value={draft.registrationNo}
+                onChange={(e) => patch("registrationNo", e.target.value)}
+                className="mt-1.5 font-mono text-[12.5px]"
+              />
+            </div>
+            <div className="col-span-12 sm:col-span-6 lg:col-span-3">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                Affiliation No.
+              </Label>
+              <Input
+                value={draft.affiliationNo}
+                onChange={(e) => patch("affiliationNo", e.target.value)}
+                className="mt-1.5 font-mono text-[12.5px]"
+              />
+            </div>
 
-          <div className="col-span-12">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-              Address
-            </Label>
-            <Textarea
-              value={draft.address}
-              onChange={(e) => patch("address", e.target.value)}
-              placeholder="Campus address"
-              className="mt-1.5 min-h-[72px] resize-none"
-            />
+            <div className="col-span-12 sm:col-span-6 lg:col-span-6">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                Principal
+              </Label>
+              <Input
+                value={draft.principalName}
+                onChange={(e) => patch("principalName", e.target.value)}
+                className="mt-1.5"
+              />
+            </div>
+            <div className="col-span-12 sm:col-span-6 lg:col-span-6">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                Established
+              </Label>
+              <Input
+                value={draft.establishedYear}
+                onChange={(e) => patch("establishedYear", e.target.value)}
+                placeholder="e.g. 1998"
+                className="mt-1.5"
+              />
+            </div>
           </div>
-
-          <div className="col-span-12 sm:col-span-6 lg:col-span-3">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-              Phone
-            </Label>
-            <Input
-              value={draft.phone}
-              onChange={(e) => patch("phone", e.target.value)}
-              placeholder="+91 …"
-              className="mt-1.5"
-            />
-          </div>
-          <div className="col-span-12 sm:col-span-6 lg:col-span-3">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-              Email
-            </Label>
-            <Input
-              type="email"
-              value={draft.email}
-              onChange={(e) => patch("email", e.target.value)}
-              placeholder="office@…"
-              className="mt-1.5"
-            />
-          </div>
-          <div className="col-span-12 sm:col-span-6 lg:col-span-3">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-              Registration No.
-            </Label>
-            <Input
-              value={draft.registrationNo}
-              onChange={(e) => patch("registrationNo", e.target.value)}
-              className="mt-1.5 font-mono text-[12.5px]"
-            />
-          </div>
-          <div className="col-span-12 sm:col-span-6 lg:col-span-3">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-              Affiliation No.
-            </Label>
-            <Input
-              value={draft.affiliationNo}
-              onChange={(e) => patch("affiliationNo", e.target.value)}
-              className="mt-1.5 font-mono text-[12.5px]"
-            />
-          </div>
-
-          <div className="col-span-12 sm:col-span-6 lg:col-span-6">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-              Principal
-            </Label>
-            <Input
-              value={draft.principalName}
-              onChange={(e) => patch("principalName", e.target.value)}
-              className="mt-1.5"
-            />
-          </div>
-          <div className="col-span-12 sm:col-span-6 lg:col-span-6">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-              Established
-            </Label>
-            <Input
-              value={draft.establishedYear}
-              onChange={(e) => patch("establishedYear", e.target.value)}
-              placeholder="e.g. 1998"
-              className="mt-1.5"
-            />
-          </div>
-        </div>
         </div>
       </form>
 
@@ -18405,10 +18483,7 @@ function CategoriesCard({
   openAcademicYear: (year: string) => { receipts: number; enrolled: number };
   addAcademicYear: (year: string) => boolean;
   renameAcademicYear: (from: string, to: string) => { ok: boolean; reason?: string };
-  setAcademicYearClosed: (
-    year: string,
-    closed: boolean,
-  ) => { ok: boolean; reason?: string };
+  setAcademicYearClosed: (year: string, closed: boolean) => { ok: boolean; reason?: string };
   canDeleteAcademicYear: (year: string) => { ok: boolean; reason?: string };
   deleteAcademicYear: (year: string) => boolean;
   themeSettings: ThemeSettings;
@@ -18571,7 +18646,8 @@ function CategoriesCard({
                 Financial Year
               </Label>
               <p className="mt-0.5 text-[11px] text-black/45">
-                Open books · close finished years · edit start and closing months · hard-delete years and their data
+                Open books · close finished years · edit start and closing months · hard-delete
+                years and their data
               </p>
             </div>
             <span className="font-mono text-[10.5px] text-black/45">
@@ -18751,7 +18827,9 @@ function CategoriesCard({
                       }}
                       className={cn(
                         "h-7 w-7 rounded-full border-2 shadow-sm transition-transform hover:scale-105",
-                        active ? "border-black dark:border-white" : "border-white dark:border-zinc-700",
+                        active
+                          ? "border-black dark:border-white"
+                          : "border-white dark:border-zinc-700",
                       )}
                       style={{
                         background: `linear-gradient(135deg, ${preset.primary} 50%, ${preset.secondary} 50%)`,
@@ -18856,7 +18934,10 @@ function CategoriesCard({
           </div>
           <div className="mt-3 grid grid-cols-12 gap-3">
             {DOWNLOAD_KINDS.map((kind) => (
-              <div key={kind} className="col-span-12 min-w-0 sm:col-span-6 lg:col-span-4 xl:col-span-3">
+              <div
+                key={kind}
+                className="col-span-12 min-w-0 sm:col-span-6 lg:col-span-4 xl:col-span-3"
+              >
                 <ThemePatternField
                   label={DOWNLOAD_KIND_LABELS[kind]}
                   kind={kind}
@@ -18903,7 +18984,8 @@ function CategoriesCard({
               Edit financial year
             </DialogTitle>
             <DialogDescription className="mt-1 text-[13px] text-black/60">
-              Set the start and closing month for {editingYear}. Receipts, fees, and enrollments move with the new label.
+              Set the start and closing month for {editingYear}. Receipts, fees, and enrollments
+              move with the new label.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={submitEdit} className="mt-4 space-y-3">
@@ -19032,7 +19114,10 @@ function ThemePatternField({
                 </p>
                 <ul className="space-y-1">
                   {tokens.map((token) => (
-                    <li key={token} className="text-[10.5px] leading-snug text-black/70 dark:text-zinc-300">
+                    <li
+                      key={token}
+                      className="text-[10.5px] leading-snug text-black/70 dark:text-zinc-300"
+                    >
                       <span className="font-mono font-semibold text-[#0F766E] dark:text-[#5EEAD4]">
                         {token}
                       </span>
@@ -19189,7 +19274,9 @@ export function FeePeriodMultiSelect({
           disabled={disabled}
           className={cn(
             "flex h-11 w-full min-w-0 items-center justify-between rounded-lg border border-[#E5E5E5] bg-white px-3 text-left text-[13px] shadow-sm transition-colors hover:bg-[#FAFAFA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-zinc-900 dark:hover:bg-zinc-800 sm:h-10",
-            stableSelected.length ? "text-black dark:text-zinc-100" : "text-black/45 dark:text-zinc-500",
+            stableSelected.length
+              ? "text-black dark:text-zinc-100"
+              : "text-black/45 dark:text-zinc-500",
           )}
         >
           <span className="truncate">{label}</span>
@@ -19210,7 +19297,8 @@ export function FeePeriodMultiSelect({
                 onClick={() => toggle(choice.value)}
                 className={cn(
                   "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-left text-[13px] transition-colors hover:bg-[#F4F4F5] dark:hover:bg-zinc-800",
-                  checked && "bg-[#ECFDF5] font-medium text-[#0F766E] dark:bg-teal-950/40 dark:text-[#2DD4BF]",
+                  checked &&
+                    "bg-[#ECFDF5] font-medium text-[#0F766E] dark:bg-teal-950/40 dark:text-[#2DD4BF]",
                 )}
               >
                 <Checkbox checked={checked} className="pointer-events-none" />
@@ -19357,7 +19445,9 @@ export function FieldSelect({
             )}
           >
             {addNewRow ? (
-              <div className="mb-1 border-b border-[#E5E5E5] pb-1 dark:border-white/10">{addNewRow}</div>
+              <div className="mb-1 border-b border-[#E5E5E5] pb-1 dark:border-white/10">
+                {addNewRow}
+              </div>
             ) : null}
             {displayOptions.map((opt) => {
               const chosen = opt.value === value;
@@ -19372,7 +19462,9 @@ export function FieldSelect({
                       "data-[state=checked]:bg-transparent data-[state=checked]:text-[#0F766E] data-[state=checked]:font-medium dark:data-[state=checked]:text-[#2DD4BF]",
                   )}
                 >
-                  <span className="block min-w-0 flex-1 whitespace-normal break-words">{opt.label}</span>
+                  <span className="block min-w-0 flex-1 whitespace-normal break-words">
+                    {opt.label}
+                  </span>
                 </SelectItem>
               );
             })}
@@ -19394,7 +19486,12 @@ export function FieldSelect({
               triggerClassName,
             )}
           >
-            <span className={cn("min-w-0 flex-1 truncate", !selectedLabel && "text-black/45 dark:text-zinc-500")}>
+            <span
+              className={cn(
+                "min-w-0 flex-1 truncate",
+                !selectedLabel && "text-black/45 dark:text-zinc-500",
+              )}
+            >
               {selectedLabel ?? placeholder}
             </span>
             <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
@@ -19410,9 +19507,14 @@ export function FieldSelect({
         >
           <Command className="rounded-lg bg-white dark:bg-zinc-900 dark:text-zinc-100">
             {addNewRow ? (
-              <div className="border-b border-[#E5E5E5] p-1.5 dark:border-white/10">{addNewRow}</div>
+              <div className="border-b border-[#E5E5E5] p-1.5 dark:border-white/10">
+                {addNewRow}
+              </div>
             ) : null}
-            <CommandInput placeholder={searchPlaceholder} className="h-10 text-[13px] dark:text-zinc-100" />
+            <CommandInput
+              placeholder={searchPlaceholder}
+              className="h-10 text-[13px] dark:text-zinc-100"
+            />
             <CommandList className="max-h-56">
               <CommandEmpty className="py-4 text-center text-[12px] text-slate-500 dark:text-zinc-400">
                 No matches found
@@ -19429,9 +19531,14 @@ export function FieldSelect({
                       }}
                       className={fieldSelectItemClass(chosen)}
                     >
-                      <span className="min-w-0 flex-1 whitespace-normal break-words">{opt.label}</span>
+                      <span className="min-w-0 flex-1 whitespace-normal break-words">
+                        {opt.label}
+                      </span>
                       {chosen ? (
-                        <Check className="h-4 w-4 shrink-0 text-[#0F766E] dark:text-[#2DD4BF]" aria-hidden />
+                        <Check
+                          className="h-4 w-4 shrink-0 text-[#0F766E] dark:text-[#2DD4BF]"
+                          aria-hidden
+                        />
                       ) : null}
                     </CommandItem>
                   );

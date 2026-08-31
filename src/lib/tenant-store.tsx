@@ -10,7 +10,11 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
-import { fetchBranchOperationalBundle, fetchRemoteTenantBundle, branchCatalogWriteEpochValue } from "@/lib/api/tenant-sync";
+import {
+  fetchBranchOperationalBundle,
+  fetchRemoteTenantBundle,
+  branchCatalogWriteEpochValue,
+} from "@/lib/api/tenant-sync";
 import { getApiToken } from "@/lib/api/client";
 import {
   apiDeleteFeeTerm,
@@ -39,14 +43,8 @@ import {
   setActiveFileNames,
   type DownloadKind,
 } from "@/lib/download-names";
-import {
-  readStoredBranchPublicId,
-  setBranchContext,
-} from "@/lib/branch-context";
-import {
-  normalizePermissionSet,
-  type PermissionSet,
-} from "@/lib/permissions";
+import { readStoredBranchPublicId, setBranchContext } from "@/lib/branch-context";
+import { normalizePermissionSet, type PermissionSet } from "@/lib/permissions";
 import {
   academicYearBookStats,
   applyLedgerToStudent,
@@ -94,25 +92,9 @@ export const STUDENT_RELIGIONS = [
   "Nil",
 ] as const;
 
-export const STUDENT_CATEGORIES = [
-  "GENERAL",
-  "OBC",
-  "OEC",
-  "ST",
-  "SC",
-  "Others",
-] as const;
+export const STUDENT_CATEGORIES = ["GENERAL", "OBC", "OEC", "ST", "SC", "Others"] as const;
 
-export const BLOOD_GROUPS = [
-  "A+",
-  "B+",
-  "AB+",
-  "A-",
-  "B-",
-  "AB-",
-  "O+",
-  "O-",
-] as const;
+export const BLOOD_GROUPS = ["A+", "B+", "AB+", "A-", "B-", "AB-", "O+", "O-"] as const;
 
 export const GUARDIAN_RELATIONS = ["Father", "Mother", "Others"] as const;
 
@@ -183,9 +165,7 @@ export const ID_CARD_ATTACHMENT_LEVELS: StaffDocumentLevel[] = [
 ];
 
 /** Single bucket for certificates, contracts, and other files */
-export const OTHER_ATTACHMENT_LEVELS: StaffDocumentLevel[] = [
-  { id: "files", label: "Files" },
-];
+export const OTHER_ATTACHMENT_LEVELS: StaffDocumentLevel[] = [{ id: "files", label: "Files" }];
 
 /** @deprecated Prefer ID_CARD_ATTACHMENT_LEVELS / OTHER_ATTACHMENT_LEVELS */
 export const DEFAULT_ATTACHMENT_LEVELS: StaffDocumentLevel[] = [
@@ -308,7 +288,9 @@ export function formatPayrollMonthLabel(month: string): string {
   });
 }
 
-export function staffGrossSalary(staff: Pick<Staff, "basicSalary" | "additionalAllowances">): number {
+export function staffGrossSalary(
+  staff: Pick<Staff, "basicSalary" | "additionalAllowances">,
+): number {
   return Math.max(0, Math.round((staff.basicSalary || 0) + (staff.additionalAllowances || 0)));
 }
 
@@ -338,19 +320,12 @@ export function staffPayableSalary(
 } {
   const gross = staffGrossSalary(staff);
   const attendance = getStaffAttendanceForMonth(staff, month);
-  if (
-    !attendance ||
-    !Number.isFinite(attendance.workingDays) ||
-    attendance.workingDays <= 0
-  ) {
+  if (!attendance || !Number.isFinite(attendance.workingDays) || attendance.workingDays <= 0) {
     return { gross, payable: gross, ratio: 1, payableDays: 0 };
   }
   const paidLeave = Math.max(0, attendance.paidLeaveDays || 0);
   const present = Math.max(0, attendance.daysPresent);
-  const payableDays = Math.max(
-    0,
-    Math.min(present + paidLeave, attendance.workingDays),
-  );
+  const payableDays = Math.max(0, Math.min(present + paidLeave, attendance.workingDays));
   const ratio = payableDays / attendance.workingDays;
   const payable = Math.round(gross * ratio);
   return { gross, payable, ratio, payableDays, attendance };
@@ -562,9 +537,7 @@ function normalizeSalaryHistory(raw: unknown): StaffSalaryHistoryEntry[] {
       mode: typeof row.mode === "string" && row.mode ? row.mode : "Bank",
       paidAt: row.paidAt,
       description:
-        typeof row.description === "string" && row.description
-          ? row.description
-          : "Salary payment",
+        typeof row.description === "string" && row.description ? row.description : "Salary payment",
       status,
     });
   }
@@ -631,11 +604,7 @@ function normalizeStaffDocuments(raw: StaffDocument[] | undefined): StaffDocumen
     for (const file of attachments) {
       if (!levelIds.has(file.levelId)) {
         const label =
-          file.levelId === "other"
-            ? "Other"
-            : file.levelId === "files"
-              ? "Files"
-              : file.levelId;
+          file.levelId === "other" ? "Other" : file.levelId === "files" ? "Files" : file.levelId;
         levels.push({ id: file.levelId, label });
         levelIds.add(file.levelId);
       }
@@ -666,20 +635,14 @@ function normalizeStudentDocuments(
     for (const file of attachments) {
       if (!levelIds.has(file.levelId)) {
         const label =
-          file.levelId === "other"
-            ? "Other"
-            : file.levelId === "files"
-              ? "Files"
-              : file.levelId;
+          file.levelId === "other" ? "Other" : file.levelId === "files" ? "Files" : file.levelId;
         levels.push({ id: file.levelId, label });
         levelIds.add(file.levelId);
       }
     }
     const existingNumber = typeof existing?.number === "string" ? existing.number.trim() : "";
     const number =
-      def.id === "doc-aadhaar"
-        ? existingNumber || (aadhaar ?? "").trim()
-        : existingNumber;
+      def.id === "doc-aadhaar" ? existingNumber || (aadhaar ?? "").trim() : existingNumber;
     return {
       ...def,
       number,
@@ -698,9 +661,7 @@ function optionalTrimmedString(value: unknown): string | undefined {
 export function normalizeStudent(
   raw: Partial<Student> & Pick<Student, "id" | "name" | "cls" | "guardian" | "due">,
 ): Student {
-  const guardianRelation = GUARDIAN_RELATIONS.includes(
-    raw.guardianRelation as GuardianRelation,
-  )
+  const guardianRelation = GUARDIAN_RELATIONS.includes(raw.guardianRelation as GuardianRelation)
     ? (raw.guardianRelation as GuardianRelation)
     : undefined;
 
@@ -759,21 +720,22 @@ export function normalizeStaff(raw: Partial<Staff> & Pick<Staff, "id" | "name">)
     active: typeof raw.active === "boolean" ? raw.active : true,
     joinedAt,
     phone: typeof raw.phone === "string" ? raw.phone : undefined,
-    altPhone: typeof raw.altPhone === "string" && raw.altPhone.trim() ? raw.altPhone.trim() : undefined,
+    altPhone:
+      typeof raw.altPhone === "string" && raw.altPhone.trim() ? raw.altPhone.trim() : undefined,
     guardianPhone:
       typeof raw.guardianPhone === "string" && raw.guardianPhone.trim()
         ? raw.guardianPhone.trim()
         : undefined,
     photoUrl: typeof raw.photoUrl === "string" && raw.photoUrl ? raw.photoUrl : undefined,
     basicSalary:
-      typeof raw.basicSalary === "number" && Number.isFinite(raw.basicSalary) ? raw.basicSalary : 8000,
+      typeof raw.basicSalary === "number" && Number.isFinite(raw.basicSalary)
+        ? raw.basicSalary
+        : 8000,
     additionalAllowances:
       typeof raw.additionalAllowances === "number" && Number.isFinite(raw.additionalAllowances)
         ? raw.additionalAllowances
         : 0,
-    ...(attendanceByMonth && attendanceByMonth.length
-      ? { attendanceByMonth }
-      : {}),
+    ...(attendanceByMonth && attendanceByMonth.length ? { attendanceByMonth } : {}),
     documents: normalizeStaffDocuments(raw.documents),
     salaryHistory: normalizeSalaryHistory(raw.salaryHistory),
     statusHistory: normalizeStatusHistory(raw.statusHistory, joinedAt, String(raw.id ?? "")),
@@ -929,9 +891,7 @@ export function filterFeePeriods(
 ): FeeTerm[] {
   return sortFeeTerms(
     terms.filter(
-      (t) =>
-        resolveFeePeriodMode(t.periodMode) === periodMode &&
-        (kind ? t.kind === kind : true),
+      (t) => resolveFeePeriodMode(t.periodMode) === periodMode && (kind ? t.kind === kind : true),
     ),
   );
 }
@@ -1071,9 +1031,7 @@ export function inferFeePeriodKind(periodLabel: string, categoryLabel?: string):
 }
 
 /** Parse itemized lines from receipt narration (backward compatible). */
-export function parsePaymentFeeLinesFromNarration(
-  narration?: string,
-): PaymentFeeLine[] {
+export function parsePaymentFeeLinesFromNarration(narration?: string): PaymentFeeLine[] {
   const parts = (narration ?? "")
     .split(/\s*[·|]\s*/)
     .map((part) => part.trim())
@@ -1127,8 +1085,7 @@ export function resolvePaymentFeeLines(payment: Payment): PaymentFeeLine[] {
       description: line.description,
       amount: Math.max(0, Math.round(line.amount) || 0),
       feePeriodKind:
-        line.feePeriodKind ??
-        inferFeePeriodKind(line.feePeriod?.trim() ?? "", line.description),
+        line.feePeriodKind ?? inferFeePeriodKind(line.feePeriod?.trim() ?? "", line.description),
       feePeriod: line.feePeriod?.trim() ?? "",
     }));
   }
@@ -1229,12 +1186,7 @@ export function studentFeePeriodPaidAmount(
     for (const line of resolvePaymentFeeLines(payment)) {
       if (!feeCategoriesMatchForBalance(line.description, description)) continue;
       if (
-        !feePeriodsMatchForBalance(
-          line.feePeriodKind,
-          line.feePeriod,
-          opts.feePeriodKind,
-          period,
-        )
+        !feePeriodsMatchForBalance(line.feePeriodKind, line.feePeriod, opts.feePeriodKind, period)
       ) {
         continue;
       }
@@ -1246,12 +1198,7 @@ export function studentFeePeriodPaidAmount(
     for (const line of opts.pendingLines) {
       if (!feeCategoriesMatchForBalance(line.description, description)) continue;
       if (
-        !feePeriodsMatchForBalance(
-          line.feePeriodKind,
-          line.feePeriod,
-          opts.feePeriodKind,
-          period,
-        )
+        !feePeriodsMatchForBalance(line.feePeriodKind, line.feePeriod, opts.feePeriodKind, period)
       ) {
         continue;
       }
@@ -1290,9 +1237,7 @@ export function normalizePaymentCategory(
   const label = normalizePaymentCategoryLabel(typeof raw.label === "string" ? raw.label : "");
   const billing =
     raw.billingCycle === "Term" || raw.billingCycle === "Monthly" ? raw.billingCycle : undefined;
-  const feeSchedule = Array.isArray(raw.feeSchedule)
-    ? parseClassFeeSchedule(raw.feeSchedule)
-    : [];
+  const feeSchedule = Array.isArray(raw.feeSchedule) ? parseClassFeeSchedule(raw.feeSchedule) : [];
   const lower = label.toLowerCase();
   const inferredSystem =
     raw.isSystem === true ||
@@ -1329,9 +1274,8 @@ export function normalizePaymentCategory(
 function normalizePaymentCategories(raw: unknown): PaymentCategory[] {
   if (!Array.isArray(raw)) return [];
   return raw
-    .filter(
-      (c): c is Partial<PaymentCategory> & Pick<PaymentCategory, "id"> =>
-        Boolean(c && typeof c === "object" && typeof (c as PaymentCategory).id === "string"),
+    .filter((c): c is Partial<PaymentCategory> & Pick<PaymentCategory, "id"> =>
+      Boolean(c && typeof c === "object" && typeof (c as PaymentCategory).id === "string"),
     )
     .map((c) => normalizePaymentCategory(c))
     .filter((c) => c.id && c.label);
@@ -1401,9 +1345,7 @@ export function normalizeStudentFeeBreak(
     : [];
   if (periods.length === 0) return null;
   const academicYear =
-    typeof raw.academicYear === "string" && raw.academicYear.trim()
-      ? raw.academicYear.trim()
-      : "";
+    typeof raw.academicYear === "string" && raw.academicYear.trim() ? raw.academicYear.trim() : "";
   return {
     id,
     studentId,
@@ -1466,8 +1408,7 @@ export function normalizeLeaveType(raw: unknown): LeaveType | null {
   if (typeof r.id !== "string" || !r.id.trim() || typeof r.name !== "string" || !r.name.trim()) {
     return null;
   }
-  const code =
-    typeof r.code === "string" && r.code.trim() ? r.code.trim().toUpperCase() : "LV";
+  const code = typeof r.code === "string" && r.code.trim() ? r.code.trim().toUpperCase() : "LV";
   const annual =
     typeof r.annualAllowanceDays === "number" && Number.isFinite(r.annualAllowanceDays)
       ? Math.max(0, Math.round(r.annualAllowanceDays))
@@ -1480,9 +1421,7 @@ export function normalizeLeaveType(raw: unknown): LeaveType | null {
     annualAllowanceDays: annual,
     active: r.active !== false,
     sortOrder:
-      typeof r.sortOrder === "number" && Number.isFinite(r.sortOrder)
-        ? Math.round(r.sortOrder)
-        : 0,
+      typeof r.sortOrder === "number" && Number.isFinite(r.sortOrder) ? Math.round(r.sortOrder) : 0,
   };
 }
 
@@ -1557,7 +1496,9 @@ export type TenantUser = {
   createdAt: string;
 };
 
-export function normalizeTenantUser(raw: Partial<TenantUser> & Pick<TenantUser, "id" | "email">): TenantUser {
+export function normalizeTenantUser(
+  raw: Partial<TenantUser> & Pick<TenantUser, "id" | "email">,
+): TenantUser {
   const email = (raw.email ?? "").trim().toLowerCase();
   return {
     id: raw.id,
@@ -1569,9 +1510,7 @@ export function normalizeTenantUser(raw: Partial<TenantUser> & Pick<TenantUser, 
     permissions: normalizePermissionSet(raw.permissions),
     active: raw.active !== false,
     createdAt:
-      typeof raw.createdAt === "string" && raw.createdAt
-        ? raw.createdAt
-        : new Date().toISOString(),
+      typeof raw.createdAt === "string" && raw.createdAt ? raw.createdAt : new Date().toISOString(),
   };
 }
 
@@ -1579,11 +1518,7 @@ export const SEED_TENANT_USERS: TenantUser[] = [];
 
 export type ClassBillingCycle = "Monthly" | "Term" | "Annually";
 
-export const CLASS_BILLING_CYCLES: ClassBillingCycle[] = [
-  "Monthly",
-  "Term",
-  "Annually",
-];
+export const CLASS_BILLING_CYCLES: ClassBillingCycle[] = ["Monthly", "Term", "Annually"];
 
 /** Cycles offered when creating a class (Annually is migrated to a single installment). */
 export const CLASS_SCHEDULE_CYCLES: Array<Extract<ClassBillingCycle, "Monthly" | "Term">> = [
@@ -1654,9 +1589,7 @@ export function splitClassName(className: string): { grade: string; section: str
   };
 }
 
-export function normalizeClassBillingCycle(
-  value: unknown,
-): ClassBillingCycle {
+export function normalizeClassBillingCycle(value: unknown): ClassBillingCycle {
   if (value === "Annually" || value === "Term" || value === "Monthly") return value;
   return "Monthly";
 }
@@ -1764,8 +1697,7 @@ export function migrateClassFeeSchedule(
     } else {
       const mode: FeePeriodMode = cls.billingCycle === "Monthly" ? "month" : "term";
       const periods = filterFeePeriods(feeTerms, mode, "tuition");
-      const parts =
-        periods.length > 0 ? splitAmountAcrossTerms(total, periods.length) : [total];
+      const parts = periods.length > 0 ? splitAmountAcrossTerms(total, periods.length) : [total];
       const labels =
         periods.length > 0
           ? periods.map((p) => p.label)
@@ -1840,15 +1772,8 @@ export function classFeePrefillAmount(
   if (oneTime) return oneTime.amount;
 
   const installments = lines.filter((line) => line.kind === "installment");
-  if (
-    opts.periodLabel &&
-    opts.collectionStartMonth &&
-    cls.billingCycle === "Monthly"
-  ) {
-    const monthIndex = installmentIndexForFeeMonth(
-      opts.collectionStartMonth,
-      opts.periodLabel,
-    );
+  if (opts.periodLabel && opts.collectionStartMonth && cls.billingCycle === "Monthly") {
+    const monthIndex = installmentIndexForFeeMonth(opts.collectionStartMonth, opts.periodLabel);
     if (monthIndex >= 0 && installments[monthIndex]) {
       return installments[monthIndex].amount;
     }
@@ -1858,11 +1783,7 @@ export function classFeePrefillAmount(
     const exact = installments.find((line) => line.label.trim().toLowerCase() === needle);
     if (exact) return exact.amount;
   }
-  if (
-    opts.periodIndex != null &&
-    opts.periodIndex >= 0 &&
-    installments[opts.periodIndex]
-  ) {
+  if (opts.periodIndex != null && opts.periodIndex >= 0 && installments[opts.periodIndex]) {
     return installments[opts.periodIndex].amount;
   }
   if (installments[0]) return installments[0].amount;
@@ -1887,9 +1808,10 @@ export function scheduleSummary(cls: ClassConfig): string {
 }
 
 export function normalizeClassConfig(
-  raw: Partial<ClassConfig> & Pick<ClassConfig, "id" | "tuitionFeeAmount"> & {
-    className?: string;
-  },
+  raw: Partial<ClassConfig> &
+    Pick<ClassConfig, "id" | "tuitionFeeAmount"> & {
+      className?: string;
+    },
 ): ClassConfig {
   const fromParts =
     typeof raw.grade === "string" || typeof raw.section === "string"
@@ -2127,9 +2049,7 @@ export const NAV_PLACEMENT_CHANGE_EVENT = "school-accounts:nav-placement";
 
 export function notifyNavPlacementChange(placement: ThemeSettings["navPlacement"]) {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(
-    new CustomEvent(NAV_PLACEMENT_CHANGE_EVENT, { detail: placement }),
-  );
+  window.dispatchEvent(new CustomEvent(NAV_PLACEMENT_CHANGE_EVENT, { detail: placement }));
 }
 
 function normalizeTransportRoute(raw: unknown): TransportRoute | null {
@@ -2140,17 +2060,9 @@ function normalizeTransportRoute(raw: unknown): TransportRoute | null {
   }
   const legacyFee = typeof r.fee === "number" ? r.fee : undefined;
   const morningFee =
-    typeof r.morningFee === "number"
-      ? r.morningFee
-      : legacyFee
-        ? Math.round(legacyFee * 0.55)
-        : 0;
+    typeof r.morningFee === "number" ? r.morningFee : legacyFee ? Math.round(legacyFee * 0.55) : 0;
   const eveningFee =
-    typeof r.eveningFee === "number"
-      ? r.eveningFee
-      : legacyFee
-        ? Math.round(legacyFee * 0.55)
-        : 0;
+    typeof r.eveningFee === "number" ? r.eveningFee : legacyFee ? Math.round(legacyFee * 0.55) : 0;
   const bothFee =
     typeof r.bothFee === "number" ? r.bothFee : (legacyFee ?? morningFee + eveningFee);
   const coord = (v: unknown): number | undefined =>
@@ -2240,8 +2152,7 @@ export function withRouteFeeSchedule(
   const uniqueBoth = [
     ...new Set(bothFeeSchedule.filter((l) => l.kind === "installment").map((l) => l.amount)),
   ];
-  const resolvedMode =
-    feeAmountMode === "custom" || uniqueBoth.length > 1 ? "custom" : "fixed";
+  const resolvedMode = feeAmountMode === "custom" || uniqueBoth.length > 1 ? "custom" : "fixed";
   return {
     ...route,
     billingCycle,
@@ -2286,15 +2197,8 @@ export function routeFeePrefillAmount(
 ): number | undefined {
   const normalized = withRouteFeeSchedule(route, feeTerms);
   const installments = routeScheduleForShift(normalized, shift);
-  if (
-    opts.periodLabel &&
-    opts.collectionStartMonth &&
-    normalized.billingCycle === "Monthly"
-  ) {
-    const monthIndex = installmentIndexForFeeMonth(
-      opts.collectionStartMonth,
-      opts.periodLabel,
-    );
+  if (opts.periodLabel && opts.collectionStartMonth && normalized.billingCycle === "Monthly") {
+    const monthIndex = installmentIndexForFeeMonth(opts.collectionStartMonth, opts.periodLabel);
     if (monthIndex >= 0 && installments[monthIndex]) {
       return installments[monthIndex].amount;
     }
@@ -2304,11 +2208,7 @@ export function routeFeePrefillAmount(
     const exact = installments.find((line) => line.label.trim().toLowerCase() === needle);
     if (exact) return exact.amount;
   }
-  if (
-    opts.periodIndex != null &&
-    opts.periodIndex >= 0 &&
-    installments[opts.periodIndex]
-  ) {
+  if (opts.periodIndex != null && opts.periodIndex >= 0 && installments[opts.periodIndex]) {
     return installments[opts.periodIndex].amount;
   }
   if (installments[0]) return installments[0].amount;
@@ -2390,7 +2290,11 @@ function normalizeVehicleDocuments(raw: unknown): VehicleDocument[] {
 function normalizeTransportVehicle(raw: unknown): TransportVehicle | null {
   if (!raw || typeof raw !== "object") return null;
   const v = raw as Record<string, unknown>;
-  if (typeof v.id !== "string" || typeof v.name !== "string" || typeof v.registrationNo !== "string") {
+  if (
+    typeof v.id !== "string" ||
+    typeof v.name !== "string" ||
+    typeof v.registrationNo !== "string"
+  ) {
     return null;
   }
   const routeIds = Array.isArray(v.routeIds)
@@ -2491,9 +2395,7 @@ export function mergeVehicleExpiryNotifications(
 ): TenantNotification[] {
   const fresh = buildVehicleDocExpiryNotifications(vehicles, now);
   const previousById = new Map(
-    existing
-      .filter((n) => n.id.startsWith(VEHICLE_DOC_EXPIRY_PREFIX))
-      .map((n) => [n.id, n]),
+    existing.filter((n) => n.id.startsWith(VEHICLE_DOC_EXPIRY_PREFIX)).map((n) => [n.id, n]),
   );
   const mergedFresh = fresh.map((n) => {
     const prev = previousById.get(n.id);
@@ -2561,7 +2463,9 @@ function normalizeTenantNotification(raw: unknown): TenantNotification | null {
   ) {
     return null;
   }
-  const category = NOTIFICATION_CATEGORIES.includes(n.category as (typeof NOTIFICATION_CATEGORIES)[number])
+  const category = NOTIFICATION_CATEGORIES.includes(
+    n.category as (typeof NOTIFICATION_CATEGORIES)[number],
+  )
     ? (n.category as TenantNotification["category"])
     : "system";
   return {
@@ -2578,9 +2482,7 @@ function normalizeTenantNotification(raw: unknown): TenantNotification | null {
 
 function normalizeNotifications(raw: unknown): TenantNotification[] {
   if (!Array.isArray(raw)) return [];
-  return raw
-    .map(normalizeTenantNotification)
-    .filter((n): n is TenantNotification => n !== null);
+  return raw.map(normalizeTenantNotification).filter((n): n is TenantNotification => n !== null);
 }
 
 export const SEED_STUDENTS: Student[] = [
@@ -2704,10 +2606,20 @@ export const SEED_STAFF: Staff[] = [
     basicSalary: 42000,
     additionalAllowances: 4000,
     documents: [
-      { id: "doc-aadhaar", label: "Aadhaar", number: "4567 8901 2345", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
-      attachments: [] },
-      { id: "doc-pan", label: "PAN Card", number: "ABDUL5678K", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
-      attachments: [] },
+      {
+        id: "doc-aadhaar",
+        label: "Aadhaar",
+        number: "4567 8901 2345",
+        levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+        attachments: [],
+      },
+      {
+        id: "doc-pan",
+        label: "PAN Card",
+        number: "ABDUL5678K",
+        levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+        attachments: [],
+      },
     ],
     salaryHistory: [
       {
@@ -2747,10 +2659,20 @@ export const SEED_STAFF: Staff[] = [
     basicSalary: 38000,
     additionalAllowances: 3500,
     documents: [
-      { id: "doc-aadhaar", label: "Aadhaar", number: "2345 6789 0123", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
-      attachments: [] },
-      { id: "doc-pan", label: "PAN Card", number: "AYISH1234P", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
-      attachments: [] },
+      {
+        id: "doc-aadhaar",
+        label: "Aadhaar",
+        number: "2345 6789 0123",
+        levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+        attachments: [],
+      },
+      {
+        id: "doc-pan",
+        label: "PAN Card",
+        number: "AYISH1234P",
+        levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+        attachments: [],
+      },
     ],
     salaryHistory: [
       {
@@ -2790,10 +2712,20 @@ export const SEED_STAFF: Staff[] = [
     basicSalary: 52000,
     additionalAllowances: 6000,
     documents: [
-      { id: "doc-aadhaar", label: "Aadhaar", number: "5678 9012 3456", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
-      attachments: [] },
-      { id: "doc-pan", label: "PAN Card", number: "SHAMI9012L", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
-      attachments: [] },
+      {
+        id: "doc-aadhaar",
+        label: "Aadhaar",
+        number: "5678 9012 3456",
+        levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+        attachments: [],
+      },
+      {
+        id: "doc-pan",
+        label: "PAN Card",
+        number: "SHAMI9012L",
+        levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+        attachments: [],
+      },
     ],
     salaryHistory: [
       {
@@ -2833,10 +2765,20 @@ export const SEED_STAFF: Staff[] = [
     basicSalary: 36000,
     additionalAllowances: 3000,
     documents: [
-      { id: "doc-aadhaar", label: "Aadhaar", number: "3456 7890 1234", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
-      attachments: [] },
-      { id: "doc-pan", label: "PAN Card", number: "FATHM3456H", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
-      attachments: [] },
+      {
+        id: "doc-aadhaar",
+        label: "Aadhaar",
+        number: "3456 7890 1234",
+        levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+        attachments: [],
+      },
+      {
+        id: "doc-pan",
+        label: "PAN Card",
+        number: "FATHM3456H",
+        levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+        attachments: [],
+      },
     ],
     salaryHistory: [
       {
@@ -2876,10 +2818,20 @@ export const SEED_STAFF: Staff[] = [
     basicSalary: 40000,
     additionalAllowances: 3500,
     documents: [
-      { id: "doc-aadhaar", label: "Aadhaar", number: "6789 0123 4567", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
-      attachments: [] },
-      { id: "doc-pan", label: "PAN Card", number: "RAHUL6789M", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
-      attachments: [] },
+      {
+        id: "doc-aadhaar",
+        label: "Aadhaar",
+        number: "6789 0123 4567",
+        levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+        attachments: [],
+      },
+      {
+        id: "doc-pan",
+        label: "PAN Card",
+        number: "RAHUL6789M",
+        levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+        attachments: [],
+      },
     ],
     salaryHistory: [
       {
@@ -2919,10 +2871,20 @@ export const SEED_STAFF: Staff[] = [
     basicSalary: 41000,
     additionalAllowances: 4000,
     documents: [
-      { id: "doc-aadhaar", label: "Aadhaar", number: "7890 1234 5678", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
-      attachments: [] },
-      { id: "doc-pan", label: "PAN Card", number: "SNEHA7890N", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
-      attachments: [] },
+      {
+        id: "doc-aadhaar",
+        label: "Aadhaar",
+        number: "7890 1234 5678",
+        levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+        attachments: [],
+      },
+      {
+        id: "doc-pan",
+        label: "PAN Card",
+        number: "SNEHA7890N",
+        levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+        attachments: [],
+      },
     ],
     salaryHistory: [
       {
@@ -2962,10 +2924,20 @@ export const SEED_STAFF: Staff[] = [
     basicSalary: 44000,
     additionalAllowances: 4500,
     documents: [
-      { id: "doc-aadhaar", label: "Aadhaar", number: "8901 2345 6789", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
-      attachments: [] },
-      { id: "doc-pan", label: "PAN Card", number: "VIKRM8901Q", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
-      attachments: [] },
+      {
+        id: "doc-aadhaar",
+        label: "Aadhaar",
+        number: "8901 2345 6789",
+        levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+        attachments: [],
+      },
+      {
+        id: "doc-pan",
+        label: "PAN Card",
+        number: "VIKRM8901Q",
+        levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+        attachments: [],
+      },
     ],
     salaryHistory: [
       {
@@ -3005,10 +2977,20 @@ export const SEED_STAFF: Staff[] = [
     basicSalary: 46000,
     additionalAllowances: 5000,
     documents: [
-      { id: "doc-aadhaar", label: "Aadhaar", number: "9012 3456 7890", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
-      attachments: [] },
-      { id: "doc-pan", label: "PAN Card", number: "LAKSH9012R", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
-      attachments: [] },
+      {
+        id: "doc-aadhaar",
+        label: "Aadhaar",
+        number: "9012 3456 7890",
+        levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+        attachments: [],
+      },
+      {
+        id: "doc-pan",
+        label: "PAN Card",
+        number: "LAKSH9012R",
+        levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+        attachments: [],
+      },
     ],
     salaryHistory: [
       {
@@ -3048,10 +3030,20 @@ export const SEED_STAFF: Staff[] = [
     basicSalary: 48000,
     additionalAllowances: 5500,
     documents: [
-      { id: "doc-aadhaar", label: "Aadhaar", number: "0123 4567 8901", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
-      attachments: [] },
-      { id: "doc-pan", label: "PAN Card", number: "JOSEP0123S", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
-      attachments: [] },
+      {
+        id: "doc-aadhaar",
+        label: "Aadhaar",
+        number: "0123 4567 8901",
+        levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+        attachments: [],
+      },
+      {
+        id: "doc-pan",
+        label: "PAN Card",
+        number: "JOSEP0123S",
+        levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+        attachments: [],
+      },
     ],
     salaryHistory: [
       {
@@ -3091,10 +3083,20 @@ export const SEED_STAFF: Staff[] = [
     basicSalary: 50000,
     additionalAllowances: 5000,
     documents: [
-      { id: "doc-aadhaar", label: "Aadhaar", number: "1234 5678 9012", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
-      attachments: [] },
-      { id: "doc-pan", label: "PAN Card", number: "PRIYA1234T", levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
-      attachments: [] },
+      {
+        id: "doc-aadhaar",
+        label: "Aadhaar",
+        number: "1234 5678 9012",
+        levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+        attachments: [],
+      },
+      {
+        id: "doc-pan",
+        label: "PAN Card",
+        number: "PRIYA1234T",
+        levels: ID_CARD_ATTACHMENT_LEVELS.map((l) => ({ ...l })),
+        attachments: [],
+      },
     ],
     salaryHistory: [
       {
@@ -3442,8 +3444,22 @@ export const SEED_VEHICLES: TransportVehicle[] = [
 ];
 
 export const SEED_PAYMENT_CATEGORIES: PaymentCategory[] = [
-  { id: "PC-001", label: "Tuition Fee", slug: "tuition", isSystem: true, hasSchedule: false, active: true },
-  { id: "PC-002", label: "Vehicle Fee", slug: "vehicle", isSystem: true, hasSchedule: false, active: true },
+  {
+    id: "PC-001",
+    label: "Tuition Fee",
+    slug: "tuition",
+    isSystem: true,
+    hasSchedule: false,
+    active: true,
+  },
+  {
+    id: "PC-002",
+    label: "Vehicle Fee",
+    slug: "vehicle",
+    isSystem: true,
+    hasSchedule: false,
+    active: true,
+  },
   { id: "PC-003", label: "Donation", hasSchedule: false, active: true },
   { id: "PC-004", label: "Other", hasSchedule: false, active: true },
 ];
@@ -3802,18 +3818,12 @@ type TenantStoreValue = {
   /** Rename a year label across books, fees, receipts, and enrollments. */
   renameAcademicYear: (from: string, to: string) => { ok: boolean; reason?: string };
   /** Close (deactivate) or reopen a financial year. Closing the open year switches books. */
-  setAcademicYearClosed: (
-    year: string,
-    closed: boolean,
-  ) => { ok: boolean; reason?: string };
+  setAcademicYearClosed: (year: string, closed: boolean) => { ok: boolean; reason?: string };
   /** Whether a year can be hard-deleted (only blocked when it is the sole year). */
   canDeleteAcademicYear: (year: string) => { ok: boolean; reason?: string };
   /** Hard-delete a year and cascade local receipts, enrollments, and fee periods. */
   deleteAcademicYear: (year: string) => boolean;
-  enrollStudentInActiveYear: (
-    studentId: string,
-    fields: StudentYearFields,
-  ) => void;
+  enrollStudentInActiveYear: (studentId: string, fields: StudentYearFields) => void;
   /** Atomically add a new student and enroll them in the active academic year. */
   admitStudentToActiveYear: (student: Student, fields: StudentYearFields) => Student;
   themeSettings: ThemeSettings;
@@ -3851,7 +3861,10 @@ function normalizeThemeAccent(value: unknown): ThemeSettings["accent"] {
   return SEED_THEME_SETTINGS.accent;
 }
 
-function isThemeSettings(value: unknown): value is Omit<ThemeSettings, "navPlacement" | "mode" | "accent"> & {
+function isThemeSettings(value: unknown): value is Omit<
+  ThemeSettings,
+  "navPlacement" | "mode" | "accent"
+> & {
   mode?: unknown;
   accent?: unknown;
   navPlacement?: ThemeSettings["navPlacement"];
@@ -3880,8 +3893,14 @@ function normalizeThemeSettings(value: unknown): ThemeSettings {
     fontFamily: normalizeFontFamily(raw.fontFamily),
     fontColor: normalizeHexColor(raw.fontColor, DEFAULT_FONT_COLOR),
     fontSize: normalizeFontSize(raw.fontSize),
-    iconColor: normalizeHexColor(raw.iconColor, normalizeHexColor(raw.primaryColor, DEFAULT_BRAND_PRIMARY)),
-    menuColor: normalizeHexColor(raw.menuColor, normalizeHexColor(raw.primaryColor, DEFAULT_BRAND_PRIMARY)),
+    iconColor: normalizeHexColor(
+      raw.iconColor,
+      normalizeHexColor(raw.primaryColor, DEFAULT_BRAND_PRIMARY),
+    ),
+    menuColor: normalizeHexColor(
+      raw.menuColor,
+      normalizeHexColor(raw.primaryColor, DEFAULT_BRAND_PRIMARY),
+    ),
     fileNames: normalizeFileNames(raw.fileNames),
   };
 }
@@ -4040,10 +4059,7 @@ function parseSnapshot(raw: string): Snapshot | null {
   const feeTerms = Array.isArray((parsed as Partial<Snapshot>).feeTerms)
     ? ((parsed as Partial<Snapshot>).feeTerms as Partial<FeeTerm>[])
         .map((t) =>
-          normalizeFeeTerm(
-            t as Partial<FeeTerm> & Pick<FeeTerm, "id" | "label">,
-            academicYear,
-          ),
+          normalizeFeeTerm(t as Partial<FeeTerm> & Pick<FeeTerm, "id" | "label">, academicYear),
         )
         .filter((t): t is FeeTerm => t !== null)
     : [...SEED_FEE_TERMS];
@@ -4055,9 +4071,7 @@ function parseSnapshot(raw: string): Snapshot | null {
           academicYear: t.academicYear ?? academicYear,
         }));
         const yearsPresent = new Set(stamped.map((t) => t.academicYear ?? academicYear));
-        const extras = SEED_FEE_TERMS.filter(
-          (t) => !yearsPresent.has(t.academicYear ?? ""),
-        );
+        const extras = SEED_FEE_TERMS.filter((t) => !yearsPresent.has(t.academicYear ?? ""));
         return [...stamped, ...extras];
       })();
   const studentYearLedgers = hadLedgers
@@ -4072,9 +4086,7 @@ function parseSnapshot(raw: string): Snapshot | null {
         return [current, ...others];
       })();
   const ledger = getYearLedger(studentYearLedgers, academicYear);
-  const studentsWithYear = students.map((s) =>
-    applyLedgerToStudent(s, ledger.byStudentId[s.id]),
-  );
+  const studentsWithYear = students.map((s) => applyLedgerToStudent(s, ledger.byStudentId[s.id]));
   return {
     students: studentsWithYear,
     staff: parsed.staff.map((s) => normalizeStaff(s as Staff)),
@@ -4089,7 +4101,9 @@ function parseSnapshot(raw: string): Snapshot | null {
     classes: Array.isArray(parsed.classes)
       ? parsed.classes.map((c) =>
           withClassFeeSchedule(
-            normalizeClassConfig(c as Partial<ClassConfig> & Pick<ClassConfig, "id" | "tuitionFeeAmount">),
+            normalizeClassConfig(
+              c as Partial<ClassConfig> & Pick<ClassConfig, "id" | "tuitionFeeAmount">,
+            ),
             migratedFeeTerms,
           ),
         )
@@ -4148,7 +4162,7 @@ function parseSnapshot(raw: string): Snapshot | null {
     activeBranchId:
       typeof (parsed as Partial<Snapshot>).activeBranchId === "string"
         ? ((parsed as Partial<Snapshot>).activeBranchId as string)
-        : SEED_BRANCHES[0]?.id ?? "",
+        : (SEED_BRANCHES[0]?.id ?? ""),
   };
 }
 
@@ -4295,10 +4309,7 @@ export function withCurrentBusPointOption(
 
 /** Student bus points that are not Map From / Map To on any transport route. */
 export function collectOrphanedStudentBusPoints(
-  students: readonly Pick<
-    Student,
-    "needsBus" | "busPoint1" | "busPoint2" | "deletedAt"
-  >[],
+  students: readonly Pick<Student, "needsBus" | "busPoint1" | "busPoint2" | "deletedAt">[],
   routes: TransportRoute[],
 ): { pickups: string[]; drops: string[] } {
   const { pickups, drops } = transportBusPointOptions(routes);
@@ -4335,8 +4346,7 @@ export function studentNeedsTransport(
   student: Pick<Student, "needsBus" | "busPoint1" | "busPoint2">,
 ): boolean {
   return (
-    student.needsBus === true ||
-    Boolean(student.busPoint1?.trim() || student.busPoint2?.trim())
+    student.needsBus === true || Boolean(student.busPoint1?.trim() || student.busPoint2?.trim())
   );
 }
 
@@ -4398,10 +4408,15 @@ export function resolveTransportFeeForStudent(
 
   if (route) {
     const normalized = withRouteFeeSchedule(route, feeTerms);
-    const fromSchedule = routeFeePrefillAmount(normalized, shift, {
-      periodLabel: period?.label,
-      collectionStartMonth: period?.collectionStartMonth,
-    }, feeTerms);
+    const fromSchedule = routeFeePrefillAmount(
+      normalized,
+      shift,
+      {
+        periodLabel: period?.label,
+        collectionStartMonth: period?.collectionStartMonth,
+      },
+      feeTerms,
+    );
     if (fromSchedule && fromSchedule > 0) {
       return { amount: Math.round(fromSchedule), shift, route: normalized };
     }
@@ -4422,10 +4437,15 @@ export function resolveTransportFeeForStudent(
 
   const fallback = routes[0] ? withRouteFeeSchedule(routes[0], feeTerms) : undefined;
   if (fallback?.bothFee && fallback.bothFee > 0) {
-    const amt = routeFeePrefillAmount(fallback, "both", {
-      periodLabel: period?.label,
-      collectionStartMonth: period?.collectionStartMonth,
-    }, feeTerms);
+    const amt = routeFeePrefillAmount(
+      fallback,
+      "both",
+      {
+        periodLabel: period?.label,
+        collectionStartMonth: period?.collectionStartMonth,
+      },
+      feeTerms,
+    );
     return {
       amount: Math.round(amt ?? fallback.bothFee),
       shift: "both",
@@ -4439,9 +4459,7 @@ export function resolveTransportFeeForStudent(
 export function vehicleFeeCategoryLabel(
   categories: readonly Pick<PaymentCategory, "label">[],
 ): string {
-  const match = categories.find((category) =>
-    /vehicle|transport|bus/i.test(category.label),
-  );
+  const match = categories.find((category) => /vehicle|transport|bus/i.test(category.label));
   return match?.label ?? "Vehicle Fee";
 }
 
@@ -4510,9 +4528,8 @@ export function findActiveTenantUserByCredentials(
   if (!snap) return null;
   const normalized = email.trim().toLowerCase();
   return (
-    snap.tenantUsers.find(
-      (u) => u.active && u.email === normalized && u.password === password,
-    ) ?? null
+    snap.tenantUsers.find((u) => u.active && u.email === normalized && u.password === password) ??
+    null
   );
 }
 
@@ -4646,8 +4663,8 @@ export function TenantStoreProvider({
   const [academicYears, setAcademicYears] = useState<string[]>(() =>
     liveApi ? (cachedSnapshot?.academicYears ?? []) : [...SEED_ACADEMIC_YEARS],
   );
-  const [closedAcademicYears, setClosedAcademicYears] = useState<string[]>(
-    () => (liveApi ? (cachedSnapshot?.closedAcademicYears ?? []) : []),
+  const [closedAcademicYears, setClosedAcademicYears] = useState<string[]>(() =>
+    liveApi ? (cachedSnapshot?.closedAcademicYears ?? []) : [],
   );
   const [academicYear, setAcademicYearState] = useState<string>(() =>
     liveApi ? (cachedSnapshot?.academicYear ?? "") : SEED_ACADEMIC_YEAR,
@@ -4680,10 +4697,8 @@ export function TenantStoreProvider({
   );
   const [activeBranchId, setActiveBranchIdState] = useState<string>(() =>
     liveApi
-      ? cachedSnapshot?.activeBranchId ||
-          readStoredBranchPublicId(tenantId) ||
-          ""
-      : SEED_BRANCHES[0]?.id ?? "",
+      ? cachedSnapshot?.activeBranchId || readStoredBranchPublicId(tenantId) || ""
+      : (SEED_BRANCHES[0]?.id ?? ""),
   );
   const [hydrated, setHydrated] = useState(() => !liveApi || cachedSnapshot !== null);
   const [branchSyncing, setBranchSyncing] = useState(false);
@@ -4705,9 +4720,7 @@ export function TenantStoreProvider({
     setDepartments(snap.departments);
     setLeaveTypes(
       Array.isArray(snap.leaveTypes)
-        ? snap.leaveTypes
-            .map(normalizeLeaveType)
-            .filter((t): t is LeaveType => t !== null)
+        ? snap.leaveTypes.map(normalizeLeaveType).filter((t): t is LeaveType => t !== null)
         : [],
     );
     setRoles(snap.roles);
@@ -4717,8 +4730,7 @@ export function TenantStoreProvider({
         ? snap.classes.map((c) =>
             withClassFeeSchedule(
               normalizeClassConfig(
-                c as Partial<ClassConfig> &
-                  Pick<ClassConfig, "id" | "tuitionFeeAmount">,
+                c as Partial<ClassConfig> & Pick<ClassConfig, "id" | "tuitionFeeAmount">,
               ),
               snap.feeTerms ?? [],
             ),
@@ -4733,9 +4745,7 @@ export function TenantStoreProvider({
     setFeeTerms(
       Array.isArray(snap.feeTerms)
         ? snap.feeTerms
-            .map((t) =>
-              normalizeFeeTerm(t as Partial<FeeTerm> & Pick<FeeTerm, "id" | "label">),
-            )
+            .map((t) => normalizeFeeTerm(t as Partial<FeeTerm> & Pick<FeeTerm, "id" | "label">))
             .filter((t): t is FeeTerm => t !== null)
         : apiLive
           ? []
@@ -4846,9 +4856,7 @@ export function TenantStoreProvider({
           const remote = await fetchRemoteTenantBundle(undefined, { tenantId });
           if (!cancelled && remote) {
             const keepLocalBranches = branchCatalogWriteEpochValue() > branchEpochAtStart;
-            const mergedBranches = keepLocalBranches
-              ? branchesRef.current
-              : remote.branches;
+            const mergedBranches = keepLocalBranches ? branchesRef.current : remote.branches;
             // Prefer server year ledgers so every browser sees the same roster.
             // Fall back to localStorage only when the API has no year-field rows yet.
             const localLedgers = readSnapshot(storeKey)?.studentYearLedgers ?? [];
@@ -5143,9 +5151,7 @@ export function TenantStoreProvider({
         });
         if (getApiToken()) {
           void apiSyncAcademicYears({
-            academicYears: academicYears.includes(next)
-              ? academicYears
-              : [...academicYears, next],
+            academicYears: academicYears.includes(next) ? academicYears : [...academicYears, next],
             academicYear: next,
             closedAcademicYears: closedAcademicYears.filter((y) => y !== next),
           }).catch(() => {
@@ -5236,9 +5242,7 @@ export function TenantStoreProvider({
         prev.map((p) => (p.academicYear === from ? { ...p, academicYear: nextLabel } : p)),
       );
       setStudentYearLedgers((prev) =>
-        prev.map((l) =>
-          l.academicYear === from ? { ...l, academicYear: nextLabel } : l,
-        ),
+        prev.map((l) => (l.academicYear === from ? { ...l, academicYear: nextLabel } : l)),
       );
       if (academicYear === from) {
         setAcademicYearState(nextLabel);

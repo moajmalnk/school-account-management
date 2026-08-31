@@ -43,7 +43,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { FinancialYearFields, resolveFinancialYearInput } from "@/components/school/FinancialYearFields";
+import {
+  FinancialYearFields,
+  resolveFinancialYearInput,
+} from "@/components/school/FinancialYearFields";
 import { AddBranchDialog } from "@/components/school/AddBranchDialog";
 import { FloatingDock, type FloatingDockItem } from "@/components/ui/floating-dock";
 import {
@@ -265,7 +268,13 @@ export function useWorkspaceSubViewBack() {
   const onEditStaff = pathname.startsWith("/tenant/staff/edit");
   const onStudentProfile = pathname === "/tenant/students" && Boolean(detailId);
   const onStaffDetail = pathname === "/tenant/staff" && Boolean(detailId);
-  const showBack = onFinanceSubView || onAdmitStudent || onEditStudent || onEditStaff || onStudentProfile || onStaffDetail;
+  const showBack =
+    onFinanceSubView ||
+    onAdmitStudent ||
+    onEditStudent ||
+    onEditStaff ||
+    onStudentProfile ||
+    onStaffDetail;
 
   const goBack = () => {
     if (onEditStudent) {
@@ -301,11 +310,11 @@ export function useWorkspaceSubViewBack() {
     ? "Back to staff directory"
     : onEditStaff
       ? "Back to staff profile"
-    : onEditStudent
-      ? "Back to student profile"
-    : onAdmitStudent || onStudentProfile
-      ? "Back to students directory"
-      : "Back to finance overview";
+      : onEditStudent
+        ? "Back to student profile"
+        : onAdmitStudent || onStudentProfile
+          ? "Back to students directory"
+          : "Back to finance overview";
 
   return { showBack, goBack, backLabel };
 }
@@ -325,10 +334,7 @@ const NAV: NavEntry[] = [
   { to: "/tenant/settings", label: "Settings", icon: Settings },
 ];
 
-function navAllowed(
-  to: string,
-  session: ReturnType<typeof useAuth>["session"],
-): boolean {
+function navAllowed(to: string, session: ReturnType<typeof useAuth>["session"]): boolean {
   if (to.startsWith("/tenant/dashboard")) return sessionHasPermission(session, "dashboard");
   if (to.startsWith("/tenant/students")) return sessionHasPermission(session, "students");
   if (to.startsWith("/tenant/staff")) return sessionHasPermission(session, "staff");
@@ -380,10 +386,7 @@ export function TenantMacDock({
   const showCollapse = isVertical;
   const expanded = isVertical && !collapsed;
 
-  const visibleNav = useMemo(
-    () => NAV.filter((item) => navAllowed(item.to, session)),
-    [session],
-  );
+  const visibleNav = useMemo(() => NAV.filter((item) => navAllowed(item.to, session)), [session]);
 
   const floatingItems = useMemo<FloatingDockItem[]>(
     () =>
@@ -398,9 +401,7 @@ export function TenantMacDock({
             <Icon
               className={cn(
                 "h-full w-full",
-                active
-                  ? "text-[#0F766E] dark:text-[#5EEAD4]"
-                  : "text-slate-700 dark:text-zinc-300",
+                active ? "text-[#0F766E] dark:text-[#5EEAD4]" : "text-slate-700 dark:text-zinc-300",
               )}
               strokeWidth={active ? 2.35 : 2}
             />
@@ -419,11 +420,7 @@ export function TenantMacDock({
         )}
         aria-label="Primary navigation"
       >
-        <FloatingDock
-          desktopOnly
-          items={floatingItems}
-          desktopClassName="pointer-events-auto"
-        />
+        <FloatingDock desktopOnly items={floatingItems} desktopClassName="pointer-events-auto" />
       </aside>
     );
   }
@@ -479,7 +476,7 @@ export function TenantMacDock({
                 {tenantName}
               </div>
               <div className="mt-0.5 text-[9px] font-medium uppercase tracking-wider text-slate-400 xl:text-[10px] dark:text-zinc-500">
-                {branches.length > 1 ? activeBranch?.name ?? "Campus" : "Tenant"}
+                {branches.length > 1 ? (activeBranch?.name ?? "Campus") : "Tenant"}
               </div>
             </div>
           )}
@@ -525,10 +522,7 @@ export function TenantMacDock({
                     )}
                   >
                     <Icon
-                      className={cn(
-                        "h-5 w-5 xl:h-6 xl:w-6",
-                        active && "dark:text-[#5EEAD4]",
-                      )}
+                      className={cn("h-5 w-5 xl:h-6 xl:w-6", active && "dark:text-[#5EEAD4]")}
                       strokeWidth={active ? 2.35 : 2}
                     />
                   </span>
@@ -733,7 +727,9 @@ export function TenantDesktopTopBar() {
             <h1 className="line-clamp-2 text-[13px] font-bold uppercase tracking-wide text-slate-900 sm:text-[14px] xl:line-clamp-1 xl:text-[16px] dark:text-zinc-100">
               {tenantName}
             </h1>
-            <p className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-zinc-400">Tenant administration workspace</p>
+            <p className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-zinc-400">
+              Tenant administration workspace
+            </p>
           </div>
         </div>
 
@@ -745,73 +741,76 @@ export function TenantDesktopTopBar() {
               className="h-9 w-[9.5rem] rounded-full bg-emerald-500/25 sm:w-[11rem]"
             />
           ) : (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="inline-flex max-w-[11rem] items-center gap-1 rounded-full bg-[#10B981] px-2.5 py-2 text-[11px] font-semibold text-white shadow-sm shadow-emerald-500/25 transition-opacity hover:opacity-90 sm:max-w-none sm:gap-1.5 sm:px-3.5 sm:text-[12px]"
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex max-w-[11rem] items-center gap-1 rounded-full bg-[#10B981] px-2.5 py-2 text-[11px] font-semibold text-white shadow-sm shadow-emerald-500/25 transition-opacity hover:opacity-90 sm:max-w-none sm:gap-1.5 sm:px-3.5 sm:text-[12px]"
+                >
+                  <CheckCircle2
+                    className="hidden h-3.5 w-3.5 shrink-0 sm:block"
+                    strokeWidth={2.5}
+                  />
+                  <span className="truncate">{academicYear} Active</span>
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-80" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="min-w-[11rem] rounded-lg border-white/60 bg-white/90 backdrop-blur-xl dark:border-white/10 dark:bg-zinc-900"
               >
-                <CheckCircle2 className="hidden h-3.5 w-3.5 shrink-0 sm:block" strokeWidth={2.5} />
-                <span className="truncate">{academicYear} Active</span>
-                <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-80" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              className="min-w-[11rem] rounded-lg border-white/60 bg-white/90 backdrop-blur-xl dark:border-white/10 dark:bg-zinc-900"
-            >
-              <DropdownMenuRadioGroup
-                value={academicYear}
-                onValueChange={(y) => {
-                  const stats = openAcademicYear(y);
-                  toast.success(`Opened books for ${y}`, {
-                    description: `${stats.receipts} receipt${stats.receipts === 1 ? "" : "s"} · ${stats.enrolled} student${stats.enrolled === 1 ? "" : "s"} enrolled`,
-                  });
-                }}
-              >
-                {selectableYears.map((y) => (
-                  <DropdownMenuRadioItem key={y} value={y} className="rounded-md text-[13px]">
-                    {y}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-              {closedAcademicYears.filter((y) => y !== academicYear).length > 0 && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400">
-                    Closed years
-                  </DropdownMenuLabel>
-                  {closedAcademicYears
-                    .filter((y) => y !== academicYear)
-                    .map((y) => (
-                      <DropdownMenuItem
-                        key={`closed-${y}`}
-                        className="rounded-md text-[13px] text-slate-500"
-                        onSelect={() => {
-                          const stats = openAcademicYear(y);
-                          toast.success(`Reopened books for ${y}`, {
-                            description: `${stats.receipts} receipt${stats.receipts === 1 ? "" : "s"} · ${stats.enrolled} student${stats.enrolled === 1 ? "" : "s"} enrolled`,
-                          });
-                        }}
-                      >
-                        {y} · reopen
-                      </DropdownMenuItem>
-                    ))}
-                </>
-              )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="rounded-md text-[13px]"
-                onSelect={() => {
-                  resetYearDraft();
-                  setAddYearOpen(true);
-                }}
-              >
-                <Plus className="mr-2 h-3.5 w-3.5" />
-                Add academic year
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <DropdownMenuRadioGroup
+                  value={academicYear}
+                  onValueChange={(y) => {
+                    const stats = openAcademicYear(y);
+                    toast.success(`Opened books for ${y}`, {
+                      description: `${stats.receipts} receipt${stats.receipts === 1 ? "" : "s"} · ${stats.enrolled} student${stats.enrolled === 1 ? "" : "s"} enrolled`,
+                    });
+                  }}
+                >
+                  {selectableYears.map((y) => (
+                    <DropdownMenuRadioItem key={y} value={y} className="rounded-md text-[13px]">
+                      {y}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+                {closedAcademicYears.filter((y) => y !== academicYear).length > 0 && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400">
+                      Closed years
+                    </DropdownMenuLabel>
+                    {closedAcademicYears
+                      .filter((y) => y !== academicYear)
+                      .map((y) => (
+                        <DropdownMenuItem
+                          key={`closed-${y}`}
+                          className="rounded-md text-[13px] text-slate-500"
+                          onSelect={() => {
+                            const stats = openAcademicYear(y);
+                            toast.success(`Reopened books for ${y}`, {
+                              description: `${stats.receipts} receipt${stats.receipts === 1 ? "" : "s"} · ${stats.enrolled} student${stats.enrolled === 1 ? "" : "s"} enrolled`,
+                            });
+                          }}
+                        >
+                          {y} · reopen
+                        </DropdownMenuItem>
+                      ))}
+                  </>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="rounded-md text-[13px]"
+                  onSelect={() => {
+                    resetYearDraft();
+                    setAddYearOpen(true);
+                  }}
+                >
+                  <Plus className="mr-2 h-3.5 w-3.5" />
+                  Add academic year
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
 
           <ThemeModeToggle />
@@ -885,7 +884,10 @@ export function TenantDesktopTopBar() {
               <Button type="button" variant="outline" onClick={() => setAddYearOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
+              <Button
+                type="submit"
+                className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+              >
                 <Plus className="mr-1 h-3.5 w-3.5" /> Add
               </Button>
             </DialogFooter>

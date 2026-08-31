@@ -35,11 +35,36 @@ export const Route = createFileRoute("/tenant")({
 });
 
 const MOBILE_TABS: MobileTabItem[] = [
-  { to: "/tenant/dashboard", label: "Home", icon: LayoutDashboard, match: (p) => p.startsWith("/tenant/dashboard") },
-  { to: "/tenant/students", label: "Students", icon: Users, match: (p) => p.startsWith("/tenant/students") },
-  { to: "/tenant/staff", label: "Staff", icon: UserCog, match: (p) => p.startsWith("/tenant/staff") },
-  { to: "/tenant/finance", label: "Finance", icon: Wallet, match: (p) => p.startsWith("/tenant/finance") },
-  { to: "/tenant/settings", label: "Settings", icon: Settings, match: (p) => p.startsWith("/tenant/settings") },
+  {
+    to: "/tenant/dashboard",
+    label: "Home",
+    icon: LayoutDashboard,
+    match: (p) => p.startsWith("/tenant/dashboard"),
+  },
+  {
+    to: "/tenant/students",
+    label: "Students",
+    icon: Users,
+    match: (p) => p.startsWith("/tenant/students"),
+  },
+  {
+    to: "/tenant/staff",
+    label: "Staff",
+    icon: UserCog,
+    match: (p) => p.startsWith("/tenant/staff"),
+  },
+  {
+    to: "/tenant/finance",
+    label: "Finance",
+    icon: Wallet,
+    match: (p) => p.startsWith("/tenant/finance"),
+  },
+  {
+    to: "/tenant/settings",
+    label: "Settings",
+    icon: Settings,
+    match: (p) => p.startsWith("/tenant/settings"),
+  },
 ];
 
 function TenantLayout() {
@@ -65,10 +90,7 @@ function TenantLayout() {
   }
 
   return (
-    <TenantStoreProvider
-      tenantId={session.tenantId}
-      tenantName={session.tenantName}
-    >
+    <TenantStoreProvider tenantId={session.tenantId} tenantName={session.tenantName}>
       <TenantShell />
     </TenantStoreProvider>
   );
@@ -152,8 +174,7 @@ function ImpersonationBanner() {
   const { schoolDetails } = useTenantStore();
   if (!session?.impersonated) return null;
 
-  const workspace =
-    schoolDetails.name || session.tenantName || session.displayName || "tenant";
+  const workspace = schoolDetails.name || session.tenantName || session.displayName || "tenant";
   const fromSuper = session.impersonationSource === "super_admin";
   const ticket = session.impersonationTicket;
 
@@ -226,7 +247,11 @@ function TenantMobileHeader() {
   const unreadCount = notifications.filter((n) => !n.read).length;
   const tenantName = schoolDetails.name || session?.tenantName || "Silver Hills Global";
   const tenantLabel = tenantName.toUpperCase();
-  const sectionLabel = onNotifications ? "NOTIFICATIONS" : activeKey ? NAV_LABELS[activeKey] : "HOME";
+  const sectionLabel = onNotifications
+    ? "NOTIFICATIONS"
+    : activeKey
+      ? NAV_LABELS[activeKey]
+      : "HOME";
   const logoUrl = resolveMediaUrl(schoolDetails.logoUrl);
   const initials = schoolInitials(tenantName);
 

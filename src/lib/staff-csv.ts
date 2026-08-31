@@ -225,9 +225,7 @@ export function staffFromCsvRow(
   },
 ): Staff {
   const joinedAt =
-    parseJoinedAt(row.joinedAt) ??
-    opts.existing?.joinedAt ??
-    new Date().toISOString().slice(0, 10);
+    parseJoinedAt(row.joinedAt) ?? opts.existing?.joinedAt ?? new Date().toISOString().slice(0, 10);
   const basicSalary = parseMoney(row.basicSalary);
   const additionalAllowances = parseMoney(row.additionalAllowances);
   const active = parseActive(row.status, opts.existing?.active ?? true);

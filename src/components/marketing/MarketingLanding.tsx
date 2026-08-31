@@ -1,16 +1,14 @@
 import { useEffect } from "react";
 
 import { MarketingShell } from "@/components/marketing/MarketingShell";
-import { Compare } from "@/components/marketing/sections/Compare";
 import { Features } from "@/components/marketing/sections/Features";
-import { FinalCta } from "@/components/marketing/sections/FinalCta";
-import { FollowUp } from "@/components/marketing/sections/FollowUp";
 import { Hero } from "@/components/marketing/sections/Hero";
+import { HowItWorks } from "@/components/marketing/sections/HowItWorks";
+import { DigitalTransformation } from "@/components/marketing/sections/DigitalTransformation";
+import { Testimonials } from "@/components/marketing/sections/Testimonials";
 import { Pricing } from "@/components/marketing/sections/Pricing";
-import { Problems } from "@/components/marketing/sections/Problems";
-import { ProductTour } from "@/components/marketing/sections/ProductTour";
-import { Setup } from "@/components/marketing/sections/Setup";
 import { MARKETING } from "@/lib/marketing-content";
+import { IntroAnimation } from "@/components/marketing/IntroAnimation";
 
 export function MarketingLanding() {
   useEffect(() => {
@@ -21,15 +19,13 @@ export function MarketingLanding() {
 
   return (
     <MarketingShell>
+      <IntroAnimation />
       <Hero />
-      <Problems />
-      <ProductTour />
+      <HowItWorks />
       <Features />
-      <Setup />
-      <Compare />
-      <FollowUp />
+      <DigitalTransformation />
+      <Testimonials />
       <Pricing />
-      <FinalCta />
     </MarketingShell>
   );
 }

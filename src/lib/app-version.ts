@@ -1,6 +1,5 @@
 /** Build id injected at compile time (see vite.config.ts). */
-export const APP_BUILD_ID =
-  typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "dev";
+export const APP_BUILD_ID = typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "dev";
 
 /** version.json is only emitted on production builds — skip polling in Vite dev. */
 export const isAppVersionCheckEnabled = import.meta.env.PROD && APP_BUILD_ID !== "dev";
@@ -64,10 +63,7 @@ export function isUpdatePromptOnCooldown(): boolean {
 function markUpdateCooldown(): void {
   if (typeof window === "undefined") return;
   try {
-    window.sessionStorage.setItem(
-      UPDATE_COOLDOWN_KEY,
-      String(Date.now() + UPDATE_COOLDOWN_MS),
-    );
+    window.sessionStorage.setItem(UPDATE_COOLDOWN_KEY, String(Date.now() + UPDATE_COOLDOWN_MS));
   } catch {
     /* ignore */
   }

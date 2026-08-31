@@ -15,10 +15,7 @@ import { OrganicCard } from "@/components/ui/organic-card";
 import { invalidateRemoteTenantBundleCache } from "@/lib/api/tenant-sync";
 import { apiDeleteBranch } from "@/lib/api/settings";
 import { getApiToken } from "@/lib/api/client";
-import {
-  isMainCampusBranch,
-  type CampusBranch,
-} from "@/lib/tenant-store";
+import { isMainCampusBranch, type CampusBranch } from "@/lib/tenant-store";
 import { cn, glassCardClass } from "@/lib/utils";
 import { SettingsResponsiveCardHeader } from "@/components/school/SettingsMobileNav";
 
@@ -185,7 +182,10 @@ export function SettingsBranchesCard({
         ))}
       </div>
 
-      <Dialog open={Boolean(pendingDelete)} onOpenChange={(next) => !next && setPendingDelete(null)}>
+      <Dialog
+        open={Boolean(pendingDelete)}
+        onOpenChange={(next) => !next && setPendingDelete(null)}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Delete campus</DialogTitle>

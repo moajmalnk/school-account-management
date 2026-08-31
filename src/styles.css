@@ -1203,4 +1203,3 @@ html.school-brand [role="option"][data-highlighted] svg.lucide,
 html.school-brand [cmdk-item][data-selected="true"] svg.lucide {
   color: var(--school-menu-fg, #ffffff);
 }
-

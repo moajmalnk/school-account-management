@@ -157,9 +157,7 @@ export function PlansView() {
 
   const toggleFlag = (i: number, k: keyof SuperAdminPlanFlags) =>
     setTiers((prev) =>
-      prev.map((t, idx) =>
-        idx === i ? { ...t, flags: { ...t.flags, [k]: !t.flags[k] } } : t,
-      ),
+      prev.map((t, idx) => (idx === i ? { ...t, flags: { ...t.flags, [k]: !t.flags[k] } } : t)),
     );
 
   const savePlan = async (tier: SuperAdminPlan) => {
@@ -174,9 +172,7 @@ export function PlansView() {
         defaultCapacity: tier.defaultCapacity,
         flags: tier.flags,
       });
-      setTiers((prev) =>
-        prev.map((t) => (t.name === saved.name ? normalizePlan(saved) : t)),
-      );
+      setTiers((prev) => prev.map((t) => (t.name === saved.name ? normalizePlan(saved) : t)));
       toast.success(`${saved.name} plan saved`);
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Save failed";
@@ -307,17 +303,14 @@ export function PlansView() {
                     <>
                       <div>₹ {formatInr(fullContract)} annual contract</div>
                       <div>
-                        Offer{" "}
-                        <span className={ink}>₹ {formatInr(t.annually)}</span> / year
+                        Offer <span className={ink}>₹ {formatInr(t.annually)}</span> / year
                       </div>
                     </>
                   ) : (
                     <>
                       <div>₹ {formatInr(fullContract)} full annual contract</div>
                       {annualSavings > 0 && (
-                        <div>
-                          Save ₹ {formatInr(annualSavings)} vs monthly billing
-                        </div>
+                        <div>Save ₹ {formatInr(annualSavings)} vs monthly billing</div>
                       )}
                     </>
                   )}
@@ -326,7 +319,9 @@ export function PlansView() {
                 <div className={`my-5 h-px ${divider}`} />
 
                 <div className="space-y-2.5">
-                  <div className={`text-[10.5px] font-semibold uppercase tracking-wider ${subText}`}>
+                  <div
+                    className={`text-[10.5px] font-semibold uppercase tracking-wider ${subText}`}
+                  >
                     Features Included
                   </div>
                   {PLAN_FEATURE_ITEMS.map((f) => {

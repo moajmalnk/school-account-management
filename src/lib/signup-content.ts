@@ -11,13 +11,7 @@ export const SCHOOL_TYPES = [
 ] as const;
 
 /** URL segment → wizard step */
-export const SIGNUP_STEP_SLUGS = [
-  "school",
-  "admin",
-  "package",
-  "review",
-  "success",
-] as const;
+export const SIGNUP_STEP_SLUGS = ["school", "admin", "package", "review", "success"] as const;
 
 export type SignupStepSlug = (typeof SIGNUP_STEP_SLUGS)[number];
 
@@ -40,9 +34,7 @@ export function stepNumberFromSlug(slug: string): number {
   return found?.id ?? 1;
 }
 
-export function slugFromStepNumber(
-  step: number,
-): Exclude<SignupStepSlug, "success"> {
+export function slugFromStepNumber(step: number): Exclude<SignupStepSlug, "success"> {
   const found = SIGNUP_STEPS.find((s) => s.id === step);
   return found?.slug ?? "school";
 }
@@ -170,25 +162,25 @@ export function maxAllowedSignupStep(form: SignupFormState): number {
 export function isSignupStep1Complete(form: SignupFormState): boolean {
   return Boolean(
     form.schoolName.trim() &&
-      form.schoolCode.trim() &&
-      form.schoolType &&
-      form.phone.trim() &&
-      form.address.trim() &&
-      form.state &&
-      form.district &&
-      form.schoolEmail.trim() &&
-      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.schoolEmail) &&
-      form.subdomain.trim().length >= 2,
+    form.schoolCode.trim() &&
+    form.schoolType &&
+    form.phone.trim() &&
+    form.address.trim() &&
+    form.state &&
+    form.district &&
+    form.schoolEmail.trim() &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.schoolEmail) &&
+    form.subdomain.trim().length >= 2,
   );
 }
 
 export function isSignupStep2Complete(form: SignupFormState): boolean {
   return Boolean(
     form.adminName.trim() &&
-      form.adminMobile.trim() &&
-      form.adminEmail.trim() &&
-      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.adminEmail) &&
-      form.password.length >= 8 &&
-      form.passwordConfirm === form.password,
+    form.adminMobile.trim() &&
+    form.adminEmail.trim() &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.adminEmail) &&
+    form.password.length >= 8 &&
+    form.passwordConfirm === form.password,
   );
 }

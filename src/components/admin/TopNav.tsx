@@ -47,11 +47,7 @@ export function TopNav() {
     <header className="sticky top-0 z-30 bg-[#F4F6F9]/92 px-3 pb-2 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl sm:px-4 sm:pt-[calc(1rem+env(safe-area-inset-top))] lg:border-b lg:border-[#E5E5E5]/60 lg:bg-[#F4F6F9]/92 lg:px-6 lg:pb-3 lg:pt-[calc(1.25rem+env(safe-area-inset-top))] lg:backdrop-blur-xl">
       <div className="mobile-app-rail flex min-w-0 items-center justify-between gap-2 rounded-xl border border-white/70 bg-white/88 px-3 py-2.5 shadow-[0_14px_44px_-32px_rgba(0,0,0,0.45)] sm:gap-3 lg:mx-auto lg:max-w-[1480px] lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
         <Link to="/super-admin/overview" className="flex min-w-0 shrink items-center">
-          <FeezoBrand
-            subtitle={activeLabel}
-            markClassName="h-10 w-10"
-            className="lg:hidden"
-          />
+          <FeezoBrand subtitle={activeLabel} markClassName="h-10 w-10" className="lg:hidden" />
           <FeezoBrand
             subtitle="Control Plane"
             markClassName="h-10 w-10"

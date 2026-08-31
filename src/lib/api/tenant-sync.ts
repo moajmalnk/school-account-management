@@ -111,9 +111,7 @@ async function getSafe<T>(path: string, fallback: T): Promise<T> {
 
       const msg = err instanceof Error ? err.message : String(err);
       const retryable =
-        /2002|Operation not permitted|Connection refused|Too many connections/i.test(
-          msg,
-        );
+        /2002|Operation not permitted|Connection refused|Too many connections/i.test(msg);
       if (retryable && attempt < maxAttempts) {
         await new Promise((r) => setTimeout(r, 250 * attempt));
         continue;
@@ -221,136 +219,119 @@ export async function fetchRemoteTenantBundle(
     void cacheKey;
 
     try {
-    const school = await getSafe<{
-      schoolDetails: SchoolDetails;
-      themeSettings: ThemeSettings;
-      academicYear: string;
-      academicYears: string[];
-      closedAcademicYears?: string[];
-      activeBranchId?: string;
-      branches?: unknown[];
-    } | null>("/api/settings/school.php", null);
-
-    const fromSchool = Array.isArray(school?.branches)
-      ? school!.branches.map(normalizeCampusBranch).filter((b): b is CampusBranch => Boolean(b))
-      : [];
-    const listed =
-      fromSchool.length > 0
-        ? fromSchool
-        : (await getSafe<{ branches?: unknown[]; activeBranchId?: string }>(
-            "/api/settings/branches.php",
-            { branches: [] },
-          )).branches?.map(normalizeCampusBranch).filter((b): b is CampusBranch => Boolean(b)) ?? [];
-    const branches = listed.length ? listed : [];
-    const activeBranchId = pickActiveBranchId(
-      branches,
-      school?.activeBranchId ?? null,
-      options?.tenantId,
-    );
-    if (activeBranchId) setActiveBranchPublicId(activeBranchId);
-
-    const academicYear = school?.academicYear ?? "AY 2025-26";
-    const academicYears = school?.academicYears?.length
-      ? school.academicYears
-      : ["AY 2024-25", "AY 2025-26", "AY 2026-27"];
-    const closedAcademicYears = Array.isArray(school?.closedAcademicYears)
-      ? school.closedAcademicYears.filter((y) => typeof y === "string" && y.trim())
-      : [];
-
-    // Sequential on purpose — do not Promise.all these on shared hosting.
-    const students = await getSafe<Student[]>(
-      "/api/students/list.php?includeDeleted=1",
-      [],
-    );
-    const yearFieldRows = await getSafe<
-      Array<{
-        studentId: string;
+      const school = await getSafe<{
+        schoolDetails: SchoolDetails;
+        themeSettings: ThemeSettings;
         academicYear: string;
-        cls: string;
-        due: number;
-        active: boolean;
-      }>
-    >("/api/students/year-fields.php", []);
-    const staff = await getSafe<Staff[]>("/api/staff/list.php?includeDeleted=1", []);
-    const payments = await getSafe<Payment[]>("/api/finance/payments.php", []);
-    const departments = await getSafe<Department[]>(
-      "/api/settings/departments.php",
-      [],
-    );
-    const leaveTypes = await getSafe<LeaveType[]>(
-      "/api/settings/leave-types.php",
-      [],
-    );
-    const roles = await getSafe<Role[]>("/api/settings/roles.php", []);
-    const classes = await getSafe<ClassConfig[]>(
-      "/api/settings/classes.php",
-      [],
-    );
+        academicYears: string[];
+        closedAcademicYears?: string[];
+        activeBranchId?: string;
+        branches?: unknown[];
+      } | null>("/api/settings/school.php", null);
 
-    const feeTerms = await getSafe<FeeTerm[]>(
-      `/api/settings/fees.php?academicYear=${encodeURIComponent(academicYear)}`,
-      [],
-    );
-    const allFeeTerms =
-      feeTerms.length > 0
-        ? await getSafe<FeeTerm[]>("/api/settings/fees.php", feeTerms)
-        : feeTerms;
-    const paymentCategories = await getSafe<PaymentCategory[]>(
-      "/api/settings/fees.php?resource=categories",
-      [],
-    );
-    const studentFeeBreaks = await getSafe<StudentFeeBreak[]>(
-      "/api/finance/fee-breaks.php",
-      [],
-    );
-    const routes = await getSafe<TransportRoute[]>(
-      "/api/settings/transport.php",
-      [],
-    );
-    const vehicles = await getSafe<TransportVehicle[]>(
-      "/api/settings/transport.php?type=vehicles",
-      [],
-    );
-    const users = await getSafe<TenantUser[]>("/api/settings/users.php", []);
-    const notifications = await getSafe<TenantNotification[]>(
-      "/api/notifications/list.php",
-      [],
-    );
-    const todos = await getSafe<{
-      dashboardTodos: string[];
-      dashboardNote: string;
-    } | null>("/api/dashboard/todos.php", null);
+      const fromSchool = Array.isArray(school?.branches)
+        ? school!.branches.map(normalizeCampusBranch).filter((b): b is CampusBranch => Boolean(b))
+        : [];
+      const listed =
+        fromSchool.length > 0
+          ? fromSchool
+          : ((
+              await getSafe<{ branches?: unknown[]; activeBranchId?: string }>(
+                "/api/settings/branches.php",
+                { branches: [] },
+              )
+            ).branches
+              ?.map(normalizeCampusBranch)
+              .filter((b): b is CampusBranch => Boolean(b)) ?? []);
+      const branches = listed.length ? listed : [];
+      const activeBranchId = pickActiveBranchId(
+        branches,
+        school?.activeBranchId ?? null,
+        options?.tenantId,
+      );
+      if (activeBranchId) setActiveBranchPublicId(activeBranchId);
 
-    return {
-      students,
-      staff,
-      payments,
-      departments,
-      leaveTypes,
-      roles,
-      classes,
-      transportRoutes: routes,
-      transportVehicles: vehicles,
-      paymentCategories,
-      feeTerms: allFeeTerms,
-      studentFeeBreaks: Array.isArray(studentFeeBreaks) ? studentFeeBreaks : [],
-      tenantUsers: users,
-      notifications,
-      schoolDetails: school?.schoolDetails ?? { ...EMPTY_SCHOOL_DETAILS },
-      themeSettings: school?.themeSettings ?? { ...SEED_THEME_SETTINGS },
-      academicYear,
-      academicYears,
-      closedAcademicYears,
-      dashboardTodos: Array.isArray(todos?.dashboardTodos)
-        ? todos.dashboardTodos
-        : ["", "", "", "", ""],
-      dashboardNote: typeof todos?.dashboardNote === "string" ? todos.dashboardNote : "",
-      branches,
-      activeBranchId,
-      studentYearLedgers: ledgersFromYearFieldRows(
-        Array.isArray(yearFieldRows) ? yearFieldRows : [],
-      ),
-    };
+      const academicYear = school?.academicYear ?? "AY 2025-26";
+      const academicYears = school?.academicYears?.length
+        ? school.academicYears
+        : ["AY 2024-25", "AY 2025-26", "AY 2026-27"];
+      const closedAcademicYears = Array.isArray(school?.closedAcademicYears)
+        ? school.closedAcademicYears.filter((y) => typeof y === "string" && y.trim())
+        : [];
+
+      // Sequential on purpose — do not Promise.all these on shared hosting.
+      const students = await getSafe<Student[]>("/api/students/list.php?includeDeleted=1", []);
+      const yearFieldRows = await getSafe<
+        Array<{
+          studentId: string;
+          academicYear: string;
+          cls: string;
+          due: number;
+          active: boolean;
+        }>
+      >("/api/students/year-fields.php", []);
+      const staff = await getSafe<Staff[]>("/api/staff/list.php?includeDeleted=1", []);
+      const payments = await getSafe<Payment[]>("/api/finance/payments.php", []);
+      const departments = await getSafe<Department[]>("/api/settings/departments.php", []);
+      const leaveTypes = await getSafe<LeaveType[]>("/api/settings/leave-types.php", []);
+      const roles = await getSafe<Role[]>("/api/settings/roles.php", []);
+      const classes = await getSafe<ClassConfig[]>("/api/settings/classes.php", []);
+
+      const feeTerms = await getSafe<FeeTerm[]>(
+        `/api/settings/fees.php?academicYear=${encodeURIComponent(academicYear)}`,
+        [],
+      );
+      const allFeeTerms =
+        feeTerms.length > 0
+          ? await getSafe<FeeTerm[]>("/api/settings/fees.php", feeTerms)
+          : feeTerms;
+      const paymentCategories = await getSafe<PaymentCategory[]>(
+        "/api/settings/fees.php?resource=categories",
+        [],
+      );
+      const studentFeeBreaks = await getSafe<StudentFeeBreak[]>("/api/finance/fee-breaks.php", []);
+      const routes = await getSafe<TransportRoute[]>("/api/settings/transport.php", []);
+      const vehicles = await getSafe<TransportVehicle[]>(
+        "/api/settings/transport.php?type=vehicles",
+        [],
+      );
+      const users = await getSafe<TenantUser[]>("/api/settings/users.php", []);
+      const notifications = await getSafe<TenantNotification[]>("/api/notifications/list.php", []);
+      const todos = await getSafe<{
+        dashboardTodos: string[];
+        dashboardNote: string;
+      } | null>("/api/dashboard/todos.php", null);
+
+      return {
+        students,
+        staff,
+        payments,
+        departments,
+        leaveTypes,
+        roles,
+        classes,
+        transportRoutes: routes,
+        transportVehicles: vehicles,
+        paymentCategories,
+        feeTerms: allFeeTerms,
+        studentFeeBreaks: Array.isArray(studentFeeBreaks) ? studentFeeBreaks : [],
+        tenantUsers: users,
+        notifications,
+        schoolDetails: school?.schoolDetails ?? { ...EMPTY_SCHOOL_DETAILS },
+        themeSettings: school?.themeSettings ?? { ...SEED_THEME_SETTINGS },
+        academicYear,
+        academicYears,
+        closedAcademicYears,
+        dashboardTodos: Array.isArray(todos?.dashboardTodos)
+          ? todos.dashboardTodos
+          : ["", "", "", "", ""],
+        dashboardNote: typeof todos?.dashboardNote === "string" ? todos.dashboardNote : "",
+        branches,
+        activeBranchId,
+        studentYearLedgers: ledgersFromYearFieldRows(
+          Array.isArray(yearFieldRows) ? yearFieldRows : [],
+        ),
+      };
     } catch (err) {
       if (isAuthExpiredError(err)) return null;
       throw err;

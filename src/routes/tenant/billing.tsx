@@ -29,12 +29,7 @@ function TenantBillingPage() {
   }
 
   return (
-    <OrganicCard
-      tone="white"
-      cornerSide="tr"
-      padded
-      className={cn(glassCardClass, "rounded-2xl")}
-    >
+    <OrganicCard tone="white" cornerSide="tr" padded className={cn(glassCardClass, "rounded-2xl")}>
       <TenantSubscriptionPanel
         tenantId={session?.tenantId}
         tenantName={tenantName}

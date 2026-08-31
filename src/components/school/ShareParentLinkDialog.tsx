@@ -104,9 +104,9 @@ export function ShareParentLinkDialog({
             Collect profile data
           </DialogTitle>
           <DialogDescription>
-            Send this private link so the guardian can submit missing details for {studentName}&apos;s
-            profile. School-filled fields stay read-only; parents can update photo, gender, DOB,
-            email, address, phone, and guardian name.
+            Send this private link so the guardian can submit missing details for {studentName}
+            &apos;s profile. School-filled fields stay read-only; parents can update photo, gender,
+            DOB, email, address, phone, and guardian name.
           </DialogDescription>
         </DialogHeader>
 

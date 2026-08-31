@@ -122,9 +122,9 @@ function DataDeletionPage() {
           <div>
             <p className="font-medium text-black">Request received</p>
             <p className="mt-1">
-              If an account exists for <span className="font-medium">{email.trim()}</span>, we
-              will process your deletion request and contact you at that address. You can also reach
-              us at{" "}
+              If an account exists for <span className="font-medium">{email.trim()}</span>, we will
+              process your deletion request and contact you at that address. You can also reach us
+              at{" "}
               <a
                 href={`mailto:${supportEmail}`}
                 className="font-medium text-[#0F766E] hover:underline"

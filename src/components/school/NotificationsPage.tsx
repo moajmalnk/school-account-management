@@ -1,13 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import {
-  Bell,
-  Bus,
-  CheckCheck,
-  GraduationCap,
-  UserCog,
-  Wallet,
-} from "lucide-react";
+import { Bell, Bus, CheckCheck, GraduationCap, UserCog, Wallet } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -64,10 +57,7 @@ export function NotificationsPage() {
   const [filter, setFilter] = useState<FilterKey>("all");
   const [confirmMarkAllOpen, setConfirmMarkAllOpen] = useState(false);
 
-  const unreadCount = useMemo(
-    () => notifications.filter((n) => !n.read).length,
-    [notifications],
-  );
+  const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
 
   const visible = useMemo(() => {
     const list = [...notifications].sort(
@@ -77,9 +67,7 @@ export function NotificationsPage() {
   }, [filter, notifications]);
 
   const markRead = (id: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
-    );
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
   };
 
   const markAllRead = () => {
@@ -106,8 +94,6 @@ export function NotificationsPage() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-
-
       <div className="flex items-center justify-between gap-3">
         <div className="inline-flex shrink-0 rounded-full border border-[#E5E5E5] bg-white p-1 dark:border-white/10 dark:bg-zinc-900">
           {(

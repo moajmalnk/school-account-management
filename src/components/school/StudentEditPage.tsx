@@ -44,18 +44,10 @@ import {
   type Student,
   type StudentFeeBreak,
 } from "@/lib/tenant-store";
-import {
-  apiCreateFeeBreak,
-  apiDeleteFeeBreak,
-  apiUpsertStudent,
-} from "@/lib/api/records";
+import { apiCreateFeeBreak, apiDeleteFeeBreak, apiUpsertStudent } from "@/lib/api/records";
 import { apiUpsertClass } from "@/lib/api/settings";
 import { getApiToken } from "@/lib/api/client";
-import {
-  buildClassFromLabel,
-  matchExistingClass,
-  nextPrefixedId,
-} from "@/lib/student-csv";
+import { buildClassFromLabel, matchExistingClass, nextPrefixedId } from "@/lib/student-csv";
 import { toDobIso } from "@/lib/dates";
 import { cn, glassCardClass } from "@/lib/utils";
 import {
@@ -144,7 +136,7 @@ function ensureStudentDocuments(student: Student) {
   }
   return DEFAULT_STUDENT_DOCUMENTS.map((def) => ({
     ...def,
-    number: def.id === "doc-aadhaar" ? student.aadhaar ?? "" : "",
+    number: def.id === "doc-aadhaar" ? (student.aadhaar ?? "") : "",
     levels: def.levels.map((l) => ({ ...l })),
     attachments: [],
   }));
@@ -199,7 +191,7 @@ export function StudentEditPage() {
   } = useTenantStore();
 
   const student = useMemo(
-    () => (search.id ? students.find((s) => s.id === search.id) ?? null : null),
+    () => (search.id ? (students.find((s) => s.id === search.id) ?? null) : null),
     [search.id, students],
   );
 
@@ -282,14 +274,7 @@ export function StudentEditPage() {
     }
     const labels = vehiclePeriodOptions.map((o) => o.label);
     const billable = labels.filter(
-      (label) =>
-        !isPeriodOnBreak(
-          studentFeeBreaks,
-          student.id,
-          academicYear,
-          "vehicle",
-          label,
-        ),
+      (label) => !isPeriodOnBreak(studentFeeBreaks, student.id, academicYear, "vehicle", label),
     );
     setBillableVehiclePeriods(billable);
     // Intentionally omit studentFeeBreaks so saving breaks does not wipe in-progress edits.
@@ -325,9 +310,7 @@ export function StudentEditPage() {
     const scheduleLabels = vehiclePeriodOptions.map((o) => o.label);
     if (scheduleLabels.length === 0) return;
 
-    const billableSet = new Set(
-      billableVehiclePeriods.map((p) => p.trim().toLowerCase()),
-    );
+    const billableSet = new Set(billableVehiclePeriods.map((p) => p.trim().toLowerCase()));
     const breakPeriods = scheduleLabels.filter(
       (label) => !billableSet.has(label.trim().toLowerCase()),
     );
@@ -424,9 +407,7 @@ export function StudentEditPage() {
     }
 
     setStudentFeeBreaks(workingBreaks);
-    setStudents((prev) =>
-      prev.map((s) => (s.id === target.id ? { ...s, due: workingDue } : s)),
-    );
+    setStudents((prev) => prev.map((s) => (s.id === target.id ? { ...s, due: workingDue } : s)));
   };
 
   const submitNewClass = async (e: FormEvent) => {
@@ -581,7 +562,12 @@ export function StudentEditPage() {
         <p className="mt-2 text-[13px] text-slate-500">
           This student may have been removed or the link is invalid.
         </p>
-        <Button type="button" variant="outline" className="mt-4 rounded-full" onClick={backToProfile}>
+        <Button
+          type="button"
+          variant="outline"
+          className="mt-4 rounded-full"
+          onClick={backToProfile}
+        >
           Back to students
         </Button>
       </div>
@@ -878,81 +864,81 @@ export function StudentEditPage() {
 
           {draft.needsBus && (
             <div className="space-y-3">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <FormField label="Bus Point 1">
-                <Select
-                  value={draft.busPoint1 || "__none__"}
-                  onValueChange={(busPoint1) =>
-                    patchDraft("busPoint1", busPoint1 === "__none__" ? "" : busPoint1)
-                  }
-                >
-                  <SelectTrigger className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white text-[13px]">
-                    <SelectValue placeholder="Select pickup point" />
-                  </SelectTrigger>
-                  <SelectContent position="popper" className="z-[250]">
-                    <SelectItem value="__none__" className="text-slate-500">
-                      No pickup point
-                    </SelectItem>
-                    {busPointOptions.point1.map((point) => (
-                      <SelectItem key={point} value={point}>
-                        {busPointOptions.orphanPickup === point ? (
-                          <span>
-                            {point}
-                            <span className="ml-1 text-[11px] font-medium text-amber-700">
-                              · not in routes
-                            </span>
-                          </span>
-                        ) : (
-                          point
-                        )}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <FormField label="Bus Point 1">
+                  <Select
+                    value={draft.busPoint1 || "__none__"}
+                    onValueChange={(busPoint1) =>
+                      patchDraft("busPoint1", busPoint1 === "__none__" ? "" : busPoint1)
+                    }
+                  >
+                    <SelectTrigger className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white text-[13px]">
+                      <SelectValue placeholder="Select pickup point" />
+                    </SelectTrigger>
+                    <SelectContent position="popper" className="z-[250]">
+                      <SelectItem value="__none__" className="text-slate-500">
+                        No pickup point
                       </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </FormField>
-              <FormField label="Bus Point 2">
-                <Select
-                  value={draft.busPoint2 || "__none__"}
-                  onValueChange={(busPoint2) =>
-                    patchDraft("busPoint2", busPoint2 === "__none__" ? "" : busPoint2)
-                  }
-                >
-                  <SelectTrigger className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white text-[13px]">
-                    <SelectValue placeholder="Select drop point" />
-                  </SelectTrigger>
-                  <SelectContent position="popper" className="z-[250]">
-                    <SelectItem value="__none__" className="text-slate-500">
-                      No drop point
-                    </SelectItem>
-                    {busPointOptions.point2.map((point) => (
-                      <SelectItem key={point} value={point}>
-                        {busPointOptions.orphanDrop === point ? (
-                          <span>
-                            {point}
-                            <span className="ml-1 text-[11px] font-medium text-amber-700">
-                              · not in routes
+                      {busPointOptions.point1.map((point) => (
+                        <SelectItem key={point} value={point}>
+                          {busPointOptions.orphanPickup === point ? (
+                            <span>
+                              {point}
+                              <span className="ml-1 text-[11px] font-medium text-amber-700">
+                                · not in routes
+                              </span>
                             </span>
-                          </span>
-                        ) : (
-                          point
-                        )}
+                          ) : (
+                            point
+                          )}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FormField>
+                <FormField label="Bus Point 2">
+                  <Select
+                    value={draft.busPoint2 || "__none__"}
+                    onValueChange={(busPoint2) =>
+                      patchDraft("busPoint2", busPoint2 === "__none__" ? "" : busPoint2)
+                    }
+                  >
+                    <SelectTrigger className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white text-[13px]">
+                      <SelectValue placeholder="Select drop point" />
+                    </SelectTrigger>
+                    <SelectContent position="popper" className="z-[250]">
+                      <SelectItem value="__none__" className="text-slate-500">
+                        No drop point
                       </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </FormField>
-            </div>
-            {busPointOptions.orphanPickup || busPointOptions.orphanDrop ? (
-              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] leading-snug text-amber-900">
-                {[busPointOptions.orphanPickup, busPointOptions.orphanDrop]
-                  .filter(Boolean)
-                  .map((p) => `“${p}”`)
-                  .join(" and ")}{" "}
-                {busPointOptions.orphanPickup && busPointOptions.orphanDrop ? "are" : "is"} saved
-                on this student but not in Transport Routes. Add a matching route in Settings, or
-                pick University / another route point.
-              </p>
-            ) : null}
+                      {busPointOptions.point2.map((point) => (
+                        <SelectItem key={point} value={point}>
+                          {busPointOptions.orphanDrop === point ? (
+                            <span>
+                              {point}
+                              <span className="ml-1 text-[11px] font-medium text-amber-700">
+                                · not in routes
+                              </span>
+                            </span>
+                          ) : (
+                            point
+                          )}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FormField>
+              </div>
+              {busPointOptions.orphanPickup || busPointOptions.orphanDrop ? (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] leading-snug text-amber-900">
+                  {[busPointOptions.orphanPickup, busPointOptions.orphanDrop]
+                    .filter(Boolean)
+                    .map((p) => `“${p}”`)
+                    .join(" and ")}{" "}
+                  {busPointOptions.orphanPickup && busPointOptions.orphanDrop ? "are" : "is"} saved
+                  on this student but not in Transport Routes. Add a matching route in Settings, or
+                  pick University / another route point.
+                </p>
+              ) : null}
             </div>
           )}
 
@@ -986,8 +972,8 @@ export function StudentEditPage() {
                 </div>
               ) : (
                 <p className="text-[12px] text-slate-500 dark:text-zinc-400">
-                  Save changes, then collect in Finance. Period schedule appears once the route
-                  fee installments are configured.
+                  Save changes, then collect in Finance. Period schedule appears once the route fee
+                  installments are configured.
                 </p>
               )}
             </div>

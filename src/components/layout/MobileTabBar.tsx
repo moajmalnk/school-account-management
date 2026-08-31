@@ -52,5 +52,4 @@ export function MobileTabBar({ items, pathname, className }: MobileTabBarProps) 
   );
 }
 
-export const mobileMainPadding =
-  "pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:pb-12";
+export const mobileMainPadding = "pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:pb-12";

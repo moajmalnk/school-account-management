@@ -1,18 +1,4 @@
-import { Link } from "@tanstack/react-router";
-import {
-  motion,
-  useReducedMotion,
-  useScroll,
-  useSpring,
-  useTransform,
-} from "motion/react";
-import { useRef } from "react";
-
-import {
-  DeviceFrame,
-  ProductShot,
-} from "@/components/marketing/DeviceFrame";
-import { TrialSignupLink } from "@/components/marketing/TrialSignupLink";
+import { motion, useReducedMotion } from "motion/react";
 import { easeOutExpo } from "@/components/marketing/motion";
 import { MARKETING } from "@/lib/marketing-content";
 
@@ -20,129 +6,60 @@ const { hero } = MARKETING;
 
 export function Hero() {
   const reduce = useReducedMotion();
-  const ref = useRef<HTMLElement>(null);
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ["start start", "end start"],
-  });
-  const smooth = useSpring(scrollYProgress, { stiffness: 120, damping: 28 });
-  const yArt = useTransform(smooth, [0, 1], [0, reduce ? 0 : 48]);
-  const yShot = useTransform(smooth, [0, 1], [0, reduce ? 0 : -28]);
-  const opacity = useTransform(smooth, [0, 0.85], [1, reduce ? 1 : 0.55]);
 
   return (
     <section
-      ref={ref}
       className="relative overflow-hidden bg-white"
       aria-labelledby="hero-heading"
     >
-      <div
-        className="pointer-events-none absolute inset-0"
-        aria-hidden
-        style={{
-          background:
-            "radial-gradient(ellipse 80% 60% at 90% 10%, rgba(143,202,74,0.18), transparent 55%), radial-gradient(ellipse 50% 40% at 10% 90%, rgba(26,28,44,0.04), transparent 50%)",
-        }}
-      />
-      <div
-        className="pointer-events-none absolute inset-0 opacity-60"
-        aria-hidden
-        style={{
-          backgroundImage:
-            "radial-gradient(circle at 1px 1px, rgba(143,202,74,0.2) 1px, transparent 0)",
-          backgroundSize: "18px 18px",
-          maskImage:
-            "radial-gradient(ellipse 65% 70% at 88% 18%, black 15%, transparent 72%)",
-        }}
-      />
-
-      <div className="relative mx-auto grid max-w-6xl gap-10 px-4 pb-14 pt-10 sm:gap-12 sm:px-6 sm:pb-20 sm:pt-14 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:items-center lg:gap-10 lg:pb-24 lg:pt-16">
+      <div className="relative mx-auto flex max-w-[1080px] flex-col items-center px-4 pb-14 pt-16 sm:px-6 sm:pb-20 sm:pt-20 lg:pb-24 lg:pt-24">
         <motion.div
-          style={{ opacity }}
           initial={reduce ? false : { opacity: 0, y: 22 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: easeOutExpo }}
-          className="relative z-10 min-w-0"
+          className="relative z-10 flex flex-col items-center text-center w-full"
         >
-          <motion.p
-            initial={reduce ? false : { opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.08, duration: 0.45, ease: easeOutExpo }}
-            className="text-[13px] font-semibold tracking-wide text-[var(--mkt-green-deep)]"
-          >
-            {hero.brandLine}
-          </motion.p>
           <h1
             id="hero-heading"
-            className="mt-3 text-[clamp(2.15rem,7vw,3.75rem)] font-bold leading-[1.05] tracking-tight"
+            className="text-[clamp(2.15rem,6vw,3.5rem)] font-bold leading-[1.05] tracking-tight text-[var(--mkt-ink)] mb-10"
           >
-            <span className="text-[var(--mkt-green-deep)]">
-              {hero.headlineGreen}
-            </span>
+            Welcome To
             <br />
-            <span className="text-[var(--mkt-ink)]">{hero.headlineInk}</span>
+            <span className="text-[var(--mkt-green)]">Feezo</span>
           </h1>
-          <p className="mt-4 max-w-md text-[15px] leading-relaxed text-[var(--mkt-muted)] sm:mt-5 sm:text-[17px]">
-            {hero.support}
-          </p>
-          <div className="mt-7 flex flex-col gap-3 sm:mt-8 sm:flex-row sm:flex-wrap sm:items-center">
-            <motion.div
-              whileHover={reduce ? undefined : { scale: 1.02 }}
-              whileTap={reduce ? undefined : { scale: 0.98 }}
-            >
-              <TrialSignupLink className="inline-flex h-12 w-full items-center justify-center rounded-full bg-[var(--mkt-green)] px-6 text-[14px] font-semibold text-[var(--mkt-ink)] shadow-[0_12px_32px_-14px_rgba(107,168,50,0.55)] transition-colors hover:bg-[var(--mkt-green-deep)] hover:text-white sm:w-auto">
-                {hero.primaryCta}
-              </TrialSignupLink>
-            </motion.div>
-            <motion.div
-              whileHover={reduce ? undefined : { scale: 1.02 }}
-              whileTap={reduce ? undefined : { scale: 0.98 }}
-            >
-              <Link
-                to="/login"
-                className="inline-flex h-12 w-full items-center justify-center rounded-full border border-[var(--mkt-line)] bg-white px-6 text-[14px] font-semibold text-[var(--mkt-ink)] transition-colors hover:border-[var(--mkt-ink)]/25 hover:bg-[var(--mkt-soft)] sm:w-auto"
-              >
-                {hero.secondaryCta}
-              </Link>
-            </motion.div>
-          </div>
-          <p className="mt-4 text-[12px] font-medium text-[var(--mkt-muted)]">
-            14-day trial · Create your school in minutes
-          </p>
-        </motion.div>
 
-        <div className="relative mx-auto w-full max-w-xl lg:max-w-none">
-          <motion.div style={{ y: yShot }} className="relative z-10">
-            <DeviceFrame label="app.feezo.app · dashboard">
-              <ProductShot
-                src={hero.productImage}
-                alt={hero.productImageAlt}
-                priority
-              />
-            </DeviceFrame>
-          </motion.div>
-
-          <motion.div
-            style={{ y: yArt }}
-            className="pointer-events-none absolute -bottom-6 -left-4 z-20 hidden w-[42%] max-w-[220px] sm:block lg:-left-8 lg:w-[46%]"
-            initial={reduce ? false : { opacity: 0, x: -16 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.35, duration: 0.55, ease: easeOutExpo }}
-          >
-            <div className="overflow-hidden rounded-2xl border border-white/80 bg-white/95 shadow-[0_20px_50px_-28px_rgba(26,28,44,0.5)] ring-1 ring-[var(--mkt-line)]">
+          <div className="w-full relative flex justify-center">
+            <div className="relative z-10 w-full max-w-4xl">
               <img
-                src={hero.brandArt}
-                alt=""
-                width={400}
-                height={300}
-                className="h-auto w-full object-cover"
-                loading="lazy"
-                decoding="async"
-                aria-hidden
+                src="/home/home.png"
+                alt="Feezo Dashboard on Laptop and Mobile"
+                className="w-full h-auto object-contain"
+                priority="true"
               />
             </div>
-          </motion.div>
-        </div>
+          </div>
+
+          {/* Bottom text and buttons row */}
+          <div className="w-full max-w-4xl flex flex-col sm:flex-row justify-between items-start sm:items-end mt-8 sm:mt-10">
+            <p className="text-left text-[14px] leading-relaxed text-[var(--mkt-muted)] mb-6 sm:mb-0">
+              School accounts simplified — fees,<br />
+              receipts, and reports in one place.<br />
+              Start a 14-day trial.
+            </p>
+
+            <div className="flex gap-3">
+              <a href="#" className="inline-flex h-10 sm:h-11 items-center justify-center rounded-lg bg-[var(--mkt-green)] px-4 sm:px-5 text-[13px] sm:text-[14px] font-bold text-white shadow-lg transition-transform hover:bg-[var(--mkt-green-deep)] hover:scale-105 active:scale-95">
+                <svg className="mr-2 h-5 w-5 fill-current" viewBox="0 0 24 24"><path d="M17.523 15.3414C17.523 15.3414 17.502 15.321 17.472 15.2897L17.4666 15.284C17.4666 15.284 12.3364 12.1643 12.3364 12.1643L12.3331 12.1623L12.3274 12.1587C12.3274 12.1587 7.20232 9.04169 7.20232 9.04169L7.19839 9.03923C7.1147 8.98894 6.99961 8.97011 6.89297 9.00405C6.77259 9.04169 6.67139 9.1362 6.62145 9.25556C6.59567 9.31753 6.58661 9.38793 6.60275 9.45663L6.60481 9.46743L6.6111 9.48866L11.5363 21.0346L11.5393 21.0422L11.542 21.0506L16.4883 24.318C16.4883 24.318 16.5186 24.3377 16.5413 24.3483C16.6346 24.3916 16.7451 24.3976 16.8436 24.3644C16.9634 24.3245 17.0601 24.2285 17.1065 24.1082C17.1322 24.043 17.1384 23.9678 17.1182 23.8967L17.1148 23.8824L17.1092 23.8647L12.3323 12.1628L17.5255 15.3441L17.523 15.3414Z" /><path d="M11.666 11.7584L6.96316 22.7828L5.78913 20.0272L10.4907 9.00392L11.666 11.7584Z" /><path d="M2.93608 13.336L3.93179 15.6706L9.46313 2.70327L8.46742 0.368652L2.93608 13.336Z" /><path d="M4.09068 16.0425L5.43468 19.1923L10.9637 6.22383L9.61966 3.07406L4.09068 16.0425Z" /></svg>
+                Google Play
+              </a>
+              <a href="#" className="inline-flex h-10 sm:h-11 items-center justify-center rounded-lg bg-[var(--mkt-green)] px-4 sm:px-5 text-[13px] sm:text-[14px] font-bold text-white shadow-lg transition-transform hover:bg-[var(--mkt-green-deep)] hover:scale-105 active:scale-95">
+                <svg className="mr-2 h-5 w-5 fill-current" viewBox="0 0 24 24"><path d="M16.4 12c0-2.8 2.3-4.1 2.4-4.2-1.3-1.9-3.3-2.2-4.1-2.2-1.7-.2-3.4 1-4.3 1-.9 0-2.2-1-3.6-1-1.9 0-3.6 1.1-4.6 2.8-2.1 3.5-.5 8.8 1.4 11.6 1 1.4 2.1 2.9 3.6 2.9 1.4 0 2-.9 3.7-.9 1.7 0 2.2.9 3.7.9 1.5 0 2.5-1.4 3.4-2.8.9-1.2 1.2-2.3 1.3-2.4-.1-.1-2.9-1.1-2.9-4.7zM14 3.7c.8-.9 1.3-2.2 1.1-3.5-1.1.1-2.5.7-3.3 1.6-.7.8-1.3 2.1-1.1 3.4 1.3.1 2.5-.6 3.3-1.5z" /></svg>
+                App Store
+              </a>
+            </div>
+          </div>
+
+        </motion.div>
       </div>
     </section>
   );

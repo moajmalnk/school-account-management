@@ -39,9 +39,7 @@ function detectIos() {
 function detectStandalone() {
   if (typeof window === "undefined") return false;
   const media = window.matchMedia("(display-mode: standalone)").matches;
-  const iosStandalone = Boolean(
-    (navigator as Navigator & { standalone?: boolean }).standalone,
-  );
+  const iosStandalone = Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
   const twa = document.referrer.startsWith("android-app://");
   return media || iosStandalone || twa;
 }
@@ -195,8 +193,7 @@ export function PwaProvider({ children }: { children: ReactNode }) {
   }, [deferred, markInstalled]);
 
   const installed = isInstalled || isStandalone || readInstalledFlag();
-  const canInstall =
-    !installed && (Boolean(deferred) || (isIos && !isStandalone));
+  const canInstall = !installed && (Boolean(deferred) || (isIos && !isStandalone));
   const showBanner = canInstall && !isDismissed;
 
   const value = useMemo<PwaContextValue>(

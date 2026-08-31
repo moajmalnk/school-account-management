@@ -289,9 +289,7 @@ export async function apiListFeeBreaks(opts?: {
   if (opts?.studentId) params.set("studentId", opts.studentId);
   if (opts?.academicYear) params.set("academicYear", opts.academicYear);
   const qs = params.toString();
-  return apiRequest<StudentFeeBreakResponse[]>(
-    `/api/finance/fee-breaks.php${qs ? `?${qs}` : ""}`,
-  );
+  return apiRequest<StudentFeeBreakResponse[]>(`/api/finance/fee-breaks.php${qs ? `?${qs}` : ""}`);
 }
 
 export async function apiCreateFeeBreak(
@@ -343,13 +341,10 @@ export async function apiDeleteFeeBreak(
     });
   } catch (err) {
     try {
-      return await apiRequest(
-        `/api/finance/fee-breaks.php?id=${encodeURIComponent(id)}`,
-        {
-          method: "DELETE",
-          body: { dueAdjustment: extras?.dueAdjustment ?? 0 },
-        },
-      );
+      return await apiRequest(`/api/finance/fee-breaks.php?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        body: { dueAdjustment: extras?.dueAdjustment ?? 0 },
+      });
     } catch {
       throw err;
     }

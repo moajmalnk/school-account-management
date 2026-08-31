@@ -60,7 +60,9 @@ export function FinancialYearFields({
         </div>
       </div>
       {invalid ? (
-        <p className="text-[10.5px] text-[#DC2626]">Closing month must be on or after the start month.</p>
+        <p className="text-[10.5px] text-[#DC2626]">
+          Closing month must be on or after the start month.
+        </p>
       ) : caption ? (
         <p className="text-[10.5px] text-black/45 dark:text-zinc-500">
           Books run <span className="font-medium text-black/65 dark:text-zinc-300">{caption}</span>
@@ -80,6 +82,9 @@ export function FinancialYearFields({
   );
 }
 
-export function resolveFinancialYearInput(startMonthKey: string, endMonthKey: string): string | null {
+export function resolveFinancialYearInput(
+  startMonthKey: string,
+  endMonthKey: string,
+): string | null {
   return formatBooksRangeLabel(startMonthKey, endMonthKey);
 }

@@ -305,13 +305,17 @@ export async function uploadSupportAttachment(input: {
   };
 }
 
-export function supportPreviewLabel(body?: string | null, attachments?: SupportAttachment[] | null): string {
+export function supportPreviewLabel(
+  body?: string | null,
+  attachments?: SupportAttachment[] | null,
+): string {
   const text = (body || "").trim();
   if (text) return text;
   const items = attachments ?? [];
   if (items.some((item) => item.kind === "voice")) return "Voice message";
   if (items.some((item) => item.kind === "screenshot")) return "Screenshot";
-  if (items.some((item) => item.kind === "image" || item.mimeType.startsWith("image/"))) return "Photo";
+  if (items.some((item) => item.kind === "image" || item.mimeType.startsWith("image/")))
+    return "Photo";
   if (items[0]?.name) return items[0].name;
   if (items.length) return "Attachment";
   return "";
@@ -330,7 +334,9 @@ export function formatSupportDuration(ms: number): string {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-export function isSupportImage(att: Pick<SupportAttachment, "kind" | "mimeType" | "name">): boolean {
+export function isSupportImage(
+  att: Pick<SupportAttachment, "kind" | "mimeType" | "name">,
+): boolean {
   return (
     att.kind === "image" ||
     att.kind === "screenshot" ||
@@ -343,7 +349,10 @@ export function isSupportVoice(att: Pick<SupportAttachment, "kind" | "mimeType">
   return att.kind === "voice" || att.mimeType.startsWith("audio/");
 }
 
-export function classifySupportFile(file: File, requested?: SupportAttachmentKind): SupportAttachmentKind {
+export function classifySupportFile(
+  file: File,
+  requested?: SupportAttachmentKind,
+): SupportAttachmentKind {
   if (requested === "voice" || requested === "screenshot") return requested;
   if (file.type.startsWith("image/")) return "image";
   if (file.type.startsWith("audio/")) return "voice";

@@ -71,12 +71,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { CornerSide } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
@@ -92,12 +87,10 @@ const STATUS_STYLE: Record<Status, { bg: string; fg: string; dot: string }> = {
   Suspended: { bg: "#FEF2F2", fg: "#B91C1C", dot: "#EF4444" },
 };
 const STATUS_TOOLTIP: Record<Status, string> = {
-  Active:
-    "School is live and in good standing. Staff can sign in and Impersonate is allowed.",
+  Active: "School is live and in good standing. Staff can sign in and Impersonate is allowed.",
   Trial:
     "Limited evaluation period. Workspace works normally until the trial ends or you convert to Active.",
-  Overdue:
-    "Payment or renewal is past due. Access may be restricted until billing is cleared.",
+  Overdue: "Payment or renewal is past due. Access may be restricted until billing is cleared.",
   Suspended:
     "Account is locked. School login and Impersonate are blocked until you set Active or Trial.",
 };
@@ -243,9 +236,7 @@ function buildAuditLog(t: Tenant, count = 18): AuditEvent[] {
   return events.sort((a, b) => (a.ts < b.ts ? 1 : -1));
 }
 
-export function TenantsView({
-  onImpersonate,
-}: { onImpersonate?: (tenant: Tenant) => void } = {}) {
+export function TenantsView({ onImpersonate }: { onImpersonate?: (tenant: Tenant) => void } = {}) {
   const [query, setQuery] = useState("");
   const [tier, setTier] = useState<string>("all");
   const [status, setStatus] = useState<string>("all");
@@ -274,8 +265,7 @@ export function TenantsView({
       } catch (err) {
         if (!cancelled) {
           setTenants([]);
-          const msg =
-            err instanceof ApiError ? err.message : "Failed to load tenants";
+          const msg = err instanceof ApiError ? err.message : "Failed to load tenants";
           toast.error("Could not load tenants", {
             description: msg,
           });
@@ -1028,9 +1018,7 @@ function TenantDetailDrawer({
       .catch((err) => {
         if (!cancelled) {
           setSnapshot(null);
-          setSnapshotError(
-            err instanceof ApiError ? err.message : "Failed to load workspace data",
-          );
+          setSnapshotError(err instanceof ApiError ? err.message : "Failed to load workspace data");
         }
       })
       .finally(() => {
@@ -1091,11 +1079,7 @@ function TenantDetailDrawer({
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs
-          value={tab}
-          onValueChange={onTabChange}
-          className="flex min-h-0 flex-1 flex-col"
-        >
+        <Tabs value={tab} onValueChange={onTabChange} className="flex min-h-0 flex-1 flex-col">
           <div className="shrink-0 border-b border-[#E5E5E5] bg-white px-3 pt-3 sm:px-6">
             <div className="-mx-1 overflow-x-auto px-1 pb-1">
               <TabsList className="inline-flex h-auto min-w-full gap-1.5 rounded-none bg-transparent p-0 pb-3">
@@ -1187,12 +1171,7 @@ function TenantDetailDrawer({
                 </div>
 
                 <div className="col-span-12">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="rounded-full"
-                    onClick={onEdit}
-                  >
+                  <Button type="button" variant="outline" className="rounded-full" onClick={onEdit}>
                     <Pencil className="h-3.5 w-3.5" /> Edit meta
                   </Button>
                 </div>
@@ -1218,7 +1197,9 @@ function TenantDetailDrawer({
                         <div key={branch.id} className="grid grid-cols-12 gap-3 px-4 py-3">
                           <div className="col-span-12 sm:col-span-7">
                             <div className="flex flex-wrap items-center gap-2">
-                              <div className="text-[13px] font-semibold text-black">{branch.name}</div>
+                              <div className="text-[13px] font-semibold text-black">
+                                {branch.name}
+                              </div>
                               <span className="rounded-full bg-[#F4F4F5] px-2 py-0.5 font-mono text-[10px] text-black/55">
                                 {branch.code || branch.id}
                               </span>
@@ -1237,7 +1218,8 @@ function TenantDetailDrawer({
                               <div className="mt-1 text-[12px] text-black/55">{branch.address}</div>
                             ) : null}
                             <div className="mt-1 text-[12px] text-black/45">
-                              {[branch.phone, branch.email].filter(Boolean).join(" · ") || "No contact on file"}
+                              {[branch.phone, branch.email].filter(Boolean).join(" · ") ||
+                                "No contact on file"}
                             </div>
                           </div>
                           <div className="col-span-12 grid grid-cols-3 gap-2 sm:col-span-5">
@@ -1274,25 +1256,41 @@ function TenantDetailDrawer({
                       snapshot?.students.map((student) => (
                         <div key={student.id} className="grid grid-cols-12 gap-2 px-4 py-3">
                           <div className="col-span-12 sm:col-span-5">
-                            <div className="text-[13px] font-semibold text-black">{student.name}</div>
-                            <div className="mt-0.5 font-mono text-[10px] text-black/45">{student.id}</div>
+                            <div className="text-[13px] font-semibold text-black">
+                              {student.name}
+                            </div>
+                            <div className="mt-0.5 font-mono text-[10px] text-black/45">
+                              {student.id}
+                            </div>
                           </div>
                           <div className="col-span-6 sm:col-span-2">
-                            <div className="text-[10px] uppercase tracking-wider text-black/40">Class</div>
-                            <div className="text-[12px] text-black/70">{student.className || "—"}</div>
+                            <div className="text-[10px] uppercase tracking-wider text-black/40">
+                              Class
+                            </div>
+                            <div className="text-[12px] text-black/70">
+                              {student.className || "—"}
+                            </div>
                           </div>
                           <div className="col-span-6 sm:col-span-2">
-                            <div className="text-[10px] uppercase tracking-wider text-black/40">Branch</div>
-                            <div className="text-[12px] text-black/70">{student.branchName || "—"}</div>
+                            <div className="text-[10px] uppercase tracking-wider text-black/40">
+                              Branch
+                            </div>
+                            <div className="text-[12px] text-black/70">
+                              {student.branchName || "—"}
+                            </div>
                           </div>
                           <div className="col-span-6 sm:col-span-2">
-                            <div className="text-[10px] uppercase tracking-wider text-black/40">Due</div>
+                            <div className="text-[10px] uppercase tracking-wider text-black/40">
+                              Due
+                            </div>
                             <div className="font-mono text-[12px] text-black/70">
                               {formatSnapshotInr(student.due)}
                             </div>
                           </div>
                           <div className="col-span-6 sm:col-span-1 sm:text-right">
-                            <div className="text-[10px] uppercase tracking-wider text-black/40">Status</div>
+                            <div className="text-[10px] uppercase tracking-wider text-black/40">
+                              Status
+                            </div>
                             <div
                               className={cn(
                                 "text-[12px] font-semibold",
@@ -1332,23 +1330,39 @@ function TenantDetailDrawer({
                       snapshot?.staff.map((member) => (
                         <div key={member.id} className="grid grid-cols-12 gap-2 px-4 py-3">
                           <div className="col-span-12 sm:col-span-4">
-                            <div className="text-[13px] font-semibold text-black">{member.name}</div>
-                            <div className="mt-0.5 font-mono text-[10px] text-black/45">{member.id}</div>
+                            <div className="text-[13px] font-semibold text-black">
+                              {member.name}
+                            </div>
+                            <div className="mt-0.5 font-mono text-[10px] text-black/45">
+                              {member.id}
+                            </div>
                           </div>
                           <div className="col-span-6 sm:col-span-2">
-                            <div className="text-[10px] uppercase tracking-wider text-black/40">Role</div>
+                            <div className="text-[10px] uppercase tracking-wider text-black/40">
+                              Role
+                            </div>
                             <div className="text-[12px] text-black/70">{member.role || "—"}</div>
                           </div>
                           <div className="col-span-6 sm:col-span-2">
-                            <div className="text-[10px] uppercase tracking-wider text-black/40">Department</div>
-                            <div className="text-[12px] text-black/70">{member.department || "—"}</div>
+                            <div className="text-[10px] uppercase tracking-wider text-black/40">
+                              Department
+                            </div>
+                            <div className="text-[12px] text-black/70">
+                              {member.department || "—"}
+                            </div>
                           </div>
                           <div className="col-span-6 sm:col-span-2">
-                            <div className="text-[10px] uppercase tracking-wider text-black/40">Branch</div>
-                            <div className="text-[12px] text-black/70">{member.branchName || "—"}</div>
+                            <div className="text-[10px] uppercase tracking-wider text-black/40">
+                              Branch
+                            </div>
+                            <div className="text-[12px] text-black/70">
+                              {member.branchName || "—"}
+                            </div>
                           </div>
                           <div className="col-span-6 sm:col-span-2 sm:text-right">
-                            <div className="text-[10px] uppercase tracking-wider text-black/40">Status</div>
+                            <div className="text-[10px] uppercase tracking-wider text-black/40">
+                              Status
+                            </div>
                             <div
                               className={cn(
                                 "text-[12px] font-semibold",
@@ -1400,27 +1414,43 @@ function TenantDetailDrawer({
                       snapshot?.payments.map((payment) => (
                         <div key={payment.id} className="grid grid-cols-12 gap-2 px-4 py-3">
                           <div className="col-span-12 sm:col-span-4">
-                            <div className="text-[13px] font-semibold text-black">{payment.name}</div>
-                            <div className="mt-0.5 font-mono text-[10px] text-black/45">{payment.id}</div>
+                            <div className="text-[13px] font-semibold text-black">
+                              {payment.name}
+                            </div>
+                            <div className="mt-0.5 font-mono text-[10px] text-black/45">
+                              {payment.id}
+                            </div>
                           </div>
                           <div className="col-span-6 sm:col-span-2">
-                            <div className="text-[10px] uppercase tracking-wider text-black/40">Category</div>
+                            <div className="text-[10px] uppercase tracking-wider text-black/40">
+                              Category
+                            </div>
                             <div className="text-[12px] text-black/70">{payment.cat || "—"}</div>
                           </div>
                           <div className="col-span-6 sm:col-span-2">
-                            <div className="text-[10px] uppercase tracking-wider text-black/40">Mode</div>
+                            <div className="text-[10px] uppercase tracking-wider text-black/40">
+                              Mode
+                            </div>
                             <div className="text-[12px] text-black/70">{payment.mode || "—"}</div>
                           </div>
                           <div className="col-span-6 sm:col-span-2">
-                            <div className="text-[10px] uppercase tracking-wider text-black/40">Branch</div>
-                            <div className="text-[12px] text-black/70">{payment.branchName || "—"}</div>
+                            <div className="text-[10px] uppercase tracking-wider text-black/40">
+                              Branch
+                            </div>
+                            <div className="text-[12px] text-black/70">
+                              {payment.branchName || "—"}
+                            </div>
                           </div>
                           <div className="col-span-6 sm:col-span-2 sm:text-right">
-                            <div className="text-[10px] uppercase tracking-wider text-black/40">Amount</div>
+                            <div className="text-[10px] uppercase tracking-wider text-black/40">
+                              Amount
+                            </div>
                             <div className="font-mono text-[12px] font-semibold text-black">
                               {formatSnapshotInr(payment.amount)}
                             </div>
-                            <div className="mt-0.5 font-mono text-[10px] text-black/45">{payment.time}</div>
+                            <div className="mt-0.5 font-mono text-[10px] text-black/45">
+                              {payment.time}
+                            </div>
                           </div>
                         </div>
                       ))
@@ -1644,8 +1674,7 @@ function TenantDetailDrawer({
                       billingCycle: draft.cycle,
                       pricingModel: draft.pricingModel,
                       currency: draft.currency,
-                      studentsBilled:
-                        draft.pricingModel === "flat_cycle" ? 1 : seats,
+                      studentsBilled: draft.pricingModel === "flat_cycle" ? 1 : seats,
                       ratePerStudent: draft.ratePerStudent,
                       discountPercent: draft.discountPercent,
                       taxPercent: draft.taxPercent,
@@ -1713,8 +1742,8 @@ function TenantDetailDrawer({
                     {tenant.adminEmail?.trim() || "No username on file"}
                   </div>
                   <p className="mt-2 text-[12px] leading-relaxed text-black/55">
-                    Reset username or password from Edit Tenant Meta. Impersonation opens the
-                    school workspace without sharing credentials.
+                    Reset username or password from Edit Tenant Meta. Impersonation opens the school
+                    workspace without sharing credentials.
                   </p>
                 </div>
 
@@ -1732,12 +1761,7 @@ function TenantDetailDrawer({
                 </div>
 
                 <div className="col-span-12">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="rounded-full"
-                    onClick={onEdit}
-                  >
+                  <Button type="button" variant="outline" className="rounded-full" onClick={onEdit}>
                     <Pencil className="h-3.5 w-3.5" /> Edit credentials
                   </Button>
                 </div>
@@ -1773,15 +1797,7 @@ function TenantDetailDrawer({
   );
 }
 
-function DetailStat({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
+function DetailStat({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="h-full rounded-2xl border border-[#E5E5E5] bg-white px-3.5 py-3">
       <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
@@ -1830,8 +1846,7 @@ function EditTenantDrawer({
 
   if (!tenant) return null;
   const currentUsername = (tenant.adminEmail ?? "").trim().toLowerCase();
-  const usernameDirty =
-    setupUsername.trim().toLowerCase() !== currentUsername;
+  const usernameDirty = setupUsername.trim().toLowerCase() !== currentUsername;
   const passwordDirty = setupPassword.trim().length > 0;
   const dirty =
     name !== tenant.name ||
@@ -2018,8 +2033,8 @@ function EditTenantDrawer({
           <div className="flex items-center gap-2 rounded-2xl border border-[#E5E5E5] bg-[#F4F4F5] px-3 py-2.5 text-[11.5px] text-black/65">
             <Info className="h-3.5 w-3.5 shrink-0 text-black/45" />
             Updates write to the tenant&apos;s metadata store. The routing key is rebuilt
-            automatically on subdomain change. Setup username is the school admin login
-            email; leave password blank to keep the current one.
+            automatically on subdomain change. Setup username is the school admin login email; leave
+            password blank to keep the current one.
           </div>
         </div>
 
@@ -2131,7 +2146,12 @@ function BillingRulesDrawer({
                     )}
                   >
                     <div className="text-[12px] font-semibold">{opt.title}</div>
-                    <div className={cn("mt-0.5 text-[10.5px]", sel ? "text-white/80" : "text-black/45")}>
+                    <div
+                      className={cn(
+                        "mt-0.5 text-[10.5px]",
+                        sel ? "text-white/80" : "text-black/45",
+                      )}
+                    >
                       {opt.hint}
                     </div>
                   </button>

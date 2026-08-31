@@ -83,10 +83,7 @@ export function SettingsResponsiveCardHeader({
             {title}
           </div>
           <p
-            className={cn(
-              "mt-1 text-[12px] text-slate-500 dark:text-zinc-400",
-              subtitleClassName,
-            )}
+            className={cn("mt-1 text-[12px] text-slate-500 dark:text-zinc-400", subtitleClassName)}
           >
             {subtitle}
           </p>

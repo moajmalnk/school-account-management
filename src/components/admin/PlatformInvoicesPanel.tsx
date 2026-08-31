@@ -2,7 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { Download, FileText, Loader2, Plus, Receipt } from "lucide-react";
 import { toast } from "sonner";
 
-import { PlatformDocumentPreview, type PlatformDocKind } from "@/components/admin/PlatformDocumentPreview";
+import {
+  PlatformDocumentPreview,
+  type PlatformDocKind,
+} from "@/components/admin/PlatformDocumentPreview";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/client";
 import {
@@ -211,10 +214,7 @@ export function PlatformInvoicesPanel({
               const sym = CURRENCY_SYMBOL[inv.currency] ?? inv.currency;
               const paid = inv.status === "Paid";
               return (
-                <li
-                  key={inv.id}
-                  className="grid grid-cols-12 items-center gap-2 px-3 py-3 sm:px-4"
-                >
+                <li key={inv.id} className="grid grid-cols-12 items-center gap-2 px-3 py-3 sm:px-4">
                   <div className="col-span-12 min-w-0 sm:col-span-5">
                     <div className="truncate text-[13px] font-semibold text-black">
                       {inv.invoiceNumber}

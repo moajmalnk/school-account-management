@@ -151,10 +151,7 @@ function StaffPhotoAvatar({
           busy={uploading}
           className={cn(dim, "rounded-2xl shadow-md ring-2 ring-white")}
           imgClassName="object-cover"
-          initialsClassName={cn(
-            "bg-gradient-to-br from-slate-900 to-slate-700",
-            text,
-          )}
+          initialsClassName={cn("bg-gradient-to-br from-slate-900 to-slate-700", text)}
         />
         <button
           type="button"
@@ -287,13 +284,7 @@ function isDocumentComplete(doc: StaffDocument) {
   return doc.number.trim().length > 0 || (doc.attachments?.length ?? 0) > 0;
 }
 
-export function StaffProfileDetail({
-  staff,
-  onBack,
-}: {
-  staff: Staff;
-  onBack: () => void;
-}) {
+export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: () => void }) {
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/staff" });
   const { session } = useAuth();
@@ -306,9 +297,7 @@ export function StaffProfileDetail({
     try {
       const saved = await apiUpsertStaff(updated);
       const merged = { ...updated, ...saved };
-      setStaff((prev) =>
-        prev.map((s) => (s.id === staff.id || s.id === saved.id ? merged : s)),
-      );
+      setStaff((prev) => prev.map((s) => (s.id === staff.id || s.id === saved.id ? merged : s)));
       return merged;
     } catch (err) {
       toast.error("Could not save staff to server", {
@@ -376,9 +365,7 @@ export function StaffProfileDetail({
       toast.error("Assign at least one permission");
       return;
     }
-    const emailTaken = tenantUsers.some(
-      (u) => u.email === email && u.staffId !== staff.id,
-    );
+    const emailTaken = tenantUsers.some((u) => u.email === email && u.staffId !== staff.id);
     if (emailTaken) {
       toast.error("Email already used by another user");
       return;
@@ -553,8 +540,7 @@ export function StaffProfileDetail({
     [staff, payrollMonth],
   );
   const attendanceHistory = useMemo(
-    () =>
-      [...(staff.attendanceByMonth ?? [])].sort((a, b) => b.month.localeCompare(a.month)),
+    () => [...(staff.attendanceByMonth ?? [])].sort((a, b) => b.month.localeCompare(a.month)),
     [staff.attendanceByMonth],
   );
 
@@ -614,11 +600,7 @@ export function StaffProfileDetail({
     const present = Number(attendanceForm.daysPresent);
     const paidLeave = Number(attendanceForm.paidLeaveDays || 0);
     const unpaidLeave = Number(attendanceForm.unpaidLeaveDays || 0);
-    if (
-      Number.isFinite(working) &&
-      working > 0 &&
-      present + paidLeave + unpaidLeave > working
-    ) {
+    if (Number.isFinite(working) && working > 0 && present + paidLeave + unpaidLeave > working) {
       toast.error("Present + paid leave + unpaid leave cannot exceed working days");
       return;
     }
@@ -904,7 +886,9 @@ export function StaffProfileDetail({
                             </span>
                           </div>
                           {event.note && (
-                            <p className="mt-1 text-[12px] text-black/55 dark:text-zinc-400">{event.note}</p>
+                            <p className="mt-1 text-[12px] text-black/55 dark:text-zinc-400">
+                              {event.note}
+                            </p>
                           )}
                         </div>
                       </li>
@@ -1100,7 +1084,9 @@ export function StaffProfileDetail({
                 </div>
               ) : (
                 <div className="mt-5 rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 py-6 text-center dark:border-white/15 dark:bg-zinc-900/60">
-                  <p className="text-[13px] font-medium text-black/70">No attendance for this month</p>
+                  <p className="text-[13px] font-medium text-black/70">
+                    No attendance for this month
+                  </p>
                   <p className="mt-1 text-[12px] text-black/45">
                     Add a month below, or upload a CSV from Staff Directory → Attendance.
                   </p>
@@ -1248,16 +1234,23 @@ export function StaffProfileDetail({
                     <table className="w-full min-w-[620px] text-left text-[12.5px]">
                       <thead>
                         <tr className="border-b border-slate-100 bg-slate-50 dark:border-white/10 dark:bg-zinc-900/70">
-                          {["Month", "Present", "Paid", "Unpaid", "Working", "Rate", "Payable", ""].map(
-                            (header) => (
-                              <th
-                                key={header || "actions"}
-                                className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/50 dark:text-zinc-400"
-                              >
-                                {header}
-                              </th>
-                            ),
-                          )}
+                          {[
+                            "Month",
+                            "Present",
+                            "Paid",
+                            "Unpaid",
+                            "Working",
+                            "Rate",
+                            "Payable",
+                            "",
+                          ].map((header) => (
+                            <th
+                              key={header || "actions"}
+                              className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/50 dark:text-zinc-400"
+                            >
+                              {header}
+                            </th>
+                          ))}
                         </tr>
                       </thead>
                       <tbody>
@@ -1437,7 +1430,9 @@ export function StaffProfileDetail({
                         search: {
                           tab: "make",
                           staffId: staff.id,
-                          amount: String(currentMonthOutstanding || payrollStatement.currentMonthPayable),
+                          amount: String(
+                            currentMonthOutstanding || payrollStatement.currentMonthPayable,
+                          ),
                           month: payrollMonth,
                         },
                       })
@@ -1592,16 +1587,22 @@ export function StaffProfileDetail({
                   <table className="w-full min-w-[640px] text-left text-[12.5px]">
                     <thead>
                       <tr className="border-b border-slate-100 bg-slate-50 dark:border-white/10 dark:bg-zinc-900/70">
-                        {["Month", "Attendance", "Payable", "Paid", "Outstanding", "Status", ""].map(
-                          (header) => (
-                            <th
-                              key={header || "actions"}
-                              className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/50 dark:text-zinc-400"
-                            >
-                              {header}
-                            </th>
-                          ),
-                        )}
+                        {[
+                          "Month",
+                          "Attendance",
+                          "Payable",
+                          "Paid",
+                          "Outstanding",
+                          "Status",
+                          "",
+                        ].map((header) => (
+                          <th
+                            key={header || "actions"}
+                            className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/50 dark:text-zinc-400"
+                          >
+                            {header}
+                          </th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
@@ -1791,9 +1792,7 @@ export function StaffProfileDetail({
                     type="button"
                     variant="outline"
                     className="rounded-full dark:border-white/20 dark:bg-transparent dark:text-zinc-100 dark:hover:bg-white/10"
-                    onClick={() =>
-                      navigate({ to: "/tenant/settings", search: { tab: "users" } })
-                    }
+                    onClick={() => navigate({ to: "/tenant/settings", search: { tab: "users" } })}
                   >
                     Manage in Users
                   </Button>
@@ -1833,7 +1832,8 @@ export function StaffProfileDetail({
               Remove attendance
             </DialogTitle>
             <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60 dark:text-zinc-400">
-              Remove {pendingDeleteMonth ? formatPayrollMonthLabel(pendingDeleteMonth) : "this month"}
+              Remove{" "}
+              {pendingDeleteMonth ? formatPayrollMonthLabel(pendingDeleteMonth) : "this month"}
               &apos;s attendance for {staff.name}? Payroll will use full gross until a new record is
               saved.
             </DialogDescription>
@@ -1891,9 +1891,7 @@ export function StaffProfileDetail({
               <button
                 type="button"
                 className="rounded-full border border-[#E5E5E5] bg-white px-2.5 py-1 text-[11px] font-semibold"
-                onClick={() =>
-                  setLoginForm((p) => ({ ...p, allFunctions: true, permissions: [] }))
-                }
+                onClick={() => setLoginForm((p) => ({ ...p, allFunctions: true, permissions: [] }))}
               >
                 All functions
               </button>
@@ -1919,8 +1917,7 @@ export function StaffProfileDetail({
                   </div>
                   <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
                     {group.keys.map((key) => {
-                      const checked =
-                        loginForm.allFunctions || loginForm.permissions.includes(key);
+                      const checked = loginForm.allFunctions || loginForm.permissions.includes(key);
                       return (
                         <label
                           key={key}
@@ -1953,9 +1950,7 @@ export function StaffProfileDetail({
             <label className="flex cursor-pointer items-center gap-2 text-[13px]">
               <Checkbox
                 checked={loginForm.active}
-                onCheckedChange={(v) =>
-                  setLoginForm({ ...loginForm, active: v === true })
-                }
+                onCheckedChange={(v) => setLoginForm({ ...loginForm, active: v === true })}
               />
               Active
             </label>
@@ -1963,7 +1958,10 @@ export function StaffProfileDetail({
               <Button type="button" variant="outline" onClick={() => setLoginOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]">
+              <Button
+                type="submit"
+                className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+              >
                 Save login
               </Button>
             </DialogFooter>
@@ -2002,7 +2000,6 @@ export function StaffProfileDetail({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
     </div>
   );
 }
@@ -2082,7 +2079,12 @@ function DocumentCard({
         </p>
       )}
 
-      <div className={cn("border-t border-slate-200/80 pt-4 dark:border-white/10", isOther ? "mt-3" : "mt-4")}>
+      <div
+        className={cn(
+          "border-t border-slate-200/80 pt-4 dark:border-white/10",
+          isOther ? "mt-3" : "mt-4",
+        )}
+      >
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
             <Paperclip className="h-3.5 w-3.5" />
@@ -2140,7 +2142,9 @@ function DocumentCard({
                 >
                   <FileText className="h-3.5 w-3.5 shrink-0 text-black/40 dark:text-zinc-500" />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[12px] font-medium text-black dark:text-zinc-100">{file.name}</div>
+                    <div className="truncate text-[12px] font-medium text-black dark:text-zinc-100">
+                      {file.name}
+                    </div>
                     <div className="font-mono text-[10px] text-black/45 dark:text-zinc-500">
                       {formatFileSize(file.size)}
                     </div>
@@ -2292,7 +2296,11 @@ function PayrollDueBox({
       <span
         className={cn(
           "mt-2 inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider",
-          cleared ? "bg-[#0F172A] text-[#10B981]" : overdue ? "bg-[#0F172A] text-[#EF4444]" : "bg-[#0F172A] text-[#F59E0B]",
+          cleared
+            ? "bg-[#0F172A] text-[#10B981]"
+            : overdue
+              ? "bg-[#0F172A] text-[#EF4444]"
+              : "bg-[#0F172A] text-[#F59E0B]",
         )}
       >
         {cleared ? "[ CLEARED ]" : overdue ? "[ OVERDUE ]" : "[ PENDING ]"}

@@ -51,13 +51,7 @@ export function isRecordDeleted(deletedAt: string | undefined) {
   return Boolean(deletedAt);
 }
 
-function StatusTableRow({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
+function StatusTableRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <tr className="flex flex-col gap-1 border-b border-slate-100 py-3 last:border-b-0 last:pb-0 first:pt-0 sm:table-row sm:border-slate-100/90 dark:border-white/10">
       <th

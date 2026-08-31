@@ -61,7 +61,12 @@ export function SupportMessageContent({
         const src = resolveMediaUrl(item.path);
         if (!src) return null;
         return (
-          <VoiceNotePlayer key={item.id} src={src} durationMs={item.durationMs} inverted={inverted} />
+          <VoiceNotePlayer
+            key={item.id}
+            src={src}
+            durationMs={item.durationMs}
+            inverted={inverted}
+          />
         );
       })}
 
@@ -83,7 +88,12 @@ export function SupportMessageContent({
             <FileText className="h-4 w-4 shrink-0 opacity-80" />
             <span className="min-w-0 flex-1">
               <span className="block truncate font-medium">{item.name}</span>
-              <span className={cn("block text-[10px]", inverted ? "text-white/70" : "text-black/45 dark:text-zinc-400")}>
+              <span
+                className={cn(
+                  "block text-[10px]",
+                  inverted ? "text-white/70" : "text-black/45 dark:text-zinc-400",
+                )}
+              >
                 {formatSupportBytes(item.size)}
               </span>
             </span>
@@ -93,7 +103,10 @@ export function SupportMessageContent({
       })}
 
       <Dialog open={Boolean(lightbox)} onOpenChange={(open) => !open && setLightbox(null)}>
-        <DialogContent className="max-w-3xl border-none bg-black/90 p-3 sm:rounded-2xl" showCloseButton={false}>
+        <DialogContent
+          className="max-w-3xl border-none bg-black/90 p-3 sm:rounded-2xl"
+          showCloseButton={false}
+        >
           <DialogTitle className="sr-only">{lightbox?.name || "Screenshot"}</DialogTitle>
           <DialogDescription className="sr-only">Full-size attachment preview</DialogDescription>
           <button
@@ -105,7 +118,11 @@ export function SupportMessageContent({
             <X className="h-4 w-4" />
           </button>
           {lightboxSrc ? (
-            <img src={lightboxSrc} alt={lightbox?.name || ""} className="max-h-[80vh] w-full rounded-lg object-contain" />
+            <img
+              src={lightboxSrc}
+              alt={lightbox?.name || ""}
+              className="max-h-[80vh] w-full rounded-lg object-contain"
+            />
           ) : null}
         </DialogContent>
       </Dialog>

@@ -14,12 +14,7 @@ import {
 import { toast } from "sonner";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ApiError } from "@/lib/api/client";
 import {
   SUPPORT_MAX_ATTACHMENTS,
@@ -50,7 +45,8 @@ type PendingAttachment = {
   uploaded?: SupportAttachment;
 };
 
-const FILE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,application/pdf,audio/*,.pdf,.webm,.ogg,.mp3,.m4a,.wav";
+const FILE_ACCEPT =
+  "image/jpeg,image/png,image/webp,image/gif,application/pdf,audio/*,.pdf,.webm,.ogg,.mp3,.m4a,.wav";
 const IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif";
 
 function ToolHint({ label, children }: { label: string; children: ReactNode }) {
@@ -111,7 +107,11 @@ async function captureDisplayFrame(): Promise<File> {
 
 function pickRecorderMime(): string {
   const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
-  return candidates.find((type) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(type)) ?? "";
+  return (
+    candidates.find(
+      (type) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(type),
+    ) ?? ""
+  );
 }
 
 function recorderExtension(mime: string): string {
@@ -178,7 +178,9 @@ export function SupportComposer({
     setPending((prev) => {
       const room = SUPPORT_MAX_ATTACHMENTS - prev.length;
       if (room <= 0) {
-        toast.error("Limit reached", { description: `You can attach up to ${SUPPORT_MAX_ATTACHMENTS} items.` });
+        toast.error("Limit reached", {
+          description: `You can attach up to ${SUPPORT_MAX_ATTACHMENTS} items.`,
+        });
         return prev;
       }
       const next = [...prev];
@@ -241,7 +243,9 @@ export function SupportComposer({
   const startRecording = async () => {
     if (disabled || recording) return;
     if (pending.length >= SUPPORT_MAX_ATTACHMENTS) {
-      toast.error("Limit reached", { description: `You can attach up to ${SUPPORT_MAX_ATTACHMENTS} items.` });
+      toast.error("Limit reached", {
+        description: `You can attach up to ${SUPPORT_MAX_ATTACHMENTS} items.`,
+      });
       return;
     }
     if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
@@ -252,7 +256,9 @@ export function SupportComposer({
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       const mime = pickRecorderMime();
-      const recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      const recorder = mime
+        ? new MediaRecorder(stream, { mimeType: mime })
+        : new MediaRecorder(stream);
       chunksRef.current = [];
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) chunksRef.current.push(event.data);
@@ -265,7 +271,9 @@ export function SupportComposer({
         const durationMs = Math.max(400, Date.now() - startedAtRef.current);
         if (blob.size < 200) return;
         const ext = recorderExtension(recorder.mimeType || "");
-        const file = new File([blob], `voice-${Date.now()}.${ext}`, { type: blob.type || "audio/webm" });
+        const file = new File([blob], `voice-${Date.now()}.${ext}`, {
+          type: blob.type || "audio/webm",
+        });
         const previewUrl = URL.createObjectURL(blob);
         setPending((prev) => {
           if (prev.length >= SUPPORT_MAX_ATTACHMENTS) return prev;
@@ -295,7 +303,9 @@ export function SupportComposer({
         if (elapsed >= SUPPORT_VOICE_MAX_MS) stopRecording();
       }, 200);
     } catch {
-      toast.error("Microphone blocked", { description: "Allow microphone access to send a voice note." });
+      toast.error("Microphone blocked", {
+        description: "Allow microphone access to send a voice note.",
+      });
     }
   };
 
@@ -331,7 +341,8 @@ export function SupportComposer({
   };
 
   const sending = busy || uploading;
-  const canSend = !disabled && !sending && !recording && (draft.trim() !== "" || pending.length > 0);
+  const canSend =
+    !disabled && !sending && !recording && (draft.trim() !== "" || pending.length > 0);
   const showSend = editingMessageId ? draft.trim() !== "" : canSend;
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -359,7 +370,12 @@ export function SupportComposer({
         setDraft("");
         onCancelEdit?.();
       } catch (err) {
-        const msg = err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Could not save";
+        const msg =
+          err instanceof ApiError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : "Could not save";
         toast.error("Could not save", { description: msg });
       } finally {
         setUploading(false);
@@ -395,7 +411,12 @@ export function SupportComposer({
       setDraft("");
       onCancelEdit?.();
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Could not send";
+      const msg =
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Could not send";
       toast.error("Could not send", { description: msg });
     } finally {
       setUploading(false);
@@ -458,7 +479,9 @@ export function SupportComposer({
                       <span className="block truncate text-[12px] font-medium text-black dark:text-zinc-100">
                         {item.name}
                       </span>
-                      <span className="block text-[10px] text-black/45 dark:text-zinc-400">{formatSupportBytes(item.size)}</span>
+                      <span className="block text-[10px] text-black/45 dark:text-zinc-400">
+                        {formatSupportBytes(item.size)}
+                      </span>
                     </span>
                   </div>
                 )}
@@ -522,7 +545,11 @@ export function SupportComposer({
                       className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-black/40 hover:bg-black/5 hover:text-[#0F766E] disabled:opacity-40 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-teal-300"
                       aria-label="Photo"
                     >
-                      {shotBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-[18px] w-[18px]" />}
+                      {shotBusy ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Camera className="h-[18px] w-[18px]" />
+                      )}
                     </button>
                   </PopoverTrigger>
                   <PopoverContent align="start" className="w-52 p-1.5">
@@ -582,7 +609,11 @@ export function SupportComposer({
               className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#0F766E] text-white shadow-sm hover:bg-[#0D9488] disabled:opacity-40"
               aria-label={editingMessageId ? "Save edit" : "Send"}
             >
-              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {sending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
             </button>
           ) : (
             <button
