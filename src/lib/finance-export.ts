@@ -834,24 +834,16 @@ function drawUploadedLetterheadBanner(
   doc: jsPDF,
   pageWidth: number,
   letterhead: PdfLogo,
-  margin: number,
+  _margin: number,
 ): number {
-  const contentWidth = pageWidth - margin * 2;
-  const maxH = 46;
   const aspect = letterhead.width / Math.max(1, letterhead.height);
-  let drawW = contentWidth;
-  let drawH = drawW / aspect;
-  if (drawH > maxH) {
-    drawH = maxH;
-    drawW = drawH * aspect;
-  }
-  const x = (pageWidth - drawW) / 2;
-  const y = 9;
-  doc.addImage(letterhead.dataUrl, "PNG", x, y, drawW, drawH);
-  const bottom = y + drawH + 3.5;
+  const drawW = pageWidth;
+  const drawH = drawW / aspect;
+  doc.addImage(letterhead.dataUrl, "PNG", 0, 0, drawW, drawH);
+  const bottom = drawH + 3.5;
   doc.setDrawColor(...receiptInk().line);
   doc.setLineWidth(0.28);
-  doc.line(margin, bottom, pageWidth - margin, bottom);
+  doc.line(0, bottom, pageWidth, bottom);
   return bottom + 4.5;
 }
 

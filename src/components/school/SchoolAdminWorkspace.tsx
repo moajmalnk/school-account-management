@@ -6285,11 +6285,11 @@ function FinanceOverview({
   ) => void;
 }) {
   const { session } = useAuth();
+  const navigate = useNavigate();
   const {
     activePayments: payments,
     setPayments,
     setStudents,
-    paymentCategories,
     academicYear,
     schoolDetails,
     activeStudents: students,
@@ -6298,18 +6298,8 @@ function FinanceOverview({
   const schoolName = schoolDetails.name || "Silver Hills Global";
   const [incomePeriod, setIncomePeriod] = useState<PaymentPeriod>("this_month");
   const [customRange, setCustomRange] = useState<CustomDateRange>({ from: "", to: "" });
-  const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
   const [pendingDeletePayment, setPendingDeletePayment] = useState<Payment | null>(null);
   const [previewAttachment, setPreviewAttachment] = useState<PaymentAttachment | null>(null);
-  const [editForm, setEditForm] = useState({
-    name: "",
-    cat: "",
-    mode: "Bank",
-    amount: "",
-    time: "",
-    narration: "",
-    payerType: "student" as "student" | "external",
-  });
 
   const filteredPayments = useMemo(
     () => filterPaymentsByPeriod(payments, incomePeriod, customRange),
@@ -6579,76 +6569,10 @@ function FinanceOverview({
 
   const openEditPayment = (payment: Payment) => {
     if (!isAdmin) return;
-    setEditingPayment(payment);
-    setEditForm({
-      name: payment.name,
-      cat: payment.cat,
-      mode: payment.mode,
-      amount: String(payment.amount),
-      time: receiptTimeForForm(payment.time),
-      narration: payment.narration ?? "",
-      payerType: payment.payerType === "external" ? "external" : "student",
+    navigate({
+      to: "/tenant/finance",
+      search: { tab: "receive", paymentId: payment.id },
     });
-  };
-
-  const saveEditedPayment = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!isAdmin || !editingPayment) return;
-    const name = editForm.name.trim();
-    const amount = Number(editForm.amount);
-    const rawTime = editForm.time.trim();
-    const time = toSqlDateTime(rawTime);
-    const cat = editForm.cat.trim();
-    const mode = editForm.mode.trim();
-    if (!name) {
-      toast.error("Account name is required");
-      return;
-    }
-    if (!cat) {
-      toast.error("Category is required");
-      return;
-    }
-    if (!mode) {
-      toast.error("Payment mode is required");
-      return;
-    }
-    if (!Number.isFinite(amount) || amount <= 0) {
-      toast.error("Enter a valid amount");
-      return;
-    }
-    if (!rawTime || formatEventDateTime(rawTime) === "—") {
-      toast.error("Date / time is required");
-      return;
-    }
-
-    const note = editForm.narration.trim();
-    const nextPayment: Payment = {
-      ...editingPayment,
-      name,
-      cat,
-      mode,
-      amount,
-      time,
-      payerType: editForm.payerType,
-      ...(note ? { narration: note } : { narration: undefined }),
-    };
-
-    if (isStudentReceipt(editingPayment) && isStudentReceipt(nextPayment)) {
-      adjustStudentDue(editingPayment, editingPayment.amount - amount);
-    } else if (isStudentReceipt(editingPayment) && !isStudentReceipt(nextPayment)) {
-      adjustStudentDue(editingPayment, editingPayment.amount);
-    } else if (!isStudentReceipt(editingPayment) && isStudentReceipt(nextPayment)) {
-      adjustStudentDue(nextPayment, -amount);
-    }
-
-    setPayments((prev) => prev.map((p) => (p.id === editingPayment.id ? nextPayment : p)));
-    void apiUpdatePayment(nextPayment).catch((err) =>
-      toast.error("Could not update receipt on server", {
-        description: err instanceof Error ? err.message : "Save failed",
-      }),
-    );
-    toast.success(`Receipt ${editingPayment.id} updated`);
-    setEditingPayment(null);
   };
 
   const confirmDeletePayment = () => {
@@ -7284,163 +7208,6 @@ function FinanceOverview({
 
       {isAdmin && (
         <>
-          <Dialog
-            open={Boolean(editingPayment)}
-            onOpenChange={(open) => {
-              if (!open) setEditingPayment(null);
-            }}
-          >
-            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Edit Transaction</DialogTitle>
-                <DialogDescription>
-                  Update receipt {editingPayment?.id}. Student ledger balance adjusts automatically
-                  when the amount changes.
-                </DialogDescription>
-              </DialogHeader>
-              <form onSubmit={saveEditedPayment} className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                    Account
-                  </Label>
-                  <Input
-                    value={editForm.name}
-                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                    placeholder="Payer / student name"
-                    autoFocus
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                      Category
-                    </Label>
-                    <Select
-                      value={editForm.cat}
-                      onValueChange={(cat) =>
-                        setEditForm({
-                          ...editForm,
-                          cat,
-                          payerType: categorySuggestsExternal(cat)
-                            ? "external"
-                            : editForm.payerType,
-                        })
-                      }
-                    >
-                      <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
-                        <SelectValue placeholder="Category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.from(
-                          new Set(
-                            [...paymentCategories.map((c) => c.label), editForm.cat].filter(
-                              Boolean,
-                            ),
-                          ),
-                        ).map((label) => (
-                          <SelectItem key={label} value={label}>
-                            {label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                      Mode
-                    </Label>
-                    <Select
-                      value={editForm.mode}
-                      onValueChange={(mode) => setEditForm({ ...editForm, mode })}
-                    >
-                      <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
-                        <SelectValue placeholder="Mode" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.from(
-                          new Set(["Bank", "Cash", "Both", editForm.mode].filter(Boolean)),
-                        ).map((mode) => (
-                          <SelectItem key={mode} value={mode}>
-                            {mode}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                      Amount (₹)
-                    </Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={editForm.amount}
-                      onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
-                      className="font-mono"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                      Payer type
-                    </Label>
-                    <Select
-                      value={editForm.payerType}
-                      onValueChange={(payerType) =>
-                        setEditForm({
-                          ...editForm,
-                          payerType: payerType as "student" | "external",
-                        })
-                      }
-                    >
-                      <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="student">Student</SelectItem>
-                        <SelectItem value="external">External</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                    Date / Time
-                  </Label>
-                  <Input
-                    value={editForm.time}
-                    onChange={(e) => setEditForm({ ...editForm, time: e.target.value })}
-                    placeholder="e.g. Today · 10:22"
-                    className="font-mono"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                    Narration
-                  </Label>
-                  <Textarea
-                    value={editForm.narration}
-                    onChange={(e) => setEditForm({ ...editForm, narration: e.target.value })}
-                    placeholder="Optional note"
-                    className="min-h-[72px] resize-none"
-                  />
-                </div>
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setEditingPayment(null)}>
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
-                  >
-                    Save changes
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
-
           <DeleteConfirmDialog
             open={Boolean(pendingDeletePayment)}
             onOpenChange={(open) => {
@@ -8698,6 +8465,8 @@ function ReceivePayment() {
     feeKind?: "tuition" | "vehicle";
     periods: string[];
   } | null>(null);
+  const paymentEditDeepLinkRef = useRef<string | null>(null);
+  const openEditHistoryPaymentRef = useRef<(payment: Payment) => void>(() => {});
 
   const isExternal = payerSource === "external";
   const selected = !isExternal
@@ -9795,6 +9564,7 @@ function ReceivePayment() {
   };
 
   const resetRecordForm = () => {
+    paymentEditDeepLinkRef.current = null;
     setEditingPayment(null);
     setPayerSource("student");
     setExternalPayer("");
@@ -9907,6 +9677,21 @@ function ReceivePayment() {
       recordCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   };
+
+  openEditHistoryPaymentRef.current = openEditHistoryPayment;
+
+  useEffect(() => {
+    if (editingPayment || !search.paymentId) return;
+    if (paymentEditDeepLinkRef.current === search.paymentId) return;
+    const payment = payments.find((p) => p.id === search.paymentId);
+    navigate({ to: "/tenant/finance", search: { tab: "receive" }, replace: true });
+    if (!payment) {
+      toast.error(`Receipt ${search.paymentId} not found`);
+      return;
+    }
+    paymentEditDeepLinkRef.current = search.paymentId;
+    openEditHistoryPaymentRef.current(payment);
+  }, [search.paymentId, payments, editingPayment, navigate]);
 
   const saveEditedHistoryPayment = () => {
     if (!editingPayment) return;
@@ -17668,7 +17453,7 @@ const SCHOOL_BRAND_MEDIA_SPECS = {
     aspectLabel: "16:5 · wide banner",
     formats: "JPG, PNG",
     maxMb: 3,
-    usage: "Top banner on receipts and PDF exports",
+    usage: "Full-width top banner on A4 receipts and PDF exports",
   },
   seal: {
     outputWidth: 640,
