@@ -356,6 +356,7 @@ import {
   downloadReceiptPdf,
   downloadSalarySlipPdf,
   downloadTablePdf,
+  truncatePdfCell,
   findReceiptStudent,
   receiptBrandingFromSchool,
 } from "@/lib/finance-export";
@@ -6498,6 +6499,31 @@ function FinanceOverview({
     [disbursements],
   );
 
+  const transactionPdfHeaders = [
+    "ID",
+    "Account",
+    "Category",
+    "Period",
+    "Mode",
+    "Amount",
+    "Time",
+    "Status",
+    "Narration",
+  ] as const;
+
+  const buildTransactionPdfRows = () =>
+    payments.map((p) => [
+      p.id,
+      p.name,
+      p.cat,
+      resolvePaymentFeePeriod(p) ?? "—",
+      p.mode,
+      p.amount.toLocaleString("en-IN"),
+      formatEventDateTime(p.time),
+      "Complete",
+      truncatePdfCell(p.narration ?? "", 88),
+    ]);
+
   const exportTransactionsCsv = () => {
     if (!payments.length) {
       toast.error("Nothing to export · no transactions yet");
@@ -6550,28 +6576,9 @@ function FinanceOverview({
       }),
       title: "Finance Transactions",
       subtitle: `${schoolName} · ${academicYear}`,
-      headers: [
-        "ID",
-        "Account",
-        "Category",
-        "Period",
-        "Mode",
-        "Amount",
-        "Time",
-        "Status",
-        "Narration",
-      ],
-      rows: payments.map((p) => [
-        p.id,
-        p.name,
-        p.cat,
-        resolvePaymentFeePeriod(p) ?? "—",
-        p.mode,
-        p.amount.toLocaleString("en-IN"),
-        formatEventDateTime(p.time),
-        "Complete",
-        p.narration ?? "",
-      ]),
+      headers: [...transactionPdfHeaders],
+      rows: buildTransactionPdfRows(),
+      landscape: true,
     });
     toast.success("Transactions PDF downloaded");
   };
@@ -6589,28 +6596,9 @@ function FinanceOverview({
       }),
       title: "Finance Transactions",
       subtitle: `${schoolName} · ${academicYear}`,
-      headers: [
-        "ID",
-        "Account",
-        "Category",
-        "Period",
-        "Mode",
-        "Amount",
-        "Time",
-        "Status",
-        "Narration",
-      ],
-      rows: payments.map((p) => [
-        p.id,
-        p.name,
-        p.cat,
-        resolvePaymentFeePeriod(p) ?? "—",
-        p.mode,
-        p.amount.toLocaleString("en-IN"),
-        formatEventDateTime(p.time),
-        "Complete",
-        p.narration ?? "",
-      ]),
+      headers: [...transactionPdfHeaders],
+      rows: buildTransactionPdfRows(),
+      landscape: true,
       action: "print",
     });
     toast.success("Print dialog opened");
@@ -7060,21 +7048,21 @@ function FinanceOverview({
         </section>
       </div>
 
-      <section className={cn(glassCardClass, "p-5")}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
+      <section className={cn(glassCardClass, "overflow-hidden p-4 sm:p-5")}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <h3 className="text-[15px] font-bold text-slate-900">Transactions</h3>
             <p className="mt-0.5 text-[12px] text-slate-500">
               {payments.length} receipt{payments.length === 1 ? "" : "s"} · most recent first
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <DropdownMenu>
+          <div className="relative z-30 flex w-full shrink-0 flex-wrap gap-2 sm:w-auto sm:justify-end">
+            <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-9 rounded-full border-[#E5E5E5] bg-white px-3.5 text-[12px]"
+                  className="h-9 flex-1 rounded-full border-[#E5E5E5] bg-white px-3.5 text-[12px] sm:flex-none"
                 >
                   <Download className="mr-1.5 h-3.5 w-3.5" />
                   Download
@@ -7113,7 +7101,7 @@ function FinanceOverview({
             <Button
               type="button"
               variant="outline"
-              className="h-9 rounded-full border-[#E5E5E5] bg-white px-3.5 text-[12px]"
+              className="h-9 flex-1 rounded-full border-[#E5E5E5] bg-white px-3.5 text-[12px] sm:flex-none"
               onClick={shareTransactionsSummary}
             >
               <Share2 className="mr-1.5 h-3.5 w-3.5" />
@@ -7188,11 +7176,11 @@ function FinanceOverview({
                 </div>
               )}
 
-              <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-[#F0F0F0] pt-2.5">
+              <div className="mt-2.5 flex flex-col gap-2 border-t border-[#F0F0F0] pt-2.5 sm:flex-row sm:items-center sm:justify-between">
                 <span className="min-w-0 truncate font-mono text-[10.5px] text-black/45">
                   {formatEventDateTime(p.time)}
                 </span>
-                <div className="flex shrink-0 items-center gap-1.5">
+                <div className="flex flex-wrap items-center justify-end gap-1.5">
                   {isAdmin && (
                     <>
                       <button
@@ -7247,8 +7235,8 @@ function FinanceOverview({
           ))}
         </div>
 
-        <div className="mobile-scrollbar-none mt-4 hidden overflow-x-auto rounded-lg border border-[#E5E5E5] md:block">
-          <table className="w-full min-w-[780px] text-left text-[12.5px]">
+        <div className="mobile-scrollbar-none relative z-0 mt-4 hidden overflow-x-auto rounded-lg border border-[#E5E5E5] md:block">
+          <table className="w-full min-w-[720px] text-left text-[12.5px]">
             <thead>
               <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5]">
                 {["Transaction", "Account", "Date / Time", "Amount", "Status", "Actions"].map(
@@ -7303,7 +7291,7 @@ function FinanceOverview({
                     </span>
                   </td>
                   <td className="px-3 py-3">
-                    <div className="flex items-center justify-end gap-1.5">
+                    <div className="flex flex-wrap items-center justify-end gap-1">
                       {isAdmin && (
                         <>
                           <button

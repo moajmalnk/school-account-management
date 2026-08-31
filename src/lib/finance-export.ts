@@ -98,14 +98,315 @@ export function downloadCsv(filename: string, headers: string[], rows: (string |
   triggerDownload(blob, filename);
 }
 
+function pdfSafe(text: string) {
+  return String(text ?? "")
+    .replace(/₹/g, "Rs.")
+    .replace(/[·•∙]/g, " | ")
+    .replace(/[−–—]/g, "-")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "");
+}
+
+export function truncatePdfCell(text: string, maxLen = 96) {
+  const clean = pdfSafe(text).trim();
+  if (clean.length <= maxLen) return clean;
+  return `${clean.slice(0, Math.max(0, maxLen - 1))}…`;
+}
+
+type TablePdfColumnStyle = {
+  cellWidth?: number;
+  halign?: "left" | "center" | "right";
+};
+
+export type TablePdfRichCell = {
+  content: string;
+  colSpan?: number;
+  rowSpan?: number;
+  styles?: {
+    halign?: "left" | "center" | "right";
+    fontStyle?: "normal" | "bold" | "italic";
+    fillColor?: [number, number, number];
+    textColor?: [number, number, number];
+  };
+};
+
+type TablePdfRowCell = string | number | TablePdfRichCell;
+
+function normalizePdfTableCell(cell: TablePdfRowCell): string | TablePdfRichCell {
+  if (typeof cell === "object" && cell !== null && "content" in cell) {
+    return {
+      ...cell,
+      content: pdfSafe(cell.content),
+    };
+  }
+  return pdfSafe(String(cell));
+}
+
+function buildDefaultTableColumnStyles(
+  headers: string[],
+  contentWidth: number,
+): Record<number, TablePdfColumnStyle> {
+  const labels = headers.map((header) => header.toLowerCase());
+  const fixedWidths: Record<number, number> = {};
+  const styles: Record<number, TablePdfColumnStyle> = {};
+
+  labels.forEach((label, index) => {
+    if (["id", "transaction", "ref", "voucher"].some((key) => label.includes(key)) || label === "receipt") {
+      fixedWidths[index] = 22;
+      return;
+    }
+    if (["account", "name", "payee", "student", "staff"].some((key) => label.includes(key))) {
+      fixedWidths[index] = 36;
+      return;
+    }
+    if (label.includes("class") || label.includes("cls")) {
+      fixedWidths[index] = 24;
+      return;
+    }
+    if (label.includes("guardian")) {
+      fixedWidths[index] = 30;
+      return;
+    }
+    if (label === "due" || label.endsWith(" due")) {
+      fixedWidths[index] = 24;
+      styles[index] = { halign: "right" };
+      return;
+    }
+    if (label.includes("category")) {
+      fixedWidths[index] = 28;
+      return;
+    }
+    if (["period", "month", "term"].some((key) => label.includes(key))) {
+      fixedWidths[index] = 20;
+      return;
+    }
+    if (label.includes("mode")) {
+      fixedWidths[index] = 18;
+      return;
+    }
+    if (label.includes("amount")) {
+      fixedWidths[index] = 22;
+      styles[index] = { halign: "right" };
+      return;
+    }
+    if (["time", "date"].some((key) => label.includes(key))) {
+      fixedWidths[index] = 32;
+      return;
+    }
+    if (label.includes("type")) {
+      fixedWidths[index] = 20;
+      return;
+    }
+    if (label.includes("line")) {
+      fixedWidths[index] = 48;
+      return;
+    }
+    if (label.includes("status")) {
+      fixedWidths[index] = 18;
+      return;
+    }
+    if (label.includes("role")) {
+      fixedWidths[index] = 22;
+      return;
+    }
+    if (label.includes("dept")) {
+      fixedWidths[index] = 22;
+      return;
+    }
+    if (label.includes("attn") || label.includes("attendance")) {
+      fixedWidths[index] = 16;
+      return;
+    }
+    if (
+      [
+        "basic",
+        "gross",
+        "payable",
+        "allow",
+        "debit",
+        "credit",
+        "balance",
+        "income",
+        "expense",
+        "net",
+        "collected",
+        "outstanding",
+        "assets",
+        "liabilit",
+        "equity",
+        "receipt",
+        "payment",
+        "cleared",
+        "uncleared",
+        "difference",
+        "statement",
+      ].some((key) => label.includes(key))
+    ) {
+      fixedWidths[index] = label.includes("balance") || label.includes("statement") ? 24 : 20;
+      styles[index] = { halign: "right" };
+    }
+  });
+
+  const fixedTotal = Object.values(fixedWidths).reduce((sum, width) => sum + width, 0);
+  const narrationIndex = labels.findIndex(
+    (label) => label.includes("narration") || label.includes("note") || label.includes("remark"),
+  );
+  if (narrationIndex >= 0) {
+    styles[narrationIndex] = {
+      ...styles[narrationIndex],
+      cellWidth: Math.max(42, contentWidth - fixedTotal),
+      halign: "left",
+    };
+  }
+
+  const particularsIndex = labels.findIndex((label) => label.includes("particular"));
+  if (particularsIndex >= 0) {
+    styles[particularsIndex] = {
+      ...styles[particularsIndex],
+      cellWidth: Math.max(42, contentWidth - fixedTotal),
+      halign: "left",
+    };
+  }
+
+  Object.entries(fixedWidths).forEach(([index, width]) => {
+    const columnIndex = Number(index);
+    styles[columnIndex] = { ...styles[columnIndex], cellWidth: width };
+  });
+
+  if (headers.length === 2) {
+    const amountIndex = labels.findIndex((label) => label.includes("amount"));
+    const labelIndex = amountIndex === 0 ? 1 : 0;
+    const amountWidth = 34;
+    if (amountIndex >= 0) {
+      styles[amountIndex] = { ...styles[amountIndex], cellWidth: amountWidth, halign: "right" };
+    }
+    styles[labelIndex] = {
+      ...styles[labelIndex],
+      cellWidth: Math.max(48, contentWidth - amountWidth),
+      halign: "left",
+    };
+  }
+
+  return styles;
+}
+
+type TablePdfSummaryItem = {
+  label: string;
+  value: string;
+};
+
+function drawPdfSummaryStrip(
+  doc: jsPDF,
+  startY: number,
+  margin: number,
+  contentWidth: number,
+  items: TablePdfSummaryItem[],
+  brand: ReturnType<typeof getActiveBrandPalette>,
+) {
+  if (!items.length) return startY;
+  const columnWidth = contentWidth / items.length;
+  autoTable(doc, {
+    startY,
+    margin: { left: margin, right: margin },
+    tableWidth: contentWidth,
+    head: [items.map((item) => pdfSafe(item.label))],
+    body: [items.map((item) => pdfSafe(item.value))],
+    theme: "grid",
+    styles: {
+      fontSize: 8.5,
+      cellPadding: { top: 3, right: 3, bottom: 3, left: 3 },
+      halign: "center",
+      valign: "middle",
+      textColor: [15, 23, 42],
+      lineColor: [226, 232, 240],
+      lineWidth: 0.1,
+      overflow: "linebreak",
+    },
+    headStyles: {
+      fillColor: brand.softRgb,
+      textColor: [71, 85, 105],
+      fontStyle: "bold",
+      halign: "center",
+      valign: "middle",
+    },
+    bodyStyles: {
+      fontStyle: "bold",
+      halign: "center",
+    },
+    columnStyles: Object.fromEntries(
+      items.map((_, index) => [index, { cellWidth: columnWidth }]),
+    ),
+  });
+  return (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+}
+
+type TablePdfAppendTable = {
+  title?: string;
+  headers: string[];
+  rows: (string | number)[][];
+};
+
+function drawPdfAppendTable(
+  doc: jsPDF,
+  startY: number,
+  margin: number,
+  contentWidth: number,
+  table: TablePdfAppendTable,
+  brand: ReturnType<typeof getActiveBrandPalette>,
+) {
+  let y = startY;
+  if (table.title) {
+    doc.setFont(pdfFontName(), "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(15, 23, 42);
+    doc.text(pdfSafe(table.title), margin, y + 4);
+    y += 8;
+  }
+  const colCount = table.headers.length;
+  const fontSize = colCount > 4 ? 8 : 8.5;
+  autoTable(doc, {
+    startY: y,
+    margin: { left: margin, right: margin },
+    tableWidth: contentWidth,
+    head: [table.headers.map((header) => pdfSafe(header))],
+    body: table.rows.map((row) => row.map((cell) => pdfSafe(String(cell)))),
+    theme: "grid",
+    styles: {
+      fontSize,
+      cellPadding: { top: 2.5, right: 2.5, bottom: 2.5, left: 2.5 },
+      overflow: "linebreak",
+      valign: "middle",
+      textColor: [15, 23, 42],
+      lineColor: [226, 232, 240],
+      lineWidth: 0.1,
+    },
+    headStyles: {
+      fillColor: brand.primaryRgb,
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+      fontSize,
+      halign: "left",
+      valign: "middle",
+    },
+    columnStyles: buildDefaultTableColumnStyles(table.headers, contentWidth),
+  });
+  return (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+}
+
 type TablePdfOptions = {
   filename: string;
   title: string;
   subtitle?: string;
   headers: string[];
-  rows: (string | number)[][];
+  rows: TablePdfRowCell[][];
   footer?: string;
+  summaryItems?: TablePdfSummaryItem[];
+  appendTables?: TablePdfAppendTable[];
+  emptyMessage?: string;
   action?: PdfEmitAction;
+  landscape?: boolean;
+  columnStyles?: Record<number, TablePdfColumnStyle>;
 };
 
 export function downloadTablePdf({
@@ -115,35 +416,110 @@ export function downloadTablePdf({
   headers,
   rows,
   footer,
+  summaryItems,
+  appendTables,
+  emptyMessage,
   action = "download",
+  landscape,
+  columnStyles,
 }: TablePdfOptions) {
   const brand = getActiveBrandPalette();
-  const doc = new jsPDF({ orientation: rows[0]?.length > 6 ? "landscape" : "portrait" });
+  const colCount = headers.length;
+  const useLandscape = landscape ?? colCount > 5;
+  const doc = new jsPDF({
+    orientation: useLandscape ? "landscape" : "portrait",
+    unit: "mm",
+    format: "a4",
+  });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 10;
+  const contentWidth = pageWidth - margin * 2;
+  const fontSize = colCount > 7 ? 7.5 : 8.5;
+  const tableBody =
+    rows.length > 0
+      ? rows.map((row) => row.map((cell) => normalizePdfTableCell(cell)))
+      : [
+          [
+            {
+              content: pdfSafe(emptyMessage ?? "No records for this period"),
+              colSpan: colCount,
+              styles: {
+                halign: "center" as const,
+                fontStyle: "italic" as const,
+                textColor: [100, 116, 139] as [number, number, number],
+              },
+            },
+          ],
+        ];
+
   doc.setFillColor(...brand.primaryRgb);
-  doc.rect(0, 0, doc.internal.pageSize.getWidth(), 3, "F");
+  doc.rect(0, 0, pageWidth, 3, "F");
   doc.setFont(pdfFontName(), "bold");
   doc.setFontSize(16);
   doc.setTextColor(...brand.primaryRgb);
-  doc.text(title, 14, 18);
+  doc.text(pdfSafe(title), margin, 18);
   if (subtitle) {
     doc.setFont(pdfFontName(), "normal");
     doc.setFontSize(10);
     doc.setTextColor(100, 116, 139);
-    doc.text(subtitle, 14, 26);
+    doc.text(pdfSafe(subtitle), margin, 26);
   }
+
   autoTable(doc, {
     startY: subtitle ? 32 : 24,
-    head: [headers],
-    body: rows.map((row) => row.map(String)),
-    styles: { fontSize: 9, cellPadding: 3, textColor: [15, 23, 42] },
-    headStyles: { fillColor: brand.primaryRgb, textColor: [255, 255, 255] },
+    margin: { left: margin, right: margin, top: margin, bottom: 14 },
+    tableWidth: contentWidth,
+    head: [headers.map((header) => pdfSafe(header))],
+    body: tableBody,
+    theme: "grid",
+    styles: {
+      fontSize,
+      cellPadding: { top: 2.5, right: 2.5, bottom: 2.5, left: 2.5 },
+      overflow: "linebreak",
+      valign: "middle",
+      textColor: [15, 23, 42],
+      lineColor: [226, 232, 240],
+      lineWidth: 0.1,
+    },
+    headStyles: {
+      fillColor: brand.primaryRgb,
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+      fontSize,
+      halign: "left",
+      valign: "middle",
+    },
     alternateRowStyles: { fillColor: brand.softRgb },
+    columnStyles: columnStyles ?? buildDefaultTableColumnStyles(headers, contentWidth),
+    showHead: "everyPage",
+    didDrawPage: (data) => {
+      const pageCount = doc.getNumberOfPages();
+      doc.setFont(pdfFontName(), "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(148, 163, 184);
+      doc.text(
+        `Page ${data.pageNumber} of ${pageCount}`,
+        pageWidth - margin,
+        pageHeight - 6,
+        { align: "right" },
+      );
+    },
   });
-  if (footer) {
-    const finalY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
+
+  let finalY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
+  if (summaryItems?.length) {
+    finalY = drawPdfSummaryStrip(doc, finalY, margin, contentWidth, summaryItems, brand) + 6;
+  } else if (footer) {
+    doc.setFont(pdfFontName(), "normal");
     doc.setFontSize(9);
     doc.setTextColor(80, 80, 80);
-    doc.text(footer, 14, finalY);
+    const lines = doc.splitTextToSize(pdfSafe(footer), contentWidth);
+    doc.text(lines, margin, finalY + 2);
+    finalY += lines.length * 4 + 4;
+  }
+  for (const table of appendTables ?? []) {
+    finalY = drawPdfAppendTable(doc, finalY, margin, contentWidth, table, brand) + 6;
   }
   emitPdf(doc, filename, action);
 }
@@ -154,16 +530,6 @@ export function printTablePdf(options: Omit<TablePdfOptions, "action">) {
 
 function formatInrPdf(amount: number) {
   return `Rs. ${amount.toLocaleString("en-IN")}`;
-}
-
-function pdfSafe(text: string) {
-  return String(text ?? "")
-    .replace(/₹/g, "Rs.")
-    .replace(/[·•∙]/g, " | ")
-    .replace(/[−–—]/g, "-")
-    .replace(/[“”]/g, '"')
-    .replace(/[‘’]/g, "'")
-    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "");
 }
 
 const ONES = [
