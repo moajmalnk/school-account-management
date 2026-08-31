@@ -554,15 +554,11 @@ export async function downloadReceiptPdf(
 
   const tableStart = Math.max(metaY, metaTop + 18) + 4;
   const items = receiptLineItems(payment);
-  const blankRows = Math.max(3, 6 - items.length);
-  const body: (string | number)[][] = [
-    ...items.map((item, index) => [
-      String(index + 1),
-      item.description,
-      item.amount.toLocaleString("en-IN"),
-    ]),
-    ...Array.from({ length: blankRows }, () => ["", "", ""]),
-  ];
+  const body: (string | number)[][] = items.map((item, index) => [
+    String(index + 1),
+    item.description,
+    item.amount.toLocaleString("en-IN"),
+  ]);
 
   autoTable(doc, {
     startY: tableStart,
@@ -648,7 +644,7 @@ export async function downloadReceiptPdf(
     generatedAt,
     displayName,
     `For billing queries, contact the ${displayName} accounts office.`,
-    false,
+    afterY > pageHeight - margin - 70,
     branding,
   );
 
@@ -1116,6 +1112,20 @@ function drawAttestationHeader(
   return y;
 }
 
+function estimateAttestationHeight(attestation: SealFooterAttestation): number {
+  let height = 12;
+  if (attestation.subtitle) height += 8;
+  if (attestation.summaryLines?.length) {
+    height += 8 + attestation.summaryLines.length * 6.2 + 4;
+  }
+  return height;
+}
+
+function footerBlockHeight(compact: boolean): number {
+  const sealSize = compact ? 30 : 38;
+  return sealSize + (compact ? 10 : 22);
+}
+
 async function drawSealFooter(
   doc: jsPDF,
   pageWidth: number,
@@ -1130,36 +1140,47 @@ async function drawSealFooter(
   attestation?: SealFooterAttestation,
 ) {
   const contentWidth = pageWidth - margin * 2;
-  const sealSize = compact ? 30 : 38;
-  const signW = compact ? 48 : 58;
-  const signH = sealSize * 0.55;
-  const footerBlock = sealSize + (compact ? 10 : 22);
   const bottomLimit = pageHeight - margin - 4;
-  const attestationBlock = attestation ? 58 : 0;
-  const needsNewPage = startY + footerBlock > bottomLimit || startY + attestationBlock + footerBlock > bottomLimit;
+  const attestationHeight = attestation ? estimateAttestationHeight(attestation) : 0;
+  const attestationGap = attestation ? 8 : 0;
+  const fullFooterH = footerBlockHeight(false);
+  const compactFooterH = footerBlockHeight(true);
+  const totalFull = attestationHeight + attestationGap + fullFooterH;
+  const totalCompact = attestationHeight + attestationGap + compactFooterH;
 
-  let y = startY;
+  let y = startY + 6;
   let useCompact = compact;
 
-  if (needsNewPage) {
-    doc.addPage();
-    paintPdfPageBackground(doc, pageWidth, pageHeight);
-    y = margin + 10;
-    useCompact = false;
+  const fits = (height: number) => y + height <= bottomLimit;
 
-    if (attestation) {
-      y = drawAttestationHeader(doc, pageWidth, margin, contentWidth, attestation, y);
-      y += 10;
+  if (!fits(totalFull)) {
+    if (fits(totalCompact)) {
+      useCompact = true;
+    } else if (!attestation && fits(compactFooterH)) {
+      useCompact = true;
+    } else {
+      doc.addPage();
+      paintPdfPageBackground(doc, pageWidth, pageHeight);
+      y = margin + 8;
+      useCompact = !fits(totalFull);
+      if (useCompact && attestation && !fits(totalCompact)) {
+        useCompact = true;
+      } else if (!attestation && !fits(fullFooterH) && fits(compactFooterH)) {
+        useCompact = true;
+      }
     }
-
-    // Place seal and signature in the lower area of the attestation page.
-    const preferredY = pageHeight - margin - footerBlock - 18;
-    y = Math.max(y, preferredY);
+  } else {
+    useCompact = false;
   }
 
-  const drawSealSize = useCompact ? 30 : 38;
-  const drawSignW = useCompact ? 48 : 58;
-  const drawSignH = drawSealSize * 0.55;
+  if (attestation) {
+    y = drawAttestationHeader(doc, pageWidth, margin, contentWidth, attestation, y);
+    y += attestationGap;
+  }
+
+  const sealSize = useCompact ? 30 : 38;
+  const signW = useCompact ? 48 : 58;
+  const signH = sealSize * 0.55;
 
   const [seal, signature] = await Promise.all([
     loadReceiptSealPng(schoolName, branding),
@@ -1173,7 +1194,7 @@ async function drawSealFooter(
 
   if (seal) {
     try {
-      doc.addImage(seal.dataUrl, "PNG", margin, y, drawSealSize, drawSealSize);
+      doc.addImage(seal.dataUrl, "PNG", margin, y, sealSize, sealSize);
     } catch {
       /* skip unreadable seal */
     }
@@ -1183,10 +1204,10 @@ async function drawSealFooter(
       doc.addImage(
         signature.dataUrl,
         "PNG",
-        pageWidth - margin - drawSignW,
-        y + (drawSealSize - drawSignH) / 2,
-        drawSignW,
-        drawSignH,
+        pageWidth - margin - signW,
+        y + (sealSize - signH) / 2,
+        signW,
+        signH,
       );
     } catch {
       /* skip unreadable signature */
@@ -1195,20 +1216,22 @@ async function drawSealFooter(
 
   doc.setFont(pdfFontName(), "normal");
   doc.setTextColor(...receiptInk().muted);
-  const labelY = y + drawSealSize + 4.5;
+  const labelY = y + sealSize + 4.5;
   doc.setFontSize(useCompact ? 8 : 8.5);
   const signatory = branding?.principalName?.trim();
   doc.text(
     signatory ? pdfSafe(signatory) : "Authorized Signatory",
-    pageWidth - margin - drawSignW / 2,
+    pageWidth - margin - signW / 2,
     labelY,
     { align: "center" },
   );
   doc.setFontSize(useCompact ? 7 : 7.5);
-  doc.text("School Seal", margin + drawSealSize / 2, labelY, { align: "center" });
+  doc.text("School Seal", margin + sealSize / 2, labelY, { align: "center" });
   if (!useCompact) {
     doc.text(`Document generated on ${generatedAt}`, margin, labelY + 8);
     doc.text(queryLine.replace("{school}", schoolName), margin, labelY + 12.5);
+  } else {
+    doc.text(`Generated ${generatedAt}`, margin, labelY + 8);
   }
   doc.setFillColor(...receiptInk().teal);
   doc.rect(0, pageHeight - 3.2, pageWidth, 3.2, "F");
@@ -1731,12 +1754,12 @@ function appendFeeLedgerTable(
   rows: StudentFeeReportInput["statement"]["ledger"],
   startY: number,
 ): number {
+  if (rows.length === 0) return startY;
   doc.setFont(pdfFontName(), "bold");
   doc.setFontSize(10);
   doc.setTextColor(...receiptInk().tealDeep);
   doc.text(title, margin, startY);
-  let tableStart = startY + 5;
-  if (rows.length === 0) return tableStart;
+  const tableStart = startY + 5;
   autoTable(doc, {
     startY: tableStart,
     margin: { left: margin, right: margin, bottom: margin + 6 },
@@ -1893,7 +1916,7 @@ export async function downloadStudentFeeReportPdf(
     tableStart,
   );
 
-  if (statement.vehicle?.applicable) {
+  if (statement.vehicle?.applicable && (statement.vehicle.ledger?.length ?? 0) > 0) {
     tableStart = appendFeeLedgerTable(
       doc,
       margin,
@@ -1944,6 +1967,22 @@ export async function downloadStudentFeeReportPdf(
     tableStart = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
   }
 
+  const footerCompact = tableStart > pageHeight - margin - 95;
+  const footerHeight = footerBlockHeight(footerCompact);
+  const bottomLimit = pageHeight - margin - 4;
+  const fullAttestationHeight = estimateAttestationHeight({
+    title: "Official Verification",
+    subtitle: "Parent copy — student fee statement",
+    summaryLines: [
+      ["Student", pdfSafe(student.name)],
+      ["Student ID", pdfSafe(student.id)],
+      ["Class", pdfSafe(student.cls || "—")],
+      ["Total Due", formatInrPdf(statement.totalDue)],
+    ],
+  });
+  const fitsFullAttestation =
+    tableStart + 6 + fullAttestationHeight + 8 + footerHeight <= bottomLimit;
+
   await drawSealFooter(
     doc,
     pageWidth,
@@ -1953,17 +1992,21 @@ export async function downloadStudentFeeReportPdf(
     generatedAt,
     displayName,
     `This statement is issued for parent reference. For fee queries, contact ${displayName}.`,
-    true,
+    footerCompact,
     branding,
     {
       title: "Official Verification",
       subtitle: "Parent copy — student fee statement",
-      summaryLines: [
-        ["Student", pdfSafe(student.name)],
-        ["Student ID", pdfSafe(student.id)],
-        ["Class", pdfSafe(student.cls || "—")],
-        ["Total Due", formatInrPdf(statement.totalDue)],
-      ],
+      ...(fitsFullAttestation
+        ? {
+            summaryLines: [
+              ["Student", pdfSafe(student.name)],
+              ["Student ID", pdfSafe(student.id)],
+              ["Class", pdfSafe(student.cls || "—")],
+              ["Total Due", formatInrPdf(statement.totalDue)],
+            ],
+          }
+        : {}),
     },
   );
 

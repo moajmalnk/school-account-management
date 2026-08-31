@@ -1,5 +1,5 @@
 import { Plus, Trash2 } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -75,6 +75,52 @@ function draftToTier(draft: FeeScheduleDraft, enabled: boolean): StudentConcessi
     feeSchedule: feeScheduleFromDraft(draft),
     feeCollectionStartMonth: draft.feeCollectionStartMonth,
   };
+}
+
+function otherFeeToDraft(fee: StudentConcessionOtherFee): FeeScheduleDraft {
+  if (fee.feeSchedule.length === 0) return emptyFeeScheduleDraft();
+  return draftFromFeeSchedule({
+    billingCycle: fee.billingCycle,
+    feeAmountMode: fee.feeAmountMode,
+    feeSchedule: fee.feeSchedule,
+    feeCollectionStartMonth: fee.feeCollectionStartMonth,
+  });
+}
+
+function draftToOtherFee(
+  draft: FeeScheduleDraft,
+  fee: StudentConcessionOtherFee,
+): StudentConcessionOtherFee {
+  return {
+    ...fee,
+    billingCycle: draft.billingCycle,
+    feeAmountMode: draft.feeAmountMode,
+    feeSchedule: feeScheduleFromDraft(draft),
+    feeCollectionStartMonth: draft.feeCollectionStartMonth,
+  };
+}
+
+function tierSyncKey(tier?: StudentConcessionFeeTier): string {
+  if (!tier) return "none";
+  return `${tier.billingCycle}|${tier.feeAmountMode}|${tier.feeSchedule.map((line) => `${line.id}:${line.amount}:${line.label}`).join(";")}`;
+}
+
+function otherFeeSyncKey(fee: StudentConcessionOtherFee): string {
+  return `${fee.billingCycle}|${fee.feeAmountMode}|${fee.feeSchedule.map((line) => `${line.id}:${line.amount}:${line.label}`).join(";")}`;
+}
+
+function useSyncedFeeDraft(tier: StudentConcessionFeeTier | undefined) {
+  const syncKey = tierSyncKey(tier);
+  const [draft, setDraft] = useState(() => tierToDraft(tier));
+  const lastSyncKey = useRef(syncKey);
+
+  useEffect(() => {
+    if (lastSyncKey.current === syncKey) return;
+    lastSyncKey.current = syncKey;
+    setDraft(tierToDraft(tier));
+  }, [syncKey, tier]);
+
+  return [draft, setDraft] as const;
 }
 
 type StudentConcessionSectionProps = {
@@ -180,8 +226,35 @@ export function StudentConcessionSection({
 
   const tuitionEnabled = value.concessionFees.tuition?.enabled === true;
   const vehicleEnabled = value.concessionFees.vehicle?.enabled === true;
-  const tuitionDraft = tierToDraft(value.concessionFees.tuition);
-  const vehicleDraft = tierToDraft(value.concessionFees.vehicle);
+  const [tuitionDraft, setTuitionDraft] = useSyncedFeeDraft(value.concessionFees.tuition);
+  const [vehicleDraft, setVehicleDraft] = useSyncedFeeDraft(value.concessionFees.vehicle);
+  const [otherDrafts, setOtherDrafts] = useState<Record<string, FeeScheduleDraft>>({});
+  const otherSyncKeys = useRef<Record<string, string>>({});
+
+  useEffect(() => {
+    const fees = value.concessionFees.otherFees ?? [];
+    setOtherDrafts((prev) => {
+      const next = { ...prev };
+      const activeIds = new Set<string>();
+      for (const fee of fees) {
+        activeIds.add(fee.id);
+        const syncKey = otherFeeSyncKey(fee);
+        if (otherSyncKeys.current[fee.id] !== syncKey) {
+          otherSyncKeys.current[fee.id] = syncKey;
+          next[fee.id] = otherFeeToDraft(fee);
+        } else if (!next[fee.id]) {
+          next[fee.id] = otherFeeToDraft(fee);
+        }
+      }
+      for (const id of Object.keys(next)) {
+        if (!activeIds.has(id)) {
+          delete next[id];
+          delete otherSyncKeys.current[id];
+        }
+      }
+      return next;
+    });
+  }, [value.concessionFees.otherFees]);
 
   const patchFees = (fees: StudentConcessionFees) => onChange({ ...value, concessionFees: fees });
 
@@ -306,12 +379,13 @@ export function StudentConcessionSection({
               });
             }}
             draft={tuitionDraft}
-            onDraftChange={(draft) =>
+            onDraftChange={(draft) => {
+              setTuitionDraft(draft);
               patchFees({
                 ...value.concessionFees,
                 tuition: draftToTier(draft, tuitionEnabled),
-              })
-            }
+              });
+            }}
             onSeedFromDefault={seedTuition}
           />
 
@@ -342,12 +416,13 @@ export function StudentConcessionSection({
                 });
               }}
               draft={vehicleDraft}
-              onDraftChange={(draft) =>
+              onDraftChange={(draft) => {
+                setVehicleDraft(draft);
                 patchFees({
                   ...value.concessionFees,
                   vehicle: draftToTier(draft, vehicleEnabled),
-                })
-              }
+                });
+              }}
               onSeedFromDefault={seedVehicle}
             />
           ) : null}
@@ -392,20 +467,11 @@ export function StudentConcessionSection({
                   </Button>
                 </div>
                 <FeeScheduleEditor
-                  value={draftFromFeeSchedule({
-                    billingCycle: fee.billingCycle,
-                    feeAmountMode: fee.feeAmountMode,
-                    feeSchedule: fee.feeSchedule,
-                    feeCollectionStartMonth: fee.feeCollectionStartMonth,
-                  })}
-                  onChange={(draft) =>
-                    updateOtherFee(fee.id, {
-                      billingCycle: draft.billingCycle,
-                      feeAmountMode: draft.feeAmountMode,
-                      feeSchedule: feeScheduleFromDraft(draft),
-                      feeCollectionStartMonth: draft.feeCollectionStartMonth,
-                    })
-                  }
+                  value={otherDrafts[fee.id] ?? otherFeeToDraft(fee)}
+                  onChange={(draft) => {
+                    setOtherDrafts((prev) => ({ ...prev, [fee.id]: draft }));
+                    updateOtherFee(fee.id, draftToOtherFee(draft, fee));
+                  }}
                 />
               </div>
             ))}
