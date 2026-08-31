@@ -176,14 +176,71 @@ export function parseClassLabel(raw: string): {
   };
 }
 
+export function normalizeClassLabelKey(className: string): string {
+  return className
+    .trim()
+    .toLowerCase()
+    .replace(/\s*[-–—]\s*/g, "-")
+    .replace(/\s+/g, " ");
+}
+
+export function findMissingClassTiers(
+  classes: ClassConfig[],
+  enrolledClassLabels: string[],
+): ClassConfig[] {
+  const pool = [...classes];
+  const created: ClassConfig[] = [];
+  const knownKeys = new Set<string>();
+  for (const cls of pool) {
+    knownKeys.add(normalizeClassLabelKey(cls.className));
+    const parts = splitClassName(cls.className);
+    const grade = (cls.grade || parts.grade || "").trim();
+    const section = (cls.section || parts.section || "").trim();
+    const composed = composeClassName(grade, section);
+    if (composed) knownKeys.add(normalizeClassLabelKey(composed));
+  }
+
+  const uniqueLabels = Array.from(
+    new Set(enrolledClassLabels.map((label) => label.trim()).filter(Boolean)),
+  );
+
+  for (const label of uniqueLabels) {
+    const parsed = parseClassLabel(label);
+    const canonical = parsed.className || label;
+    const key = normalizeClassLabelKey(canonical);
+    if (knownKeys.has(key)) continue;
+
+    const existing = matchExistingClass(pool, label);
+    if (existing) {
+      knownKeys.add(normalizeClassLabelKey(existing.className));
+      continue;
+    }
+
+    const id = nextPrefixedId(
+      "CLS",
+      [...pool.map((c) => c.id), ...created.map((c) => c.id)],
+      3,
+    );
+    const createdClass = buildClassFromLabel(id, label);
+    pool.push(createdClass);
+    created.push(createdClass);
+    knownKeys.add(normalizeClassLabelKey(createdClass.className));
+  }
+
+  return created;
+}
+
 export function matchExistingClass(classes: ClassConfig[], label: string): ClassConfig | undefined {
   const parsed = parseClassLabel(label);
-  const needle = parsed.className.toLowerCase();
+  const needleKey = normalizeClassLabelKey(parsed.className);
   return classes.find((cls) => {
-    if (cls.className.trim().toLowerCase() === needle) return true;
+    if (normalizeClassLabelKey(cls.className) === needleKey) return true;
+    const parts = splitClassName(cls.className);
+    const grade = (cls.grade || parts.grade || "").trim();
+    const section = (cls.section || parts.section || "").trim();
     return (
-      cls.grade.trim().toLowerCase() === parsed.grade.toLowerCase() &&
-      cls.section.trim().toLowerCase() === parsed.section.toLowerCase() &&
+      normalizeClassLabelKey(grade) === normalizeClassLabelKey(parsed.grade) &&
+      normalizeClassLabelKey(section) === normalizeClassLabelKey(parsed.section) &&
       Boolean(parsed.grade)
     );
   });

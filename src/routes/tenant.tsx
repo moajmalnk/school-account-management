@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Bell, ChevronLeft, LayoutDashboard, Settings, UserCog, Users, Wallet } from "lucide-react";
+import { Bell, ChevronLeft, Home, Settings, UserCog, Users, Wallet } from "lucide-react";
 import { useEffect } from "react";
 
 import {
@@ -42,7 +42,7 @@ const MOBILE_TABS: MobileTabItem[] = [
   {
     to: "/tenant/dashboard",
     label: "Home",
-    icon: LayoutDashboard,
+    icon: Home,
     match: (p) => p.startsWith("/tenant/dashboard"),
   },
   {

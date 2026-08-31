@@ -393,9 +393,11 @@ import { apiUploadDataUrl } from "@/lib/api/settings";
 import { getApiToken } from "@/lib/api/client";
 import {
   buildClassFromLabel,
+  findMissingClassTiers,
   isDuplicateStudent,
   matchExistingClass,
   nextPrefixedId,
+  normalizeClassLabelKey,
   parseStudentCsv,
 } from "@/lib/student-csv";
 import { isDuplicateStaff, parseStaffCsv, staffFromCsvRow } from "@/lib/staff-csv";
@@ -3006,6 +3008,7 @@ export function StudentsLedger() {
   const [bulkWhatsAppOpen, setBulkWhatsAppOpen] = useState(false);
   const [bulkWhatsAppMsg, setBulkWhatsAppMsg] = useState("");
   const [bulkWhatsAppSending, setBulkWhatsAppSending] = useState(false);
+  const reconciledClassKeysRef = useRef(new Set<string>());
 
   useEffect(() => {
     setDivisionFilter("all");
@@ -3017,6 +3020,42 @@ export function StudentsLedger() {
     () => students.filter((s) => !isRecordDeleted(s.deletedAt)),
     [students],
   );
+
+  useEffect(() => {
+    if (!hydrated || branchSyncing) return;
+    const enrolled = liveStudents.map((s) => s.cls);
+    const missing = findMissingClassTiers(classes, enrolled).filter((cls) => {
+      const key = normalizeClassLabelKey(cls.className);
+      if (reconciledClassKeysRef.current.has(key)) return false;
+      return !classes.some((c) => normalizeClassLabelKey(c.className) === key);
+    });
+    if (!missing.length) return;
+
+    for (const cls of missing) {
+      reconciledClassKeysRef.current.add(normalizeClassLabelKey(cls.className));
+    }
+
+    void (async () => {
+      setClasses((prev) => {
+        const seen = new Set(prev.map((c) => normalizeClassLabelKey(c.className)));
+        const add = missing.filter((c) => !seen.has(normalizeClassLabelKey(c.className)));
+        return add.length ? [...prev, ...add] : prev;
+      });
+      if (getApiToken()) {
+        for (const cls of missing) {
+          await apiUpsertClass(cls).catch(() => {
+            /* keep local tier; settings sync can retry on next visit */
+          });
+        }
+      }
+      toast.message(
+        missing.length === 1
+          ? `Added missing class tier: ${missing[0].className}`
+          : `Added ${missing.length} missing class tiers from student enrollments`,
+        { description: "Configure fees in Settings → Class Tier" },
+      );
+    })();
+  }, [hydrated, branchSyncing, liveStudents, classes, setClasses]);
   const deletedStudents = useMemo(
     () =>
       students
@@ -3032,16 +3071,15 @@ export function StudentsLedger() {
   );
 
   const classDivisionIndex = useMemo(() => {
-    // Class Tier settings are the source of truth — do not pull orphan labels
-    // like "Grade 1" from old student.cls values into the filter dropdown.
-    const names = classes.map((c) => {
+    const fromTiers = classes.map((c) => {
       const parts = splitClassName(c.className);
       const grade = (c.grade || parts.grade || "").trim();
       const section = (c.section || parts.section || "").trim();
       return composeClassName(grade, section) || c.className.trim();
     });
-    return buildClassDivisionIndex(names.filter(Boolean));
-  }, [classes]);
+    const fromEnrollments = liveStudents.map((s) => s.cls.trim()).filter(Boolean);
+    return buildClassDivisionIndex(Array.from(new Set([...fromTiers, ...fromEnrollments])));
+  }, [classes, liveStudents]);
 
   const gradeOptions = useMemo(
     () =>
@@ -3551,6 +3589,29 @@ export function StudentsLedger() {
             });
           }
 
+          const orphanTiers = findMissingClassTiers(classPool, admitted.map((s) => s.cls));
+          if (orphanTiers.length) {
+            setClasses((prev) => {
+              const seen = new Set(prev.map((c) => normalizeClassLabelKey(c.className)));
+              const add = orphanTiers.filter(
+                (c) => !seen.has(normalizeClassLabelKey(c.className)),
+              );
+              return add.length ? [...prev, ...add] : prev;
+            });
+          }
+
+          const tiersToSync = [
+            ...createdClasses,
+            ...orphanTiers.filter(
+              (tier) =>
+                !createdClasses.some(
+                  (created) =>
+                    normalizeClassLabelKey(created.className) ===
+                    normalizeClassLabelKey(tier.className),
+                ),
+            ),
+          ];
+
           if (!admitted.length) {
             toast.error("No new students to admit", {
               description:
@@ -3561,7 +3622,7 @@ export function StudentsLedger() {
             return;
           }
 
-          for (const cls of createdClasses) {
+          for (const cls of tiersToSync) {
             await apiUpsertClass(cls).catch(() => {
               /* local class kept; settings sync can retry */
             });
@@ -3572,9 +3633,10 @@ export function StudentsLedger() {
             });
           }
 
-          const classNote = createdClasses.length
-            ? `${createdClasses.length} class${createdClasses.length === 1 ? "" : "es"} created`
-            : null;
+          const classNote =
+            tiersToSync.length > 0
+              ? `${tiersToSync.length} class tier${tiersToSync.length === 1 ? "" : "s"} synced`
+              : null;
           const skipNote = skipped > 0 ? `${skipped} skipped` : null;
           toast.success(`${admitted.length} student${admitted.length === 1 ? "" : "s"} admitted`, {
             description: [classNote, skipNote, academicYear].filter(Boolean).join(" · "),
@@ -4034,8 +4096,91 @@ export function StudentsLedger() {
       ) : (
         <>
           <div className={cn(glassCardClass, "min-w-0 p-2.5 md:p-5")}>
-            <div className="flex items-end gap-2 md:gap-3 lg:gap-4">
-              <div className="min-w-0 flex-1">
+            <div className="flex flex-col gap-2.5 md:flex-row md:items-end md:gap-3 lg:gap-4">
+              <div className="flex items-end gap-2 md:contents">
+                <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 md:contents">
+                  <div className="min-w-0 md:order-1 md:w-36 lg:w-40">
+                    <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
+                      Class / Grade
+                    </div>
+                    <Select value={gradeFilter} onValueChange={setGradeFilter}>
+                      <SelectTrigger
+                        className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
+                        aria-label="Class / Grade"
+                      >
+                        <SelectValue placeholder="All classes" />
+                      </SelectTrigger>
+                      <SelectContent
+                        position="popper"
+                        sideOffset={4}
+                        className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
+                      >
+                        <SelectItem value="all" className="rounded-md">
+                          All classes
+                        </SelectItem>
+                        {gradeOptions.map((grade) => (
+                          <SelectItem key={grade} value={grade} className="rounded-md">
+                            {grade}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="min-w-0 md:order-2 md:w-32 lg:w-36">
+                    <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
+                      Division
+                    </div>
+                    <Select
+                      value={divisionFilter}
+                      onValueChange={setDivisionFilter}
+                      disabled={gradeFilter === "all" && divisionOptions.length === 0}
+                    >
+                      <SelectTrigger
+                        className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
+                        aria-label="Division"
+                      >
+                        <SelectValue placeholder="All divisions" />
+                      </SelectTrigger>
+                      <SelectContent
+                        position="popper"
+                        sideOffset={4}
+                        className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
+                      >
+                        <SelectItem value="all" className="rounded-md">
+                          All divisions
+                        </SelectItem>
+                        {divisionOptions.map((division) => (
+                          <SelectItem key={division} value={division} className="rounded-md">
+                            {division}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex shrink-0 flex-col items-end gap-0.5 max-md:pb-0.5 md:order-4 md:mb-0.5 lg:mb-1">
+                  <span className="font-mono text-[10px] tabular-nums text-slate-400 md:text-[11px]">
+                    {filtered.length} shown
+                  </span>
+                  {(gradeFilter !== "all" || divisionFilter !== "all" || searchQuery.trim()) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGradeFilter("all");
+                        setDivisionFilter("all");
+                        setSearchQuery("");
+                      }}
+                      className="text-[10px] font-semibold text-slate-500 underline-offset-2 hover:text-slate-900 hover:underline"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="min-w-0 w-full md:order-3 md:flex-1">
                 <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
                   Search
                 </div>
@@ -4059,85 +4204,6 @@ export function StudentsLedger() {
                     </button>
                   )}
                 </div>
-              </div>
-
-              <div className="min-w-0 w-[min(42vw,9.5rem)] sm:w-36 lg:w-40">
-                <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
-                  Class / Grade
-                </div>
-                <Select value={gradeFilter} onValueChange={setGradeFilter}>
-                  <SelectTrigger
-                    className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
-                    aria-label="Class / Grade"
-                  >
-                    <SelectValue placeholder="All classes" />
-                  </SelectTrigger>
-                  <SelectContent
-                    position="popper"
-                    sideOffset={4}
-                    className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
-                  >
-                    <SelectItem value="all" className="rounded-md">
-                      All classes
-                    </SelectItem>
-                    {gradeOptions.map((grade) => (
-                      <SelectItem key={grade} value={grade} className="rounded-md">
-                        {grade}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="min-w-0 w-[min(42vw,9.5rem)] sm:w-32 lg:w-36">
-                <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
-                  Division
-                </div>
-                <Select
-                  value={divisionFilter}
-                  onValueChange={setDivisionFilter}
-                  disabled={gradeFilter === "all" && divisionOptions.length === 0}
-                >
-                  <SelectTrigger
-                    className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
-                    aria-label="Division"
-                  >
-                    <SelectValue placeholder="All divisions" />
-                  </SelectTrigger>
-                  <SelectContent
-                    position="popper"
-                    sideOffset={4}
-                    className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
-                  >
-                    <SelectItem value="all" className="rounded-md">
-                      All divisions
-                    </SelectItem>
-                    {divisionOptions.map((division) => (
-                      <SelectItem key={division} value={division} className="rounded-md">
-                        {division}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="mb-0.5 flex shrink-0 flex-col items-end gap-0.5 lg:mb-1">
-                <span className="font-mono text-[10px] tabular-nums text-slate-400 md:text-[11px]">
-                  {filtered.length} shown
-                </span>
-                {(gradeFilter !== "all" || divisionFilter !== "all" || searchQuery.trim()) && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setGradeFilter("all");
-                      setDivisionFilter("all");
-                      setSearchQuery("");
-                    }}
-                    className="text-[10px] font-semibold text-slate-500 underline-offset-2 hover:text-slate-900 hover:underline"
-                  >
-                    Clear
-                  </button>
-                )}
               </div>
             </div>
           </div>
@@ -5477,8 +5543,91 @@ export function StaffRoster() {
       ) : (
         <>
           <div className={cn(glassCardClass, "min-w-0 p-2.5 md:p-5")}>
-            <div className="flex items-end gap-2 md:gap-3 lg:gap-4">
-              <div className="min-w-0 flex-1">
+            <div className="flex flex-col gap-2.5 md:flex-row md:items-end md:gap-3 lg:gap-4">
+              <div className="flex items-end gap-2 md:contents">
+                <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 md:contents">
+                  <div className="min-w-0 md:order-1 md:w-36 lg:w-40">
+                    <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
+                      Department
+                    </div>
+                    <Select value={deptFilter} onValueChange={setDeptFilter}>
+                      <SelectTrigger
+                        className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
+                        aria-label="Department"
+                      >
+                        <SelectValue placeholder="All departments" />
+                      </SelectTrigger>
+                      <SelectContent
+                        position="popper"
+                        sideOffset={4}
+                        className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
+                      >
+                        <SelectItem value="all" className="rounded-md">
+                          All departments
+                        </SelectItem>
+                        {departmentOptions.map((dept) => (
+                          <SelectItem key={dept} value={dept} className="rounded-md">
+                            {dept}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="min-w-0 md:order-2 md:w-32 lg:w-36">
+                    <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
+                      Status
+                    </div>
+                    <Select
+                      value={statusFilter}
+                      onValueChange={(value) => setStatusFilter(value as StaffStatusFilter)}
+                    >
+                      <SelectTrigger
+                        className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
+                        aria-label="Status"
+                      >
+                        <SelectValue placeholder="All statuses" />
+                      </SelectTrigger>
+                      <SelectContent
+                        position="popper"
+                        sideOffset={4}
+                        className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
+                      >
+                        <SelectItem value="all" className="rounded-md">
+                          All statuses
+                        </SelectItem>
+                        <SelectItem value="active" className="rounded-md">
+                          Active
+                        </SelectItem>
+                        <SelectItem value="inactive" className="rounded-md">
+                          Inactive
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex shrink-0 flex-col items-end gap-0.5 max-md:pb-0.5 md:order-4 md:mb-0.5 lg:mb-1">
+                  <span className="font-mono text-[10px] tabular-nums text-slate-400 md:text-[11px]">
+                    {filteredStaff.length} shown
+                  </span>
+                  {(deptFilter !== "all" || statusFilter !== "all" || searchQuery.trim()) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDeptFilter("all");
+                        setStatusFilter("all");
+                        setSearchQuery("");
+                      }}
+                      className="text-[10px] font-semibold text-[#0F766E] underline-offset-2 hover:underline"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="min-w-0 w-full md:order-3 md:flex-1">
                 <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
                   Search
                 </div>
@@ -5502,85 +5651,6 @@ export function StaffRoster() {
                     </button>
                   )}
                 </div>
-              </div>
-
-              <div className="min-w-0 w-[min(42vw,9.5rem)] sm:w-36 lg:w-40">
-                <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
-                  Department
-                </div>
-                <Select value={deptFilter} onValueChange={setDeptFilter}>
-                  <SelectTrigger
-                    className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
-                    aria-label="Department"
-                  >
-                    <SelectValue placeholder="All departments" />
-                  </SelectTrigger>
-                  <SelectContent
-                    position="popper"
-                    sideOffset={4}
-                    className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
-                  >
-                    <SelectItem value="all" className="rounded-md">
-                      All departments
-                    </SelectItem>
-                    {departmentOptions.map((dept) => (
-                      <SelectItem key={dept} value={dept} className="rounded-md">
-                        {dept}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="min-w-0 w-[min(42vw,9.5rem)] sm:w-32 lg:w-36">
-                <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
-                  Status
-                </div>
-                <Select
-                  value={statusFilter}
-                  onValueChange={(value) => setStatusFilter(value as StaffStatusFilter)}
-                >
-                  <SelectTrigger
-                    className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
-                    aria-label="Status"
-                  >
-                    <SelectValue placeholder="All statuses" />
-                  </SelectTrigger>
-                  <SelectContent
-                    position="popper"
-                    sideOffset={4}
-                    className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
-                  >
-                    <SelectItem value="all" className="rounded-md">
-                      All statuses
-                    </SelectItem>
-                    <SelectItem value="active" className="rounded-md">
-                      Active
-                    </SelectItem>
-                    <SelectItem value="inactive" className="rounded-md">
-                      Inactive
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="mb-0.5 flex shrink-0 flex-col items-end gap-0.5 lg:mb-1">
-                <span className="font-mono text-[10px] tabular-nums text-slate-400 md:text-[11px]">
-                  {filteredStaff.length} shown
-                </span>
-                {(deptFilter !== "all" || statusFilter !== "all" || searchQuery.trim()) && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDeptFilter("all");
-                      setStatusFilter("all");
-                      setSearchQuery("");
-                    }}
-                    className="text-[10px] font-semibold text-[#0F766E] underline-offset-2 hover:underline"
-                  >
-                    Clear
-                  </button>
-                )}
               </div>
             </div>
           </div>
