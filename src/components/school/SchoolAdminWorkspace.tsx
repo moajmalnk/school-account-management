@@ -13360,12 +13360,14 @@ function DeleteConfirmDialog({
   title,
   description,
   onConfirm,
+  confirmDisabled = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
   description: string;
   onConfirm: () => void;
+  confirmDisabled?: boolean;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -13383,7 +13385,8 @@ function DeleteConfirmDialog({
           <Button
             type="button"
             onClick={onConfirm}
-            className="rounded-full bg-[#EF4444] text-white hover:bg-[#DC2626]"
+            disabled={confirmDisabled}
+            className="rounded-full bg-[#EF4444] text-white hover:bg-[#DC2626] disabled:cursor-not-allowed disabled:opacity-50"
           >
             Delete
           </Button>
@@ -14472,11 +14475,27 @@ function ClassesCard({
     setOpen(false);
   };
 
+  const enrolledCount = (className: string) =>
+    students.filter(
+      (s) => !isRecordDeleted(s.deletedAt) && studentBelongsToClass(s.cls, className),
+    ).length;
+
+  const requestDelete = (c: ClassConfig) => {
+    const count = enrolledCount(c.className);
+    if (count > 0) {
+      toast.error(`${c.className} cannot be deleted`, {
+        description: `${count} student${count === 1 ? "" : "s"} enrolled · move them to another class first`,
+      });
+      return;
+    }
+    setPendingDelete(c);
+  };
+
   const remove = (c: ClassConfig) => {
-    const enrolled = students.some((s) => s.cls === c.className);
-    if (enrolled) {
-      toast.error(`${c.className} has students enrolled`, {
-        description: "Move them to another class first",
+    const count = enrolledCount(c.className);
+    if (count > 0) {
+      toast.error(`${c.className} cannot be deleted`, {
+        description: `${count} student${count === 1 ? "" : "s"} enrolled · move them to another class first`,
       });
       return;
     }
@@ -14484,7 +14503,7 @@ function ClassesCard({
     void apiDeleteClass(c.id).catch((err) =>
       toast.error(err instanceof Error ? err.message : "Could not delete class"),
     );
-    toast.error(`${c.className} removed`);
+    toast.success(`${c.className} removed`);
   };
 
   const confirmDelete = () => {
@@ -14492,9 +14511,6 @@ function ClassesCard({
     remove(pendingDelete);
     setPendingDelete(null);
   };
-
-  const enrolledCount = (className: string) =>
-    students.filter((s) => !s.deletedAt && s.cls === className).length;
 
   const termMonthLabel = (c: ClassConfig) => {
     const normalized = withClassFeeSchedule(normalizeClassConfig(c), feeTerms);
@@ -14575,6 +14591,7 @@ function ClassesCard({
                 const div = (normalized.section || parts.section || "").trim();
                 const teacher = teacherName(normalized.classTeacherId);
                 const count = enrolledCount(normalized.className);
+                const canDelete = count === 0;
                 return (
                   <tr
                     key={c.id}
@@ -14613,9 +14630,24 @@ function ClassesCard({
                         </button>
                         <button
                           type="button"
-                          onClick={() => setPendingDelete(c)}
-                          aria-label={`Delete ${normalized.className}`}
-                          className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                          onClick={() => requestDelete(c)}
+                          disabled={!canDelete}
+                          aria-label={
+                            canDelete
+                              ? `Delete ${normalized.className}`
+                              : `${normalized.className} cannot be deleted while ${count} students are enrolled`
+                          }
+                          title={
+                            canDelete
+                              ? `Delete ${normalized.className}`
+                              : `Move ${count} enrolled student${count === 1 ? "" : "s"} before deleting`
+                          }
+                          className={cn(
+                            "grid h-8 w-8 place-items-center rounded-full border transition-colors",
+                            canDelete
+                              ? "border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                              : "cursor-not-allowed border-[#E5E5E5] bg-[#F8F8F9] text-black/25 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-600",
+                          )}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -14637,10 +14669,13 @@ function ClassesCard({
         title="Delete Class Tier"
         description={
           pendingDelete
-            ? `Are you sure you want to delete ${pendingDelete.className}? Tuition prefills for this class will stop working.`
+            ? enrolledCount(pendingDelete.className) > 0
+              ? `${pendingDelete.className} still has ${enrolledCount(pendingDelete.className)} enrolled student(s). Move them to another class before deleting.`
+              : `Are you sure you want to delete ${pendingDelete.className}? Tuition prefills for this class will stop working.`
             : "Are you sure you want to delete this class tier?"
         }
         onConfirm={confirmDelete}
+        confirmDisabled={pendingDelete ? enrolledCount(pendingDelete.className) > 0 : false}
       />
 
       <Dialog open={open} onOpenChange={setOpen}>
