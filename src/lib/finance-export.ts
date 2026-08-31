@@ -1113,7 +1113,7 @@ function drawAttestationHeader(
 }
 
 function estimateAttestationHeight(attestation: SealFooterAttestation): number {
-  let height = 12;
+  let height = 16;
   if (attestation.subtitle) height += 8;
   if (attestation.summaryLines?.length) {
     height += 8 + attestation.summaryLines.length * 6.2 + 4;
@@ -1124,6 +1124,47 @@ function estimateAttestationHeight(attestation: SealFooterAttestation): number {
 function footerBlockHeight(compact: boolean): number {
   const sealSize = compact ? 30 : 38;
   return sealSize + (compact ? 10 : 22);
+}
+
+function attestationVariants(base?: SealFooterAttestation): (SealFooterAttestation | undefined)[] {
+  if (!base) return [undefined];
+  const variants: SealFooterAttestation[] = [base];
+  if (base.summaryLines?.length) {
+    variants.push({ title: base.title, subtitle: base.subtitle });
+  }
+  return variants;
+}
+
+function measureFooterBlock(
+  attestation: SealFooterAttestation | undefined,
+  compact: boolean,
+): number {
+  const attestationHeight = attestation ? estimateAttestationHeight(attestation) : 0;
+  const attestationGap = attestation ? 8 : 0;
+  return attestationHeight + attestationGap + footerBlockHeight(compact);
+}
+
+function pickFooterLayout(
+  startY: number,
+  bottomLimit: number,
+  attestation?: SealFooterAttestation,
+  preferCompact = false,
+): { attestation?: SealFooterAttestation; compact: boolean; y: number } | null {
+  const gapBefore = 6;
+  const compactOrder: boolean[] = preferCompact ? [true, false] : [false, true];
+  for (const variant of attestationVariants(attestation)) {
+    for (const useCompact of compactOrder) {
+      const blockHeight = measureFooterBlock(variant, useCompact);
+      if (startY + gapBefore + blockHeight <= bottomLimit) {
+        return {
+          attestation: variant,
+          compact: useCompact,
+          y: startY + gapBefore,
+        };
+      }
+    }
+  }
+  return null;
 }
 
 async function drawSealFooter(
@@ -1141,41 +1182,29 @@ async function drawSealFooter(
 ) {
   const contentWidth = pageWidth - margin * 2;
   const bottomLimit = pageHeight - margin - 4;
-  const attestationHeight = attestation ? estimateAttestationHeight(attestation) : 0;
-  const attestationGap = attestation ? 8 : 0;
-  const fullFooterH = footerBlockHeight(false);
-  const compactFooterH = footerBlockHeight(true);
-  const totalFull = attestationHeight + attestationGap + fullFooterH;
-  const totalCompact = attestationHeight + attestationGap + compactFooterH;
 
-  let y = startY + 6;
-  let useCompact = compact;
-
-  const fits = (height: number) => y + height <= bottomLimit;
-
-  if (!fits(totalFull)) {
-    if (fits(totalCompact)) {
-      useCompact = true;
-    } else if (!attestation && fits(compactFooterH)) {
-      useCompact = true;
-    } else {
+  let layout =
+    pickFooterLayout(startY, bottomLimit, attestation, compact) ??
+    (() => {
       doc.addPage();
       paintPdfPageBackground(doc, pageWidth, pageHeight);
-      y = margin + 8;
-      useCompact = !fits(totalFull);
-      if (useCompact && attestation && !fits(totalCompact)) {
-        useCompact = true;
-      } else if (!attestation && !fits(fullFooterH) && fits(compactFooterH)) {
-        useCompact = true;
-      }
-    }
-  } else {
-    useCompact = false;
-  }
+      const freshY = margin + 8;
+      return (
+        pickFooterLayout(freshY, bottomLimit, attestation, compact) ?? {
+          attestation: attestationVariants(attestation).at(-1),
+          compact: true,
+          y: freshY,
+        }
+      );
+    })();
 
-  if (attestation) {
-    y = drawAttestationHeader(doc, pageWidth, margin, contentWidth, attestation, y);
-    y += attestationGap;
+  let y = layout.y;
+  const useCompact = layout.compact;
+  const resolvedAttestation = layout.attestation;
+
+  if (resolvedAttestation) {
+    y = drawAttestationHeader(doc, pageWidth, margin, contentWidth, resolvedAttestation, y);
+    y += 8;
   }
 
   const sealSize = useCompact ? 30 : 38;
@@ -1967,22 +1996,6 @@ export async function downloadStudentFeeReportPdf(
     tableStart = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
   }
 
-  const footerCompact = tableStart > pageHeight - margin - 95;
-  const footerHeight = footerBlockHeight(footerCompact);
-  const bottomLimit = pageHeight - margin - 4;
-  const fullAttestationHeight = estimateAttestationHeight({
-    title: "Official Verification",
-    subtitle: "Parent copy — student fee statement",
-    summaryLines: [
-      ["Student", pdfSafe(student.name)],
-      ["Student ID", pdfSafe(student.id)],
-      ["Class", pdfSafe(student.cls || "—")],
-      ["Total Due", formatInrPdf(statement.totalDue)],
-    ],
-  });
-  const fitsFullAttestation =
-    tableStart + 6 + fullAttestationHeight + 8 + footerHeight <= bottomLimit;
-
   await drawSealFooter(
     doc,
     pageWidth,
@@ -1992,21 +2005,17 @@ export async function downloadStudentFeeReportPdf(
     generatedAt,
     displayName,
     `This statement is issued for parent reference. For fee queries, contact ${displayName}.`,
-    footerCompact,
+    tableStart > pageHeight - margin - 95,
     branding,
     {
       title: "Official Verification",
       subtitle: "Parent copy — student fee statement",
-      ...(fitsFullAttestation
-        ? {
-            summaryLines: [
-              ["Student", pdfSafe(student.name)],
-              ["Student ID", pdfSafe(student.id)],
-              ["Class", pdfSafe(student.cls || "—")],
-              ["Total Due", formatInrPdf(statement.totalDue)],
-            ],
-          }
-        : {}),
+      summaryLines: [
+        ["Student", pdfSafe(student.name)],
+        ["Student ID", pdfSafe(student.id)],
+        ["Class", pdfSafe(student.cls || "—")],
+        ["Total Due", formatInrPdf(statement.totalDue)],
+      ],
     },
   );
 
@@ -2226,7 +2235,7 @@ export async function downloadStaffPayrollReportPdf(
     generatedAt,
     displayName,
     `This payroll statement is issued for employee records. For salary queries, contact ${displayName}.`,
-    true,
+    tableStart > pageHeight - margin - 95,
     branding,
     {
       title: "Official Verification",
