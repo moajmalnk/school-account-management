@@ -4,7 +4,7 @@ import { MARKETING } from "@/lib/marketing-content";
 
 const { hero } = MARKETING;
 
-export function Hero() {
+export function Hero({ noDelay = false }: { noDelay?: boolean }) {
   const reduce = useReducedMotion();
 
   return (
@@ -16,7 +16,7 @@ export function Hero() {
         <motion.div
           initial={reduce ? false : { opacity: 0, y: 22 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, ease: easeOutExpo, delay: 1.0 }}
+          transition={{ duration: 0.8, ease: easeOutExpo, delay: noDelay ? 0 : 1.0 }}
           className="relative z-10 flex flex-col items-center text-center w-full"
         >
           <h1
@@ -33,7 +33,7 @@ export function Hero() {
               className="relative z-10 w-full max-w-4xl"
               initial={reduce ? false : { opacity: 0, y: 40, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 0.8, ease: easeOutExpo, delay: 1.2 }}
+              transition={{ duration: 0.8, ease: easeOutExpo, delay: noDelay ? 0 : 1.2 }}
             >
               <img
                 src="/home/home.png"

@@ -62,7 +62,7 @@ export function IntroAnimation() {
             animate={{ x: "100vw" }}
             transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
           >
-            <MiniPage><Hero /></MiniPage>
+            <MiniPage><Hero noDelay={true} /></MiniPage>
           </motion.div>
           <motion.div
             className="absolute top-0 left-[33.33%] w-[33.33%] h-[33.33%]"
@@ -104,7 +104,7 @@ export function IntroAnimation() {
             animate={{ x: "-100vw" }}
             transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
           >
-            <MiniPage><Hero /></MiniPage>
+            <MiniPage><Hero noDelay={true} /></MiniPage>
           </motion.div>
 
           {/* Middle Left (Moves Left) */}
@@ -157,7 +157,7 @@ export function IntroAnimation() {
                  transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
                >
                  <MarketingShell>
-                   <Hero />
+                   <Hero noDelay={true} />
                  </MarketingShell>
                </motion.div>
                {/* Shine fading out */}
