@@ -4034,8 +4034,8 @@ export function StudentsLedger() {
       ) : (
         <>
           <div className={cn(glassCardClass, "min-w-0 p-2.5 md:p-5")}>
-            <div className="flex flex-col gap-2 md:gap-3">
-              <div className="min-w-0">
+            <div className="flex items-end gap-2 md:gap-3 lg:gap-4">
+              <div className="min-w-0 flex-1">
                 <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
                   Search
                 </div>
@@ -4061,87 +4061,83 @@ export function StudentsLedger() {
                 </div>
               </div>
 
-              <div className="flex items-end gap-2 lg:gap-4">
-                <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 md:gap-4">
-                  <div className="min-w-0">
-                    <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
-                      Class / Grade
-                    </div>
-                    <Select value={gradeFilter} onValueChange={setGradeFilter}>
-                      <SelectTrigger
-                        className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
-                        aria-label="Class / Grade"
-                      >
-                        <SelectValue placeholder="All classes" />
-                      </SelectTrigger>
-                      <SelectContent
-                        position="popper"
-                        sideOffset={4}
-                        className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
-                      >
-                        <SelectItem value="all" className="rounded-md">
-                          All classes
-                        </SelectItem>
-                        {gradeOptions.map((grade) => (
-                          <SelectItem key={grade} value={grade} className="rounded-md">
-                            {grade}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="min-w-0">
-                    <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
-                      Division
-                    </div>
-                    <Select
-                      value={divisionFilter}
-                      onValueChange={setDivisionFilter}
-                      disabled={gradeFilter === "all" && divisionOptions.length === 0}
-                    >
-                      <SelectTrigger
-                        className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
-                        aria-label="Division"
-                      >
-                        <SelectValue placeholder="All divisions" />
-                      </SelectTrigger>
-                      <SelectContent
-                        position="popper"
-                        sideOffset={4}
-                        className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
-                      >
-                        <SelectItem value="all" className="rounded-md">
-                          All divisions
-                        </SelectItem>
-                        {divisionOptions.map((division) => (
-                          <SelectItem key={division} value={division} className="rounded-md">
-                            {division}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+              <div className="min-w-0 w-[min(42vw,9.5rem)] sm:w-36 lg:w-40">
+                <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
+                  Class / Grade
                 </div>
+                <Select value={gradeFilter} onValueChange={setGradeFilter}>
+                  <SelectTrigger
+                    className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
+                    aria-label="Class / Grade"
+                  >
+                    <SelectValue placeholder="All classes" />
+                  </SelectTrigger>
+                  <SelectContent
+                    position="popper"
+                    sideOffset={4}
+                    className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
+                  >
+                    <SelectItem value="all" className="rounded-md">
+                      All classes
+                    </SelectItem>
+                    {gradeOptions.map((grade) => (
+                      <SelectItem key={grade} value={grade} className="rounded-md">
+                        {grade}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-                <div className="mb-0.5 flex shrink-0 flex-col items-end gap-0.5 lg:mb-1">
-                  <span className="font-mono text-[10px] tabular-nums text-slate-400 md:text-[11px]">
-                    {filtered.length} shown
-                  </span>
-                  {(gradeFilter !== "all" || divisionFilter !== "all" || searchQuery.trim()) && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setGradeFilter("all");
-                        setDivisionFilter("all");
-                        setSearchQuery("");
-                      }}
-                      className="text-[10px] font-semibold text-slate-500 underline-offset-2 hover:text-slate-900 hover:underline"
-                    >
-                      Clear
-                    </button>
-                  )}
+              <div className="min-w-0 w-[min(42vw,9.5rem)] sm:w-32 lg:w-36">
+                <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
+                  Division
                 </div>
+                <Select
+                  value={divisionFilter}
+                  onValueChange={setDivisionFilter}
+                  disabled={gradeFilter === "all" && divisionOptions.length === 0}
+                >
+                  <SelectTrigger
+                    className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
+                    aria-label="Division"
+                  >
+                    <SelectValue placeholder="All divisions" />
+                  </SelectTrigger>
+                  <SelectContent
+                    position="popper"
+                    sideOffset={4}
+                    className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
+                  >
+                    <SelectItem value="all" className="rounded-md">
+                      All divisions
+                    </SelectItem>
+                    {divisionOptions.map((division) => (
+                      <SelectItem key={division} value={division} className="rounded-md">
+                        {division}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="mb-0.5 flex shrink-0 flex-col items-end gap-0.5 lg:mb-1">
+                <span className="font-mono text-[10px] tabular-nums text-slate-400 md:text-[11px]">
+                  {filtered.length} shown
+                </span>
+                {(gradeFilter !== "all" || divisionFilter !== "all" || searchQuery.trim()) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGradeFilter("all");
+                      setDivisionFilter("all");
+                      setSearchQuery("");
+                    }}
+                    className="text-[10px] font-semibold text-slate-500 underline-offset-2 hover:text-slate-900 hover:underline"
+                  >
+                    Clear
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -5481,8 +5477,8 @@ export function StaffRoster() {
       ) : (
         <>
           <div className={cn(glassCardClass, "min-w-0 p-2.5 md:p-5")}>
-            <div className="flex flex-col gap-2 md:gap-3">
-              <div className="min-w-0">
+            <div className="flex items-end gap-2 md:gap-3 lg:gap-4">
+              <div className="min-w-0 flex-1">
                 <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
                   Search
                 </div>
@@ -5508,87 +5504,83 @@ export function StaffRoster() {
                 </div>
               </div>
 
-              <div className="flex items-end gap-2 lg:gap-4">
-                <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 md:gap-4">
-                  <div className="min-w-0">
-                    <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
-                      Department
-                    </div>
-                    <Select value={deptFilter} onValueChange={setDeptFilter}>
-                      <SelectTrigger
-                        className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
-                        aria-label="Department"
-                      >
-                        <SelectValue placeholder="All departments" />
-                      </SelectTrigger>
-                      <SelectContent
-                        position="popper"
-                        sideOffset={4}
-                        className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
-                      >
-                        <SelectItem value="all" className="rounded-md">
-                          All departments
-                        </SelectItem>
-                        {departmentOptions.map((dept) => (
-                          <SelectItem key={dept} value={dept} className="rounded-md">
-                            {dept}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="min-w-0">
-                    <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
-                      Status
-                    </div>
-                    <Select
-                      value={statusFilter}
-                      onValueChange={(value) => setStatusFilter(value as StaffStatusFilter)}
-                    >
-                      <SelectTrigger
-                        className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
-                        aria-label="Status"
-                      >
-                        <SelectValue placeholder="All statuses" />
-                      </SelectTrigger>
-                      <SelectContent
-                        position="popper"
-                        sideOffset={4}
-                        className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
-                      >
-                        <SelectItem value="all" className="rounded-md">
-                          All statuses
-                        </SelectItem>
-                        <SelectItem value="active" className="rounded-md">
-                          Active
-                        </SelectItem>
-                        <SelectItem value="inactive" className="rounded-md">
-                          Inactive
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+              <div className="min-w-0 w-[min(42vw,9.5rem)] sm:w-36 lg:w-40">
+                <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
+                  Department
                 </div>
+                <Select value={deptFilter} onValueChange={setDeptFilter}>
+                  <SelectTrigger
+                    className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
+                    aria-label="Department"
+                  >
+                    <SelectValue placeholder="All departments" />
+                  </SelectTrigger>
+                  <SelectContent
+                    position="popper"
+                    sideOffset={4}
+                    className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
+                  >
+                    <SelectItem value="all" className="rounded-md">
+                      All departments
+                    </SelectItem>
+                    {departmentOptions.map((dept) => (
+                      <SelectItem key={dept} value={dept} className="rounded-md">
+                        {dept}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-                <div className="mb-0.5 flex shrink-0 flex-col items-end gap-0.5 lg:mb-1">
-                  <span className="font-mono text-[10px] tabular-nums text-slate-400 md:text-[11px]">
-                    {filteredStaff.length} shown
-                  </span>
-                  {(deptFilter !== "all" || statusFilter !== "all" || searchQuery.trim()) && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDeptFilter("all");
-                        setStatusFilter("all");
-                        setSearchQuery("");
-                      }}
-                      className="text-[10px] font-semibold text-[#0F766E] underline-offset-2 hover:underline"
-                    >
-                      Clear
-                    </button>
-                  )}
+              <div className="min-w-0 w-[min(42vw,9.5rem)] sm:w-32 lg:w-36">
+                <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
+                  Status
                 </div>
+                <Select
+                  value={statusFilter}
+                  onValueChange={(value) => setStatusFilter(value as StaffStatusFilter)}
+                >
+                  <SelectTrigger
+                    className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
+                    aria-label="Status"
+                  >
+                    <SelectValue placeholder="All statuses" />
+                  </SelectTrigger>
+                  <SelectContent
+                    position="popper"
+                    sideOffset={4}
+                    className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
+                  >
+                    <SelectItem value="all" className="rounded-md">
+                      All statuses
+                    </SelectItem>
+                    <SelectItem value="active" className="rounded-md">
+                      Active
+                    </SelectItem>
+                    <SelectItem value="inactive" className="rounded-md">
+                      Inactive
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="mb-0.5 flex shrink-0 flex-col items-end gap-0.5 lg:mb-1">
+                <span className="font-mono text-[10px] tabular-nums text-slate-400 md:text-[11px]">
+                  {filteredStaff.length} shown
+                </span>
+                {(deptFilter !== "all" || statusFilter !== "all" || searchQuery.trim()) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeptFilter("all");
+                      setStatusFilter("all");
+                      setSearchQuery("");
+                    }}
+                    className="text-[10px] font-semibold text-[#0F766E] underline-offset-2 hover:underline"
+                  >
+                    Clear
+                  </button>
+                )}
               </div>
             </div>
           </div>
