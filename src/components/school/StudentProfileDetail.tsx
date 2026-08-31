@@ -60,6 +60,7 @@ import {
   type StudentLedgerStatus as LedgerStatus,
   type StudentReceipt as Receipt,
 } from "@/lib/student-fees";
+import { concessionSummaryLines } from "@/lib/student-concession-fees";
 import { FeePeriodChecklist } from "@/components/school/FeePeriodChecklist";
 import { ShareParentLinkDialog } from "@/components/school/ShareParentLinkDialog";
 import {
@@ -520,6 +521,7 @@ export function StudentProfileDetail({
     () => studentFeeBreaksForYear(studentFeeBreaks, student.id, academicYear),
     [studentFeeBreaks, student.id, academicYear],
   );
+  const concessionSummary = useMemo(() => concessionSummaryLines(student), [student]);
   const fees = feeStatement;
   const ledger = feeStatement.tuition.ledger;
   const vehicleFees = feeStatement.vehicle;
@@ -1067,7 +1069,24 @@ export function StudentProfileDetail({
         <ProfileTabPanel value="payments" className="space-y-4 sm:space-y-6">
           <section className={CARD_FRAME}>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <h2 className="text-base font-semibold text-black">Fees Overview</h2>
+              <div>
+                <h2 className="text-base font-semibold text-black">Fees Overview</h2>
+                {student.hasConcession ? (
+                  <div className="mt-2 space-y-1">
+                    <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-900">
+                      Fee concession
+                    </span>
+                    {concessionSummary.length > 0 ? (
+                      <p className="text-[12px] leading-relaxed text-slate-600">
+                        {concessionSummary.join(" · ")}
+                      </p>
+                    ) : null}
+                    {student.concessionReason ? (
+                      <p className="text-[12px] text-slate-500">{student.concessionReason}</p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
               <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
                 <Button
                   type="button"

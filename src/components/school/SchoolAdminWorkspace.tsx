@@ -252,7 +252,21 @@ import {
   type VehicleOwnership,
 } from "@/lib/tenant-store";
 import { StudentProfileDetail } from "@/components/school/StudentProfileDetail";
+import {
+  StudentConcessionSection,
+  emptyConcessionState,
+  type StudentConcessionState,
+} from "@/components/school/StudentConcessionSection";
 import { isPeriodOnBreak, buildStudentFeeStatement } from "@/lib/student-fees";
+import {
+  concessionOtherFeePrefillAmount,
+  concessionVehiclePrefillAmount,
+  isConcessionTierEnabled,
+  resolveConcessionOtherFees,
+  resolveConcessionTuitionClassConfig,
+  studentHasConcession,
+  validateConcessionFees,
+} from "@/lib/student-concession-fees";
 import { ShareParentLinkDialog } from "@/components/school/ShareParentLinkDialog";
 import { StaffProfileDetail } from "@/components/school/StaffProfileDetail";
 import { StaffOrgQuickCreateDialogs } from "@/components/school/StaffOrgQuickCreate";
@@ -671,7 +685,7 @@ const DASH = {
   incomeExpense:
     "border-rose-200/50 bg-gradient-to-br from-[#FECDD3]/45 via-[#FFF1F2] to-white/85 dark:border-rose-900/30 dark:from-zinc-900 dark:via-zinc-900 dark:to-rose-950/30",
   transactions:
-    "border-teal-800/20 bg-gradient-to-br from-[#0F766E] via-[#0D9488] to-[#115E59] text-white",
+    "border-teal-300/45 bg-gradient-to-br from-[#ECFDF5] via-[#F0FDFA] to-[#CCFBF1]/90 dark:border-teal-800/20 dark:bg-gradient-to-br dark:from-[#0F766E] dark:via-[#0D9488] dark:to-[#115E59] dark:text-white",
 } as const;
 
 const dashTileHover =
@@ -1556,45 +1570,45 @@ function PremiumDashboard({
         >
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <span className="grid h-8 w-8 place-items-center rounded-xl bg-white/15 text-teal-100">
+              <span className="grid h-8 w-8 place-items-center rounded-xl bg-teal-100 text-teal-700 dark:bg-white/15 dark:text-teal-100">
                 <ArrowDownToLine className="h-4 w-4" strokeWidth={2} />
               </span>
-              <h3 className="text-[12px] font-bold uppercase tracking-wider text-white">
+              <h3 className="text-[12px] font-bold uppercase tracking-wider text-teal-950 dark:text-white">
                 Recent Transactions
               </h3>
             </div>
             <Link
               to="/tenant/finance"
               search={{ tab: "receive" }}
-              className="text-[12px] font-semibold text-teal-100 hover:text-white hover:underline"
+              className="text-[12px] font-semibold text-teal-700 hover:text-teal-900 hover:underline dark:text-teal-100 dark:hover:text-white"
             >
               View All
             </Link>
           </div>
-          <div className="mt-4 flex-1 divide-y divide-white/10">
+          <div className="mt-4 flex-1 divide-y divide-teal-200/70 dark:divide-white/10">
             {recentReceipts.length === 0 && (
-              <div className="py-6 text-center text-[12px] text-teal-100/70">
+              <div className="py-6 text-center text-[12px] text-slate-600 dark:text-teal-100/70">
                 No receipts logged yet
               </div>
             )}
             {recentReceipts.map((payment) => (
               <div key={payment.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/15 text-emerald-300">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-teal-100 text-teal-700 dark:bg-white/15 dark:text-emerald-300">
                   <ArrowUpRight className="h-4 w-4" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13px] font-semibold text-white">
+                  <div className="truncate text-[13px] font-semibold text-slate-900 dark:text-white">
                     {payment.name}
                   </div>
-                  <div className="mt-0.5 text-[11px] text-teal-100/70">
+                  <div className="mt-0.5 text-[11px] text-slate-600 dark:text-teal-100/70">
                     {payment.cat} · {payment.mode}
                   </div>
                 </div>
                 <div className="shrink-0 text-right">
-                  <div className="font-mono text-[13px] font-semibold text-white">
+                  <div className="font-mono text-[13px] font-semibold text-slate-900 dark:text-white">
                     {formatInr(payment.amount)}
                   </div>
-                  <div className="mt-0.5 text-[10px] text-teal-100/60">
+                  <div className="mt-0.5 text-[10px] text-slate-500 dark:text-teal-100/60">
                     {formatEventDateTime(payment.time)}
                   </div>
                   <div className="mt-1.5 flex items-center justify-end gap-1">
@@ -1603,7 +1617,7 @@ function PremiumDashboard({
                       aria-label={`Show receipt ${payment.id}`}
                       title="Show"
                       onClick={() => onShowReceipt(payment)}
-                      className="inline-flex h-7 items-center gap-1 rounded-lg border border-white/20 bg-white/10 px-2 text-[10px] font-semibold text-teal-50 transition-colors hover:bg-white/20 hover:text-white"
+                      className="inline-flex h-7 items-center gap-1 rounded-lg border border-teal-200/80 bg-white px-2 text-[10px] font-semibold text-teal-800 shadow-sm transition-colors hover:bg-teal-50 dark:border-white/20 dark:bg-white/10 dark:text-teal-50 dark:shadow-none dark:hover:bg-white/20 dark:hover:text-white"
                     >
                       <Eye className="h-3 w-3" />
                       Show
@@ -1613,7 +1627,7 @@ function PremiumDashboard({
                       aria-label={`Download receipt ${payment.id}`}
                       title="Download"
                       onClick={() => onDownloadReceipt(payment)}
-                      className="inline-grid h-7 w-7 place-items-center rounded-lg border border-white/20 bg-white/10 text-teal-50 transition-colors hover:bg-white/20 hover:text-white"
+                      className="inline-grid h-7 w-7 place-items-center rounded-lg border border-teal-200/80 bg-white text-teal-800 shadow-sm transition-colors hover:bg-teal-50 dark:border-white/20 dark:bg-white/10 dark:text-teal-50 dark:shadow-none dark:hover:bg-white/20 dark:hover:text-white"
                     >
                       <Download className="h-3.5 w-3.5" />
                     </button>
@@ -2576,10 +2590,11 @@ function StudentsDirectoryTable({
 }
 
 export function AdmitStudentPage() {
-  const { students, classes, setClasses, admitStudentToActiveYear } = useTenantStore();
+  const { students, classes, setClasses, admitStudentToActiveYear, activeFeeTerms } = useTenantStore();
   const navigate = useNavigate();
   const defaultClass = classes[0]?.className ?? "";
   const [form, setForm] = useState<AdmitStudentForm>(() => emptyAdmitForm(defaultClass));
+  const [concession, setConcession] = useState<StudentConcessionState>(emptyConcessionState);
   const [shareOpen, setShareOpen] = useState(false);
   const [shareToken, setShareToken] = useState("");
   const [shareName, setShareName] = useState("");
@@ -2652,9 +2667,19 @@ export function AdmitStudentPage() {
     }
   };
 
+  const matchedAdmitClass = useMemo(
+    () => classes.find((c) => c.className === form.cls),
+    [classes, form.cls],
+  );
+
   const createStudent = (): Student | null => {
     if (!form.name.trim() || !form.guardian.trim()) {
       toast.error("Name and guardian are required");
+      return null;
+    }
+    const concessionError = validateConcessionFees(concession.hasConcession, concession.concessionFees);
+    if (concessionError) {
+      toast.error(concessionError);
       return null;
     }
     const nextNum = 2847 + students.filter((s) => s.id.startsWith("STU-28")).length;
@@ -2669,6 +2694,9 @@ export function AdmitStudentPage() {
       phone: form.phone.trim() || undefined,
       shareToken: token,
       active: true,
+      hasConcession: concession.hasConcession,
+      concessionReason: concession.hasConcession ? concession.concessionReason.trim() || undefined : undefined,
+      concessionFees: concession.hasConcession ? concession.concessionFees : undefined,
     });
     return admitStudentToActiveYear(draft, {
       cls: draft.cls,
@@ -2790,6 +2818,16 @@ export function AdmitStudentPage() {
                 className={cn(admitFormInputClass, "font-mono")}
               />
             </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 dark:border-zinc-700/60 dark:bg-zinc-900/30">
+            <StudentConcessionSection
+              value={concession}
+              onChange={setConcession}
+              matchedClass={matchedAdmitClass}
+              feeTerms={activeFeeTerms}
+              needsBus={false}
+            />
           </div>
 
           <div className="flex flex-nowrap items-center gap-1.5 pt-2 sm:justify-end sm:gap-2">
@@ -7424,6 +7462,8 @@ type FeeBreakPeriodContext = {
 
 /** Set while Fee Collection (ReceivePayment) is mounted so period helpers skip break periods. */
 let receivePaymentBreakCtx: FeeBreakPeriodContext | undefined;
+/** Active student in Receive Payment for concession fee prefill. */
+let receivePaymentStudentCtx: Student | undefined;
 
 function feePeriodChoices(
   feeTerms: FeeTerm[],
@@ -7749,6 +7789,7 @@ function getFeeLineBalanceSummary(
   matchedRoute: TransportRoute | undefined,
   transportShift: TransportFeeShift | undefined,
   balanceCtx: FeePrefillBalanceContext | undefined,
+  student?: Student,
 ): { scheduled: number; paid: number; balance: number } | null {
   if (!balanceCtx || !item.feePeriod.trim()) return null;
   const scheduled = prefillScheduledAmountForFeeLine(
@@ -7760,6 +7801,7 @@ function getFeeLineBalanceSummary(
     collectionStartMonth,
     matchedRoute,
     transportShift,
+    student,
   );
   if (scheduled == null || scheduled <= 0) return null;
 
@@ -7869,7 +7911,9 @@ function prefillScheduledAmountForFeeLine(
   collectionStartMonth?: string,
   matchedRoute?: TransportRoute,
   transportShift?: TransportFeeShift,
+  student?: Student,
 ): number | undefined {
+  const effectiveStudent = student ?? receivePaymentStudentCtx;
   const category = item.description;
   const lower = category.toLowerCase();
   const termKind = categoryFeeTermKind(category);
@@ -7883,6 +7927,51 @@ function prefillScheduledAmountForFeeLine(
     item.feePeriodKind === "month"
       ? monthsForCategory.find((t) => t.label === item.feePeriod)
       : undefined;
+
+  if (effectiveStudent && studentHasConcession(effectiveStudent)) {
+    if (termKind === "tuition" && isConcessionTierEnabled(effectiveStudent.concessionFees?.tuition)) {
+      const concessionClass = resolveConcessionTuitionClassConfig(
+        effectiveStudent,
+        matchedClass,
+        feeTerms,
+      );
+      if (concessionClass) {
+        const scheduled = withClassFeeSchedule(concessionClass, feeTerms);
+        const installments = scheduled.feeSchedule.filter((line) => line.kind === "installment");
+        const scheduleIndex = installments.findIndex(
+          (line) => line.label.trim().toLowerCase() === item.feePeriod.trim().toLowerCase(),
+        );
+        const fromSchedule = classFeePrefillAmount(scheduled, {
+          category,
+          periodLabel: item.feePeriod || selectedTerm?.label || selectedMonthPeriod?.label,
+          periodIndex: scheduleIndex >= 0 ? scheduleIndex : undefined,
+          collectionStartMonth:
+            collectionStartMonth?.trim() ||
+            concessionClass.feeCollectionStartMonth?.trim() ||
+            undefined,
+        });
+        if (fromSchedule && fromSchedule > 0) return fromSchedule;
+      }
+    }
+    if (
+      (termKind === "vehicle" ||
+        lower.includes("vehicle") ||
+        lower.includes("transport") ||
+        lower.includes("bus")) &&
+      isConcessionTierEnabled(effectiveStudent.concessionFees?.vehicle)
+    ) {
+      const fromConcessionVehicle = concessionVehiclePrefillAmount(effectiveStudent, {
+        periodLabel: item.feePeriod || selectedTerm?.label || selectedMonthPeriod?.label,
+        collectionStartMonth: collectionStartMonth?.trim(),
+      });
+      if (fromConcessionVehicle && fromConcessionVehicle > 0) return fromConcessionVehicle;
+    }
+    const fromOther = concessionOtherFeePrefillAmount(effectiveStudent, category, {
+      periodLabel: item.feePeriod || selectedTerm?.label || selectedMonthPeriod?.label,
+      collectionStartMonth: collectionStartMonth?.trim(),
+    });
+    if (fromOther && fromOther > 0) return fromOther;
+  }
 
   if (matchedClass && !(termKind === "vehicle" && matchedRoute)) {
     const scheduled = withClassFeeSchedule(matchedClass, feeTerms);
@@ -7951,6 +8040,7 @@ function prefillAmountForFeeLine(
   matchedRoute?: TransportRoute,
   transportShift?: TransportFeeShift,
   balanceCtx?: FeePrefillBalanceContext,
+  student?: Student,
 ): number | undefined {
   const scheduled = prefillScheduledAmountForFeeLine(
     item,
@@ -7961,6 +8051,7 @@ function prefillAmountForFeeLine(
     collectionStartMonth,
     matchedRoute,
     transportShift,
+    student,
   );
   if (scheduled == null || scheduled <= 0 || !balanceCtx || !item.feePeriod.trim()) {
     return scheduled;
@@ -8523,9 +8614,11 @@ function ReceivePayment() {
         breaks: studentFeeBreaks,
       }
     : undefined;
+  receivePaymentStudentCtx = selected;
   useEffect(() => {
     return () => {
       receivePaymentBreakCtx = undefined;
+      receivePaymentStudentCtx = undefined;
     };
   }, []);
   const descriptionOptions = useMemo(
@@ -8621,7 +8714,15 @@ function ReceivePayment() {
     return undefined;
   }, [transportFeeResolved, matchedClass]);
 
-  const tuitionFee = matchedClass?.tuitionFeeAmount;
+  const tuitionFee = useMemo(() => {
+    if (selected?.hasConcession) {
+      const concessionClass = resolveConcessionTuitionClassConfig(selected, matchedClass, feeTerms);
+      if (concessionClass && concessionClass.tuitionFeeAmount > 0) {
+        return concessionClass.tuitionFeeAmount;
+      }
+    }
+    return matchedClass?.tuitionFeeAmount;
+  }, [selected, matchedClass, feeTerms]);
 
   const getPrefillBalanceContext = useCallback(
     (lines: FeeLineItem[]): FeePrefillBalanceContext | undefined => {
@@ -8699,6 +8800,7 @@ function ReceivePayment() {
           collectionStartMonth,
           matchedRoute,
           transportShift,
+          selected,
         );
         const prefill = prefillAmountForFeeLine(
           item,
@@ -8710,6 +8812,7 @@ function ReceivePayment() {
           matchedRoute,
           transportShift,
           balanceCtx,
+          selected,
         );
         if (prefill === undefined) return item;
         const current = Math.max(0, Math.round(Number(item.amount) || 0));
@@ -8724,6 +8827,7 @@ function ReceivePayment() {
               matchedRoute,
               transportShift,
               balanceCtx,
+              selected,
             )
           : null;
         const looksAutoFilled =
@@ -8959,6 +9063,22 @@ function ReceivePayment() {
     if (isExternal || editingPayment) return;
     setFeeItems((prev) => applyPrefillToLines(prev));
   }, [applyPrefillToLines, isExternal, selected?.id, editingPayment, paymentsSyncKey]);
+
+  useEffect(() => {
+    if (isExternal || editingPayment || !selected?.hasConcession) return;
+    const otherFees = resolveConcessionOtherFees(selected);
+    if (!otherFees.length) return;
+    setFeeItems((prev) => {
+      const existing = new Set(
+        prev.map((line) => feeLineCategoryLabel(line).trim().toLowerCase()).filter(Boolean),
+      );
+      const additions = otherFees
+        .filter((fee) => !existing.has(fee.label.trim().toLowerCase()))
+        .map((fee) => createFeeLineItem({ description: fee.label }));
+      if (!additions.length) return prev;
+      return [...prev, ...additions];
+    });
+  }, [selected?.id, selected?.hasConcession, isExternal, editingPayment]);
 
   useEffect(() => {
     if (isExternal || editingPayment || !selected) return;
@@ -10328,6 +10448,20 @@ function ReceivePayment() {
                     triggerClassName="h-11 sm:h-10"
                   />
                 </div>
+
+                {selected?.hasConcession ? (
+                  <div className="col-span-12 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-3 text-[12px] leading-relaxed text-amber-950 dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-100">
+                    <span className="font-semibold">Fee concession</span>
+                    {" — "}
+                    This student has custom fee schedules. Amounts below use their concession
+                    rates, not the class or route defaults.
+                    {selected.concessionReason ? (
+                      <span className="mt-1 block text-amber-800/90 dark:text-amber-200/80">
+                        Reason: {selected.concessionReason}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 {feeItems.map((item, index) => {
                   const linePeriodOpts = periodOptsForDescription(item.description);

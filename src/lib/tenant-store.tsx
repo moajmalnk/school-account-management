@@ -80,8 +80,6 @@ export {
   yearHasBookData,
 };
 
-export type GuardianRelation = "Father" | "Mother" | "Others";
-
 export const STUDENT_RELIGIONS = [
   "Buddhist",
   "Christian",
@@ -97,6 +95,31 @@ export const STUDENT_CATEGORIES = ["GENERAL", "OBC", "OEC", "ST", "SC", "Others"
 export const BLOOD_GROUPS = ["A+", "B+", "AB+", "A-", "B-", "AB-", "O+", "O-"] as const;
 
 export const GUARDIAN_RELATIONS = ["Father", "Mother", "Others"] as const;
+
+export type GuardianRelation = (typeof GUARDIAN_RELATIONS)[number];
+
+export type StudentConcessionFeeTier = {
+  enabled: boolean;
+  billingCycle: Extract<ClassBillingCycle, "Monthly" | "Term" | "Annually">;
+  feeAmountMode: ClassFeeAmountMode;
+  feeSchedule: ClassFeeLine[];
+  feeCollectionStartMonth?: string;
+};
+
+export type StudentConcessionOtherFee = {
+  id: string;
+  label: string;
+  billingCycle: Extract<ClassBillingCycle, "Monthly" | "Term">;
+  feeAmountMode: ClassFeeAmountMode;
+  feeSchedule: ClassFeeLine[];
+  feeCollectionStartMonth?: string;
+};
+
+export type StudentConcessionFees = {
+  tuition?: StudentConcessionFeeTier;
+  vehicle?: StudentConcessionFeeTier;
+  otherFees?: StudentConcessionOtherFee[];
+};
 
 export type Student = {
   id: string;
@@ -130,6 +153,12 @@ export type Student = {
   shareToken?: string;
   /** Identity documents with optional file attachments */
   documents?: StaffDocument[];
+  /** When true, fee schedules on this student override class/route defaults */
+  hasConcession?: boolean;
+  /** Optional note · scholarship, staff child, etc. */
+  concessionReason?: string;
+  /** Per-student custom fee schedules */
+  concessionFees?: StudentConcessionFees;
   /** ISO timestamp when moved to recycle bin; absent means live in directory */
   deletedAt?: string;
 };
@@ -658,6 +687,67 @@ function optionalTrimmedString(value: unknown): string | undefined {
   return trimmed || undefined;
 }
 
+function normalizeConcessionFeeTier(raw: unknown): StudentConcessionFeeTier | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const row = raw as Partial<StudentConcessionFeeTier>;
+  const billingCycle =
+    row.billingCycle === "Term" || row.billingCycle === "Annually" ? row.billingCycle : "Monthly";
+  const feeAmountMode = row.feeAmountMode === "custom" ? "custom" : "fixed";
+  const feeSchedule = Array.isArray(row.feeSchedule)
+    ? row.feeSchedule
+        .map((line, index) => normalizeClassFeeLine(line, index))
+        .filter((line): line is ClassFeeLine => line !== null)
+    : [];
+  return {
+    enabled: row.enabled === true,
+    billingCycle,
+    feeAmountMode,
+    feeSchedule,
+    feeCollectionStartMonth: optionalTrimmedString(row.feeCollectionStartMonth),
+  };
+}
+
+export function normalizeStudentConcessionFees(raw: unknown): StudentConcessionFees | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const row = raw as Partial<StudentConcessionFees>;
+  const tuition = normalizeConcessionFeeTier(row.tuition);
+  const vehicle = normalizeConcessionFeeTier(row.vehicle);
+  const otherFees = Array.isArray(row.otherFees)
+    ? row.otherFees
+        .map((item) => {
+          if (!item || typeof item !== "object") return null;
+          const fee = item as Partial<StudentConcessionOtherFee>;
+          const id = typeof fee.id === "string" && fee.id.trim() ? fee.id.trim() : "";
+          const label = typeof fee.label === "string" ? fee.label.trim() : "";
+          if (!id || !label) return null;
+          const billingCycle = fee.billingCycle === "Term" ? "Term" : "Monthly";
+          const feeAmountMode = fee.feeAmountMode === "custom" ? "custom" : "fixed";
+          const feeSchedule = Array.isArray(fee.feeSchedule)
+            ? fee.feeSchedule
+                .map((line, index) => normalizeClassFeeLine(line, index))
+                .filter((line): line is ClassFeeLine => line !== null)
+            : [];
+          const feeCollectionStartMonth = optionalTrimmedString(fee.feeCollectionStartMonth);
+          const normalized: StudentConcessionOtherFee = {
+            id,
+            label,
+            billingCycle,
+            feeAmountMode,
+            feeSchedule,
+            ...(feeCollectionStartMonth ? { feeCollectionStartMonth } : {}),
+          };
+          return normalized;
+        })
+        .filter((fee): fee is StudentConcessionOtherFee => fee !== null)
+    : undefined;
+  if (!tuition && !vehicle && (!otherFees || otherFees.length === 0)) return undefined;
+  return {
+    ...(tuition ? { tuition } : {}),
+    ...(vehicle ? { vehicle } : {}),
+    ...(otherFees?.length ? { otherFees } : {}),
+  };
+}
+
 export function normalizeStudent(
   raw: Partial<Student> & Pick<Student, "id" | "name" | "cls" | "guardian" | "due">,
 ): Student {
@@ -699,6 +789,9 @@ export function normalizeStudent(
         ? raw.shareToken.trim()
         : undefined,
     documents: normalizeStudentDocuments(raw.documents, optionalTrimmedString(raw.aadhaar)),
+    hasConcession: raw.hasConcession === true,
+    concessionReason: optionalTrimmedString(raw.concessionReason),
+    concessionFees: normalizeStudentConcessionFees(raw.concessionFees),
     deletedAt:
       typeof raw.deletedAt === "string" && raw.deletedAt.trim() ? raw.deletedAt.trim() : undefined,
   };
@@ -4389,7 +4482,7 @@ export function findTransportRouteForStudent(
 }
 
 export function resolveTransportFeeForStudent(
-  student: Pick<Student, "needsBus" | "busPoint1" | "busPoint2" | "cls">,
+  student: Pick<Student, "needsBus" | "busPoint1" | "busPoint2" | "cls" | "hasConcession" | "concessionFees">,
   routes: TransportRoute[],
   classConfig?: Pick<ClassConfig, "vehicleFeeAmount">,
   period?: {
@@ -4401,6 +4494,34 @@ export function resolveTransportFeeForStudent(
 ): { amount: number | undefined; shift: TransportFeeShift; route?: TransportRoute } {
   if (!studentNeedsTransport(student)) {
     return { amount: undefined, shift: "both" };
+  }
+
+  if (student.hasConcession && student.concessionFees?.vehicle?.enabled) {
+    const tier = student.concessionFees.vehicle;
+    const schedule = tier.feeSchedule.filter((line) => line.amount > 0);
+    if (schedule.length > 0) {
+      const synthetic: ClassConfig = {
+        id: "__concession_vehicle__",
+        className: student.cls ?? "",
+        grade: "",
+        section: "",
+        tuitionFeeAmount: 0,
+        vehicleFeeAmount: sumFeeSchedule(schedule),
+        billingCycle: tier.billingCycle,
+        feeAmountMode: tier.feeAmountMode,
+        feeSchedule: schedule,
+        feeCollectionStartMonth: tier.feeCollectionStartMonth,
+      };
+      const fromConcession = classFeePrefillAmount(synthetic, {
+        category: "Vehicle Fee",
+        periodLabel: period?.label,
+        collectionStartMonth: period?.collectionStartMonth ?? tier.feeCollectionStartMonth,
+      });
+      if (fromConcession && fromConcession > 0) {
+        return { amount: Math.round(fromConcession), shift: "both" };
+      }
+      return { amount: Math.round(schedule[0].amount), shift: "both" };
+    }
   }
 
   const shift = resolveTransportFeeShift(student);
@@ -4795,7 +4916,20 @@ export function TenantStoreProvider({
       activeBranchId: string;
       studentFeeBreaks?: StudentFeeBreak[];
     }) => {
-      setStudents(Array.isArray(data.students) ? data.students : []);
+      setStudents(
+        Array.isArray(data.students)
+          ? data.students
+              .filter(
+                (s): s is Student =>
+                  Boolean(s && typeof s.id === "string" && typeof s.name === "string"),
+              )
+              .map((s) =>
+                normalizeStudent(
+                  s as Partial<Student> & Pick<Student, "id" | "name" | "cls" | "guardian" | "due">,
+                ),
+              )
+          : [],
+      );
       setStaff(
         Array.isArray(data.staff)
           ? data.staff

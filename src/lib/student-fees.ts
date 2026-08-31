@@ -18,6 +18,12 @@ import {
   type TransportFeeShift,
   type TransportRoute,
 } from "@/lib/tenant-store";
+import {
+  isConcessionTierEnabled,
+  resolveConcessionOtherFees,
+  resolveConcessionTuitionClassConfig,
+  resolveConcessionVehicleSchedule,
+} from "@/lib/student-concession-fees";
 
 export type StudentLedgerStatus = "Paid" | "Partially Paid" | "Due" | "Overdue" | "On Break";
 
@@ -256,21 +262,25 @@ type ChargeDraft = {
 };
 
 function expectedTuitionChargeLines(
+  student: Student,
   classConfig: ClassConfig | undefined,
   feeTerms: FeeTerm[],
 ): ChargeDraft[] {
-  if (!classConfig) return [];
-  const scheduled = withClassFeeSchedule(classConfig, feeTerms).feeSchedule.filter(
+  const concessionClass = resolveConcessionTuitionClassConfig(student, classConfig, feeTerms);
+  const effectiveClass = concessionClass ?? classConfig;
+  if (!effectiveClass) return [];
+  const scheduled = withClassFeeSchedule(effectiveClass, feeTerms).feeSchedule.filter(
     (line) => line.amount > 0 && !isVehicleLineLabel(line.label),
   );
   if (scheduled.length === 0) return [];
 
   return scheduled.map((line) => {
     const due = line.dueDate || "—";
+    const prefix = concessionClass ? "Tuition (Concession) · " : "";
     return {
       key: `line::${line.id}`,
       date: formatDisplayDate(line.dueDate),
-      desc: line.label,
+      desc: `${prefix}${line.label}`,
       due,
       charge: line.amount,
       paid: 0,
@@ -286,6 +296,22 @@ function expectedVehicleChargeLines(
   feeTerms: FeeTerm[],
 ): ChargeDraft[] {
   if (!studentNeedsTransport(student)) return [];
+
+  const concessionSchedule = resolveConcessionVehicleSchedule(student);
+  if (concessionSchedule.length > 0) {
+    return concessionSchedule.map((line) => {
+      const due = line.dueDate || "—";
+      return {
+        key: `vehicle::concession::${line.id}`,
+        date: formatDisplayDate(line.dueDate),
+        desc: `Vehicle (Concession) · ${line.label}`,
+        due,
+        charge: line.amount,
+        paid: 0,
+        periodLabel: line.label,
+      };
+    });
+  }
 
   const transport = resolveTransportFeeForStudent(
     student,
@@ -369,6 +395,25 @@ function expectedVehicleChargeLines(
   }
 
   return [];
+}
+
+function expectedOtherConcessionChargeLines(student: Student): ChargeDraft[] {
+  const out: ChargeDraft[] = [];
+  for (const fee of resolveConcessionOtherFees(student)) {
+    for (const line of fee.feeSchedule.filter((row) => row.amount > 0)) {
+      const due = line.dueDate || "—";
+      out.push({
+        key: `other::${fee.id}::${line.id}`,
+        date: formatDisplayDate(line.dueDate),
+        desc: `${fee.label} · ${line.label}`,
+        due,
+        charge: line.amount,
+        paid: 0,
+        periodLabel: line.label,
+      });
+    }
+  }
+  return out;
 }
 
 function markBreaksOnCharges(
@@ -562,16 +607,16 @@ function summarizeSection(
 }
 
 function mergeSections(
-  tuition: StudentFeeSection,
-  vehicle: StudentVehicleFeeSection,
+  a: StudentFeeSection,
+  b: StudentFeeSection,
   studentDue: number,
 ): StudentFeeSection {
-  const ledger = sortLedger([...tuition.ledger, ...vehicle.ledger]);
-  const receipts = [...tuition.receipts, ...vehicle.receipts].sort((a, b) =>
-    String(b.date).localeCompare(String(a.date)),
+  const ledger = sortLedger([...a.ledger, ...b.ledger]);
+  const receipts = [...a.receipts, ...b.receipts].sort((x, y) =>
+    String(y.date).localeCompare(String(x.date)),
   );
-  const totalPaid = tuition.totalPaid + vehicle.totalPaid;
-  const totalFee = Math.max(tuition.totalFee + vehicle.totalFee, totalPaid);
+  const totalPaid = a.totalPaid + b.totalPaid;
+  const totalFee = Math.max(a.totalFee + b.totalFee, totalPaid);
   const billable = ledger.filter((r) => r.status !== "On Break");
   const ledgerOutstanding = billable.reduce((s, r) => s + r.balance, 0);
   const totalDue = Math.max(
@@ -621,7 +666,7 @@ export function buildStudentFeeStatement(input: {
 
   const classConfig = input.classes.find((c) => c.className === student.cls);
   const tuitionExpected = markBreaksOnCharges(
-    expectedTuitionChargeLines(classConfig, yearTerms),
+    expectedTuitionChargeLines(student, classConfig, yearTerms),
     feeBreaks,
     student.id,
     academicYear,
@@ -634,9 +679,11 @@ export function buildStudentFeeStatement(input: {
     academicYear,
     "vehicle",
   );
+  const otherExpected = expectedOtherConcessionChargeLines(student);
 
   const tuition = summarizeSection(tuitionExpected, tuitionPayments);
   const vehicleBase = summarizeSection(vehicleExpected, vehiclePayments, false);
+  const otherBase = summarizeSection(otherExpected, studentPayments, false);
 
   const transport = resolveTransportFeeForStudent(
     student,
@@ -657,7 +704,7 @@ export function buildStudentFeeStatement(input: {
   };
 
   // student.due may still include amounts covered by breaks until adjusted — prefer ledger.
-  const combined = mergeSections(tuition, vehicle, 0);
+  const combined = mergeSections(mergeSections(tuition, vehicle, 0), otherBase, 0);
   if (
     student.due > 0 &&
     combined.totalDue === 0 &&
@@ -758,7 +805,7 @@ export function studentSchedulePeriodOptions(input: {
   };
 
   if (input.kind === "tuition" || input.kind === "both") {
-    for (const line of expectedTuitionChargeLines(classConfig, yearTerms)) {
+    for (const line of expectedTuitionChargeLines(input.student, classConfig, yearTerms)) {
       push(line.periodLabel || line.desc, line.charge, "tuition");
     }
   }
@@ -770,6 +817,11 @@ export function studentSchedulePeriodOptions(input: {
       yearTerms,
     )) {
       push(line.periodLabel || line.desc, line.charge, "vehicle");
+    }
+  }
+  if (input.kind === "both") {
+    for (const line of expectedOtherConcessionChargeLines(input.student)) {
+      push(line.periodLabel || line.desc, line.charge, "tuition");
     }
   }
   return out;
