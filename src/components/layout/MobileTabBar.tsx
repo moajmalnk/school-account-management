@@ -37,8 +37,8 @@ export function MobileTabBar({ items, pathname, className }: MobileTabBarProps) 
   return (
     <div
       className={cn(
-        "pointer-events-none fixed inset-x-0 bottom-0 z-40 px-5 lg:hidden",
-        "pb-[calc(1rem+env(safe-area-inset-bottom))]",
+        "pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 lg:hidden",
+        "pb-[calc(0.75rem+env(safe-area-inset-bottom))]",
         className,
       )}
     >
@@ -117,4 +117,4 @@ export function MobileTabBar({ items, pathname, className }: MobileTabBarProps) 
   );
 }
 
-export const mobileMainPadding = "pb-[calc(52px+1rem+env(safe-area-inset-bottom))] lg:pb-12";
+export const mobileMainPadding = "pb-[calc(52px+0.75rem+env(safe-area-inset-bottom))] lg:pb-12";
