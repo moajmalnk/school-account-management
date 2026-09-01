@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { easeOutExpo } from "./motion";
 
 import { Hero } from "@/components/marketing/sections/Hero";
+import { MarketingShell } from "@/components/marketing/MarketingShell";
 
 const MiniPage = ({ imgSrc }: { imgSrc: string }) => (
   <div className="w-full h-full p-2 relative pointer-events-none">
@@ -140,22 +141,25 @@ export function IntroAnimation() {
               setTimeout(() => setIsFinished(true), 50);
             }}
           >
-            {/* Center Piece Image Container */}
+            {/* Center Piece Glass Content Container */}
             <motion.div 
-               className="w-full h-full relative overflow-hidden bg-[#08180A]"
-               initial={{ borderRadius: "1rem" }}
-               animate={{ borderRadius: "0rem" }}
+               className="w-full h-full relative overflow-hidden bg-white/10 backdrop-blur-xl border border-white/30"
+               initial={{ borderRadius: "1rem", backgroundColor: "rgba(255,255,255,0.1)", borderColor: "rgba(255,255,255,0.3)" }}
+               animate={{ borderRadius: "0rem", backgroundColor: "rgba(8,24,10,1)", borderColor: "rgba(8,24,10,0)" }}
                transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
             >
-               <motion.img 
-                 src="/grid/5.png"
-                 alt=""
-                 className="w-full h-full object-cover"
-                 initial={{ opacity: 0.9 }}
-                 animate={{ opacity: 1 }}
+               <motion.div 
+                 className="absolute top-0 left-0 w-screen h-screen origin-top-left pointer-events-none"
+                 initial={{ scale: 0.33333, opacity: 0.8 }}
+                 animate={{ scale: 1, opacity: 1 }}
                  transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
-               />
-               
+               >
+                 <MarketingShell>
+                   <Hero noDelay={true} />
+                   {/* Push the bottom of the card off-screen to perfectly match the real tall page */}
+                   <div className="h-[200vh]" />
+                 </MarketingShell>
+               </motion.div>
                {/* 3D Video "Light Sweep" effect fading out */}
                <motion.div 
                  className="absolute inset-0 bg-gradient-to-tr from-[#8FCA4A]/30 via-transparent to-transparent pointer-events-none mix-blend-overlay"
