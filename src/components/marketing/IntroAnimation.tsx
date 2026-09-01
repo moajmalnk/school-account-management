@@ -7,11 +7,9 @@ import { MarketingShell } from "@/components/marketing/MarketingShell";
 
 const MiniPage = ({ imgSrc }: { imgSrc: string }) => (
   <div className="w-full h-full p-2 relative pointer-events-none">
-    {/* Page Container with Glassmorphism */}
-    <div className="w-full h-full relative overflow-hidden rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.2)] border border-white/30 bg-white/10 backdrop-blur-xl">
-      {/* Glossy reflection on the glass */}
-      <div className="absolute inset-0 bg-gradient-to-tr from-white/60 via-transparent to-transparent pointer-events-none mix-blend-overlay z-10" />
-      <img src={imgSrc} className="w-full h-full object-cover opacity-90" alt="" />
+    {/* Page Container */}
+    <div className="w-full h-full relative overflow-hidden rounded-[1rem] shadow-lg">
+      <img src={imgSrc} className="w-full h-full object-cover" alt="" />
     </div>
   </div>
 );
@@ -141,16 +139,16 @@ export function IntroAnimation() {
               setTimeout(() => setIsFinished(true), 50);
             }}
           >
-            {/* Center Piece Glass Content Container */}
+            {/* Center Piece Content Container */}
             <motion.div 
-               className="w-full h-full relative overflow-hidden bg-white/10 backdrop-blur-xl border border-white/30"
-               initial={{ borderRadius: "1rem", backgroundColor: "rgba(255,255,255,0.1)", borderColor: "rgba(255,255,255,0.3)" }}
-               animate={{ borderRadius: "0rem", backgroundColor: "rgba(8,24,10,1)", borderColor: "rgba(8,24,10,0)" }}
+               className="w-full h-full relative overflow-hidden bg-white shadow-lg"
+               initial={{ borderRadius: "1rem" }}
+               animate={{ borderRadius: "0rem" }}
                transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
             >
                <motion.div 
                  className="absolute top-0 left-0 w-screen h-screen origin-top-left pointer-events-none"
-                 initial={{ scale: 0.33333, opacity: 0.8 }}
+                 initial={{ scale: 0.33333, opacity: 1 }}
                  animate={{ scale: 1, opacity: 1 }}
                  transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
                >
@@ -160,13 +158,6 @@ export function IntroAnimation() {
                    <div className="h-[200vh]" />
                  </MarketingShell>
                </motion.div>
-               {/* 3D Video "Light Sweep" effect fading out */}
-               <motion.div 
-                 className="absolute inset-0 bg-gradient-to-tr from-[#8FCA4A]/30 via-transparent to-transparent pointer-events-none mix-blend-overlay"
-                 initial={{ opacity: 1, x: "-100%" }}
-                 animate={{ opacity: 0, x: "100%" }}
-                 transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
-               />
             </motion.div>
           </motion.div>
         </motion.div>

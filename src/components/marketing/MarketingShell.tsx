@@ -19,11 +19,8 @@ const MKT_VARS = {
 export function MarketingShell({ children }: { children: ReactNode }) {
   return (
     <div
-      className="marketing-root min-h-dvh scroll-smooth bg-[#08180A] p-4 sm:p-8 md:p-12 flex flex-col antialiased"
-      style={{
-        ...MKT_VARS,
-        backgroundImage: "radial-gradient(circle at 50% 0%, #15321A 0%, #08180A 80%)"
-      }}
+      className="marketing-root min-h-dvh scroll-smooth bg-white flex flex-col antialiased"
+      style={MKT_VARS}
     >
       <a
         href="#main"
@@ -32,8 +29,8 @@ export function MarketingShell({ children }: { children: ReactNode }) {
         Skip to content
       </a>
 
-      {/* ── Inner White Card ── */}
-      <div className="flex-1 bg-white rounded-[32px] sm:rounded-[40px] shadow-[0_20px_60px_rgba(0,0,0,0.3)] overflow-hidden flex flex-col relative text-[var(--mkt-ink)]">
+      {/* ── Main Content Container ── */}
+      <div className="flex-1 bg-white overflow-hidden flex flex-col relative text-[var(--mkt-ink)]">
         
         <header
           className="sticky top-0 z-50"
