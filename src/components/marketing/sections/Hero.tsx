@@ -1,92 +1,244 @@
-import { motion, useReducedMotion } from "motion/react";
+import { useRef, useEffect } from "react";
+import { motion, useMotionValue, useSpring, useTransform, useReducedMotion } from "motion/react";
 import { easeOutExpo } from "@/components/marketing/motion";
 import { MARKETING } from "@/lib/marketing-content";
 
-const { hero } = MARKETING;
-
+/* ── 3D Interactive Hero ── */
 export function Hero({ noDelay = false }: { noDelay?: boolean }) {
   const reduce = useReducedMotion();
+  
+  // Mouse tracking for 3D parallax
+  const ref = useRef<HTMLDivElement>(null);
+  const mouseX = useMotionValue(0.5);
+  const mouseY = useMotionValue(0.5);
+  
+  // Smooth springs for mouse movement to make it feel premium
+  const springX = useSpring(mouseX, { stiffness: 100, damping: 30 });
+  const springY = useSpring(mouseY, { stiffness: 100, damping: 30 });
+  
+  // Map mouse position to 3D rotations
+  const rotateX = useTransform(springY, [0, 1], [8, -8]);
+  const rotateY = useTransform(springX, [0, 1], [-8, 8]);
+  
+  // Map mouse position for background panning
+  const bgX = useTransform(springX, [0, 1], ["-52%", "-48%"]);
+  const bgY = useTransform(springY, [0, 1], ["-52%", "-48%"]);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!ref.current || reduce) return;
+      const rect = ref.current.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width;
+      const y = (e.clientY - rect.top) / rect.height;
+      mouseX.set(x);
+      mouseY.set(y);
+    };
+    
+    // Reset on mouse leave
+    const handleMouseLeave = () => {
+      mouseX.set(0.5);
+      mouseY.set(0.5);
+    };
+
+    const element = ref.current;
+    if (element) {
+      element.addEventListener("mousemove", handleMouseMove);
+      element.addEventListener("mouseleave", handleMouseLeave);
+      return () => {
+        element.removeEventListener("mousemove", handleMouseMove);
+        element.removeEventListener("mouseleave", handleMouseLeave);
+      };
+    }
+  }, [mouseX, mouseY, reduce]);
 
   return (
     <section
-      className="relative overflow-hidden bg-white"
-      aria-labelledby="hero-heading"
+      ref={ref}
+      className="relative overflow-hidden min-h-[90vh] flex items-center justify-center pt-10 pb-20"
+      style={{
+        perspective: "1200px",
+      }}
     >
-      <div className="relative mx-auto flex max-w-[1080px] flex-col items-center px-4 pb-14 pt-16 sm:px-6 sm:pb-20 sm:pt-20 lg:pb-24 lg:pt-24">
+      {/* ── Spotlight following mouse ── */}
+      <motion.div 
+        className="absolute inset-0 pointer-events-none z-0 mix-blend-multiply opacity-40"
+        style={{
+          background: useTransform(
+            [springX, springY],
+            ([x, y]) => `radial-gradient(circle at ${x * 100}% ${y * 100}%, rgba(143,202,74,0.15) 0%, transparent 40%)`
+          )
+        }}
+      />
+
+      {/* ── Parallax Concentric Background ── */}
+      <motion.div
+        className="absolute top-1/2 left-1/2 w-[1600px] h-[1600px] pointer-events-none z-0"
+        style={{
+          x: bgX,
+          y: bgY,
+          rotateX: useTransform(springY, [0, 1], [-15, 15]),
+          rotateY: useTransform(springX, [0, 1], [15, -15]),
+          transformStyle: "preserve-3d",
+        }}
+      >
+        {/* Glow behind rings */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(143,202,74,0.05)_0%,transparent_60%)] blur-2xl" />
+        
+        {/* Crisp SVG Rings */}
+        <svg viewBox="0 0 1600 1600" fill="none" className="w-full h-full opacity-40">
+          {[300, 500, 700, 900, 1100, 1300].map((r, i) => (
+            <motion.circle
+              key={r}
+              cx="800"
+              cy="800"
+              r={r}
+              stroke="url(#ring-grad)"
+              strokeWidth={i % 2 === 0 ? "1.5" : "1"}
+              strokeDasharray={i % 3 === 0 ? "6 8" : "none"}
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 - (i * 0.15) }}
+              transition={{ duration: 1.5, delay: i * 0.1, ease: easeOutExpo }}
+            />
+          ))}
+          <defs>
+            <radialGradient id="ring-grad" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="rgba(107,168,50,0.4)" />
+              <stop offset="100%" stopColor="rgba(143,202,74,0.05)" />
+            </radialGradient>
+          </defs>
+        </svg>
+
+        {/* Orbiting particles */}
+        {[...Array(12)].map((_, i) => (
+          <motion.div
+            key={i}
+            className="absolute rounded-full shadow-[0_0_10px_rgba(143,202,74,0.5)] bg-[var(--mkt-green)]"
+            style={{
+              width: i % 2 === 0 ? 6 : 4,
+              height: i % 2 === 0 ? 6 : 4,
+              left: "50%",
+              top: "50%",
+            }}
+            animate={{
+              rotate: 360,
+              x: (300 + (i * 80)) * Math.cos(i),
+              y: (300 + (i * 80)) * Math.sin(i),
+            }}
+            transition={{
+              rotate: { duration: 20 + i * 5, repeat: Infinity, ease: "linear" },
+            }}
+          />
+        ))}
+      </motion.div>
+
+      {/* ── 3D Tilted Content ── */}
+      <motion.div
+        className="relative z-10 flex flex-col items-center text-center w-full max-w-5xl px-4 py-20"
+        style={{
+          rotateX,
+          rotateY,
+          transformStyle: "preserve-3d",
+        }}
+      >
         <motion.div
-          initial={reduce ? false : { opacity: 0, y: 22 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, ease: easeOutExpo, delay: noDelay ? 0 : 1.0 }}
-          className="relative z-10 flex flex-col items-center text-center w-full"
+          className="mb-8 inline-flex items-center gap-3 px-5 py-2.5 rounded-full text-[13px] font-semibold backdrop-blur-md border border-[var(--mkt-line)] shadow-sm bg-white/60 text-[var(--mkt-ink)]"
+          initial={reduce ? false : { opacity: 0, y: -20, z: -50 }}
+          animate={{ opacity: 1, y: 0, z: 20 }}
+          transition={{ duration: 1, ease: easeOutExpo, delay: noDelay ? 0 : 0.8 }}
+          style={{ transform: "translateZ(30px)" }} // Pop out in 3D
         >
-          <h1
-            id="hero-heading"
-            className="text-[clamp(2.15rem,6vw,3.5rem)] font-bold leading-[1.05] tracking-tight text-[var(--mkt-ink)] mb-10"
-          >
-            Welcome To
-            <br />
-            <span className="text-[var(--mkt-green)]">Feezo</span>
-          </h1>
-
-          <div className="w-full relative flex justify-center">
-            {/* Animated glowing background aura */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[800px] aspect-[2/1] z-0 pointer-events-none">
-              <motion.div 
-                className="absolute inset-0 bg-[var(--mkt-green)]/20 rounded-[100%] blur-[80px]"
-                animate={{ 
-                  scale: [1, 1.1, 1],
-                  opacity: [0.3, 0.6, 0.3],
-                }}
-                transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-              />
-              <motion.div 
-                className="absolute inset-0 bg-blue-500/10 rounded-[100%] blur-[80px]"
-                animate={{ 
-                  scale: [1.1, 1, 1.1],
-                  opacity: [0.2, 0.5, 0.2],
-                  rotate: [0, 90, 0]
-                }}
-                transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-              />
-            </div>
-
-            <motion.div
-              className="relative z-10 w-full max-w-4xl"
-              initial={reduce ? false : { opacity: 0, y: 40, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 0.8, ease: easeOutExpo, delay: noDelay ? 0 : 1.2 }}
-            >
-              <img
-                src="/home/home.png"
-                alt="Feezo Dashboard on Laptop and Mobile"
-                className="w-full h-auto object-contain"
-                priority="true"
-              />
-            </motion.div>
-          </div>
-
-          {/* Bottom text and buttons row */}
-          <div className="w-full max-w-4xl flex flex-col sm:flex-row justify-between items-start sm:items-end mt-8 sm:mt-10">
-            <p className="text-left text-[14px] leading-relaxed text-[var(--mkt-muted)] mb-6 sm:mb-0">
-              School accounts simplified — fees,<br />
-              receipts, and reports in one place.<br />
-              Start a 14-day trial.
-            </p>
-
-            <div className="flex gap-3">
-              <a href="#" className="inline-flex h-10 sm:h-11 items-center justify-center rounded-lg bg-[var(--mkt-green)] px-4 sm:px-5 text-[13px] sm:text-[14px] font-bold text-white shadow-lg transition-transform hover:bg-[var(--mkt-green-deep)] hover:scale-105 active:scale-95">
-                <svg className="mr-2 h-5 w-5 fill-current" viewBox="0 0 24 24"><path d="M17.523 15.3414C17.523 15.3414 17.502 15.321 17.472 15.2897L17.4666 15.284C17.4666 15.284 12.3364 12.1643 12.3364 12.1643L12.3331 12.1623L12.3274 12.1587C12.3274 12.1587 7.20232 9.04169 7.20232 9.04169L7.19839 9.03923C7.1147 8.98894 6.99961 8.97011 6.89297 9.00405C6.77259 9.04169 6.67139 9.1362 6.62145 9.25556C6.59567 9.31753 6.58661 9.38793 6.60275 9.45663L6.60481 9.46743L6.6111 9.48866L11.5363 21.0346L11.5393 21.0422L11.542 21.0506L16.4883 24.318C16.4883 24.318 16.5186 24.3377 16.5413 24.3483C16.6346 24.3916 16.7451 24.3976 16.8436 24.3644C16.9634 24.3245 17.0601 24.2285 17.1065 24.1082C17.1322 24.043 17.1384 23.9678 17.1182 23.8967L17.1148 23.8824L17.1092 23.8647L12.3323 12.1628L17.5255 15.3441L17.523 15.3414Z" /><path d="M11.666 11.7584L6.96316 22.7828L5.78913 20.0272L10.4907 9.00392L11.666 11.7584Z" /><path d="M2.93608 13.336L3.93179 15.6706L9.46313 2.70327L8.46742 0.368652L2.93608 13.336Z" /><path d="M4.09068 16.0425L5.43468 19.1923L10.9637 6.22383L9.61966 3.07406L4.09068 16.0425Z" /></svg>
-                Google Play
-              </a>
-              <a href="#" className="inline-flex h-10 sm:h-11 items-center justify-center rounded-lg bg-[var(--mkt-green)] px-4 sm:px-5 text-[13px] sm:text-[14px] font-bold text-white shadow-lg transition-transform hover:bg-[var(--mkt-green-deep)] hover:scale-105 active:scale-95">
-                <svg className="mr-2 h-5 w-5 fill-current" viewBox="0 0 24 24"><path d="M16.4 12c0-2.8 2.3-4.1 2.4-4.2-1.3-1.9-3.3-2.2-4.1-2.2-1.7-.2-3.4 1-4.3 1-.9 0-2.2-1-3.6-1-1.9 0-3.6 1.1-4.6 2.8-2.1 3.5-.5 8.8 1.4 11.6 1 1.4 2.1 2.9 3.6 2.9 1.4 0 2-.9 3.7-.9 1.7 0 2.2.9 3.7.9 1.5 0 2.5-1.4 3.4-2.8.9-1.2 1.2-2.3 1.3-2.4-.1-.1-2.9-1.1-2.9-4.7zM14 3.7c.8-.9 1.3-2.2 1.1-3.5-1.1.1-2.5.7-3.3 1.6-.7.8-1.3 2.1-1.1 3.4 1.3.1 2.5-.6 3.3-1.5z" /></svg>
-                App Store
-              </a>
-            </div>
-          </div>
-
+          <motion.span
+            className="w-2.5 h-2.5 rounded-full bg-[var(--mkt-green)] shadow-[0_0_8px_rgba(143,202,74,0.6)]"
+            animate={{ scale: [1, 1.5, 1], opacity: [1, 0.6, 1] }}
+            transition={{ duration: 2, repeat: Infinity }}
+          />
+          School fee management — simplified
         </motion.div>
-      </div>
+
+        <motion.h1
+          id="hero-heading"
+          className="text-[clamp(2.5rem,7vw,4.5rem)] font-extrabold leading-[1.05] tracking-tight text-[var(--mkt-ink)] mb-8"
+          initial={reduce ? false : { opacity: 0, y: 30, z: -100 }}
+          animate={{ opacity: 1, y: 0, z: 50 }}
+          transition={{ duration: 1, ease: easeOutExpo, delay: noDelay ? 0 : 1.0 }}
+          style={{ transform: "translateZ(60px)" }} // Huge pop out
+        >
+          Welcome To
+          <br />
+          <motion.span
+            className="inline-block mt-2 text-transparent bg-clip-text bg-gradient-to-r from-[var(--mkt-green-deep)] via-[var(--mkt-green)] to-[var(--mkt-green-deep)]"
+            style={{
+              backgroundSize: "200% auto",
+            }}
+            animate={{ backgroundPosition: ["0% center", "200% center"] }}
+            transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+          >
+            Feezo
+          </motion.span>
+        </motion.h1>
+
+        {/* ── 3D Mockup Frame ── */}
+        <motion.div 
+          className="relative w-full max-w-[800px] mt-8"
+          initial={reduce ? false : { opacity: 0, y: 60, scale: 0.9, rotateX: 20 }}
+          animate={{ opacity: 1, y: 0, scale: 1, rotateX: 0 }}
+          transition={{ duration: 1.2, ease: easeOutExpo, delay: noDelay ? 0 : 1.2 }}
+          style={{ transform: "translateZ(40px)" }}
+        >
+          {/* Glowing Aura behind mockup */}
+          <div className="absolute -inset-4 bg-gradient-to-r from-[var(--mkt-green)]/20 to-[var(--mkt-green-deep)]/20 blur-3xl -z-10 rounded-full opacity-60" />
+
+          {/* Glass floating card around image */}
+          <div className="relative rounded-2xl sm:rounded-3xl p-1.5 sm:p-2 bg-white/40 backdrop-blur-xl border border-white/60 shadow-[0_24px_80px_rgba(0,0,0,0.1),inset_0_1px_0_rgba(255,255,255,0.8)] overflow-hidden group">
+            {/* Glossy reflection on the card */}
+            <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-[rgba(255,255,255,0.4)] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-1000 -translate-x-full group-hover:translate-x-full" />
+            
+            <img
+              src="/home/home.png"
+              alt="Feezo Dashboard"
+              className="w-full h-auto object-contain rounded-xl sm:rounded-2xl shadow-xl relative z-10"
+            />
+          </div>
+
+          {/* Floating badge 1 */}
+          <motion.div
+            className="absolute -top-6 -right-6 hidden sm:flex items-center gap-3 px-4 py-3 rounded-2xl bg-white/80 backdrop-blur-md border border-[var(--mkt-line)] shadow-[0_8px_32px_rgba(0,0,0,0.1)] z-20"
+            initial={{ opacity: 0, scale: 0, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ duration: 0.8, ease: easeOutExpo, delay: noDelay ? 0.4 : 1.9 }}
+            style={{ transform: "translateZ(80px)" }} // Extreme 3D pop
+          >
+            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-[var(--mkt-green)] to-[var(--mkt-green-deep)] flex items-center justify-center shadow-md">
+              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+            </div>
+            <div className="flex flex-col text-left">
+              <span className="text-[11px] font-medium text-[var(--mkt-muted)]">Trusted by</span>
+              <span className="text-[14px] font-bold text-[var(--mkt-ink)] leading-tight">80+ Schools</span>
+            </div>
+          </motion.div>
+
+          {/* Floating badge 2 */}
+          <motion.div
+            className="absolute -bottom-6 -left-6 hidden sm:flex items-center gap-3 px-4 py-3 rounded-2xl bg-white/80 backdrop-blur-md border border-[var(--mkt-line)] shadow-[0_8px_32px_rgba(0,0,0,0.1)] z-20"
+            initial={{ opacity: 0, scale: 0, y: -20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ duration: 0.8, ease: easeOutExpo, delay: noDelay ? 0.5 : 2.1 }}
+            style={{ transform: "translateZ(70px)" }}
+          >
+            <div className="w-10 h-10 rounded-full bg-[rgba(143,202,74,0.1)] border border-[var(--mkt-green)] flex items-center justify-center shadow-sm">
+              <svg className="w-5 h-5 text-[var(--mkt-green-deep)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <div className="flex flex-col text-left">
+              <span className="text-[14px] font-bold text-[var(--mkt-ink)] leading-tight">14-day free trial</span>
+              <span className="text-[11px] font-medium text-[var(--mkt-muted)]">No credit card</span>
+            </div>
+          </motion.div>
+        </motion.div>
+      </motion.div>
     </section>
   );
 }
