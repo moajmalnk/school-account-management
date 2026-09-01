@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import type { CSSProperties, ReactNode } from "react";
 
-import { FeezoBrand, FeezoMark } from "@/components/brand/FeezoBrand";
+import { FeezoMark } from "@/components/brand/FeezoBrand";
 import { BRAND } from "@/lib/brand";
 import { MARKETING } from "@/lib/marketing-content";
 
@@ -42,33 +42,32 @@ export function MarketingShell({ children }: { children: ReactNode }) {
             paddingBottom: "8px",
           }}
         >
-          <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-6 sm:h-16 sm:gap-4 sm:px-10">
+          <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-3 px-6 sm:h-20 sm:gap-4 sm:px-10">
             <Link
               to="/"
               className="shrink-0 rounded-lg outline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--mkt-green)] transition-transform hover:scale-105 active:scale-95 flex items-center gap-2"
               aria-label={`${BRAND.name} home`}
             >
-              <FeezoBrand markClassName="h-8 w-8 sm:h-9 sm:w-9" />
-              <span className="font-bold text-[22px] tracking-tight text-[var(--mkt-ink)]">Feezo</span>
+              <FeezoMark className="h-9 w-9 sm:h-10 sm:w-10" />
+              <div className="flex flex-col -gap-1">
+                <span className="font-bold text-[26px] leading-none tracking-tight text-[var(--mkt-ink)]">Feezo</span>
+                <span className="text-[10px] font-semibold text-[var(--mkt-ink)] self-end tracking-wider">Edu Books</span>
+              </div>
             </Link>
 
-            <nav className="hidden items-center gap-2 lg:flex" aria-label="Page sections">
-              {MARKETING.nav.map((item) => (
-                <a
-                  key={item.id}
-                  href={`#${item.id}`}
-                  className="relative rounded-full px-5 py-2 text-[14px] font-semibold text-[var(--mkt-ink)] transition-all duration-200 hover:text-[var(--mkt-green)] hover:bg-[var(--mkt-green)]/5 group border border-[var(--mkt-line)]"
-                >
-                  <span className="relative z-10">{item.id}</span>
-                </a>
-              ))}
+            <nav className="hidden items-center gap-8 lg:flex" aria-label="Page sections">
+              <a href="#why" className="text-[15px] font-medium text-[var(--mkt-ink)] transition-colors hover:text-[var(--mkt-green)]">Why Feezo</a>
+              <a href="#product" className="text-[15px] font-medium text-[var(--mkt-green)] transition-colors hover:text-[var(--mkt-green-deep)]">Product</a>
+              <a href="#features" className="text-[15px] font-medium text-[var(--mkt-ink)] transition-colors hover:text-[var(--mkt-green)]">Features</a>
+              <a href="#setup" className="text-[15px] font-medium text-[var(--mkt-ink)] transition-colors hover:text-[var(--mkt-green)]">Setup</a>
+              <a href="#pricing" className="text-[15px] font-medium text-[var(--mkt-ink)] transition-colors hover:text-[var(--mkt-green)]">Pricing</a>
             </nav>
 
             <Link
               to="/login"
-              className="inline-flex h-11 shrink-0 items-center justify-center rounded-full border border-[var(--mkt-ink)] bg-transparent px-6 text-[14px] font-semibold text-[var(--mkt-ink)] transition-all duration-200 hover:border-[var(--mkt-green)] hover:text-[var(--mkt-green)] hover:shadow-[0_4px_16px_rgba(143,202,74,0.12)] hover:scale-105 active:scale-95"
+              className="inline-flex h-10 shrink-0 items-center justify-center rounded-lg bg-[var(--mkt-green)] px-7 text-[15px] font-medium text-white transition-all duration-200 hover:bg-[var(--mkt-green-deep)] hover:shadow-lg hover:shadow-[var(--mkt-green)]/20 hover:-translate-y-0.5 active:translate-y-0"
             >
-              Reserve Id
+              Sign in
             </Link>
           </div>
           <nav
