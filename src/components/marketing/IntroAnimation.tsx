@@ -3,27 +3,15 @@ import { motion, AnimatePresence } from "motion/react";
 import { easeOutExpo } from "./motion";
 
 import { Hero } from "@/components/marketing/sections/Hero";
-import { HowItWorks } from "@/components/marketing/sections/HowItWorks";
-import { Features } from "@/components/marketing/sections/Features";
-import { DigitalTransformation } from "@/components/marketing/sections/DigitalTransformation";
-import { Testimonials } from "@/components/marketing/sections/Testimonials";
-import { Pricing } from "@/components/marketing/sections/Pricing";
 import { MarketingShell } from "@/components/marketing/MarketingShell";
 
-const MiniPage = ({ children }: { children: React.ReactNode }) => (
+const MiniPage = ({ imgSrc }: { imgSrc: string }) => (
   <div className="w-full h-full p-2 relative pointer-events-none">
     {/* Page Container with Glassmorphism */}
     <div className="w-full h-full relative overflow-hidden rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.2)] border border-white/30 bg-white/10 backdrop-blur-xl">
       {/* Glossy reflection on the glass */}
       <div className="absolute inset-0 bg-gradient-to-tr from-white/60 via-transparent to-transparent pointer-events-none mix-blend-overlay z-10" />
-      <div 
-        className="absolute top-0 left-0 w-screen h-screen origin-top-left" 
-        style={{ transform: "scale(0.33333)" }}
-      >
-        <div className="w-full h-full pointer-events-none opacity-80">
-          {children}
-        </div>
-      </div>
+      <img src={imgSrc} className="w-full h-full object-cover opacity-90" alt="" />
     </div>
   </div>
 );
@@ -71,7 +59,7 @@ export function IntroAnimation() {
             animate={{ x: "100vw", y: "-20vh", rotateY: 45, rotateX: 45 }}
             transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
           >
-            <MiniPage><Hero noDelay={true} /></MiniPage>
+            <MiniPage imgSrc="/grid/1.png" />
           </motion.div>
           <motion.div
             className="absolute top-0 left-[33.33%] w-[33.33%] h-[33.33%]"
@@ -79,7 +67,7 @@ export function IntroAnimation() {
             animate={{ x: "50vw", y: "-50vh", rotateY: -45, rotateX: 45 }}
             transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
           >
-            <MiniPage><HowItWorks /></MiniPage>
+            <MiniPage imgSrc="/grid/2.png" />
           </motion.div>
           <motion.div
             className="absolute top-0 left-[66.66%] w-[33.33%] h-[33.33%]"
@@ -87,7 +75,7 @@ export function IntroAnimation() {
             animate={{ x: "100vw", y: "-20vh", rotateY: -60, rotateX: 45 }}
             transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
           >
-            <MiniPage><Features /></MiniPage>
+            <MiniPage imgSrc="/grid/3.png" />
           </motion.div>
 
           {/* Bottom Row (Moves Left & Tumbles in 3D) */}
@@ -97,7 +85,7 @@ export function IntroAnimation() {
             animate={{ x: "-100vw", y: "20vh", rotateY: 45, rotateX: -45 }}
             transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
           >
-            <MiniPage><Testimonials /></MiniPage>
+            <MiniPage imgSrc="/grid/7.png" />
           </motion.div>
           <motion.div
             className="absolute bottom-0 left-[33.33%] w-[33.33%] h-[33.33%]"
@@ -105,7 +93,7 @@ export function IntroAnimation() {
             animate={{ x: "-50vw", y: "50vh", rotateY: 45, rotateX: -45 }}
             transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
           >
-            <MiniPage><Pricing /></MiniPage>
+            <MiniPage imgSrc="/grid/8.png" />
           </motion.div>
           <motion.div
             className="absolute bottom-0 left-[66.66%] w-[33.33%] h-[33.33%]"
@@ -113,7 +101,7 @@ export function IntroAnimation() {
             animate={{ x: "-100vw", y: "20vh", rotateY: -45, rotateX: -45 }}
             transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
           >
-            <MiniPage><Hero noDelay={true} /></MiniPage>
+            <MiniPage imgSrc="/grid/9.png" />
           </motion.div>
 
           {/* Middle Left (Moves Left & Tumbles) */}
@@ -123,7 +111,7 @@ export function IntroAnimation() {
             animate={{ x: "-100vw", rotateY: 60, rotateX: 0 }}
             transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
           >
-            <MiniPage><DigitalTransformation /></MiniPage>
+            <MiniPage imgSrc="/grid/4.png" />
           </motion.div>
 
           {/* Middle Right (Moves Right & Tumbles) */}
@@ -133,7 +121,7 @@ export function IntroAnimation() {
             animate={{ x: "100vw", rotateY: -60, rotateX: 0 }}
             transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
           >
-            <MiniPage><HowItWorks /></MiniPage>
+            <MiniPage imgSrc="/grid/6.png" />
           </motion.div>
 
           {/* Center piece (Expands & Zooms from 3D) */}
