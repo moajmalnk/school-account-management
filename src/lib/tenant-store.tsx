@@ -15,7 +15,7 @@ import {
   fetchRemoteTenantBundle,
   branchCatalogWriteEpochValue,
 } from "@/lib/api/tenant-sync";
-import { getApiToken, isImpersonating } from "@/lib/api/client";
+import { getApiToken } from "@/lib/api/client";
 import {
   apiDeleteFeeTerm,
   apiSyncAcademicYears,
@@ -2420,6 +2420,17 @@ function normalizeDashboardTodos(raw: unknown): string[] {
   return items.slice(0, 20);
 }
 
+/** Cheap fingerprint to skip no-op cache→API repaints when counts/year/branch are unchanged. */
+function snapshotDigest(snap: {
+  students: unknown[];
+  staff: unknown[];
+  payments: unknown[];
+  academicYear: string;
+  activeBranchId: string;
+}): string {
+  return `${snap.students.length}|${snap.staff.length}|${snap.payments.length}|${snap.academicYear}|${snap.activeBranchId}`;
+}
+
 const NOTIFICATION_CATEGORIES = ["fees", "admissions", "staff", "system", "transport"] as const;
 
 /** Prefix for auto-generated vehicle document expiry alerts */
@@ -4821,9 +4832,7 @@ export function TenantStoreProvider({
       ? cachedSnapshot?.activeBranchId || readStoredBranchPublicId(tenantId) || ""
       : (SEED_BRANCHES[0]?.id ?? ""),
   );
-  const [hydrated, setHydrated] = useState(
-    () => !liveApi || cachedSnapshot !== null || isImpersonating(),
-  );
+  const [hydrated, setHydrated] = useState(() => !liveApi || cachedSnapshot !== null);
   const [branchSyncing, setBranchSyncing] = useState(false);
   const branchSwitchSeq = useRef(0);
   const branchesRef = useRef(branches);
@@ -4971,6 +4980,7 @@ export function TenantStoreProvider({
     let cancelled = false;
     const branchEpochAtStart = branchCatalogWriteEpochValue();
     const localSnap = readSnapshot(storeKey);
+    const hadLocalCache = localSnap !== null;
     if (localSnap) {
       applySnapshot({
         ...localSnap,
@@ -5016,7 +5026,7 @@ export function TenantStoreProvider({
               });
             }
             const sessionTenantName = tenantNameRef.current?.trim() || "";
-            applySnapshot({
+            const nextSnapshot = {
               students: remote.students,
               staff: remote.staff,
               payments: remote.payments,
@@ -5047,7 +5057,14 @@ export function TenantStoreProvider({
               tenantUsers: remote.tenantUsers,
               branches: mergedBranches,
               activeBranchId: remote.activeBranchId,
-            });
+            };
+            const skipNoOpRefresh =
+              hadLocalCache &&
+              localSnap &&
+              snapshotDigest(localSnap) === snapshotDigest(nextSnapshot);
+            if (!skipNoOpRefresh) {
+              applySnapshot(nextSnapshot);
+            }
             if (remote.activeBranchId) {
               setBranchContext(tenantId ?? null, remote.activeBranchId);
             }
@@ -5639,12 +5656,6 @@ export function TenantStoreProvider({
       setBranchContext(tenantId ?? null, nextId);
       setActiveBranchIdState(nextId);
       setBranchSyncing(true);
-      setStudents([]);
-      setStaff([]);
-      setPayments([]);
-      setStudentYearLedgers([]);
-      setDashboardTodos([...DEFAULT_DASHBOARD_TODOS]);
-      setDashboardNote("");
 
       if (!getApiToken()) {
         setBranchSyncing(false);
@@ -5700,59 +5711,10 @@ export function TenantStoreProvider({
             setBranchSyncing(false);
           }
 
-          void (async () => {
-            try {
-              const remote = await fetchRemoteTenantBundle(undefined, {
-                force: true,
-                tenantId,
-              });
-              if (thisSwitch !== branchSwitchSeq.current || !remote) return;
-
-              applySnapshot({
-                students: remote.students,
-                staff: remote.staff,
-                payments: remote.payments,
-                departments: remote.departments,
-                leaveTypes: remote.leaveTypes,
-                roles: remote.roles,
-                classes: remote.classes,
-                transportRoutes: remote.transportRoutes,
-                transportVehicles: remote.transportVehicles,
-                paymentCategories: remote.paymentCategories,
-                feeTerms: remote.feeTerms,
-                studentFeeBreaks: remote.studentFeeBreaks ?? [],
-                studentYearLedgers: reconcileLedgersWithStudents(
-                  remote.students,
-                  remote.studentYearLedgers,
-                  remote.academicYear,
-                ),
-                academicYears: remote.academicYears,
-                closedAcademicYears: remote.closedAcademicYears ?? [],
-                academicYear: remote.academicYear,
-                themeSettings: remote.themeSettings,
-                schoolDetails: {
-                  ...remote.schoolDetails,
-                  name:
-                    remote.schoolDetails.name?.trim() ||
-                    tenantNameRef.current?.trim() ||
-                    remote.schoolDetails.name,
-                },
-                dashboardTodos: remote.dashboardTodos,
-                dashboardNote: remote.dashboardNote,
-                notifications: remote.notifications,
-                tenantUsers: remote.tenantUsers,
-                branches: remote.branches.length ? remote.branches : branchesRef.current,
-                activeBranchId: nextId,
-              });
-            } catch {
-              /* keep phase 1 operational data */
-            }
-          })();
-
           return stats;
         }
       } catch {
-        /* keep cleared campus data */
+        /* keep current campus data visible */
       } finally {
         if (thisSwitch === branchSwitchSeq.current) {
           setBranchSyncing(false);
@@ -5761,7 +5723,7 @@ export function TenantStoreProvider({
 
       return { students: 0, receipts: 0 };
     },
-    [academicYear, applyBranchOperationalData, applySnapshot, branches, tenantId],
+    [academicYear, applyBranchOperationalData, branches, tenantId],
   );
 
   const value = useMemo<TenantStoreValue>(

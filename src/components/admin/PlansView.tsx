@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Check, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
-import { Input } from "@/components/ui/input";
 import { OrganicCard } from "@/components/ui/organic-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -14,6 +13,7 @@ import {
 import { ApiError, getApiToken } from "@/lib/api/client";
 import { PLAN_FEATURE_ITEMS } from "@/lib/permissions";
 import type { Tone, CornerSide } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 type Interval = "Monthly" | "Annually";
 
@@ -186,11 +186,11 @@ export function PlansView() {
 
   if (loading) {
     return (
-      <div className="space-y-4 sm:space-y-6" aria-busy="true" aria-label="Loading plans">
-        <Skeleton className="h-8 w-72 bg-black/[0.07]" />
-        <div className="grid grid-cols-1 gap-3 sm:gap-5 md:grid-cols-2 xl:grid-cols-3">
+      <div className="min-w-0 space-y-4 sm:space-y-6" aria-busy="true" aria-label="Loading plans">
+        <Skeleton className="h-7 w-full max-w-[16rem] bg-black/[0.07] sm:h-8" />
+        <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-5 md:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-[28rem] rounded-3xl bg-black/[0.06]" />
+            <Skeleton key={i} className="h-[22rem] rounded-3xl bg-black/[0.06] sm:h-[28rem]" />
           ))}
         </div>
       </div>
@@ -198,17 +198,17 @@ export function PlansView() {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="min-w-0 space-y-4 sm:space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-heading">Subscription Tiers &amp; Feature Matrix</h1>
-          <p className="mt-2 text-[14px] text-black/55">
+        <div className="min-w-0">
+          <h1 className="text-title sm:text-heading">Subscription Tiers &amp; Feature Matrix</h1>
+          <p className="mt-1.5 text-[12.5px] leading-relaxed text-black/55 sm:mt-2 sm:text-[14px]">
             Globally configure commercial plans &amp; module access · {totalEnabled} flags enabled
             across tiers
           </p>
         </div>
 
-        <div className="inline-flex w-full items-center gap-1 rounded-full border border-[#E5E5E5] bg-white p-1 sm:w-auto">
+        <div className="inline-flex w-full shrink-0 items-center gap-1 rounded-full border border-[#E5E5E5] bg-white p-1 sm:w-auto">
           {(["Monthly", "Annually"] as Interval[]).map((i) => (
             <button
               key={i}
@@ -229,7 +229,7 @@ export function PlansView() {
           No subscription plans found for this platform.
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid min-w-0 grid-cols-1 gap-3 pb-1 sm:gap-5 md:grid-cols-2 xl:grid-cols-3">
           {tiers.map((t, i) => {
             const price = interval === "Monthly" ? t.monthly : t.annually;
             const fullContract = t.monthly * 12;
@@ -253,36 +253,32 @@ export function PlansView() {
                 key={t.name}
                 tone={tone}
                 cornerSide={cornerSide}
-                arrow
                 padded
-                className="overflow-hidden"
+                className="overflow-hidden !p-3.5 sm:!p-6"
               >
-                <div className="mb-4 flex h-7 items-center">
-                  {isPremium && (
-                    <div className="inline-flex items-center gap-1 rounded-full bg-black px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white">
-                      <Sparkles className="h-3 w-3" /> Most adopted
-                    </div>
-                  )}
-                </div>
+                {isPremium ? (
+                  <div className="mb-3 inline-flex items-center gap-1 rounded-full bg-black px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white">
+                    <Sparkles className="h-3 w-3" /> Most adopted
+                  </div>
+                ) : null}
 
-                <div className="flex items-center gap-2">
+                <div className="flex min-w-0 items-center gap-2">
                   <span
-                    className="h-2.5 w-2.5 rounded-full"
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
                     style={{ backgroundColor: onDark ? "#CCFBF1" : "#000000" }}
                   />
-                  <Input
-                    value={t.name}
-                    readOnly
-                    className={`h-9 border-transparent bg-transparent px-1 text-[18px] font-semibold focus-visible:bg-white/10 ${ink}`}
-                  />
+                  <span className={`truncate text-[16px] font-semibold sm:text-[18px] ${ink}`}>
+                    {t.name}
+                  </span>
                 </div>
 
                 <div
-                  className={`mt-4 flex w-full items-baseline gap-2 border-b pb-2 font-mono ${rule}`}
+                  className={`mt-3 flex w-full min-w-0 items-baseline gap-1.5 border-b pb-2 font-mono sm:mt-4 sm:gap-2 ${rule}`}
                 >
-                  <span className={`text-[20px] font-bold ${ink}`}>₹</span>
+                  <span className={`shrink-0 text-[16px] font-bold sm:text-[20px] ${ink}`}>₹</span>
                   <input
                     type="number"
+                    inputMode="numeric"
                     value={price}
                     onChange={(e) =>
                       updateTier(
@@ -292,13 +288,13 @@ export function PlansView() {
                           : { annually: Number(e.target.value) || 0 },
                       )
                     }
-                    className={`w-full min-w-0 bg-transparent text-[28px] font-bold tracking-tight focus:outline-none ${ink}`}
+                    className={`min-w-0 flex-1 bg-transparent text-[24px] font-bold tracking-tight tabular-nums focus:outline-none sm:text-[28px] ${ink}`}
                   />
-                  <span className={`shrink-0 font-sans text-[12px] ${subText}`}>
+                  <span className={`shrink-0 font-sans text-[11px] sm:text-[12px] ${subText}`}>
                     / {interval === "Monthly" ? "mo" : "yr"}
                   </span>
                 </div>
-                <div className={`mt-1 space-y-0.5 font-mono text-[11px] ${subText}`}>
+                <div className={`mt-1 space-y-0.5 font-mono text-[10.5px] sm:text-[11px] ${subText}`}>
                   {interval === "Monthly" ? (
                     <>
                       <div>₹ {formatInr(fullContract)} annual contract</div>
@@ -316,11 +312,11 @@ export function PlansView() {
                   )}
                 </div>
 
-                <div className={`my-5 h-px ${divider}`} />
+                <div className={`my-4 h-px sm:my-5 ${divider}`} />
 
-                <div className="space-y-2.5">
+                <div className="space-y-1.5 sm:space-y-2.5">
                   <div
-                    className={`text-[10.5px] font-semibold uppercase tracking-wider ${subText}`}
+                    className={`text-[10px] font-semibold uppercase tracking-wider sm:text-[10.5px] ${subText}`}
                   >
                     Features Included
                   </div>
@@ -329,15 +325,15 @@ export function PlansView() {
                     return (
                       <div
                         key={f.key}
-                        className={`flex items-center justify-between rounded-2xl px-3 py-2 ${rowBg}`}
+                        className={`flex items-center justify-between gap-2 rounded-xl px-2.5 py-1.5 sm:rounded-2xl sm:px-3 sm:py-2 ${rowBg}`}
                       >
-                        <div className="flex min-w-0 items-center gap-2">
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
                           <Check
                             className={`h-3.5 w-3.5 shrink-0 ${on ? "" : "opacity-40"}`}
                             style={{ color: onDark ? "#CCFBF1" : "#000000" }}
                           />
                           <span
-                            className={`truncate text-[12px] ${
+                            className={`truncate text-[11.5px] sm:text-[12px] ${
                               on ? `font-medium ${ink}` : inkMuted
                             }`}
                           >
@@ -347,11 +343,12 @@ export function PlansView() {
                         <Switch
                           checked={on}
                           onCheckedChange={() => toggleFlag(i, f.key)}
-                          className={
+                          className={cn(
+                            "shrink-0 scale-90 sm:scale-100",
                             onDark
                               ? "data-[state=checked]:bg-[#CCFBF1] data-[state=unchecked]:bg-white/30"
-                              : undefined
-                          }
+                              : undefined,
+                          )}
                         />
                       </div>
                     );
@@ -362,7 +359,7 @@ export function PlansView() {
                   type="button"
                   disabled={saving}
                   onClick={() => void savePlan(t)}
-                  className={`mt-5 w-full rounded-full py-2.5 text-[12.5px] font-semibold shadow-sm transition-colors disabled:opacity-60 ${
+                  className={`mt-4 w-full rounded-full py-2.5 text-[12px] font-semibold shadow-sm transition-colors disabled:opacity-60 sm:mt-5 sm:text-[12.5px] ${
                     isLime
                       ? "bg-black text-white hover:bg-black/85"
                       : isBlack
@@ -370,7 +367,14 @@ export function PlansView() {
                         : "bg-black text-white hover:bg-black/85"
                   }`}
                 >
-                  {saving ? "Saving…" : `Save ${t.name} Configuration`}
+                  {saving ? (
+                    "Saving…"
+                  ) : (
+                    <>
+                      <span className="sm:hidden">Save {t.name}</span>
+                      <span className="hidden sm:inline">Save {t.name} Configuration</span>
+                    </>
+                  )}
                 </button>
               </OrganicCard>
             );

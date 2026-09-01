@@ -75,7 +75,7 @@ function SuperAdminLayout() {
       >
         <TopNavSkeleton />
         <main
-          className={`mobile-app-rail min-w-0 px-3 pb-6 pt-4 sm:px-4 sm:pt-6 lg:mx-auto lg:max-w-[1480px] lg:px-6 lg:pb-24 lg:pt-8 ${mobileMainPadding}`}
+          className={`mobile-app-rail min-w-0 scroll-pb-[calc(60px+0.75rem+env(safe-area-inset-bottom))] px-3 pb-6 pt-4 sm:px-4 sm:pt-6 lg:mx-auto lg:max-w-[1480px] lg:scroll-pb-24 lg:px-6 lg:pb-24 lg:pt-8 ${mobileMainPadding}`}
         >
           {pathname.startsWith("/super-admin/tenants") ? (
             <TenantsViewSkeleton />
@@ -112,7 +112,7 @@ function SuperAdminLayout() {
     <div className="min-h-dvh bg-[#F4F6F9] text-black">
       <TopNav />
       <main
-        className={`mobile-app-rail min-w-0 px-3 pb-6 pt-4 sm:px-4 sm:pt-6 lg:mx-auto lg:max-w-[1480px] lg:px-6 lg:pb-24 lg:pt-8 ${mobileMainPadding}`}
+        className={`mobile-app-rail min-w-0 scroll-pb-[calc(60px+0.75rem+env(safe-area-inset-bottom))] px-3 pb-6 pt-4 sm:px-4 sm:pt-6 lg:mx-auto lg:max-w-[1480px] lg:scroll-pb-24 lg:px-6 lg:pb-24 lg:pt-8 ${mobileMainPadding}`}
       >
         <Outlet />
       </main>

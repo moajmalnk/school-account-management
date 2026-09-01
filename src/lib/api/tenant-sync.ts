@@ -84,6 +84,92 @@ export type RemoteTenantBundle = {
   studentYearLedgers: StudentYearLedger[];
 };
 
+type YearFieldRow = {
+  studentId: string;
+  academicYear: string;
+  cls: string;
+  due: number;
+  active: boolean;
+};
+
+type TenantBundleApiResponse = {
+  schoolDetails?: SchoolDetails;
+  themeSettings?: ThemeSettings;
+  academicYear?: string;
+  academicYears?: string[];
+  closedAcademicYears?: string[];
+  activeBranchId?: string;
+  branches?: unknown[];
+  students?: Student[];
+  staff?: Staff[];
+  payments?: Payment[];
+  departments?: Department[];
+  leaveTypes?: LeaveType[];
+  roles?: Role[];
+  classes?: ClassConfig[];
+  transportRoutes?: TransportRoute[];
+  transportVehicles?: TransportVehicle[];
+  paymentCategories?: PaymentCategory[];
+  feeTerms?: FeeTerm[];
+  studentFeeBreaks?: StudentFeeBreak[];
+  tenantUsers?: TenantUser[];
+  notifications?: TenantNotification[];
+  dashboardTodos?: string[];
+  dashboardNote?: string;
+  yearFieldRows?: YearFieldRow[];
+};
+
+function mapBundleToRemote(
+  data: TenantBundleApiResponse,
+  options?: { tenantId?: string },
+): RemoteTenantBundle {
+  const branches = Array.isArray(data.branches)
+    ? data.branches.map(normalizeCampusBranch).filter((b): b is CampusBranch => Boolean(b))
+    : [];
+  const activeBranchId = pickActiveBranchId(
+    branches,
+    data.activeBranchId ?? null,
+    options?.tenantId,
+  );
+  if (activeBranchId) setActiveBranchPublicId(activeBranchId);
+
+  const academicYear = data.academicYear ?? "AY 2025-26";
+  const yearFieldRows = Array.isArray(data.yearFieldRows) ? data.yearFieldRows : [];
+
+  return {
+    students: Array.isArray(data.students) ? data.students : [],
+    staff: Array.isArray(data.staff) ? data.staff : [],
+    payments: Array.isArray(data.payments) ? data.payments : [],
+    departments: Array.isArray(data.departments) ? data.departments : [],
+    leaveTypes: Array.isArray(data.leaveTypes) ? data.leaveTypes : [],
+    roles: Array.isArray(data.roles) ? data.roles : [],
+    classes: Array.isArray(data.classes) ? data.classes : [],
+    transportRoutes: Array.isArray(data.transportRoutes) ? data.transportRoutes : [],
+    transportVehicles: Array.isArray(data.transportVehicles) ? data.transportVehicles : [],
+    paymentCategories: Array.isArray(data.paymentCategories) ? data.paymentCategories : [],
+    feeTerms: Array.isArray(data.feeTerms) ? data.feeTerms : [],
+    studentFeeBreaks: Array.isArray(data.studentFeeBreaks) ? data.studentFeeBreaks : [],
+    tenantUsers: Array.isArray(data.tenantUsers) ? data.tenantUsers : [],
+    notifications: Array.isArray(data.notifications) ? data.notifications : [],
+    schoolDetails: data.schoolDetails ?? { ...EMPTY_SCHOOL_DETAILS },
+    themeSettings: data.themeSettings ?? { ...SEED_THEME_SETTINGS },
+    academicYear,
+    academicYears: data.academicYears?.length
+      ? data.academicYears
+      : ["AY 2024-25", "AY 2025-26", "AY 2026-27"],
+    closedAcademicYears: Array.isArray(data.closedAcademicYears)
+      ? data.closedAcademicYears.filter((y) => typeof y === "string" && y.trim())
+      : [],
+    dashboardTodos: Array.isArray(data.dashboardTodos)
+      ? data.dashboardTodos
+      : ["", "", "", "", ""],
+    dashboardNote: typeof data.dashboardNote === "string" ? data.dashboardNote : "",
+    branches,
+    activeBranchId,
+    studentYearLedgers: ledgersFromYearFieldRows(yearFieldRows),
+  };
+}
+
 const EMPTY_SCHOOL_DETAILS: SchoolDetails = {
   name: "",
   tagline: "",
@@ -153,27 +239,38 @@ function pickActiveBranchId(
 
 /**
  * Fast branch-scoped operational data for campus switches.
- * Four parallel calls — students, staff, payments, dashboard todos.
+ * Prefers single bundle request; falls back to parallel per-endpoint calls.
  */
 export async function fetchBranchOperationalBundle(): Promise<BranchOperationalBundle | null> {
   const token = getApiToken();
   if (!token) return null;
 
   try {
+    const bundled = await getSafe<TenantBundleApiResponse | null>(
+      "/api/tenant/bundle.php?scope=operational",
+      null,
+    );
+    if (bundled && Array.isArray(bundled.students)) {
+      const yearFieldRows = Array.isArray(bundled.yearFieldRows) ? bundled.yearFieldRows : [];
+      return {
+        students: bundled.students,
+        staff: Array.isArray(bundled.staff) ? bundled.staff : [],
+        payments: Array.isArray(bundled.payments) ? bundled.payments : [],
+        dashboardTodos: Array.isArray(bundled.dashboardTodos)
+          ? bundled.dashboardTodos
+          : ["", "", "", "", ""],
+        dashboardNote: typeof bundled.dashboardNote === "string" ? bundled.dashboardNote : "",
+        studentYearLedgers: ledgersFromYearFieldRows(yearFieldRows),
+        studentFeeBreaks: Array.isArray(bundled.studentFeeBreaks) ? bundled.studentFeeBreaks : [],
+      };
+    }
+
     const [students, staff, payments, feeBreaks, yearFields, todos] = await Promise.all([
       getSafe<Student[]>("/api/students/list.php?includeDeleted=1", []),
       getSafe<Staff[]>("/api/staff/list.php?includeDeleted=1", []),
       getSafe<Payment[]>("/api/finance/payments.php", []),
       getSafe<StudentFeeBreak[]>("/api/finance/fee-breaks.php", []),
-      getSafe<
-        Array<{
-          studentId: string;
-          academicYear: string;
-          cls: string;
-          due: number;
-          active: boolean;
-        }>
-      >("/api/students/year-fields.php", []),
+      getSafe<YearFieldRow[]>("/api/students/year-fields.php", []),
       getSafe<{ dashboardTodos: string[]; dashboardNote: string } | null>(
         "/api/dashboard/todos.php",
         null,
@@ -205,10 +302,10 @@ export async function fetchBranchOperationalBundle(): Promise<BranchOperationalB
  * (SQLSTATE[HY000] [2002] Operation not permitted).
  */
 
-/** Max wait for the sequential tenant hydrate — avoids skeleton lock when API is down. */
+/** Max wait for the tenant hydrate — avoids skeleton lock when API is down. */
 const BUNDLE_HYDRATE_TIMEOUT_MS = 28_000;
 
-async function loadRemoteTenantBundle(
+async function loadRemoteTenantBundleSequential(
   options?: { tenantId?: string },
 ): Promise<RemoteTenantBundle | null> {
   try {
@@ -254,15 +351,7 @@ async function loadRemoteTenantBundle(
 
       // Sequential on purpose — do not Promise.all these on shared hosting.
       const students = await getSafe<Student[]>("/api/students/list.php?includeDeleted=1", []);
-      const yearFieldRows = await getSafe<
-        Array<{
-          studentId: string;
-          academicYear: string;
-          cls: string;
-          due: number;
-          active: boolean;
-        }>
-      >("/api/students/year-fields.php", []);
+      const yearFieldRows = await getSafe<YearFieldRow[]>("/api/students/year-fields.php", []);
       const staff = await getSafe<Staff[]>("/api/staff/list.php?includeDeleted=1", []);
       const payments = await getSafe<Payment[]>("/api/finance/payments.php", []);
       const departments = await getSafe<Department[]>("/api/settings/departments.php", []);
@@ -329,6 +418,21 @@ async function loadRemoteTenantBundle(
       if (isAuthExpiredError(err)) return null;
       throw err;
     }
+}
+
+async function loadRemoteTenantBundle(
+  options?: { tenantId?: string },
+): Promise<RemoteTenantBundle | null> {
+  try {
+    const bundled = await getSafe<TenantBundleApiResponse | null>("/api/tenant/bundle.php", null);
+    if (bundled && Array.isArray(bundled.students) && bundled.schoolDetails) {
+      return mapBundleToRemote(bundled, options);
+    }
+  } catch (err) {
+    if (isAuthExpiredError(err)) return null;
+    console.warn("[api] tenant bundle endpoint unavailable — falling back to sequential hydrate", err);
+  }
+  return loadRemoteTenantBundleSequential(options);
 }
 
 export async function fetchRemoteTenantBundle(
