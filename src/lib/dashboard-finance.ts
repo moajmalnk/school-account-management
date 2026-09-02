@@ -130,12 +130,70 @@ export function salaryPayable(rows: FinanceDisbursement[] = []): number {
   return queuedSalaryPayables(rows).reduce((sum, row) => sum + row.amount, 0);
 }
 
+type PaymentLike = Pick<Payment, "mode" | "amount" | "narration">;
+
+/** Parse Bank/Cash amounts from narration when mode is Both. */
+export function parsePaymentModeSplit(
+  narration: string | undefined,
+): { bank: number; cash: number } | null {
+  const parts = (narration ?? "")
+    .split(/\s*[·|]\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  let bank = 0;
+  let cash = 0;
+  let foundBank = false;
+  let foundCash = false;
+
+  for (const part of parts) {
+    const cleaned = part.replace(/^Fee breakdown:\s*/i, "").trim();
+    const match = cleaned.match(/^(Bank|Cash)\s+(?:₹|Rs\.?)\s*([\d,]+(?:\.\d+)?)\s*$/i);
+    if (!match) continue;
+    const amount = Number(match[2].replace(/,/g, ""));
+    if (!Number.isFinite(amount) || amount < 0) continue;
+    if (/^Bank$/i.test(match[1])) {
+      bank = amount;
+      foundBank = true;
+    } else {
+      cash = amount;
+      foundCash = true;
+    }
+  }
+
+  if (!foundBank && !foundCash) return null;
+  return { bank, cash };
+}
+
+/** Cash portion of a receipt — Cash mode full amount; Both mode uses narration split. */
+export function paymentCashAmount(payment: PaymentLike): number {
+  const mode = (payment.mode || "").trim();
+  if (mode === "Cash") return payment.amount;
+  if (mode === "Both") {
+    const split = parsePaymentModeSplit(payment.narration);
+    return split?.cash ?? 0;
+  }
+  return 0;
+}
+
+/** Bank portion of a receipt — Bank mode full amount; Both mode uses narration split. */
+export function paymentBankAmount(payment: PaymentLike): number {
+  const mode = (payment.mode || "").trim();
+  if (mode === "Cash") return 0;
+  if (mode === "Bank") return payment.amount;
+  if (mode === "Both") {
+    const split = parsePaymentModeSplit(payment.narration);
+    if (split) return split.bank;
+    return payment.amount;
+  }
+  return payment.amount;
+}
+
 export function cashOnHand(payments: Payment[]): number {
-  return payments.filter((p) => p.mode === "Cash").reduce((sum, p) => sum + p.amount, 0);
+  return payments.reduce((sum, p) => sum + paymentCashAmount(p), 0);
 }
 
 export function bankBalance(payments: Payment[]): number {
-  return payments.filter((p) => p.mode !== "Cash").reduce((sum, p) => sum + p.amount, 0);
+  return payments.reduce((sum, p) => sum + paymentBankAmount(p), 0);
 }
 
 export function formatInr(amount: number): string {

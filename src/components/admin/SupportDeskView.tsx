@@ -435,7 +435,12 @@ export function SupportDeskView() {
   return (
     <>
       <div className="grid grid-cols-12 gap-3 sm:gap-4 lg:gap-5">
-        <div className="col-span-12 flex flex-wrap items-center gap-2">
+        <div
+          className={cn(
+            "col-span-12 flex flex-wrap items-center gap-2",
+            ticketId && "hidden lg:flex",
+          )}
+        >
           {SECTIONS.map((item) => (
             <button
               key={item.id}
@@ -478,8 +483,13 @@ export function SupportDeskView() {
         </div>
 
         {section === "messages" ? (
-          <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+          <OrganicCard
+            tone="white"
+            cornerSide="tr"
+            padded
+            className={cn("col-span-12", ticketId && "!p-0 lg:!p-6")}
+          >
+            <div className={cn("space-y-3", ticketId && "hidden lg:block")}>
               <div>
                 <div className="text-[13px] font-semibold text-black">School messages</div>
                 <p className="mt-0.5 text-[12px] text-black/50">
@@ -488,30 +498,44 @@ export function SupportDeskView() {
                     : `${visibleTickets.length} conversation${visibleTickets.length === 1 ? "" : "s"}`}
                 </p>
               </div>
-              <div className="inline-flex flex-wrap rounded-full border border-[#E5E5E5] bg-white p-1">
-                {STATUS_FILTERS.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => setStatus(item.id)}
-                    className={cn(
-                      "rounded-full px-3 py-1.5 text-[11px] font-semibold",
-                      status === item.id ? "bg-black text-white" : "text-black/55 hover:text-black",
-                    )}
-                  >
-                    {item.label}
-                    {statusCounts[item.id] ? (
-                      <span className="ml-1 font-mono text-[10px] opacity-70">
-                        {statusCounts[item.id]}
-                      </span>
-                    ) : null}
-                  </button>
-                ))}
+              <div className="mobile-scrollbar-none -mx-0.5 overflow-x-auto pb-0.5">
+                <div className="inline-flex min-w-max rounded-full border border-[#E5E5E5] bg-white p-1">
+                  {STATUS_FILTERS.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setStatus(item.id)}
+                      className={cn(
+                        "rounded-full px-3 py-1.5 text-[11px] font-semibold whitespace-nowrap",
+                        status === item.id ? "bg-black text-white" : "text-black/55 hover:text-black",
+                      )}
+                    >
+                      {item.label}
+                      {statusCounts[item.id] ? (
+                        <span className="ml-1 font-mono text-[10px] opacity-70">
+                          {statusCounts[item.id]}
+                        </span>
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
-            <div className="mt-4 overflow-hidden rounded-2xl border border-[#EFEFEF]">
-              <div className="grid h-[min(calc(100dvh-16rem),720px)] min-h-[22rem] grid-cols-12">
+            <div
+              className={cn(
+                "overflow-hidden rounded-2xl border border-[#EFEFEF]",
+                ticketId ? "mt-0 border-0 lg:mt-4 lg:border" : "mt-4",
+              )}
+            >
+              <div
+                className={cn(
+                  "grid min-h-[22rem] grid-cols-12",
+                  ticketId
+                    ? "h-[min(calc(100dvh-9rem),720px)] lg:h-[min(calc(100dvh-16rem),720px)]"
+                    : "h-[min(calc(100dvh-16rem),720px)]",
+                )}
+              >
                 <ul
                   className={cn(
                     "mobile-scrollbar-none col-span-12 space-y-0 overflow-y-auto border-[#EFEFEF] bg-white lg:col-span-4 lg:border-r",

@@ -252,7 +252,21 @@ import {
   type VehicleOwnership,
 } from "@/lib/tenant-store";
 import { StudentProfileDetail } from "@/components/school/StudentProfileDetail";
+import {
+  StudentConcessionSection,
+  emptyConcessionState,
+  type StudentConcessionState,
+} from "@/components/school/StudentConcessionSection";
 import { isPeriodOnBreak, buildStudentFeeStatement } from "@/lib/student-fees";
+import {
+  concessionOtherFeePrefillAmount,
+  concessionVehiclePrefillAmount,
+  isConcessionTierEnabled,
+  resolveConcessionOtherFees,
+  resolveConcessionTuitionClassConfig,
+  studentHasConcession,
+  validateConcessionFees,
+} from "@/lib/student-concession-fees";
 import { ShareParentLinkDialog } from "@/components/school/ShareParentLinkDialog";
 import { StaffProfileDetail } from "@/components/school/StaffProfileDetail";
 import { StaffOrgQuickCreateDialogs } from "@/components/school/StaffOrgQuickCreate";
@@ -342,6 +356,7 @@ import {
   downloadReceiptPdf,
   downloadSalarySlipPdf,
   downloadTablePdf,
+  truncatePdfCell,
   findReceiptStudent,
   receiptBrandingFromSchool,
 } from "@/lib/finance-export";
@@ -379,10 +394,14 @@ import { apiUploadDataUrl } from "@/lib/api/settings";
 import { getApiToken } from "@/lib/api/client";
 import {
   buildClassFromLabel,
+  findMissingClassTiers,
   isDuplicateStudent,
   matchExistingClass,
   nextPrefixedId,
+  normalizeClassLabelKey,
   parseStudentCsv,
+  splitStudentClassForCsv,
+  STUDENT_CSV_HEADERS,
 } from "@/lib/student-csv";
 import { isDuplicateStaff, parseStaffCsv, staffFromCsvRow } from "@/lib/staff-csv";
 import { resolveMediaUrl, fetchMediaBlob } from "@/lib/media";
@@ -406,6 +425,10 @@ import {
   type PayeeType,
 } from "@/lib/dashboard-finance";
 import { useDisbursements } from "@/lib/use-disbursements";
+import {
+  useSettingsUnsavedGuard,
+  useSettingsUnsavedRegistration,
+} from "@/components/school/settings-unsaved-guard";
 import {
   buildIncomeExpenseSeries,
   filterPaymentsByPeriod,
@@ -667,7 +690,7 @@ const DASH = {
   incomeExpense:
     "border-rose-200/50 bg-gradient-to-br from-[#FECDD3]/45 via-[#FFF1F2] to-white/85 dark:border-rose-900/30 dark:from-zinc-900 dark:via-zinc-900 dark:to-rose-950/30",
   transactions:
-    "border-teal-800/20 bg-gradient-to-br from-[#0F766E] via-[#0D9488] to-[#115E59] text-white",
+    "border-teal-300/45 bg-gradient-to-br from-[#ECFDF5] via-[#F0FDFA] to-[#CCFBF1]/90 dark:border-teal-800/20 dark:bg-gradient-to-br dark:from-[#0F766E] dark:via-[#0D9488] dark:to-[#115E59] dark:text-white",
 } as const;
 
 const dashTileHover =
@@ -729,11 +752,28 @@ function DashboardAmount({
   value,
   className,
   compact = false,
+  pending = false,
 }: {
   value: number;
   className?: string;
   compact?: boolean;
+  pending?: boolean;
 }) {
+  if (pending) {
+    return (
+      <div
+        className={cn(
+          "min-w-0 max-w-full overflow-hidden font-mono font-bold leading-[1.15] tracking-tight",
+          dashboardAmountSize("₹0", compact),
+          className,
+        )}
+        aria-busy="true"
+        aria-label="Loading amount"
+      >
+        <span className="block h-[1em] w-[4.5rem] max-w-full animate-pulse rounded bg-current/20" />
+      </div>
+    );
+  }
   const formatted = formatInr(value);
   return (
     <div
@@ -755,12 +795,14 @@ function IncomeExpenseSummaryTiles({
   receiptCount,
   paymentCount,
   compact = false,
+  expensePending = false,
 }: {
   income: number;
   expense: number;
   receiptCount: number;
   paymentCount: number;
   compact?: boolean;
+  expensePending?: boolean;
 }) {
   const tileClass = compact
     ? "flex min-h-[84px] min-w-0 flex-col items-center justify-center overflow-hidden rounded-2xl px-2 py-2.5 text-center sm:min-h-[96px] sm:px-3 sm:py-3"
@@ -788,10 +830,17 @@ function IncomeExpenseSummaryTiles({
         <DashboardAmount
           value={expense}
           compact={compact}
+          pending={expensePending}
           className="mt-1.5 w-full text-center text-white"
         />
         <div className="mt-1 text-[10px] font-medium text-rose-100/80">
-          {paymentCount} payment{paymentCount === 1 ? "" : "s"}
+          {expensePending ? (
+            <span className="inline-block h-3 w-14 animate-pulse rounded bg-white/25" />
+          ) : (
+            <>
+              {paymentCount} payment{paymentCount === 1 ? "" : "s"}
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -825,6 +874,7 @@ type PremiumDashboardProps = {
   onViewStaff: () => void;
   onShowReceipt: (payment: Payment) => void;
   onDownloadReceipt: (payment: Payment) => void;
+  expensesReady?: boolean;
 };
 
 /** Isolated from PremiumDashboard so typing todos/notes does not re-render charts. */
@@ -1103,6 +1153,7 @@ function PremiumDashboard({
   onViewStaff,
   onShowReceipt,
   onDownloadReceipt,
+  expensesReady = true,
 }: PremiumDashboardProps) {
   const liveStudents = students.filter((s) => !isRecordDeleted(s.deletedAt));
   const liveStaff = staff.filter((s) => !isRecordDeleted(s.deletedAt));
@@ -1237,6 +1288,7 @@ function PremiumDashboard({
                 expense={expenseTotal}
                 receiptCount={periodReceiptCount}
                 paymentCount={periodExpenseCount}
+                expensePending={!expensesReady}
               />
             </div>
           </section>
@@ -1274,11 +1326,19 @@ function PremiumDashboard({
                 </div>
                 <div className="min-w-0">
                   <div className="text-[11px] font-medium text-slate-500">
-                    {salaryOutstandingStaff > 0
-                      ? `${salaryOutstandingStaff} queued`
-                      : "No payroll created"}
+                    {!expensesReady ? (
+                      <span className="inline-block h-3 w-24 animate-pulse rounded bg-slate-200/80 dark:bg-white/10" />
+                    ) : salaryOutstandingStaff > 0 ? (
+                      `${salaryOutstandingStaff} queued`
+                    ) : (
+                      "No payroll created"
+                    )}
                   </div>
-                  <DashboardAmount value={salaryOutstanding} className="mt-1 text-slate-900" />
+                  <DashboardAmount
+                    value={salaryOutstanding}
+                    pending={!expensesReady}
+                    className="mt-1 text-slate-900"
+                  />
                 </div>
               </div>
             </div>
@@ -1505,6 +1565,7 @@ function PremiumDashboard({
               receiptCount={periodReceiptCount}
               paymentCount={periodExpenseCount}
               compact
+              expensePending={!expensesReady}
             />
           </div>
         </section>
@@ -1514,45 +1575,45 @@ function PremiumDashboard({
         >
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <span className="grid h-8 w-8 place-items-center rounded-xl bg-white/15 text-teal-100">
+              <span className="grid h-8 w-8 place-items-center rounded-xl bg-teal-100 text-teal-700 dark:bg-white/15 dark:text-teal-100">
                 <ArrowDownToLine className="h-4 w-4" strokeWidth={2} />
               </span>
-              <h3 className="text-[12px] font-bold uppercase tracking-wider text-white">
+              <h3 className="text-[12px] font-bold uppercase tracking-wider text-teal-950 dark:text-white">
                 Recent Transactions
               </h3>
             </div>
             <Link
               to="/tenant/finance"
               search={{ tab: "receive" }}
-              className="text-[12px] font-semibold text-teal-100 hover:text-white hover:underline"
+              className="text-[12px] font-semibold text-teal-700 hover:text-teal-900 hover:underline dark:text-teal-100 dark:hover:text-white"
             >
               View All
             </Link>
           </div>
-          <div className="mt-4 flex-1 divide-y divide-white/10">
+          <div className="mt-4 flex-1 divide-y divide-teal-200/70 dark:divide-white/10">
             {recentReceipts.length === 0 && (
-              <div className="py-6 text-center text-[12px] text-teal-100/70">
+              <div className="py-6 text-center text-[12px] text-slate-600 dark:text-teal-100/70">
                 No receipts logged yet
               </div>
             )}
             {recentReceipts.map((payment) => (
               <div key={payment.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/15 text-emerald-300">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-teal-100 text-teal-700 dark:bg-white/15 dark:text-emerald-300">
                   <ArrowUpRight className="h-4 w-4" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13px] font-semibold text-white">
+                  <div className="truncate text-[13px] font-semibold text-slate-900 dark:text-white">
                     {payment.name}
                   </div>
-                  <div className="mt-0.5 text-[11px] text-teal-100/70">
+                  <div className="mt-0.5 text-[11px] text-slate-600 dark:text-teal-100/70">
                     {payment.cat} · {payment.mode}
                   </div>
                 </div>
                 <div className="shrink-0 text-right">
-                  <div className="font-mono text-[13px] font-semibold text-white">
+                  <div className="font-mono text-[13px] font-semibold text-slate-900 dark:text-white">
                     {formatInr(payment.amount)}
                   </div>
-                  <div className="mt-0.5 text-[10px] text-teal-100/60">
+                  <div className="mt-0.5 text-[10px] text-slate-500 dark:text-teal-100/60">
                     {formatEventDateTime(payment.time)}
                   </div>
                   <div className="mt-1.5 flex items-center justify-end gap-1">
@@ -1561,7 +1622,7 @@ function PremiumDashboard({
                       aria-label={`Show receipt ${payment.id}`}
                       title="Show"
                       onClick={() => onShowReceipt(payment)}
-                      className="inline-flex h-7 items-center gap-1 rounded-lg border border-white/20 bg-white/10 px-2 text-[10px] font-semibold text-teal-50 transition-colors hover:bg-white/20 hover:text-white"
+                      className="inline-flex h-7 items-center gap-1 rounded-lg border border-teal-200/80 bg-white px-2 text-[10px] font-semibold text-teal-800 shadow-sm transition-colors hover:bg-teal-50 dark:border-white/20 dark:bg-white/10 dark:text-teal-50 dark:shadow-none dark:hover:bg-white/20 dark:hover:text-white"
                     >
                       <Eye className="h-3 w-3" />
                       Show
@@ -1571,7 +1632,7 @@ function PremiumDashboard({
                       aria-label={`Download receipt ${payment.id}`}
                       title="Download"
                       onClick={() => onDownloadReceipt(payment)}
-                      className="inline-grid h-7 w-7 place-items-center rounded-lg border border-white/20 bg-white/10 text-teal-50 transition-colors hover:bg-white/20 hover:text-white"
+                      className="inline-grid h-7 w-7 place-items-center rounded-lg border border-teal-200/80 bg-white text-teal-800 shadow-sm transition-colors hover:bg-teal-50 dark:border-white/20 dark:bg-white/10 dark:text-teal-50 dark:shadow-none dark:hover:bg-white/20 dark:hover:text-white"
                     >
                       <Download className="h-3.5 w-3.5" />
                     </button>
@@ -1782,7 +1843,7 @@ export function SchoolDashboard() {
 
   const recentReceipts = useMemo(() => filteredPayments.slice(0, 5), [filteredPayments]);
 
-  if (!hydrated || branchSyncing || !disbursementsLoaded) {
+  if (!hydrated || branchSyncing) {
     return <TenantDashboardSkeleton />;
   }
 
@@ -1802,6 +1863,7 @@ export function SchoolDashboard() {
         inHand={inHand}
         inBank={inBank}
         totalBalance={totalBalance}
+        expensesReady={disbursementsLoaded}
         overdueStudents={overdueStudents}
         recentReceipts={recentReceipts}
         period={period}
@@ -2533,10 +2595,11 @@ function StudentsDirectoryTable({
 }
 
 export function AdmitStudentPage() {
-  const { students, classes, setClasses, admitStudentToActiveYear } = useTenantStore();
+  const { students, classes, setClasses, admitStudentToActiveYear, activeFeeTerms } = useTenantStore();
   const navigate = useNavigate();
   const defaultClass = classes[0]?.className ?? "";
   const [form, setForm] = useState<AdmitStudentForm>(() => emptyAdmitForm(defaultClass));
+  const [concession, setConcession] = useState<StudentConcessionState>(emptyConcessionState);
   const [shareOpen, setShareOpen] = useState(false);
   const [shareToken, setShareToken] = useState("");
   const [shareName, setShareName] = useState("");
@@ -2609,9 +2672,19 @@ export function AdmitStudentPage() {
     }
   };
 
+  const matchedAdmitClass = useMemo(
+    () => classes.find((c) => c.className === form.cls),
+    [classes, form.cls],
+  );
+
   const createStudent = (): Student | null => {
     if (!form.name.trim() || !form.guardian.trim()) {
       toast.error("Name and guardian are required");
+      return null;
+    }
+    const concessionError = validateConcessionFees(concession.hasConcession, concession.concessionFees);
+    if (concessionError) {
+      toast.error(concessionError);
       return null;
     }
     const nextNum = 2847 + students.filter((s) => s.id.startsWith("STU-28")).length;
@@ -2626,6 +2699,9 @@ export function AdmitStudentPage() {
       phone: form.phone.trim() || undefined,
       shareToken: token,
       active: true,
+      hasConcession: concession.hasConcession,
+      concessionReason: concession.hasConcession ? concession.concessionReason.trim() || undefined : undefined,
+      concessionFees: concession.hasConcession ? concession.concessionFees : undefined,
     });
     return admitStudentToActiveYear(draft, {
       cls: draft.cls,
@@ -2747,6 +2823,16 @@ export function AdmitStudentPage() {
                 className={cn(admitFormInputClass, "font-mono")}
               />
             </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 dark:border-zinc-700/60 dark:bg-zinc-900/30">
+            <StudentConcessionSection
+              value={concession}
+              onChange={setConcession}
+              matchedClass={matchedAdmitClass}
+              feeTerms={activeFeeTerms}
+              needsBus={false}
+            />
           </div>
 
           <div className="flex flex-nowrap items-center gap-1.5 pt-2 sm:justify-end sm:gap-2">
@@ -2925,6 +3011,7 @@ export function StudentsLedger() {
   const [bulkWhatsAppOpen, setBulkWhatsAppOpen] = useState(false);
   const [bulkWhatsAppMsg, setBulkWhatsAppMsg] = useState("");
   const [bulkWhatsAppSending, setBulkWhatsAppSending] = useState(false);
+  const reconciledClassKeysRef = useRef(new Set<string>());
 
   useEffect(() => {
     setDivisionFilter("all");
@@ -2936,6 +3023,42 @@ export function StudentsLedger() {
     () => students.filter((s) => !isRecordDeleted(s.deletedAt)),
     [students],
   );
+
+  useEffect(() => {
+    if (!hydrated || branchSyncing) return;
+    const enrolled = liveStudents.map((s) => s.cls);
+    const missing = findMissingClassTiers(classes, enrolled).filter((cls) => {
+      const key = normalizeClassLabelKey(cls.className);
+      if (reconciledClassKeysRef.current.has(key)) return false;
+      return !classes.some((c) => normalizeClassLabelKey(c.className) === key);
+    });
+    if (!missing.length) return;
+
+    for (const cls of missing) {
+      reconciledClassKeysRef.current.add(normalizeClassLabelKey(cls.className));
+    }
+
+    void (async () => {
+      setClasses((prev) => {
+        const seen = new Set(prev.map((c) => normalizeClassLabelKey(c.className)));
+        const add = missing.filter((c) => !seen.has(normalizeClassLabelKey(c.className)));
+        return add.length ? [...prev, ...add] : prev;
+      });
+      if (getApiToken()) {
+        for (const cls of missing) {
+          await apiUpsertClass(cls).catch(() => {
+            /* keep local tier; settings sync can retry on next visit */
+          });
+        }
+      }
+      toast.message(
+        missing.length === 1
+          ? `Added missing class tier: ${missing[0].className}`
+          : `Added ${missing.length} missing class tiers from student enrollments`,
+        { description: "Configure fees in Settings → Class Tier" },
+      );
+    })();
+  }, [hydrated, branchSyncing, liveStudents, classes, setClasses]);
   const deletedStudents = useMemo(
     () =>
       students
@@ -2951,16 +3074,15 @@ export function StudentsLedger() {
   );
 
   const classDivisionIndex = useMemo(() => {
-    // Class Tier settings are the source of truth — do not pull orphan labels
-    // like "Grade 1" from old student.cls values into the filter dropdown.
-    const names = classes.map((c) => {
+    const fromTiers = classes.map((c) => {
       const parts = splitClassName(c.className);
       const grade = (c.grade || parts.grade || "").trim();
       const section = (c.section || parts.section || "").trim();
       return composeClassName(grade, section) || c.className.trim();
     });
-    return buildClassDivisionIndex(names.filter(Boolean));
-  }, [classes]);
+    const fromEnrollments = liveStudents.map((s) => s.cls.trim()).filter(Boolean);
+    return buildClassDivisionIndex(Array.from(new Set([...fromTiers, ...fromEnrollments])));
+  }, [classes, liveStudents]);
 
   const gradeOptions = useMemo(
     () =>
@@ -3323,10 +3445,18 @@ export function StudentsLedger() {
     }
     const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
     const rows = [
-      "Student,Class,Guardian,Phone,Balance",
-      ...filtered.map((s) =>
-        [escape(s.name), escape(s.cls), escape(s.guardian), escape(s.phone ?? ""), s.due].join(","),
-      ),
+      STUDENT_CSV_HEADERS.join(","),
+      ...filtered.map((s) => {
+        const { grade, division } = splitStudentClassForCsv(s.cls);
+        return [
+          escape(s.name),
+          escape(grade),
+          escape(division),
+          escape(s.guardian),
+          escape(s.phone ?? ""),
+          s.due,
+        ].join(",");
+      }),
     ].join("\n");
     const uri = encodeURI("data:text/csv;charset=utf-8," + rows);
     const a = document.createElement("a");
@@ -3347,17 +3477,20 @@ export function StudentsLedger() {
   const handleImportClick = () => fileInputRef.current?.click();
 
   const downloadStudentTemplate = () => {
+    const sampleGrade = defaultClass ? splitStudentClassForCsv(defaultClass).grade : "Grade 1";
+    const sampleDivision = defaultClass ? splitStudentClassForCsv(defaultClass).division : "";
     downloadCsv(
       "students-bulk-upload-template.csv",
-      ["Name", "Class", "Guardian", "Phone", "Balance"],
+      [...STUDENT_CSV_HEADERS],
       [
-        ["Aarav Sharma", defaultClass || "LKG - A", "Rajesh Sharma", "9810045221", "0"],
-        ["Meera Iyer", "UKG - B", "Priya Iyer", "9876501234", "4500"],
+        ["Aarav Sharma", sampleGrade || "Grade 1", sampleDivision, "Rajesh Sharma", "9810045221", "0"],
+        ["Meera Iyer", "UKG", "B", "Priya Iyer", "9876501234", "4500"],
+        ["Rahul Nair", "TLC", "A", "Suresh Nair", "9895012345", "0"],
       ],
     );
     toast.success("Student template downloaded", {
       description:
-        "Fill Name, Class, Guardian, Phone, Balance · missing classes are created on upload",
+        "Use separate Class and Division columns · missing class tiers are created on upload",
     });
   };
 
@@ -3370,7 +3503,7 @@ export function StudentsLedger() {
         const rows = parseStudentCsv(String(reader.result ?? ""));
         if (!rows.length) {
           toast.error("CSV had no student rows", {
-            description: "Use the template: Name, Class, Guardian, Phone, Balance",
+            description: "Use the template: Name, Class, Division, Guardian, Phone, Balance",
           });
           if (fileInputRef.current) fileInputRef.current.value = "";
           return;
@@ -3470,6 +3603,29 @@ export function StudentsLedger() {
             });
           }
 
+          const orphanTiers = findMissingClassTiers(classPool, admitted.map((s) => s.cls));
+          if (orphanTiers.length) {
+            setClasses((prev) => {
+              const seen = new Set(prev.map((c) => normalizeClassLabelKey(c.className)));
+              const add = orphanTiers.filter(
+                (c) => !seen.has(normalizeClassLabelKey(c.className)),
+              );
+              return add.length ? [...prev, ...add] : prev;
+            });
+          }
+
+          const tiersToSync = [
+            ...createdClasses,
+            ...orphanTiers.filter(
+              (tier) =>
+                !createdClasses.some(
+                  (created) =>
+                    normalizeClassLabelKey(created.className) ===
+                    normalizeClassLabelKey(tier.className),
+                ),
+            ),
+          ];
+
           if (!admitted.length) {
             toast.error("No new students to admit", {
               description:
@@ -3480,7 +3636,7 @@ export function StudentsLedger() {
             return;
           }
 
-          for (const cls of createdClasses) {
+          for (const cls of tiersToSync) {
             await apiUpsertClass(cls).catch(() => {
               /* local class kept; settings sync can retry */
             });
@@ -3491,9 +3647,10 @@ export function StudentsLedger() {
             });
           }
 
-          const classNote = createdClasses.length
-            ? `${createdClasses.length} class${createdClasses.length === 1 ? "" : "es"} created`
-            : null;
+          const classNote =
+            tiersToSync.length > 0
+              ? `${tiersToSync.length} class tier${tiersToSync.length === 1 ? "" : "s"} synced`
+              : null;
           const skipNote = skipped > 0 ? `${skipped} skipped` : null;
           toast.success(`${admitted.length} student${admitted.length === 1 ? "" : "s"} admitted`, {
             description: [classNote, skipNote, academicYear].filter(Boolean).join(" · "),
@@ -3953,36 +4110,10 @@ export function StudentsLedger() {
       ) : (
         <>
           <div className={cn(glassCardClass, "min-w-0 p-2.5 md:p-5")}>
-            <div className="flex flex-col gap-2 md:gap-3">
-              <div className="min-w-0">
-                <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
-                  Search
-                </div>
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400 md:h-4 md:w-4" />
-                  <Input
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search name, ID, guardian, phone…"
-                    className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white pl-9 pr-9 md:h-10"
-                    aria-label="Search students"
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => setSearchQuery("")}
-                      aria-label="Clear search"
-                      className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-end gap-2 lg:gap-4">
-                <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 md:gap-4">
-                  <div className="min-w-0">
+            <div className="flex flex-col gap-2.5 md:flex-row md:items-end md:gap-3 lg:gap-4">
+              <div className="flex items-end gap-2 md:contents">
+                <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 md:contents">
+                  <div className="min-w-0 md:order-1 md:w-36 lg:w-40">
                     <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
                       Class / Grade
                     </div>
@@ -4010,7 +4141,7 @@ export function StudentsLedger() {
                     </Select>
                   </div>
 
-                  <div className="min-w-0">
+                  <div className="min-w-0 md:order-2 md:w-32 lg:w-36">
                     <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
                       Division
                     </div>
@@ -4043,7 +4174,7 @@ export function StudentsLedger() {
                   </div>
                 </div>
 
-                <div className="mb-0.5 flex shrink-0 flex-col items-end gap-0.5 lg:mb-1">
+                <div className="flex shrink-0 flex-col items-end gap-0.5 max-md:pb-0.5 md:order-4 md:mb-0.5 lg:mb-1">
                   <span className="font-mono text-[10px] tabular-nums text-slate-400 md:text-[11px]">
                     {filtered.length} shown
                   </span>
@@ -4058,6 +4189,32 @@ export function StudentsLedger() {
                       className="text-[10px] font-semibold text-slate-500 underline-offset-2 hover:text-slate-900 hover:underline"
                     >
                       Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="min-w-0 w-full md:order-3 md:flex-1">
+                <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
+                  Search
+                </div>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400 md:h-4 md:w-4" />
+                  <Input
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search name, ID, guardian, phone…"
+                    className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white pl-9 pr-9 md:h-10"
+                    aria-label="Search students"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery("")}
+                      aria-label="Clear search"
+                      className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                    >
+                      <X className="h-3.5 w-3.5" />
                     </button>
                   )}
                 </div>
@@ -5400,36 +5557,10 @@ export function StaffRoster() {
       ) : (
         <>
           <div className={cn(glassCardClass, "min-w-0 p-2.5 md:p-5")}>
-            <div className="flex flex-col gap-2 md:gap-3">
-              <div className="min-w-0">
-                <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
-                  Search
-                </div>
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400 md:h-4 md:w-4" />
-                  <Input
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search name, ID, role, phone…"
-                    className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white pl-9 pr-9 md:h-10"
-                    aria-label="Search staff"
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => setSearchQuery("")}
-                      aria-label="Clear search"
-                      className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-end gap-2 lg:gap-4">
-                <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 md:gap-4">
-                  <div className="min-w-0">
+            <div className="flex flex-col gap-2.5 md:flex-row md:items-end md:gap-3 lg:gap-4">
+              <div className="flex items-end gap-2 md:contents">
+                <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 md:contents">
+                  <div className="min-w-0 md:order-1 md:w-36 lg:w-40">
                     <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
                       Department
                     </div>
@@ -5457,7 +5588,7 @@ export function StaffRoster() {
                     </Select>
                   </div>
 
-                  <div className="min-w-0">
+                  <div className="min-w-0 md:order-2 md:w-32 lg:w-36">
                     <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
                       Status
                     </div>
@@ -5490,7 +5621,7 @@ export function StaffRoster() {
                   </div>
                 </div>
 
-                <div className="mb-0.5 flex shrink-0 flex-col items-end gap-0.5 lg:mb-1">
+                <div className="flex shrink-0 flex-col items-end gap-0.5 max-md:pb-0.5 md:order-4 md:mb-0.5 lg:mb-1">
                   <span className="font-mono text-[10px] tabular-nums text-slate-400 md:text-[11px]">
                     {filteredStaff.length} shown
                   </span>
@@ -5505,6 +5636,32 @@ export function StaffRoster() {
                       className="text-[10px] font-semibold text-[#0F766E] underline-offset-2 hover:underline"
                     >
                       Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="min-w-0 w-full md:order-3 md:flex-1">
+                <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
+                  Search
+                </div>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400 md:h-4 md:w-4" />
+                  <Input
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search name, ID, role, phone…"
+                    className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white pl-9 pr-9 md:h-10"
+                    aria-label="Search staff"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery("")}
+                      aria-label="Clear search"
+                      className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                    >
+                      <X className="h-3.5 w-3.5" />
                     </button>
                   )}
                 </div>
@@ -6285,11 +6442,11 @@ function FinanceOverview({
   ) => void;
 }) {
   const { session } = useAuth();
+  const navigate = useNavigate();
   const {
     activePayments: payments,
     setPayments,
     setStudents,
-    paymentCategories,
     academicYear,
     schoolDetails,
     activeStudents: students,
@@ -6298,18 +6455,8 @@ function FinanceOverview({
   const schoolName = schoolDetails.name || "Silver Hills Global";
   const [incomePeriod, setIncomePeriod] = useState<PaymentPeriod>("this_month");
   const [customRange, setCustomRange] = useState<CustomDateRange>({ from: "", to: "" });
-  const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
   const [pendingDeletePayment, setPendingDeletePayment] = useState<Payment | null>(null);
   const [previewAttachment, setPreviewAttachment] = useState<PaymentAttachment | null>(null);
-  const [editForm, setEditForm] = useState({
-    name: "",
-    cat: "",
-    mode: "Bank",
-    amount: "",
-    time: "",
-    narration: "",
-    payerType: "student" as "student" | "external",
-  });
 
   const filteredPayments = useMemo(
     () => filterPaymentsByPeriod(payments, incomePeriod, customRange),
@@ -6351,6 +6498,31 @@ function FinanceOverview({
       })),
     [disbursements],
   );
+
+  const transactionPdfHeaders = [
+    "ID",
+    "Account",
+    "Category",
+    "Period",
+    "Mode",
+    "Amount",
+    "Time",
+    "Status",
+    "Narration",
+  ] as const;
+
+  const buildTransactionPdfRows = () =>
+    payments.map((p) => [
+      p.id,
+      p.name,
+      p.cat,
+      resolvePaymentFeePeriod(p) ?? "—",
+      p.mode,
+      p.amount.toLocaleString("en-IN"),
+      formatEventDateTime(p.time),
+      "Complete",
+      truncatePdfCell(p.narration ?? "", 88),
+    ]);
 
   const exportTransactionsCsv = () => {
     if (!payments.length) {
@@ -6404,28 +6576,9 @@ function FinanceOverview({
       }),
       title: "Finance Transactions",
       subtitle: `${schoolName} · ${academicYear}`,
-      headers: [
-        "ID",
-        "Account",
-        "Category",
-        "Period",
-        "Mode",
-        "Amount",
-        "Time",
-        "Status",
-        "Narration",
-      ],
-      rows: payments.map((p) => [
-        p.id,
-        p.name,
-        p.cat,
-        resolvePaymentFeePeriod(p) ?? "—",
-        p.mode,
-        p.amount.toLocaleString("en-IN"),
-        formatEventDateTime(p.time),
-        "Complete",
-        p.narration ?? "",
-      ]),
+      headers: [...transactionPdfHeaders],
+      rows: buildTransactionPdfRows(),
+      landscape: true,
     });
     toast.success("Transactions PDF downloaded");
   };
@@ -6443,28 +6596,9 @@ function FinanceOverview({
       }),
       title: "Finance Transactions",
       subtitle: `${schoolName} · ${academicYear}`,
-      headers: [
-        "ID",
-        "Account",
-        "Category",
-        "Period",
-        "Mode",
-        "Amount",
-        "Time",
-        "Status",
-        "Narration",
-      ],
-      rows: payments.map((p) => [
-        p.id,
-        p.name,
-        p.cat,
-        resolvePaymentFeePeriod(p) ?? "—",
-        p.mode,
-        p.amount.toLocaleString("en-IN"),
-        formatEventDateTime(p.time),
-        "Complete",
-        p.narration ?? "",
-      ]),
+      headers: [...transactionPdfHeaders],
+      rows: buildTransactionPdfRows(),
+      landscape: true,
       action: "print",
     });
     toast.success("Print dialog opened");
@@ -6579,76 +6713,10 @@ function FinanceOverview({
 
   const openEditPayment = (payment: Payment) => {
     if (!isAdmin) return;
-    setEditingPayment(payment);
-    setEditForm({
-      name: payment.name,
-      cat: payment.cat,
-      mode: payment.mode,
-      amount: String(payment.amount),
-      time: receiptTimeForForm(payment.time),
-      narration: payment.narration ?? "",
-      payerType: payment.payerType === "external" ? "external" : "student",
+    navigate({
+      to: "/tenant/finance",
+      search: { tab: "receive", paymentId: payment.id },
     });
-  };
-
-  const saveEditedPayment = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!isAdmin || !editingPayment) return;
-    const name = editForm.name.trim();
-    const amount = Number(editForm.amount);
-    const rawTime = editForm.time.trim();
-    const time = toSqlDateTime(rawTime);
-    const cat = editForm.cat.trim();
-    const mode = editForm.mode.trim();
-    if (!name) {
-      toast.error("Account name is required");
-      return;
-    }
-    if (!cat) {
-      toast.error("Category is required");
-      return;
-    }
-    if (!mode) {
-      toast.error("Payment mode is required");
-      return;
-    }
-    if (!Number.isFinite(amount) || amount <= 0) {
-      toast.error("Enter a valid amount");
-      return;
-    }
-    if (!rawTime || formatEventDateTime(rawTime) === "—") {
-      toast.error("Date / time is required");
-      return;
-    }
-
-    const note = editForm.narration.trim();
-    const nextPayment: Payment = {
-      ...editingPayment,
-      name,
-      cat,
-      mode,
-      amount,
-      time,
-      payerType: editForm.payerType,
-      ...(note ? { narration: note } : { narration: undefined }),
-    };
-
-    if (isStudentReceipt(editingPayment) && isStudentReceipt(nextPayment)) {
-      adjustStudentDue(editingPayment, editingPayment.amount - amount);
-    } else if (isStudentReceipt(editingPayment) && !isStudentReceipt(nextPayment)) {
-      adjustStudentDue(editingPayment, editingPayment.amount);
-    } else if (!isStudentReceipt(editingPayment) && isStudentReceipt(nextPayment)) {
-      adjustStudentDue(nextPayment, -amount);
-    }
-
-    setPayments((prev) => prev.map((p) => (p.id === editingPayment.id ? nextPayment : p)));
-    void apiUpdatePayment(nextPayment).catch((err) =>
-      toast.error("Could not update receipt on server", {
-        description: err instanceof Error ? err.message : "Save failed",
-      }),
-    );
-    toast.success(`Receipt ${editingPayment.id} updated`);
-    setEditingPayment(null);
   };
 
   const confirmDeletePayment = () => {
@@ -6980,21 +7048,21 @@ function FinanceOverview({
         </section>
       </div>
 
-      <section className={cn(glassCardClass, "p-5")}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
+      <section className={cn(glassCardClass, "overflow-hidden p-4 sm:p-5")}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <h3 className="text-[15px] font-bold text-slate-900">Transactions</h3>
             <p className="mt-0.5 text-[12px] text-slate-500">
               {payments.length} receipt{payments.length === 1 ? "" : "s"} · most recent first
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <DropdownMenu>
+          <div className="relative z-30 flex w-full shrink-0 flex-wrap gap-2 sm:w-auto sm:justify-end">
+            <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-9 rounded-full border-[#E5E5E5] bg-white px-3.5 text-[12px]"
+                  className="h-9 flex-1 rounded-full border-[#E5E5E5] bg-white px-3.5 text-[12px] sm:flex-none"
                 >
                   <Download className="mr-1.5 h-3.5 w-3.5" />
                   Download
@@ -7033,7 +7101,7 @@ function FinanceOverview({
             <Button
               type="button"
               variant="outline"
-              className="h-9 rounded-full border-[#E5E5E5] bg-white px-3.5 text-[12px]"
+              className="h-9 flex-1 rounded-full border-[#E5E5E5] bg-white px-3.5 text-[12px] sm:flex-none"
               onClick={shareTransactionsSummary}
             >
               <Share2 className="mr-1.5 h-3.5 w-3.5" />
@@ -7108,11 +7176,11 @@ function FinanceOverview({
                 </div>
               )}
 
-              <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-[#F0F0F0] pt-2.5">
+              <div className="mt-2.5 flex flex-col gap-2 border-t border-[#F0F0F0] pt-2.5 sm:flex-row sm:items-center sm:justify-between">
                 <span className="min-w-0 truncate font-mono text-[10.5px] text-black/45">
                   {formatEventDateTime(p.time)}
                 </span>
-                <div className="flex shrink-0 items-center gap-1.5">
+                <div className="flex flex-wrap items-center justify-end gap-1.5">
                   {isAdmin && (
                     <>
                       <button
@@ -7167,8 +7235,8 @@ function FinanceOverview({
           ))}
         </div>
 
-        <div className="mobile-scrollbar-none mt-4 hidden overflow-x-auto rounded-lg border border-[#E5E5E5] md:block">
-          <table className="w-full min-w-[780px] text-left text-[12.5px]">
+        <div className="mobile-scrollbar-none relative z-0 mt-4 hidden overflow-x-auto rounded-lg border border-[#E5E5E5] md:block">
+          <table className="w-full min-w-[720px] text-left text-[12.5px]">
             <thead>
               <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5]">
                 {["Transaction", "Account", "Date / Time", "Amount", "Status", "Actions"].map(
@@ -7223,7 +7291,7 @@ function FinanceOverview({
                     </span>
                   </td>
                   <td className="px-3 py-3">
-                    <div className="flex items-center justify-end gap-1.5">
+                    <div className="flex flex-wrap items-center justify-end gap-1">
                       {isAdmin && (
                         <>
                           <button
@@ -7284,163 +7352,6 @@ function FinanceOverview({
 
       {isAdmin && (
         <>
-          <Dialog
-            open={Boolean(editingPayment)}
-            onOpenChange={(open) => {
-              if (!open) setEditingPayment(null);
-            }}
-          >
-            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Edit Transaction</DialogTitle>
-                <DialogDescription>
-                  Update receipt {editingPayment?.id}. Student ledger balance adjusts automatically
-                  when the amount changes.
-                </DialogDescription>
-              </DialogHeader>
-              <form onSubmit={saveEditedPayment} className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                    Account
-                  </Label>
-                  <Input
-                    value={editForm.name}
-                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                    placeholder="Payer / student name"
-                    autoFocus
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                      Category
-                    </Label>
-                    <Select
-                      value={editForm.cat}
-                      onValueChange={(cat) =>
-                        setEditForm({
-                          ...editForm,
-                          cat,
-                          payerType: categorySuggestsExternal(cat)
-                            ? "external"
-                            : editForm.payerType,
-                        })
-                      }
-                    >
-                      <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
-                        <SelectValue placeholder="Category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.from(
-                          new Set(
-                            [...paymentCategories.map((c) => c.label), editForm.cat].filter(
-                              Boolean,
-                            ),
-                          ),
-                        ).map((label) => (
-                          <SelectItem key={label} value={label}>
-                            {label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                      Mode
-                    </Label>
-                    <Select
-                      value={editForm.mode}
-                      onValueChange={(mode) => setEditForm({ ...editForm, mode })}
-                    >
-                      <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
-                        <SelectValue placeholder="Mode" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.from(
-                          new Set(["Bank", "Cash", "Both", editForm.mode].filter(Boolean)),
-                        ).map((mode) => (
-                          <SelectItem key={mode} value={mode}>
-                            {mode}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                      Amount (₹)
-                    </Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={editForm.amount}
-                      onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
-                      className="font-mono"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                      Payer type
-                    </Label>
-                    <Select
-                      value={editForm.payerType}
-                      onValueChange={(payerType) =>
-                        setEditForm({
-                          ...editForm,
-                          payerType: payerType as "student" | "external",
-                        })
-                      }
-                    >
-                      <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="student">Student</SelectItem>
-                        <SelectItem value="external">External</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                    Date / Time
-                  </Label>
-                  <Input
-                    value={editForm.time}
-                    onChange={(e) => setEditForm({ ...editForm, time: e.target.value })}
-                    placeholder="e.g. Today · 10:22"
-                    className="font-mono"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                    Narration
-                  </Label>
-                  <Textarea
-                    value={editForm.narration}
-                    onChange={(e) => setEditForm({ ...editForm, narration: e.target.value })}
-                    placeholder="Optional note"
-                    className="min-h-[72px] resize-none"
-                  />
-                </div>
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setEditingPayment(null)}>
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
-                  >
-                    Save changes
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
-
           <DeleteConfirmDialog
             open={Boolean(pendingDeletePayment)}
             onOpenChange={(open) => {
@@ -7614,6 +7525,8 @@ type FeeBreakPeriodContext = {
 
 /** Set while Fee Collection (ReceivePayment) is mounted so period helpers skip break periods. */
 let receivePaymentBreakCtx: FeeBreakPeriodContext | undefined;
+/** Active student in Receive Payment for concession fee prefill. */
+let receivePaymentStudentCtx: Student | undefined;
 
 function feePeriodChoices(
   feeTerms: FeeTerm[],
@@ -7939,6 +7852,7 @@ function getFeeLineBalanceSummary(
   matchedRoute: TransportRoute | undefined,
   transportShift: TransportFeeShift | undefined,
   balanceCtx: FeePrefillBalanceContext | undefined,
+  student?: Student,
 ): { scheduled: number; paid: number; balance: number } | null {
   if (!balanceCtx || !item.feePeriod.trim()) return null;
   const scheduled = prefillScheduledAmountForFeeLine(
@@ -7950,6 +7864,7 @@ function getFeeLineBalanceSummary(
     collectionStartMonth,
     matchedRoute,
     transportShift,
+    student,
   );
   if (scheduled == null || scheduled <= 0) return null;
 
@@ -8059,7 +7974,9 @@ function prefillScheduledAmountForFeeLine(
   collectionStartMonth?: string,
   matchedRoute?: TransportRoute,
   transportShift?: TransportFeeShift,
+  student?: Student,
 ): number | undefined {
+  const effectiveStudent = student ?? receivePaymentStudentCtx;
   const category = item.description;
   const lower = category.toLowerCase();
   const termKind = categoryFeeTermKind(category);
@@ -8073,6 +7990,51 @@ function prefillScheduledAmountForFeeLine(
     item.feePeriodKind === "month"
       ? monthsForCategory.find((t) => t.label === item.feePeriod)
       : undefined;
+
+  if (effectiveStudent && studentHasConcession(effectiveStudent)) {
+    if (termKind === "tuition" && isConcessionTierEnabled(effectiveStudent.concessionFees?.tuition)) {
+      const concessionClass = resolveConcessionTuitionClassConfig(
+        effectiveStudent,
+        matchedClass,
+        feeTerms,
+      );
+      if (concessionClass) {
+        const scheduled = withClassFeeSchedule(concessionClass, feeTerms);
+        const installments = scheduled.feeSchedule.filter((line) => line.kind === "installment");
+        const scheduleIndex = installments.findIndex(
+          (line) => line.label.trim().toLowerCase() === item.feePeriod.trim().toLowerCase(),
+        );
+        const fromSchedule = classFeePrefillAmount(scheduled, {
+          category,
+          periodLabel: item.feePeriod || selectedTerm?.label || selectedMonthPeriod?.label,
+          periodIndex: scheduleIndex >= 0 ? scheduleIndex : undefined,
+          collectionStartMonth:
+            collectionStartMonth?.trim() ||
+            concessionClass.feeCollectionStartMonth?.trim() ||
+            undefined,
+        });
+        if (fromSchedule && fromSchedule > 0) return fromSchedule;
+      }
+    }
+    if (
+      (termKind === "vehicle" ||
+        lower.includes("vehicle") ||
+        lower.includes("transport") ||
+        lower.includes("bus")) &&
+      isConcessionTierEnabled(effectiveStudent.concessionFees?.vehicle)
+    ) {
+      const fromConcessionVehicle = concessionVehiclePrefillAmount(effectiveStudent, {
+        periodLabel: item.feePeriod || selectedTerm?.label || selectedMonthPeriod?.label,
+        collectionStartMonth: collectionStartMonth?.trim(),
+      });
+      if (fromConcessionVehicle && fromConcessionVehicle > 0) return fromConcessionVehicle;
+    }
+    const fromOther = concessionOtherFeePrefillAmount(effectiveStudent, category, {
+      periodLabel: item.feePeriod || selectedTerm?.label || selectedMonthPeriod?.label,
+      collectionStartMonth: collectionStartMonth?.trim(),
+    });
+    if (fromOther && fromOther > 0) return fromOther;
+  }
 
   if (matchedClass && !(termKind === "vehicle" && matchedRoute)) {
     const scheduled = withClassFeeSchedule(matchedClass, feeTerms);
@@ -8141,6 +8103,7 @@ function prefillAmountForFeeLine(
   matchedRoute?: TransportRoute,
   transportShift?: TransportFeeShift,
   balanceCtx?: FeePrefillBalanceContext,
+  student?: Student,
 ): number | undefined {
   const scheduled = prefillScheduledAmountForFeeLine(
     item,
@@ -8151,6 +8114,7 @@ function prefillAmountForFeeLine(
     collectionStartMonth,
     matchedRoute,
     transportShift,
+    student,
   );
   if (scheduled == null || scheduled <= 0 || !balanceCtx || !item.feePeriod.trim()) {
     return scheduled;
@@ -8698,6 +8662,8 @@ function ReceivePayment() {
     feeKind?: "tuition" | "vehicle";
     periods: string[];
   } | null>(null);
+  const paymentEditDeepLinkRef = useRef<string | null>(null);
+  const openEditHistoryPaymentRef = useRef<(payment: Payment) => void>(() => {});
 
   const isExternal = payerSource === "external";
   const selected = !isExternal
@@ -8711,9 +8677,11 @@ function ReceivePayment() {
         breaks: studentFeeBreaks,
       }
     : undefined;
+  receivePaymentStudentCtx = selected;
   useEffect(() => {
     return () => {
       receivePaymentBreakCtx = undefined;
+      receivePaymentStudentCtx = undefined;
     };
   }, []);
   const descriptionOptions = useMemo(
@@ -8809,7 +8777,15 @@ function ReceivePayment() {
     return undefined;
   }, [transportFeeResolved, matchedClass]);
 
-  const tuitionFee = matchedClass?.tuitionFeeAmount;
+  const tuitionFee = useMemo(() => {
+    if (selected?.hasConcession) {
+      const concessionClass = resolveConcessionTuitionClassConfig(selected, matchedClass, feeTerms);
+      if (concessionClass && concessionClass.tuitionFeeAmount > 0) {
+        return concessionClass.tuitionFeeAmount;
+      }
+    }
+    return matchedClass?.tuitionFeeAmount;
+  }, [selected, matchedClass, feeTerms]);
 
   const getPrefillBalanceContext = useCallback(
     (lines: FeeLineItem[]): FeePrefillBalanceContext | undefined => {
@@ -8887,6 +8863,7 @@ function ReceivePayment() {
           collectionStartMonth,
           matchedRoute,
           transportShift,
+          selected,
         );
         const prefill = prefillAmountForFeeLine(
           item,
@@ -8898,6 +8875,7 @@ function ReceivePayment() {
           matchedRoute,
           transportShift,
           balanceCtx,
+          selected,
         );
         if (prefill === undefined) return item;
         const current = Math.max(0, Math.round(Number(item.amount) || 0));
@@ -8912,6 +8890,7 @@ function ReceivePayment() {
               matchedRoute,
               transportShift,
               balanceCtx,
+              selected,
             )
           : null;
         const looksAutoFilled =
@@ -9147,6 +9126,22 @@ function ReceivePayment() {
     if (isExternal || editingPayment) return;
     setFeeItems((prev) => applyPrefillToLines(prev));
   }, [applyPrefillToLines, isExternal, selected?.id, editingPayment, paymentsSyncKey]);
+
+  useEffect(() => {
+    if (isExternal || editingPayment || !selected?.hasConcession) return;
+    const otherFees = resolveConcessionOtherFees(selected);
+    if (!otherFees.length) return;
+    setFeeItems((prev) => {
+      const existing = new Set(
+        prev.map((line) => feeLineCategoryLabel(line).trim().toLowerCase()).filter(Boolean),
+      );
+      const additions = otherFees
+        .filter((fee) => !existing.has(fee.label.trim().toLowerCase()))
+        .map((fee) => createFeeLineItem({ description: fee.label }));
+      if (!additions.length) return prev;
+      return [...prev, ...additions];
+    });
+  }, [selected?.id, selected?.hasConcession, isExternal, editingPayment]);
 
   useEffect(() => {
     if (isExternal || editingPayment || !selected) return;
@@ -9795,6 +9790,7 @@ function ReceivePayment() {
   };
 
   const resetRecordForm = () => {
+    paymentEditDeepLinkRef.current = null;
     setEditingPayment(null);
     setPayerSource("student");
     setExternalPayer("");
@@ -9907,6 +9903,21 @@ function ReceivePayment() {
       recordCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   };
+
+  openEditHistoryPaymentRef.current = openEditHistoryPayment;
+
+  useEffect(() => {
+    if (editingPayment || !search.paymentId) return;
+    if (paymentEditDeepLinkRef.current === search.paymentId) return;
+    const payment = payments.find((p) => p.id === search.paymentId);
+    navigate({ to: "/tenant/finance", search: { tab: "receive" }, replace: true });
+    if (!payment) {
+      toast.error(`Receipt ${search.paymentId} not found`);
+      return;
+    }
+    paymentEditDeepLinkRef.current = search.paymentId;
+    openEditHistoryPaymentRef.current(payment);
+  }, [search.paymentId, payments, editingPayment, navigate]);
 
   const saveEditedHistoryPayment = () => {
     if (!editingPayment) return;
@@ -10500,6 +10511,20 @@ function ReceivePayment() {
                     triggerClassName="h-11 sm:h-10"
                   />
                 </div>
+
+                {selected?.hasConcession ? (
+                  <div className="col-span-12 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-3 text-[12px] leading-relaxed text-amber-950 dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-100">
+                    <span className="font-semibold">Fee concession</span>
+                    {" — "}
+                    This student has custom fee schedules. Amounts below use their concession
+                    rates, not the class or route defaults.
+                    {selected.concessionReason ? (
+                      <span className="mt-1 block text-amber-800/90 dark:text-amber-200/80">
+                        Reason: {selected.concessionReason}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 {feeItems.map((item, index) => {
                   const linePeriodOpts = periodOptsForDescription(item.description);
@@ -12930,53 +12955,31 @@ export function SchoolSettings() {
   }, [session, activeTab, navigate, tabParam]);
 
   const [schoolDirty, setSchoolDirty] = useState(false);
-  const [unsavedDialogOpen, setUnsavedDialogOpen] = useState(false);
-  const [unsavedSaving, setUnsavedSaving] = useState(false);
+  const { tryNavigate } = useSettingsUnsavedGuard();
   const schoolActionsRef = useRef<{
     save: () => Promise<boolean>;
     discard: () => void;
   } | null>(null);
-  const pendingNavRef = useRef<(() => void) | null>(null);
+
+  useSettingsUnsavedRegistration(
+    activeTab === "school" && schoolDirty
+      ? {
+          dirty: true,
+          title: "Unsaved school details",
+          description:
+            "You have changes that are not saved yet. Save them before leaving this section, or discard to revert.",
+          save: () => schoolActionsRef.current?.save() ?? Promise.resolve(false),
+          discard: () => schoolActionsRef.current?.discard(),
+        }
+      : null,
+  );
 
   const runOrConfirmLeave = useCallback(
     (action: () => void) => {
-      if (activeTab === "school" && schoolDirty) {
-        pendingNavRef.current = action;
-        setUnsavedDialogOpen(true);
-        return;
-      }
-      action();
+      tryNavigate(action);
     },
-    [activeTab, schoolDirty],
+    [tryNavigate],
   );
-
-  const handleUnsavedCancel = () => {
-    setUnsavedDialogOpen(false);
-    pendingNavRef.current = null;
-  };
-
-  const handleUnsavedDiscard = () => {
-    schoolActionsRef.current?.discard();
-    setUnsavedDialogOpen(false);
-    const action = pendingNavRef.current;
-    pendingNavRef.current = null;
-    action?.();
-  };
-
-  const handleUnsavedSave = async () => {
-    if (!schoolActionsRef.current) return;
-    setUnsavedSaving(true);
-    try {
-      const ok = await schoolActionsRef.current.save();
-      if (!ok) return;
-      setUnsavedDialogOpen(false);
-      const action = pendingNavRef.current;
-      pendingNavRef.current = null;
-      action?.();
-    } finally {
-      setUnsavedSaving(false);
-    }
-  };
 
   const setTab = (tab: SettingsTabId) => {
     runOrConfirmLeave(() => {
@@ -13309,59 +13312,6 @@ export function SchoolSettings() {
       </div>
 
       <div className="col-span-12 hidden min-w-0 lg:block">{renderSettingsContent("table")}</div>
-
-      <AlertDialog
-        open={unsavedDialogOpen}
-        onOpenChange={(open) => {
-          if (!open) handleUnsavedCancel();
-        }}
-      >
-        <AlertDialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6 dark:border-white/10 dark:bg-zinc-900">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-[20px] font-semibold text-black dark:text-zinc-50">
-              Unsaved school details
-            </AlertDialogTitle>
-            <AlertDialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60 dark:text-zinc-400">
-              You have changes that are not saved yet. Save them before leaving, or discard to
-              revert.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="mt-5 flex-col gap-2 sm:flex-row sm:justify-end sm:space-x-0">
-            <AlertDialogCancel
-              disabled={unsavedSaving}
-              className="mt-0 w-full rounded-full sm:w-auto"
-            >
-              Keep editing
-            </AlertDialogCancel>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={unsavedSaving}
-              onClick={handleUnsavedDiscard}
-              className="w-full rounded-full sm:w-auto"
-            >
-              Discard
-            </Button>
-            <AlertDialogAction
-              disabled={unsavedSaving}
-              onClick={(e) => {
-                e.preventDefault();
-                void handleUnsavedSave();
-              }}
-              className="w-full rounded-full bg-[#0F766E] hover:bg-[#0D9488] sm:w-auto"
-            >
-              {unsavedSaving ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving…
-                </>
-              ) : (
-                "Save changes"
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
@@ -13411,12 +13361,14 @@ function DeleteConfirmDialog({
   title,
   description,
   onConfirm,
+  confirmDisabled = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
   description: string;
   onConfirm: () => void;
+  confirmDisabled?: boolean;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -13434,7 +13386,8 @@ function DeleteConfirmDialog({
           <Button
             type="button"
             onClick={onConfirm}
-            className="rounded-full bg-[#EF4444] text-white hover:bg-[#DC2626]"
+            disabled={confirmDisabled}
+            className="rounded-full bg-[#EF4444] text-white hover:bg-[#DC2626] disabled:cursor-not-allowed disabled:opacity-50"
           >
             Delete
           </Button>
@@ -14523,11 +14476,27 @@ function ClassesCard({
     setOpen(false);
   };
 
+  const enrolledCount = (className: string) =>
+    students.filter(
+      (s) => !isRecordDeleted(s.deletedAt) && studentBelongsToClass(s.cls, className),
+    ).length;
+
+  const requestDelete = (c: ClassConfig) => {
+    const count = enrolledCount(c.className);
+    if (count > 0) {
+      toast.error(`${c.className} cannot be deleted`, {
+        description: `${count} student${count === 1 ? "" : "s"} enrolled · move them to another class first`,
+      });
+      return;
+    }
+    setPendingDelete(c);
+  };
+
   const remove = (c: ClassConfig) => {
-    const enrolled = students.some((s) => s.cls === c.className);
-    if (enrolled) {
-      toast.error(`${c.className} has students enrolled`, {
-        description: "Move them to another class first",
+    const count = enrolledCount(c.className);
+    if (count > 0) {
+      toast.error(`${c.className} cannot be deleted`, {
+        description: `${count} student${count === 1 ? "" : "s"} enrolled · move them to another class first`,
       });
       return;
     }
@@ -14535,7 +14504,7 @@ function ClassesCard({
     void apiDeleteClass(c.id).catch((err) =>
       toast.error(err instanceof Error ? err.message : "Could not delete class"),
     );
-    toast.error(`${c.className} removed`);
+    toast.success(`${c.className} removed`);
   };
 
   const confirmDelete = () => {
@@ -14543,9 +14512,6 @@ function ClassesCard({
     remove(pendingDelete);
     setPendingDelete(null);
   };
-
-  const enrolledCount = (className: string) =>
-    students.filter((s) => !s.deletedAt && s.cls === className).length;
 
   const termMonthLabel = (c: ClassConfig) => {
     const normalized = withClassFeeSchedule(normalizeClassConfig(c), feeTerms);
@@ -14626,6 +14592,7 @@ function ClassesCard({
                 const div = (normalized.section || parts.section || "").trim();
                 const teacher = teacherName(normalized.classTeacherId);
                 const count = enrolledCount(normalized.className);
+                const canDelete = count === 0;
                 return (
                   <tr
                     key={c.id}
@@ -14664,9 +14631,24 @@ function ClassesCard({
                         </button>
                         <button
                           type="button"
-                          onClick={() => setPendingDelete(c)}
-                          aria-label={`Delete ${normalized.className}`}
-                          className="grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                          onClick={() => requestDelete(c)}
+                          disabled={!canDelete}
+                          aria-label={
+                            canDelete
+                              ? `Delete ${normalized.className}`
+                              : `${normalized.className} cannot be deleted while ${count} students are enrolled`
+                          }
+                          title={
+                            canDelete
+                              ? `Delete ${normalized.className}`
+                              : `Move ${count} enrolled student${count === 1 ? "" : "s"} before deleting`
+                          }
+                          className={cn(
+                            "grid h-8 w-8 place-items-center rounded-full border transition-colors",
+                            canDelete
+                              ? "border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                              : "cursor-not-allowed border-[#E5E5E5] bg-[#F8F8F9] text-black/25 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-600",
+                          )}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -14688,10 +14670,13 @@ function ClassesCard({
         title="Delete Class Tier"
         description={
           pendingDelete
-            ? `Are you sure you want to delete ${pendingDelete.className}? Tuition prefills for this class will stop working.`
+            ? enrolledCount(pendingDelete.className) > 0
+              ? `${pendingDelete.className} still has ${enrolledCount(pendingDelete.className)} enrolled student(s). Move them to another class before deleting.`
+              : `Are you sure you want to delete ${pendingDelete.className}? Tuition prefills for this class will stop working.`
             : "Are you sure you want to delete this class tier?"
         }
         onConfirm={confirmDelete}
+        confirmDisabled={pendingDelete ? enrolledCount(pendingDelete.className) > 0 : false}
       />
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -17668,7 +17653,7 @@ const SCHOOL_BRAND_MEDIA_SPECS = {
     aspectLabel: "16:5 · wide banner",
     formats: "JPG, PNG",
     maxMb: 3,
-    usage: "Top banner on receipts and PDF exports",
+    usage: "Full-width top banner on A4 receipts and PDF exports",
   },
   seal: {
     outputWidth: 640,

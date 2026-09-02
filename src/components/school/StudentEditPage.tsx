@@ -27,6 +27,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { FieldSelect, classSelectOptions } from "@/components/school/SchoolAdminWorkspace";
 import { FeePeriodChecklist } from "@/components/school/FeePeriodChecklist";
 import {
+  StudentConcessionSection,
+  concessionStateFromStudent,
+  emptyConcessionState,
+  type StudentConcessionState,
+} from "@/components/school/StudentConcessionSection";
+import {
   BLOOD_GROUPS,
   DEFAULT_STUDENT_DOCUMENTS,
   GUARDIAN_RELATIONS,
@@ -50,6 +56,7 @@ import { getApiToken } from "@/lib/api/client";
 import { buildClassFromLabel, matchExistingClass, nextPrefixedId } from "@/lib/student-csv";
 import { toDobIso } from "@/lib/dates";
 import { cn, glassCardClass } from "@/lib/utils";
+import { validateConcessionFees } from "@/lib/student-concession-fees";
 import {
   isPeriodOnBreak,
   studentFeeBreaksForYear,
@@ -142,7 +149,11 @@ function ensureStudentDocuments(student: Student) {
   }));
 }
 
-function applyDraftToStudent(student: Student, draft: StudentDraft): Student {
+function applyDraftToStudent(
+  student: Student,
+  draft: StudentDraft,
+  concession: StudentConcessionState,
+): Student {
   const nextDocs = ensureStudentDocuments(student).map((d) =>
     d.id === "doc-aadhaar" ? { ...d, number: draft.aadhaar.trim() } : d,
   );
@@ -171,6 +182,11 @@ function applyDraftToStudent(student: Student, draft: StudentDraft): Student {
     busPoint1: draft.needsBus ? emptyToUndefined(draft.busPoint1) : undefined,
     busPoint2: draft.needsBus ? emptyToUndefined(draft.busPoint2) : undefined,
     documents: nextDocs,
+    hasConcession: concession.hasConcession,
+    concessionReason: concession.hasConcession
+      ? emptyToUndefined(concession.concessionReason)
+      : undefined,
+    concessionFees: concession.hasConcession ? concession.concessionFees : undefined,
   };
 }
 
@@ -198,6 +214,9 @@ export function StudentEditPage() {
   const [draft, setDraft] = useState<StudentDraft>(() =>
     student ? draftFromStudent(student) : draftFromStudent({} as Student),
   );
+  const [concession, setConcession] = useState<StudentConcessionState>(() =>
+    student ? concessionStateFromStudent(student) : emptyConcessionState(),
+  );
   const [addClassOpen, setAddClassOpen] = useState(false);
   const [newClassGrade, setNewClassGrade] = useState("");
   const [newClassSection, setNewClassSection] = useState("");
@@ -210,7 +229,10 @@ export function StudentEditPage() {
   const [pendingCollectStudent, setPendingCollectStudent] = useState<Student | null>(null);
 
   useEffect(() => {
-    if (student) setDraft(draftFromStudent(student));
+    if (student) {
+      setDraft(draftFromStudent(student));
+      setConcession(concessionStateFromStudent(student));
+    }
   }, [student]);
 
   const matchedClass = useMemo(
@@ -250,7 +272,7 @@ export function StudentEditPage() {
 
   const draftAsStudent = useMemo((): Student | null => {
     if (!student) return null;
-    return applyDraftToStudent(student, draft);
+    return applyDraftToStudent(student, draft, concession);
   }, [student, draft]);
 
   const vehiclePeriodOptions = useMemo(() => {
@@ -490,9 +512,14 @@ export function StudentEditPage() {
       toast.error("Class is required");
       return;
     }
+    const concessionError = validateConcessionFees(concession.hasConcession, concession.concessionFees);
+    if (concessionError) {
+      toast.error(concessionError);
+      return;
+    }
     setSaving(true);
     try {
-      const updated = applyDraftToStudent(student, draft);
+      const updated = applyDraftToStudent(student, draft, concession);
       await persistStudent(updated);
       if (updated.needsBus) {
         await syncVehicleFeeBreaks(updated);
@@ -534,9 +561,14 @@ export function StudentEditPage() {
       toast.error("Fill required fields before collecting fee");
       return;
     }
+    const concessionError = validateConcessionFees(concession.hasConcession, concession.concessionFees);
+    if (concessionError) {
+      toast.error(concessionError);
+      return;
+    }
     setSaving(true);
     try {
-      const updated = applyDraftToStudent(student, draft);
+      const updated = applyDraftToStudent(student, draft, concession);
       await persistStudent(updated);
       if (updated.needsBus) {
         await syncVehicleFeeBreaks(updated);
@@ -978,6 +1010,22 @@ export function StudentEditPage() {
               )}
             </div>
           ) : null}
+
+          <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 dark:border-zinc-700/60 dark:bg-zinc-900/30">
+            <div className="mb-3 text-[14px] font-semibold text-slate-900 dark:text-zinc-100">
+              Fee concession
+            </div>
+            <StudentConcessionSection
+              value={concession}
+              onChange={setConcession}
+              matchedClass={matchedClass}
+              feeTerms={activeFeeTerms}
+              transportRoutes={transportRoutes}
+              needsBus={draft.needsBus}
+              busPoint1={draft.busPoint1}
+              busPoint2={draft.busPoint2}
+            />
+          </div>
 
           <div className="flex flex-nowrap items-center gap-1.5 pt-2 sm:justify-end sm:gap-2">
             <Button

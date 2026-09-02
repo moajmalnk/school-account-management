@@ -4,7 +4,7 @@
  * Mobile navbar is better positioned at bottom right.
  **/
 
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import {
   AnimatePresence,
   type MotionValue,
@@ -16,6 +16,7 @@ import {
 import * as React from "react";
 import { useRef, useState } from "react";
 
+import { useOptionalSettingsUnsavedGuard } from "@/components/school/settings-unsaved-guard";
 import { cn, glassPanelClass } from "@/lib/utils";
 
 export type FloatingDockItem = {
@@ -55,6 +56,9 @@ const FloatingDockMobile = ({
   className?: string;
 }) => {
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
+  const guard = useOptionalSettingsUnsavedGuard();
+
   return (
     <div className={cn("relative block md:hidden", className)}>
       <AnimatePresence>
@@ -79,6 +83,11 @@ const FloatingDockMobile = ({
                   to={item.href}
                   aria-label={item.title}
                   aria-current={item.active ? "page" : undefined}
+                  onClick={(event) => {
+                    if (item.active || !guard?.isDirty()) return;
+                    event.preventDefault();
+                    guard.tryNavigate(() => navigate({ to: item.href }));
+                  }}
                   className={cn(
                     "flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-white/80 shadow-sm",
                     item.active && "ring-2 ring-[#0F766E]/40",
@@ -185,6 +194,8 @@ function IconContainer({
 
   const [hovered, setHovered] = useState(false);
   const isAppRoute = href.startsWith("/");
+  const navigate = useNavigate();
+  const guard = useOptionalSettingsUnsavedGuard();
 
   const content = (
     <motion.div
@@ -230,7 +241,16 @@ function IconContainer({
 
   if (isAppRoute) {
     return (
-      <Link to={href} aria-label={title} aria-current={active ? "page" : undefined}>
+      <Link
+        to={href}
+        aria-label={title}
+        aria-current={active ? "page" : undefined}
+        onClick={(event) => {
+          if (active || !guard?.isDirty()) return;
+          event.preventDefault();
+          guard.tryNavigate(() => navigate({ to: href }));
+        }}
+      >
         {content}
       </Link>
     );

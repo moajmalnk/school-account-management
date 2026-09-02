@@ -5,7 +5,7 @@ import { toast } from "sonner";
 
 import { AuthShell } from "@/components/auth/AuthShell";
 import { Label } from "@/components/ui/label";
-import { homePathForSession, INVALID_CREDENTIALS_MESSAGE, useAuth } from "@/lib/auth";
+import { homePathForSession, API_UNREACHABLE_MESSAGE, useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
@@ -17,7 +17,7 @@ function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
-  const [bannerError, setBannerError] = useState(false);
+  const [bannerError, setBannerError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [submitting, setSubmitting] = useState(false);
 
@@ -52,7 +52,7 @@ function LoginPage() {
     if (!password) errs.password = "Password is required";
     setFieldErrors(errs);
     if (Object.keys(errs).length > 0) {
-      setBannerError(false);
+      setBannerError(null);
       return;
     }
 
@@ -61,12 +61,13 @@ function LoginPage() {
     setSubmitting(false);
 
     if (!result.ok) {
-      setBannerError(true);
-      toast.error(result.error || INVALID_CREDENTIALS_MESSAGE);
+      const message = result.error || "Sign in failed. Please try again.";
+      setBannerError(message);
+      toast.error(message);
       return;
     }
 
-    setBannerError(false);
+    setBannerError(null);
     toast.success(`Welcome, ${result.session.displayName}`);
     navigate({ to: result.redirect });
   };
@@ -76,10 +77,14 @@ function LoginPage() {
       {bannerError && (
         <div
           role="alert"
-          className="mt-4 flex items-start gap-2 rounded-2xl border border-[#EF4444]/20 bg-[#FEE2E2] px-3 py-2.5 text-[12px] text-[#EF4444]"
+          className={
+            bannerError === API_UNREACHABLE_MESSAGE
+              ? "mt-4 flex items-start gap-2 rounded-2xl border border-[#F59E0B]/25 bg-[#FFFBEB] px-3 py-2.5 text-[12px] text-[#B45309]"
+              : "mt-4 flex items-start gap-2 rounded-2xl border border-[#EF4444]/20 bg-[#FEE2E2] px-3 py-2.5 text-[12px] text-[#EF4444]"
+          }
         >
           <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>{INVALID_CREDENTIALS_MESSAGE}</span>
+          <span>{bannerError}</span>
         </div>
       )}
 
@@ -99,7 +104,7 @@ function LoginPage() {
             onChange={(e) => {
               setEmail(e.target.value);
               if (fieldErrors.email) setFieldErrors((f) => ({ ...f, email: undefined }));
-              if (bannerError) setBannerError(false);
+              if (bannerError) setBannerError(null);
             }}
             placeholder="you@school.com"
             aria-invalid={!!fieldErrors.email}
@@ -136,7 +141,7 @@ function LoginPage() {
               onChange={(e) => {
                 setPassword(e.target.value);
                 if (fieldErrors.password) setFieldErrors((f) => ({ ...f, password: undefined }));
-                if (bannerError) setBannerError(false);
+                if (bannerError) setBannerError(null);
               }}
               placeholder="••••••••"
               aria-invalid={!!fieldErrors.password}

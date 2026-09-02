@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Bell, ChevronLeft, LayoutDashboard, Settings, UserCog, Users, Wallet } from "lucide-react";
+import { Bell, ChevronLeft, Home, Settings, UserCog, Users, Wallet } from "lucide-react";
 import { useEffect } from "react";
 
 import {
@@ -10,6 +10,10 @@ import {
   ThemeModeToggle,
   useWorkspaceSubViewBack,
 } from "@/components/layout/TenantGlassShell";
+import {
+  SettingsUnsavedProvider,
+  useTenantNavigationGuard,
+} from "@/components/school/settings-unsaved-guard";
 import {
   MobileTabBar,
   mobileMainPadding,
@@ -38,7 +42,7 @@ const MOBILE_TABS: MobileTabItem[] = [
   {
     to: "/tenant/dashboard",
     label: "Home",
-    icon: LayoutDashboard,
+    icon: Home,
     match: (p) => p.startsWith("/tenant/dashboard"),
   },
   {
@@ -91,7 +95,9 @@ function TenantLayout() {
 
   return (
     <TenantStoreProvider tenantId={session.tenantId} tenantName={session.tenantName}>
-      <TenantShell />
+      <SettingsUnsavedProvider>
+        <TenantShell />
+      </SettingsUnsavedProvider>
     </TenantStoreProvider>
   );
 }
@@ -106,6 +112,7 @@ function TenantShell() {
 
   // Refresh subscription plan flags so Super Admin Plan toggles apply without re-login.
   useEffect(() => {
+    if (session?.impersonated) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -123,7 +130,7 @@ function TenantShell() {
     return () => {
       cancelled = true;
     };
-  }, [updateSession]);
+  }, [session?.impersonated, updateSession]);
 
   return (
     <div className="tenant-canvas flex min-h-dvh flex-col text-slate-900 dark:text-zinc-100">
@@ -231,6 +238,7 @@ function ImpersonationBanner() {
 function TenantMobileHeader() {
   const { session } = useAuth();
   const navigate = useNavigate();
+  const { guardedNavigate, tryNavigate } = useTenantNavigationGuard();
   const { notifications, schoolDetails, activeBranch, branches } = useTenantStore();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { showBack, goBack, backLabel } = useWorkspaceSubViewBack();
@@ -261,7 +269,10 @@ function TenantMobileHeader() {
         {showBack ? (
           <button
             type="button"
-            onClick={goBack}
+            onClick={() => {
+              if (tryNavigate) tryNavigate(goBack);
+              else goBack();
+            }}
             aria-label={backLabel}
             className={cn(
               glassInsetClass,
@@ -302,7 +313,7 @@ function TenantMobileHeader() {
         <ThemeModeToggle className="rounded-full border border-white/80 bg-white/70 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-200" />
         <button
           type="button"
-          onClick={() => navigate({ to: "/tenant/notifications" })}
+          onClick={() => guardedNavigate("/tenant/notifications")}
           aria-label="Notifications"
           className="relative grid h-11 w-11 shrink-0 place-items-center rounded-full border border-white/80 bg-white/70 text-slate-600 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-300"
         >

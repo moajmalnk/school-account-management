@@ -28,6 +28,8 @@ import {
   GraduationCap,
   Users,
   Receipt,
+  ChevronUp,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 import { type Tenant, type Tier, type Status } from "./data";
@@ -41,6 +43,7 @@ import {
 } from "@/lib/api/super-admin";
 import { ApiError, getApiToken } from "@/lib/api/client";
 import { TenantsViewSkeleton } from "@/components/admin/TenantsViewSkeleton";
+import { mobileFabClass } from "@/components/layout/MobileTabBar";
 import { PlatformInvoicesPanel } from "@/components/admin/PlatformInvoicesPanel";
 import { OrganicCard } from "@/components/ui/organic-card";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -338,18 +341,33 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (tenant: Tenant
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-heading">School Tenants Registry</h1>
-          <p className="mt-2 text-[14px] text-black/55">
+          <h1 className="text-title sm:text-heading">School Tenants Registry</h1>
+          <p className="mt-1.5 text-[12.5px] leading-relaxed text-black/55 sm:mt-2 sm:text-[14px]">
             {`${filtered.length} of ${tenants.length} tenants · isolated routing keys, provisioning & billing`}
           </p>
         </div>
         <button
+          type="button"
           onClick={() => setOpen(true)}
-          className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-full bg-black px-5 py-2.5 text-[13px] font-semibold text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)] transition hover:bg-black/85 sm:w-auto"
+          className="hidden min-h-11 items-center justify-center gap-1.5 rounded-full bg-black px-5 py-2.5 text-[13px] font-semibold text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)] transition hover:bg-black/85 md:inline-flex"
         >
           <Plus className="h-4 w-4" /> Provision New School Tenant
         </button>
       </div>
+
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label="Provision new school tenant"
+        className={cn(
+          mobileFabClass,
+          "grid h-14 w-14 place-items-center rounded-full bg-black text-white",
+          "shadow-[0_10px_32px_-10px_rgba(0,0,0,0.5)] ring-4 ring-white/90",
+          "transition-transform active:scale-95 hover:bg-black/90",
+        )}
+      >
+        <Plus className="h-6 w-6" strokeWidth={2.25} />
+      </button>
 
       {/* Filters */}
       <OrganicCard
@@ -931,6 +949,70 @@ const TENANT_DETAIL_TABS = [
   { id: "access", label: "Access", icon: Shield },
 ] as const;
 
+function TenantDetailTabSheet({
+  open,
+  onOpenChange,
+  tab,
+  onTabChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  tab: string;
+  onTabChange: (tab: string) => void;
+}) {
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="bottom"
+        className="z-[60] max-h-[min(85dvh,560px)] overflow-y-auto rounded-t-[1.75rem] border-[#E5E5E5] bg-white px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2"
+      >
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-black/10" aria-hidden />
+        <SheetHeader className="space-y-1 text-left">
+          <SheetTitle className="text-[16px] font-semibold tracking-tight text-black">
+            Tenant sections
+          </SheetTitle>
+          <SheetDescription className="text-[12px] text-black/55">
+            Choose what to view in this school profile
+          </SheetDescription>
+        </SheetHeader>
+        <div className="mt-4 grid gap-1.5">
+          {TENANT_DETAIL_TABS.map((item) => {
+            const Icon = item.icon;
+            const active = tab === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  onTabChange(item.id);
+                  onOpenChange(false);
+                }}
+                className={cn(
+                  "flex w-full items-center gap-3 rounded-2xl px-3.5 py-3 text-left transition active:scale-[0.99]",
+                  active
+                    ? "bg-[#0F766E] text-white shadow-sm"
+                    : "bg-[#F4F4F5] text-black/75 hover:bg-[#ECECEC]",
+                )}
+              >
+                <span
+                  className={cn(
+                    "grid h-9 w-9 shrink-0 place-items-center rounded-xl",
+                    active ? "bg-white/20 text-white" : "bg-white text-[#0F766E]",
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                </span>
+                <span className="flex-1 text-[14px] font-semibold">{item.label}</span>
+                {active ? <Check className="h-4 w-4 shrink-0 opacity-90" aria-hidden /> : null}
+              </button>
+            );
+          })}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 function formatSnapshotInr(amount: number) {
   return `₹ ${amount.toLocaleString("en-IN")}`;
 }
@@ -985,6 +1067,7 @@ function TenantDetailDrawer({
   onImpersonate: () => void;
   onSaveBilling: (rule: BillingRule) => void;
 }) {
+  const [tabSheetOpen, setTabSheetOpen] = useState(false);
   const [billingDraft, setBillingDraft] = useState<BillingRule | null>(null);
   const [activity, setActivity] = useState<AuditEvent[]>([]);
   const [snapshot, setSnapshot] = useState<TenantWorkspaceSnapshot | null>(null);
@@ -1029,6 +1112,10 @@ function TenantDetailDrawer({
     };
   }, [tenant?.id]);
 
+  useEffect(() => {
+    setTabSheetOpen(false);
+  }, [tenant?.id]);
+
   if (!tenant) return null;
   const draft = billingDraft ?? billing;
   if (!draft) return null;
@@ -1061,6 +1148,9 @@ function TenantDetailDrawer({
     onSaveBilling(draft);
   };
 
+  const activeTab = TENANT_DETAIL_TABS.find((item) => item.id === tab);
+  const ActiveTabIcon = activeTab?.icon;
+
   return (
     <Dialog open={!!tenant} onOpenChange={(v) => !v && onClose()}>
       <DialogContent
@@ -1080,7 +1170,40 @@ function TenantDetailDrawer({
         </DialogHeader>
 
         <Tabs value={tab} onValueChange={onTabChange} className="flex min-h-0 flex-1 flex-col">
-          <div className="shrink-0 border-b border-[#E5E5E5] bg-white px-3 pt-3 sm:px-6">
+          <div className="shrink-0 border-b border-[#E5E5E5] bg-white px-3 py-3 md:hidden">
+            <button
+              type="button"
+              onClick={() => setTabSheetOpen(true)}
+              className="flex w-full items-center justify-between gap-3 rounded-2xl border border-[#E5E5E5] bg-[#F4F4F5] px-3.5 py-3 text-left transition active:scale-[0.99]"
+              aria-haspopup="dialog"
+              aria-expanded={tabSheetOpen}
+            >
+              <span className="flex min-w-0 items-center gap-2.5">
+                {ActiveTabIcon ? (
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-[#0F766E] shadow-sm">
+                    <ActiveTabIcon className="h-4 w-4" />
+                  </span>
+                ) : null}
+                <span className="min-w-0">
+                  <span className="block text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    Section
+                  </span>
+                  <span className="block truncate text-[14px] font-semibold text-black">
+                    {activeTab?.label ?? "Overview"}
+                  </span>
+                </span>
+              </span>
+              <ChevronUp className="h-4 w-4 shrink-0 text-black/45" aria-hidden />
+            </button>
+            <TenantDetailTabSheet
+              open={tabSheetOpen}
+              onOpenChange={setTabSheetOpen}
+              tab={tab}
+              onTabChange={onTabChange}
+            />
+          </div>
+
+          <div className="hidden shrink-0 border-b border-[#E5E5E5] bg-white px-3 pt-3 sm:px-6 md:block">
             <div className="-mx-1 overflow-x-auto px-1 pb-1">
               <TabsList className="inline-flex h-auto min-w-full gap-1.5 rounded-none bg-transparent p-0 pb-3">
                 {TENANT_DETAIL_TABS.map((item) => {

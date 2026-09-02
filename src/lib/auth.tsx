@@ -121,7 +121,9 @@ function loginFailureMessage(err: unknown): string {
   if (
     err instanceof TypeError ||
     (err instanceof Error &&
-      /failed to fetch|networkerror|load failed|network request failed/i.test(err.message))
+      /failed to fetch|networkerror|load failed|network request failed|timed out|aborted/i.test(
+        err.message,
+      ))
   ) {
     return API_UNREACHABLE_MESSAGE;
   }
@@ -397,7 +399,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         try {
-          await apiMe();
+          if (!impersonated) {
+            await apiMe();
+          }
           touchLastActive(true);
           if (!cancelled) setSession(readSession() ?? existing);
         } catch (err) {

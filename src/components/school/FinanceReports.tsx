@@ -35,6 +35,8 @@ import { MonthPicker } from "@/components/ui/date-picker";
 import { FinanceBarCard, FinanceDonutCard } from "@/components/school/finance-charts";
 import { OrganicCard } from "@/components/ui/organic-card";
 import {
+  bankBalance,
+  cashOnHand,
   expenseSegmentsFromDisbursements,
   isSalaryDisbursement,
   normalizePayeeType,
@@ -44,7 +46,7 @@ import {
   type FinanceDisbursement,
 } from "@/lib/dashboard-finance";
 import { formatEventDate, formatEventDateTime } from "@/lib/dates";
-import { downloadCsv, downloadTablePdf } from "@/lib/finance-export";
+import { downloadCsv, downloadTablePdf, truncatePdfCell } from "@/lib/finance-export";
 import { formatDownloadFilename, slugYear, todayStamp } from "@/lib/download-names";
 import { useDisbursements } from "@/lib/use-disbursements";
 import {
@@ -73,6 +75,10 @@ export type LedgerRow = {
 
 function inr(n: number) {
   return `₹ ${n.toLocaleString("en-IN")}`;
+}
+
+function pdfInr(n: number) {
+  return `Rs. ${n.toLocaleString("en-IN")}`;
 }
 
 function reportDownloadName(
@@ -134,16 +140,16 @@ function withRunningBalance(rows: Omit<LedgerRow, "balance">[]): LedgerRow[] {
   });
 }
 
-function ExportBar({
-  title,
+function ExportActions({
   onCsv,
   onPdf,
   onPrint,
+  confirmTitle,
 }: {
-  title: string;
   onCsv: () => void;
   onPdf: () => void;
   onPrint: () => void;
+  confirmTitle: string;
 }) {
   const [pendingExport, setPendingExport] = useState<"csv" | "pdf" | null>(null);
 
@@ -156,45 +162,40 @@ function ExportBar({
   const exportCopy = {
     csv: {
       title: "Export CSV",
-      description: `Export ${title} as a CSV file? The download will start immediately after confirmation.`,
+      description: `Export ${confirmTitle} as a CSV file? The download will start immediately after confirmation.`,
       confirm: "Export CSV",
     },
     pdf: {
       title: "Export PDF",
-      description: `Export ${title} as a PDF file? The download will start immediately after confirmation.`,
+      description: `Export ${confirmTitle} as a PDF file? The download will start immediately after confirmation.`,
       confirm: "Export PDF",
     },
   } as const;
 
   return (
     <>
-      <div className="grid grid-cols-12 items-start gap-3 lg:items-center">
-        <div className="col-span-12 lg:col-span-7">
-          <div className="text-title text-slate-900 dark:text-zinc-50">{title}</div>
-        </div>
-        <div className="col-span-12 grid grid-cols-3 gap-2 lg:col-span-5">
-          <button
-            type="button"
-            onClick={() => setPendingExport("csv")}
-            className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 py-1.5 text-[11.5px] font-medium text-black transition-colors hover:bg-[#F4F4F5] dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 sm:text-[12px]"
-          >
-            <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" /> Export CSV
-          </button>
-          <button
-            type="button"
-            onClick={() => setPendingExport("pdf")}
-            className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full bg-[#0F766E] px-3 py-1.5 text-[11.5px] font-semibold text-white transition-colors hover:bg-[#0D9488] sm:text-[12px]"
-          >
-            <Download className="h-3.5 w-3.5 shrink-0" /> Export PDF
-          </button>
-          <button
-            type="button"
-            onClick={onPrint}
-            className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 py-1.5 text-[11.5px] font-medium text-black transition-colors hover:bg-[#F4F4F5] dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 sm:text-[12px]"
-          >
-            <Printer className="h-3.5 w-3.5 shrink-0" /> Print PDF
-          </button>
-        </div>
+      <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-3">
+        <button
+          type="button"
+          onClick={() => setPendingExport("csv")}
+          className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 py-1.5 text-[11.5px] font-medium text-black transition-colors hover:bg-[#F4F4F5] dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 sm:text-[12px]"
+        >
+          <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" /> Export CSV
+        </button>
+        <button
+          type="button"
+          onClick={() => setPendingExport("pdf")}
+          className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full bg-[#0F766E] px-3 py-1.5 text-[11.5px] font-semibold text-white transition-colors hover:bg-[#0D9488] sm:text-[12px]"
+        >
+          <Download className="h-3.5 w-3.5 shrink-0" /> Export PDF
+        </button>
+        <button
+          type="button"
+          onClick={onPrint}
+          className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 py-1.5 text-[11.5px] font-medium text-black transition-colors hover:bg-[#F4F4F5] dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 sm:text-[12px]"
+        >
+          <Printer className="h-3.5 w-3.5 shrink-0" /> Print PDF
+        </button>
       </div>
 
       <Dialog
@@ -229,6 +230,25 @@ function ExportBar({
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function ExportBar({
+  title,
+  onCsv,
+  onPdf,
+  onPrint,
+}: {
+  title: string;
+  onCsv: () => void;
+  onPdf: () => void;
+  onPrint: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="text-title text-slate-900 dark:text-zinc-50">{title}</div>
+      <ExportActions onCsv={onCsv} onPdf={onPdf} onPrint={onPrint} confirmTitle={title} />
+    </div>
   );
 }
 
@@ -576,7 +596,37 @@ export function GeneralLedgerReport() {
 
   const headers = ["Date", "Voucher", "Particulars", "Account", "Debit", "Credit", "Balance"];
 
-  const exportMeta = `${schoolName} · ${academicYear} · General Ledger`;
+  const ledgerPdfHeaders = [
+    "Date",
+    "Voucher",
+    "Particulars",
+    "Account",
+    "Debit (Rs.)",
+    "Credit (Rs.)",
+    "Balance (Rs.)",
+  ] as const;
+
+  const formatLedgerPdfAmount = (value: number) =>
+    value > 0 ? value.toLocaleString("en-IN") : "-";
+
+  const buildGeneralLedgerPdfRows = () =>
+    filteredRows.map((row) => [
+      row.date,
+      row.voucher,
+      truncatePdfCell(row.particulars, 80),
+      row.account,
+      formatLedgerPdfAmount(row.debit),
+      formatLedgerPdfAmount(row.credit),
+      row.balance.toLocaleString("en-IN"),
+    ]);
+
+  const generalLedgerPdfSummary = () => [
+    { label: "Total Debit", value: pdfInr(totalDebit) },
+    { label: "Total Credit", value: pdfInr(totalCredit) },
+    { label: "Closing Balance", value: pdfInr(closing) },
+  ];
+
+  const exportMeta = `${schoolName} · ${academicYear}`;
 
   const clearFilters = () => {
     setQuery("");
@@ -606,9 +656,11 @@ export function GeneralLedgerReport() {
       filename: reportDownloadName("general-ledger", "pdf", schoolName, academicYear),
       title: "General Ledger",
       subtitle: exportMeta,
-      headers,
-      rows: tableRows,
-      footer: `Total Debit ${inr(totalDebit)} · Total Credit ${inr(totalCredit)} · Closing ${inr(closing)}`,
+      headers: [...ledgerPdfHeaders],
+      rows: buildGeneralLedgerPdfRows(),
+      summaryItems: generalLedgerPdfSummary(),
+      emptyMessage: "No ledger postings for this period",
+      landscape: true,
     });
     toast.success("Ledger exported as PDF");
   };
@@ -618,27 +670,36 @@ export function GeneralLedgerReport() {
       filename: reportDownloadName("general-ledger", "pdf", schoolName, academicYear),
       title: "General Ledger",
       subtitle: exportMeta,
-      headers,
-      rows: tableRows,
-      footer: `Total Debit ${inr(totalDebit)} · Total Credit ${inr(totalCredit)} · Closing ${inr(closing)}`,
+      headers: [...ledgerPdfHeaders],
+      rows: buildGeneralLedgerPdfRows(),
+      summaryItems: generalLedgerPdfSummary(),
+      emptyMessage: "No ledger postings for this period",
+      landscape: true,
       action: "print",
     });
     toast.success("Print dialog opened");
   };
 
   return (
-    <div className="grid grid-cols-12 gap-4 sm:gap-5">
-      <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12">
-        <ExportBar
-          title="General Ledger"
-          onCsv={handleCsv}
-          onPdf={handlePdf}
-          onPrint={handlePrint}
-        />
-        <p className="mt-1 text-[12px] text-black/55">
-          Chronological double-entry view · {filteredRows.length}
-          {filtersActive ? ` of ${allRows.length}` : ""} postings · {academicYear}
-        </p>
+    <div className="flex flex-col gap-4 sm:gap-5">
+      <OrganicCard tone="white" cornerSide="tr" padded className="shrink-0">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="text-title text-slate-900 dark:text-zinc-50">General Ledger</div>
+            <p className="mt-1 text-[12px] text-black/55">
+              Chronological double-entry view · {filteredRows.length}
+              {filtersActive ? ` of ${allRows.length}` : ""} postings · {academicYear}
+            </p>
+          </div>
+          <div className="w-full shrink-0 lg:w-auto lg:min-w-[260px]">
+            <ExportActions
+              onCsv={handleCsv}
+              onPdf={handlePdf}
+              onPrint={handlePrint}
+              confirmTitle="General Ledger"
+            />
+          </div>
+        </div>
         <SummaryStrip
           items={[
             { label: "Total Debit", value: inr(totalDebit) },
@@ -648,9 +709,9 @@ export function GeneralLedgerReport() {
         />
       </OrganicCard>
 
-      <OrganicCard tone="white" cornerSide="bl" padded className="col-span-12">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+      <OrganicCard tone="white" cornerSide="bl" padded>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <div className="text-title text-slate-900 dark:text-zinc-50">Ledger Postings</div>
             <p className="mt-1 text-[12px] text-black/55">
               {filteredRows.length} of {allRows.length} entr
@@ -662,7 +723,7 @@ export function GeneralLedgerReport() {
             <button
               type="button"
               onClick={clearFilters}
-              className="text-[11px] font-semibold text-[#0F766E] hover:underline"
+              className="shrink-0 text-[11px] font-semibold text-[#0F766E] hover:underline"
             >
               Clear filters
             </button>
@@ -751,7 +812,36 @@ export function ProfitLossReport() {
     ["Net Surplus / (Deficit)", "Result", inr(netProfit)],
   ];
 
-  const exportMeta = `${schoolName} · ${academicYear} · Profit & Loss`;
+  const profitLossPdfHeaders = ["Line Item", "Type", "Amount (Rs.)"] as const;
+
+  const buildProfitLossPdfRows = () => [
+    ...incomeByCategory.map((item) => [
+      item.label,
+      "Income",
+      item.amount.toLocaleString("en-IN"),
+    ]),
+    ...expenseSegments.map((item) => [
+      item.label,
+      "Expense",
+      item.value.toLocaleString("en-IN"),
+    ]),
+    [
+      { content: "Net Surplus / (Deficit)", styles: { fontStyle: "bold" as const } },
+      { content: "Result", styles: { fontStyle: "bold" as const } },
+      {
+        content: netProfit.toLocaleString("en-IN"),
+        styles: { fontStyle: "bold" as const, halign: "right" as const },
+      },
+    ],
+  ];
+
+  const profitLossPdfSummary = () => [
+    { label: "Total Income", value: pdfInr(totalIncome) },
+    { label: "Total Expense", value: pdfInr(totalExpense) },
+    { label: "Net Surplus", value: pdfInr(netProfit) },
+  ];
+
+  const exportMeta = `${schoolName} · ${academicYear}`;
 
   const handleCsv = () => {
     downloadCsv(reportDownloadName("profit-loss", "csv", schoolName, academicYear), headers, [
@@ -767,9 +857,11 @@ export function ProfitLossReport() {
       filename: reportDownloadName("profit-loss", "pdf", schoolName, academicYear),
       title: "Profit & Loss Account",
       subtitle: exportMeta,
-      headers,
-      rows: tableRows,
-      footer: `Total Income ${inr(totalIncome)} · Total Expense ${inr(totalExpense)} · Net ${inr(netProfit)}`,
+      headers: [...profitLossPdfHeaders],
+      rows: buildProfitLossPdfRows(),
+      summaryItems: profitLossPdfSummary(),
+      emptyMessage: "No income or expense recorded for this period",
+      landscape: false,
     });
     toast.success("P&L exported as PDF");
   };
@@ -779,67 +871,87 @@ export function ProfitLossReport() {
       filename: reportDownloadName("profit-loss", "pdf", schoolName, academicYear),
       title: "Profit & Loss Account",
       subtitle: exportMeta,
-      headers,
-      rows: tableRows,
-      footer: `Total Income ${inr(totalIncome)} · Total Expense ${inr(totalExpense)} · Net ${inr(netProfit)}`,
+      headers: [...profitLossPdfHeaders],
+      rows: buildProfitLossPdfRows(),
+      summaryItems: profitLossPdfSummary(),
+      emptyMessage: "No income or expense recorded for this period",
+      landscape: false,
       action: "print",
     });
     toast.success("Print dialog opened");
   };
 
   return (
-    <div className="grid grid-cols-12 gap-4 sm:gap-5">
-      <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12 lg:col-span-8">
-        <ExportBar
-          title="Profit & Loss Account"
-          onCsv={handleCsv}
-          onPdf={handlePdf}
-          onPrint={handlePrint}
+    <div className="flex flex-col gap-4 sm:gap-5">
+      <OrganicCard tone="white" cornerSide="tr" padded className="shrink-0">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="text-title text-slate-900 dark:text-zinc-50">Profit &amp; Loss Account</div>
+            <p className="mt-1 text-[12px] text-black/55">
+              Income from fee receipts vs operating expenditure · {academicYear}
+            </p>
+          </div>
+          <div className="w-full shrink-0 lg:w-auto lg:min-w-[260px]">
+            <ExportActions
+              onCsv={handleCsv}
+              onPdf={handlePdf}
+              onPrint={handlePrint}
+              confirmTitle="Profit & Loss Account"
+            />
+          </div>
+        </div>
+        <SummaryStrip
+          items={[
+            { label: "Gross Income", value: inr(totalIncome) },
+            { label: "Operating Expense", value: inr(totalExpense) },
+            { label: "Net Surplus", value: inr(netProfit), accent: true },
+          ]}
         />
-        <p className="mt-1 text-[12px] text-black/55">
-          Income from fee receipts vs operating expenditure · {academicYear}
-        </p>
-        <ReportTable headers={headers} rows={tableRows} />
       </OrganicCard>
 
-      <OrganicCard
-        tone="lime"
-        cornerSide="bl"
-        padded
-        className="col-span-12 max-h-[calc(100dvh-9rem)] overflow-hidden p-4 sm:p-6 lg:col-span-4"
-      >
-        <div className="text-[28px] font-semibold leading-none tracking-tight text-white sm:text-title">
-          Statement Summary
-        </div>
-        <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-3 lg:grid-cols-1">
-          <div className="min-w-0 rounded-xl bg-white/15 px-3 py-2.5 ring-1 ring-white/20 sm:rounded-2xl sm:p-3">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-teal-100/75">
-              Gross Income
-            </div>
-            <div className="mt-1 truncate font-mono text-[18px] font-semibold text-white sm:text-[20px]">
-              {inr(totalIncome)}
-            </div>
-          </div>
-          <div className="min-w-0 rounded-xl bg-white/15 px-3 py-2.5 ring-1 ring-white/20 sm:rounded-2xl sm:p-3">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-teal-100/75">
-              Operating Expense
-            </div>
-            <div className="mt-1 truncate font-mono text-[18px] font-semibold text-white sm:text-[20px]">
-              {inr(totalExpense)}
-            </div>
-          </div>
-          <div className="min-w-0 rounded-xl bg-slate-950/45 px-3 py-2.5 text-white ring-1 ring-white/10 sm:rounded-2xl sm:p-3">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60">
-              Net Surplus
-            </div>
-            <div className="mt-1 truncate font-mono text-[18px] font-semibold sm:text-[22px]">
-              {inr(netProfit)}
-            </div>
-          </div>
-        </div>
-      </OrganicCard>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-5">
+        <OrganicCard tone="white" cornerSide="tl" padded className="lg:col-span-2">
+          <div className="text-title text-slate-900 dark:text-zinc-50">Income &amp; Expense Lines</div>
+          <p className="mt-1 text-[12px] text-black/55">
+            Receipts grouped by category with operating expenditure
+          </p>
+          <ReportTable headers={headers} rows={tableRows} className="mt-4" />
+        </OrganicCard>
 
-      <div className="col-span-12 min-w-0 sm:col-span-6">
+        <OrganicCard tone="lime" cornerSide="bl" padded className="p-4 sm:p-6">
+          <div className="text-[24px] font-semibold leading-none tracking-tight text-white sm:text-[28px]">
+            Statement Summary
+          </div>
+          <div className="mt-4 grid grid-cols-1 gap-2.5">
+            <div className="min-w-0 rounded-xl bg-white/15 px-3 py-2.5 ring-1 ring-white/20 sm:rounded-2xl sm:p-3">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-teal-100/75">
+                Gross Income
+              </div>
+              <div className="mt-1 truncate font-mono text-[18px] font-semibold text-white sm:text-[20px]">
+                {inr(totalIncome)}
+              </div>
+            </div>
+            <div className="min-w-0 rounded-xl bg-white/15 px-3 py-2.5 ring-1 ring-white/20 sm:rounded-2xl sm:p-3">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-teal-100/75">
+                Operating Expense
+              </div>
+              <div className="mt-1 truncate font-mono text-[18px] font-semibold text-white sm:text-[20px]">
+                {inr(totalExpense)}
+              </div>
+            </div>
+            <div className="min-w-0 rounded-xl bg-slate-950/45 px-3 py-2.5 text-white ring-1 ring-white/10 sm:rounded-2xl sm:p-3">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60">
+                Net Surplus
+              </div>
+              <div className="mt-1 truncate font-mono text-[18px] font-semibold sm:text-[22px]">
+                {inr(netProfit)}
+              </div>
+            </div>
+          </div>
+        </OrganicCard>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5">
         <FinanceDonutCard
           title="Income Mix"
           cornerSide="tr"
@@ -848,8 +960,6 @@ export function ProfitLossReport() {
             value: item.amount,
           }))}
         />
-      </div>
-      <div className="col-span-12 min-w-0 sm:col-span-6">
         <FinanceBarCard
           title="Expense Breakdown"
           cornerSide="bl"
@@ -875,25 +985,19 @@ export function BalanceSheetReport() {
   const schoolName = schoolDetails.name || "School";
   const openPayables = useMemo(() => queuedPayables(disbursements), [disbursements]);
 
-  const cashOnHand = useMemo(
-    () => payments.filter((p) => p.mode === "Cash").reduce((s, p) => s + p.amount, 0),
-    [payments],
-  );
-  const bankBalance = useMemo(
-    () => payments.filter((p) => p.mode !== "Cash").reduce((s, p) => s + p.amount, 0),
-    [payments],
-  );
+  const cashOnHandTotal = useMemo(() => cashOnHand(payments), [payments]);
+  const bankBalanceTotal = useMemo(() => bankBalance(payments), [payments]);
   const receivables = useMemo(
     () => students.filter((st) => !isRecordDeleted(st.deletedAt)).reduce((s, st) => s + st.due, 0),
     [students],
   );
   const payables = totalAccountsPayable(disbursements);
-  const totalAssets = cashOnHand + bankBalance + receivables;
+  const totalAssets = cashOnHandTotal + bankBalanceTotal + receivables;
   const equity = totalAssets - payables;
 
   const assetRows = [
-    ["Cash in Hand", inr(cashOnHand)],
-    ["Bank & UPI", inr(bankBalance)],
+    ["Cash in Hand", inr(cashOnHandTotal)],
+    ["Bank & UPI", inr(bankBalanceTotal)],
     ["Accounts Receivable (Fees Due)", inr(receivables)],
     ["Total Assets", inr(totalAssets)],
   ];
@@ -911,12 +1015,57 @@ export function BalanceSheetReport() {
     ...liabilityRows,
   ];
 
-  const exportMeta = `${schoolName} · ${academicYear} · Balance Sheet`;
+  const balanceSheetPdfHeaders = ["Account Head", "Amount (Rs.)"] as const;
+
+  const balanceSheetSectionRow = (label: string) => [
+    {
+      content: label,
+      colSpan: 2,
+      styles: {
+        halign: "center" as const,
+        fontStyle: "bold" as const,
+        fillColor: [244, 244, 245] as [number, number, number],
+        textColor: [71, 85, 105] as [number, number, number],
+      },
+    },
+  ];
+
+  const balanceSheetAmountRow = (label: string, amount: number, emphasize = false) => [
+    emphasize
+      ? { content: label, styles: { fontStyle: "bold" as const } }
+      : label,
+    emphasize
+      ? {
+          content: amount.toLocaleString("en-IN"),
+          styles: { fontStyle: "bold" as const, halign: "right" as const },
+        }
+      : amount.toLocaleString("en-IN"),
+  ];
+
+  const buildBalanceSheetPdfRows = () => [
+    balanceSheetSectionRow("ASSETS"),
+    balanceSheetAmountRow("Cash in Hand", cashOnHandTotal),
+    balanceSheetAmountRow("Bank & UPI", bankBalanceTotal),
+    balanceSheetAmountRow("Accounts Receivable (Fees Due)", receivables),
+    balanceSheetAmountRow("Total Assets", totalAssets, true),
+    balanceSheetSectionRow("LIABILITIES & EQUITY"),
+    balanceSheetAmountRow("Accounts Payable", payables),
+    balanceSheetAmountRow("Retained Surplus / Equity", equity),
+    balanceSheetAmountRow("Total Liabilities & Equity", payables + equity, true),
+  ];
+
+  const balanceSheetPdfSummary = () => [
+    { label: "Total Assets", value: pdfInr(totalAssets) },
+    { label: "Payables", value: pdfInr(payables) },
+    { label: "Net Equity", value: pdfInr(equity) },
+  ];
+
+  const exportMeta = `${schoolName} · ${academicYear}`;
 
   const handleCsv = () => {
     downloadCsv(reportDownloadName("balance-sheet", "csv", schoolName, academicYear), headers, [
-      ["Cash in Hand", cashOnHand],
-      ["Bank & UPI", bankBalance],
+      ["Cash in Hand", cashOnHandTotal],
+      ["Bank & UPI", bankBalanceTotal],
       ["Accounts Receivable", receivables],
       ["Total Assets", totalAssets],
       ["Accounts Payable", payables],
@@ -931,9 +1080,10 @@ export function BalanceSheetReport() {
       filename: reportDownloadName("balance-sheet", "pdf", schoolName, academicYear),
       title: "Balance Sheet",
       subtitle: exportMeta,
-      headers,
-      rows: tableRows,
-      footer: `Assets ${inr(totalAssets)} · Liabilities & Equity ${inr(payables + equity)}`,
+      headers: [...balanceSheetPdfHeaders],
+      rows: buildBalanceSheetPdfRows(),
+      summaryItems: balanceSheetPdfSummary(),
+      landscape: false,
     });
     toast.success("Balance sheet exported as PDF");
   };
@@ -943,26 +1093,34 @@ export function BalanceSheetReport() {
       filename: reportDownloadName("balance-sheet", "pdf", schoolName, academicYear),
       title: "Balance Sheet",
       subtitle: exportMeta,
-      headers,
-      rows: tableRows,
-      footer: `Assets ${inr(totalAssets)} · Liabilities & Equity ${inr(payables + equity)}`,
+      headers: [...balanceSheetPdfHeaders],
+      rows: buildBalanceSheetPdfRows(),
+      summaryItems: balanceSheetPdfSummary(),
+      landscape: false,
       action: "print",
     });
     toast.success("Print dialog opened");
   };
 
   return (
-    <div className="grid grid-cols-12 gap-4 sm:gap-5">
-      <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12 lg:col-span-6">
-        <ExportBar
-          title="Balance Sheet"
-          onCsv={handleCsv}
-          onPdf={handlePdf}
-          onPrint={handlePrint}
-        />
-        <p className="mt-1 text-[12px] text-black/55">
-          Position statement as at today · {academicYear}
-        </p>
+    <div className="flex flex-col gap-4 sm:gap-5">
+      <OrganicCard tone="white" cornerSide="tr" padded className="shrink-0">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="text-title text-slate-900 dark:text-zinc-50">Balance Sheet</div>
+            <p className="mt-1 text-[12px] text-black/55">
+              Position statement as at today · {academicYear}
+            </p>
+          </div>
+          <div className="w-full shrink-0 lg:w-auto lg:min-w-[260px]">
+            <ExportActions
+              onCsv={handleCsv}
+              onPdf={handlePdf}
+              onPrint={handlePrint}
+              confirmTitle="Balance Sheet"
+            />
+          </div>
+        </div>
         <SummaryStrip
           items={[
             { label: "Total Assets", value: inr(totalAssets) },
@@ -970,10 +1128,16 @@ export function BalanceSheetReport() {
             { label: "Net Equity", value: inr(equity), accent: true },
           ]}
         />
-        <ReportTable headers={headers} rows={tableRows} compact />
       </OrganicCard>
 
-      <OrganicCard tone="white" cornerSide="bl" padded className="col-span-12 lg:col-span-6">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-5">
+        <OrganicCard tone="white" cornerSide="tl" padded>
+          <div className="text-title text-slate-900 dark:text-zinc-50">Statement of Position</div>
+          <p className="mt-1 text-[12px] text-black/55">Assets, liabilities, and equity as at today</p>
+          <ReportTable headers={headers} rows={tableRows} compact className="mt-4" />
+        </OrganicCard>
+
+        <OrganicCard tone="white" cornerSide="bl" padded>
         <div className="text-title text-slate-900 dark:text-zinc-50">Outstanding Payables</div>
         <p className="mt-1 text-[12px] text-black/55">
           {openPayables.length} open obligation{openPayables.length === 1 ? "" : "s"}
@@ -1007,19 +1171,18 @@ export function BalanceSheetReport() {
           </p>
         </div>
       </OrganicCard>
+      </div>
 
-      <div className="col-span-6 min-w-0">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5">
         <FinanceDonutCard
           title="Asset Composition"
           cornerSide="tr"
           segments={[
-            { label: "Cash", value: cashOnHand },
-            { label: "Bank & UPI", value: bankBalance },
+            { label: "Cash", value: cashOnHandTotal },
+            { label: "Bank & UPI", value: bankBalanceTotal },
             { label: "Receivables", value: receivables },
           ]}
         />
-      </div>
-      <div className="col-span-6 min-w-0">
         <FinanceBarCard
           title="Payables Snapshot"
           cornerSide="bl"
@@ -1245,6 +1408,44 @@ export function FeesReport() {
 
   const outstandingRows = filteredDues.map((s) => [s.id, s.name, s.cls, s.guardian, inr(s.due)]);
 
+  const feesReportPdfHeaders = [
+    "Receipt",
+    "Student",
+    "Class",
+    "Category",
+    "Period",
+    "Mode",
+    "Amount (Rs.)",
+    "Time",
+  ] as const;
+
+  const buildFeesReportPdfRows = () =>
+    filteredCollections.map((payment) => [
+      payment.id,
+      truncatePdfCell(payment.name, 48),
+      payment.resolvedClass,
+      payment.cat,
+      resolvePaymentFeePeriod(payment) ?? "-",
+      payment.mode,
+      payment.amount.toLocaleString("en-IN"),
+      formatEventDateTime(payment.time),
+    ]);
+
+  const buildFeesOutstandingPdfRows = () =>
+    filteredDues.map((student) => [
+      student.id,
+      truncatePdfCell(student.name, 48),
+      student.cls,
+      truncatePdfCell(student.guardian, 40),
+      student.due.toLocaleString("en-IN"),
+    ]);
+
+  const feesReportPdfSummary = () => [
+    { label: "Fees Collected", value: pdfInr(collected) },
+    { label: "Outstanding", value: pdfInr(outstanding) },
+    { label: "Students Overdue", value: String(filteredDues.length) },
+  ];
+
   const clearCollectionFilters = () => {
     setCollectionQuery("");
     setCollectionCategory("all");
@@ -1280,18 +1481,18 @@ export function FeesReport() {
       filename: reportDownloadName("fees-report", "pdf", schoolName, academicYear),
       title: "Fees Report",
       subtitle: `${schoolName} · ${academicYear}`,
-      headers: ["Receipt", "Student", "Class", "Category", "Period", "Mode", "Amount", "Time"],
-      rows: filteredCollections.map((p) => [
-        p.id,
-        p.name,
-        p.resolvedClass,
-        p.cat,
-        resolvePaymentFeePeriod(p) ?? "—",
-        p.mode,
-        p.amount.toLocaleString("en-IN"),
-        formatEventDateTime(p.time),
-      ]),
-      footer: `Collected ${inr(collected)} · Outstanding ${inr(outstanding)}`,
+      headers: [...feesReportPdfHeaders],
+      rows: buildFeesReportPdfRows(),
+      summaryItems: feesReportPdfSummary(),
+      appendTables: [
+        {
+          title: "Outstanding Dues",
+          headers: ["ID", "Student", "Class", "Guardian", "Due (Rs.)"],
+          rows: buildFeesOutstandingPdfRows(),
+        },
+      ],
+      emptyMessage: "No student fee receipts recorded for this period",
+      landscape: true,
     });
     toast.success("Fees report PDF downloaded");
   };
@@ -1301,30 +1502,42 @@ export function FeesReport() {
       filename: reportDownloadName("fees-report", "pdf", schoolName, academicYear),
       title: "Fees Report",
       subtitle: `${schoolName} · ${academicYear}`,
-      headers: ["Receipt", "Student", "Class", "Category", "Period", "Mode", "Amount", "Time"],
-      rows: filteredCollections.map((p) => [
-        p.id,
-        p.name,
-        p.resolvedClass,
-        p.cat,
-        resolvePaymentFeePeriod(p) ?? "—",
-        p.mode,
-        p.amount.toLocaleString("en-IN"),
-        formatEventDateTime(p.time),
-      ]),
-      footer: `Collected ${inr(collected)} · Outstanding ${inr(outstanding)}`,
+      headers: [...feesReportPdfHeaders],
+      rows: buildFeesReportPdfRows(),
+      summaryItems: feesReportPdfSummary(),
+      appendTables: [
+        {
+          title: "Outstanding Dues",
+          headers: ["ID", "Student", "Class", "Guardian", "Due (Rs.)"],
+          rows: buildFeesOutstandingPdfRows(),
+        },
+      ],
+      emptyMessage: "No student fee receipts recorded for this period",
+      landscape: true,
       action: "print",
     });
     toast.success("Print dialog opened");
   };
 
   return (
-    <div className="grid grid-cols-12 gap-4 sm:gap-5">
-      <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12">
-        <ExportBar title="Fees Report" onCsv={handleCsv} onPdf={handlePdf} onPrint={handlePrint} />
-        <p className="mt-1 text-[12px] text-black/55">
-          Student fee collections and outstanding dues · {academicYear}
-        </p>
+    <div className="flex flex-col gap-4 sm:gap-5">
+      <OrganicCard tone="white" cornerSide="tr" padded className="shrink-0">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="text-title text-slate-900 dark:text-zinc-50">Fees Report</div>
+            <p className="mt-1 text-[12px] text-black/55">
+              Student fee collections and outstanding dues · {academicYear}
+            </p>
+          </div>
+          <div className="w-full shrink-0 lg:w-auto lg:min-w-[260px]">
+            <ExportActions
+              onCsv={handleCsv}
+              onPdf={handlePdf}
+              onPrint={handlePrint}
+              confirmTitle="Fees Report"
+            />
+          </div>
+        </div>
         <SummaryStrip
           items={[
             { label: "Fees Collected", value: inr(collected) },
@@ -1338,28 +1551,29 @@ export function FeesReport() {
         />
       </OrganicCard>
 
-      <OrganicCard tone="white" cornerSide="bl" padded className="col-span-12 lg:col-span-7">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="text-title text-slate-900 dark:text-zinc-50">Fee Collections</div>
-            <p className="mt-1 text-[12px] text-black/55">
-              {filteredCollections.length} of {feeReceipts.length} receipt
-              {feeReceipts.length === 1 ? "" : "s"}
-            </p>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:gap-5">
+        <OrganicCard tone="white" cornerSide="bl" padded>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <div className="text-title text-slate-900 dark:text-zinc-50">Fee Collections</div>
+              <p className="mt-1 text-[12px] text-black/55">
+                {filteredCollections.length} of {feeReceipts.length} receipt
+                {feeReceipts.length === 1 ? "" : "s"}
+              </p>
+            </div>
+            {(collectionQuery ||
+              collectionCategory !== "all" ||
+              collectionMode !== "all" ||
+              collectionClass !== "all") && (
+              <button
+                type="button"
+                onClick={clearCollectionFilters}
+                className="shrink-0 text-[11px] font-semibold text-[#0F766E] hover:underline"
+              >
+                Clear filters
+              </button>
+            )}
           </div>
-          {(collectionQuery ||
-            collectionCategory !== "all" ||
-            collectionMode !== "all" ||
-            collectionClass !== "all") && (
-            <button
-              type="button"
-              onClick={clearCollectionFilters}
-              className="text-[11px] font-semibold text-[#0F766E] hover:underline"
-            >
-              Clear filters
-            </button>
-          )}
-        </div>
 
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
           <div className="sm:col-span-2 xl:col-span-4">
@@ -1413,26 +1627,26 @@ export function FeesReport() {
         )}
       </OrganicCard>
 
-      <div className="col-span-12 space-y-4 lg:col-span-5">
-        <OrganicCard tone="white" cornerSide="tr" padded>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="text-title text-slate-900 dark:text-zinc-50">Outstanding Dues</div>
-              <p className="mt-1 text-[12px] text-black/55">
-                {filteredDues.length} of {overdueStudents.length} student
-                {overdueStudents.length === 1 ? "" : "s"} with open balance
-              </p>
+        <div className="flex min-h-0 flex-col gap-4">
+          <OrganicCard tone="white" cornerSide="tr" padded>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <div className="text-title text-slate-900 dark:text-zinc-50">Outstanding Dues</div>
+                <p className="mt-1 text-[12px] text-black/55">
+                  {filteredDues.length} of {overdueStudents.length} student
+                  {overdueStudents.length === 1 ? "" : "s"} with open balance
+                </p>
+              </div>
+              {(duesQuery || duesClass !== "all") && (
+                <button
+                  type="button"
+                  onClick={clearDuesFilters}
+                  className="shrink-0 text-[11px] font-semibold text-[#0F766E] hover:underline"
+                >
+                  Clear filters
+                </button>
+              )}
             </div>
-            {(duesQuery || duesClass !== "all") && (
-              <button
-                type="button"
-                onClick={clearDuesFilters}
-                className="text-[11px] font-semibold text-[#0F766E] hover:underline"
-              >
-                Clear filters
-              </button>
-            )}
-          </div>
 
           <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div className="sm:col-span-2">
@@ -1462,19 +1676,19 @@ export function FeesReport() {
               headers={["ID", "Student", "Class", "Guardian", "Due"]}
               rows={outstandingRows}
               compact
+              className="[&_table]:min-w-[520px]"
             />
           )}
         </OrganicCard>
 
         {byCategory.length > 0 && (
-          <div className="min-h-0">
-            <FinanceDonutCard
-              title="Collection by Category"
-              cornerSide="bl"
-              segments={byCategory}
-            />
-          </div>
+          <FinanceDonutCard
+            title="Collection by Category"
+            cornerSide="bl"
+            segments={byCategory}
+          />
         )}
+        </div>
       </div>
     </div>
   );
@@ -1658,6 +1872,40 @@ export function SalaryReport() {
     setStatus("active");
   };
 
+  const salaryReportPdfHeaders = [
+    "ID",
+    "Name",
+    "Role",
+    "Dept",
+    "Attn",
+    "Basic",
+    "Allow.",
+    "Gross",
+    "Payable",
+    "Status",
+  ] as const;
+
+  const buildSalaryReportPdfRows = () =>
+    payrollRows.map(({ staff: s, gross, payable, attendanceLabel }) => [
+      s.id,
+      s.name,
+      s.role,
+      s.dept,
+      attendanceLabel,
+      s.basicSalary.toLocaleString("en-IN"),
+      s.additionalAllowances.toLocaleString("en-IN"),
+      gross.toLocaleString("en-IN"),
+      payable.toLocaleString("en-IN"),
+      isSalaryMonthSettled(s.salaryHistory, payrollMonth, payable) ? "Paid" : "Due",
+    ]);
+
+  const salaryReportPdfSummary = () => [
+    { label: "Staff Shown", value: String(filteredStaff.length) },
+    { label: "Gross Payroll", value: pdfInr(totalGross) },
+    { label: "Attendance Payable", value: pdfInr(totalPayable) },
+    { label: "Ledger Payable", value: pdfInr(salaryPayableAmount) },
+  ];
+
   const handleCsv = () => {
     downloadCsv(
       reportDownloadName("salary-report", "csv", schoolName, academicYear, { name: payrollMonth }),
@@ -1698,31 +1946,11 @@ export function SalaryReport() {
       }),
       title: `Salary Report · ${payrollMonthLabel}`,
       subtitle: `${schoolName} · ${academicYear} · ${payrollMonth}`,
-      headers: [
-        "ID",
-        "Name",
-        "Role",
-        "Dept",
-        "Attn",
-        "Basic",
-        "Allow.",
-        "Gross",
-        "Payable",
-        "Status",
-      ],
-      rows: payrollRows.map(({ staff: s, gross, payable, attendanceLabel }) => [
-        s.id,
-        s.name,
-        s.role,
-        s.dept,
-        attendanceLabel,
-        s.basicSalary.toLocaleString("en-IN"),
-        s.additionalAllowances.toLocaleString("en-IN"),
-        gross.toLocaleString("en-IN"),
-        payable.toLocaleString("en-IN"),
-        isSalaryMonthSettled(s.salaryHistory, payrollMonth, payable) ? "Paid" : "Due",
-      ]),
-      footer: `Gross ${inr(totalGross)} · Attendance payable ${inr(totalPayable)} · Ledger payable ${inr(salaryPayableAmount)}`,
+      headers: [...salaryReportPdfHeaders],
+      rows: buildSalaryReportPdfRows(),
+      summaryItems: salaryReportPdfSummary(),
+      emptyMessage: "No staff on payroll for this month",
+      landscape: true,
     });
     toast.success("Salary report PDF downloaded");
   };
@@ -1734,31 +1962,11 @@ export function SalaryReport() {
       }),
       title: `Salary Report · ${payrollMonthLabel}`,
       subtitle: `${schoolName} · ${academicYear} · ${payrollMonth}`,
-      headers: [
-        "ID",
-        "Name",
-        "Role",
-        "Dept",
-        "Attn",
-        "Basic",
-        "Allow.",
-        "Gross",
-        "Payable",
-        "Status",
-      ],
-      rows: payrollRows.map(({ staff: s, gross, payable, attendanceLabel }) => [
-        s.id,
-        s.name,
-        s.role,
-        s.dept,
-        attendanceLabel,
-        s.basicSalary.toLocaleString("en-IN"),
-        s.additionalAllowances.toLocaleString("en-IN"),
-        gross.toLocaleString("en-IN"),
-        payable.toLocaleString("en-IN"),
-        isSalaryMonthSettled(s.salaryHistory, payrollMonth, payable) ? "Paid" : "Due",
-      ]),
-      footer: `Gross ${inr(totalGross)} · Attendance payable ${inr(totalPayable)} · Ledger payable ${inr(salaryPayableAmount)}`,
+      headers: [...salaryReportPdfHeaders],
+      rows: buildSalaryReportPdfRows(),
+      summaryItems: salaryReportPdfSummary(),
+      emptyMessage: "No staff on payroll for this month",
+      landscape: true,
       action: "print",
     });
     toast.success("Print dialog opened");
@@ -1767,49 +1975,52 @@ export function SalaryReport() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 sm:gap-5">
       <OrganicCard tone="white" cornerSide="tr" padded className="shrink-0">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 flex-1">
-            <ExportBar
-              title="Salary Report"
-              onCsv={handleCsv}
-              onPdf={handlePdf}
-              onPrint={handlePrint}
-            />
+            <div className="text-title text-slate-900 dark:text-zinc-50">Salary Report</div>
             <p className="mt-1 text-[12px] text-black/55">
               Monthly payroll · present + paid leave adjust payable · {academicYear}
             </p>
-          </div>
-          <div className="w-full shrink-0 sm:w-[200px]">
-            <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/45">
-              Payroll month
+            <div className="mt-3 inline-flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center rounded-full bg-[#0F766E] px-3 py-1 text-[12px] font-semibold text-white">
+                {payrollMonthLabel}
+              </span>
+              <span className="font-mono text-[11px] text-black/45">{payrollMonth}</span>
+              {isCurrentPayrollMonth ? (
+                <span className="rounded-full bg-[#CCFBF1] px-2.5 py-1 text-[10px] font-semibold text-[#0F766E]">
+                  Current month
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setPayrollMonth(currentPayrollMonth())}
+                  className="text-[11px] font-semibold text-[#0F766E] hover:underline"
+                >
+                  Jump to current
+                </button>
+              )}
             </div>
-            <MonthPicker
-              value={payrollMonth}
-              onChange={(month) => setPayrollMonth(month || currentPayrollMonth())}
-              allowClear={false}
-              placeholder="Select month"
-              className="h-10 w-full"
+          </div>
+          <div className="flex w-full shrink-0 flex-col gap-3 sm:min-w-[260px] lg:w-[280px]">
+            <div>
+              <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                Payroll month
+              </div>
+              <MonthPicker
+                value={payrollMonth}
+                onChange={(month) => setPayrollMonth(month || currentPayrollMonth())}
+                allowClear={false}
+                placeholder="Select month"
+                className="h-10 w-full"
+              />
+            </div>
+            <ExportActions
+              onCsv={handleCsv}
+              onPdf={handlePdf}
+              onPrint={handlePrint}
+              confirmTitle="Salary Report"
             />
           </div>
-        </div>
-        <div className="mt-3 inline-flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center rounded-full bg-[#0F766E] px-3 py-1 text-[12px] font-semibold text-white">
-            {payrollMonthLabel}
-          </span>
-          <span className="font-mono text-[11px] text-black/45">{payrollMonth}</span>
-          {isCurrentPayrollMonth ? (
-            <span className="rounded-full bg-[#CCFBF1] px-2.5 py-1 text-[10px] font-semibold text-[#0F766E]">
-              Current month
-            </span>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setPayrollMonth(currentPayrollMonth())}
-              className="text-[11px] font-semibold text-[#0F766E] hover:underline"
-            >
-              Jump to current
-            </button>
-          )}
         </div>
         <SummaryStrip
           items={[
@@ -2169,6 +2380,38 @@ export function DayBookReport() {
     e.type === "Payment" ? inr(e.amount) : "—",
   ]);
 
+  const dayBookPdfHeaders = [
+    "Voucher",
+    "Date/Time",
+    "Particulars",
+    "Account",
+    "Mode",
+    "Type",
+    "Receipt (Rs.)",
+    "Payment (Rs.)",
+  ] as const;
+
+  const formatDayBookPdfAmount = (value: number) =>
+    value > 0 ? value.toLocaleString("en-IN") : "-";
+
+  const buildDayBookPdfRows = () =>
+    filtered.map((entry) => [
+      entry.id,
+      entry.time,
+      truncatePdfCell(entry.particular, 72),
+      entry.account,
+      entry.mode,
+      entry.type,
+      entry.type === "Receipt" ? formatDayBookPdfAmount(entry.amount) : "-",
+      entry.type === "Payment" ? formatDayBookPdfAmount(entry.amount) : "-",
+    ]);
+
+  const dayBookPdfSummary = () => [
+    { label: "Total Receipts", value: pdfInr(totalReceipts) },
+    { label: "Total Payments", value: pdfInr(totalPayments) },
+    { label: "Net Movement", value: pdfInr(net) },
+  ];
+
   const clearFilters = () => {
     setQuery("");
     setEntryType("all");
@@ -2209,27 +2452,11 @@ export function DayBookReport() {
       filename: reportDownloadName("day-book", "pdf", schoolName, academicYear),
       title: "Day Book",
       subtitle: `${schoolName} · ${academicYear}`,
-      headers: [
-        "Voucher",
-        "Date/Time",
-        "Particulars",
-        "Account",
-        "Mode",
-        "Type",
-        "Receipt",
-        "Payment",
-      ],
-      rows: filtered.map((e) => [
-        e.id,
-        e.time,
-        e.particular,
-        e.account,
-        e.mode,
-        e.type,
-        e.type === "Receipt" ? e.amount.toLocaleString("en-IN") : "—",
-        e.type === "Payment" ? e.amount.toLocaleString("en-IN") : "—",
-      ]),
-      footer: `Receipts ${inr(totalReceipts)} · Payments ${inr(totalPayments)} · Net ${inr(net)}`,
+      headers: [...dayBookPdfHeaders],
+      rows: buildDayBookPdfRows(),
+      summaryItems: dayBookPdfSummary(),
+      emptyMessage: "No day book entries for this period",
+      landscape: true,
     });
     toast.success("Day book PDF downloaded");
   };
@@ -2239,39 +2466,35 @@ export function DayBookReport() {
       filename: reportDownloadName("day-book", "pdf", schoolName, academicYear),
       title: "Day Book",
       subtitle: `${schoolName} · ${academicYear}`,
-      headers: [
-        "Voucher",
-        "Date/Time",
-        "Particulars",
-        "Account",
-        "Mode",
-        "Type",
-        "Receipt",
-        "Payment",
-      ],
-      rows: filtered.map((e) => [
-        e.id,
-        e.time,
-        e.particular,
-        e.account,
-        e.mode,
-        e.type,
-        e.type === "Receipt" ? e.amount.toLocaleString("en-IN") : "—",
-        e.type === "Payment" ? e.amount.toLocaleString("en-IN") : "—",
-      ]),
-      footer: `Receipts ${inr(totalReceipts)} · Payments ${inr(totalPayments)} · Net ${inr(net)}`,
+      headers: [...dayBookPdfHeaders],
+      rows: buildDayBookPdfRows(),
+      summaryItems: dayBookPdfSummary(),
+      emptyMessage: "No day book entries for this period",
+      landscape: true,
       action: "print",
     });
     toast.success("Print dialog opened");
   };
 
   return (
-    <div className="grid grid-cols-12 gap-4 sm:gap-5">
-      <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12">
-        <ExportBar title="Day Book" onCsv={handleCsv} onPdf={handlePdf} onPrint={handlePrint} />
-        <p className="mt-1 text-[12px] text-black/55">
-          Chronological cash book of receipts and payments · {academicYear}
-        </p>
+    <div className="flex flex-col gap-4 sm:gap-5">
+      <OrganicCard tone="white" cornerSide="tr" padded className="shrink-0">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="text-title text-slate-900 dark:text-zinc-50">Day Book</div>
+            <p className="mt-1 text-[12px] text-black/55">
+              Chronological cash book of receipts and payments · {academicYear}
+            </p>
+          </div>
+          <div className="w-full shrink-0 lg:w-auto lg:min-w-[260px]">
+            <ExportActions
+              onCsv={handleCsv}
+              onPdf={handlePdf}
+              onPrint={handlePrint}
+              confirmTitle="Day Book"
+            />
+          </div>
+        </div>
         <SummaryStrip
           items={[
             { label: "Total Receipts", value: inr(totalReceipts) },
@@ -2281,9 +2504,9 @@ export function DayBookReport() {
         />
       </OrganicCard>
 
-      <OrganicCard tone="white" cornerSide="bl" padded className="col-span-12">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+      <OrganicCard tone="white" cornerSide="bl" padded>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <div className="text-title text-slate-900 dark:text-zinc-50">Day Book Entries</div>
             <p className="mt-1 text-[12px] text-black/55">
               {filtered.length} of {entries.length} entr{entries.length === 1 ? "y" : "ies"}
@@ -2293,7 +2516,7 @@ export function DayBookReport() {
             <button
               type="button"
               onClick={clearFilters}
-              className="text-[11px] font-semibold text-[#0F766E] hover:underline"
+              className="shrink-0 text-[11px] font-semibold text-[#0F766E] hover:underline"
             >
               Clear filters
             </button>
@@ -2462,6 +2685,40 @@ export function BankReconciliationReport() {
     ["Unreconciled Difference", inr(difference)],
   ];
 
+  const bankReconPdfHeaders = [
+    "Voucher",
+    "Date/Time",
+    "Account",
+    "Mode",
+    "Amount",
+    "Status",
+  ] as const;
+
+  const buildBankReconPdfRows = () =>
+    bankTxns.map((t) => [
+      t.id,
+      t.time,
+      t.name,
+      t.mode,
+      t.amount.toLocaleString("en-IN"),
+      isCleared(t.id) ? "Cleared" : "Uncleared",
+    ]);
+
+  const bankReconPdfSummary = () => [
+    { label: "Statement Balance", value: pdfInr(statementBalance) },
+    { label: "Cleared", value: pdfInr(clearedTotal) },
+    { label: "Uncleared", value: pdfInr(unclearedTotal) },
+    { label: "Difference", value: pdfInr(difference) },
+  ];
+
+  const buildBankReconStatementPdfRows = () => [
+    ["Balance as per Bank Statement", pdfInr(statementBalance)],
+    [`Add: Deposits in transit (${unclearedCount} uncleared)`, pdfInr(unclearedTotal)],
+    ["Adjusted Balance (per Books)", pdfInr(statementBalance + unclearedTotal)],
+    ["Balance as per Books", pdfInr(bookBalance)],
+    ["Unreconciled Difference", pdfInr(difference)],
+  ];
+
   const handleCsv = () => {
     downloadCsv(
       reportDownloadName("bank-reconciliation", "csv", schoolName, academicYear),
@@ -2484,16 +2741,18 @@ export function BankReconciliationReport() {
       filename: reportDownloadName("bank-reconciliation", "pdf", schoolName, academicYear),
       title: "Bank Reconciliation Statement",
       subtitle: `${schoolName} · ${academicYear}`,
-      headers: ["Voucher", "Date/Time", "Account", "Mode", "Amount", "Status"],
-      rows: bankTxns.map((t) => [
-        t.id,
-        t.time,
-        t.name,
-        t.mode,
-        t.amount.toLocaleString("en-IN"),
-        isCleared(t.id) ? "Cleared" : "Uncleared",
-      ]),
-      footer: `Statement ${inr(statementBalance)} · Cleared ${inr(clearedTotal)} · Uncleared ${inr(unclearedTotal)} · Difference ${inr(difference)}`,
+      headers: [...bankReconPdfHeaders],
+      rows: buildBankReconPdfRows(),
+      summaryItems: bankReconPdfSummary(),
+      appendTables: [
+        {
+          title: "Reconciliation Statement",
+          headers: ["Particulars", "Amount"],
+          rows: buildBankReconStatementPdfRows(),
+        },
+      ],
+      emptyMessage: "No bank or UPI transactions to reconcile",
+      landscape: true,
     });
     toast.success("Bank reconciliation PDF downloaded");
   };
@@ -2503,33 +2762,42 @@ export function BankReconciliationReport() {
       filename: reportDownloadName("bank-reconciliation", "pdf", schoolName, academicYear),
       title: "Bank Reconciliation Statement",
       subtitle: `${schoolName} · ${academicYear}`,
-      headers: ["Voucher", "Date/Time", "Account", "Mode", "Amount", "Status"],
-      rows: bankTxns.map((t) => [
-        t.id,
-        t.time,
-        t.name,
-        t.mode,
-        t.amount.toLocaleString("en-IN"),
-        isCleared(t.id) ? "Cleared" : "Uncleared",
-      ]),
-      footer: `Statement ${inr(statementBalance)} · Cleared ${inr(clearedTotal)} · Uncleared ${inr(unclearedTotal)} · Difference ${inr(difference)}`,
+      headers: [...bankReconPdfHeaders],
+      rows: buildBankReconPdfRows(),
+      summaryItems: bankReconPdfSummary(),
+      appendTables: [
+        {
+          title: "Reconciliation Statement",
+          headers: ["Particulars", "Amount"],
+          rows: buildBankReconStatementPdfRows(),
+        },
+      ],
+      emptyMessage: "No bank or UPI transactions to reconcile",
+      landscape: true,
       action: "print",
     });
     toast.success("Print dialog opened");
   };
 
   return (
-    <div className="grid grid-cols-12 gap-4 sm:gap-5">
-      <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12 lg:col-span-7">
-        <ExportBar
-          title="Bank Reconciliation"
-          onCsv={handleCsv}
-          onPdf={handlePdf}
-          onPrint={handlePrint}
-        />
-        <p className="mt-1 text-[12px] text-black/55">
-          Match recorded bank &amp; UPI receipts against the bank statement · {academicYear}
-        </p>
+    <div className="flex flex-col gap-4 sm:gap-5">
+      <OrganicCard tone="white" cornerSide="tr" padded className="shrink-0">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="text-title text-slate-900 dark:text-zinc-50">Bank Reconciliation</div>
+            <p className="mt-1 text-[12px] text-black/55">
+              Match recorded bank &amp; UPI receipts against the bank statement · {academicYear}
+            </p>
+          </div>
+          <div className="w-full shrink-0 lg:w-auto lg:min-w-[260px]">
+            <ExportActions
+              onCsv={handleCsv}
+              onPdf={handlePdf}
+              onPrint={handlePrint}
+              confirmTitle="Bank Reconciliation"
+            />
+          </div>
+        </div>
         <SummaryStrip
           items={[
             { label: "Balance per Books", value: inr(bookBalance) },
@@ -2537,29 +2805,35 @@ export function BankReconciliationReport() {
             { label: "Deposits in Transit", value: inr(unclearedTotal), accent: true },
           ]}
         />
+      </OrganicCard>
 
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-black/55">
-              Bank Statement Closing Balance
-            </label>
-            <div className="relative">
-              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-[13px] text-black/45">
-                ₹
-              </span>
-              <Input
-                inputMode="numeric"
-                value={statementInput}
-                onChange={(e) => setStatementInput(e.target.value.replace(/[^0-9]/g, ""))}
-                placeholder={String(clearedTotal)}
-                className="h-10 rounded-xl border-[#E5E5E5] bg-white pl-7 font-mono"
-              />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-5">
+        <OrganicCard tone="white" cornerSide="tl" padded>
+          <div className="text-title text-slate-900 dark:text-zinc-50">Statement Balance</div>
+          <p className="mt-1 text-[12px] text-black/55">
+            Enter the closing balance from your bank statement
+          </p>
+          <div className="mt-4 grid grid-cols-1 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-black/55">
+                Bank Statement Closing Balance
+              </label>
+              <div className="relative">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-[13px] text-black/45">
+                  ₹
+                </span>
+                <Input
+                  inputMode="numeric"
+                  value={statementInput}
+                  onChange={(e) => setStatementInput(e.target.value.replace(/[^0-9]/g, ""))}
+                  placeholder={String(clearedTotal)}
+                  className="h-10 rounded-xl border-[#E5E5E5] bg-white pl-7 font-mono"
+                />
+              </div>
+              <p className="text-[10.5px] text-black/45">
+                Leave blank to assume it matches cleared items.
+              </p>
             </div>
-            <p className="text-[10.5px] text-black/45">
-              Leave blank to assume it matches cleared items.
-            </p>
-          </div>
-          <div className="flex items-end">
             <div
               className={cn(
                 "flex w-full items-center gap-3 rounded-xl border p-3.5",
@@ -2594,10 +2868,9 @@ export function BankReconciliationReport() {
               </div>
             </div>
           </div>
-        </div>
-      </OrganicCard>
+        </OrganicCard>
 
-      <OrganicCard tone="white" cornerSide="bl" padded className="col-span-12 lg:col-span-5">
+        <OrganicCard tone="white" cornerSide="bl" padded>
         <div className="flex items-center gap-2">
           <Landmark className="h-4 w-4 text-black/45" />
           <div className="text-title text-slate-900 dark:text-zinc-50">
@@ -2647,10 +2920,11 @@ export function BankReconciliationReport() {
           })}
         </div>
       </OrganicCard>
+      </div>
 
-      <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+      <OrganicCard tone="white" cornerSide="tr" padded>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <div className="text-title text-slate-900 dark:text-zinc-50">
               Bank &amp; UPI Transactions
             </div>
@@ -2658,7 +2932,7 @@ export function BankReconciliationReport() {
               {filtered.length} of {bankTxns.length} · {unclearedCount} marked uncleared
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             {unclearedCount > 0 && (
               <button
                 type="button"
@@ -2760,8 +3034,8 @@ export function BankReconciliationReport() {
               </div>
             </div>
 
-            <div className="mobile-scrollbar-none mt-4 hidden overflow-x-auto rounded-lg border border-[#E5E5E5] md:block">
-              <table className="w-full min-w-[640px] text-left text-[12.5px]">
+            <div className="mobile-scrollbar-none relative z-0 mt-4 hidden overflow-x-auto rounded-lg border border-[#E5E5E5] md:block">
+              <table className="w-full min-w-[600px] text-left text-[12.5px]">
                 <thead>
                   <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5]">
                     {["Cleared", "Voucher", "Account", "Mode", "Date / Time", "Amount"].map((h) => (

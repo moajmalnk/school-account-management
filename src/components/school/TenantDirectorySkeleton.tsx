@@ -1,11 +1,28 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn, dashCardClass, glassCardClass } from "@/lib/utils";
 
-const bone = "bg-black/[0.07]";
-const boneSoft = "bg-black/[0.05]";
+const bone = "bg-black/[0.07] dark:bg-white/[0.08]";
+const boneSoft = "bg-black/[0.05] dark:bg-white/[0.05]";
+
+const DASH_SKELETON = {
+  overview:
+    "border-teal-300/40 bg-gradient-to-br from-[#CCFBF1]/90 via-[#F0FDFA] to-[#99F6E4]/70 dark:border-teal-700/35 dark:from-zinc-900 dark:via-zinc-900 dark:to-[#0F766E]/25",
+  finance: "border-slate-200/50 bg-white/90 dark:border-white/10 dark:bg-zinc-900/90",
+  outstanding:
+    "border-orange-300/40 bg-gradient-to-br from-[#FFEDD5] via-[#FED7AA]/55 to-[#FECACA]/45 dark:border-orange-800/35 dark:from-zinc-900 dark:via-zinc-900 dark:to-orange-950/45",
+  cash: "border-violet-300/40 bg-gradient-to-br from-[#EDE9FE]/90 via-[#F5F3FF] to-[#E9D5FF]/70 dark:border-violet-800/35 dark:from-zinc-900 dark:via-zinc-900 dark:to-violet-950/40",
+  receive:
+    "border-emerald-400/50 bg-gradient-to-br from-[#6EE7B7] via-[#A7F3D0] to-[#D1FAE5] dark:border-emerald-600/40 dark:from-emerald-950/80 dark:via-zinc-900 dark:to-emerald-900/50",
+  pay: "border-rose-400/50 bg-gradient-to-br from-[#FDA4AF] via-[#FECDD3] to-[#FFE4E6] dark:border-rose-700/40 dark:from-rose-950/80 dark:via-zinc-900 dark:to-rose-900/45",
+  todo: "border-teal-300/40 bg-gradient-to-br from-[#CCFBF1]/90 via-[#F0FDFA] to-[#ECFDF5]/80 dark:border-teal-700/30 dark:from-zinc-900 dark:via-zinc-900 dark:to-[#0F766E]/15",
+} as const;
 
 function Bone({ className }: { className?: string }) {
-  return <Skeleton className={cn(bone, className)} />;
+  return (
+    <Skeleton
+      className={cn("skeleton-shimmer relative overflow-hidden", bone, className)}
+    />
+  );
 }
 
 /** Matches Students / Staff directory layout while tenant store hydrates. */
@@ -113,77 +130,109 @@ export function TenantDashboardSkeleton() {
       aria-live="polite"
       aria-label="Loading dashboard"
     >
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-teal-500/20 bg-teal-500/5 px-3.5 py-2.5">
-        <Bone className={cn("h-3.5 w-40 rounded-md", boneSoft)} />
-        <Bone className={cn("h-3 w-28 rounded-md", boneSoft)} />
-      </div>
-
       <div className="space-y-4 sm:space-y-5">
         <div className="grid min-w-0 grid-cols-1 gap-4 sm:gap-5 xl:grid-cols-12">
           <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:col-span-8">
             {/* School Overview */}
-            <section className={cn(dashCardClass, "flex min-w-0 flex-col p-4 sm:p-5")}>
+            <section
+              className={cn(dashCardClass, DASH_SKELETON.overview, "flex min-w-0 flex-col p-4 sm:p-5")}
+            >
               <Bone className="h-4 w-32 rounded-md" />
               <div className="mt-4 grid min-w-0 flex-1 grid-cols-2 gap-2 sm:gap-3">
-                {Array.from({ length: 2 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="flex min-h-[120px] flex-col justify-between rounded-2xl bg-white/55 p-3 sm:min-h-[128px] sm:p-4"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <Bone className={cn("h-3 w-20 rounded-md", boneSoft)} />
-                      <Bone className="h-8 w-8 rounded-full" />
-                    </div>
-                    <div className="flex flex-col items-center gap-1.5 py-2">
-                      <Bone className="h-9 w-12 rounded-md" />
-                      <Bone className={cn("h-2.5 w-24 rounded-md", boneSoft)} />
-                    </div>
+                <div className="flex min-h-[120px] flex-col justify-between rounded-2xl border border-emerald-400/30 bg-gradient-to-br from-[#6EE7B7]/80 via-[#A7F3D0]/70 to-[#D1FAE5]/80 p-3 sm:min-h-[128px] sm:p-4 dark:border-emerald-600/30 dark:from-emerald-950/60 dark:via-zinc-900/80 dark:to-emerald-900/40">
+                  <div className="flex items-start justify-between gap-2">
+                    <Bone className={cn("h-3 w-20 rounded-md", boneSoft)} />
+                    <Bone className="h-8 w-8 rounded-xl" />
                   </div>
-                ))}
+                  <div className="flex flex-col items-center gap-2 py-2">
+                    <Bone className="h-9 w-14 rounded-lg" />
+                    <Bone className={cn("h-2.5 w-28 rounded-md", boneSoft)} />
+                  </div>
+                </div>
+                <div className="flex min-h-[120px] flex-col justify-between rounded-2xl border border-sky-400/30 bg-gradient-to-br from-[#7DD3FC]/80 via-[#BAE6FD]/70 to-[#E0F2FE]/80 p-3 sm:min-h-[128px] sm:p-4 dark:border-sky-600/30 dark:from-sky-950/60 dark:via-zinc-900/80 dark:to-blue-950/40">
+                  <div className="flex items-start justify-between gap-2">
+                    <Bone className={cn("h-3 w-16 rounded-md", boneSoft)} />
+                    <Bone className="h-8 w-8 rounded-xl" />
+                  </div>
+                  <div className="flex flex-col items-center gap-2 py-2">
+                    <Bone className="h-9 w-10 rounded-lg" />
+                    <Bone className={cn("h-2.5 w-24 rounded-md", boneSoft)} />
+                  </div>
+                </div>
               </div>
-              <Bone className="mt-3 h-11 w-full rounded-full" />
+              <Bone className="mt-3 h-11 w-full rounded-2xl" />
             </section>
 
             {/* Financial Summary */}
-            <section className={cn(dashCardClass, "flex min-w-0 flex-col p-4 sm:p-5")}>
-              <div className="flex items-center justify-between gap-2">
+            <section
+              className={cn(dashCardClass, DASH_SKELETON.finance, "flex min-w-0 flex-col p-4 sm:p-5")}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <Bone className="h-4 w-36 rounded-md" />
-                <Bone className="h-8 w-24 rounded-full" />
+                <Bone className="h-9 w-full max-w-[11rem] rounded-full sm:w-28" />
               </div>
-              <div className="mt-4 grid flex-1 grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
-                <div className="rounded-2xl bg-emerald-500/20 p-4">
-                  <Bone className="mx-auto h-3 w-24 rounded-md bg-white/30" />
-                  <Bone className="mx-auto mt-3 h-8 w-20 rounded-md bg-white/40" />
+              <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-3">
+                <div className="flex min-h-[96px] flex-col items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 via-teal-600 to-teal-700 p-3 sm:min-h-[112px]">
+                  <Bone className="h-3 w-20 rounded-md bg-white/25" />
+                  <Bone className="mt-3 h-8 w-24 rounded-lg bg-white/35" />
+                  <Bone className="mt-2 h-2.5 w-16 rounded-md bg-white/20" />
                 </div>
-                <div className="rounded-2xl bg-rose-500/20 p-4">
-                  <Bone className="mx-auto h-3 w-24 rounded-md bg-white/30" />
-                  <Bone className="mx-auto mt-3 h-8 w-20 rounded-md bg-white/40" />
+                <div className="flex min-h-[96px] flex-col items-center justify-center rounded-2xl bg-gradient-to-br from-rose-500 via-red-500 to-red-600 p-3 sm:min-h-[112px]">
+                  <Bone className="h-3 w-20 rounded-md bg-white/25" />
+                  <Bone className="mt-3 h-8 w-24 rounded-lg bg-white/35" />
+                  <Bone className="mt-2 h-2.5 w-16 rounded-md bg-white/20" />
                 </div>
               </div>
             </section>
 
             {/* Outstanding */}
-            <section className={cn(dashCardClass, "flex min-w-0 flex-col p-4 sm:p-5")}>
+            <section
+              className={cn(
+                dashCardClass,
+                DASH_SKELETON.outstanding,
+                "flex min-w-0 flex-col p-4 sm:p-5",
+              )}
+            >
               <Bone className="h-4 w-40 rounded-md" />
               <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {Array.from({ length: 2 }).map((_, i) => (
-                  <div key={i} className="rounded-2xl bg-white/55 p-3.5">
+                  <div
+                    key={i}
+                    className="rounded-2xl border border-orange-200/40 bg-white/55 p-3.5 dark:border-orange-800/25 dark:bg-zinc-900/50"
+                  >
                     <Bone className={cn("h-3 w-24 rounded-md", boneSoft)} />
                     <Bone className={cn("mt-1 h-2.5 w-16 rounded-md", boneSoft)} />
-                    <Bone className="mt-3 h-7 w-20 rounded-md" />
+                    <Bone className="mt-3 h-7 w-24 rounded-lg" />
                   </div>
                 ))}
               </div>
             </section>
 
             {/* Cash Position */}
-            <section className={cn(dashCardClass, "flex min-w-0 flex-col p-4 sm:p-5")}>
+            <section
+              className={cn(dashCardClass, DASH_SKELETON.cash, "flex min-w-0 flex-col p-4 sm:p-5")}
+            >
               <Bone className="h-4 w-28 rounded-md" />
               <div className="mt-4 space-y-3">
                 {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="flex items-center justify-between gap-3">
-                    <Bone className={cn("h-3 w-24 rounded-md", boneSoft)} />
-                    <Bone className="h-5 w-16 rounded-md" />
+                  <div
+                    key={i}
+                    className={cn(
+                      "flex items-center justify-between gap-3 rounded-xl px-3 py-2.5",
+                      i === 2
+                        ? "bg-gradient-to-r from-violet-600/90 to-indigo-700/90 dark:from-violet-900/80 dark:to-indigo-950/80"
+                        : "bg-white/55 dark:bg-zinc-900/50",
+                    )}
+                  >
+                    <Bone
+                      className={cn(
+                        "h-3 w-24 rounded-md",
+                        i === 2 ? "bg-white/25" : boneSoft,
+                      )}
+                    />
+                    <Bone
+                      className={cn("h-5 w-16 rounded-md", i === 2 ? "bg-white/30" : bone)}
+                    />
                   </div>
                 ))}
               </div>
@@ -193,16 +242,34 @@ export function TenantDashboardSkeleton() {
           {/* Right column: actions + todo */}
           <div className="flex min-w-0 flex-col gap-4 sm:gap-5 xl:col-span-4">
             <div className="grid grid-cols-2 gap-3">
-              <div className={cn(dashCardClass, "flex min-h-[88px] flex-col justify-between p-4")}>
+              <div
+                className={cn(
+                  dashCardClass,
+                  DASH_SKELETON.receive,
+                  "flex min-h-[88px] flex-col justify-between p-4",
+                )}
+              >
                 <Bone className="h-8 w-8 rounded-full" />
                 <Bone className="h-3.5 w-20 rounded-md" />
               </div>
-              <div className={cn(dashCardClass, "flex min-h-[88px] flex-col justify-between p-4")}>
+              <div
+                className={cn(
+                  dashCardClass,
+                  DASH_SKELETON.pay,
+                  "flex min-h-[88px] flex-col justify-between p-4",
+                )}
+              >
                 <Bone className="h-8 w-8 rounded-full" />
                 <Bone className="h-3.5 w-20 rounded-md" />
               </div>
             </div>
-            <section className={cn(dashCardClass, "flex min-h-[280px] flex-1 flex-col p-4 sm:p-5")}>
+            <section
+              className={cn(
+                dashCardClass,
+                DASH_SKELETON.todo,
+                "flex min-h-[280px] flex-1 flex-col p-4 sm:p-5",
+              )}
+            >
               <div className="flex items-center justify-between gap-2">
                 <Bone className="h-4 w-24 rounded-md" />
                 <Bone className="h-8 w-16 rounded-xl" />
@@ -216,7 +283,7 @@ export function TenantDashboardSkeleton() {
                   </div>
                 ))}
               </div>
-              <div className="mt-5 flex-1 rounded-2xl border border-white/60 bg-white/50 p-3.5">
+              <div className="mt-5 flex-1 rounded-2xl border border-white/60 bg-white/50 p-3.5 dark:border-white/10 dark:bg-zinc-900/40">
                 <Bone className="h-4 w-16 rounded-md" />
                 <Bone className="mt-3 h-16 w-full rounded-xl" />
               </div>
@@ -228,10 +295,14 @@ export function TenantDashboardSkeleton() {
           {Array.from({ length: 3 }).map((_, i) => (
             <section
               key={i}
-              className={cn(dashCardClass, "flex min-h-[220px] flex-col p-4 sm:p-5 xl:col-span-4")}
+              className={cn(
+                dashCardClass,
+                DASH_SKELETON.finance,
+                "flex min-h-[220px] flex-col p-4 sm:p-5 xl:col-span-4",
+              )}
             >
               <Bone className="h-4 w-36 rounded-md" />
-              <Bone className="mt-4 h-36 w-full rounded-xl" />
+              <Bone className="mt-4 h-36 w-full rounded-2xl" />
             </section>
           ))}
         </div>

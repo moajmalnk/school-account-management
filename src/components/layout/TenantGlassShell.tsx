@@ -48,6 +48,7 @@ import {
   resolveFinancialYearInput,
 } from "@/components/school/FinancialYearFields";
 import { AddBranchDialog } from "@/components/school/AddBranchDialog";
+import { useTenantNavigationGuard } from "@/components/school/settings-unsaved-guard";
 import { FloatingDock, type FloatingDockItem } from "@/components/ui/floating-dock";
 import {
   sessionCanAccessSettings,
@@ -387,6 +388,7 @@ export function TenantMacDock({
   const expanded = isVertical && !collapsed;
 
   const visibleNav = useMemo(() => NAV.filter((item) => navAllowed(item.to, session)), [session]);
+  const { onGuardedLinkClick } = useTenantNavigationGuard();
 
   const floatingItems = useMemo<FloatingDockItem[]>(
     () =>
@@ -506,6 +508,7 @@ export function TenantMacDock({
                   to={item.to}
                   aria-label={item.label}
                   aria-current={active ? "page" : undefined}
+                  onClick={(event) => onGuardedLinkClick(item.to, event, active)}
                   className={cn(
                     "flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 transition-colors xl:gap-3.5 xl:px-3 xl:py-3",
                     active
@@ -539,6 +542,7 @@ export function TenantMacDock({
                 to={item.to}
                 aria-label={item.label}
                 aria-current={active ? "page" : undefined}
+                onClick={(event) => onGuardedLinkClick(item.to, event, active)}
                 onMouseEnter={() => setHovered(index)}
                 className={cn(
                   "group relative z-10 flex h-14 w-14 shrink-0 items-center justify-center xl:h-16 xl:w-16",
@@ -650,6 +654,7 @@ export function TenantDesktopTopBar() {
     hydrated,
   } = useTenantStore();
   const { showBack, goBack, backLabel } = useWorkspaceSubViewBack();
+  const { guardedNavigate, tryNavigate } = useTenantNavigationGuard();
   const [pendingLogout, setPendingLogout] = useState(false);
   const [addYearOpen, setAddYearOpen] = useState(false);
   const [addMonthKey, setAddMonthKey] = useState(() =>
@@ -712,7 +717,10 @@ export function TenantDesktopTopBar() {
           {showBack && (
             <button
               type="button"
-              onClick={goBack}
+              onClick={() => {
+                if (tryNavigate) tryNavigate(goBack);
+                else goBack();
+              }}
               aria-label={backLabel}
               className={cn(
                 glassInsetClass,
@@ -817,7 +825,7 @@ export function TenantDesktopTopBar() {
 
           <button
             type="button"
-            onClick={() => navigate({ to: "/tenant/settings" })}
+            onClick={() => guardedNavigate("/tenant/settings")}
             aria-label="Settings"
             className="glass-inset grid h-10 w-10 place-items-center rounded-xl text-slate-600 transition-colors hover:text-[#0F766E] dark:text-zinc-300 dark:hover:text-[#2DD4BF]"
           >
@@ -826,7 +834,7 @@ export function TenantDesktopTopBar() {
 
           <button
             type="button"
-            onClick={() => navigate({ to: "/tenant/notifications" })}
+            onClick={() => guardedNavigate("/tenant/notifications")}
             aria-label="Notifications"
             className="glass-inset relative grid h-10 w-10 place-items-center rounded-xl text-slate-600 transition-colors hover:text-[#0F766E]"
           >
@@ -838,7 +846,11 @@ export function TenantDesktopTopBar() {
 
           <button
             type="button"
-            onClick={() => setPendingLogout(true)}
+            onClick={() => {
+              const openLogout = () => setPendingLogout(true);
+              if (tryNavigate) tryNavigate(openLogout);
+              else openLogout();
+            }}
             aria-label="Logout"
             className="glass-inset grid h-10 w-10 place-items-center rounded-xl text-slate-600 transition-colors hover:text-[#EF4444]"
           >

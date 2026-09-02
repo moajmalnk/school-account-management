@@ -7,6 +7,9 @@ import {
 
 export type StudentCsvRow = {
   name: string;
+  grade: string;
+  division: string;
+  /** Resolved class tier label used for enrollment (e.g. "Grade 1", "TLC - A"). */
   classLabel: string;
   guardian: string;
   phone: string;
@@ -14,13 +17,42 @@ export type StudentCsvRow = {
   line: number;
 };
 
-const HEADER_ALIASES: Record<keyof Omit<StudentCsvRow, "line">, string[]> = {
-  name: ["name", "student", "student name", "student_name", "full name"],
-  classLabel: ["class", "grade", "class/grade", "class name", "cls", "section"],
-  guardian: ["guardian", "parent", "father", "mother", "guardian name"],
-  phone: ["phone", "mobile", "contact", "whatsapp", "phone number"],
-  due: ["balance", "due", "fees", "outstanding", "fee due"],
-};
+const NAME_ALIASES = ["name", "student", "student name", "student_name", "full name"];
+const CLASS_GRADE_ALIASES = ["class", "grade", "class/grade", "class name", "cls"];
+const DIVISION_ALIASES = ["division", "div", "section", "sec"];
+const GUARDIAN_ALIASES = ["guardian", "parent", "father", "mother", "guardian name"];
+const PHONE_ALIASES = ["phone", "mobile", "contact", "whatsapp", "phone number"];
+const DUE_ALIASES = ["balance", "due", "fees", "outstanding", "fee due"];
+
+export const STUDENT_CSV_HEADERS = [
+  "Name",
+  "Class",
+  "Division",
+  "Guardian",
+  "Phone",
+  "Balance",
+] as const;
+
+export function splitStudentClassForCsv(className: string): { grade: string; division: string } {
+  const parts = splitClassName(className.trim());
+  return {
+    grade: parts.grade,
+    division: parts.section,
+  };
+}
+
+/** Build the enrolled class label from separate CSV columns (or legacy combined class cell). */
+export function resolveStudentCsvClass(grade: string, division: string): string {
+  const gradeLabel = grade.trim();
+  const divisionLabel = division.trim().toUpperCase();
+  if (gradeLabel && divisionLabel) {
+    return composeClassName(gradeLabel, divisionLabel);
+  }
+  if (gradeLabel) {
+    return parseClassLabel(gradeLabel).className;
+  }
+  return "";
+}
 
 function detectDelimiter(headerLine: string): string {
   const counts = [
@@ -95,7 +127,7 @@ function columnIndex(headers: string[], aliases: string[]): number {
 
 function looksLikeHeader(cells: string[]): boolean {
   const joined = cells.map(headerKey).join(" ");
-  return /name|student|class|guardian|phone|balance|due/.test(joined);
+  return /name|student|class|grade|division|div|guardian|phone|balance|due/.test(joined);
 }
 
 function parseDue(raw: string): number {
@@ -110,22 +142,24 @@ export function parseStudentCsv(text: string): StudentCsvRow[] {
   let start = 0;
   let nameIdx = 0;
   let classIdx = 1;
+  let divisionIdx = -1;
   let guardianIdx = 2;
   let phoneIdx = 3;
   let dueIdx = 4;
 
   if (looksLikeHeader(table[0] ?? [])) {
     const headers = table[0] ?? [];
-    nameIdx = columnIndex(headers, HEADER_ALIASES.name);
-    classIdx = columnIndex(headers, HEADER_ALIASES.classLabel);
-    guardianIdx = columnIndex(headers, HEADER_ALIASES.guardian);
-    phoneIdx = columnIndex(headers, HEADER_ALIASES.phone);
-    dueIdx = columnIndex(headers, HEADER_ALIASES.due);
+    nameIdx = columnIndex(headers, NAME_ALIASES);
+    classIdx = columnIndex(headers, CLASS_GRADE_ALIASES);
+    divisionIdx = columnIndex(headers, DIVISION_ALIASES);
+    guardianIdx = columnIndex(headers, GUARDIAN_ALIASES);
+    phoneIdx = columnIndex(headers, PHONE_ALIASES);
+    dueIdx = columnIndex(headers, DUE_ALIASES);
     if (nameIdx < 0) nameIdx = 0;
     if (classIdx < 0) classIdx = 1;
-    if (guardianIdx < 0) guardianIdx = 2;
-    if (phoneIdx < 0) phoneIdx = 3;
-    if (dueIdx < 0) dueIdx = 4;
+    if (guardianIdx < 0) guardianIdx = divisionIdx >= 0 ? 3 : 2;
+    if (phoneIdx < 0) phoneIdx = guardianIdx + 1;
+    if (dueIdx < 0) dueIdx = phoneIdx + 1;
     start = 1;
   }
 
@@ -134,9 +168,14 @@ export function parseStudentCsv(text: string): StudentCsvRow[] {
     const cells = table[i] ?? [];
     const name = (cells[nameIdx] ?? "").trim();
     if (!name) continue;
+    const grade = (cells[classIdx] ?? "").trim();
+    const division = divisionIdx >= 0 ? (cells[divisionIdx] ?? "").trim() : "";
+    const classLabel = resolveStudentCsvClass(grade, division);
     rows.push({
       name,
-      classLabel: (cells[classIdx] ?? "").trim(),
+      grade,
+      division,
+      classLabel,
       guardian: (cells[guardianIdx] ?? "").trim(),
       phone: (cells[phoneIdx] ?? "").trim(),
       due: parseDue(cells[dueIdx] ?? ""),
@@ -176,14 +215,71 @@ export function parseClassLabel(raw: string): {
   };
 }
 
+export function normalizeClassLabelKey(className: string): string {
+  return className
+    .trim()
+    .toLowerCase()
+    .replace(/\s*[-–—]\s*/g, "-")
+    .replace(/\s+/g, " ");
+}
+
+export function findMissingClassTiers(
+  classes: ClassConfig[],
+  enrolledClassLabels: string[],
+): ClassConfig[] {
+  const pool = [...classes];
+  const created: ClassConfig[] = [];
+  const knownKeys = new Set<string>();
+  for (const cls of pool) {
+    knownKeys.add(normalizeClassLabelKey(cls.className));
+    const parts = splitClassName(cls.className);
+    const grade = (cls.grade || parts.grade || "").trim();
+    const section = (cls.section || parts.section || "").trim();
+    const composed = composeClassName(grade, section);
+    if (composed) knownKeys.add(normalizeClassLabelKey(composed));
+  }
+
+  const uniqueLabels = Array.from(
+    new Set(enrolledClassLabels.map((label) => label.trim()).filter(Boolean)),
+  );
+
+  for (const label of uniqueLabels) {
+    const parsed = parseClassLabel(label);
+    const canonical = parsed.className || label;
+    const key = normalizeClassLabelKey(canonical);
+    if (knownKeys.has(key)) continue;
+
+    const existing = matchExistingClass(pool, label);
+    if (existing) {
+      knownKeys.add(normalizeClassLabelKey(existing.className));
+      continue;
+    }
+
+    const id = nextPrefixedId(
+      "CLS",
+      [...pool.map((c) => c.id), ...created.map((c) => c.id)],
+      3,
+    );
+    const createdClass = buildClassFromLabel(id, label);
+    pool.push(createdClass);
+    created.push(createdClass);
+    knownKeys.add(normalizeClassLabelKey(createdClass.className));
+  }
+
+  return created;
+}
+
 export function matchExistingClass(classes: ClassConfig[], label: string): ClassConfig | undefined {
   const parsed = parseClassLabel(label);
-  const needle = parsed.className.toLowerCase();
+  const needleKey = normalizeClassLabelKey(parsed.className);
   return classes.find((cls) => {
-    if (cls.className.trim().toLowerCase() === needle) return true;
+    if (normalizeClassLabelKey(cls.className) === needleKey) return true;
+    const parts = splitClassName(cls.className);
+    const grade = (cls.grade || parts.grade || "").trim();
+    const section = (cls.section || parts.section || "").trim();
     return (
-      cls.grade.trim().toLowerCase() === parsed.grade.toLowerCase() &&
-      cls.section.trim().toLowerCase() === parsed.section.toLowerCase() &&
+      normalizeClassLabelKey(grade) === normalizeClassLabelKey(parsed.grade) &&
+      normalizeClassLabelKey(section) === normalizeClassLabelKey(parsed.section) &&
       Boolean(parsed.grade)
     );
   });
