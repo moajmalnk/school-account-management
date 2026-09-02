@@ -260,6 +260,41 @@
   will-change: auto;
 }
 
+@keyframes mkt-testimonial-marquee {
+  0% {
+    transform: translate3d(-50%, 0, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.mkt-testimonial-track {
+  display: flex;
+  width: max-content;
+  gap: 1.25rem;
+  animation: mkt-testimonial-marquee 52s linear infinite;
+  will-change: transform;
+}
+
+.mkt-testimonial-track:hover {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mkt-testimonial-track {
+    animation: none;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    padding-inline: 1.25rem;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .mkt-testimonial-slide {
+    scroll-snap-align: start;
+  }
+}
+
 /* Particle dot */
 .mkt-particle {
   position: absolute;

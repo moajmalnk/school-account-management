@@ -54,13 +54,13 @@ export function Features() {
           </p>
         </motion.div>
 
-        <div className="mx-auto grid max-w-4xl grid-cols-1 gap-x-10 gap-y-8 sm:grid-cols-2 sm:gap-y-10 lg:grid-cols-3">
+        <div className="mx-auto grid max-w-4xl grid-cols-1 justify-items-center gap-x-10 gap-y-8 sm:grid-cols-2 sm:justify-items-start sm:gap-y-10 lg:grid-cols-3">
           {features.items.map((item, i) => {
             const Icon = ICONS[i] ?? FileSpreadsheet;
             return (
               <motion.div
                 key={item.title}
-                className="flex items-center gap-4"
+                className="flex w-fit items-center justify-center gap-4 sm:w-full sm:justify-start"
                 initial={{ opacity: 0, y: 16 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: "-40px" }}

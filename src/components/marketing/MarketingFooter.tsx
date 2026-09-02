@@ -120,59 +120,67 @@ export function MarketingFooter() {
             </TrialSignupLink>
           </motion.div>
 
-          {/* Explore */}
-          <motion.div className="sm:col-span-1 lg:col-span-2 lg:col-start-6" variants={columnReveal}>
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--mkt-muted)]">
-              Explore
-            </p>
-            <nav className="mt-4 flex flex-col gap-2.5" aria-label="Footer navigation">
-              {MARKETING.nav.map((item) => (
-                <FooterNavLink
-                  key={item.id}
-                  href={`#${item.id}`}
-                  onClick={(event) => handleMarketingSectionClick(event, item.id)}
-                  className={item.id === "product" ? "text-[var(--mkt-green)] hover:text-[var(--mkt-green-deep)]" : undefined}
-                >
-                  {item.label}
-                </FooterNavLink>
-              ))}
-            </nav>
-          </motion.div>
+          {/* Explore + Legal — always 2 columns on one row */}
+          <motion.div
+            className="grid grid-cols-2 gap-x-6 gap-y-0 sm:col-span-2 sm:gap-x-10 lg:col-span-4 lg:col-start-6 lg:gap-x-12"
+            variants={columnReveal}
+          >
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--mkt-muted)]">
+                Explore
+              </p>
+              <nav className="mt-4 flex flex-col gap-2.5" aria-label="Footer navigation">
+                {MARKETING.nav.map((item) => (
+                  <FooterNavLink
+                    key={item.id}
+                    href={`#${item.id}`}
+                    onClick={(event) => handleMarketingSectionClick(event, item.id)}
+                    className={
+                      item.id === "product"
+                        ? "text-[var(--mkt-green)] hover:text-[var(--mkt-green-deep)]"
+                        : undefined
+                    }
+                  >
+                    {item.label}
+                  </FooterNavLink>
+                ))}
+              </nav>
+            </div>
 
-          {/* Legal */}
-          <motion.div className="sm:col-span-1 lg:col-span-2" variants={columnReveal}>
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--mkt-muted)]">
-              Legal
-            </p>
-            <nav className="mt-4 flex flex-col gap-2.5" aria-label="Legal">
-              {LEGAL_LINKS.map((item) => (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  className="group relative inline-flex w-fit py-1 text-[14px] font-medium text-[var(--mkt-ink)]/80 transition-colors hover:text-[var(--mkt-green-deep)]"
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--mkt-muted)]">
+                Legal
+              </p>
+              <nav className="mt-4 flex flex-col gap-2.5" aria-label="Legal">
+                {LEGAL_LINKS.map((item) => (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    className="group relative inline-flex w-fit py-1 text-[14px] font-medium text-[var(--mkt-ink)]/80 transition-colors hover:text-[var(--mkt-green-deep)]"
+                  >
+                    <span className="relative">
+                      {item.label}
+                      <span
+                        className="absolute -bottom-0.5 left-0 h-px w-0 bg-[var(--mkt-green)] transition-all duration-300 ease-out group-hover:w-full"
+                        aria-hidden
+                      />
+                    </span>
+                  </Link>
+                ))}
+                <a
+                  href={`mailto:${BRAND.legal.supportEmail}`}
+                  className="group relative inline-flex w-fit break-all py-1 text-[13px] font-medium text-[var(--mkt-ink)]/80 transition-colors hover:text-[var(--mkt-green-deep)] sm:text-[14px]"
                 >
                   <span className="relative">
-                    {item.label}
+                    {BRAND.legal.supportEmail}
                     <span
                       className="absolute -bottom-0.5 left-0 h-px w-0 bg-[var(--mkt-green)] transition-all duration-300 ease-out group-hover:w-full"
                       aria-hidden
                     />
                   </span>
-                </Link>
-              ))}
-              <a
-                href={`mailto:${BRAND.legal.supportEmail}`}
-                className="group relative inline-flex w-fit py-1 text-[14px] font-medium text-[var(--mkt-ink)]/80 transition-colors hover:text-[var(--mkt-green-deep)]"
-              >
-                <span className="relative">
-                  {BRAND.legal.supportEmail}
-                  <span
-                    className="absolute -bottom-0.5 left-0 h-px w-0 bg-[var(--mkt-green)] transition-all duration-300 ease-out group-hover:w-full"
-                    aria-hidden
-                  />
-                </span>
-              </a>
-            </nav>
+                </a>
+              </nav>
+            </div>
           </motion.div>
 
           {/* App downloads */}
@@ -180,12 +188,12 @@ export function MarketingFooter() {
             <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--mkt-muted)]">
               Get the app
             </p>
-            <p className="mt-3 max-w-[220px] text-[13px] leading-relaxed text-[var(--mkt-muted)]">
+            <p className="mt-3 max-w-[280px] text-[13px] leading-relaxed text-[var(--mkt-muted)] sm:max-w-none">
               Manage fees and accounts on the go — same workspace, mobile-ready.
             </p>
-            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center lg:flex-col lg:items-stretch">
-              <StoreBadge variant="play" reduce={reduce} />
-              <StoreBadge variant="apple" reduce={reduce} />
+            <div className="mt-5 flex flex-row items-stretch gap-2.5 sm:gap-3">
+              <StoreBadge variant="play" reduce={reduce} className="w-auto min-w-0 flex-1" />
+              <StoreBadge variant="apple" reduce={reduce} className="w-auto min-w-0 flex-1" />
             </div>
           </motion.div>
         </motion.div>

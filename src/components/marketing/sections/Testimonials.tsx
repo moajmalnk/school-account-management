@@ -1,7 +1,7 @@
 import { Quote, Star } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 
-import { easeOutExpo, staggerContainer } from "@/components/marketing/motion";
+import { easeOutExpo } from "@/components/marketing/motion";
 import { MARKETING } from "@/lib/marketing-content";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +17,8 @@ const STATUS_STYLES = {
   Active: "bg-emerald-50 text-emerald-700 border-emerald-200",
   Trial: "bg-violet-50 text-violet-700 border-violet-200",
 } as const;
+
+const MARQUEE_ITEMS = [...testimonials.items, ...testimonials.items];
 
 function SchoolAvatar({ initials }: { initials: string }) {
   return (
@@ -59,36 +61,15 @@ function StatusBadge({ status }: { status: keyof typeof STATUS_STYLES }) {
 
 function TestimonialCard({
   item,
-  index,
   reduce,
 }: {
   item: (typeof testimonials.items)[number];
-  index: number;
   reduce: boolean | null;
 }) {
   const usagePct = Math.round((item.enrolled / item.seats) * 100);
 
   return (
-    <motion.article
-      className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-[rgba(143,202,74,0.18)] bg-white/75 p-5 shadow-[0_8px_32px_rgba(26,28,44,0.06)] backdrop-blur-xl sm:p-6"
-      variants={{
-        hidden: { opacity: 0, y: 28 },
-        show: {
-          opacity: 1,
-          y: 0,
-          transition: { duration: 0.6, ease: easeOutExpo, delay: index * 0.06 },
-        },
-      }}
-      whileHover={
-        reduce
-          ? undefined
-          : {
-              y: -6,
-              boxShadow: "0 20px 48px rgba(143,202,74,0.16), 0 8px 24px rgba(26,28,44,0.06)",
-              borderColor: "rgba(143,202,74,0.35)",
-            }
-      }
-    >
+    <article className="group relative flex h-full w-[min(88vw,360px)] shrink-0 flex-col overflow-hidden rounded-2xl border border-[rgba(143,202,74,0.18)] bg-white/80 p-5 shadow-[0_8px_32px_rgba(26,28,44,0.06)] backdrop-blur-xl transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-1 hover:border-[rgba(143,202,74,0.35)] hover:shadow-[0_20px_48px_rgba(143,202,74,0.14)] sm:w-[380px] sm:p-6">
       <div
         className="pointer-events-none absolute inset-x-0 top-0 h-px"
         style={{
@@ -111,7 +92,7 @@ function TestimonialCard({
           ) : null}
         </div>
         <Quote
-          className="h-5 w-5 shrink-0 text-[var(--mkt-green)]/35 transition-colors group-hover:text-[var(--mkt-green)]/55"
+          className="h-5 w-5 shrink-0 text-[var(--mkt-green)]/35 transition-colors group-hover:text-[var(--mkt-green)]/60"
           strokeWidth={2}
           aria-hidden
         />
@@ -157,15 +138,19 @@ function TestimonialCard({
         <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/80">
           <motion.div
             className="h-full rounded-full"
-            style={{ background: "linear-gradient(90deg, #0f766e, #8FCA4A)" }}
-            initial={reduce ? { width: `${usagePct}%` } : { width: 0 }}
-            whileInView={{ width: `${usagePct}%` }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.9, ease: easeOutExpo, delay: 0.15 + index * 0.05 }}
+            style={{
+              background: "linear-gradient(90deg, #0f766e, #8FCA4A)",
+              width: `${usagePct}%`,
+              transformOrigin: "left center",
+            }}
+            initial={reduce ? undefined : { scaleX: 0 }}
+            whileInView={{ scaleX: 1 }}
+            viewport={{ once: true, amount: 0.4 }}
+            transition={{ duration: 0.9, ease: easeOutExpo }}
           />
         </div>
       </div>
-    </motion.article>
+    </article>
   );
 }
 
@@ -194,47 +179,60 @@ export function Testimonials() {
         />
       </div>
 
-      <div className="relative z-10 mx-auto max-w-6xl px-5 sm:px-8 lg:px-10">
-        <motion.div
-          className="mx-auto max-w-2xl text-center"
-          initial={reduce ? false : { opacity: 0, y: 24 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.65, ease: easeOutExpo }}
-        >
-          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--mkt-muted)]">
-            {testimonials.eyebrow}
-          </p>
-          <h2
-            id="testimonials-heading"
-            className="mt-3 text-[clamp(1.75rem,4.5vw,2.5rem)] font-bold tracking-tight text-[var(--mkt-ink)]"
+      <div className="relative z-10">
+        <div className="mx-auto max-w-6xl px-5 sm:px-8 lg:px-10">
+          <motion.div
+            className="mx-auto max-w-2xl text-center"
+            initial={reduce ? false : { opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-80px" }}
+            transition={{ duration: 0.65, ease: easeOutExpo }}
           >
-            {testimonials.title}
-          </h2>
-          <p className="mt-3 text-[14px] leading-relaxed text-[var(--mkt-muted)] sm:text-[15px]">
-            {testimonials.subtitle}
-          </p>
-          <p className="mt-5 inline-flex items-center gap-2 rounded-full border border-[var(--mkt-line)] bg-white/80 px-4 py-1.5 text-[12px] font-semibold text-[var(--mkt-ink)] shadow-sm backdrop-blur-sm">
-            <span className="h-2 w-2 rounded-full bg-[var(--mkt-green)]" aria-hidden />
-            {totalEnrolled}+ students enrolled across featured campuses
-          </p>
-        </motion.div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--mkt-muted)]">
+              {testimonials.eyebrow}
+            </p>
+            <h2
+              id="testimonials-heading"
+              className="mt-3 text-[clamp(1.75rem,4.5vw,2.5rem)] font-bold tracking-tight text-[var(--mkt-ink)]"
+            >
+              {testimonials.title}
+            </h2>
+            <p className="mt-3 text-[14px] leading-relaxed text-[var(--mkt-muted)] sm:text-[15px]">
+              {testimonials.subtitle}
+            </p>
+            <p className="mt-5 inline-flex items-center gap-2 rounded-full border border-[var(--mkt-line)] bg-white/80 px-4 py-1.5 text-[12px] font-semibold text-[var(--mkt-ink)] shadow-sm backdrop-blur-sm">
+              <span className="h-2 w-2 rounded-full bg-[var(--mkt-green)]" aria-hidden />
+              {totalEnrolled}+ students enrolled across featured campuses
+            </p>
+          </motion.div>
+        </div>
 
         <motion.div
-          className="mt-12 flex flex-wrap justify-center gap-5 lg:mt-14 lg:gap-6"
-          variants={staggerContainer}
-          initial={reduce ? false : "hidden"}
-          whileInView="show"
-          viewport={{ once: true, margin: "-8% 0px", amount: 0.08 }}
+          className="relative mt-12 lg:mt-14"
+          initial={reduce ? false : { opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true, margin: "-5% 0px" }}
+          transition={{ duration: 0.8, ease: easeOutExpo, delay: 0.1 }}
+          aria-label="School testimonials"
         >
-          {testimonials.items.map((item, index) => (
-            <div
-              key={item.id}
-              className="w-full max-w-[400px] sm:w-[calc(50%-0.625rem)] lg:w-[calc(33.333%-1rem)]"
-            >
-              <TestimonialCard item={item} index={index} reduce={reduce} />
+          <div
+            className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-[#f8fff4] via-[#f8fff4]/80 to-transparent sm:w-20"
+            aria-hidden
+          />
+          <div
+            className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-[#f8fff4] via-[#f8fff4]/80 to-transparent sm:w-20"
+            aria-hidden
+          />
+
+          <div className={cn("overflow-hidden", reduce && "overflow-x-auto")}>
+            <div className={cn(!reduce && "mkt-testimonial-track", reduce && "flex gap-5 px-5")}>
+              {MARQUEE_ITEMS.map((item, index) => (
+                <div key={`${item.id}-${index}`} className="mkt-testimonial-slide shrink-0">
+                  <TestimonialCard item={item} reduce={reduce} />
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
         </motion.div>
       </div>
     </section>

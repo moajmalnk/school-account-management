@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Eye, EyeOff, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, AlertCircle, Home } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -170,6 +170,14 @@ function LoginPage() {
         >
           {submitting ? "Signing in…" : "Sign in"}
         </button>
+
+        <Link
+          to="/"
+          className="flex h-12 w-full items-center justify-center gap-2 rounded-full border border-[#E5E5E5] bg-white text-[13.5px] font-semibold text-[#0F766E] transition-colors hover:border-[#0F766E]/25 hover:bg-[#F0FDFA]"
+        >
+          <Home className="h-4 w-4" aria-hidden />
+          Home page
+        </Link>
       </form>
     </AuthShell>
   );

@@ -41,16 +41,16 @@ export function Hero({ noDelay = false }: { noDelay?: boolean }) {
         </motion.div>
 
         <motion.div
-          className="mt-10 flex flex-col gap-8 sm:mt-14 sm:flex-row sm:items-end sm:justify-between sm:gap-10"
+          className="mt-10 flex flex-col items-center gap-6 sm:mt-14 sm:flex-row sm:items-end sm:justify-between sm:gap-10"
           initial={reduce ? false : { opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.85, ease: easeOutExpo, delay: baseDelay + 0.22 }}
         >
-          <p className="max-w-lg text-left text-[clamp(1rem,2.4vw,1.375rem)] font-medium leading-snug text-[var(--mkt-ink)]">
+          <p className="max-w-lg text-center text-[clamp(1rem,2.4vw,1.375rem)] font-medium leading-snug text-[var(--mkt-ink)] sm:text-left">
             {MARKETING.hero.support}
           </p>
 
-          <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="flex w-full max-w-md flex-row items-stretch gap-2 sm:max-w-none sm:w-auto sm:gap-3">
             <StoreBadge variant="play" reduce={reduce} />
             <StoreBadge variant="apple" reduce={reduce} />
           </div>

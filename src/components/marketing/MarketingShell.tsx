@@ -1,24 +1,14 @@
 import { Link } from "@tanstack/react-router";
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 
 import { FeezoMark } from "@/components/brand/FeezoBrand";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { MarketingMobileNav } from "@/components/marketing/MarketingMobileNav";
+import { MARKETING_THEME_VARS } from "@/components/marketing/marketing-theme";
 import { BRAND } from "@/lib/brand";
 import { MARKETING } from "@/lib/marketing-content";
 import { handleMarketingSectionClick } from "@/lib/marketing-scroll";
-
-const MKT_VARS = {
-  "--mkt-green": "#8FCA4A",
-  "--mkt-green-deep": "#6BA832",
-  "--mkt-ink": "#1A1C2C",
-  "--mkt-muted": "rgba(26, 28, 44, 0.58)",
-  "--mkt-line": "rgba(26, 28, 44, 0.1)",
-  "--mkt-soft": "#F4FBF0",
-  "--mkt-glass": "rgba(255,255,255,0.72)",
-  "--mkt-glass-border": "rgba(143,202,74,0.18)",
-} as CSSProperties;
 
 export function MarketingShell({ children }: { children: ReactNode }) {
   const [scrolled, setScrolled] = useState(false);
@@ -33,7 +23,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
   return (
     <div
       className="marketing-root min-h-dvh scroll-smooth bg-white flex flex-col antialiased"
-      style={MKT_VARS}
+      style={MARKETING_THEME_VARS}
     >
       <a
         href="#main"

@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { TrialSignupLink } from "@/components/marketing/TrialSignupLink";
+import { MARKETING_THEME_VARS } from "@/components/marketing/marketing-theme";
 import { MARKETING } from "@/lib/marketing-content";
 import { handleMarketingSectionClick, preloadMarketingSections } from "@/lib/marketing-scroll";
 import { cn } from "@/lib/utils";
@@ -135,6 +136,7 @@ export function MarketingMobileNav() {
                     exit={{ x: "100%" }}
                     transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
                     style={{
+                      ...MARKETING_THEME_VARS,
                       background:
                         "linear-gradient(165deg, #ffffff 0%, #f8fff4 42%, #f4fbf0 100%)",
                     }}

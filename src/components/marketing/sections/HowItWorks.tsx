@@ -324,7 +324,7 @@ export function HowItWorks() {
 
           {/* Card 2: Built for */}
           <motion.div
-            className="md:col-span-6 rounded-3xl p-8 pl-10 flex items-center justify-between overflow-hidden relative cursor-default mkt-aurora-border"
+            className="md:col-span-6 rounded-3xl p-6 pb-4 sm:p-8 sm:pb-5 md:p-8 md:pl-10 flex flex-col min-h-[400px] sm:min-h-[440px] md:min-h-[300px] overflow-hidden relative cursor-default mkt-aurora-border"
             style={glassCard}
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -333,18 +333,18 @@ export function HowItWorks() {
             whileHover={hoverGlass}
           >
             <CardShine />
-            <div className="relative z-10 w-[50%]">
-              <h3 className="text-[28px] font-bold leading-[1.1] mb-3">
+            <div className="relative z-10 w-full shrink-0 text-center md:w-[48%] md:text-left">
+              <h3 className="text-[24px] sm:text-[28px] font-bold leading-[1.1] mb-3">
                 <span className="text-[#1a1a1a]">Built for</span><br />
                 <span style={{ color: "#5ec45f" }}>how schools</span><br />
                 <span style={{ color: "#5ec45f" }}>actually work</span>
               </h3>
-              <p className="text-[13px] text-[#6b7280] leading-relaxed pr-4">
+              <p className="mx-auto max-w-[22rem] text-[13px] text-[#6b7280] leading-relaxed md:mx-0 md:max-w-none md:pr-4">
                 Dashboard, students, fees, staff, plans, and support — one workspace your team can open on day one
               </p>
             </div>
             <motion.div
-              className="absolute right-0 top-0 bottom-0 w-[55%] flex items-center justify-end pr-1"
+              className="relative z-0 mt-auto flex w-full min-h-[230px] flex-1 items-end justify-center pt-4 sm:min-h-[270px] md:pointer-events-none md:absolute md:right-0 md:top-0 md:bottom-0 md:mt-0 md:min-h-0 md:w-[52%] md:items-center md:justify-end md:pt-0 md:pr-1"
               initial={{ opacity: 0, x: 30 }}
               whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true }}
@@ -353,7 +353,7 @@ export function HowItWorks() {
               <img
                 src="/works/1.png"
                 alt="Platform overview"
-                className="h-[108%] w-full object-contain object-right drop-shadow-[0_12px_36px_rgba(0,0,0,0.16)]"
+                className="h-full w-full max-h-[250px] object-contain object-bottom drop-shadow-[0_12px_36px_rgba(0,0,0,0.16)] sm:max-h-[290px] md:max-h-none md:h-[108%] md:w-full md:object-right"
               />
             </motion.div>
           </motion.div>
@@ -363,7 +363,7 @@ export function HowItWorks() {
 
           {/* Card 4: Directory */}
           <motion.div
-            className="md:col-span-6 rounded-3xl p-8 pl-10 flex items-center justify-between overflow-hidden relative min-h-[300px] cursor-default mkt-aurora-border"
+            className="md:col-span-6 rounded-3xl p-6 pb-4 sm:p-8 sm:pb-5 md:p-8 md:pl-10 flex flex-col min-h-[400px] sm:min-h-[440px] md:min-h-[300px] overflow-hidden relative cursor-default mkt-aurora-border"
             style={glassCard}
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -372,18 +372,18 @@ export function HowItWorks() {
             whileHover={hoverGlass}
           >
             <CardShine />
-            <div className="relative z-10 w-[45%] h-full flex flex-col justify-center">
-              <h3 className="text-[28px] font-bold leading-[1.1] mb-4">
+            <div className="relative z-10 w-full shrink-0 text-center md:w-[45%] md:text-left md:h-full md:flex md:flex-col md:justify-center">
+              <h3 className="text-[24px] sm:text-[28px] font-bold leading-[1.1] mb-4">
                 <span className="text-[#1a1a1a]">Directory with</span><br />
                 <span style={{ color: "#5ec45f" }}>fees &</span><br />
                 <span style={{ color: "#5ec45f" }}>follow-up</span>
               </h3>
-              <p className="text-[13px] text-[#6b7280] leading-relaxed">
+              <p className="mx-auto max-w-[22rem] text-[13px] text-[#6b7280] leading-relaxed md:mx-0 md:max-w-none">
                 Search, filter by class, call or WhatsApp guardians, and see overdue fees without leaving the list.
               </p>
             </div>
             <motion.div
-              className="absolute right-0 bottom-0 top-0 w-[55%] flex items-end justify-end pr-1"
+              className="relative z-0 mt-auto flex w-full min-h-[230px] flex-1 items-end justify-center pt-4 sm:min-h-[270px] md:pointer-events-none md:absolute md:right-0 md:bottom-0 md:top-0 md:mt-0 md:min-h-0 md:w-[55%] md:items-end md:justify-end md:pt-0 md:pr-1"
               initial={{ opacity: 0, y: 30, scale: 0.95 }}
               whileInView={{ opacity: 1, y: 0, scale: 1 }}
               viewport={{ once: true }}
@@ -392,14 +392,14 @@ export function HowItWorks() {
               <img
                 src="/works/2.png"
                 alt="Directory features"
-                className="max-h-full w-[105%] object-contain object-right-bottom drop-shadow-[0_12px_36px_rgba(0,0,0,0.16)]"
+                className="h-full w-full max-h-[250px] object-contain object-bottom drop-shadow-[0_12px_36px_rgba(0,0,0,0.16)] sm:max-h-[290px] md:max-h-full md:w-[105%] md:object-right-bottom"
               />
             </motion.div>
           </motion.div>
 
           {/* Card 5: Student Fees */}
           <motion.div
-            className="md:col-span-6 rounded-3xl p-8 pl-10 flex items-center justify-between overflow-hidden relative min-h-[300px] cursor-default mkt-aurora-border"
+            className="md:col-span-6 rounded-3xl p-6 pb-4 sm:p-8 sm:pb-5 md:p-8 md:pl-10 flex flex-col min-h-[400px] sm:min-h-[440px] md:min-h-[300px] overflow-hidden relative cursor-default mkt-aurora-border"
             style={glassCard}
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -408,18 +408,18 @@ export function HowItWorks() {
             whileHover={hoverGlass}
           >
             <CardShine />
-            <div className="relative z-10 w-[50%] h-full flex flex-col justify-center">
-              <h3 className="text-[28px] font-bold leading-[1.1] mb-4">
+            <div className="relative z-10 w-full shrink-0 text-center md:w-[50%] md:text-left md:h-full md:flex md:flex-col md:justify-center">
+              <h3 className="text-[24px] sm:text-[28px] font-bold leading-[1.1] mb-4">
                 <span style={{ color: "#5ec45f" }}>Student fees,</span><br />
                 <span className="text-[#1a1a1a]">installment by</span><br />
                 <span className="text-[#1a1a1a]">installment</span>
               </h3>
-              <p className="text-[13px] text-[#6b7280] leading-relaxed pr-2">
+              <p className="mx-auto max-w-[22rem] text-[13px] text-[#6b7280] leading-relaxed md:mx-0 md:max-w-none md:pr-2">
                 See total fee, paid, and due. Collect payments, flag overdue installments, and WhatsApp parents from the profile.
               </p>
             </div>
             <motion.div
-              className="absolute right-0 bottom-0 top-0 w-[55%] flex items-end justify-end pr-1"
+              className="relative z-0 mt-auto flex w-full min-h-[230px] flex-1 items-end justify-center pt-4 sm:min-h-[270px] md:pointer-events-none md:absolute md:right-0 md:bottom-0 md:top-0 md:mt-0 md:min-h-0 md:w-[55%] md:items-end md:justify-end md:pt-0 md:pr-1"
               initial={{ opacity: 0, y: 30, scale: 0.95 }}
               whileInView={{ opacity: 1, y: 0, scale: 1 }}
               viewport={{ once: true }}
@@ -428,14 +428,14 @@ export function HowItWorks() {
               <img
                 src="/works/3.png"
                 alt="Student fee management"
-                className="max-h-[105%] w-full object-contain object-right-bottom drop-shadow-[0_12px_36px_rgba(0,0,0,0.16)]"
+                className="h-full w-full max-h-[250px] object-contain object-bottom drop-shadow-[0_12px_36px_rgba(0,0,0,0.16)] sm:max-h-[290px] md:max-h-[105%] md:w-full md:object-right-bottom"
               />
             </motion.div>
           </motion.div>
 
           {/* Card 6: Financial Overview */}
           <motion.div
-            className="md:col-span-9 rounded-3xl p-10 pl-12 flex overflow-hidden relative min-h-[340px] cursor-default mkt-aurora-border"
+            className="md:col-span-9 rounded-3xl p-6 pb-4 sm:p-8 sm:pb-5 md:p-10 md:pl-12 flex flex-col min-h-[420px] sm:min-h-[460px] md:min-h-[340px] overflow-hidden relative cursor-default mkt-aurora-border"
             style={glassCard}
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -444,18 +444,18 @@ export function HowItWorks() {
             whileHover={hoverGlass}
           >
             <CardShine />
-            <div className="relative z-10 w-[35%] flex flex-col justify-center">
-              <h3 className="text-[32px] font-bold leading-[1.1] mb-5">
+            <div className="relative z-10 w-full shrink-0 text-center md:w-[35%] md:text-left md:flex md:flex-col md:justify-center">
+              <h3 className="text-[26px] sm:text-[28px] md:text-[32px] font-bold leading-[1.1] mb-4 md:mb-5">
                 <span style={{ color: "#5ec45f" }}>Financial</span><br />
                 <span style={{ color: "#5ec45f" }}>overview</span><br />
                 <span className="text-[#1a1a1a]">at a glance</span>
               </h3>
-              <p className="text-[14px] text-[#6b7280] leading-relaxed pr-4">
+              <p className="mx-auto max-w-[22rem] text-[13px] sm:text-[14px] text-[#6b7280] leading-relaxed md:mx-0 md:max-w-none md:pr-4">
                 Income, expenses, outstanding fees, cash and bank — plus quick actions to receive or make payments.
               </p>
             </div>
             <motion.div
-              className="absolute right-0 bottom-0 top-0 w-[65%] flex items-end justify-center pt-4 pr-2"
+              className="relative z-0 mt-auto flex w-full min-h-[240px] flex-1 items-end justify-center pt-4 sm:min-h-[280px] md:pointer-events-none md:absolute md:right-0 md:bottom-0 md:top-0 md:mt-0 md:min-h-0 md:w-[65%] md:items-end md:justify-center md:pt-4 md:pr-2"
               initial={{ opacity: 0, y: 40, scale: 0.95 }}
               whileInView={{ opacity: 1, y: 0, scale: 1 }}
               viewport={{ once: true }}
@@ -464,14 +464,14 @@ export function HowItWorks() {
               <img
                 src="/works/5.png"
                 alt="Financial dashboard"
-                className="w-full max-h-[98%] object-contain object-bottom drop-shadow-[0_12px_36px_rgba(0,0,0,0.18)]"
+                className="h-full w-full max-h-[260px] object-contain object-bottom drop-shadow-[0_12px_36px_rgba(0,0,0,0.18)] sm:max-h-[300px] md:w-full md:max-h-[98%]"
               />
             </motion.div>
           </motion.div>
 
           {/* Card 7: Help */}
           <motion.div
-            className="md:col-span-3 rounded-3xl p-10 flex flex-col min-h-[340px] cursor-default relative overflow-hidden mkt-aurora-border"
+            className="md:col-span-3 rounded-3xl p-6 sm:p-8 md:p-10 flex flex-col min-h-0 md:min-h-[340px] cursor-default relative overflow-hidden mkt-aurora-border text-center md:text-left"
             style={glassCard}
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -495,7 +495,7 @@ export function HowItWorks() {
             </p>
             {/* Floating icon */}
             <motion.div
-              className="mt-auto relative z-10"
+              className="mt-6 md:mt-auto mx-auto md:mx-0 relative z-10"
               animate={{ y: [0, -6, 0] }}
               transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
             >
