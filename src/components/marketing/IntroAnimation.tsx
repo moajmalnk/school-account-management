@@ -2,29 +2,14 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { easeOutExpo } from "./motion";
 
-// Import real pages/sections to use as previews
 import { Hero } from "@/components/marketing/sections/Hero";
-import { HowItWorks } from "@/components/marketing/sections/HowItWorks";
-import { Features } from "@/components/marketing/sections/Features";
-import { DigitalTransformation } from "@/components/marketing/sections/DigitalTransformation";
-import { Testimonials } from "@/components/marketing/sections/Testimonials";
-import { Pricing } from "@/components/marketing/sections/Pricing";
 import { MarketingShell } from "@/components/marketing/MarketingShell";
 
-// Helper component that renders a section at 33.33% scale to act as a mini-page
-const MiniPage = ({ children }: { children: React.ReactNode }) => (
-  <div className="w-full h-full p-4 relative pointer-events-none">
-    <div className="w-full h-full relative overflow-hidden rounded-3xl border border-white/20 shadow-2xl bg-black/10 backdrop-blur-md">
-      <div 
-        className="absolute top-0 left-0 w-screen h-screen origin-top-left opacity-90" 
-        style={{ transform: "scale(0.33333)" }}
-      >
-        {/* We add a div with pointer-events-none to prevent any interaction within the preview */}
-        <div className="w-full h-full overflow-hidden pointer-events-none">
-          {children}
-        </div>
-      </div>
-      <div className="absolute inset-0 bg-white/5 z-10 pointer-events-none" />
+const MiniPage = ({ imgSrc }: { imgSrc: string }) => (
+  <div className="w-full h-full p-2 relative pointer-events-none">
+    {/* Page Container */}
+    <div className="w-full h-full relative overflow-hidden rounded-[1rem] shadow-lg">
+      <img src={imgSrc} className="w-full h-full object-cover" alt="" />
     </div>
   </div>
 );
@@ -51,130 +36,130 @@ export function IntroAnimation() {
     <AnimatePresence>
       {!isFinished && (
         <motion.div
-          className="fixed inset-0 z-[100] bg-background/80 backdrop-blur-lg overflow-hidden"
+          className="fixed inset-0 z-[100] bg-[#050505] overflow-hidden flex items-center justify-center"
+          style={{ perspective: "2000px" }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.8, ease: "easeInOut" }}
+          transition={{ duration: 0.1 }}
           onAnimationComplete={() => setIsVisible(false)}
         >
-          {/* Top Row */}
+          {/* Cinematic "Video Effect" Glow Background */}
+          <motion.div
+            className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(143,202,74,0.25)_0%,transparent_60%)]"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1.2 }}
+            transition={{ duration: 1.5, ease: "easeOut" }}
+          />
+
+          {/* Top Row (Moves Right & Tumbles in 3D) */}
           <motion.div
             className="absolute top-0 left-0 w-[33.33%] h-[33.33%]"
-            initial={{ x: 0 }}
-            animate={{ x: "100vw" }}
-            transition={{ duration: 1.2, ease: easeOutExpo, delay: 0.5 }}
+            initial={{ x: 0, rotateY: 0, rotateX: 0 }}
+            animate={{ x: "100vw", y: "-20vh", rotateY: 45, rotateX: 45 }}
+            transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
           >
-            <MiniPage><Hero /></MiniPage>
+            <MiniPage imgSrc="/grid/1.png" />
           </motion.div>
           <motion.div
             className="absolute top-0 left-[33.33%] w-[33.33%] h-[33.33%]"
-            initial={{ x: 0 }}
-            animate={{ x: "100vw" }}
-            transition={{ duration: 1.2, ease: easeOutExpo, delay: 0.55 }}
+            initial={{ x: 0, rotateY: 0, rotateX: 0 }}
+            animate={{ x: "50vw", y: "-50vh", rotateY: -45, rotateX: 45 }}
+            transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
           >
-            <MiniPage><HowItWorks /></MiniPage>
+            <MiniPage imgSrc="/grid/2.png" />
           </motion.div>
           <motion.div
             className="absolute top-0 left-[66.66%] w-[33.33%] h-[33.33%]"
-            initial={{ x: 0 }}
-            animate={{ x: "100vw" }}
-            transition={{ duration: 1.2, ease: easeOutExpo, delay: 0.6 }}
+            initial={{ x: 0, rotateY: 0, rotateX: 0 }}
+            animate={{ x: "100vw", y: "-20vh", rotateY: -60, rotateX: 45 }}
+            transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
           >
-            <MiniPage><Features /></MiniPage>
+            <MiniPage imgSrc="/grid/3.png" />
           </motion.div>
 
-          {/* Bottom Row */}
+          {/* Bottom Row (Moves Left & Tumbles in 3D) */}
           <motion.div
             className="absolute bottom-0 left-0 w-[33.33%] h-[33.33%]"
-            initial={{ x: 0 }}
-            animate={{ x: "-100vw" }}
-            transition={{ duration: 1.2, ease: easeOutExpo, delay: 0.5 }}
+            initial={{ x: 0, rotateY: 0, rotateX: 0 }}
+            animate={{ x: "-100vw", y: "20vh", rotateY: 45, rotateX: -45 }}
+            transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
           >
-            <MiniPage><Testimonials /></MiniPage>
+            <MiniPage imgSrc="/grid/7.png" />
           </motion.div>
           <motion.div
             className="absolute bottom-0 left-[33.33%] w-[33.33%] h-[33.33%]"
-            initial={{ x: 0 }}
-            animate={{ x: "-100vw" }}
-            transition={{ duration: 1.2, ease: easeOutExpo, delay: 0.55 }}
+            initial={{ x: 0, rotateY: 0, rotateX: 0 }}
+            animate={{ x: "-50vw", y: "50vh", rotateY: 45, rotateX: -45 }}
+            transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
           >
-            <MiniPage><Pricing /></MiniPage>
+            <MiniPage imgSrc="/grid/8.png" />
           </motion.div>
           <motion.div
             className="absolute bottom-0 left-[66.66%] w-[33.33%] h-[33.33%]"
-            initial={{ x: 0 }}
-            animate={{ x: "-100vw" }}
-            transition={{ duration: 1.2, ease: easeOutExpo, delay: 0.6 }}
+            initial={{ x: 0, rotateY: 0, rotateX: 0 }}
+            animate={{ x: "-100vw", y: "20vh", rotateY: -45, rotateX: -45 }}
+            transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
           >
-            <MiniPage><Hero /></MiniPage>
+            <MiniPage imgSrc="/grid/9.png" />
           </motion.div>
 
-          {/* Middle Left */}
+          {/* Middle Left (Moves Left & Tumbles) */}
           <motion.div
             className="absolute top-[33.33%] left-0 w-[33.33%] h-[33.33%]"
-            initial={{ x: 0 }}
-            animate={{ x: "-100vw" }}
-            transition={{ duration: 1.2, ease: easeOutExpo, delay: 0.5 }}
+            initial={{ x: 0, rotateY: 0, rotateX: 0 }}
+            animate={{ x: "-100vw", rotateY: 60, rotateX: 0 }}
+            transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
           >
-            <MiniPage><DigitalTransformation /></MiniPage>
+            <MiniPage imgSrc="/grid/4.png" />
           </motion.div>
 
-          {/* Middle Right */}
+          {/* Middle Right (Moves Right & Tumbles) */}
           <motion.div
             className="absolute top-[33.33%] left-[66.66%] w-[33.33%] h-[33.33%]"
-            initial={{ x: 0 }}
-            animate={{ x: "100vw" }}
-            transition={{ duration: 1.2, ease: easeOutExpo, delay: 0.6 }}
+            initial={{ x: 0, rotateY: 0, rotateX: 0 }}
+            animate={{ x: "100vw", rotateY: -60, rotateX: 0 }}
+            transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
           >
-            <MiniPage><HowItWorks /></MiniPage>
+            <MiniPage imgSrc="/grid/6.png" />
           </motion.div>
 
-          {/* Center piece */}
+          {/* Center piece (Expands & Zooms from 3D) */}
           <motion.div
-            className="absolute z-10 flex items-start justify-start shadow-2xl"
+            className="absolute z-10 flex items-start justify-start shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
             initial={{ 
-              top: "33.33%", 
-              left: "33.33%", 
-              width: "33.33%", 
-              height: "33.33%",
-              padding: "1rem"
+              top: "33.33%", left: "33.33%", width: "33.33%", height: "33.33%",
+              padding: "0.5rem", z: 0
             }}
             animate={{ 
-              top: "0%", 
-              left: "0%", 
-              width: "100%", 
-              height: "100%",
-              padding: "0rem"
+              top: "0%", left: "0%", width: "100%", height: "100%",
+              padding: "0rem", z: 0 // Keep at z:0 so scale perfectly matches real page
             }}
-            transition={{ duration: 1.2, ease: easeOutExpo, delay: 1.2 }}
+            transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
             onAnimationComplete={() => {
-              setTimeout(() => setIsFinished(true), 100);
+              // Minimal delay before handing over to real DOM to prevent flash
+              setTimeout(() => setIsFinished(true), 50);
             }}
           >
+            {/* Center Piece Content Container */}
             <motion.div 
-               className="w-full h-full relative overflow-hidden bg-background"
-               initial={{ borderRadius: "1.5rem", border: "1px solid rgba(255,255,255,0.2)" }}
-               animate={{ borderRadius: "0rem", border: "0px solid rgba(255,255,255,0)" }}
-               transition={{ duration: 1.2, ease: easeOutExpo, delay: 1.2 }}
+               className="w-full h-full relative overflow-hidden bg-white shadow-lg"
+               initial={{ borderRadius: "1rem" }}
+               animate={{ borderRadius: "0rem" }}
+               transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
             >
                <motion.div 
                  className="absolute top-0 left-0 w-screen h-screen origin-top-left pointer-events-none"
-                 initial={{ scale: 0.33333 }}
-                 animate={{ scale: 1 }}
-                 transition={{ duration: 1.2, ease: easeOutExpo, delay: 1.2 }}
+                 initial={{ scale: 0.33333, opacity: 1 }}
+                 animate={{ scale: 1, opacity: 1 }}
+                 transition={{ duration: 1.5, ease: easeOutExpo, delay: 0.5 }}
                >
                  <MarketingShell>
-                   <Hero />
+                   <Hero noDelay={true} />
+                   {/* Push the bottom of the card off-screen to perfectly match the real tall page */}
+                   <div className="h-[200vh]" />
                  </MarketingShell>
                </motion.div>
-               <motion.div 
-                 className="absolute inset-0 bg-white/5 z-10 pointer-events-none"
-                 initial={{ opacity: 1 }}
-                 animate={{ opacity: 0 }}
-                 transition={{ duration: 1.2, ease: easeOutExpo, delay: 1.2 }}
-               />
             </motion.div>
           </motion.div>
-
         </motion.div>
       )}
     </AnimatePresence>

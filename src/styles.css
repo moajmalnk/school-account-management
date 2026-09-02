@@ -28,6 +28,7 @@
 
   body {
     overflow-x: clip;
+    scrollbar-gutter: stable;
   }
   .font-mono {
     font-family: "JetBrains Mono", ui-monospace, monospace;
@@ -57,6 +58,26 @@
     font-size: 16px;
     line-height: 1.5;
     font-weight: 400;
+  }
+
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--mkt-green, var(--color-lime, #22c55e));
+    border-radius: 20px;
+    border: 3px solid var(--background, #f4f6f9);
+  }
+  .dark ::-webkit-scrollbar-thumb {
+    border-color: var(--background, #0a0a0a);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: #0d9488;
   }
 }
 
@@ -93,6 +114,158 @@
 .overdue-flash {
   animation: overdueFlash 1.2s ease-in-out infinite;
 }
+
+/* =============================================
+   Marketing glassmorphism animations
+   ============================================= */
+
+/* Float up/down */
+@keyframes mkt-float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-12px); }
+}
+
+/* Diagonal shimmer sweep across a card */
+@keyframes mkt-shimmer-sweep {
+  0%   { transform: translateX(-100%) skewX(-15deg); opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: translateX(350%) skewX(-15deg); opacity: 0; }
+}
+
+/* Rotating conic glow border */
+@keyframes mkt-border-spin {
+  0%   { --mkt-angle: 0deg; }
+  100% { --mkt-angle: 360deg; }
+}
+
+/* Pulsing green glow ring */
+@keyframes mkt-pulse-ring {
+  0%   { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(143,202,74,0.5); }
+  70%  { transform: scale(1);    box-shadow: 0 0 0 14px rgba(143,202,74,0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(143,202,74,0); }
+}
+
+/* Drifting background orb */
+@keyframes mkt-orb-drift {
+  0%   { transform: translate(0px, 0px) scale(1); }
+  25%  { transform: translate(40px, -30px) scale(1.08); }
+  50%  { transform: translate(20px, 20px) scale(0.96); }
+  75%  { transform: translate(-30px, -10px) scale(1.04); }
+  100% { transform: translate(0px, 0px) scale(1); }
+}
+
+/* Slow rotation (for decorative elements) */
+@keyframes mkt-spin-slow {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Gradient border aurora */
+@keyframes mkt-aurora {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Gentle scale throb for stat numbers */
+@keyframes mkt-throb {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.06); }
+}
+
+/* Particle float — each particle has a unique duration via nth-child */
+@keyframes mkt-particle-rise {
+  0%   { transform: translateY(0) scale(1); opacity: 0; }
+  10%  { opacity: 0.7; }
+  90%  { opacity: 0.5; }
+  100% { transform: translateY(-120px) scale(0.5); opacity: 0; }
+}
+
+/* ---- Utility classes ---- */
+
+.mkt-float { animation: mkt-float 5s ease-in-out infinite; }
+
+/* Shimmer overlay: place a ::before pseudo-element inside a glass card */
+.mkt-shimmer-card {
+  position: relative;
+  overflow: hidden;
+}
+.mkt-shimmer-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    120deg,
+    transparent 20%,
+    rgba(255,255,255,0.55) 50%,
+    transparent 80%
+  );
+  background-size: 200% 100%;
+  animation: mkt-shimmer-sweep 3.5s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* Rotating aurora border wrapper */
+.mkt-aurora-border {
+  position: relative;
+  z-index: 0;
+}
+.mkt-aurora-border::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    rgba(143,202,74,0.8),
+    rgba(107,168,50,0.6),
+    rgba(200,235,160,0.9),
+    rgba(143,202,74,0.8)
+  );
+  background-size: 300% 300%;
+  animation: mkt-aurora 3s linear infinite;
+  z-index: -1;
+  filter: blur(3px);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.mkt-aurora-border:hover::before {
+  opacity: 1;
+}
+
+/* Pulse ring on buttons/CTAs */
+.mkt-pulse-ring {
+  animation: mkt-pulse-ring 2s ease-out infinite;
+}
+
+/* Glow on stat numbers */
+.mkt-stat {
+  animation: mkt-throb 4s ease-in-out infinite;
+  display: inline-block;
+}
+
+/* Smooth scroll for marketing */
+.marketing-root {
+  scroll-behavior: smooth;
+}
+.marketing-root section {
+  will-change: auto;
+}
+
+/* Particle dot */
+.mkt-particle {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(143,202,74,0.6);
+  animation: mkt-particle-rise 4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+
 
 /* Professional card radius — uniform, SaaS-standard corners. */
 @layer components {
@@ -242,78 +415,6 @@
     border-color: rgba(45, 212, 191, 0.35);
     background: rgba(15, 118, 110, 0.28);
     box-shadow: 0 4px 18px rgba(15, 118, 110, 0.2);
-  }
-
-  .mobile-tab-dock {
-    border: 1px solid rgba(255, 255, 255, 0.92);
-    background: rgba(255, 255, 255, 0.82);
-    box-shadow:
-      0 0 0 0.5px rgba(15, 23, 42, 0.06),
-      0 10px 40px -12px rgba(15, 23, 42, 0.16),
-      0 4px 12px -4px rgba(15, 23, 42, 0.08),
-      inset 0 1px 0 rgba(255, 255, 255, 1);
-    backdrop-filter: blur(40px) saturate(1.85);
-    -webkit-backdrop-filter: blur(40px) saturate(1.85);
-  }
-
-  .dark .mobile-tab-dock {
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(24, 24, 27, 0.82);
-    box-shadow:
-      0 0 0 0.5px rgba(255, 255, 255, 0.05),
-      0 16px 48px -14px rgba(0, 0, 0, 0.55),
-      0 4px 12px -4px rgba(0, 0, 0, 0.25),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(40px) saturate(1.6);
-    -webkit-backdrop-filter: blur(40px) saturate(1.6);
-  }
-
-  .mobile-tab-indicator {
-    background: rgba(15, 118, 110, 0.1);
-    border: 1px solid rgba(15, 118, 110, 0.14);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.65),
-      0 1px 3px rgba(15, 118, 110, 0.08);
-  }
-
-  .dark .mobile-tab-indicator {
-    background: rgba(45, 212, 191, 0.14);
-    border: 1px solid rgba(45, 212, 191, 0.18);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.1),
-      0 1px 4px rgba(0, 0, 0, 0.2);
-  }
-
-  @keyframes skeleton-shimmer {
-    0% {
-      transform: translateX(-100%);
-    }
-    100% {
-      transform: translateX(100%);
-    }
-  }
-
-  .skeleton-shimmer::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(
-      90deg,
-      transparent 0%,
-      rgba(255, 255, 255, 0.45) 50%,
-      transparent 100%
-    );
-    animation: skeleton-shimmer 1.6s ease-in-out infinite;
-    pointer-events: none;
-  }
-
-  .dark .skeleton-shimmer::after {
-    background: linear-gradient(
-      90deg,
-      transparent 0%,
-      rgba(255, 255, 255, 0.12) 50%,
-      transparent 100%
-    );
   }
 
   @media (min-width: 1024px) {
@@ -765,8 +866,8 @@
   background-color: rgba(67, 56, 202, 0.35) !important;
   color: #c7d2fe !important;
 }
-.dark .bg-\[\#E0E7FF\] .text-\[\#3730A3\],
-.dark .bg-\[\#E0E7FF\].text-\[\#3730A3\] {
+.dark .bg-\[\#E0E7FF\] .text-\[\#6BA832\],
+.dark .bg-\[\#E0E7FF\].text-\[\#6BA832\] {
   color: #c7d2fe !important;
 }
 

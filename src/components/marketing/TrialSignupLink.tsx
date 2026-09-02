@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 /**
  * Marketing CTA → signup (index redirects to /signup/school).
@@ -7,13 +7,15 @@ import type { ReactNode } from "react";
  */
 export function TrialSignupLink({
   className,
+  style,
   children,
 }: {
   className?: string;
+  style?: CSSProperties;
   children: ReactNode;
 }) {
   return (
-    <Link to={"/signup" as "/"} className={className}>
+    <Link to={"/signup" as "/"} className={className} style={style}>
       {children}
     </Link>
   );
