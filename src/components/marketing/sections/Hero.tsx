@@ -36,7 +36,7 @@ export function Hero({ noDelay = false }: { noDelay?: boolean }) {
             height={900}
             decoding="async"
             fetchPriority="high"
-            className="mx-auto w-full max-w-[920px] h-auto object-contain drop-shadow-[0_28px_72px_rgba(26,28,44,0.14)]"
+            className="mx-auto block w-full max-w-[920px] h-auto bg-white object-contain"
           />
         </motion.div>
 

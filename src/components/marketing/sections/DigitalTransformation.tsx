@@ -1,366 +1,183 @@
-import { Bell, Hash, Asterisk } from "lucide-react";
+import { ArrowRight, Bell } from "lucide-react";
 import { motion } from "motion/react";
-import { easeOutExpo } from "@/components/marketing/motion";
 
-const glassCard = {
-  backdropFilter: "blur(18px)",
-  WebkitBackdropFilter: "blur(18px)",
-};
+import { easeOutExpo } from "@/components/marketing/motion";
+import { MARKETING } from "@/lib/marketing-content";
+
+const SETUP_HIGHLIGHTS = MARKETING.setup.highlights;
+const FOLLOW_UP = MARKETING.followUp;
+const BRANDING_STEP = MARKETING.setup.steps[0];
+const STAFF_STEP = MARKETING.setup.steps[2];
+
+const CARD =
+  "relative overflow-hidden rounded-3xl border border-[rgba(26,28,44,0.08)] shadow-[0_2px_16px_rgba(26,28,44,0.04)]";
+
+const FOLLOW_BTN_SHADOW = "shadow-[0_4px_14px_rgba(143,202,74,0.38)]";
+
+function MintGlow({ position }: { position: "bottom-right" | "top-right" }) {
+  const style =
+    position === "bottom-right"
+      ? "radial-gradient(ellipse 95% 85% at 100% 100%, rgba(143,202,74,0.32) 0%, rgba(143,202,74,0.08) 45%, transparent 74%)"
+      : "radial-gradient(ellipse 90% 80% at 100% 0%, rgba(143,202,74,0.3) 0%, rgba(143,202,74,0.08) 42%, transparent 72%)";
+
+  return (
+    <div className="pointer-events-none absolute inset-0" style={{ background: style }} aria-hidden />
+  );
+}
 
 export function DigitalTransformation() {
   return (
     <section
       id="product"
-      className="scroll-mt-24 relative py-14 sm:py-20 lg:py-24 overflow-hidden"
-      style={{
-        background: "linear-gradient(135deg, #F0FBE8 0%, #F8FFF4 40%, #F4FBF0 70%, #EEFBE5 100%)",
-      }}
+      className="scroll-mt-24 bg-white py-14 sm:py-20 lg:py-24"
       aria-labelledby="digital-transformation-heading"
     >
-      {/* Animated background orbs */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <motion.div
-          className="absolute -top-24 right-1/4 w-80 h-80 rounded-full"
-          style={{ background: "radial-gradient(circle, rgba(143,202,74,0.14) 0%, transparent 70%)" }}
-          animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0.9, 0.5] }}
-          transition={{ duration: 9, repeat: Infinity, ease: "easeInOut" }}
-        />
-        <motion.div
-          className="absolute -bottom-24 left-1/4 w-72 h-72 rounded-full"
-          style={{ background: "radial-gradient(circle, rgba(107,168,50,0.1) 0%, transparent 70%)" }}
-          animate={{ scale: [1.1, 1, 1.1] }}
-          transition={{ duration: 11, repeat: Infinity, ease: "easeInOut" }}
-        />
-        <div
-          className="absolute inset-0"
-          style={{
-            backgroundImage: "radial-gradient(rgba(143,202,74,0.06) 1px, transparent 1px)",
-            backgroundSize: "48px 48px",
-          }}
-        />
-      </div>
+      <div className="mx-auto max-w-5xl px-5 sm:px-8">
+        <h2 id="digital-transformation-heading" className="sr-only">
+          Product overview
+        </h2>
 
-      <div className="mx-auto max-w-5xl px-4 sm:px-6 relative z-10">
-
-        {/* Header */}
-        <motion.div
-          className="flex flex-col items-center text-center mb-16 relative mt-8"
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-100px" }}
-          transition={{ duration: 0.7, ease: easeOutExpo }}
-        >
-          <div className="relative mb-6">
-            <div
-              className="inline-flex items-center justify-center rounded-full px-4 py-1.5 text-[13px] font-semibold text-[var(--mkt-ink)] relative z-10"
-              style={{
-                background: "rgba(255,255,255,0.85)",
-                backdropFilter: "blur(12px)",
-                WebkitBackdropFilter: "blur(12px)",
-                border: "1px solid rgba(143,202,74,0.3)",
-                boxShadow: "0 2px 12px rgba(143,202,74,0.15)",
-              }}
-            >
-              Your school, Upgraded
-            </div>
-            <Hash className="w-6 h-6 absolute -right-4 -top-3 text-[var(--mkt-green)] opacity-50 -rotate-12" strokeWidth={2.5} />
-          </div>
-
-          <div className="relative">
-            <Asterisk className="w-8 h-8 absolute -left-8 bottom-2 text-[var(--mkt-green)] opacity-50" strokeWidth={2.5} />
-            <h2 id="digital-transformation-heading" className="text-[clamp(2.5rem,6vw,3.5rem)] font-bold tracking-tight text-[var(--mkt-ink)] leading-[1.1]">
-              From manual<br />
-              to <span className="inline-block px-3 py-0.5 rounded-lg bg-[var(--mkt-green)] text-white ml-1">digital</span>
-            </h2>
-          </div>
-        </motion.div>
-
-        {/* Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-          {/* Top Left: Brand Card */}
-          <motion.div
-            className="rounded-3xl p-8 flex flex-col min-h-[340px] cursor-default transition-all duration-300"
-            style={{
-              ...glassCard,
-              background: "rgba(255,255,255,0.82)",
-              border: "1px solid rgba(143,202,74,0.2)",
-              boxShadow: "0 4px 24px rgba(143,202,74,0.10), 0 1px 4px rgba(0,0,0,0.04)",
-            }}
-            initial={{ opacity: 0, y: 30 }}
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 md:gap-6">
+          {/* Top left — brand setup */}
+          <motion.article
+            className={`${CARD} min-h-[300px] bg-white p-6 sm:min-h-[340px] sm:p-8`}
+            initial={{ opacity: 0, y: 24 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-50px" }}
-            transition={{ duration: 0.7, ease: easeOutExpo, delay: 0.1 }}
-            whileHover={{ y: -6, boxShadow: "0 20px 48px rgba(143,202,74,0.22), 0 4px 12px rgba(0,0,0,0.06)", border: "1px solid rgba(143,202,74,0.35)" }}
+            viewport={{ once: true, margin: "-60px" }}
+            transition={{ duration: 0.65, ease: easeOutExpo }}
           >
-            <h3 className="text-2xl font-bold text-[var(--mkt-ink)] leading-tight mb-2">
-              From school brand<br />to day-one profiles
-            </h3>
-            <p className="text-[13px] text-[var(--mkt-muted)] mb-6 max-w-[85%]">
-              Configure branding once, then run students, fees, and staff from the same workspace.
-            </p>
-
-            <div className="flex flex-col gap-2.5 mt-auto">
-              {[
-                "Logo, letterhead, seal & signature",
-                "School profile, phone & email",
-                "Student fee schedules & collection",
-                "Staff profiles, roles & login"
-              ].map((pill, idx) => (
-                <motion.div
-                  key={pill}
-                  className="inline-flex items-center px-3.5 py-1.5 rounded-full text-[11.5px] font-semibold text-[var(--mkt-ink)] w-max max-w-full truncate"
-                  style={{
-                    background: "rgba(255,255,255,0.9)",
-                    border: "1px solid rgba(143,202,74,0.2)",
-                    boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
-                  }}
-                  initial={{ opacity: 0, x: -15 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 0.5, ease: easeOutExpo, delay: 0.2 + idx * 0.06 }}
-                >
-                  {pill}
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-
-          {/* Top Right: Follow up Card */}
-          <motion.div
-            className="rounded-3xl p-8 flex overflow-hidden relative min-h-[340px] cursor-default transition-all duration-300"
-            style={{
-              ...glassCard,
-              background: "rgba(240,251,232,0.85)",
-              border: "1px solid rgba(143,202,74,0.22)",
-              boxShadow: "0 4px 24px rgba(143,202,74,0.10), 0 1px 4px rgba(0,0,0,0.04)",
-            }}
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-50px" }}
-            transition={{ duration: 0.7, ease: easeOutExpo, delay: 0.2 }}
-            whileHover={{ y: -6, boxShadow: "0 20px 48px rgba(143,202,74,0.22), 0 4px 12px rgba(0,0,0,0.06)", border: "1px solid rgba(143,202,74,0.4)" }}
-          >
-            <div className="relative z-10 w-[55%] flex flex-col">
-              <h3 className="text-2xl font-bold text-[var(--mkt-ink)] leading-tight mb-2">
-                One-click<br />follow-up
+            <MintGlow position="bottom-right" />
+            <div className="relative z-10 flex h-full flex-col">
+              <h3 className="text-[22px] font-bold leading-[1.15] text-[var(--mkt-ink)] sm:text-[26px]">
+                From school brand
+                <br />
+                to day-one profiles
               </h3>
-              <p className="text-[13px] text-[var(--mkt-muted)] mb-6">
-                No more individual messages and missed reminders. Select overdue, send bulk WhatsApp, done.
+              <p className="mt-2.5 max-w-[95%] text-[13px] leading-relaxed text-[var(--mkt-ink)]">
+                {MARKETING.setup.body}
               </p>
-
-              <div className="flex flex-col gap-2 mt-auto">
-                {["Overdue →", "Bulk WhatsApp →", "Send"].map((label, idx) => (
-                  <motion.div
-                    key={label}
-                    className="inline-flex items-center justify-between px-3 py-1.5 text-white text-[11px] font-medium rounded-md w-fit shadow-sm"
-                    style={{
-                      background: "linear-gradient(135deg, var(--mkt-green), #6BA832)",
-                      minWidth: `${90 + idx * 20}px`,
-                      boxShadow: "0 2px 10px rgba(143,202,74,0.4)",
-                    }}
-                    whileHover={{ scale: 1.05 }}
-                    transition={{ type: "spring", stiffness: 400 }}
+              <div className="mt-6 flex flex-col gap-2.5 sm:mt-auto sm:pt-10">
+                {SETUP_HIGHLIGHTS.map((pill, idx) => (
+                  <motion.span
+                    key={pill}
+                    className="inline-flex w-fit max-w-full items-center rounded-full border border-[var(--mkt-ink)]/80 bg-white px-3.5 py-1.5 text-[11.5px] font-semibold text-[var(--mkt-ink)]"
+                    initial={{ opacity: 0, x: -12 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.45, ease: easeOutExpo, delay: 0.08 + idx * 0.05 }}
                   >
-                    {label}
-                  </motion.div>
+                    {pill}
+                  </motion.span>
                 ))}
               </div>
             </div>
+          </motion.article>
 
-            <motion.div
-              className="absolute right-0 bottom-0 top-[10%] w-[65%]"
-              initial={{ opacity: 0, x: 40, scale: 0.95 }}
-              whileInView={{ opacity: 1, x: 0, scale: 1 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.7, ease: easeOutExpo, delay: 0.4 }}
-            >
-              <img src="/digital/2.png" alt="Hand holding phone" className="w-full h-full object-contain object-right-bottom drop-shadow-xl translate-x-2 translate-y-4 scale-[1.2]" />
-            </motion.div>
-          </motion.div>
-
-          {/* Bottom Left Column */}
-          <div className="flex flex-col gap-6 h-full">
-            {/* Assets Card */}
-            <motion.div
-              className="rounded-3xl p-6 flex items-start justify-between flex-1 min-h-[160px] cursor-default transition-all duration-300"
-              style={{
-                ...glassCard,
-                background: "rgba(255,255,255,0.85)",
-                border: "1px solid rgba(143,202,74,0.15)",
-                boxShadow: "0 4px 20px rgba(143,202,74,0.08), 0 1px 4px rgba(0,0,0,0.04)",
-              }}
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-50px" }}
-              transition={{ duration: 0.7, ease: easeOutExpo, delay: 0.1 }}
-              whileHover={{ y: -5, boxShadow: "0 16px 40px rgba(143,202,74,0.18), 0 4px 12px rgba(0,0,0,0.05)", border: "1px solid rgba(143,202,74,0.3)" }}
-            >
-              <div className="w-[65%]">
-                <h3 className="text-xl font-bold text-[var(--mkt-ink)] leading-tight mb-2">
-                  School details<br />& assets
-                </h3>
-                <p className="text-[12px] text-[var(--mkt-muted)] leading-relaxed">
-                  Upload logo, letterhead, seal, and signature. Set name, address, and registration — receipts look official from day one.
-                </p>
-              </div>
-              <div
-                className="w-[80px] h-[80px] rounded-2xl flex items-center justify-center flex-shrink-0 ml-4 mt-2 relative overflow-hidden"
-                style={{
-                  background: "rgba(255,255,255,0.9)",
-                  border: "1px solid rgba(143,202,74,0.2)",
-                  boxShadow: "0 2px 12px rgba(143,202,74,0.15)",
-                }}
-              >
-                <div className="w-10 h-10 rounded-full flex items-center justify-center relative z-10" style={{ background: "linear-gradient(135deg, var(--mkt-green), #6BA832)", boxShadow: "0 2px 8px rgba(143,202,74,0.4)" }}>
-                  <Bell className="w-5 h-5 text-white" strokeWidth={2.5} />
-                </div>
-              </div>
-            </motion.div>
-
-            {/* Payments Card */}
-            <motion.div
-              className="rounded-3xl p-6 flex flex-col justify-between flex-1 min-h-[190px] cursor-default transition-all duration-300"
-              style={{
-                ...glassCard,
-                background: "rgba(255,255,255,0.85)",
-                border: "1px solid rgba(143,202,74,0.15)",
-                boxShadow: "0 4px 20px rgba(143,202,74,0.08), 0 1px 4px rgba(0,0,0,0.04)",
-              }}
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-50px" }}
-              transition={{ duration: 0.7, ease: easeOutExpo, delay: 0.2 }}
-              whileHover={{ y: -5, boxShadow: "0 16px 40px rgba(143,202,74,0.18), 0 4px 12px rgba(0,0,0,0.05)", border: "1px solid rgba(143,202,74,0.3)" }}
-            >
-              <div>
-                <div className="flex items-start gap-3 mb-2">
-                  <div className="w-6 h-6 rounded-full flex items-center justify-center text-[var(--mkt-green)] flex-shrink-0 mt-0.5" style={{ background: "rgba(143,202,74,0.12)", border: "1px solid rgba(143,202,74,0.2)" }}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg>
-                  </div>
-                  <h3 className="text-xl font-bold text-[var(--mkt-ink)] leading-tight">
-                    Payments on<br />every profile
-                  </h3>
-                </div>
-                <p className="text-[12px] text-[var(--mkt-muted)] mb-4 ml-9">
-                  Fees overview, installment table, overdue badges, and WhatsApp reminders — collect without leaving the student.
-                </p>
-              </div>
-              <div className="flex items-end justify-between w-full pl-9 pr-2">
-                <div>
-                  <div className="text-[28px] font-bold text-[var(--mkt-ink)] leading-none tracking-tight">23,500</div>
-                  <div className="text-[11px] font-semibold text-[var(--mkt-green)] mt-1.5 flex items-center">
-                    <svg className="w-3 h-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>
-                    5.6% <span className="text-[var(--mkt-muted)] font-medium ml-1">vs last week</span>
-                  </div>
-                </div>
-                <div className="w-[110px] h-[40px] opacity-80">
-                  <svg viewBox="0 0 100 40" className="w-full h-full stroke-[var(--mkt-green)] fill-none stroke-[2.5]">
-                    <path d="M0 35 Q 15 25 30 30 T 50 15 T 70 25 T 85 5 T 100 10" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-
-          {/* Bottom Right Column: Staff setup Card */}
-          <motion.div
-            className="rounded-3xl flex flex-col relative overflow-hidden h-full min-h-[374px] cursor-default transition-all duration-300"
-            style={{
-              ...glassCard,
-              background: "rgba(255,255,255,0.85)",
-              border: "1px solid rgba(143,202,74,0.15)",
-              boxShadow: "0 4px 24px rgba(143,202,74,0.08), 0 1px 4px rgba(0,0,0,0.04)",
-            }}
-            initial={{ opacity: 0, y: 30 }}
+          {/* Top right — follow-up */}
+          <motion.article
+            className={`${CARD} min-h-[300px] bg-[#f4fbf0] p-6 sm:min-h-[340px] sm:p-8`}
+            initial={{ opacity: 0, y: 24 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-50px" }}
-            transition={{ duration: 0.7, ease: easeOutExpo, delay: 0.3 }}
-            whileHover={{ y: -6, boxShadow: "0 16px 40px rgba(143,202,74,0.18), 0 4px 12px rgba(0,0,0,0.06)", border: "1px solid rgba(143,202,74,0.3)" }}
+            viewport={{ once: true, margin: "-60px" }}
+            transition={{ duration: 0.65, ease: easeOutExpo, delay: 0.06 }}
           >
-            <div className="p-8 pb-2 relative z-10">
-              <h3 className="text-2xl font-bold text-[var(--mkt-ink)] leading-tight mb-2">
+            <MintGlow position="top-right" />
+            <div className="relative z-10 flex h-full min-h-[260px]">
+              <div className="flex w-[48%] flex-col sm:w-[50%]">
+                <h3 className="text-[22px] font-bold leading-[1.15] text-[var(--mkt-ink)] sm:text-[26px]">
+                  One-click
+                  <br />
+                  follow-up
+                </h3>
+                <p className="mt-2.5 text-[13px] leading-relaxed text-[var(--mkt-ink)]">
+                  {FOLLOW_UP.body}
+                </p>
+                <div className="mt-6 flex flex-col gap-2 sm:mt-auto sm:pt-4">
+                  {FOLLOW_UP.steps.map((label, idx) => (
+                    <span
+                      key={label}
+                      className={`inline-flex w-fit items-center gap-2 rounded-md px-3 py-1.5 text-[11px] font-semibold text-white ${FOLLOW_BTN_SHADOW} ${
+                        idx === 2
+                          ? "bg-[#A8D96A]"
+                          : "bg-[var(--mkt-green)]"
+                      }`}
+                    >
+                      {label}
+                      {idx < 2 ? (
+                        <ArrowRight className="h-3 w-3" strokeWidth={2.5} aria-hidden />
+                      ) : null}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <motion.div
+                className="pointer-events-none absolute bottom-0 right-0 top-[6%] w-[56%] sm:w-[54%]"
+                initial={{ opacity: 0, y: 20, scale: 0.96 }}
+                whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.75, ease: easeOutExpo, delay: 0.2 }}
+              >
+                <img
+                  src="/digital/2.png"
+                  alt={FOLLOW_UP.imageAlt}
+                  className="h-full w-full object-contain object-right-bottom drop-shadow-[0_18px_42px_rgba(0,0,0,0.16)] scale-[1.14] sm:scale-[1.18]"
+                  decoding="async"
+                />
+              </motion.div>
+            </div>
+          </motion.article>
+
+          {/* Bottom left — school details */}
+          <motion.article
+            className={`${CARD} flex min-h-[200px] items-start justify-between gap-4 bg-white p-6 sm:min-h-[230px] sm:p-8`}
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-60px" }}
+            transition={{ duration: 0.65, ease: easeOutExpo, delay: 0.04 }}
+          >
+            <div className="relative z-10 max-w-[70%]">
+              <h3 className="text-xl font-bold leading-tight text-[var(--mkt-ink)] sm:text-[22px]">
+                School details
+                <br />
+                & assets
+              </h3>
+              <p className="mt-2.5 text-[12px] leading-relaxed text-[var(--mkt-ink)] sm:text-[13px]">
+                {BRANDING_STEP.body}
+              </p>
+            </div>
+            <div className="relative z-10 mt-0.5 flex h-[84px] w-[84px] shrink-0 items-center justify-center rounded-2xl border border-[var(--mkt-line)] bg-white shadow-sm">
+              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--mkt-green)] shadow-[0_4px_12px_rgba(143,202,74,0.35)]">
+                <Bell className="h-5 w-5 text-white" strokeWidth={2.5} aria-hidden />
+              </div>
+            </div>
+          </motion.article>
+
+          {/* Bottom right — staff setup */}
+          <motion.article
+            className={`${CARD} flex min-h-[230px] flex-col bg-white p-6 sm:min-h-[280px] sm:p-8`}
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-60px" }}
+            transition={{ duration: 0.65, ease: easeOutExpo, delay: 0.08 }}
+          >
+            <div className="relative z-10">
+              <h3 className="text-[22px] font-bold leading-tight text-[var(--mkt-ink)] sm:text-[26px]">
                 Staff setup that scales
               </h3>
-              <p className="text-[13px] text-[var(--mkt-muted)] max-w-[90%]">
-                Create staff profiles with role, department, and optional workspace login — attendance and documents in the same place.
+              <p className="mt-2.5 max-w-[95%] text-[13px] leading-relaxed text-[var(--mkt-ink)]">
+                {STAFF_STEP.body}
               </p>
             </div>
 
-            {/* CSS Bar Chart */}
-            <div className="flex-1 w-full relative mt-2 flex flex-col justify-end pb-10 px-10">
-              {/* Stats Header Pill */}
-              <div
-                className="flex items-center justify-between rounded-full p-1.5 mb-6 w-full max-w-[280px] mx-auto z-10 relative"
-                style={{
-                  background: "rgba(255,255,255,0.9)",
-                  border: "1px solid rgba(143,202,74,0.2)",
-                  boxShadow: "0 1px 8px rgba(143,202,74,0.1)",
-                }}
-              >
-                <div className="text-white text-[12px] font-bold px-6 py-1.5 rounded-full" style={{ background: "linear-gradient(135deg, var(--mkt-green), #6BA832)" }}>
-                  Stats
-                </div>
-                <div className="text-[11px] text-[#6b7280] font-medium px-4">
-                  January 2026
-                </div>
-              </div>
-
-              {/* Chart Area */}
-              <div className="relative h-[130px] w-full flex items-end justify-center px-4 max-w-[320px] mx-auto">
-                {/* Y axis */}
-                <div className="absolute left-0 bottom-0 top-4 flex flex-col justify-between text-[11px] font-semibold text-[#9ca3af] pb-0">
-                  <span>60</span>
-                  <span>40</span>
-                  <span>20</span>
-                  <span>00</span>
-                </div>
-
-                {/* Bars Container */}
-                <div className="w-[85%] ml-8 h-full flex items-end justify-between pb-0 relative z-10 px-2">
-                  <motion.div
-                    className="w-[14px] rounded-full"
-                    style={{ height: "45%", background: "#6b7280" }}
-                    initial={{ scaleY: 0, originY: 1 }}
-                    whileInView={{ scaleY: 1 }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 0.6, ease: easeOutExpo, delay: 0.1 }}
-                  />
-                  <motion.div
-                    className="w-[14px] rounded-full relative"
-                    style={{ height: "90%", background: "linear-gradient(180deg, var(--mkt-green), #6BA832)" }}
-                    initial={{ scaleY: 0, originY: 1 }}
-                    whileInView={{ scaleY: 1 }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 0.6, ease: easeOutExpo, delay: 0.2 }}
-                  >
-                    <div className="absolute -top-7 left-1/2 -translate-x-1/2 text-white text-[10px] px-2 py-0.5 rounded shadow-sm whitespace-nowrap font-bold tracking-tight" style={{ background: "var(--mkt-green)" }}>
-                      33,200
-                      <div className="absolute -bottom-[3px] left-1/2 -translate-x-1/2 w-2 h-2 rotate-45 rounded-[1px]" style={{ background: "var(--mkt-green)" }}></div>
-                    </div>
-                  </motion.div>
-                  <motion.div
-                    className="w-[14px] bg-[#1a1a1a] rounded-full"
-                    style={{ height: "80%" }}
-                    initial={{ scaleY: 0, originY: 1 }}
-                    whileInView={{ scaleY: 1 }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 0.6, ease: easeOutExpo, delay: 0.3 }}
-                  />
-                  <motion.div
-                    className="w-[14px] rounded-full"
-                    style={{ height: "40%", background: "var(--mkt-green)" }}
-                    initial={{ scaleY: 0, originY: 1 }}
-                    whileInView={{ scaleY: 1 }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 0.6, ease: easeOutExpo, delay: 0.4 }}
-                  />
-                </div>
-              </div>
+            <div className="relative z-10 mt-auto flex items-center justify-between rounded-full border border-[var(--mkt-line)] bg-white p-1.5 shadow-sm">
+              <span className="rounded-full bg-[var(--mkt-green)] px-5 py-1.5 text-[12px] font-bold text-white shadow-[0_3px_10px_rgba(143,202,74,0.3)]">
+                Stats
+              </span>
+              <span className="px-4 text-[11px] font-medium text-[var(--mkt-muted)]">January 2026</span>
             </div>
-          </motion.div>
+          </motion.article>
         </div>
-
       </div>
     </section>
   );

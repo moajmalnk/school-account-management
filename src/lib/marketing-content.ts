@@ -103,7 +103,7 @@ export const MARKETING = {
   setup: {
     eyebrow: "Expert-ready setup",
     title: "From school brand to day-one profiles",
-    body: "Configure branding once, then run students, fees, and staff from the same workspace — ready for a 14-day trial.",
+    body: "Configure branding once, then run students, fees, and staff from the same workspace",
     highlights: [
       "Logo, letterhead, seal & signature",
       "School profile, phone & email",
@@ -115,7 +115,7 @@ export const MARKETING = {
         id: "branding",
         label: "Branding",
         title: "School details & assets",
-        body: "Upload logo, letterhead, seal, and signature. Set name, address, and registration — receipts look official from day one.",
+        body: "Upload logo, letterhead, seal, and signature. Set name, address, and registration - receipts look official from day one.",
         image: "/marketing/product-setup.png",
         alt: "Feezo school details and branding setup",
       },
@@ -140,7 +140,7 @@ export const MARKETING = {
   features: {
     eyebrow: "Everything in one place",
     title: "A mini ERP for your school",
-    subtitle: "More than accounts — the modules schools actually use every day.",
+    subtitle: "More than accounts the modules schools actually use every day.",
     items: [
       { title: "Smart Fee Management", hint: "Track dues, collections, and balances" },
       { title: "One-Click Fee Follow-up", hint: "Bulk reminders when fees are pending" },
