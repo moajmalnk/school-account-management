@@ -4,10 +4,24 @@
  */
 declare module "@tanstack/react-router" {
   interface FileRoutesByPath {
+    "/terms": {
+      id: "/terms";
+      path: "/terms";
+      fullPath: "/terms";
+      preLoaderRoute: unknown;
+      parentRoute: unknown;
+    };
     "/privacy": {
       id: "/privacy";
       path: "/privacy";
       fullPath: "/privacy";
+      preLoaderRoute: unknown;
+      parentRoute: unknown;
+    };
+    "/refund-policy": {
+      id: "/refund-policy";
+      path: "/refund-policy";
+      fullPath: "/refund-policy";
       preLoaderRoute: unknown;
       parentRoute: unknown;
     };

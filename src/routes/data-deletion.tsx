@@ -3,7 +3,7 @@ import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { LegalSection, LegalShell } from "@/components/legal/LegalShell";
+import { LegalLink, LegalSection, LegalShell } from "@/components/legal/LegalShell";
 import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api/client";
 import { apiRequestDataDeletion } from "@/lib/api/auth";
@@ -73,6 +73,7 @@ function DataDeletionPage() {
 
   return (
     <LegalShell
+      activePage="deletion"
       title="Account & data deletion"
       subtitle={`Use this page to request deletion of your ${BRAND.name} login and associated personal data. Required for App Store and Google Play account deletion.`}
     >
@@ -109,9 +110,7 @@ function DataDeletionPage() {
         </ol>
         <p>
           Read our{" "}
-          <a href="/privacy" className="font-medium text-[#0F766E] hover:underline">
-            Privacy Policy
-          </a>{" "}
+          <LegalLink href={BRAND.legal.privacyPath}>Privacy Policy</LegalLink>{" "}
           for full details on retention and School-controlled data.
         </p>
       </LegalSection>

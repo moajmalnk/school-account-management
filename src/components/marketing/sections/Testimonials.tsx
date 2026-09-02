@@ -69,7 +69,7 @@ function TestimonialCard({
   const usagePct = Math.round((item.enrolled / item.seats) * 100);
 
   return (
-    <article className="group relative flex h-full w-[min(88vw,360px)] shrink-0 flex-col overflow-hidden rounded-2xl border border-[rgba(143,202,74,0.18)] bg-white/80 p-5 shadow-[0_8px_32px_rgba(26,28,44,0.06)] backdrop-blur-xl transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-1 hover:border-[rgba(143,202,74,0.35)] hover:shadow-[0_20px_48px_rgba(143,202,74,0.14)] sm:w-[380px] sm:p-6">
+    <article className="group relative flex h-full w-[min(88vw,360px)] shrink-0 flex-col overflow-hidden rounded-2xl border border-[rgba(26,28,44,0.1)] bg-white p-5 shadow-[0_10px_30px_rgba(26,28,44,0.08),0_2px_8px_rgba(26,28,44,0.04)] transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-1 hover:border-[rgba(143,202,74,0.4)] hover:shadow-[0_18px_44px_rgba(143,202,74,0.16),0_4px_12px_rgba(26,28,44,0.06)] sm:w-[380px] sm:p-6">
       <div
         className="pointer-events-none absolute inset-x-0 top-0 h-px"
         style={{
@@ -123,7 +123,7 @@ function TestimonialCard({
         {item.role}
       </p>
 
-      <div className="mt-4 rounded-xl border border-[var(--mkt-line)] bg-[var(--mkt-soft)]/50 px-3.5 py-3">
+      <div className="mt-4 rounded-xl border border-[rgba(26,28,44,0.08)] bg-[#f8fff4] px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
         <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-[var(--mkt-muted)]">
           <span>Seat usage</span>
           <span className="text-[var(--mkt-ink)]">{usagePct}%</span>
@@ -215,22 +215,32 @@ export function Testimonials() {
           transition={{ duration: 0.8, ease: easeOutExpo, delay: 0.1 }}
           aria-label="School testimonials"
         >
-          <div
-            className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-[#f8fff4] via-[#f8fff4]/80 to-transparent sm:w-20"
-            aria-hidden
-          />
-          <div
-            className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-[#f8fff4] via-[#f8fff4]/80 to-transparent sm:w-20"
-            aria-hidden
-          />
+          <div className="relative overflow-hidden rounded-[28px] border border-[rgba(143,202,74,0.2)] bg-white/55 py-6 shadow-[0_16px_48px_rgba(26,28,44,0.06),inset_0_1px_0_rgba(255,255,255,0.95)] backdrop-blur-sm sm:py-8">
+            <div
+              className="pointer-events-none absolute inset-x-0 top-0 z-10 h-8 bg-gradient-to-b from-white/95 via-white/70 to-transparent sm:h-10"
+              aria-hidden
+            />
+            <div
+              className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-8 bg-gradient-to-t from-white/95 via-white/70 to-transparent sm:h-10"
+              aria-hidden
+            />
+            <div
+              className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-white/95 via-white/75 to-transparent sm:w-20"
+              aria-hidden
+            />
+            <div
+              className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-white/95 via-white/75 to-transparent sm:w-20"
+              aria-hidden
+            />
 
-          <div className={cn("overflow-hidden", reduce && "overflow-x-auto")}>
-            <div className={cn(!reduce && "mkt-testimonial-track", reduce && "flex gap-5 px-5")}>
-              {MARQUEE_ITEMS.map((item, index) => (
-                <div key={`${item.id}-${index}`} className="mkt-testimonial-slide shrink-0">
-                  <TestimonialCard item={item} reduce={reduce} />
-                </div>
-              ))}
+            <div className={cn("overflow-hidden", reduce && "overflow-x-auto")}>
+              <div className={cn(!reduce && "mkt-testimonial-track", reduce && "flex gap-5 px-5")}>
+                {MARQUEE_ITEMS.map((item, index) => (
+                  <div key={`${item.id}-${index}`} className="mkt-testimonial-slide shrink-0">
+                    <TestimonialCard item={item} reduce={reduce} />
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </motion.div>

@@ -43,8 +43,20 @@ export function AuthShell({
 
         <div className="mt-6 flex flex-col items-center gap-2 text-center">
           <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[12px] font-medium text-black/45">
+            <a href={BRAND.legal.termsPath} className="hover:text-black hover:underline">
+              Terms of Use
+            </a>
+            <span aria-hidden className="text-black/25">
+              ·
+            </span>
             <a href={BRAND.legal.privacyPath} className="hover:text-black hover:underline">
               Privacy Policy
+            </a>
+            <span aria-hidden className="text-black/25">
+              ·
+            </span>
+            <a href={BRAND.legal.refundPolicyPath} className="hover:text-black hover:underline">
+              Refund Policy
             </a>
             <span aria-hidden className="text-black/25">
               ·

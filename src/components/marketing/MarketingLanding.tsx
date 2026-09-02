@@ -43,8 +43,8 @@ export function MarketingLanding() {
       <Hero />
       <Suspense fallback={null}>
         <HowItWorks />
-        <Features />
         <DigitalTransformation />
+        <Features />
         <Testimonials />
         <Pricing />
       </Suspense>

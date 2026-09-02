@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect } from "react";
 
-import { LegalSection, LegalShell } from "@/components/legal/LegalShell";
+import { LegalLink, LegalSection, LegalShell } from "@/components/legal/LegalShell";
 import { BRAND } from "@/lib/brand";
 
 export const Route = createFileRoute("/privacy")({
@@ -20,8 +20,9 @@ function PrivacyPolicyPage() {
 
   return (
     <LegalShell
+      activePage="privacy"
       title="Privacy Policy"
-      subtitle={`Last updated: 23 August 2026 · Effective for ${BRAND.name} web and mobile apps.`}
+      subtitle={`How ${BRAND.name} collects, uses, and protects information across our web and mobile apps.`}
     >
       <p>
         This Privacy Policy explains how <strong>{BRAND.name}</strong> (“we”, “us”, or “our”)
@@ -112,9 +113,7 @@ function PrivacyPolicyPage() {
           active, and for a limited period afterward as needed for backups, dispute resolution,
           security, and legal compliance. You may request deletion as described in Section 8 and on
           our{" "}
-          <a href="/data-deletion" className="font-medium text-[#0F766E] hover:underline">
-            Data deletion
-          </a>{" "}
+          <LegalLink href={BRAND.legal.dataDeletionPath}>Data deletion</LegalLink>{" "}
           page.
         </p>
       </LegalSection>
@@ -137,9 +136,9 @@ function PrivacyPolicyPage() {
         </ul>
         <p>
           To request deletion of your {BRAND.name} account or personal data, use{" "}
-          <a href="/data-deletion" className="font-medium text-[#0F766E] hover:underline">
+          <LegalLink href={BRAND.legal.dataDeletionPath}>
             {BRAND.legal.dataDeletionUrl}
-          </a>{" "}
+          </LegalLink>{" "}
           or email{" "}
           <a href={`mailto:${email}`} className="font-medium text-[#0F766E] hover:underline">
             {email}

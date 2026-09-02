@@ -273,6 +273,7 @@
   display: flex;
   width: max-content;
   gap: 1.25rem;
+  padding-inline: 1.25rem;
   animation: mkt-testimonial-marquee 52s linear infinite;
   will-change: transform;
 }

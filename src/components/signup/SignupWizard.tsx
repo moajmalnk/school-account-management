@@ -589,16 +589,34 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
               onChange={(e) => patch("agreeTerms", e.target.checked)}
             />
             <span>
-              I agree to Feezo Edu Books{" "}
+              I agree to the{" "}
+              <a
+                href={BRAND.legal.termsPath}
+                className="font-medium text-[#0F766E] hover:underline"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Terms of Use
+              </a>
+              ,{" "}
               <a
                 href={BRAND.legal.privacyPath}
                 className="font-medium text-[#0F766E] hover:underline"
                 target="_blank"
                 rel="noreferrer"
               >
-                Terms of Service & Privacy
-              </a>{" "}
-              standards.
+                Privacy Policy
+              </a>
+              , and{" "}
+              <a
+                href={BRAND.legal.refundPolicyPath}
+                className="font-medium text-[#0F766E] hover:underline"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Refund Policy
+              </a>
+              .
               {errors.agreeTerms ? (
                 <span className="mt-1 block text-[12px] text-red-500">{errors.agreeTerms}</span>
               ) : null}

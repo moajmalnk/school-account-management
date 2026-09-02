@@ -14,6 +14,7 @@ import { createPortal } from "react-dom";
 
 import { TrialSignupLink } from "@/components/marketing/TrialSignupLink";
 import { MARKETING_THEME_VARS } from "@/components/marketing/marketing-theme";
+import { useMarketingActiveSection } from "@/hooks/useMarketingActiveSection";
 import { MARKETING } from "@/lib/marketing-content";
 import { handleMarketingSectionClick, preloadMarketingSections } from "@/lib/marketing-scroll";
 import { cn } from "@/lib/utils";
@@ -70,6 +71,7 @@ function MenuToggle({
 export function MarketingMobileNav() {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const activeSection = useMarketingActiveSection();
 
   const close = useCallback(() => setOpen(false), []);
 
@@ -197,7 +199,7 @@ export function MarketingMobileNav() {
                           className={cn(
                             "group flex items-center gap-3 rounded-2xl border px-4 py-3.5 transition-all duration-200",
                             "border-transparent bg-white/55 hover:border-[var(--mkt-green)]/30 hover:bg-white hover:shadow-[0_8px_24px_rgba(143,202,74,0.14)]",
-                            item.id === "product" &&
+                            item.id === activeSection &&
                               "border-[var(--mkt-green)]/25 bg-[var(--mkt-soft)]/80",
                           )}
                         >

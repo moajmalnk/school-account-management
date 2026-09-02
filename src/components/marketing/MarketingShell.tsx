@@ -6,12 +6,14 @@ import { FeezoMark } from "@/components/brand/FeezoBrand";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { MarketingMobileNav } from "@/components/marketing/MarketingMobileNav";
 import { MARKETING_THEME_VARS } from "@/components/marketing/marketing-theme";
+import { useMarketingActiveSection } from "@/hooks/useMarketingActiveSection";
 import { BRAND } from "@/lib/brand";
 import { MARKETING } from "@/lib/marketing-content";
 import { handleMarketingSectionClick } from "@/lib/marketing-scroll";
 
 export function MarketingShell({ children }: { children: ReactNode }) {
   const [scrolled, setScrolled] = useState(false);
+  const activeSection = useMarketingActiveSection();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -63,7 +65,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
                 href={`#${item.id}`}
                 onClick={(event) => handleMarketingSectionClick(event, item.id)}
                 className={`text-[15px] font-medium transition-colors hover:text-[var(--mkt-green-deep)] ${
-                  item.id === "product"
+                  item.id === activeSection
                     ? "text-[var(--mkt-green)]"
                     : "text-[var(--mkt-ink)] hover:text-[var(--mkt-green)]"
                 }`}

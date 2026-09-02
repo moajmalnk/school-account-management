@@ -1,12 +1,13 @@
 import { Link } from "@tanstack/react-router";
-import type { MouseEvent, ReactNode } from "react";
 import { Facebook, Github, Instagram, Linkedin, Twitter } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
+import type { MouseEvent, ReactNode } from "react";
 
 import { FeezoMark } from "@/components/brand/FeezoBrand";
 import { StoreBadge } from "@/components/marketing/StoreBadge";
 import { TrialSignupLink } from "@/components/marketing/TrialSignupLink";
 import { easeOutExpo, staggerContainer } from "@/components/marketing/motion";
+import { useMarketingActiveSection } from "@/hooks/useMarketingActiveSection";
 import { BRAND } from "@/lib/brand";
 import { MARKETING } from "@/lib/marketing-content";
 import { handleMarketingSectionClick } from "@/lib/marketing-scroll";
@@ -20,10 +21,7 @@ const SOCIAL_LINKS = [
   { label: "LinkedIn", href: "#", icon: Linkedin },
 ] as const;
 
-const LEGAL_LINKS = [
-  { label: "Privacy", to: "/privacy" as const },
-  { label: "Data deletion", to: "/data-deletion" as const },
-] as const;
+import { LEGAL_PAGES } from "@/lib/legal-pages";
 
 const columnReveal = {
   hidden: { opacity: 0, y: 32 },
@@ -67,6 +65,7 @@ function FooterNavLink({
 
 export function MarketingFooter() {
   const reduce = useReducedMotion();
+  const activeSection = useMarketingActiveSection();
 
   return (
     <footer
@@ -136,7 +135,7 @@ export function MarketingFooter() {
                     href={`#${item.id}`}
                     onClick={(event) => handleMarketingSectionClick(event, item.id)}
                     className={
-                      item.id === "product"
+                      item.id === activeSection
                         ? "text-[var(--mkt-green)] hover:text-[var(--mkt-green-deep)]"
                         : undefined
                     }
@@ -152,20 +151,10 @@ export function MarketingFooter() {
                 Legal
               </p>
               <nav className="mt-4 flex flex-col gap-2.5" aria-label="Legal">
-                {LEGAL_LINKS.map((item) => (
-                  <Link
-                    key={item.to}
-                    to={item.to}
-                    className="group relative inline-flex w-fit py-1 text-[14px] font-medium text-[var(--mkt-ink)]/80 transition-colors hover:text-[var(--mkt-green-deep)]"
-                  >
-                    <span className="relative">
-                      {item.label}
-                      <span
-                        className="absolute -bottom-0.5 left-0 h-px w-0 bg-[var(--mkt-green)] transition-all duration-300 ease-out group-hover:w-full"
-                        aria-hidden
-                      />
-                    </span>
-                  </Link>
+                {LEGAL_PAGES.map((item) => (
+                  <FooterNavLink key={item.path} href={item.path}>
+                    {item.label}
+                  </FooterNavLink>
                 ))}
                 <a
                   href={`mailto:${BRAND.legal.supportEmail}`}

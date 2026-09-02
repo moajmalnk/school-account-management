@@ -9,10 +9,12 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as TenantRouteImport } from './routes/tenant'
 import { Route as SuperAdminRouteImport } from './routes/super-admin'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as RefundPolicyRouteImport } from './routes/refund-policy'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ImpersonateRouteImport } from './routes/impersonate'
@@ -43,6 +45,11 @@ import { Route as SuperAdminSupportContactRouteImport } from './routes/super-adm
 import { Route as SuperAdminSupportTicketIdRouteImport } from './routes/super-admin/support/$ticketId'
 import { Route as ParentStudentTokenRouteImport } from './routes/parent/student.$token'
 
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TenantRoute = TenantRouteImport.update({
   id: '/tenant',
   path: '/tenant',
@@ -61,6 +68,11 @@ const SignupRoute = SignupRouteImport.update({
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RefundPolicyRoute = RefundPolicyRouteImport.update({
+  id: '/refund-policy',
+  path: '/refund-policy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -218,10 +230,12 @@ export interface FileRoutesByFullPath {
   '/impersonate': typeof ImpersonateRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
+  '/refund-policy': typeof RefundPolicyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRouteWithChildren
   '/super-admin': typeof SuperAdminRouteWithChildren
   '/tenant': typeof TenantRouteWithChildren
+  '/terms': typeof TermsRoute
   '/signup/$step': typeof SignupStepRoute
   '/super-admin/overview': typeof SuperAdminOverviewRoute
   '/super-admin/plans': typeof SuperAdminPlansRoute
@@ -253,7 +267,9 @@ export interface FileRoutesByTo {
   '/impersonate': typeof ImpersonateRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
+  '/refund-policy': typeof RefundPolicyRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/terms': typeof TermsRoute
   '/signup/$step': typeof SignupStepRoute
   '/super-admin/overview': typeof SuperAdminOverviewRoute
   '/super-admin/plans': typeof SuperAdminPlansRoute
@@ -285,10 +301,12 @@ export interface FileRoutesById {
   '/impersonate': typeof ImpersonateRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
+  '/refund-policy': typeof RefundPolicyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRouteWithChildren
   '/super-admin': typeof SuperAdminRouteWithChildren
   '/tenant': typeof TenantRouteWithChildren
+  '/terms': typeof TermsRoute
   '/signup/$step': typeof SignupStepRoute
   '/super-admin/overview': typeof SuperAdminOverviewRoute
   '/super-admin/plans': typeof SuperAdminPlansRoute
@@ -322,10 +340,12 @@ export interface FileRouteTypes {
     | '/impersonate'
     | '/login'
     | '/privacy'
+    | '/refund-policy'
     | '/reset-password'
     | '/signup'
     | '/super-admin'
     | '/tenant'
+    | '/terms'
     | '/signup/$step'
     | '/super-admin/overview'
     | '/super-admin/plans'
@@ -357,7 +377,9 @@ export interface FileRouteTypes {
     | '/impersonate'
     | '/login'
     | '/privacy'
+    | '/refund-policy'
     | '/reset-password'
+    | '/terms'
     | '/signup/$step'
     | '/super-admin/overview'
     | '/super-admin/plans'
@@ -388,10 +410,12 @@ export interface FileRouteTypes {
     | '/impersonate'
     | '/login'
     | '/privacy'
+    | '/refund-policy'
     | '/reset-password'
     | '/signup'
     | '/super-admin'
     | '/tenant'
+    | '/terms'
     | '/signup/$step'
     | '/super-admin/overview'
     | '/super-admin/plans'
@@ -424,15 +448,24 @@ export interface RootRouteChildren {
   ImpersonateRoute: typeof ImpersonateRoute
   LoginRoute: typeof LoginRoute
   PrivacyRoute: typeof PrivacyRoute
+  RefundPolicyRoute: typeof RefundPolicyRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignupRoute: typeof SignupRouteWithChildren
   SuperAdminRoute: typeof SuperAdminRouteWithChildren
   TenantRoute: typeof TenantRouteWithChildren
+  TermsRoute: typeof TermsRoute
   ParentStudentTokenRoute: typeof ParentStudentTokenRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/tenant': {
       id: '/tenant'
       path: '/tenant'
@@ -459,6 +492,13 @@ declare module '@tanstack/react-router' {
       path: '/reset-password'
       fullPath: '/reset-password'
       preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/refund-policy': {
+      id: '/refund-policy'
+      path: '/refund-policy'
+      fullPath: '/refund-policy'
+      preLoaderRoute: typeof RefundPolicyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -755,10 +795,12 @@ const rootRouteChildren: RootRouteChildren = {
   ImpersonateRoute: ImpersonateRoute,
   LoginRoute: LoginRoute,
   PrivacyRoute: PrivacyRoute,
+  RefundPolicyRoute: RefundPolicyRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SignupRoute: SignupRouteWithChildren,
   SuperAdminRoute: SuperAdminRouteWithChildren,
   TenantRoute: TenantRouteWithChildren,
+  TermsRoute: TermsRoute,
   ParentStudentTokenRoute: ParentStudentTokenRoute,
 }
 export const routeTree = rootRouteImport

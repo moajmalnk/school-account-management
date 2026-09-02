@@ -1,5 +1,11 @@
 import type { MouseEvent } from "react";
 
+import {
+  notifyMarketingSectionChange,
+  type MarketingSectionId,
+} from "@/hooks/useMarketingActiveSection";
+import { router } from "@/router";
+
 /** Read live marketing header height for anchor scroll offset. */
 function getMarketingHeaderOffset(): number {
   const header = document.querySelector<HTMLElement>(".marketing-header");
@@ -14,6 +20,7 @@ function scrollToElement(sectionId: string): boolean {
   const top = el.getBoundingClientRect().top + window.scrollY - getMarketingHeaderOffset();
   window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
   window.history.replaceState(null, "", `#${sectionId}`);
+  notifyMarketingSectionChange(sectionId as MarketingSectionId);
   return true;
 }
 
@@ -30,6 +37,11 @@ export function scrollToMarketingSection(sectionId: string): void {
   }, 100);
 }
 
+function isMarketingHomePath(): boolean {
+  const path = window.location.pathname;
+  return path === "/" || path === "";
+}
+
 export function handleMarketingSectionClick(
   event: MouseEvent<HTMLAnchorElement>,
   sectionId: string,
@@ -38,6 +50,19 @@ export function handleMarketingSectionClick(
   event.preventDefault();
   document.body.style.overflow = "";
   onAfterNavigate?.();
+
+  if (sectionId === "product") {
+    void import("@/components/marketing/sections/DigitalTransformation");
+  }
+
+  if (!isMarketingHomePath()) {
+    preloadMarketingSections();
+    void router.navigate({ to: "/", hash: sectionId }).then(() => {
+      scrollToMarketingSection(sectionId);
+    });
+    return;
+  }
+
   scrollToMarketingSection(sectionId);
 }
 
