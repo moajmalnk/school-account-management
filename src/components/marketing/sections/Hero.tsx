@@ -144,7 +144,7 @@ export function Hero({ noDelay = false }: { noDelay?: boolean }) {
           className="mb-8 inline-flex items-center gap-3 px-5 py-2.5 rounded-full text-[13px] font-semibold backdrop-blur-md border border-[var(--mkt-line)] shadow-sm bg-white/60 text-[var(--mkt-ink)]"
           initial={reduce ? false : { opacity: 0, y: -20, z: -50 }}
           animate={{ opacity: 1, y: 0, z: 20 }}
-          transition={{ duration: 1, ease: easeOutExpo, delay: noDelay ? 0 : 0.8 }}
+          transition={{ duration: 1, ease: easeOutExpo, delay: noDelay ? 0 : 0.1 }}
           style={{ transform: "translateZ(30px)" }} // Pop out in 3D
         >
           <motion.span
@@ -160,7 +160,7 @@ export function Hero({ noDelay = false }: { noDelay?: boolean }) {
           className="text-[clamp(2.5rem,7vw,4.5rem)] font-extrabold leading-[1.05] tracking-tight text-[var(--mkt-ink)] mb-8"
           initial={reduce ? false : { opacity: 0, y: 30, z: -100 }}
           animate={{ opacity: 1, y: 0, z: 50 }}
-          transition={{ duration: 1, ease: easeOutExpo, delay: noDelay ? 0 : 1.0 }}
+          transition={{ duration: 1, ease: easeOutExpo, delay: noDelay ? 0 : 0.2 }}
           style={{ transform: "translateZ(60px)" }} // Huge pop out
         >
           Welcome To
@@ -182,7 +182,7 @@ export function Hero({ noDelay = false }: { noDelay?: boolean }) {
           className="relative w-full max-w-[800px] mt-8"
           initial={reduce ? false : { opacity: 0, y: 60, scale: 0.9, rotateX: 20 }}
           animate={{ opacity: 1, y: 0, scale: 1, rotateX: 0 }}
-          transition={{ duration: 1.2, ease: easeOutExpo, delay: noDelay ? 0 : 1.2 }}
+          transition={{ duration: 1.2, ease: easeOutExpo, delay: noDelay ? 0 : 0.35 }}
           style={{ transform: "translateZ(40px)" }}
         >
           {/* Glowing Aura behind mockup */}
@@ -196,6 +196,10 @@ export function Hero({ noDelay = false }: { noDelay?: boolean }) {
             <img
               src="/home/home.png"
               alt="Feezo Dashboard"
+              width={1600}
+              height={900}
+              decoding="async"
+              fetchPriority="high"
               className="w-full h-auto object-contain rounded-xl sm:rounded-2xl shadow-xl relative z-10"
             />
           </div>

@@ -1,14 +1,26 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 
 import { MarketingShell } from "@/components/marketing/MarketingShell";
-import { Features } from "@/components/marketing/sections/Features";
 import { Hero } from "@/components/marketing/sections/Hero";
-import { HowItWorks } from "@/components/marketing/sections/HowItWorks";
-import { DigitalTransformation } from "@/components/marketing/sections/DigitalTransformation";
-import { Testimonials } from "@/components/marketing/sections/Testimonials";
-import { Pricing } from "@/components/marketing/sections/Pricing";
 import { MARKETING } from "@/lib/marketing-content";
-import { IntroAnimation } from "@/components/marketing/IntroAnimation";
+
+const HowItWorks = lazy(() =>
+  import("@/components/marketing/sections/HowItWorks").then((m) => ({ default: m.HowItWorks })),
+);
+const Features = lazy(() =>
+  import("@/components/marketing/sections/Features").then((m) => ({ default: m.Features })),
+);
+const DigitalTransformation = lazy(() =>
+  import("@/components/marketing/sections/DigitalTransformation").then((m) => ({
+    default: m.DigitalTransformation,
+  })),
+);
+const Testimonials = lazy(() =>
+  import("@/components/marketing/sections/Testimonials").then((m) => ({ default: m.Testimonials })),
+);
+const Pricing = lazy(() =>
+  import("@/components/marketing/sections/Pricing").then((m) => ({ default: m.Pricing })),
+);
 
 export function MarketingLanding() {
   useEffect(() => {
@@ -19,13 +31,14 @@ export function MarketingLanding() {
 
   return (
     <MarketingShell>
-      <IntroAnimation />
       <Hero />
-      <HowItWorks />
-      <Features />
-      <DigitalTransformation />
-      <Testimonials />
-      <Pricing />
+      <Suspense fallback={null}>
+        <HowItWorks />
+        <Features />
+        <DigitalTransformation />
+        <Testimonials />
+        <Pricing />
+      </Suspense>
     </MarketingShell>
   );
 }

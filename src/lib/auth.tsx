@@ -365,7 +365,7 @@ export function clearAllAuthState() {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<Session | null>(() => readSession());
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -375,6 +375,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const existing = readSession();
       const impersonated = Boolean(existing?.impersonated);
       const token = getApiToken();
+
+      // Anonymous visitor — no token work; mark ready immediately.
+      if (!existing && !token && !hasPersistedCredentials()) {
+        if (!cancelled) {
+          setSession(null);
+          setHydrated(true);
+        }
+        return;
+      }
 
       if (!impersonated && isLocalIdleExpired()) {
         clearAllAuthState();

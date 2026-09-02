@@ -8,6 +8,17 @@ export const Route = createFileRoute("/")({
   component: IndexPage,
 });
 
+function OpeningWorkspace() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-white">
+      <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-black/45">
+        <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-black/45" />
+        Opening workspace…
+      </div>
+    </div>
+  );
+}
+
 function IndexPage() {
   const navigate = useNavigate();
   const { session, hydrated } = useAuth();
@@ -19,27 +30,11 @@ function IndexPage() {
     }
   }, [hydrated, session, navigate]);
 
-  if (!hydrated) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-white">
-        <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-black/45">
-          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--mkt-green,#8FCA4A)]" />
-          Loading…
-        </div>
-      </div>
-    );
-  }
-
+  // Logged-in users: hand off to workspace (no marketing flash).
   if (session) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-white">
-        <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-black/45">
-          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-black/45" />
-          Opening workspace…
-        </div>
-      </div>
-    );
+    return <OpeningWorkspace />;
   }
 
+  // Visitors: show the landing page immediately — don't wait on auth API.
   return <MarketingLanding />;
 }
