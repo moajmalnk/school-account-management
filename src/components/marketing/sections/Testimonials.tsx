@@ -1,26 +1,183 @@
-import { Star } from "lucide-react";
-import { motion } from "motion/react";
-import { easeOutExpo } from "@/components/marketing/motion";
+import { Quote, Star } from "lucide-react";
+import { motion, useReducedMotion } from "motion/react";
+
+import { easeOutExpo, staggerContainer } from "@/components/marketing/motion";
+import { MARKETING } from "@/lib/marketing-content";
+import { cn } from "@/lib/utils";
+
+const { testimonials } = MARKETING;
+
+const PLAN_STYLES = {
+  Basic: "bg-slate-100 text-slate-700 border-slate-200",
+  Premium: "bg-[#e8f7e0] text-[#3d7a28] border-[#c8e8b8]",
+  Enterprise: "bg-[#1A1C2C] text-white border-[#1A1C2C]",
+} as const;
+
+const STATUS_STYLES = {
+  Active: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  Trial: "bg-violet-50 text-violet-700 border-violet-200",
+} as const;
+
+function SchoolAvatar({ initials }: { initials: string }) {
+  return (
+    <div
+      className="grid h-12 w-12 shrink-0 place-items-center rounded-full text-[13px] font-bold tracking-wide text-white shadow-[0_4px_14px_rgba(15,118,110,0.28)]"
+      style={{ background: "linear-gradient(145deg, #0f766e 0%, #115e59 100%)" }}
+      aria-hidden
+    >
+      {initials}
+    </div>
+  );
+}
+
+function PlanBadge({ plan }: { plan: keyof typeof PLAN_STYLES }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+        PLAN_STYLES[plan],
+      )}
+    >
+      {plan}
+    </span>
+  );
+}
+
+function StatusBadge({ status }: { status: keyof typeof STATUS_STYLES }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+        STATUS_STYLES[status],
+      )}
+    >
+      <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" aria-hidden />
+      {status}
+    </span>
+  );
+}
+
+function TestimonialCard({
+  item,
+  index,
+  reduce,
+}: {
+  item: (typeof testimonials.items)[number];
+  index: number;
+  reduce: boolean | null;
+}) {
+  const usagePct = Math.round((item.enrolled / item.seats) * 100);
+
+  return (
+    <motion.article
+      className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-[rgba(143,202,74,0.18)] bg-white/75 p-5 shadow-[0_8px_32px_rgba(26,28,44,0.06)] backdrop-blur-xl sm:p-6"
+      variants={{
+        hidden: { opacity: 0, y: 28 },
+        show: {
+          opacity: 1,
+          y: 0,
+          transition: { duration: 0.6, ease: easeOutExpo, delay: index * 0.06 },
+        },
+      }}
+      whileHover={
+        reduce
+          ? undefined
+          : {
+              y: -6,
+              boxShadow: "0 20px 48px rgba(143,202,74,0.16), 0 8px 24px rgba(26,28,44,0.06)",
+              borderColor: "rgba(143,202,74,0.35)",
+            }
+      }
+    >
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 h-px"
+        style={{
+          background:
+            "linear-gradient(90deg, transparent, rgba(255,255,255,0.95) 40%, rgba(255,255,255,0.95) 60%, transparent)",
+        }}
+      />
+
+      <div className="flex items-start gap-3.5">
+        <SchoolAvatar initials={item.initials} />
+        <div className="min-w-0 flex-1">
+          <h3 className="text-[15px] font-bold leading-snug tracking-tight text-[var(--mkt-ink)]">
+            {item.school}
+          </h3>
+          <p className="mt-0.5 truncate font-mono text-[11px] text-[#0f766e]">
+            {item.subdomain}.schoolaccounts.in
+          </p>
+          {"tenantId" in item && item.tenantId ? (
+            <p className="mt-0.5 font-mono text-[10px] text-[var(--mkt-muted)]">{item.tenantId}</p>
+          ) : null}
+        </div>
+        <Quote
+          className="h-5 w-5 shrink-0 text-[var(--mkt-green)]/35 transition-colors group-hover:text-[var(--mkt-green)]/55"
+          strokeWidth={2}
+          aria-hidden
+        />
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <PlanBadge plan={item.plan} />
+        <StatusBadge status={item.status} />
+      </div>
+
+      <div className="mt-4 flex items-center gap-0.5">
+        {Array.from({ length: 5 }).map((_, starIndex) => (
+          <Star
+            key={starIndex}
+            className="h-3.5 w-3.5 fill-amber-400 text-amber-400"
+            strokeWidth={0}
+            aria-hidden
+          />
+        ))}
+        <span className="sr-only">5 out of 5 stars</span>
+      </div>
+
+      <blockquote className="mt-3 flex-1 text-[13px] leading-relaxed text-[var(--mkt-ink)]/78">
+        “{item.quote}”
+      </blockquote>
+
+      <p className="mt-4 text-[11px] font-semibold uppercase tracking-wide text-[var(--mkt-muted)]">
+        {item.role}
+      </p>
+
+      <div className="mt-4 rounded-xl border border-[var(--mkt-line)] bg-[var(--mkt-soft)]/50 px-3.5 py-3">
+        <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-[var(--mkt-muted)]">
+          <span>Seat usage</span>
+          <span className="text-[var(--mkt-ink)]">{usagePct}%</span>
+        </div>
+        <div className="mt-2 flex items-center justify-between text-[12px]">
+          <span>
+            <strong className="font-bold text-[var(--mkt-ink)]">{item.enrolled}</strong>
+            <span className="text-[var(--mkt-muted)]"> enrolled</span>
+          </span>
+          <span className="text-[var(--mkt-muted)]">{item.seats} seats</span>
+        </div>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/80">
+          <motion.div
+            className="h-full rounded-full"
+            style={{ background: "linear-gradient(90deg, #0f766e, #8FCA4A)" }}
+            initial={reduce ? { width: `${usagePct}%` } : { width: 0 }}
+            whileInView={{ width: `${usagePct}%` }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.9, ease: easeOutExpo, delay: 0.15 + index * 0.05 }}
+          />
+        </div>
+      </div>
+    </motion.article>
+  );
+}
 
 export function Testimonials() {
-  const testimonials = [
-    {
-      id: 1,
-      name: "ABC School",
-      image: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80",
-      content: "Fees overview, installment table, overdue badges, and WhatsApp reminders — collect without leaving the student."
-    },
-    {
-      id: 2,
-      name: "ABC School",
-      image: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80",
-      content: "Fees overview, installment table, overdue badges, and WhatsApp reminders — collect without leaving the student."
-    }
-  ];
+  const reduce = useReducedMotion();
+  const totalEnrolled = testimonials.items.reduce((sum, item) => sum + item.enrolled, 0);
 
   return (
     <section
-      className="relative py-14 sm:py-20 lg:py-24 overflow-hidden"
+      id="setup"
+      className="scroll-mt-24 relative overflow-hidden py-14 sm:py-20 lg:py-24"
+      aria-labelledby="testimonials-heading"
       style={{
         background:
           "radial-gradient(ellipse 70% 60% at 10% 30%, rgba(143,202,74,0.08) 0%, transparent 55%)," +
@@ -28,131 +185,57 @@ export function Testimonials() {
           "linear-gradient(180deg,#ffffff 0%,#f8fff4 100%)",
       }}
     >
-      {/* Background orbs */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <motion.div
-          className="absolute top-0 right-0 w-72 h-72 rounded-full"
+          className="absolute top-0 right-0 h-72 w-72 rounded-full"
           style={{ background: "radial-gradient(circle, rgba(143,202,74,0.10) 0%, transparent 70%)" }}
-          animate={{ scale: [1, 1.25, 1], x: [0, 25, 0] }}
-          transition={{ duration: 11, repeat: Infinity, ease: "easeInOut" }}
+          animate={reduce ? undefined : { scale: [1, 1.2, 1], x: [0, 20, 0] }}
+          transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
         />
-        <motion.div
-          className="absolute bottom-0 left-0 w-64 h-64 rounded-full"
-          style={{ background: "radial-gradient(circle, rgba(107,168,50,0.08) 0%, transparent 70%)" }}
-          animate={{ scale: [1.1, 1, 1.1], x: [0, -18, 0] }}
-          transition={{ duration: 13, repeat: Infinity, ease: "easeInOut" }}
-        />
-        {/* Floating stars */}
-        {[...Array(6)].map((_, i) => (
-          <motion.div
-            key={i}
-            className="absolute"
-            style={{
-              left: `${10 + i * 15}%`,
-              top: `${15 + (i * 17) % 65}%`,
-              color: "rgba(143,202,74,0.4)",
-            }}
-            animate={{
-              y: [0, -15, 0],
-              opacity: [0.3, 0.9, 0.3],
-              rotate: [0, 20, 0],
-            }}
-            transition={{ duration: 3 + i * 0.5, repeat: Infinity, delay: i * 0.6, ease: "easeInOut" }}
-          >
-            <Star size={8 + (i % 3) * 4} fill="rgba(143,202,74,0.4)" stroke="none" />
-          </motion.div>
-        ))}
       </div>
 
-      <div className="mx-auto max-w-4xl px-4 sm:px-6 relative z-10">
-        <motion.h2
-          className="text-center text-[clamp(1.5rem,4vw,2rem)] font-bold tracking-tight text-[var(--mkt-ink)] mb-12"
-          initial={{ opacity: 0, y: 30 }}
+      <div className="relative z-10 mx-auto max-w-6xl px-5 sm:px-8 lg:px-10">
+        <motion.div
+          className="mx-auto max-w-2xl text-center"
+          initial={reduce ? false : { opacity: 0, y: 24 }}
           whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-100px" }}
-          transition={{ duration: 0.7, ease: easeOutExpo }}
+          viewport={{ once: true, margin: "-80px" }}
+          transition={{ duration: 0.65, ease: easeOutExpo }}
         >
-          testimonials
-        </motion.h2>
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--mkt-muted)]">
+            {testimonials.eyebrow}
+          </p>
+          <h2
+            id="testimonials-heading"
+            className="mt-3 text-[clamp(1.75rem,4.5vw,2.5rem)] font-bold tracking-tight text-[var(--mkt-ink)]"
+          >
+            {testimonials.title}
+          </h2>
+          <p className="mt-3 text-[14px] leading-relaxed text-[var(--mkt-muted)] sm:text-[15px]">
+            {testimonials.subtitle}
+          </p>
+          <p className="mt-5 inline-flex items-center gap-2 rounded-full border border-[var(--mkt-line)] bg-white/80 px-4 py-1.5 text-[12px] font-semibold text-[var(--mkt-ink)] shadow-sm backdrop-blur-sm">
+            <span className="h-2 w-2 rounded-full bg-[var(--mkt-green)]" aria-hidden />
+            {totalEnrolled}+ students enrolled across featured campuses
+          </p>
+        </motion.div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
-          {testimonials.map((t, i) => (
-            <motion.div
-              key={t.id}
-              className="group rounded-2xl p-6 flex items-start gap-5 cursor-default relative overflow-hidden mkt-aurora-border"
-              style={{
-                background: "rgba(255,255,255,0.70)",
-                backdropFilter: "blur(24px) saturate(180%)",
-                WebkitBackdropFilter: "blur(24px) saturate(180%)",
-                border: "1px solid rgba(143,202,74,0.20)",
-                boxShadow: "0 6px 24px rgba(143,202,74,0.10), 0 2px 8px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.88)",
-              }}
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-50px" }}
-              transition={{ duration: 0.7, ease: easeOutExpo, delay: i * 0.12 }}
-              whileHover={{
-                y: -8,
-                boxShadow: "0 24px 56px rgba(143,202,74,0.26), 0 6px 16px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.95)",
-                border: "1px solid rgba(143,202,74,0.42)",
-              }}
+        <motion.div
+          className="mt-12 flex flex-wrap justify-center gap-5 lg:mt-14 lg:gap-6"
+          variants={staggerContainer}
+          initial={reduce ? false : "hidden"}
+          whileInView="show"
+          viewport={{ once: true, margin: "-8% 0px", amount: 0.08 }}
+        >
+          {testimonials.items.map((item, index) => (
+            <div
+              key={item.id}
+              className="w-full max-w-[400px] sm:w-[calc(50%-0.625rem)] lg:w-[calc(33.333%-1rem)]"
             >
-              {/* Top shine */}
-              <div
-                className="absolute top-0 left-0 right-0 h-px pointer-events-none"
-                style={{ background: "linear-gradient(90deg,transparent,rgba(255,255,255,0.9) 40%,rgba(255,255,255,0.9) 60%,transparent)" }}
-              />
-              {/* Shimmer sweep */}
-              <motion.div
-                className="absolute inset-0 pointer-events-none"
-                style={{
-                  background: "linear-gradient(120deg,transparent 20%,rgba(255,255,255,0.4) 50%,transparent 80%)",
-                }}
-                initial={{ x: "-100%" }}
-                animate={{ x: "320%" }}
-                transition={{ duration: 2.5, repeat: Infinity, repeatDelay: 4 + i * 1.5, ease: "easeInOut" }}
-              />
-
-              <div className="relative flex-shrink-0 z-10">
-                <div
-                  className="rounded-full p-0.5"
-                  style={{
-                    background: "linear-gradient(135deg, rgba(143,202,74,0.7), rgba(107,168,50,0.9))",
-                    boxShadow: "0 3px 14px rgba(143,202,74,0.35)",
-                  }}
-                >
-                  <img src={t.image} alt={t.name} className="w-[52px] h-[52px] rounded-full object-cover" />
-                </div>
-                <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-sm">
-                  <div
-                    className="text-white rounded-full w-4 h-4 flex items-center justify-center"
-                    style={{ background: "linear-gradient(135deg,#8FCA4A,#5ec45f)" }}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="w-2.5 h-2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  </div>
-                </div>
-              </div>
-
-              <div className="relative z-10">
-                <h3 className="text-[16px] font-bold text-[var(--mkt-green)]">{t.name}</h3>
-                <div className="flex items-center gap-0.5 mt-0.5 mb-2">
-                  {[...Array(5)].map((_, j) => (
-                    <motion.div
-                      key={j}
-                      animate={{ scale: [1, 1.2, 1] }}
-                      transition={{ duration: 0.4, delay: j * 0.08, repeat: Infinity, repeatDelay: 3 }}
-                    >
-                      <Star className="w-3.5 h-3.5 fill-[var(--mkt-green)] text-[var(--mkt-green)]" />
-                    </motion.div>
-                  ))}
-                </div>
-                <p className="text-[11px] text-[var(--mkt-muted)] leading-relaxed font-medium">
-                  {t.content}
-                </p>
-              </div>
-            </motion.div>
+              <TestimonialCard item={item} index={index} reduce={reduce} />
+            </div>
           ))}
-        </div>
+        </motion.div>
       </div>
     </section>
   );

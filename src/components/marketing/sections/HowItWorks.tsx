@@ -151,7 +151,8 @@ function StatCard({
 export function HowItWorks() {
   return (
     <section
-      className="relative py-14 sm:py-24 lg:py-32 overflow-hidden"
+      id="problems"
+      className="scroll-mt-24 relative py-14 sm:py-24 lg:py-32 overflow-hidden"
       style={{
         background:
           "radial-gradient(ellipse 80% 60% at 20% 20%, rgba(143,202,74,0.16) 0%, transparent 60%)," +
@@ -343,13 +344,17 @@ export function HowItWorks() {
               </p>
             </div>
             <motion.div
-              className="absolute right-0 top-0 bottom-0 w-[55%] flex items-center justify-end"
+              className="absolute right-0 top-0 bottom-0 w-[55%] flex items-center justify-end pr-1"
               initial={{ opacity: 0, x: 30 }}
               whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.7, ease: easeOutExpo, delay: 0.4 }}
             >
-              <img src="/works/1.png" alt="Platform overview" className="w-full h-[110%] object-contain object-right drop-shadow-lg translate-x-2" />
+              <img
+                src="/works/1.png"
+                alt="Platform overview"
+                className="h-[108%] w-full object-contain object-right drop-shadow-[0_12px_36px_rgba(0,0,0,0.16)]"
+              />
             </motion.div>
           </motion.div>
 
@@ -378,13 +383,17 @@ export function HowItWorks() {
               </p>
             </div>
             <motion.div
-              className="absolute right-0 bottom-0 top-0 w-[55%] flex items-end justify-end pt-8 pr-2"
+              className="absolute right-0 bottom-0 top-0 w-[55%] flex items-end justify-end pr-1"
               initial={{ opacity: 0, y: 30, scale: 0.95 }}
               whileInView={{ opacity: 1, y: 0, scale: 1 }}
               viewport={{ once: true }}
               transition={{ duration: 0.7, ease: easeOutExpo, delay: 0.3 }}
             >
-              <img src="/works/2.png" alt="Directory features" className="w-[105%] max-h-full object-contain object-right-bottom drop-shadow-lg" />
+              <img
+                src="/works/2.png"
+                alt="Directory features"
+                className="max-h-full w-[105%] object-contain object-right-bottom drop-shadow-[0_12px_36px_rgba(0,0,0,0.16)]"
+              />
             </motion.div>
           </motion.div>
 
@@ -410,13 +419,17 @@ export function HowItWorks() {
               </p>
             </div>
             <motion.div
-              className="absolute right-0 bottom-0 top-0 w-[55%] flex items-end justify-end pt-6"
+              className="absolute right-0 bottom-0 top-0 w-[55%] flex items-end justify-end pr-1"
               initial={{ opacity: 0, y: 30, scale: 0.95 }}
               whileInView={{ opacity: 1, y: 0, scale: 1 }}
               viewport={{ once: true }}
               transition={{ duration: 0.7, ease: easeOutExpo, delay: 0.4 }}
             >
-              <img src="/works/3.png" alt="Student fee management" className="w-full max-h-[105%] object-contain object-right-bottom drop-shadow-lg" />
+              <img
+                src="/works/3.png"
+                alt="Student fee management"
+                className="max-h-[105%] w-full object-contain object-right-bottom drop-shadow-[0_12px_36px_rgba(0,0,0,0.16)]"
+              />
             </motion.div>
           </motion.div>
 
@@ -442,13 +455,17 @@ export function HowItWorks() {
               </p>
             </div>
             <motion.div
-              className="absolute right-0 bottom-0 top-0 w-[65%] flex items-end justify-center pt-8 px-6"
+              className="absolute right-0 bottom-0 top-0 w-[65%] flex items-end justify-center pt-4 pr-2"
               initial={{ opacity: 0, y: 40, scale: 0.95 }}
               whileInView={{ opacity: 1, y: 0, scale: 1 }}
               viewport={{ once: true }}
               transition={{ duration: 0.8, ease: easeOutExpo, delay: 0.3 }}
             >
-              <img src="/works/5.png" alt="Financial dashboard" className="w-full max-h-[95%] object-contain object-bottom drop-shadow-[0_8px_30px_rgba(0,0,0,0.14)]" />
+              <img
+                src="/works/5.png"
+                alt="Financial dashboard"
+                className="w-full max-h-[98%] object-contain object-bottom drop-shadow-[0_12px_36px_rgba(0,0,0,0.18)]"
+              />
             </motion.div>
           </motion.div>
 

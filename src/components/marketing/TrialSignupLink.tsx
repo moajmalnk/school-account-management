@@ -2,20 +2,27 @@ import { Link } from "@tanstack/react-router";
 import type { CSSProperties, ReactNode } from "react";
 
 /**
- * Marketing CTA → signup (index redirects to /signup/school).
- * Cast keeps the IDE happy when routeTree.gen.ts lags the language service.
+ * Marketing CTA → signup wizard (school step).
  */
 export function TrialSignupLink({
   className,
   style,
   children,
+  onClick,
 }: {
   className?: string;
   style?: CSSProperties;
   children: ReactNode;
+  onClick?: () => void;
 }) {
   return (
-    <Link to={"/signup" as "/"} className={className} style={style}>
+    <Link
+      to="/signup/$step"
+      params={{ step: "school" }}
+      className={className}
+      style={style}
+      onClick={onClick}
+    >
       {children}
     </Link>
   );

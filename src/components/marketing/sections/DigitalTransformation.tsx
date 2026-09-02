@@ -10,7 +10,8 @@ const glassCard = {
 export function DigitalTransformation() {
   return (
     <section
-      className="relative py-14 sm:py-20 lg:py-24 overflow-hidden"
+      id="product"
+      className="scroll-mt-24 relative py-14 sm:py-20 lg:py-24 overflow-hidden"
       style={{
         background: "linear-gradient(135deg, #F0FBE8 0%, #F8FFF4 40%, #F4FBF0 70%, #EEFBE5 100%)",
       }}

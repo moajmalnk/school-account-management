@@ -3,6 +3,7 @@ import { lazy, Suspense, useEffect } from "react";
 import { MarketingShell } from "@/components/marketing/MarketingShell";
 import { Hero } from "@/components/marketing/sections/Hero";
 import { MARKETING } from "@/lib/marketing-content";
+import { preloadMarketingSections, scrollToMarketingSection } from "@/lib/marketing-scroll";
 
 const HowItWorks = lazy(() =>
   import("@/components/marketing/sections/HowItWorks").then((m) => ({ default: m.HowItWorks })),
@@ -27,6 +28,14 @@ export function MarketingLanding() {
     document.title = MARKETING.title;
     const meta = document.querySelector('meta[name="description"]');
     if (meta) meta.setAttribute("content", MARKETING.description);
+    preloadMarketingSections();
+  }, []);
+
+  useEffect(() => {
+    const hash = window.location.hash.replace(/^#/, "");
+    if (!hash) return;
+    const timer = window.setTimeout(() => scrollToMarketingSection(hash), 120);
+    return () => window.clearTimeout(timer);
   }, []);
 
   return (

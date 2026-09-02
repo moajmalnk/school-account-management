@@ -19,7 +19,7 @@ export function Features() {
   return (
     <section
       id="features"
-      className="relative py-14 sm:py-20 lg:py-24 overflow-hidden"
+      className="scroll-mt-24 relative py-14 sm:py-20 lg:py-24 overflow-hidden"
       style={{
         background:
           "radial-gradient(ellipse 70% 60% at 80% 20%, rgba(143,202,74,0.09) 0%, transparent 55%)," +
