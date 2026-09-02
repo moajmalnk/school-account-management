@@ -47,7 +47,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
       >
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-3 px-5 sm:h-16 sm:gap-4 sm:px-10">
           <Link
-            to="/"
+            to="/home"
             className="shrink-0 rounded-lg outline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--mkt-green)] transition-transform hover:scale-105 active:scale-95 flex items-center gap-2"
             aria-label={`${BRAND.name} home`}
           >

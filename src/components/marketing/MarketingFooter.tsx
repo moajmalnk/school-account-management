@@ -97,7 +97,7 @@ export function MarketingFooter() {
           {/* Brand */}
           <motion.div className="sm:col-span-2 lg:col-span-4" variants={columnReveal}>
             <Link
-              to="/"
+              to="/home"
               className="inline-flex items-center gap-3 rounded-xl outline-offset-4 transition-transform hover:scale-[1.02] active:scale-[0.98]"
               aria-label={`${BRAND.name} home`}
             >

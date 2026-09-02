@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Bell, ChevronLeft, Home, Settings, UserCog, Users, Wallet } from "lucide-react";
 import { useEffect } from "react";
 
@@ -311,6 +311,13 @@ function TenantMobileHeader() {
         </div>
         <BranchSwitcher compact />
         <ThemeModeToggle className="rounded-full border border-white/80 bg-white/70 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-200" />
+        <Link
+          to="/home"
+          aria-label="Home page"
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-white/80 bg-white/70 text-slate-600 shadow-sm backdrop-blur-md transition-colors hover:text-[#0F766E] dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-300 dark:hover:text-[#2DD4BF]"
+        >
+          <Home className="h-[18px] w-[18px]" />
+        </Link>
         <button
           type="button"
           onClick={() => guardedNavigate("/tenant/notifications")}

@@ -18,6 +18,7 @@ import { Route as RefundPolicyRouteImport } from './routes/refund-policy'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ImpersonateRouteImport } from './routes/impersonate'
+import { Route as HomeRouteImport } from './routes/home'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as DataDeletionRouteImport } from './routes/data-deletion'
 import { Route as IndexRouteImport } from './routes/index'
@@ -88,6 +89,11 @@ const LoginRoute = LoginRouteImport.update({
 const ImpersonateRoute = ImpersonateRouteImport.update({
   id: '/impersonate',
   path: '/impersonate',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HomeRoute = HomeRouteImport.update({
+  id: '/home',
+  path: '/home',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
@@ -227,6 +233,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/data-deletion': typeof DataDeletionRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/home': typeof HomeRoute
   '/impersonate': typeof ImpersonateRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
@@ -264,6 +271,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/data-deletion': typeof DataDeletionRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/home': typeof HomeRoute
   '/impersonate': typeof ImpersonateRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
@@ -298,6 +306,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/data-deletion': typeof DataDeletionRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/home': typeof HomeRoute
   '/impersonate': typeof ImpersonateRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
@@ -337,6 +346,7 @@ export interface FileRouteTypes {
     | '/'
     | '/data-deletion'
     | '/forgot-password'
+    | '/home'
     | '/impersonate'
     | '/login'
     | '/privacy'
@@ -374,6 +384,7 @@ export interface FileRouteTypes {
     | '/'
     | '/data-deletion'
     | '/forgot-password'
+    | '/home'
     | '/impersonate'
     | '/login'
     | '/privacy'
@@ -407,6 +418,7 @@ export interface FileRouteTypes {
     | '/'
     | '/data-deletion'
     | '/forgot-password'
+    | '/home'
     | '/impersonate'
     | '/login'
     | '/privacy'
@@ -445,6 +457,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DataDeletionRoute: typeof DataDeletionRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
+  HomeRoute: typeof HomeRoute
   ImpersonateRoute: typeof ImpersonateRoute
   LoginRoute: typeof LoginRoute
   PrivacyRoute: typeof PrivacyRoute
@@ -520,6 +533,13 @@ declare module '@tanstack/react-router' {
       path: '/impersonate'
       fullPath: '/impersonate'
       preLoaderRoute: typeof ImpersonateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/home': {
+      id: '/home'
+      path: '/home'
+      fullPath: '/home'
+      preLoaderRoute: typeof HomeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/forgot-password': {
@@ -792,6 +812,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DataDeletionRoute: DataDeletionRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
+  HomeRoute: HomeRoute,
   ImpersonateRoute: ImpersonateRoute,
   LoginRoute: LoginRoute,
   PrivacyRoute: PrivacyRoute,

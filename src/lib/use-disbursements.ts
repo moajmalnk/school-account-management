@@ -32,6 +32,31 @@ function writeDisbursementsCache(scope: string, rows: DisbursementPayload[]) {
 }
 
 const inflightFetches = new Map<string, Promise<DisbursementPayload[]>>();
+const DISBURSEMENTS_CHANGED = "feezo:disbursements-changed";
+
+function disbursementsScope(scopeKey?: string, branchId?: string | null) {
+  return `${scopeKey ?? ""}|${branchId ?? ""}`;
+}
+
+function notifyDisbursementsChanged(scope: string) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(DISBURSEMENTS_CHANGED, { detail: { scope } }));
+}
+
+/** Keep dashboard expense totals in sync after Make Payment saves. */
+export function upsertDisbursementInCache(
+  branchId: string | null | undefined,
+  row: DisbursementPayload,
+  scopeKey?: string,
+) {
+  const scope = disbursementsScope(scopeKey, branchId);
+  const cached = readDisbursementsCache(scope) ?? [];
+  const idx = cached.findIndex((entry) => entry.id === row.id);
+  const next =
+    idx >= 0 ? cached.map((entry, index) => (index === idx ? { ...entry, ...row } : entry)) : [row, ...cached];
+  writeDisbursementsCache(scope, next);
+  notifyDisbursementsChanged(scope);
+}
 
 async function fetchDisbursementsForScope(scope: string): Promise<DisbursementPayload[]> {
   const pending = inflightFetches.get(scope);
@@ -57,13 +82,24 @@ async function fetchDisbursementsForScope(scope: string): Promise<DisbursementPa
  */
 export function useDisbursements(scopeKey?: string, enabled = true) {
   const { activeBranchId, hydrated } = useTenantStore();
-  const scope = `${scopeKey ?? ""}|${activeBranchId}`;
+  const scope = disbursementsScope(scopeKey, activeBranchId);
   const on = enabled && hydrated;
 
   const [disbursements, setDisbursements] = useState<DisbursementPayload[]>(
     () => readDisbursementsCache(scope) ?? [],
   );
   const [loaded, setLoaded] = useState(() => readDisbursementsCache(scope) !== null);
+
+  useEffect(() => {
+    const onChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ scope: string }>).detail;
+      if (detail?.scope !== scope) return;
+      const cached = readDisbursementsCache(scope);
+      if (cached) setDisbursements(cached);
+    };
+    window.addEventListener(DISBURSEMENTS_CHANGED, onChanged);
+    return () => window.removeEventListener(DISBURSEMENTS_CHANGED, onChanged);
+  }, [scope]);
 
   const reload = useCallback(async () => {
     const hadData = readDisbursementsCache(scope) !== null;

@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Bell, LogOut, Settings, UserCog } from "lucide-react";
+import { Bell, Home, LogOut, Settings, UserCog } from "lucide-react";
 import { toast } from "sonner";
 
 import { ADMIN_NAV, type ViewKey } from "@/components/admin/admin-nav";
@@ -133,6 +133,11 @@ export function TopNav() {
                 <a href="/data-deletion">Delete my account</a>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link to="/home">
+                  <Home className="mr-2 h-3.5 w-3.5" /> Home page
+                </Link>
+              </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={handleLogout}
                 className="text-[#EF4444] focus:text-[#EF4444]"

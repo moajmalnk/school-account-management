@@ -424,7 +424,7 @@ import {
   normalizePayeeType,
   type PayeeType,
 } from "@/lib/dashboard-finance";
-import { useDisbursements } from "@/lib/use-disbursements";
+import { upsertDisbursementInCache, useDisbursements } from "@/lib/use-disbursements";
 import {
   useSettingsUnsavedGuard,
   useSettingsUnsavedRegistration,
@@ -462,15 +462,6 @@ import {
   type CornerSide,
   type Tone,
 } from "@/lib/utils";
-
-type PendingObligation = {
-  id: string;
-  payee: string;
-  desc: string;
-  amount: number;
-  due: string;
-  payeeType: PayeeType;
-};
 
 type MadePayment = {
   id: string;
@@ -6489,7 +6480,7 @@ function FinanceOverview({
 
   const overdueBills = useMemo(
     () =>
-      queuedPayables(disbursements).map((item, index) => ({
+      queuedSalaryPayables(disbursements).map((item, index) => ({
         id: item.id || `OBL-${String(index + 1).padStart(3, "0")}`,
         name: item.payee,
         amount: item.amount,
@@ -11352,15 +11343,11 @@ function StaffSearchSelect({
 }
 
 function MakePayment() {
-  const { staff, setStaff, schoolDetails, academicYear } = useTenantStore();
+  const { staff, setStaff, schoolDetails, academicYear, activeBranchId } = useTenantStore();
   const schoolName = schoolDetails.name || "School";
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/finance" });
-  const [obligations, setObligations] = useState<PendingObligation[]>([]);
   const [madePayments, setMadePayments] = useState<MadePayment[]>([]);
-  const [selectedObligationId, setSelectedObligationId] = useState<string | null>(
-    search.staffId ? null : null,
-  );
   const [payeeType, setPayeeType] = useState<PayeeType>(search.staffId ? "Salary" : "Salary");
   const [selectedStaffId, setSelectedStaffId] = useState<string>(search.staffId ?? "");
   const [salaryMonth, setSalaryMonth] = useState(() => search.month ?? currentPayrollMonth());
@@ -11424,23 +11411,10 @@ function MakePayment() {
               : undefined,
           })),
         );
-        setObligations(
-          list
-            .filter((row) => row.status === "Queued")
-            .map((row) => ({
-              id: row.id || `OBL-${Date.now()}`,
-              payee: row.payee,
-              desc: row.desc || "",
-              amount: row.amount,
-              due: formatEventDateTime(row.time) === "—" ? "Due" : formatEventDateTime(row.time),
-              payeeType: normalizePayeeType(row.payeeType),
-            })),
-        );
       })
       .catch(() => {
         if (cancelled) return;
         setMadePayments([]);
-        setObligations([]);
       });
     return () => {
       cancelled = true;
@@ -11569,6 +11543,15 @@ function MakePayment() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeStaff, search.staffId, search.month, search.amount]);
 
+  const topExpenses = useMemo(
+    () =>
+      [...madePayments]
+        .filter((payment) => payment.status === "Cleared")
+        .sort((a, b) => b.amount - a.amount || b.time.localeCompare(a.time))
+        .slice(0, 5),
+    [madePayments],
+  );
+
   const applySalaryMonth = (month: string) => {
     const next = month || currentPayrollMonth();
     setSalaryMonth(next);
@@ -11577,30 +11560,7 @@ function MakePayment() {
     }
   };
 
-  const applyObligation = (obligation: PendingObligation) => {
-    setSelectedObligationId(obligation.id);
-    setPayeeType(obligation.payeeType);
-    setBeneficiary(obligation.payee);
-    setDescription(obligation.desc);
-    setAmount(String(obligation.amount));
-    setAttachments([]);
-    if (obligation.payeeType === "Salary") {
-      const matched = matchStaffByName(obligation.payee);
-      setSelectedStaffId(matched?.id ?? "");
-      if (matched) {
-        applyStaff(matched.id, {
-          month: salaryMonth,
-          amount: obligation.amount,
-          skipToast: true,
-        });
-      }
-    } else {
-      setSelectedStaffId("");
-    }
-  };
-
   const resetForm = () => {
-    setSelectedObligationId(null);
     setPayeeType("Salary");
     setSelectedStaffId("");
     setSalaryMonth(currentPayrollMonth());
@@ -11617,7 +11577,6 @@ function MakePayment() {
 
   const setPayeeTypeAndClear = (next: PayeeType) => {
     setPayeeType(next);
-    setSelectedObligationId(null);
     if (next === "Other Expense") {
       setSelectedStaffId("");
       if (selectedStaffId) {
@@ -11735,10 +11694,6 @@ function MakePayment() {
     setIsSubmitting(true);
     setPendingAuthorisation(false);
 
-    if (selectedObligationId) {
-      setObligations((prev) => prev.filter((item) => item.id !== selectedObligationId));
-    }
-
     let desc = description.trim();
     if (mode === "Both") {
       desc = [
@@ -11758,10 +11713,14 @@ function MakePayment() {
       mode,
       payeeType,
       time: toSqlDateTime(new Date()),
-      status: "Queued",
+      status: payeeType === "Salary" ? "Queued" : "Cleared",
       attachments: attachments.length ? attachments : undefined,
     };
     setMadePayments((prev) => [disbursal, ...prev]);
+    upsertDisbursementInCache(activeBranchId, {
+      ...disbursal,
+      staffId: payeeType === "Salary" ? selectedStaffId || undefined : undefined,
+    });
 
     void apiCreateDisbursement({
       ...disbursal,
@@ -11769,29 +11728,28 @@ function MakePayment() {
     })
       .then((saved) => {
         const savedId = saved?.id;
-        if (!savedId || savedId === disbursal.id) return;
-        setMadePayments((prev) =>
-          prev.map((p) =>
-            p.id === disbursal.id
-              ? {
-                  ...disbursal,
-                  id: savedId,
-                  payee: saved.payee || disbursal.payee,
-                  desc: saved.desc || disbursal.desc,
-                  amount: saved.amount || disbursal.amount,
-                  mode: saved.mode || disbursal.mode,
-                  payeeType: saved.payeeType
-                    ? normalizePayeeType(saved.payeeType)
-                    : disbursal.payeeType,
-                  time: saved.time || disbursal.time,
-                  status:
-                    saved.status === "Queued" || saved.status === "Cleared"
-                      ? saved.status
-                      : disbursal.status,
-                }
-              : p,
-          ),
-        );
+        const resolvedStatus =
+          saved?.status === "Queued" || saved?.status === "Cleared"
+            ? saved.status
+            : disbursal.status;
+        const resolved: MadePayment = {
+          ...disbursal,
+          id: savedId && savedId !== disbursal.id ? savedId : disbursal.id,
+          payee: saved?.payee || disbursal.payee,
+          desc: saved?.desc || disbursal.desc,
+          amount: saved?.amount || disbursal.amount,
+          mode: saved?.mode || disbursal.mode,
+          payeeType: saved?.payeeType ? normalizePayeeType(saved.payeeType) : disbursal.payeeType,
+          time: saved?.time || disbursal.time,
+          status: resolvedStatus,
+        };
+        if (savedId && savedId !== disbursal.id) {
+          setMadePayments((prev) => prev.map((p) => (p.id === disbursal.id ? resolved : p)));
+        }
+        upsertDisbursementInCache(activeBranchId, {
+          ...resolved,
+          staffId: payeeType === "Salary" ? selectedStaffId || undefined : undefined,
+        });
       })
       .catch((err) =>
         toast.error("Could not save disbursement on server", {
@@ -11868,12 +11826,7 @@ function MakePayment() {
       }`,
     });
 
-    const remaining = obligations.filter((item) => item.id !== selectedObligationId);
-    if (remaining.length) {
-      applyObligation(remaining[0]);
-    } else {
-      resetForm();
-    }
+    resetForm();
 
     setIsSubmitting(false);
   };
@@ -12384,47 +12337,37 @@ function MakePayment() {
         padded
         className={cn(workspacePanelClass, "col-span-12 lg:col-span-4")}
       >
-        <DashboardPanelHeading icon={AlertTriangle} title="Top Pending Obligations" />
+        <DashboardPanelHeading icon={Wallet} title="Top Expenses" />
         <div className="mt-3 space-y-3">
-          {obligations.length === 0 && (
+          {topExpenses.length === 0 && (
             <div className="rounded-lg border border-dashed border-black/15 bg-[#F4F4F5]/40 px-4 py-6 text-center text-[12px] text-black/55 dark:text-zinc-400">
-              No pending obligations in the queue
+              No expenses recorded yet
             </div>
           )}
-          {obligations.map((p) => {
-            const isSelected = selectedObligationId === p.id;
-            return (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => applyObligation(p)}
-                className={`w-full rounded-lg p-3 text-left transition-colors ${
-                  isSelected
-                    ? "bg-[#FEE2E2] text-[#7F1D1D] ring-2 ring-[#FECACA]"
-                    : "bg-[#CCFBF1] text-[#0F172A] hover:bg-[#99F6E4] dark:hover:bg-[#5EEAD4]"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2 text-[12.5px]">
-                  <span className="min-w-0 break-words font-semibold">{p.payee}</span>
-                  <span className="shrink-0 font-mono">₹ {p.amount.toLocaleString("en-IN")}</span>
-                </div>
-                <div
-                  className={`mt-1 flex flex-col gap-1.5 text-[10.5px] sm:flex-row sm:items-start sm:justify-between sm:gap-2 ${
-                    isSelected ? "text-[#991B1B]/75" : "text-black/55 dark:text-zinc-400"
-                  }`}
-                >
-                  <span className="min-w-0 break-words leading-snug">{p.desc}</span>
-                  <span
-                    className={`inline-flex w-fit shrink-0 rounded-full px-2 py-0.5 whitespace-nowrap ${
-                      isSelected ? "bg-[#EF4444] text-white" : "bg-black/10 text-black/65"
-                    }`}
-                  >
-                    Due {p.due}
-                  </span>
-                </div>
-              </button>
-            );
-          })}
+          {topExpenses.map((payment) => (
+            <div
+              key={payment.id}
+              className="rounded-lg bg-[#FFF1F2] p-3 text-[#0F172A]"
+            >
+              <div className="flex items-start justify-between gap-2 text-[12.5px]">
+                <span className="min-w-0 break-words font-semibold">{payment.payee}</span>
+                <span className="shrink-0 font-mono text-[#BE123C]">
+                  − ₹ {payment.amount.toLocaleString("en-IN")}
+                </span>
+              </div>
+              <div className="mt-1 flex flex-col gap-1.5 text-[10.5px] text-black/55 dark:text-zinc-400 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
+                <span className="min-w-0 break-words leading-snug">
+                  {payment.payeeType}
+                  {payment.desc ? ` · ${payment.desc}` : ""}
+                </span>
+                <span className="inline-flex w-fit shrink-0 rounded-full bg-black/10 px-2 py-0.5 whitespace-nowrap text-black/65">
+                  {formatEventDateTime(payment.time) === "—"
+                    ? payment.mode
+                    : formatEventDateTime(payment.time)}
+                </span>
+              </div>
+            </div>
+          ))}
         </div>
       </OrganicCard>
 

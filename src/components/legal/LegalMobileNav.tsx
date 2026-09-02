@@ -149,7 +149,7 @@ export function LegalMobileNav({ activePage }: { activePage?: LegalPageId }) {
                       <ul className="mt-2 space-y-1">
                         <li>
                           <Link
-                            to="/"
+                            to="/home"
                             onClick={close}
                             className="flex items-center gap-3 rounded-2xl px-4 py-3 text-[15px] font-semibold text-[var(--mkt-ink)] transition hover:bg-white hover:shadow-sm"
                           >

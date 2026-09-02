@@ -39,7 +39,7 @@ export function scrollToMarketingSection(sectionId: string): void {
 
 function isMarketingHomePath(): boolean {
   const path = window.location.pathname;
-  return path === "/" || path === "";
+  return path === "/" || path === "" || path === "/home";
 }
 
 export function handleMarketingSectionClick(
@@ -57,7 +57,7 @@ export function handleMarketingSectionClick(
 
   if (!isMarketingHomePath()) {
     preloadMarketingSections();
-    void router.navigate({ to: "/", hash: sectionId }).then(() => {
+    void router.navigate({ to: "/home", hash: sectionId }).then(() => {
       scrollToMarketingSection(sectionId);
     });
     return;

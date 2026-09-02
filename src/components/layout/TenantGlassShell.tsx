@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronLeft,
   Crown,
+  Home,
   LayoutDashboard,
   Loader2,
   LogOut,
@@ -822,6 +823,14 @@ export function TenantDesktopTopBar() {
           )}
 
           <ThemeModeToggle />
+
+          <Link
+            to="/home"
+            aria-label="Home page"
+            className="glass-inset grid h-10 w-10 place-items-center rounded-xl text-slate-600 transition-colors hover:text-[#0F766E] dark:text-zinc-300 dark:hover:text-[#2DD4BF]"
+          >
+            <Home className="h-[18px] w-[18px]" />
+          </Link>
 
           <button
             type="button"

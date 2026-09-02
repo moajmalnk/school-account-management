@@ -42,6 +42,7 @@ import {
   staffGrossSalary,
   upsertStaffAttendanceMonth,
   normalizeStaffAttendanceMonth,
+  normalizeStaff,
   salaryHistoryPayrollMonth,
   salaryPaidAmountForMonth,
   isSalaryMonthSettled,
@@ -296,10 +297,17 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
     setStaff((prev) => prev.map((s) => (s.id === staff.id ? updated : s)));
     try {
       const saved = await apiUpsertStaff(updated);
-      const merged = { ...updated, ...saved };
+      const merged = normalizeStaff({
+        ...updated,
+        ...saved,
+        attendanceByMonth: Array.isArray(updated.attendanceByMonth)
+          ? updated.attendanceByMonth
+          : saved.attendanceByMonth,
+      });
       setStaff((prev) => prev.map((s) => (s.id === staff.id || s.id === saved.id ? merged : s)));
       return merged;
     } catch (err) {
+      setStaff((prev) => prev.map((s) => (s.id === staff.id ? staff : s)));
       toast.error("Could not save staff to server", {
         description: err instanceof Error ? err.message : "Save failed",
       });
@@ -626,14 +634,18 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
     });
   };
 
-  const removeAttendanceMonth = (month: string) => {
+  const removeAttendanceMonth = async (month: string) => {
     const updated: Staff = {
       ...staff,
       attendanceByMonth: (staff.attendanceByMonth ?? []).filter((row) => row.month !== month),
     };
-    syncStaff(updated);
-    setPendingDeleteMonth(null);
-    toast.error(`Attendance removed · ${formatPayrollMonthLabel(month)}`);
+    try {
+      await syncStaff(updated);
+      setPendingDeleteMonth(null);
+      toast.success(`Attendance removed · ${formatPayrollMonthLabel(month)}`);
+    } catch {
+      setPendingDeleteMonth(null);
+    }
   };
 
   const documentsOnFile = useMemo(() => documents.filter(isDocumentComplete).length, [documents]);
@@ -1846,7 +1858,7 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
               type="button"
               className="rounded-full bg-[#EF4444] text-white hover:bg-[#DC2626]"
               onClick={() => {
-                if (pendingDeleteMonth) removeAttendanceMonth(pendingDeleteMonth);
+                if (pendingDeleteMonth) void removeAttendanceMonth(pendingDeleteMonth);
               }}
             >
               Delete
