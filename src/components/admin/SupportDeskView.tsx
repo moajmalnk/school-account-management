@@ -3,6 +3,7 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { ArrowLeft, LifeBuoy, Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
+import { mobileChatViewportClass } from "@/components/layout/MobileTabBar";
 import {
   SupportChatBubble,
   SupportChatShell,
@@ -487,7 +488,11 @@ export function SupportDeskView() {
             tone="white"
             cornerSide="tr"
             padded
-            className={cn("col-span-12", ticketId && "!p-0 lg:!p-6")}
+            className={cn(
+              "col-span-12",
+              ticketId &&
+                "!p-0 max-lg:-mx-3 max-lg:-mt-4 max-lg:mb-[calc(-1*(60px+0.75rem+env(safe-area-inset-bottom,0px)))] lg:!p-6 lg:mx-0 lg:mt-0 lg:mb-0",
+            )}
           >
             <div className={cn("space-y-3", ticketId && "hidden lg:block")}>
               <div>
@@ -525,14 +530,16 @@ export function SupportDeskView() {
             <div
               className={cn(
                 "overflow-hidden rounded-2xl border border-[#EFEFEF]",
-                ticketId ? "mt-0 border-0 lg:mt-4 lg:border" : "mt-4",
+                ticketId
+                  ? "mt-0 border-0 max-lg:rounded-none lg:mt-4 lg:rounded-2xl lg:border"
+                  : "mt-4",
               )}
             >
               <div
                 className={cn(
                   "grid min-h-[22rem] grid-cols-12",
                   ticketId
-                    ? "h-[min(calc(100dvh-9rem),720px)] lg:h-[min(calc(100dvh-16rem),720px)]"
+                    ? cn(mobileChatViewportClass, "lg:h-[min(calc(100dvh-16rem),720px)]")
                     : "h-[min(calc(100dvh-16rem),720px)]",
                 )}
               >
@@ -683,7 +690,7 @@ export function SupportDeskView() {
                           ))}
                         </div>
                       </div>
-                      <div className="shrink-0 px-1.5 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1 sm:px-2">
+                      <div className="shrink-0 px-1.5 pb-1.5 pt-1 sm:px-2 lg:pb-[max(0.5rem,env(safe-area-inset-bottom))]">
                         {thread.status === "closed" ? (
                           <p className="rounded-2xl bg-white/80 px-3 py-2 text-center text-[12px] text-black/50 dark:bg-zinc-900/80 dark:text-zinc-400">
                             Closed. Reopen from the header, or the school can write again.

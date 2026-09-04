@@ -124,9 +124,20 @@ export function MobileTabBar({ items, pathname, className }: MobileTabBarProps) 
   );
 }
 
+/** Space reserved under content for the floating tab dock (bar + gap + home indicator). */
+export const MOBILE_TAB_DOCK_SPACE =
+  "calc(60px + 0.75rem + env(safe-area-inset-bottom, 0px))";
+
 export const mobileMainPadding =
   "pb-[calc(60px+0.75rem+env(safe-area-inset-bottom))] lg:pb-12";
 
 /** Fixed position for FABs — sits above the mobile tab dock. */
 export const mobileFabClass =
   "fixed right-4 z-40 md:hidden bottom-[calc(60px+1.25rem+env(safe-area-inset-bottom))]";
+
+/**
+ * Mobile chat / thread shell height: fills the viewport between the sticky top nav
+ * (~5rem + safe-area-top) and the tab dock so the composer stays on-screen.
+ */
+export const mobileChatViewportClass =
+  "max-lg:h-[calc(100dvh-5rem-env(safe-area-inset-top,0px)-(60px+0.75rem+env(safe-area-inset-bottom,0px)))]";

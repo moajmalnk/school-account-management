@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { ArrowLeft, Loader2, Mail, Plus } from "lucide-react";
 import { toast } from "sonner";
 
+import { mobileChatViewportClass } from "@/components/layout/MobileTabBar";
 import {
   SupportChatBubble,
   SupportChatShell,
@@ -371,8 +372,8 @@ export function CustomerSupportCard({ onBackToSettings }: { onBackToSettings?: (
   }, [chatId, tickets]);
 
   const mobileShellHeight = onBackToSettings
-    ? "max-lg:h-[min(calc(100dvh-4.75rem),760px)]"
-    : "max-lg:h-[min(calc(100dvh-9.5rem),760px)]";
+    ? mobileChatViewportClass
+    : "max-lg:h-[calc(100dvh-9.5rem-env(safe-area-inset-top,0px)-(60px+0.75rem+env(safe-area-inset-bottom,0px)))]";
 
   if (loading) {
     return (
@@ -595,7 +596,7 @@ export function CustomerSupportCard({ onBackToSettings }: { onBackToSettings?: (
                     ))}
                   </div>
                 </div>
-                <div className="shrink-0 px-1.5 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1 sm:px-2">
+                <div className="shrink-0 px-1.5 pb-1.5 pt-1 sm:px-2 lg:pb-[max(0.5rem,env(safe-area-inset-bottom))]">
                   {activeTicket.status === "closed" ? (
                     <p className="rounded-2xl bg-white/80 px-3 py-2 text-center text-[12px] text-black/50 dark:bg-zinc-900/80 dark:text-zinc-400">
                       Chat closed. Reopen it from the header, or start a new one from the list.
@@ -701,7 +702,7 @@ export function CustomerSupportCard({ onBackToSettings }: { onBackToSettings?: (
                     ) : null}
                   </div>
                 </div>
-                <div className="shrink-0 px-1.5 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1 sm:px-2">
+                <div className="shrink-0 px-1.5 pb-1.5 pt-1 sm:px-2 lg:pb-[max(0.5rem,env(safe-area-inset-bottom))]">
                   <SupportComposer
                     placeholder="Message"
                     autoFocus={composing}
