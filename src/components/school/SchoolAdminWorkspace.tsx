@@ -377,17 +377,23 @@ import {
   apiUpsertVehicle,
 } from "@/lib/api/settings";
 import {
+  apiBulkCreateDisbursements,
+  apiBulkCreatePayments,
   apiCreateDisbursement,
+  apiCreateExpenseLedger,
   apiCreatePayment,
   apiDeleteDisbursement,
   apiDeletePayment,
   apiDeleteStaff,
   apiDeleteStudent,
   apiListDisbursements,
+  apiListExpenseLedgers,
   apiUpdateDisbursement,
   apiUpdatePayment,
   apiUpsertStaff,
   apiUpsertStudent,
+  FINANCE_BULK_CHUNK,
+  isFinanceBulkUnsupported,
 } from "@/lib/api/records";
 import { apiSaveDashboardTodos } from "@/lib/api/dashboard";
 import { apiUploadDataUrl } from "@/lib/api/settings";
@@ -404,6 +410,28 @@ import {
   STUDENT_CSV_HEADERS,
 } from "@/lib/student-csv";
 import { isDuplicateStaff, parseStaffCsv, staffFromCsvRow } from "@/lib/staff-csv";
+import { chunkItems, importRowsSequentially, isExcelFilename, parseIndianDate } from "@/lib/csv-import";
+import {
+  EXPENSE_CSV_HEADERS,
+  expenseCsvDemoRows,
+  expenseCsvTemplateRows,
+  expenseDuplicateKey,
+  parseExpenseCsv,
+  resolveExpenseImportRows,
+  type ExpenseCsvIssue,
+  type ResolvedExpenseImport,
+} from "@/lib/expense-csv";
+import {
+  FEE_COLLECTION_CSV_HEADERS,
+  feeCollectionCsvDemoRows,
+  feeCollectionCsvTemplateRows,
+  feeDuplicateKey,
+  parseFeeCollectionCsv,
+  resolveFeeImportRows,
+  type FeeCsvIssue,
+  type ResolvedFeeImport,
+} from "@/lib/fee-collection-csv";
+import { CsvBulkImportDialog, FinanceCsvImportMenu } from "@/components/school/CsvBulkImportDialog";
 import { resolveMediaUrl, fetchMediaBlob } from "@/lib/media";
 import {
   defaultSealToPng,
@@ -470,6 +498,7 @@ type MadePayment = {
   amount: number;
   mode: string;
   payeeType: PayeeType;
+  ledgerId?: string | null;
   time: string;
   status: "Queued" | "Cleared";
   attachments?: PaymentAttachment[];
@@ -8643,6 +8672,12 @@ function ReceivePayment() {
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
   const [pendingDeletePayment, setPendingDeletePayment] = useState<Payment | null>(null);
   const [savingReceipt, setSavingReceipt] = useState(false);
+  const feeImportRef = useRef<HTMLInputElement>(null);
+  const [feeImportOpen, setFeeImportOpen] = useState(false);
+  const [feeImporting, setFeeImporting] = useState(false);
+  const [feeImportProgress, setFeeImportProgress] = useState({ current: 0, total: 0 });
+  const [feeImportReady, setFeeImportReady] = useState<ResolvedFeeImport[]>([]);
+  const [feeImportIssues, setFeeImportIssues] = useState<FeeCsvIssue[]>([]);
   const [addCategoryOpen, setAddCategoryOpen] = useState(false);
   const [addCategoryTarget, setAddCategoryTarget] = useState<
     { type: "feeLine"; id: string } | { type: "ledger" } | null
@@ -10264,6 +10299,210 @@ function ReceivePayment() {
     return opts;
   }, [studentsInClass, stu, editingPayment]);
 
+  const downloadFeeTemplate = () => {
+    downloadCsv(
+      "fee-collection-bulk-upload-template.csv",
+      [...FEE_COLLECTION_CSV_HEADERS],
+      feeCollectionCsvTemplateRows(),
+    );
+    toast.success("Fee collection template downloaded", {
+      description: "Fill the sample rows, save as CSV, then Upload CSV",
+    });
+  };
+
+  const downloadFeeDemo = () => {
+    downloadCsv(
+      "fee-collection-bulk-upload-demo.csv",
+      [...FEE_COLLECTION_CSV_HEADERS],
+      feeCollectionCsvDemoRows(students),
+    );
+    toast.success("Fee collection demo downloaded", {
+      description: "Review the sample rows, then Upload CSV to import them",
+    });
+  };
+
+  const openFeeImport = () => feeImportRef.current?.click();
+
+  const handleFeeImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (isExcelFilename(file.name)) {
+      toast.error("Excel files are not supported yet", {
+        description: "Open the sheet in Excel/Sheets and Save as CSV, then upload",
+      });
+      e.target.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const parsed = parseFeeCollectionCsv(String(reader.result ?? ""));
+      if (!parsed.ok) {
+        toast.error(parsed.error, { description: parsed.description });
+        e.target.value = "";
+        return;
+      }
+      const existingKeys = payments.map((payment) =>
+        feeDuplicateKey({
+          date: parseIndianDate(payment.time) ?? parseEventDate(payment.time) ?? new Date(0),
+          amount: payment.amount,
+          name: payment.name,
+          mode: payment.mode,
+          feePeriod: payment.feePeriod || payment.feeMonth,
+          cat: payment.cat,
+        }),
+      );
+      const resolved = resolveFeeImportRows(parsed.drafts, {
+        students,
+        categories: paymentCategories,
+        academicYear,
+        existingKeys,
+      });
+      const issues: FeeCsvIssue[] = [...parsed.issues, ...resolved.issues];
+      const ready: ResolvedFeeImport[] = [];
+      for (const row of resolved.ready) {
+        const period = row.payment.feePeriod ?? "";
+        const kind = categoryFeeTermKind(row.payment.cat);
+        if (
+          row.studentId &&
+          (kind === "tuition" || kind === "vehicle") &&
+          isPeriodOnBreak(studentFeeBreaks, row.studentId, academicYear, kind, period)
+        ) {
+          issues.push({
+            line: row.line,
+            rowLabel: row.previewLabel,
+            message: `${period} is on fee break for this student`,
+          });
+          continue;
+        }
+        ready.push(row);
+      }
+      if (!ready.length && !issues.length) {
+        toast.error("No receipts to import");
+        e.target.value = "";
+        return;
+      }
+      setFeeImportReady(ready);
+      setFeeImportIssues(issues);
+      setFeeImportProgress({ current: 0, total: 0 });
+      setFeeImportOpen(true);
+      e.target.value = "";
+    };
+    reader.onerror = () => toast.error("Could not read the selected file");
+    reader.readAsText(file);
+  };
+
+  const confirmFeeImport = () => {
+    const rows = feeImportReady.filter((row) => !row.duplicate);
+    if (!rows.length || feeImporting) return;
+    setFeeImporting(true);
+    setFeeImportProgress({ current: 0, total: rows.length });
+    const previewSkipped = feeImportReady.filter((row) => row.duplicate).length;
+    const invalidSkipped = feeImportIssues.length;
+    const dueByStudent = new Map(students.map((s) => [s.id, s.due]));
+
+    const finish = (ok: number, failed: number, extraSkipped: number) => {
+      const skipped = previewSkipped + extraSkipped;
+      const parts = [
+        ok ? `${ok} added` : null,
+        skipped ? `${skipped} duplicate${skipped === 1 ? "" : "s"} skipped` : null,
+        failed ? `${failed} failed` : null,
+        invalidSkipped ? `${invalidSkipped} invalid skipped` : null,
+      ].filter(Boolean);
+      if (ok) {
+        toast.success(`${ok} receipt${ok === 1 ? "" : "s"} imported`, {
+          description: parts.join(" · ") || "Saved to payment history",
+        });
+      } else {
+        toast.error("No receipts imported", {
+          description: parts.join(" · ") || "Check the CSV and try again",
+        });
+      }
+      setFeeImporting(false);
+      setFeeImportOpen(false);
+      setFeeImportReady([]);
+      setFeeImportIssues([]);
+    };
+
+    const applySaved = (saved: Payment, studentId?: string, amount = saved.amount) => {
+      setPayments((prev) => [saved, ...prev.filter((item) => item.id !== saved.id)]);
+      if (!studentId) return;
+      const nextDue = Math.max(0, (dueByStudent.get(studentId) ?? 0) - amount);
+      dueByStudent.set(studentId, nextDue);
+      setStudents((prev) =>
+        prev.map((item) => (item.id === studentId ? { ...item, due: nextDue } : item)),
+      );
+    };
+
+    const importSequentially = () =>
+      importRowsSequentially(
+        rows,
+        async (row) => {
+          const { id: _omit, ...payload } = row.payment;
+          const draft: Payment = {
+            ...payload,
+            id: "",
+            time: toSqlDateTime(row.date),
+          };
+          const saved = row.studentId
+            ? await apiCreatePayment(draft, { reduceDue: true, studentId: row.studentId })
+            : await apiCreatePayment(draft);
+          applySaved(saved, row.studentId, row.payment.amount);
+        },
+        (current, total) => setFeeImportProgress({ current, total }),
+      );
+
+    void (async () => {
+      try {
+        let usedBulk = false;
+        let ok = 0;
+        let failed = 0;
+        let extraSkipped = 0;
+        const rowByLine = new Map(rows.map((row) => [row.line, row]));
+        try {
+          let done = 0;
+          for (const chunk of chunkItems(rows, FINANCE_BULK_CHUNK)) {
+            const result = await apiBulkCreatePayments(
+              chunk.map((row) => {
+                const { id: _omit, ...payment } = row.payment;
+                return {
+                  ...payment,
+                  time: toSqlDateTime(row.date),
+                  studentId: row.studentId,
+                  reduceDue: Boolean(row.studentId),
+                  line: row.line,
+                };
+              }),
+            );
+            usedBulk = true;
+            extraSkipped += result.skipped?.length ?? 0;
+            failed += result.failed?.length ?? 0;
+            (result.added ?? []).forEach((saved, index) => {
+              const { line, ...payment } = saved;
+              const source = typeof line === "number" ? rowByLine.get(line) : chunk[index];
+              applySaved(payment, source?.studentId, source?.payment.amount ?? payment.amount);
+              ok += 1;
+            });
+            done += chunk.length;
+            setFeeImportProgress({ current: done, total: rows.length });
+          }
+          finish(ok, failed, extraSkipped);
+        } catch (err) {
+          if (!usedBulk && isFinanceBulkUnsupported(err)) {
+            const sequential = await importSequentially();
+            finish(sequential.ok, sequential.failed, 0);
+            return;
+          }
+          throw err;
+        }
+      } catch {
+        toast.error("Receipt import failed", {
+          description: "Check the connection and try again",
+        });
+        setFeeImporting(false);
+      }
+    })();
+  };
+
   return (
     <div className="space-y-4 sm:space-y-5">
       <div ref={recordCardRef}>
@@ -10284,7 +10523,7 @@ function ReceivePayment() {
                 </p>
               )}
             </div>
-            {editingPayment && (
+            {editingPayment ? (
               <button
                 type="button"
                 onClick={resetRecordForm}
@@ -10292,6 +10531,13 @@ function ReceivePayment() {
               >
                 Cancel edit
               </button>
+            ) : (
+              <FinanceCsvImportMenu
+                disabled={feeImporting}
+                onTemplate={downloadFeeTemplate}
+                onDemo={downloadFeeDemo}
+                onUploadClick={openFeeImport}
+              />
             )}
           </div>
 
@@ -10305,6 +10551,43 @@ function ReceivePayment() {
               void addAttachments(e.target.files);
               e.target.value = "";
             }}
+          />
+          <input
+            ref={feeImportRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={handleFeeImportFile}
+          />
+          <CsvBulkImportDialog
+            open={feeImportOpen}
+            onOpenChange={(next) => {
+              if (feeImporting) return;
+              setFeeImportOpen(next);
+              if (!next) {
+                setFeeImportReady([]);
+                setFeeImportIssues([]);
+              }
+            }}
+            title="Import fee collection"
+            description="Review the CSV rows, then import them as receipts. Student dues update automatically. Duplicates and invalid lines are skipped."
+            validCount={feeImportReady.filter((row) => !row.duplicate).length}
+            invalidCount={feeImportIssues.length}
+            duplicateCount={feeImportReady.filter((row) => row.duplicate).length}
+            totalAmount={feeImportReady
+              .filter((row) => !row.duplicate)
+              .reduce((sum, row) => sum + row.payment.amount, 0)}
+            issues={feeImportIssues}
+            previewRows={feeImportReady.map((row) => ({
+              line: row.line,
+              label: row.previewLabel,
+              amount: row.payment.amount,
+              extra: row.previewExtra,
+              duplicate: row.duplicate,
+            }))}
+            importing={feeImporting}
+            progress={feeImportProgress}
+            onConfirm={confirmFeeImport}
           />
 
           <div className="mt-5 grid grid-cols-12 gap-x-4 gap-y-5 sm:gap-x-5 sm:gap-y-6">
@@ -10838,12 +11121,20 @@ function ReceivePayment() {
                 : `${payments.length} receipts · most recent first`}
             </p>
           </div>
-          <div className="rounded-lg bg-[#F4F4F5] px-3.5 py-2 text-right dark:bg-zinc-800 dark:ring-1 dark:ring-white/10">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
-              Today&apos;s intake
-            </div>
-            <div className="font-mono text-[16px] font-semibold text-black dark:text-zinc-50">
-              ₹ {todayTotal.toLocaleString("en-IN")}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <FinanceCsvImportMenu
+              disabled={feeImporting}
+              onTemplate={downloadFeeTemplate}
+              onDemo={downloadFeeDemo}
+              onUploadClick={openFeeImport}
+            />
+            <div className="rounded-lg bg-[#F4F4F5] px-3.5 py-2 text-right dark:bg-zinc-800 dark:ring-1 dark:ring-white/10">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
+                Today&apos;s intake
+              </div>
+              <div className="font-mono text-[16px] font-semibold text-black dark:text-zinc-50">
+                ₹ {todayTotal.toLocaleString("en-IN")}
+              </div>
             </div>
           </div>
         </div>
@@ -11356,6 +11647,11 @@ function MakePayment() {
   const [paidLeaveDays, setPaidLeaveDays] = useState("");
   const [unpaidLeaveDays, setUnpaidLeaveDays] = useState("");
   const [beneficiary, setBeneficiary] = useState("");
+  const [selectedLedgerId, setSelectedLedgerId] = useState("");
+  const [expenseLedgers, setExpenseLedgers] = useState<{ id: string; name: string }[]>([]);
+  const [createLedgerOpen, setCreateLedgerOpen] = useState(false);
+  const [newLedgerName, setNewLedgerName] = useState("");
+  const [creatingLedger, setCreatingLedger] = useState(false);
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState(search.amount ?? "");
   const [mode, setMode] = useState("Bank");
@@ -11374,11 +11670,18 @@ function MakePayment() {
     amount: "",
     mode: "UPI Business",
     payeeType: "Other Expense" as PayeeType,
+    ledgerId: "" as string,
     status: "Queued" as "Queued" | "Cleared",
     date: toIsoDate(new Date()),
     clock: toClockLocal(new Date()),
   });
   const prefillAppliedRef = useRef(false);
+  const expenseImportRef = useRef<HTMLInputElement>(null);
+  const [expenseImportOpen, setExpenseImportOpen] = useState(false);
+  const [expenseImporting, setExpenseImporting] = useState(false);
+  const [expenseImportProgress, setExpenseImportProgress] = useState({ current: 0, total: 0 });
+  const [expenseImportReady, setExpenseImportReady] = useState<ResolvedExpenseImport[]>([]);
+  const [expenseImportIssues, setExpenseImportIssues] = useState<ExpenseCsvIssue[]>([]);
   const paymentTotal = Number(amount.replace(/[^0-9]/g, "")) || 0;
   const splitOk = splitMatchesTotal(mode, bankSplitAmount, cashSplitAmount, paymentTotal);
 
@@ -11404,6 +11707,7 @@ function MakePayment() {
             amount: row.amount,
             mode: row.mode,
             payeeType: normalizePayeeType(row.payeeType),
+            ledgerId: row.ledgerId ?? null,
             time: isBlankDate(row.time) ? toSqlDateTime(new Date()) : String(row.time),
             status: (row.status === "Queued" ? "Queued" : "Cleared") as "Queued" | "Cleared",
             attachments: Array.isArray(row.attachments)
@@ -11421,6 +11725,74 @@ function MakePayment() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    void apiListExpenseLedgers()
+      .then((rows) => {
+        if (cancelled) return;
+        setExpenseLedgers(
+          (Array.isArray(rows) ? rows : [])
+            .filter((r) => r?.id && r?.name)
+            .map((r) => ({ id: r.id, name: r.name || r.label || "" }))
+            .filter((r) => r.name),
+        );
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setExpenseLedgers([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeBranchId]);
+
+  const expenseLedgerOptions = useMemo(
+    () =>
+      expenseLedgers
+        .map((l) => ({ value: l.id, label: l.name }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [expenseLedgers],
+  );
+
+  const applyExpenseLedger = (ledgerId: string) => {
+    setSelectedLedgerId(ledgerId);
+    const match = expenseLedgers.find((l) => l.id === ledgerId);
+    if (match) setBeneficiary(match.name);
+  };
+
+  const createExpenseLedger = async () => {
+    const name = newLedgerName.trim();
+    if (!name) {
+      toast.error("Enter a ledger name");
+      return;
+    }
+    setCreatingLedger(true);
+    try {
+      const saved = await apiCreateExpenseLedger({ name });
+      const entry = { id: saved.id, name: saved.name || name };
+      setExpenseLedgers((prev) => {
+        if (prev.some((l) => l.id === entry.id)) return prev;
+        return [...prev.filter((l) => l.name.toLowerCase() !== entry.name.toLowerCase()), entry];
+      });
+      setSelectedLedgerId(entry.id);
+      setBeneficiary(entry.name);
+      if (editingDisbursal) {
+        setDisbursalEditForm((prev) => ({
+          ...prev,
+          ledgerId: entry.id,
+          payee: entry.name,
+          payeeType: "Other Expense",
+        }));
+      }
+      setCreateLedgerOpen(false);
+      setNewLedgerName("");
+      toast.success(`Ledger “${entry.name}” ready`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not create ledger");
+    } finally {
+      setCreatingLedger(false);
+    }
+  };
   const activeStaff = useMemo(
     () =>
       staff
@@ -11567,6 +11939,7 @@ function MakePayment() {
     setDaysPresent("");
     setWorkingDays("");
     setBeneficiary("");
+    setSelectedLedgerId("");
     setDescription("");
     setAmount("");
     setMode("Bank");
@@ -11581,11 +11954,12 @@ function MakePayment() {
       setSelectedStaffId("");
       if (selectedStaffId) {
         setBeneficiary("");
+        setSelectedLedgerId("");
         setDescription("");
         setAmount("");
       }
-    } else if (next === "Salary" && !selectedStaffId) {
-      // Keep typed values; user can pick staff next
+    } else if (next === "Salary") {
+      setSelectedLedgerId("");
     }
   };
 
@@ -11655,7 +12029,11 @@ function MakePayment() {
       }
     }
     if (!beneficiary.trim()) {
-      toast.error(payeeType === "Salary" ? "Choose a staff member" : "Payee name is required");
+      toast.error(payeeType === "Salary" ? "Choose a staff member" : "Choose an expense ledger");
+      return;
+    }
+    if (payeeType === "Other Expense" && !selectedLedgerId) {
+      toast.error("Choose an expense ledger");
       return;
     }
     if (!description.trim()) {
@@ -11712,6 +12090,7 @@ function MakePayment() {
       amount: value,
       mode,
       payeeType,
+      ledgerId: payeeType === "Other Expense" ? selectedLedgerId || null : null,
       time: toSqlDateTime(new Date()),
       status: payeeType === "Salary" ? "Queued" : "Cleared",
       attachments: attachments.length ? attachments : undefined,
@@ -11740,6 +12119,7 @@ function MakePayment() {
           amount: saved?.amount || disbursal.amount,
           mode: saved?.mode || disbursal.mode,
           payeeType: saved?.payeeType ? normalizePayeeType(saved.payeeType) : disbursal.payeeType,
+          ledgerId: saved?.ledgerId ?? disbursal.ledgerId,
           time: saved?.time || disbursal.time,
           status: resolvedStatus,
         };
@@ -11829,6 +12209,292 @@ function MakePayment() {
     resetForm();
 
     setIsSubmitting(false);
+  };
+
+  const downloadExpenseTemplate = () => {
+    downloadCsv(
+      "expense-bulk-upload-template.csv",
+      [...EXPENSE_CSV_HEADERS],
+      expenseCsvTemplateRows(),
+    );
+    toast.success("Expense template downloaded", {
+      description: "Fill the sample rows, save as CSV, then Upload CSV",
+    });
+  };
+
+  const downloadExpenseDemo = () => {
+    downloadCsv(
+      "expense-bulk-upload-demo.csv",
+      [...EXPENSE_CSV_HEADERS],
+      expenseCsvDemoRows(activeStaff),
+    );
+    toast.success("Expense demo downloaded", {
+      description: "Review the sample rows, then Upload CSV to import them",
+    });
+  };
+
+  const openExpenseImport = () => expenseImportRef.current?.click();
+
+  const handleExpenseImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (isExcelFilename(file.name)) {
+      toast.error("Excel files are not supported yet", {
+        description: "Open the sheet in Excel/Sheets and Save as CSV, then upload",
+      });
+      e.target.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const parsed = parseExpenseCsv(String(reader.result ?? ""));
+      if (!parsed.ok) {
+        toast.error(parsed.error, { description: parsed.description });
+        e.target.value = "";
+        return;
+      }
+      const existingKeys = madePayments.map((payment) =>
+        expenseDuplicateKey({
+          date: parseIndianDate(payment.time) ?? parseEventDate(payment.time) ?? new Date(0),
+          amount: payment.amount,
+          payee: payment.payee,
+          mode: payment.mode,
+          payeeType: payment.payeeType,
+        }),
+      );
+      const resolved = resolveExpenseImportRows(parsed.drafts, {
+        staff: staff.filter((member) => !isRecordDeleted(member.deletedAt)),
+        existingKeys,
+      });
+      const issues = [...parsed.issues, ...resolved.issues];
+      if (!resolved.ready.length && !issues.length) {
+        toast.error("No expenses to import");
+        e.target.value = "";
+        return;
+      }
+      setExpenseImportReady(resolved.ready);
+      setExpenseImportIssues(issues);
+      setExpenseImportProgress({ current: 0, total: 0 });
+      setExpenseImportOpen(true);
+      e.target.value = "";
+    };
+    reader.onerror = () => toast.error("Could not read the selected file");
+    reader.readAsText(file);
+  };
+
+  const confirmExpenseImport = () => {
+    const rows = expenseImportReady.filter((row) => !row.duplicate);
+    if (!rows.length || expenseImporting) return;
+    setExpenseImporting(true);
+    setExpenseImportProgress({ current: 0, total: rows.length });
+    const previewSkipped = expenseImportReady.filter((row) => row.duplicate).length;
+    const invalidSkipped = expenseImportIssues.length;
+    const staffMap = new Map(staff.map((member) => [member.id, member]));
+    const ledgerByName = new Map(
+      expenseLedgers.map((ledger) => [ledger.name.trim().toLowerCase(), ledger]),
+    );
+
+    const finish = (ok: number, failed: number, extraSkipped: number) => {
+      const skipped = previewSkipped + extraSkipped;
+      const parts = [
+        ok ? `${ok} added` : null,
+        skipped ? `${skipped} duplicate${skipped === 1 ? "" : "s"} skipped` : null,
+        failed ? `${failed} failed` : null,
+        invalidSkipped ? `${invalidSkipped} invalid skipped` : null,
+      ].filter(Boolean);
+      if (ok) {
+        toast.success(`${ok} expense${ok === 1 ? "" : "s"} imported`, {
+          description: parts.join(" · ") || "Saved to made payments",
+        });
+      } else {
+        toast.error("No expenses imported", {
+          description: parts.join(" · ") || "Check the CSV and try again",
+        });
+      }
+      setExpenseImporting(false);
+      setExpenseImportOpen(false);
+      setExpenseImportReady([]);
+      setExpenseImportIssues([]);
+    };
+
+    const applySalaryHistory = (row: ResolvedExpenseImport) => {
+      if (row.payeeType !== "Salary" || !row.staffId) return;
+      const member = staffMap.get(row.staffId);
+      if (!member) return;
+      const nextMember = {
+        ...member,
+        salaryHistory: [
+          {
+            id: `SAL-${member.id}-${Date.now().toString(36)}`,
+            amount: row.amount,
+            mode: row.mode,
+            paidAt: toIsoDate(row.time),
+            description: row.desc || `Salary · ${member.name}`,
+            status: "Queued" as const,
+          },
+          ...(member.salaryHistory ?? []),
+        ],
+      };
+      staffMap.set(member.id, nextMember);
+      setStaff((prev) => prev.map((item) => (item.id === member.id ? nextMember : item)));
+      void apiUpsertStaff(nextMember).catch(() => {});
+    };
+
+    const applySaved = (
+      saved: {
+        id?: string;
+        payee: string;
+        desc: string;
+        amount: number;
+        mode: string;
+        payeeType?: string;
+        ledgerId?: string | null;
+        time?: string;
+        status?: string;
+      },
+      row: ResolvedExpenseImport,
+      fallbackId: string,
+    ) => {
+      const resolved: MadePayment = {
+        id: saved?.id || fallbackId,
+        payee: saved?.payee || row.payee,
+        desc: saved?.desc || row.desc,
+        amount: saved?.amount || row.amount,
+        mode: saved?.mode || row.mode,
+        payeeType: saved?.payeeType ? normalizePayeeType(saved.payeeType) : row.payeeType,
+        ledgerId:
+          saved?.ledgerId ??
+          ledgerByName.get((row.category || row.payee).trim().toLowerCase())?.id ??
+          null,
+        time: saved?.time || toSqlDateTime(row.time),
+        status: saved?.status === "Queued" || saved?.status === "Cleared" ? saved.status : row.status,
+      };
+      setMadePayments((prev) => [resolved, ...prev.filter((item) => item.id !== resolved.id)]);
+      upsertDisbursementInCache(activeBranchId, {
+        ...resolved,
+        staffId: row.staffId,
+      });
+      applySalaryHistory(row);
+    };
+
+    const ensureLedger = async (rawName: string) => {
+      const name = rawName.trim();
+      if (!name) return null;
+      const existing = ledgerByName.get(name.toLowerCase());
+      if (existing) return existing;
+      const saved = await apiCreateExpenseLedger({ name });
+      const entry = { id: saved.id, name: saved.name || name };
+      ledgerByName.set(entry.name.toLowerCase(), entry);
+      ledgerByName.set(name.toLowerCase(), entry);
+      setExpenseLedgers((prev) =>
+        prev.some((item) => item.id === entry.id) ? prev : [...prev, entry],
+      );
+      return entry;
+    };
+
+    const refreshLedgers = () => {
+      void apiListExpenseLedgers()
+        .then((list) => {
+          setExpenseLedgers(
+            (Array.isArray(list) ? list : [])
+              .filter((r) => r?.id && r?.name)
+              .map((r) => ({ id: r.id, name: r.name || r.label || "" }))
+              .filter((r) => r.name),
+          );
+        })
+        .catch(() => {});
+    };
+
+    const importSequentially = () =>
+      importRowsSequentially(
+        rows,
+        async (row, index) => {
+          let payee = row.payee;
+          let ledgerId: string | null = null;
+          if (row.payeeType === "Other Expense") {
+            const ledger = await ensureLedger(row.category || row.payee);
+            if (ledger) {
+              ledgerId = ledger.id;
+              payee = ledger.name;
+            }
+          }
+          const disbursal: MadePayment = {
+            id: `DISB-${Date.now().toString(36).toUpperCase()}${String(index).padStart(3, "0")}`,
+            payee,
+            desc: row.desc,
+            amount: row.amount,
+            mode: row.mode,
+            payeeType: row.payeeType,
+            ledgerId,
+            time: toSqlDateTime(row.time),
+            status: row.status,
+          };
+          const saved = await apiCreateDisbursement({
+            ...disbursal,
+            staffId: row.staffId,
+          });
+          applySaved(saved, row, disbursal.id);
+        },
+        (current, total) => setExpenseImportProgress({ current, total }),
+      );
+
+    void (async () => {
+      try {
+        let usedBulk = false;
+        let ok = 0;
+        let failed = 0;
+        let extraSkipped = 0;
+        const rowByLine = new Map(rows.map((row) => [row.line, row]));
+        try {
+          let done = 0;
+          let ledgersCreated = 0;
+          for (const chunk of chunkItems(rows, FINANCE_BULK_CHUNK)) {
+            const result = await apiBulkCreateDisbursements(
+              chunk.map((row) => ({
+                line: row.line,
+                payee: row.payee,
+                desc: row.desc,
+                amount: row.amount,
+                mode: row.mode,
+                payeeType: row.payeeType,
+                category: row.category,
+                time: toSqlDateTime(row.time),
+                status: row.status,
+                staffId: row.staffId,
+                staffName: row.staffName,
+              })),
+            );
+            usedBulk = true;
+            extraSkipped += result.skipped.length;
+            failed += result.failed.length;
+            ledgersCreated += result.ledgersCreated ?? 0;
+            result.added.forEach((saved, index) => {
+              const source =
+                typeof saved.line === "number" ? rowByLine.get(saved.line) : chunk[index];
+              if (!source) return;
+              applySaved(saved, source, saved.id || `DISB-${source.line}`);
+              ok += 1;
+            });
+            done += chunk.length;
+            setExpenseImportProgress({ current: done, total: rows.length });
+          }
+          if (ledgersCreated > 0) refreshLedgers();
+          finish(ok, failed, extraSkipped);
+        } catch (err) {
+          if (!usedBulk && isFinanceBulkUnsupported(err)) {
+            const sequential = await importSequentially();
+            finish(sequential.ok, sequential.failed, 0);
+            return;
+          }
+          throw err;
+        }
+      } catch {
+        toast.error("Expense import failed", {
+          description: "Check the connection and try again",
+        });
+        setExpenseImporting(false);
+      }
+    })();
   };
 
   const handleDownloadDisbursals = () => {
@@ -11983,6 +12649,10 @@ function MakePayment() {
     setEditingDisbursal(payment);
     const parts = parseReceiptDateTimeParts(payment.time);
     const parsed = parseStoredReceiptNarration(payment.desc);
+    const matchedLedger =
+      payment.ledgerId ||
+      expenseLedgers.find((l) => l.name.toLowerCase() === payment.payee.trim().toLowerCase())?.id ||
+      "";
     setDisbursalEditForm({
       payee: payment.payee,
       desc: parsed.note || payment.desc,
@@ -11991,6 +12661,7 @@ function MakePayment() {
         ? payment.mode
         : payment.mode || "Bank",
       payeeType: payment.payeeType,
+      ledgerId: matchedLedger,
       status: payment.status,
       date: parts.date,
       clock: parts.clock,
@@ -12015,7 +12686,15 @@ function MakePayment() {
       formatReceiptDateTimeFromParts(disbursalEditForm.date, disbursalEditForm.clock),
     );
     if (!payee) {
-      toast.error("Payee is required");
+      toast.error(
+        disbursalEditForm.payeeType === "Other Expense"
+          ? "Choose an expense ledger"
+          : "Payee is required",
+      );
+      return;
+    }
+    if (disbursalEditForm.payeeType === "Other Expense" && !disbursalEditForm.ledgerId) {
+      toast.error("Choose an expense ledger");
       return;
     }
     if (!desc) {
@@ -12060,6 +12739,8 @@ function MakePayment() {
       amount: nextAmount,
       mode: modeValue,
       payeeType: disbursalEditForm.payeeType,
+      ledgerId:
+        disbursalEditForm.payeeType === "Other Expense" ? disbursalEditForm.ledgerId || null : null,
       status: disbursalEditForm.status,
       time,
     };
@@ -12087,15 +12768,96 @@ function MakePayment() {
 
   return (
     <div className="grid grid-cols-12 gap-4 sm:gap-5">
+      <Dialog open={createLedgerOpen} onOpenChange={setCreateLedgerOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create expense ledger</DialogTitle>
+            <DialogDescription>
+              Add a reusable ledger head for this campus (Books, Electricity, Transport…).
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void createExpenseLedger();
+            }}
+          >
+            <div className="space-y-1.5">
+              <Label htmlFor="new-expense-ledger">Ledger name</Label>
+              <Input
+                id="new-expense-ledger"
+                value={newLedgerName}
+                onChange={(e) => setNewLedgerName(e.target.value)}
+                placeholder="e.g. Books"
+                autoFocus
+              />
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button type="button" variant="outline" onClick={() => setCreateLedgerOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={creatingLedger} className="rounded-full bg-[#0F766E]">
+                {creatingLedger ? "Creating…" : "Create ledger"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
       <OrganicCard
         tone="white"
         cornerSide="tr"
         padded
         className={cn(workspacePanelClass, "col-span-12 lg:col-span-8")}
       >
-        <div className="min-w-0">
-          <DashboardPanelHeading icon={ArrowUpFromLine} title="Make Payment" />
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <DashboardPanelHeading icon={ArrowUpFromLine} title="Make Payment" />
+          </div>
+          <FinanceCsvImportMenu
+            disabled={expenseImporting}
+            onTemplate={downloadExpenseTemplate}
+            onDemo={downloadExpenseDemo}
+            onUploadClick={openExpenseImport}
+          />
         </div>
+        <input
+          ref={expenseImportRef}
+          type="file"
+          accept=".csv,text/csv"
+          className="hidden"
+          onChange={handleExpenseImportFile}
+        />
+        <CsvBulkImportDialog
+          open={expenseImportOpen}
+          onOpenChange={(next) => {
+            if (expenseImporting) return;
+            setExpenseImportOpen(next);
+            if (!next) {
+              setExpenseImportReady([]);
+              setExpenseImportIssues([]);
+            }
+          }}
+          title="Import expenses"
+          description="Review the CSV rows, then import them as made payments. Duplicates and invalid lines are skipped."
+          validCount={expenseImportReady.filter((row) => !row.duplicate).length}
+          invalidCount={expenseImportIssues.length}
+          duplicateCount={expenseImportReady.filter((row) => row.duplicate).length}
+          totalAmount={expenseImportReady
+            .filter((row) => !row.duplicate)
+            .reduce((sum, row) => sum + row.amount, 0)}
+          issues={expenseImportIssues}
+          previewRows={expenseImportReady.map((row) => ({
+            line: row.line,
+            label: row.previewLabel,
+            amount: row.amount,
+            extra: row.previewExtra,
+            duplicate: row.duplicate,
+          }))}
+          importing={expenseImporting}
+          progress={expenseImportProgress}
+          onConfirm={confirmExpenseImport}
+        />
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <FieldLabel>Payee Type</FieldLabel>
@@ -12118,7 +12880,7 @@ function MakePayment() {
             </div>
           </div>
           <div>
-            <FieldLabel>{payeeType === "Salary" ? "Staff" : "Paid to"}</FieldLabel>
+            <FieldLabel>{payeeType === "Salary" ? "Staff" : "Expense ledger"}</FieldLabel>
             {payeeType === "Salary" ? (
               <StaffSearchSelect
                 staff={activeStaff}
@@ -12127,15 +12889,28 @@ function MakePayment() {
                 placeholder="Choose current staff"
               />
             ) : (
-              <Input
-                value={beneficiary}
-                onChange={(e) => setBeneficiary(e.target.value)}
-                placeholder="e.g. electricity, books, transport"
+              <FieldSelect
+                value={selectedLedgerId}
+                onValueChange={applyExpenseLedger}
+                options={expenseLedgerOptions}
+                placeholder="Choose ledger (Books, Electricity…)"
+                searchable
+                searchPlaceholder="Search ledgers…"
+                onAddNew={() => {
+                  setNewLedgerName("");
+                  setCreateLedgerOpen(true);
+                }}
+                addNewLabel="Create new ledger"
               />
             )}
             {payeeType === "Salary" && selectedStaffId && (
               <div className="mt-1.5 text-[11px] text-black/45"></div>
             )}
+            {payeeType === "Other Expense" ? (
+              <p className="mt-1.5 text-[11px] text-black/45">
+                Pick a ledger head for this campus, or create one like Books or Electricity.
+              </p>
+            ) : null}
           </div>
           {payeeType === "Salary" && (
             <div className="grid grid-cols-1 gap-4 sm:col-span-2 sm:grid-cols-2 lg:grid-cols-5">
@@ -12384,14 +13159,22 @@ function MakePayment() {
               {madePayments.length} disbursals · most recent
             </div>
           </div>
-          <button
-            type="button"
-            onClick={handleDownloadDisbursals}
-            className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3.5 text-[12px] font-semibold text-black transition-colors hover:border-black/20 hover:bg-[#F4F4F5]"
-          >
-            <Download className="h-3.5 w-3.5" />
-            Download CSV
-          </button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <FinanceCsvImportMenu
+              disabled={expenseImporting}
+              onTemplate={downloadExpenseTemplate}
+              onDemo={downloadExpenseDemo}
+              onUploadClick={openExpenseImport}
+            />
+            <button
+              type="button"
+              onClick={handleDownloadDisbursals}
+              className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3.5 text-[12px] font-semibold text-black transition-colors hover:border-black/20 hover:bg-[#F4F4F5]"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Download CSV
+            </button>
+          </div>
         </div>
         <div className="mobile-scrollbar-none mt-3 max-h-[420px] divide-y divide-[#F0F0F0] overflow-y-auto">
           {madePayments.length === 0 && (
@@ -12515,15 +13298,38 @@ function MakePayment() {
           <form onSubmit={saveEditedDisbursal} className="space-y-3">
             <div className="space-y-1.5">
               <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                Payee
+                {disbursalEditForm.payeeType === "Other Expense" ? "Expense ledger" : "Payee"}
               </Label>
-              <Input
-                value={disbursalEditForm.payee}
-                onChange={(e) =>
-                  setDisbursalEditForm({ ...disbursalEditForm, payee: e.target.value })
-                }
-                autoFocus
-              />
+              {disbursalEditForm.payeeType === "Other Expense" ? (
+                <FieldSelect
+                  value={disbursalEditForm.ledgerId}
+                  onValueChange={(ledgerId) => {
+                    const match = expenseLedgers.find((l) => l.id === ledgerId);
+                    setDisbursalEditForm({
+                      ...disbursalEditForm,
+                      ledgerId,
+                      payee: match?.name || disbursalEditForm.payee,
+                    });
+                  }}
+                  options={expenseLedgerOptions}
+                  placeholder="Choose ledger"
+                  searchable
+                  searchPlaceholder="Search ledgers…"
+                  onAddNew={() => {
+                    setNewLedgerName("");
+                    setCreateLedgerOpen(true);
+                  }}
+                  addNewLabel="Create new ledger"
+                />
+              ) : (
+                <Input
+                  value={disbursalEditForm.payee}
+                  onChange={(e) =>
+                    setDisbursalEditForm({ ...disbursalEditForm, payee: e.target.value })
+                  }
+                  autoFocus
+                />
+              )}
             </div>
             <div className="space-y-1.5">
               <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
@@ -12910,7 +13716,7 @@ export function SchoolSettings() {
           dirty: true,
           title: "Unsaved school details",
           description:
-            "You have changes that are not saved yet. Save them before leaving this section, or discard to revert.",
+            "You have changes that are not saved yet. Save them before switching campus or leaving this section, or discard to revert.",
           save: () => schoolActionsRef.current?.save() ?? Promise.resolve(false),
           discard: () => schoolActionsRef.current?.discard(),
         }
@@ -12976,14 +13782,22 @@ export function SchoolSettings() {
   const renderSettingsContent = (listLayout: "cards" | "table") => (
     <>
       {activeTab === "school" && (
-        <SchoolDetailsCard
-          schoolDetails={schoolDetails}
-          setSchoolDetails={setSchoolDetails}
-          onDirtyChange={setSchoolDirty}
-          onBindActions={(actions: { save: () => Promise<boolean>; discard: () => void }) => {
-            schoolActionsRef.current = actions;
-          }}
-        />
+        <>
+          {campusHint}
+          {settingsDataLoading ? (
+            <TenantSettingsListSkeleton label="Loading school details" layout={listLayout} />
+          ) : (
+            <SchoolDetailsCard
+              schoolDetails={schoolDetails}
+              setSchoolDetails={setSchoolDetails}
+              onDirtyChange={setSchoolDirty}
+              onBindActions={(actions: { save: () => Promise<boolean>; discard: () => void }) => {
+                schoolActionsRef.current = actions;
+              }}
+              saveDisabled={branchSyncing}
+            />
+          )}
+        </>
       )}
 
       {activeTab === "branches" &&
@@ -17760,11 +18574,13 @@ function SchoolDetailsCard({
   setSchoolDetails,
   onDirtyChange,
   onBindActions,
+  saveDisabled = false,
 }: {
   schoolDetails: SchoolDetails;
   setSchoolDetails: React.Dispatch<React.SetStateAction<SchoolDetails>>;
   onDirtyChange?: (dirty: boolean) => void;
   onBindActions?: (actions: { save: () => Promise<boolean>; discard: () => void }) => void;
+  saveDisabled?: boolean;
 }) {
   const { updateSession } = useAuth();
   const [draft, setDraft] = useState<SchoolDetails>(schoolDetails);
@@ -18034,7 +18850,7 @@ function SchoolDetailsCard({
               School Details
             </div>
             <p className="mt-1 text-[12px] text-black/55 dark:text-zinc-400">
-              Logo, letterhead, signature, and seal used across the workspace
+              Logo, letterhead, signature, and seal for this campus
             </p>
           </div>
           <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto sm:justify-end">
@@ -18045,7 +18861,7 @@ function SchoolDetailsCard({
             )}
             <Button
               type="submit"
-              disabled={!dirty || saving}
+              disabled={!dirty || saving || saveDisabled}
               className="w-full rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488] disabled:opacity-40 sm:w-auto"
             >
               {saving ? (
@@ -18061,7 +18877,7 @@ function SchoolDetailsCard({
         </div>
         {onBackToSettings ? (
           <p className="mt-2 text-[12px] text-black/55 lg:hidden dark:text-zinc-400">
-            Logo, letterhead, signature, and seal used across the workspace
+            Logo, letterhead, signature, and seal for this campus
           </p>
         ) : null}
 

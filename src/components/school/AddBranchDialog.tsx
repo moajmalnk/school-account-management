@@ -262,8 +262,8 @@ export function AddBranchDialog({
                 </SelectContent>
               </Select>
               <p className="text-[11px] text-black/50 dark:text-zinc-500">
-                Copies classes, departments, positions, and fee catalogs. Students, staff, and
-                receipts start empty.
+                Copies school branding, classes, departments, positions, and fee catalogs. Students,
+                staff, and receipts start empty.
               </p>
             </div>
           ) : null}

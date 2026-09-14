@@ -142,6 +142,48 @@ export async function apiCreatePayment(
   });
 }
 
+export const FINANCE_BULK_CHUNK = 80;
+export const FINANCE_BULK_TIMEOUT_MS = 60_000;
+
+export type FinanceBulkSkip = { line: number; reason: string };
+
+export type FinanceBulkResult<T> = {
+  added: T[];
+  skipped: FinanceBulkSkip[];
+  failed: FinanceBulkSkip[];
+  ledgersCreated?: number;
+};
+
+/** Old PHP (no `_bulk` handler) returns 404/405 or single-row validation 422. */
+export function isFinanceBulkUnsupported(err: unknown): boolean {
+  if (!(err instanceof ApiError)) return false;
+  if (err.status === 404 || err.status === 405) return true;
+  const msg = err.message.toLowerCase();
+  return (
+    (err.status === 400 || err.status === 422) &&
+    (msg.includes("payee and amount") || msg.includes("name and amount"))
+  );
+}
+
+export type PaymentBulkRow = Omit<Payment, "id"> & {
+  line?: number;
+  studentId?: string;
+  reduceDue?: boolean;
+};
+
+export async function apiBulkCreatePayments(
+  rows: PaymentBulkRow[],
+): Promise<FinanceBulkResult<Payment & { line?: number }>> {
+  if (!hasToken()) {
+    throw new Error("Not signed in to API — log in again to import receipts");
+  }
+  return apiRequest<FinanceBulkResult<Payment & { line?: number }>>("/api/finance/payments.php", {
+    method: "POST",
+    body: { _bulk: true, rows },
+    timeoutMs: FINANCE_BULK_TIMEOUT_MS,
+  });
+}
+
 export async function apiUpdatePayment(payment: Payment): Promise<Payment> {
   if (!hasToken()) {
     throw new Error("Not signed in to API — log in again to update payments");
@@ -190,11 +232,42 @@ export type DisbursementPayload = {
   amount: number;
   mode: string;
   payeeType: string;
+  ledgerId?: string | null;
   time?: string;
   status?: string;
   attachments?: unknown[];
   staffId?: string;
+  category?: string;
+  staffName?: string;
+  line?: number;
 };
+
+export type ExpenseLedgerPayload = {
+  id: string;
+  name: string;
+  label?: string;
+  slug?: string | null;
+  active?: boolean;
+  sortOrder?: number;
+};
+
+export async function apiListExpenseLedgers(): Promise<ExpenseLedgerPayload[]> {
+  if (!hasToken()) return [];
+  return apiRequest<ExpenseLedgerPayload[]>("/api/finance/expense-ledgers.php");
+}
+
+export async function apiCreateExpenseLedger(input: {
+  name: string;
+  id?: string;
+}): Promise<ExpenseLedgerPayload> {
+  if (!hasToken()) {
+    throw new Error("Not signed in to API — log in again to create ledgers");
+  }
+  return apiRequest<ExpenseLedgerPayload>("/api/finance/expense-ledgers.php", {
+    method: "POST",
+    body: input,
+  });
+}
 
 export async function apiCreateDisbursement(
   disbursement: DisbursementPayload,
@@ -205,6 +278,19 @@ export async function apiCreateDisbursement(
   return apiRequest<DisbursementPayload>("/api/finance/disbursements.php", {
     method: "POST",
     body: disbursement,
+  });
+}
+
+export async function apiBulkCreateDisbursements(
+  rows: DisbursementPayload[],
+): Promise<FinanceBulkResult<DisbursementPayload>> {
+  if (!hasToken()) {
+    throw new Error("Not signed in to API — log in again to import expenses");
+  }
+  return apiRequest<FinanceBulkResult<DisbursementPayload>>("/api/finance/disbursements.php", {
+    method: "POST",
+    body: { _bulk: true, rows },
+    timeoutMs: FINANCE_BULK_TIMEOUT_MS,
   });
 }
 

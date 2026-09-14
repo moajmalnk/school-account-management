@@ -27,7 +27,22 @@
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <link rel="mask-icon" href="/favicon.svg" color="#0F766E" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="preload" as="image" href="/home/home.png" type="image/png" />
+    <script>
+      (function () {
+        var path = location.pathname;
+        if (path !== "/" && path !== "/index.html") return;
+        try {
+          if (localStorage.getItem("school-accounts/api-token/v1")) return;
+        } catch (e) {}
+        var link = document.createElement("link");
+        link.rel = "preload";
+        link.as = "image";
+        link.href = "/home/home.png";
+        link.type = "image/png";
+        link.fetchPriority = "high";
+        document.head.appendChild(link);
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

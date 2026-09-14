@@ -24,6 +24,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } 
 import { toast } from "sonner";
 
 import { FeezoBrand } from "@/components/brand/FeezoBrand";
+import { useOptionalSettingsUnsavedGuard } from "@/components/school/settings-unsaved-guard";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -115,6 +116,7 @@ export function BranchSwitcher({ compact = false }: { compact?: boolean }) {
   const { session } = useAuth();
   const { branches, activeBranchId, activeBranch, openBranch, hydrated, branchSyncing } =
     useTenantStore();
+  const unsavedGuard = useOptionalSettingsUnsavedGuard();
   const [addOpen, setAddOpen] = useState(false);
   const selectable = branches.filter((b) => b.isActive !== false);
   const canManage = sessionCanAccessSettings(session);
@@ -145,6 +147,24 @@ export function BranchSwitcher({ compact = false }: { compact?: boolean }) {
       return;
     }
     setAddOpen(true);
+  };
+
+  const switchToBranch = (id: string) => {
+    if (branchSyncing || id === activeBranchId) return;
+    const run = () => {
+      void (async () => {
+        const stats = await openBranch(id);
+        const name = selectable.find((b) => b.id === id)?.name ?? "campus";
+        toast.success(`Opened ${name}`, {
+          description: `${stats.students} student${stats.students === 1 ? "" : "s"} · ${stats.receipts} receipt${stats.receipts === 1 ? "" : "s"}`,
+        });
+      })();
+    };
+    if (unsavedGuard) {
+      unsavedGuard.tryNavigate(run);
+      return;
+    }
+    run();
   };
 
   return (
@@ -179,19 +199,7 @@ export function BranchSwitcher({ compact = false }: { compact?: boolean }) {
           {selectable.length === 0 ? (
             <div className="px-2 py-2 text-[12px] text-slate-400">No campuses yet</div>
           ) : (
-            <DropdownMenuRadioGroup
-              value={activeBranchId}
-              onValueChange={(id) => {
-                if (branchSyncing) return;
-                void (async () => {
-                  const stats = await openBranch(id);
-                  const name = selectable.find((b) => b.id === id)?.name ?? "campus";
-                  toast.success(`Opened ${name}`, {
-                    description: `${stats.students} student${stats.students === 1 ? "" : "s"} · ${stats.receipts} receipt${stats.receipts === 1 ? "" : "s"}`,
-                  });
-                })();
-              }}
-            >
+            <DropdownMenuRadioGroup value={activeBranchId} onValueChange={switchToBranch}>
               {selectable.map((b) => (
                 <DropdownMenuRadioItem key={b.id} value={b.id} className="rounded-md text-[13px]">
                   <span className="flex min-w-0 flex-col">

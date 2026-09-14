@@ -31,7 +31,11 @@ export async function apiUploadDataUrl(
   return data.url;
 }
 
-/** Persist school identity; uploads data-URL logo/letterhead first. */
+/**
+ * Persist school identity for the active campus (`X-Branch-Id`).
+ * Branding (logo/letterhead/seal/signature/name) is campus-scoped; theme/years
+ * extras remain organization-wide when the API stores them at tenant level.
+ */
 export async function apiSaveSchoolDetails(
   schoolDetails: SchoolDetails,
   extras?: {
@@ -359,6 +363,7 @@ export type CampusBranchPayload = {
   lng?: number | null;
   isActive?: boolean;
   isMain?: boolean;
+  /** Seed catalogs + School Details from this campus (students/receipts stay empty). */
   copyFromId?: string;
 };
 

@@ -123,7 +123,7 @@ export function SettingsBranchesCard({
             ? "This plan includes one campus · upgrade to Premium or Enterprise to add more"
             : branches.length === 1
               ? "One campus · add Kozhikode, Malappuram, or another site to split books"
-              : `${branches.length} campuses · switch from the header like academic years`
+              : `${branches.length} campuses · each campus has its own branding, catalogs, and books`
         }
         actionLabel={canAddBranch ? "Add Branch" : undefined}
         onAction={canAddBranch ? startCreate : undefined}

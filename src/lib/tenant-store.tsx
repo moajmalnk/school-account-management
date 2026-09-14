@@ -11,9 +11,10 @@ import {
   type SetStateAction,
 } from "react";
 import {
-  fetchBranchOperationalBundle,
+  fetchBranchWorkspaceBundle,
   fetchRemoteTenantBundle,
   branchCatalogWriteEpochValue,
+  type BranchWorkspaceBundle,
 } from "@/lib/api/tenant-sync";
 import { getApiToken } from "@/lib/api/client";
 import {
@@ -2103,8 +2104,10 @@ export type TenantNotification = {
   href?: string;
 };
 
-const STORAGE_KEY = "school-accounts/tenant-store/v12";
+const STORAGE_KEY = "school-accounts/tenant-store/v13";
+const LEGACY_TENANT_STORAGE_KEY = "school-accounts/tenant-store/v12";
 const LEGACY_STORAGE_KEYS = [
+  LEGACY_TENANT_STORAGE_KEY,
   "school-accounts/tenant-store/v11",
   "school-accounts/tenant-store/v10",
   "school-accounts/tenant-store/v9",
@@ -2116,12 +2119,51 @@ const LEGACY_STORAGE_KEYS = [
   "school-accounts/tenant-store/v3",
 ] as const;
 
-/** Active workspace cache key — set by TenantStoreProvider so snapshots don't bleed across schools. */
+/** Active campus workspace cache key — set by TenantStoreProvider (tenant + branch). */
 let activeStoreKey = STORAGE_KEY;
 
 function storeKeyForTenant(tenantId?: string | null): string {
   const id = typeof tenantId === "string" ? tenantId.trim() : "";
   return id ? `${STORAGE_KEY}/${id}` : STORAGE_KEY;
+}
+
+/** Per-campus snapshot key so School Details / catalogs don't overwrite sibling campuses. */
+function storeKeyForCampus(tenantId?: string | null, branchId?: string | null): string {
+  const tid = typeof tenantId === "string" ? tenantId.trim() : "";
+  const bid = typeof branchId === "string" ? branchId.trim() : "";
+  if (tid && bid) return `${STORAGE_KEY}/${tid}/${bid}`;
+  return storeKeyForTenant(tid || null);
+}
+
+function legacyTenantStoreKey(tenantId?: string | null): string {
+  const id = typeof tenantId === "string" ? tenantId.trim() : "";
+  return id ? `${LEGACY_TENANT_STORAGE_KEY}/${id}` : LEGACY_TENANT_STORAGE_KEY;
+}
+
+/** Read campus cache; migrate once from tenant-only v12/v13 keys when needed. */
+function readCampusSnapshot(
+  tenantId?: string | null,
+  branchId?: string | null,
+): Snapshot | null {
+  const bid = typeof branchId === "string" ? branchId.trim() : "";
+  const campusKey = storeKeyForCampus(tenantId, bid || null);
+  const direct = readSnapshot(campusKey);
+  if (direct) return direct;
+
+  if (!bid) {
+    return (
+      readSnapshot(storeKeyForTenant(tenantId)) ??
+      readSnapshot(legacyTenantStoreKey(tenantId)) ??
+      null
+    );
+  }
+
+  const legacy =
+    readSnapshot(storeKeyForTenant(tenantId)) ?? readSnapshot(legacyTenantStoreKey(tenantId));
+  if (!legacy) return null;
+  const migrated: Snapshot = { ...legacy, activeBranchId: bid };
+  writeSnapshot(migrated, campusKey);
+  return migrated;
 }
 
 export const EMPTY_SCHOOL_DETAILS: SchoolDetails = {
@@ -3943,13 +3985,13 @@ type TenantStoreValue = {
   resetTenant: () => void;
   /** False until remote/local snapshot has been applied — use for page skeletons. */
   hydrated: boolean;
-  /** True while campus switch is loading branch-scoped operational data. */
+  /** True while campus switch is loading branch-scoped workspace data. */
   branchSyncing: boolean;
   branches: CampusBranch[];
   setBranches: Dispatch<SetStateAction<CampusBranch[]>>;
   activeBranchId: string;
   activeBranch: CampusBranch | null;
-  /** Open another campus workspace (refetches operational data). */
+  /** Open another campus workspace (refetches branding, catalogs, and books). */
   openBranch: (branchId: string) => Promise<{ students: number; receipts: number }>;
 };
 
@@ -4726,8 +4768,14 @@ export function TenantStoreProvider({
   tenantName?: string;
 }) {
   const liveApi = typeof window !== "undefined" && Boolean(getApiToken());
-  const storeKey = storeKeyForTenant(tenantId);
-  activeStoreKey = storeKey;
+  const initialBranchId =
+    typeof window !== "undefined"
+      ? readStoredBranchPublicId(tenantId) || ""
+      : "";
+  const cachedSnapshot = useMemo(
+    () => readCampusSnapshot(tenantId, initialBranchId),
+    [tenantId, initialBranchId],
+  );
 
   const blankSchool = useMemo<SchoolDetails>(
     () => ({
@@ -4742,8 +4790,6 @@ export function TenantStoreProvider({
   tenantNameRef.current = tenantName;
   const blankSchoolRef = useRef(blankSchool);
   blankSchoolRef.current = blankSchool;
-
-  const cachedSnapshot = useMemo(() => readSnapshot(storeKey), [storeKey]);
 
   const [students, setStudents] = useState<Student[]>(() =>
     liveApi ? (cachedSnapshot?.students ?? []) : SEED_STUDENTS,
@@ -4803,14 +4849,14 @@ export function TenantStoreProvider({
   );
   const [themeSettings, setThemeSettings] = useState<ThemeSettings>(() => {
     if (!liveApi) return SEED_THEME_SETTINGS;
-    return readSnapshot(storeKey)?.themeSettings ?? SEED_THEME_SETTINGS;
+    return cachedSnapshot?.themeSettings ?? SEED_THEME_SETTINGS;
   });
   const skipThemePersist = useRef(true);
   // Live API: paint cached logo/name immediately so the dock does not flash initials
   // while the remote hydrate is in flight.
   const [schoolDetails, setSchoolDetails] = useState<SchoolDetails>(() => {
     if (!liveApi) return SEED_SCHOOL_DETAILS;
-    const cached = readSnapshot(storeKey)?.schoolDetails;
+    const cached = cachedSnapshot?.schoolDetails;
     if (cached) {
       return {
         ...cached,
@@ -4829,7 +4875,7 @@ export function TenantStoreProvider({
   );
   const [activeBranchId, setActiveBranchIdState] = useState<string>(() =>
     liveApi
-      ? cachedSnapshot?.activeBranchId || readStoredBranchPublicId(tenantId) || ""
+      ? cachedSnapshot?.activeBranchId || initialBranchId || ""
       : (SEED_BRANCHES[0]?.id ?? ""),
   );
   const [hydrated, setHydrated] = useState(() => !liveApi || cachedSnapshot !== null);
@@ -4837,6 +4883,10 @@ export function TenantStoreProvider({
   const branchSwitchSeq = useRef(0);
   const branchesRef = useRef(branches);
   branchesRef.current = branches;
+
+  const storeKey = storeKeyForCampus(tenantId, activeBranchId || initialBranchId);
+  activeStoreKey = storeKey;
+  const snapshotRef = useRef<Snapshot | null>(cachedSnapshot);
 
   const applySnapshot = useCallback((snap: Snapshot) => {
     const apiLive = liveApiRef.current;
@@ -4916,17 +4966,15 @@ export function TenantStoreProvider({
     setActiveBranchIdState(snap.activeBranchId ?? "");
   }, []);
 
-  const applyBranchOperationalData = useCallback(
-    (data: {
-      students: Student[];
-      staff: Staff[];
-      payments: Payment[];
-      studentYearLedgers: StudentYearLedger[];
-      dashboardTodos: string[];
-      dashboardNote: string;
-      activeBranchId: string;
-      studentFeeBreaks?: StudentFeeBreak[];
-    }) => {
+  const applyBranchWorkspaceData = useCallback(
+    (
+      data: BranchWorkspaceBundle & {
+        activeBranchId: string;
+        /** When true, only apply campus fields (keep org users/theme/years/branches). */
+        preserveOrgFields?: boolean;
+      },
+    ) => {
+      const apiLive = liveApiRef.current;
       setStudents(
         Array.isArray(data.students)
           ? data.students
@@ -4949,37 +4997,83 @@ export function TenantStoreProvider({
           : [],
       );
       setPayments(data.payments);
-      if (data.studentFeeBreaks) {
-        setStudentFeeBreaks(
-          data.studentFeeBreaks
-            .map((b) =>
-              normalizeStudentFeeBreak(
-                b as Partial<StudentFeeBreak> & Pick<StudentFeeBreak, "id" | "studentId">,
-              ),
-            )
-            .filter((b): b is StudentFeeBreak => b !== null),
-        );
-      }
+      setStudentFeeBreaks(
+        Array.isArray(data.studentFeeBreaks)
+          ? data.studentFeeBreaks
+              .map((b) =>
+                normalizeStudentFeeBreak(
+                  b as Partial<StudentFeeBreak> & Pick<StudentFeeBreak, "id" | "studentId">,
+                ),
+              )
+              .filter((b): b is StudentFeeBreak => b !== null)
+          : [],
+      );
       setStudentYearLedgers(
         data.studentYearLedgers?.length
           ? data.studentYearLedgers
-          : liveApiRef.current
+          : apiLive
             ? []
             : SEED_STUDENT_YEAR_LEDGERS,
       );
       setDashboardTodos(data.dashboardTodos);
       setDashboardNote(data.dashboardNote);
+      setSchoolDetails({
+        ...data.schoolDetails,
+        name:
+          data.schoolDetails.name?.trim() ||
+          tenantNameRef.current?.trim() ||
+          data.schoolDetails.name,
+      });
+      setDepartments(Array.isArray(data.departments) ? data.departments : []);
+      setLeaveTypes(
+        Array.isArray(data.leaveTypes)
+          ? data.leaveTypes.map(normalizeLeaveType).filter((t): t is LeaveType => t !== null)
+          : [],
+      );
+      setRoles(Array.isArray(data.roles) ? data.roles : []);
+      const feeTermsNext = Array.isArray(data.feeTerms)
+        ? data.feeTerms
+            .map((t) => normalizeFeeTerm(t as Partial<FeeTerm> & Pick<FeeTerm, "id" | "label">))
+            .filter((t): t is FeeTerm => t !== null)
+        : apiLive
+          ? []
+          : SEED_FEE_TERMS;
+      setFeeTerms(feeTermsNext);
+      setClasses(
+        Array.isArray(data.classes)
+          ? data.classes.map((c) =>
+              withClassFeeSchedule(
+                normalizeClassConfig(
+                  c as Partial<ClassConfig> & Pick<ClassConfig, "id" | "tuitionFeeAmount">,
+                ),
+                feeTermsNext,
+              ),
+            )
+          : apiLive
+            ? []
+            : SEED_CLASSES,
+      );
+      setPaymentCategories(normalizePaymentCategories(data.paymentCategories));
+      setTransportRoutes(normalizeTransportRoutes(data.transportRoutes, feeTermsNext));
+      setTransportVehicles(
+        Array.isArray(data.transportVehicles) ? data.transportVehicles : apiLive ? [] : SEED_VEHICLES,
+      );
       setActiveBranchIdState(data.activeBranchId);
+      void data.preserveOrgFields;
     },
     [],
   );
 
   useEffect(() => {
     activeStoreKey = storeKey;
+  }, [storeKey]);
+
+  useEffect(() => {
     setBranchContext(tenantId ?? null, readStoredBranchPublicId(tenantId));
     let cancelled = false;
     const branchEpochAtStart = branchCatalogWriteEpochValue();
-    const localSnap = readSnapshot(storeKey);
+    const bootBranchId = readStoredBranchPublicId(tenantId) || initialBranchId || "";
+    const localSnap = readCampusSnapshot(tenantId, bootBranchId);
     const hadLocalCache = localSnap !== null;
     if (localSnap) {
       applySnapshot({
@@ -5005,7 +5099,9 @@ export function TenantStoreProvider({
             const mergedBranches = keepLocalBranches ? branchesRef.current : remote.branches;
             // Prefer server year ledgers so every browser sees the same roster.
             // Fall back to localStorage only when the API has no year-field rows yet.
-            const localLedgers = readSnapshot(storeKey)?.studentYearLedgers ?? [];
+            const localLedgers =
+              readCampusSnapshot(tenantId, remote.activeBranchId || bootBranchId)
+                ?.studentYearLedgers ?? [];
             const remoteLedgers = remote.studentYearLedgers ?? [];
             const mergedLedgers =
               remoteLedgers.length > 0
@@ -5076,7 +5172,7 @@ export function TenantStoreProvider({
         }
 
         if (cancelled) return;
-        const snap = readSnapshot(storeKey);
+        const snap = readCampusSnapshot(tenantId, bootBranchId);
         if (snap) {
           applySnapshot({
             ...snap,
@@ -5119,7 +5215,7 @@ export function TenantStoreProvider({
       }
 
       if (cancelled) return;
-      const snap = readSnapshot(storeKey);
+      const snap = readCampusSnapshot(tenantId, bootBranchId);
       if (snap) {
         applySnapshot({
           ...snap,
@@ -5137,7 +5233,7 @@ export function TenantStoreProvider({
     return () => {
       cancelled = true;
     };
-  }, [applySnapshot, storeKey, tenantId]);
+  }, [applySnapshot, tenantId, initialBranchId]);
 
   useEffect(() => {
     applyWorkspaceThemeMode(themeSettings.mode);
@@ -5217,35 +5313,34 @@ export function TenantStoreProvider({
 
   useEffect(() => {
     if (!hydrated) return;
-    writeSnapshot(
-      {
-        students,
-        staff,
-        payments,
-        departments,
-        leaveTypes,
-        roles,
-        classes,
-        transportRoutes,
-        transportVehicles,
-        paymentCategories,
-        feeTerms,
-        studentFeeBreaks,
-        studentYearLedgers,
-        academicYears,
-        closedAcademicYears,
-        academicYear,
-        themeSettings,
-        schoolDetails,
-        dashboardTodos,
-        dashboardNote,
-        notifications,
-        tenantUsers,
-        branches,
-        activeBranchId,
-      },
-      storeKey,
-    );
+    const snap: Snapshot = {
+      students,
+      staff,
+      payments,
+      departments,
+      leaveTypes,
+      roles,
+      classes,
+      transportRoutes,
+      transportVehicles,
+      paymentCategories,
+      feeTerms,
+      studentFeeBreaks,
+      studentYearLedgers,
+      academicYears,
+      closedAcademicYears,
+      academicYear,
+      themeSettings,
+      schoolDetails,
+      dashboardTodos,
+      dashboardNote,
+      notifications,
+      tenantUsers,
+      branches,
+      activeBranchId,
+    };
+    snapshotRef.current = snap;
+    writeSnapshot(snap, storeKey);
   }, [
     hydrated,
     students,
@@ -5651,15 +5746,68 @@ export function TenantStoreProvider({
       if (!nextId || !target) {
         return { students: 0, receipts: 0 };
       }
+      if (nextId === activeBranchId && !branchSyncing) {
+        return {
+          students: students.filter((s) => !s.deletedAt).length,
+          receipts: academicYearBookStats({
+            payments,
+            ledgers: studentYearLedgers,
+            year: academicYear,
+          }).receipts,
+        };
+      }
 
       const thisSwitch = ++branchSwitchSeq.current;
+
+      // Persist outgoing campus so sibling workspaces don't bleed.
+      const outgoing = snapshotRef.current;
+      if (outgoing && activeBranchId && activeBranchId !== nextId) {
+        writeSnapshot(
+          { ...outgoing, activeBranchId },
+          storeKeyForCampus(tenantId, activeBranchId),
+        );
+      }
+
       setBranchContext(tenantId ?? null, nextId);
       setActiveBranchIdState(nextId);
       setBranchSyncing(true);
+      activeStoreKey = storeKeyForCampus(tenantId, nextId);
+
+      // Instant paint from per-campus cache (org fields stay as-is in apply).
+      const cached = readCampusSnapshot(tenantId, nextId);
+      if (cached && thisSwitch === branchSwitchSeq.current) {
+        applyBranchWorkspaceData({
+          students: cached.students,
+          staff: cached.staff,
+          payments: cached.payments,
+          dashboardTodos: cached.dashboardTodos,
+          dashboardNote: cached.dashboardNote,
+          studentYearLedgers: cached.studentYearLedgers,
+          studentFeeBreaks: cached.studentFeeBreaks,
+          schoolDetails: cached.schoolDetails,
+          departments: cached.departments,
+          leaveTypes: cached.leaveTypes,
+          roles: cached.roles,
+          classes: cached.classes,
+          paymentCategories: cached.paymentCategories,
+          feeTerms: cached.feeTerms,
+          transportRoutes: cached.transportRoutes,
+          transportVehicles: cached.transportVehicles,
+          activeBranchId: nextId,
+          preserveOrgFields: true,
+        });
+      }
 
       if (!getApiToken()) {
         setBranchSyncing(false);
-        return { students: 0, receipts: 0 };
+        return {
+          students: (cached?.students ?? []).filter((s) => !s.deletedAt).length,
+          receipts: academicYearBookStats({
+            payments: cached?.payments ?? [],
+            ledgers: cached?.studentYearLedgers ?? [],
+            year: academicYear,
+          }).receipts,
+        };
       }
 
       void apiSyncActiveBranch(nextId).catch(() => {
@@ -5667,19 +5815,19 @@ export function TenantStoreProvider({
       });
 
       try {
-        const operational = await fetchBranchOperationalBundle();
+        const workspace = await fetchBranchWorkspaceBundle();
         if (thisSwitch !== branchSwitchSeq.current) {
           return { students: 0, receipts: 0 };
         }
 
-        if (operational) {
+        if (workspace) {
           const ledgers = reconcileLedgersWithStudents(
-            operational.students,
-            operational.studentYearLedgers,
+            workspace.students,
+            workspace.studentYearLedgers,
             academicYear,
           );
           const missingYearEntries = yearFieldEntriesMissingFrom(
-            operational.studentYearLedgers,
+            workspace.studentYearLedgers,
             ledgers,
           );
           if (missingYearEntries.length > 0) {
@@ -5687,21 +5835,16 @@ export function TenantStoreProvider({
               /* local reconcile still applied */
             });
           }
-          applyBranchOperationalData({
-            students: operational.students,
-            staff: operational.staff,
-            payments: operational.payments,
+          applyBranchWorkspaceData({
+            ...workspace,
             studentYearLedgers: ledgers,
-            dashboardTodos: operational.dashboardTodos,
-            dashboardNote: operational.dashboardNote,
             activeBranchId: nextId,
-            studentFeeBreaks: operational.studentFeeBreaks,
           });
 
           const stats = {
-            students: operational.students.filter((s) => !s.deletedAt).length,
+            students: workspace.students.filter((s) => !s.deletedAt).length,
             receipts: academicYearBookStats({
-              payments: operational.payments,
+              payments: workspace.payments,
               ledgers,
               year: academicYear,
             }).receipts,
@@ -5723,7 +5866,17 @@ export function TenantStoreProvider({
 
       return { students: 0, receipts: 0 };
     },
-    [academicYear, applyBranchOperationalData, branches, tenantId],
+    [
+      academicYear,
+      activeBranchId,
+      applyBranchWorkspaceData,
+      branchSyncing,
+      branches,
+      payments,
+      studentYearLedgers,
+      students,
+      tenantId,
+    ],
   );
 
   const value = useMemo<TenantStoreValue>(

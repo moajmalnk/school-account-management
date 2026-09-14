@@ -25,9 +25,11 @@ export type {
 } from "@/lib/api/auth";
 export {
   fetchBranchOperationalBundle,
+  fetchBranchWorkspaceBundle,
   fetchRemoteTenantBundle,
   invalidateRemoteTenantBundleCache,
 } from "@/lib/api/tenant-sync";
+export type { BranchWorkspaceBundle, BranchOperationalBundle } from "@/lib/api/tenant-sync";
 export { fetchTenantSubscription } from "@/lib/api/subscription";
 export type { TenantSubscription } from "@/lib/api/subscription";
 export { fetchSupportDesk, fetchSupportTickets, fetchSuperAdminSupport } from "@/lib/api/support";
