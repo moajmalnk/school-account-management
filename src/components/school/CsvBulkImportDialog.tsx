@@ -96,6 +96,8 @@ export function CsvBulkImportDialog({
   importing,
   progress,
   onConfirm,
+  skipDuplicates = true,
+  duplicateStatLabel = "Duplicates",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -110,8 +112,10 @@ export function CsvBulkImportDialog({
   importing: boolean;
   progress: { current: number; total: number };
   onConfirm: () => void;
+  skipDuplicates?: boolean;
+  duplicateStatLabel?: string;
 }) {
-  const importable = previewRows.filter((row) => !row.duplicate);
+  const importable = skipDuplicates ? previewRows.filter((row) => !row.duplicate) : previewRows;
   const canImport = importable.length > 0 && !importing;
 
   return (
@@ -165,7 +169,7 @@ export function CsvBulkImportDialog({
             <div className="grid grid-cols-2 gap-2 px-5 py-4 sm:grid-cols-4 sm:px-6">
               <ImportStat label="Ready" value={String(validCount)} />
               <ImportStat label="Amount" value={`₹ ${totalAmount.toLocaleString("en-IN")}`} />
-              <ImportStat label="Duplicates" value={String(duplicateCount)} muted />
+              <ImportStat label={duplicateStatLabel} value={String(duplicateCount)} muted />
               <ImportStat label="Errors" value={String(invalidCount)} muted={invalidCount === 0} />
             </div>
 
@@ -184,13 +188,19 @@ export function CsvBulkImportDialog({
                         <div className="mt-0.5 truncate text-[11px] text-black/50">
                           Line {row.line}
                           {row.extra ? ` · ${row.extra}` : ""}
-                          {row.duplicate ? " · already on ledger" : ""}
+                          {row.duplicate
+                            ? skipDuplicates
+                              ? " · already on ledger"
+                              : " · will update"
+                            : ""}
                         </div>
                       </div>
                       <div
                         className={cn(
                           "shrink-0 font-mono text-[12.5px] font-semibold tabular-nums",
-                          row.duplicate ? "text-black/40 line-through" : "text-black",
+                          row.duplicate && skipDuplicates
+                            ? "text-black/40 line-through"
+                            : "text-black",
                         )}
                       >
                         ₹ {row.amount.toLocaleString("en-IN")}

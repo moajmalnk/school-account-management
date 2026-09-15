@@ -43,19 +43,57 @@ function notifyDisbursementsChanged(scope: string) {
   window.dispatchEvent(new CustomEvent(DISBURSEMENTS_CHANGED, { detail: { scope } }));
 }
 
-/** Keep dashboard expense totals in sync after Make Payment saves. */
+function scopesForBranch(branchId: string | null | undefined, extraScope?: string) {
+  const suffix = `|${branchId ?? ""}`;
+  const scopes = new Set<string>([disbursementsScope(undefined, branchId)]);
+  if (extraScope) scopes.add(disbursementsScope(extraScope, branchId));
+  for (const key of memoryCache.keys()) {
+    if (key.endsWith(suffix)) scopes.add(key);
+  }
+  if (typeof sessionStorage !== "undefined") {
+    try {
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const raw = sessionStorage.key(i);
+        if (!raw?.startsWith(CACHE_PREFIX)) continue;
+        const scope = raw.slice(CACHE_PREFIX.length);
+        if (scope.endsWith(suffix)) scopes.add(scope);
+      }
+    } catch {
+      // private mode
+    }
+  }
+  return scopes;
+}
+
+/** Keep dashboard / finance expense lists in sync after Make Payment saves. */
 export function upsertDisbursementInCache(
   branchId: string | null | undefined,
   row: DisbursementPayload,
   scopeKey?: string,
 ) {
-  const scope = disbursementsScope(scopeKey, branchId);
-  const cached = readDisbursementsCache(scope) ?? [];
-  const idx = cached.findIndex((entry) => entry.id === row.id);
-  const next =
-    idx >= 0 ? cached.map((entry, index) => (index === idx ? { ...entry, ...row } : entry)) : [row, ...cached];
-  writeDisbursementsCache(scope, next);
-  notifyDisbursementsChanged(scope);
+  for (const scope of scopesForBranch(branchId, scopeKey)) {
+    const cached = readDisbursementsCache(scope) ?? [];
+    const idx = cached.findIndex((entry) => entry.id === row.id);
+    const next =
+      idx >= 0
+        ? cached.map((entry, index) => (index === idx ? { ...entry, ...row } : entry))
+        : [row, ...cached];
+    writeDisbursementsCache(scope, next);
+    notifyDisbursementsChanged(scope);
+  }
+}
+
+/** Replace every cached list for this campus after a bulk import or full reload. */
+export function syncDisbursementsCache(
+  branchId: string | null | undefined,
+  rows: DisbursementPayload[],
+  scopeKey?: string,
+) {
+  const next = Array.isArray(rows) ? rows : [];
+  for (const scope of scopesForBranch(branchId, scopeKey)) {
+    writeDisbursementsCache(scope, next);
+    notifyDisbursementsChanged(scope);
+  }
 }
 
 async function fetchDisbursementsForScope(scope: string): Promise<DisbursementPayload[]> {

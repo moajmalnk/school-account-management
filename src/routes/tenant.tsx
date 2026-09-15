@@ -1,13 +1,15 @@
-import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Bell, ChevronLeft, Home, Settings, UserCog, Users, Wallet } from "lucide-react";
 import { useEffect } from "react";
 
 import {
   AcademicYearBooksFade,
   BranchSwitcher,
+  ImpersonationChip,
   TenantDesktopTopBar,
   TenantMacDock,
   ThemeModeToggle,
+  HardRefreshButton,
   useWorkspaceSubViewBack,
 } from "@/components/layout/TenantGlassShell";
 import {
@@ -21,7 +23,6 @@ import {
 } from "@/components/layout/MobileTabBar";
 import {
   useAuth,
-  endImpersonation,
   isTenantWorkspaceSession,
   sessionCanAccessSettings,
   sessionHasAnyFinance,
@@ -32,7 +33,6 @@ import { resolveMediaUrl } from "@/lib/media";
 import { normalizePlanFlags } from "@/lib/permissions";
 import { TenantStoreProvider, schoolInitials, useTenantStore } from "@/lib/tenant-store";
 import { cn, glassInsetClass } from "@/lib/utils";
-import { KeyRound, X } from "lucide-react";
 
 export const Route = createFileRoute("/tenant")({
   component: TenantLayout,
@@ -134,7 +134,6 @@ function TenantShell() {
 
   return (
     <div className="tenant-canvas flex min-h-dvh flex-col text-slate-900 dark:text-zinc-100">
-      <ImpersonationBanner />
       <TenantMobileHeader />
       <div
         className={cn(
@@ -176,65 +175,6 @@ function TenantShell() {
   );
 }
 
-function ImpersonationBanner() {
-  const { session } = useAuth();
-  const { schoolDetails } = useTenantStore();
-  if (!session?.impersonated) return null;
-
-  const workspace = schoolDetails.name || session.tenantName || session.displayName || "tenant";
-  const fromSuper = session.impersonationSource === "super_admin";
-  const ticket = session.impersonationTicket;
-
-  return (
-    <div
-      role="status"
-      className="sticky top-0 z-[60] overflow-hidden border-b border-black/20 text-white shadow-[0_8px_24px_-12px_rgba(0,0,0,0.45)]"
-      style={{
-        background:
-          "repeating-linear-gradient(-45deg, #0F766E, #0F766E 12px, #0d6a63 12px, #0d6a63 24px)",
-      }}
-    >
-      <div className="relative flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5">
-        <div className="pointer-events-none absolute inset-y-0 left-0 w-1.5 bg-[#CCFBF1]" />
-        <div className="flex min-w-0 items-start gap-2.5 sm:items-center">
-          <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-black/25 ring-1 ring-white/25 sm:mt-0">
-            <KeyRound className="h-3.5 w-3.5" />
-          </span>
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-black/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em]">
-                Impersonate mode
-              </span>
-              {ticket ? (
-                <span className="font-mono text-[10px] text-white/80">{ticket}</span>
-              ) : null}
-            </div>
-            <p className="mt-0.5 truncate text-[12.5px] font-medium leading-snug">
-              Viewing <strong>{workspace}</strong>
-              <span className="text-white/80">
-                {" "}
-                as {session.displayName}
-                {session.email ? ` · ${session.email}` : ""}
-              </span>
-            </p>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            const redirect = endImpersonation();
-            window.location.replace(redirect);
-          }}
-          className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-full border border-white/40 bg-white px-4 py-1.5 text-[12px] font-semibold text-[#0F766E] shadow-sm transition hover:bg-[#CCFBF1]"
-        >
-          <X className="h-3.5 w-3.5" />
-          Exit impersonation
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function TenantMobileHeader() {
   const { session } = useAuth();
   const navigate = useNavigate();
@@ -264,7 +204,10 @@ function TenantMobileHeader() {
   const initials = schoolInitials(tenantName);
 
   return (
-    <header className="sticky top-0 z-30 bg-gradient-to-b from-white/80 to-transparent px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl dark:from-[#0a0a0a]/95 dark:via-[#0a0a0a]/65 dark:to-transparent md:hidden">
+    <header
+      data-tenant-mobile-header
+      className="sticky top-0 z-30 bg-gradient-to-b from-white/80 to-transparent px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl dark:from-[#0a0a0a]/95 dark:via-[#0a0a0a]/65 dark:to-transparent md:hidden"
+    >
       <div className="flex w-full items-center gap-3">
         {showBack ? (
           <button
@@ -309,15 +252,10 @@ function TenantMobileHeader() {
             </div>
           ) : null}
         </div>
+        <ImpersonationChip compact />
         <BranchSwitcher compact />
         <ThemeModeToggle className="rounded-full border border-white/80 bg-white/70 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-200" />
-        <Link
-          to="/home"
-          aria-label="Home page"
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-white/80 bg-white/70 text-slate-600 shadow-sm backdrop-blur-md transition-colors hover:text-[#0F766E] dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-300 dark:hover:text-[#2DD4BF]"
-        >
-          <Home className="h-[18px] w-[18px]" />
-        </Link>
+        <HardRefreshButton className="h-11 w-11 shrink-0 rounded-full border border-white/80 bg-white/70 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-200" />
         <button
           type="button"
           onClick={() => guardedNavigate("/tenant/notifications")}

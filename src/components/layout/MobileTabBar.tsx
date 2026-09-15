@@ -45,6 +45,7 @@ export function MobileTabBar({ items, pathname, className }: MobileTabBarProps) 
 
   return (
     <div
+      data-mobile-tab-dock
       className={cn(
         "pointer-events-none fixed inset-x-0 bottom-0 z-50 px-5 lg:hidden",
         "pb-[calc(0.75rem+env(safe-area-inset-bottom))]",

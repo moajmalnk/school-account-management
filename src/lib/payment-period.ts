@@ -3,11 +3,16 @@ import type { Payment } from "@/lib/tenant-store";
 
 export type PaymentPeriod =
   | "today"
+  | "yesterday"
+  | "this_week"
+  | "last_week"
   | "this_month"
   | "last_month"
   | "last_3_months"
   | "last_6_months"
+  | "this_year"
   | "last_year"
+  | "all"
   | "custom";
 
 export type CustomDateRange = {
@@ -17,11 +22,14 @@ export type CustomDateRange = {
 
 export const PAYMENT_PERIOD_OPTIONS: { value: PaymentPeriod; label: string }[] = [
   { value: "today", label: "Today" },
+  { value: "yesterday", label: "Yesterday" },
+  { value: "this_week", label: "This week" },
+  { value: "last_week", label: "Last week" },
   { value: "this_month", label: "This month" },
   { value: "last_month", label: "Last month" },
-  { value: "last_3_months", label: "Last three month" },
-  { value: "last_6_months", label: "Last 6 month" },
-  { value: "last_year", label: "Last Year" },
+  { value: "this_year", label: "This year" },
+  { value: "last_year", label: "Last year" },
+  { value: "all", label: "All" },
   { value: "custom", label: "Custom" },
 ];
 
@@ -47,11 +55,30 @@ function endOfMonth(date: Date): Date {
   return endOfDay(new Date(date.getFullYear(), date.getMonth() + 1, 0));
 }
 
+function startOfWeek(date: Date): Date {
+  const day = startOfDay(date);
+  const weekday = day.getDay();
+  const mondayOffset = weekday === 0 ? 6 : weekday - 1;
+  return addDays(day, -mondayOffset);
+}
+
+function endOfWeek(date: Date): Date {
+  return endOfDay(addDays(startOfWeek(date), 6));
+}
+
+function startOfYear(date: Date): Date {
+  return new Date(date.getFullYear(), 0, 1);
+}
+
+function endOfYear(date: Date): Date {
+  return endOfDay(new Date(date.getFullYear(), 11, 31));
+}
+
 function parsePaymentDate(time: string, reference = new Date()): Date | null {
   return parseEventDate(time, reference);
 }
 
-function getPeriodRange(
+export function getPeriodRange(
   period: PaymentPeriod,
   customRange: CustomDateRange | undefined,
   reference = new Date(),
@@ -61,6 +88,16 @@ function getPeriodRange(
   switch (period) {
     case "today":
       return { start: today, end: endOfDay(reference) };
+    case "yesterday": {
+      const day = addDays(today, -1);
+      return { start: startOfDay(day), end: endOfDay(day) };
+    }
+    case "this_week":
+      return { start: startOfWeek(reference), end: endOfWeek(reference) };
+    case "last_week": {
+      const last = addDays(startOfWeek(reference), -7);
+      return { start: last, end: endOfWeek(last) };
+    }
     case "this_month":
       return { start: startOfMonth(reference), end: endOfDay(reference) };
     case "last_month": {
@@ -77,11 +114,14 @@ function getPeriodRange(
         start: startOfMonth(new Date(reference.getFullYear(), reference.getMonth() - 5, 1)),
         end: endOfDay(reference),
       };
-    case "last_year":
-      return {
-        start: startOfMonth(new Date(reference.getFullYear(), reference.getMonth() - 11, 1)),
-        end: endOfDay(reference),
-      };
+    case "this_year":
+      return { start: startOfYear(reference), end: endOfDay(reference) };
+    case "last_year": {
+      const prev = new Date(reference.getFullYear() - 1, 0, 1);
+      return { start: startOfYear(prev), end: endOfYear(prev) };
+    }
+    case "all":
+      return null;
     case "custom": {
       if (!customRange?.from || !customRange?.to) return null;
       const start = startOfDay(new Date(customRange.from));
@@ -94,21 +134,26 @@ function getPeriodRange(
   }
 }
 
+export function timestampMatchesPeriod(
+  time: string | Date | null | undefined,
+  period: PaymentPeriod,
+  customRange?: CustomDateRange,
+  reference = new Date(),
+): boolean {
+  const range = getPeriodRange(period, customRange, reference);
+  if (!range) return true;
+  const parsed = time instanceof Date ? time : parsePaymentDate(String(time ?? ""), reference);
+  if (!parsed) return false;
+  return parsed >= range.start && parsed <= range.end;
+}
+
 function paymentMatchesPeriod(
   payment: Payment,
   period: PaymentPeriod,
   customRange: CustomDateRange | undefined,
   reference = new Date(),
 ): boolean {
-  const range = getPeriodRange(period, customRange, reference);
-  if (!range) return true;
-
-  const parsed = parsePaymentDate(payment.time, reference);
-  if (!parsed) {
-    return period !== "today";
-  }
-
-  return parsed >= range.start && parsed <= range.end;
+  return timestampMatchesPeriod(payment.time, period, customRange, reference);
 }
 
 export function filterPaymentsByPeriod(
@@ -198,8 +243,8 @@ function createPeriodBuckets(
   end: Date,
   reference: Date,
 ): PeriodBucket[] {
-  if (period === "today") {
-    const day = startOfDay(reference);
+  if (period === "today" || period === "yesterday") {
+    const day = startOfDay(start);
     return [
       {
         label: "AM",
@@ -209,16 +254,25 @@ function createPeriodBuckets(
       {
         label: "PM",
         start: new Date(day.getFullYear(), day.getMonth(), day.getDate(), 12, 0, 0, 0),
-        end: endOfDay(reference),
+        end: endOfDay(day),
       },
     ];
+  }
+
+  if (period === "this_week" || period === "last_week") {
+    return weekBucketsInRange(start, end);
   }
 
   if (period === "this_month" || period === "last_month") {
     return weekBucketsInRange(start, end);
   }
 
-  if (period === "last_3_months" || period === "last_6_months" || period === "last_year") {
+  if (
+    period === "last_3_months" ||
+    period === "last_6_months" ||
+    period === "this_year" ||
+    period === "last_year"
+  ) {
     return monthBucketsInRange(start, end);
   }
 

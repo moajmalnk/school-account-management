@@ -6,7 +6,7 @@ import {
   ChevronDown,
   ChevronLeft,
   Crown,
-  Home,
+  Eye,
   LayoutDashboard,
   Loader2,
   LogOut,
@@ -14,13 +14,15 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
+  RefreshCw,
   Settings,
   Sun,
   UserCog,
   Users,
   Wallet,
+  X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { FeezoBrand } from "@/components/brand/FeezoBrand";
@@ -53,12 +55,14 @@ import { AddBranchDialog } from "@/components/school/AddBranchDialog";
 import { useTenantNavigationGuard } from "@/components/school/settings-unsaved-guard";
 import { FloatingDock, type FloatingDockItem } from "@/components/ui/floating-dock";
 import {
+  endImpersonation,
   sessionCanAccessSettings,
   sessionHasAnyFinance,
   sessionHasPermission,
   useAuth,
 } from "@/lib/auth";
 import { defaultClosingMonthKey, suggestNextBooksMonthKey } from "@/lib/academic-year";
+import { hardRefreshApp } from "@/lib/app-version";
 import {
   isMainCampusBranch,
   schoolInitials,
@@ -109,6 +113,71 @@ export function AcademicYearBooksFade({ children }: { children: ReactNode }) {
     >
       {children}
     </div>
+  );
+}
+
+/** Compact impersonation control — sits beside the campus switcher. */
+export function ImpersonationChip({ compact = false }: { compact?: boolean }) {
+  const { session } = useAuth();
+  const { schoolDetails } = useTenantStore();
+  if (!session?.impersonated) return null;
+
+  const workspace = schoolDetails.name || session.tenantName || session.displayName || "tenant";
+  const ticket = session.impersonationTicket;
+  const actor = session.displayName || session.email || "admin";
+
+  const exit = () => {
+    const redirect = endImpersonation();
+    window.location.replace(redirect);
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Previewing ${workspace} as ${actor}. Open to exit impersonation.`}
+          className={cn(
+            "inline-flex items-center gap-1 rounded-full border border-amber-300/80 bg-amber-50 px-2 py-2 text-[11px] font-semibold text-amber-950 shadow-sm backdrop-blur-md transition-colors hover:border-amber-400 hover:bg-amber-100/90 dark:border-amber-500/30 dark:bg-amber-950/50 dark:text-amber-100 dark:hover:bg-amber-900/60 sm:gap-1.5 sm:px-2.5 sm:text-[12px]",
+            compact && "h-8 w-8 justify-center px-0 py-0 sm:h-auto sm:w-auto sm:px-2 sm:py-1.5",
+          )}
+        >
+          <span className="relative grid h-3.5 w-3.5 shrink-0 place-items-center">
+            <Eye className="h-3.5 w-3.5" strokeWidth={2.25} />
+            <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-amber-500 ring-1 ring-amber-50 dark:ring-amber-950" />
+          </span>
+          {compact ? <span className="sr-only">Preview</span> : <span className="truncate">Preview</span>}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        className="w-[min(18rem,calc(100vw-2rem))] rounded-xl border-white/60 bg-white/95 p-1 backdrop-blur-xl dark:border-white/10 dark:bg-zinc-900"
+      >
+        <div className="px-2.5 py-2">
+          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-amber-800 dark:text-amber-300">
+            Impersonation preview
+          </p>
+          <p className="mt-1 truncate text-[12.5px] font-semibold text-slate-900 dark:text-zinc-100">
+            {workspace}
+          </p>
+          <p className="mt-0.5 truncate text-[11.5px] text-slate-500 dark:text-zinc-400">
+            as {actor}
+            {session.email && session.displayName ? ` · ${session.email}` : ""}
+          </p>
+          {ticket ? (
+            <p className="mt-1 font-mono text-[10px] text-slate-400 dark:text-zinc-500">{ticket}</p>
+          ) : null}
+        </div>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onSelect={exit}
+          className="cursor-pointer gap-2 rounded-lg text-[12.5px] font-semibold text-rose-700 focus:bg-rose-50 focus:text-rose-800 dark:text-rose-300 dark:focus:bg-rose-950/40"
+        >
+          <X className="h-3.5 w-3.5" />
+          Exit impersonation
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -257,6 +326,45 @@ export function ThemeModeToggle({ className }: { className?: string }) {
       )}
     >
       {isDark ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
+    </button>
+  );
+}
+
+export function HardRefreshButton({ className }: { className?: string }) {
+  const [busy, setBusy] = useState(false);
+  const unsaved = useOptionalSettingsUnsavedGuard();
+
+  const run = useCallback(async () => {
+    if (busy) return;
+    setBusy(true);
+    toast.message("Hard refresh", { description: "Clearing cache and reloading latest data…" });
+    try {
+      await hardRefreshApp();
+    } catch {
+      setBusy(false);
+      toast.error("Could not refresh", { description: "Try again in a moment." });
+    }
+  }, [busy]);
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (busy) return;
+        const start = () => void run();
+        if (unsaved?.tryNavigate) unsaved.tryNavigate(start);
+        else start();
+      }}
+      disabled={busy}
+      aria-label="Hard refresh — reload latest data"
+      title="Hard refresh"
+      className={cn(
+        glassInsetClass,
+        "grid h-10 w-10 shrink-0 place-items-center text-slate-600 transition-colors hover:text-[#0F766E] disabled:opacity-60 dark:text-zinc-300 dark:hover:text-[#2DD4BF]",
+        className,
+      )}
+    >
+      <RefreshCw className={cn("h-[18px] w-[18px]", busy && "animate-spin")} />
     </button>
   );
 }
@@ -751,6 +859,7 @@ export function TenantDesktopTopBar() {
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
+          <ImpersonationChip />
           <BranchSwitcher />
           {!hydrated || !academicYear ? (
             <Skeleton
@@ -832,13 +941,7 @@ export function TenantDesktopTopBar() {
 
           <ThemeModeToggle />
 
-          <Link
-            to="/home"
-            aria-label="Home page"
-            className="glass-inset grid h-10 w-10 place-items-center rounded-xl text-slate-600 transition-colors hover:text-[#0F766E] dark:text-zinc-300 dark:hover:text-[#2DD4BF]"
-          >
-            <Home className="h-[18px] w-[18px]" />
-          </Link>
+          <HardRefreshButton />
 
           <button
             type="button"

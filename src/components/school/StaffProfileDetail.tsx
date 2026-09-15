@@ -551,6 +551,33 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
     () => [...(staff.attendanceByMonth ?? [])].sort((a, b) => b.month.localeCompare(a.month)),
     [staff.attendanceByMonth],
   );
+  const attendanceHistoryRows = useMemo(
+    () =>
+      attendanceHistory.map((row) => {
+        const pay = staffPayableSalary(
+          {
+            basicSalary: staff.basicSalary,
+            additionalAllowances: staff.additionalAllowances,
+            attendanceByMonth: [row],
+          },
+          row.month,
+        );
+        return {
+          row,
+          pay,
+          isCurrent: row.month === payrollMonth,
+          monthPaid: salaryPaidAmountForMonth(salaryHistory, row.month),
+          monthSettled: isSalaryMonthSettled(salaryHistory, row.month, pay.payable),
+        };
+      }),
+    [
+      attendanceHistory,
+      staff.basicSalary,
+      staff.additionalAllowances,
+      payrollMonth,
+      salaryHistory,
+    ],
+  );
 
   const lastSalaryPayment = salaryHistory[0] ?? null;
 
@@ -994,16 +1021,16 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
         </ProfileTabPanel>
 
         <ProfileTabPanel value="attendance">
-          <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-12">
-            <section className={cn(CARD_FRAME, "lg:col-span-4")}>
+          <div className="grid grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-12">
+            <section className={cn(CARD_FRAME, "xl:col-span-4")}>
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-base font-semibold text-black">This Month</h2>
-                  <p className="mt-1 text-[12.5px] text-black/50">
+                  <h2 className="text-base font-semibold text-black dark:text-zinc-100">This Month</h2>
+                  <p className="mt-1 text-[12.5px] text-black/50 dark:text-zinc-400">
                     {formatPayrollMonthLabel(payrollMonth)} · used for salary payable
                   </p>
                 </div>
-                <div className="grid h-10 w-10 place-items-center rounded-xl bg-[#CCFBF1] text-[#0F766E]">
+                <div className="grid h-10 w-10 place-items-center rounded-xl bg-[#CCFBF1] text-[#0F766E] dark:bg-teal-950/70 dark:text-[#5EEAD4]">
                   <CalendarDays className="h-5 w-5" />
                 </div>
               </div>
@@ -1011,54 +1038,54 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
               {attendancePay.attendance ? (
                 <div className="mt-5 space-y-3">
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-3">
-                      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    <div className="rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-3 dark:border-white/10 dark:bg-zinc-900">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-500">
                         Present
                       </div>
-                      <div className="mt-1 font-mono text-[22px] font-bold text-black">
+                      <div className="mt-1 font-mono text-[22px] font-bold text-black dark:text-zinc-100">
                         {attendancePay.attendance.daysPresent}
                       </div>
                     </div>
-                    <div className="rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-3">
-                      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    <div className="rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-3 dark:border-white/10 dark:bg-zinc-900">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-500">
                         Working
                       </div>
-                      <div className="mt-1 font-mono text-[22px] font-bold text-black">
+                      <div className="mt-1 font-mono text-[22px] font-bold text-black dark:text-zinc-100">
                         {attendancePay.attendance.workingDays}
                       </div>
                     </div>
-                    <div className="rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-3">
-                      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    <div className="rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-3 dark:border-white/10 dark:bg-zinc-900">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-500">
                         Paid leave
                       </div>
-                      <div className="mt-1 font-mono text-[22px] font-bold text-black">
+                      <div className="mt-1 font-mono text-[22px] font-bold text-black dark:text-zinc-100">
                         {attendancePay.attendance.paidLeaveDays || 0}
                       </div>
                     </div>
-                    <div className="rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-3">
-                      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    <div className="rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-3 dark:border-white/10 dark:bg-zinc-900">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-500">
                         Unpaid leave
                       </div>
-                      <div className="mt-1 font-mono text-[22px] font-bold text-black">
+                      <div className="mt-1 font-mono text-[22px] font-bold text-black dark:text-zinc-100">
                         {attendancePay.attendance.unpaidLeaveDays || 0}
                       </div>
                     </div>
                   </div>
-                  <div className="rounded-lg border border-[#D1FAE5] bg-[#F0FDFA] px-3.5 py-3">
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-[#0F766E]">
+                  <div className="rounded-lg border border-[#D1FAE5] bg-[#F0FDFA] px-3.5 py-3 dark:border-teal-800/70 dark:bg-teal-950/45">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-[#0F766E] dark:text-[#5EEAD4]">
                       Payable Salary
                     </div>
-                    <div className="mt-1 font-mono text-[20px] font-bold text-[#0F766E]">
+                    <div className="mt-1 font-mono text-[20px] font-bold text-[#0F766E] dark:text-[#5EEAD4]">
                       ₹ {attendancePay.payable.toLocaleString("en-IN")}
                     </div>
-                    <p className="mt-1 text-[11px] text-black/50">
+                    <p className="mt-1 text-[11px] text-black/50 dark:text-zinc-400">
                       Gross ₹ {staffGrossSalary(staff).toLocaleString("en-IN")} ×{" "}
                       {attendancePay.payableDays}/{attendancePay.attendance.workingDays} payable
                       days ({Math.round(attendancePay.ratio * 100)}%)
                     </p>
                     {currentMonthSettled ? (
                       <div className="mt-3 space-y-2">
-                        <div className="inline-flex rounded-full bg-[#D1F2E1] px-2.5 py-1 text-[11px] font-semibold text-[#059669]">
+                        <div className="inline-flex rounded-full bg-[#D1F2E1] px-2.5 py-1 text-[11px] font-semibold text-[#059669] dark:bg-emerald-950/80 dark:text-emerald-300">
                           Settled for {formatPayrollMonthLabel(payrollMonth)}
                         </div>
                         <Button
@@ -1096,24 +1123,24 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                 </div>
               ) : (
                 <div className="mt-5 rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 py-6 text-center dark:border-white/15 dark:bg-zinc-900/60">
-                  <p className="text-[13px] font-medium text-black/70">
+                  <p className="text-[13px] font-medium text-black/70 dark:text-zinc-200">
                     No attendance for this month
                   </p>
-                  <p className="mt-1 text-[12px] text-black/45">
+                  <p className="mt-1 text-[12px] text-black/45 dark:text-zinc-500">
                     Add a month below, or upload a CSV from Staff Directory → Attendance.
                   </p>
-                  <p className="mt-3 font-mono text-[12px] text-black/55">
+                  <p className="mt-3 font-mono text-[12px] text-black/55 dark:text-zinc-400">
                     Full gross ₹ {staffGrossSalary(staff).toLocaleString("en-IN")} applies
                   </p>
                 </div>
               )}
             </section>
 
-            <section className={cn(CARD_FRAME, "lg:col-span-8")}>
+            <section className={cn(CARD_FRAME, "min-w-0 p-4 sm:p-6 xl:col-span-8")}>
               <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <h2 className="text-base font-semibold text-black">Record Attendance</h2>
-                  <p className="mt-1 text-[12.5px] text-black/50">
+                  <h2 className="text-base font-semibold text-black dark:text-zinc-100">Record Attendance</h2>
+                  <p className="mt-1 text-[12.5px] text-black/50 dark:text-zinc-400">
                     Payable days = present + paid leave. Unpaid leave is loss of pay.
                   </p>
                 </div>
@@ -1121,9 +1148,9 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
 
               <form
                 onSubmit={saveAttendanceMonth}
-                className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-6 sm:items-end"
+                className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4 sm:items-end"
               >
-                <div className="space-y-1.5 sm:col-span-1">
+                <div className="col-span-2 min-w-0 space-y-1.5">
                   <Label className={META_LABEL} htmlFor="attendance-month">
                     Month
                   </Label>
@@ -1138,9 +1165,10 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                     }
                     allowClear={false}
                     placeholder="Select month"
+                    className="min-w-0"
                   />
                 </div>
-                <div className="space-y-1.5">
+                <div className="min-w-0 space-y-1.5">
                   <Label className={META_LABEL} htmlFor="days-present">
                     Days Present
                   </Label>
@@ -1155,11 +1183,11 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                       }))
                     }
                     placeholder="20"
-                    className="h-10 font-mono"
+                    className="h-10 min-w-0 font-mono"
                     required
                   />
                 </div>
-                <div className="space-y-1.5">
+                <div className="min-w-0 space-y-1.5">
                   <Label className={META_LABEL} htmlFor="paid-leave-days">
                     Paid Leave
                   </Label>
@@ -1174,10 +1202,10 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                       }))
                     }
                     placeholder="0"
-                    className="h-10 font-mono"
+                    className="h-10 min-w-0 font-mono"
                   />
                 </div>
-                <div className="space-y-1.5">
+                <div className="min-w-0 space-y-1.5">
                   <Label className={META_LABEL} htmlFor="unpaid-leave-days">
                     Unpaid Leave
                   </Label>
@@ -1192,10 +1220,10 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                       }))
                     }
                     placeholder="0"
-                    className="h-10 font-mono"
+                    className="h-10 min-w-0 font-mono"
                   />
                 </div>
-                <div className="space-y-1.5">
+                <div className="min-w-0 space-y-1.5">
                   <Label className={META_LABEL} htmlFor="working-days">
                     Working Days
                   </Label>
@@ -1210,39 +1238,136 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                       }))
                     }
                     placeholder="24"
-                    className="h-10 font-mono"
+                    className="h-10 min-w-0 font-mono"
                     required
                   />
                 </div>
-                <Button
-                  type="submit"
-                  className="h-10 rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
-                >
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  Save Month
-                </Button>
+                <div className="col-span-2 min-w-0 sm:col-span-4">
+                  <Button
+                    type="submit"
+                    className="h-10 w-full rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488] sm:w-auto sm:px-6"
+                  >
+                    <Plus className="mr-1.5 h-3.5 w-3.5 shrink-0" />
+                    Save Month
+                  </Button>
+                </div>
               </form>
 
               <div className="mt-6">
                 <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                  <h3 className="text-[11px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-500">
                     Attendance History
                   </h3>
                   <button
                     type="button"
                     onClick={() => setActiveTab("payments")}
-                    className="text-[11px] font-semibold text-[#0F766E] hover:underline"
+                    className="text-[11px] font-semibold text-[#0F766E] hover:underline dark:text-[#5EEAD4]"
                   >
                     Salary history →
                   </button>
                 </div>
 
-                {attendanceHistory.length === 0 ? (
+                {attendanceHistoryRows.length === 0 ? (
                   <div className="mt-3 rounded-lg border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center text-[13px] text-black/50 dark:border-white/15 dark:bg-zinc-900/60 dark:text-zinc-400">
                     No monthly attendance yet for {staff.name}.
                   </div>
                 ) : (
-                  <div className="mt-3 overflow-x-auto rounded-lg border border-slate-100 dark:border-white/10">
+                  <>
+                    <div className="mt-3 space-y-2 md:hidden">
+                      {attendanceHistoryRows.map(
+                        ({ row, pay, isCurrent, monthPaid, monthSettled }) => (
+                          <article
+                            key={row.month}
+                            className={cn(
+                              "rounded-xl border border-slate-100 p-3 dark:border-white/10 dark:bg-zinc-900/50",
+                              isCurrent &&
+                                "border-[#CCFBF1] bg-teal-50 dark:border-teal-900/80 dark:bg-teal-950/40",
+                            )}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="font-medium text-black dark:text-zinc-100">
+                                  {formatPayrollMonthLabel(row.month)}
+                                </div>
+                                <div className="font-mono text-[10.5px] text-black/40 dark:text-zinc-500">
+                                  {row.month}
+                                  {isCurrent ? " · current" : ""}
+                                </div>
+                              </div>
+                              <div className="shrink-0 text-right">
+                                <div className="font-mono text-[13px] font-semibold text-[#0F766E] dark:text-[#5EEAD4]">
+                                  ₹ {pay.payable.toLocaleString("en-IN")}
+                                </div>
+                                <div className="mt-1">
+                                  {monthSettled ? (
+                                    <span className="inline-flex rounded-full bg-[#D1F2E1] px-2 py-0.5 text-[10px] font-semibold text-[#059669] dark:bg-emerald-950/80 dark:text-emerald-300">
+                                      Paid
+                                    </span>
+                                  ) : monthPaid > 0 ? (
+                                    <span className="inline-flex rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[10px] font-semibold text-[#B45309] dark:bg-amber-950/80 dark:text-amber-300">
+                                      Partial
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-semibold text-black/55 dark:bg-zinc-800 dark:text-zinc-400">
+                                      Unpaid
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <dl className="mt-3 grid grid-cols-4 gap-2 text-center">
+                              {[
+                                ["Present", row.daysPresent],
+                                ["Paid", row.paidLeaveDays || 0],
+                                ["Unpaid", row.unpaidLeaveDays || 0],
+                                ["Working", row.workingDays],
+                              ].map(([label, value]) => (
+                                <div key={label}>
+                                  <dt className="text-[9.5px] font-semibold uppercase tracking-wider text-black/40 dark:text-zinc-500">
+                                    {label}
+                                  </dt>
+                                  <dd className="mt-0.5 font-mono text-[13px] font-semibold text-black dark:text-zinc-100">
+                                    {value}
+                                  </dd>
+                                </div>
+                              ))}
+                            </dl>
+                            <div className="mt-3 flex items-center justify-between">
+                              <span className="font-mono text-[11px] text-black/50 dark:text-zinc-400">
+                                {Math.round(pay.ratio * 100)}% rate
+                              </span>
+                              <div className="inline-flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setAttendanceForm({
+                                      month: row.month,
+                                      daysPresent: String(row.daysPresent),
+                                      workingDays: String(row.workingDays),
+                                      paidLeaveDays: String(row.paidLeaveDays || 0),
+                                      unpaidLeaveDays: String(row.unpaidLeaveDays || 0),
+                                    })
+                                  }
+                                  className="grid h-9 w-9 place-items-center rounded-full text-black/45 transition-colors hover:bg-[#0F766E] hover:text-white dark:text-zinc-400"
+                                  aria-label={`Edit ${row.month}`}
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setPendingDeleteMonth(row.month)}
+                                  className="grid h-9 w-9 place-items-center rounded-full text-black/45 transition-colors hover:bg-[#EF4444] hover:text-white dark:text-zinc-400"
+                                  aria-label={`Remove ${row.month}`}
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          </article>
+                        ),
+                      )}
+                    </div>
+                    <div className="mt-3 hidden overflow-x-auto rounded-lg border border-slate-100 dark:border-white/10 md:block">
                     <table className="w-full min-w-[620px] text-left text-[12.5px]">
                       <thead>
                         <tr className="border-b border-slate-100 bg-slate-50 dark:border-white/10 dark:bg-zinc-900/70">
@@ -1266,69 +1391,54 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                         </tr>
                       </thead>
                       <tbody>
-                        {attendanceHistory.map((row) => {
-                          const pay = staffPayableSalary(
-                            {
-                              basicSalary: staff.basicSalary,
-                              additionalAllowances: staff.additionalAllowances,
-                              attendanceByMonth: [row],
-                            },
-                            row.month,
-                          );
-                          const isCurrent = row.month === payrollMonth;
-                          const monthPaid = salaryPaidAmountForMonth(salaryHistory, row.month);
-                          const monthSettled = isSalaryMonthSettled(
-                            salaryHistory,
-                            row.month,
-                            pay.payable,
-                          );
-                          return (
+                        {attendanceHistoryRows.map(
+                          ({ row, pay, isCurrent, monthPaid, monthSettled }) => (
                             <tr
                               key={row.month}
                               className={cn(
-                                "border-b border-slate-50 last:border-0",
-                                isCurrent && "bg-[#F0FDFA]/70",
+                                "border-b border-slate-50 last:border-0 dark:border-white/5",
+                                isCurrent && "bg-teal-50 dark:bg-teal-950/40",
                               )}
                             >
                               <td className="px-3 py-3">
-                                <div className="font-medium text-black">
+                                <div className="font-medium text-black dark:text-zinc-100">
                                   {formatPayrollMonthLabel(row.month)}
                                 </div>
-                                <div className="font-mono text-[10.5px] text-black/40">
+                                <div className="font-mono text-[10.5px] text-black/40 dark:text-zinc-500">
                                   {row.month}
                                   {isCurrent ? " · current" : ""}
                                 </div>
                               </td>
-                              <td className="px-3 py-3 font-mono font-semibold text-black">
+                              <td className="px-3 py-3 font-mono font-semibold text-black dark:text-zinc-100">
                                 {row.daysPresent}
                               </td>
-                              <td className="px-3 py-3 font-mono text-black/70">
+                              <td className="px-3 py-3 font-mono text-black/70 dark:text-zinc-300">
                                 {row.paidLeaveDays || 0}
                               </td>
-                              <td className="px-3 py-3 font-mono text-black/70">
+                              <td className="px-3 py-3 font-mono text-black/70 dark:text-zinc-300">
                                 {row.unpaidLeaveDays || 0}
                               </td>
-                              <td className="px-3 py-3 font-mono text-black/70">
+                              <td className="px-3 py-3 font-mono text-black/70 dark:text-zinc-300">
                                 {row.workingDays}
                               </td>
-                              <td className="px-3 py-3 font-mono text-black/70">
+                              <td className="px-3 py-3 font-mono text-black/70 dark:text-zinc-300">
                                 {Math.round(pay.ratio * 100)}%
                               </td>
                               <td className="px-3 py-3">
-                                <div className="font-mono font-semibold text-[#0F766E]">
+                                <div className="font-mono font-semibold text-[#0F766E] dark:text-[#5EEAD4]">
                                   ₹ {pay.payable.toLocaleString("en-IN")}
                                 </div>
                                 <div className="mt-1">
                                   {monthSettled ? (
-                                    <span className="inline-flex rounded-full bg-[#D1F2E1] px-2 py-0.5 text-[10px] font-semibold text-[#059669]">
+                                    <span className="inline-flex rounded-full bg-[#D1F2E1] px-2 py-0.5 text-[10px] font-semibold text-[#059669] dark:bg-emerald-950/80 dark:text-emerald-300">
                                       Paid
                                     </span>
                                   ) : monthPaid > 0 ? (
-                                    <span className="inline-flex rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[10px] font-semibold text-[#B45309]">
+                                    <span className="inline-flex rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[10px] font-semibold text-[#B45309] dark:bg-amber-950/80 dark:text-amber-300">
                                       Partial
                                     </span>
                                   ) : (
-                                    <span className="inline-flex rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-semibold text-black/55">
+                                    <span className="inline-flex rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-semibold text-black/55 dark:bg-zinc-800 dark:text-zinc-400">
                                       Unpaid
                                     </span>
                                   )}
@@ -1347,7 +1457,7 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                                         unpaidLeaveDays: String(row.unpaidLeaveDays || 0),
                                       })
                                     }
-                                    className="grid h-8 w-8 place-items-center rounded-full text-black/45 transition-colors hover:bg-[#0F766E] hover:text-white"
+                                    className="grid h-8 w-8 place-items-center rounded-full text-black/45 transition-colors hover:bg-[#0F766E] hover:text-white dark:text-zinc-400"
                                     aria-label={`Edit ${row.month}`}
                                   >
                                     <Pencil className="h-3.5 w-3.5" />
@@ -1355,7 +1465,7 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                                   <button
                                     type="button"
                                     onClick={() => setPendingDeleteMonth(row.month)}
-                                    className="grid h-8 w-8 place-items-center rounded-full text-black/45 transition-colors hover:bg-[#EF4444] hover:text-white"
+                                    className="grid h-8 w-8 place-items-center rounded-full text-black/45 transition-colors hover:bg-[#EF4444] hover:text-white dark:text-zinc-400"
                                     aria-label={`Remove ${row.month}`}
                                   >
                                     <X className="h-3.5 w-3.5" />
@@ -1363,11 +1473,12 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                                 </div>
                               </td>
                             </tr>
-                          );
-                        })}
+                          ),
+                        )}
                       </tbody>
                     </table>
-                  </div>
+                    </div>
+                  </>
                 )}
               </div>
             </section>
@@ -1486,18 +1597,18 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
               <div className="mt-4 rounded-lg border border-slate-100 bg-[#FAFAFA] px-4 py-3 dark:border-white/10 dark:bg-zinc-900/50">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-500">
                       Last payment
                     </div>
-                    <p className="mt-0.5 text-[13px] font-medium text-black">
+                    <p className="mt-0.5 text-[13px] font-medium text-black dark:text-zinc-100">
                       {lastSalaryPayment.description}
                     </p>
                   </div>
                   <div className="text-right">
-                    <div className="font-mono text-[14px] font-semibold text-[#0F766E]">
+                    <div className="font-mono text-[14px] font-semibold text-[#0F766E] dark:text-[#5EEAD4]">
                       ₹ {lastSalaryPayment.amount.toLocaleString("en-IN")}
                     </div>
-                    <div className="font-mono text-[11px] text-black/45">
+                    <div className="font-mono text-[11px] text-black/45 dark:text-zinc-500">
                       {formatEventDateTime(lastSalaryPayment.paidAt)} · {lastSalaryPayment.mode}
                     </div>
                   </div>
@@ -1509,12 +1620,12 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
           <section className={CARD_FRAME}>
             <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <h2 className="text-base font-semibold text-black">Monthly Payroll Ledger</h2>
-                <p className="mt-1 text-[12.5px] text-black/50">
+                <h2 className="text-base font-semibold text-black dark:text-zinc-100">Monthly Payroll Ledger</h2>
+                <p className="mt-1 text-[12.5px] text-black/50 dark:text-zinc-400">
                   Month-by-month payable vs paid · attendance drives the amount due.
                 </p>
               </div>
-              <span className="font-mono text-[11px] text-black/40">
+              <span className="font-mono text-[11px] text-black/40 dark:text-zinc-500">
                 {monthlyPayrollLedger.length} month
                 {monthlyPayrollLedger.length === 1 ? "" : "s"}
               </span>
@@ -1535,10 +1646,10 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <div className="text-[13px] font-semibold text-black">
+                          <div className="text-[13px] font-semibold text-black dark:text-zinc-100">
                             {row.monthLabel}
                           </div>
-                          <div className="mt-0.5 font-mono text-[10.5px] text-black/40">
+                          <div className="mt-0.5 font-mono text-[10.5px] text-black/40 dark:text-zinc-500">
                             {row.month}
                             {row.month === payrollMonth ? " · current" : ""}
                           </div>
@@ -1547,26 +1658,26 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                       </div>
                       <div className="mt-3 grid grid-cols-3 gap-2 border-t border-slate-200/70 pt-3 text-center dark:border-white/10">
                         <div>
-                          <div className="text-[10px] font-semibold uppercase tracking-wider text-black/40">
+                          <div className="text-[10px] font-semibold uppercase tracking-wider text-black/40 dark:text-zinc-500">
                             Payable
                           </div>
-                          <div className="mt-0.5 font-mono text-[12.5px] font-semibold text-black">
+                          <div className="mt-0.5 font-mono text-[12.5px] font-semibold text-black dark:text-zinc-100">
                             ₹ {row.payable.toLocaleString("en-IN")}
                           </div>
                         </div>
                         <div>
-                          <div className="text-[10px] font-semibold uppercase tracking-wider text-black/40">
+                          <div className="text-[10px] font-semibold uppercase tracking-wider text-black/40 dark:text-zinc-500">
                             Paid
                           </div>
-                          <div className="mt-0.5 font-mono text-[12.5px] font-semibold text-[#059669]">
+                          <div className="mt-0.5 font-mono text-[12.5px] font-semibold text-[#059669] dark:text-emerald-400">
                             ₹ {row.paid.toLocaleString("en-IN")}
                           </div>
                         </div>
                         <div>
-                          <div className="text-[10px] font-semibold uppercase tracking-wider text-black/40">
+                          <div className="text-[10px] font-semibold uppercase tracking-wider text-black/40 dark:text-zinc-500">
                             Due
                           </div>
-                          <div className="mt-0.5 font-mono text-[12.5px] font-semibold text-black">
+                          <div className="mt-0.5 font-mono text-[12.5px] font-semibold text-black dark:text-zinc-100">
                             ₹ {row.outstanding.toLocaleString("en-IN")}
                           </div>
                         </div>
@@ -1622,27 +1733,28 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                         <tr
                           key={row.month}
                           className={cn(
-                            "border-b border-slate-50 last:border-0",
-                            row.month === payrollMonth && "bg-[#F0FDFA]/70",
+                            "border-b border-slate-50 last:border-0 dark:border-white/5",
+                            row.month === payrollMonth &&
+                              "bg-[#F0FDFA]/70 dark:bg-teal-950/45",
                           )}
                         >
                           <td className="px-3 py-3">
-                            <div className="font-medium text-black">{row.monthLabel}</div>
-                            <div className="font-mono text-[10.5px] text-black/40">
+                            <div className="font-medium text-black dark:text-zinc-100">{row.monthLabel}</div>
+                            <div className="font-mono text-[10.5px] text-black/40 dark:text-zinc-500">
                               {row.month}
                               {row.month === payrollMonth ? " · current" : ""}
                             </div>
                           </td>
-                          <td className="px-3 py-3 font-mono text-black/70">
+                          <td className="px-3 py-3 font-mono text-black/70 dark:text-zinc-300">
                             {row.attendanceLabel}
                           </td>
-                          <td className="px-3 py-3 font-mono font-semibold text-black">
+                          <td className="px-3 py-3 font-mono font-semibold text-black dark:text-zinc-100">
                             ₹ {row.payable.toLocaleString("en-IN")}
                           </td>
-                          <td className="px-3 py-3 font-mono font-semibold text-[#059669]">
+                          <td className="px-3 py-3 font-mono font-semibold text-[#059669] dark:text-emerald-400">
                             ₹ {row.paid.toLocaleString("en-IN")}
                           </td>
-                          <td className="px-3 py-3 font-mono font-semibold text-black">
+                          <td className="px-3 py-3 font-mono font-semibold text-black dark:text-zinc-100">
                             ₹ {row.outstanding.toLocaleString("en-IN")}
                           </td>
                           <td className="px-3 py-3">
@@ -1682,18 +1794,18 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
           <section className={CARD_FRAME}>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <h2 className="text-base font-semibold text-black">Payment History</h2>
-                <p className="mt-1 text-[12.5px] text-black/50">
+                <h2 className="text-base font-semibold text-black dark:text-zinc-100">Payment History</h2>
+                <p className="mt-1 text-[12.5px] text-black/50 dark:text-zinc-400">
                   Individual salary disbursements for {staff.name}.
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2 rounded-lg bg-slate-50 px-4 py-3 dark:bg-zinc-900/70">
-                <Wallet className="h-4 w-4 text-black/45" />
+                <Wallet className="h-4 w-4 text-black/45 dark:text-zinc-500" />
                 <div className="text-right">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-500">
                     Transactions
                   </div>
-                  <div className="font-mono text-lg font-bold text-black">
+                  <div className="font-mono text-lg font-bold text-black dark:text-zinc-100">
                     {salaryHistory.length}
                   </div>
                 </div>
@@ -1733,16 +1845,16 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                       {salaryHistory.map((row) => {
                         const month = salaryHistoryPayrollMonth(row);
                         return (
-                          <tr key={row.id} className="border-b border-slate-50 last:border-0">
+                          <tr key={row.id} className="border-b border-slate-50 last:border-0 dark:border-white/5">
                             <td className="px-3 py-3 font-mono text-[11px] text-black/60 dark:text-zinc-400">
                               {formatEventDateTime(row.paidAt)}
                             </td>
-                            <td className="px-3 py-3 text-black/70">
+                            <td className="px-3 py-3 text-black/70 dark:text-zinc-300">
                               {month ? formatPayrollMonthLabel(month) : "—"}
                             </td>
-                            <td className="px-3 py-3 font-medium text-black">{row.description}</td>
-                            <td className="px-3 py-3 text-black/65">{row.mode}</td>
-                            <td className="px-3 py-3 font-mono font-semibold text-black">
+                            <td className="px-3 py-3 font-medium text-black dark:text-zinc-100">{row.description}</td>
+                            <td className="px-3 py-3 text-black/65 dark:text-zinc-300">{row.mode}</td>
+                            <td className="px-3 py-3 font-mono font-semibold text-black dark:text-zinc-100">
                               ₹ {row.amount.toLocaleString("en-IN")}
                             </td>
                             <td className="px-3 py-3">
@@ -1750,8 +1862,8 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                                 className={cn(
                                   "inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold",
                                   row.status === "Cleared" || row.status === "Paid"
-                                    ? "bg-[#D1F2E1] text-[#059669]"
-                                    : "bg-[#FEF3C7] text-[#B45309]",
+                                    ? "bg-[#D1F2E1] text-[#059669] dark:bg-emerald-950/80 dark:text-emerald-300"
+                                    : "bg-[#FEF3C7] text-[#B45309] dark:bg-amber-950/80 dark:text-amber-300",
                                 )}
                               >
                                 {row.status}
@@ -1773,20 +1885,20 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
         <section className={CARD_FRAME}>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h2 className="text-base font-semibold text-black">Workspace Login</h2>
-              <p className="mt-1 text-[12.5px] leading-relaxed text-black/55">
+              <h2 className="text-base font-semibold text-black dark:text-zinc-100">Workspace Login</h2>
+              <p className="mt-1 text-[12.5px] leading-relaxed text-black/55 dark:text-zinc-400">
                 Allow this staff member to sign in with limited module permissions.
               </p>
               {linkedUser ? (
                 <div className="mt-2 text-[12px] text-black/60 dark:text-zinc-400">
-                  <div className="font-medium text-black">{linkedUser.email}</div>
+                  <div className="font-medium text-black dark:text-zinc-100">{linkedUser.email}</div>
                   <div className="mt-0.5">
                     {linkedUser.active ? "Active" : "Inactive"} ·{" "}
                     {summarizePermissions(linkedUser.permissions)}
                   </div>
                 </div>
               ) : (
-                <p className="mt-2 text-[12px] text-black/45">No login enabled yet</p>
+                <p className="mt-2 text-[12px] text-black/45 dark:text-zinc-500">No login enabled yet</p>
               )}
             </div>
             <div className="flex flex-wrap gap-2">
@@ -2294,7 +2406,7 @@ function PayrollDueBox({
         {!cleared && overdue ? (
           <AlertTriangle className="h-4 w-4 text-[#EF4444]" />
         ) : (
-          <CheckCircle2 className="h-4 w-4 text-black" />
+          <CheckCircle2 className="h-4 w-4 text-black dark:text-zinc-400" />
         )}
       </div>
       <div
@@ -2321,7 +2433,7 @@ function PayrollDueBox({
         <p
           className={cn(
             "mt-2 text-[11px]",
-            !cleared && overdue ? "text-white/70" : "text-black/45",
+            !cleared && overdue ? "text-white/70" : "text-black/45 dark:text-zinc-500",
           )}
         >
           {hint}
@@ -2340,11 +2452,11 @@ function SalaryStatusBadge({
     <span
       className={cn(
         "inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold",
-        status === "Paid" && "bg-[#D1F2E1] text-[#059669]",
-        status === "Queued" && "bg-[#FEF3C7] text-[#B45309]",
-        status === "Partial" && "bg-[#FEF3C7] text-[#B45309]",
-        status === "Due" && "bg-[#FEE2E2] text-[#EF4444]",
-        status === "No due" && "bg-[#F4F4F5] text-black/55",
+        status === "Paid" && "bg-[#D1F2E1] text-[#059669] dark:bg-emerald-950/80 dark:text-emerald-300",
+        status === "Queued" && "bg-[#FEF3C7] text-[#B45309] dark:bg-amber-950/80 dark:text-amber-300",
+        status === "Partial" && "bg-[#FEF3C7] text-[#B45309] dark:bg-amber-950/80 dark:text-amber-300",
+        status === "Due" && "bg-[#FEE2E2] text-[#EF4444] dark:bg-red-950/80 dark:text-red-300",
+        status === "No due" && "bg-[#F4F4F5] text-black/55 dark:bg-zinc-800 dark:text-zinc-400",
       )}
     >
       {status}
@@ -2370,8 +2482,8 @@ function SalaryPaymentCard({ row }: { row: StaffSalaryHistoryEntry }) {
           className={cn(
             "shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold",
             row.status === "Cleared" || row.status === "Paid"
-              ? "bg-[#D1F2E1] text-[#059669]"
-              : "bg-[#FEF3C7] text-[#B45309]",
+              ? "bg-[#D1F2E1] text-[#059669] dark:bg-emerald-950/80 dark:text-emerald-300"
+              : "bg-[#FEF3C7] text-[#B45309] dark:bg-amber-950/80 dark:text-amber-300",
           )}
         >
           {row.status}

@@ -17,7 +17,14 @@ import {
 import { getActiveBrandPalette, pdfFontName } from "@/lib/brand-theme";
 import { defaultSealToPng, defaultSignatureSvg, svgMarkupToPng } from "@/lib/school-marks";
 import { formatDownloadFilename, slugYear, todayStamp } from "@/lib/download-names";
-import { resolveStudentLedgerStatus } from "@/lib/student-fees";
+import {
+  feeStatementHeadline,
+  isScheduledFeeLedgerRow,
+  resolveStudentLedgerStatus,
+  uniqueStudentReceipts,
+  type StudentLedgerRow,
+  type StudentReceipt,
+} from "@/lib/student-fees";
 
 function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -143,6 +150,78 @@ function normalizePdfTableCell(cell: TablePdfRowCell): string | TablePdfRichCell
   return pdfSafe(String(cell));
 }
 
+function fillTableColumnWidths(
+  styles: Record<number, TablePdfColumnStyle>,
+  columnCount: number,
+  contentWidth: number,
+): Record<number, TablePdfColumnStyle> {
+  const next: Record<number, TablePdfColumnStyle> = {};
+  for (let index = 0; index < columnCount; index += 1) {
+    next[index] = { ...styles[index] };
+  }
+
+  const widths = Array.from({ length: columnCount }, (_, index) => next[index].cellWidth ?? 0);
+  const assignedTotal = widths.reduce((sum, width) => sum + width, 0);
+  const unassigned = widths
+    .map((width, index) => (width > 0 ? -1 : index))
+    .filter((index) => index >= 0);
+
+  if (assignedTotal > contentWidth && assignedTotal > 0) {
+    const scale = contentWidth / assignedTotal;
+    for (let index = 0; index < columnCount; index += 1) {
+      if (next[index].cellWidth) next[index].cellWidth = next[index].cellWidth! * scale;
+    }
+    return next;
+  }
+
+  const leftover = contentWidth - assignedTotal;
+  if (leftover <= 0.2) return next;
+
+  if (unassigned.length > 0) {
+    const share = leftover / unassigned.length;
+    for (const index of unassigned) {
+      next[index].cellWidth = share;
+    }
+    return next;
+  }
+
+  let flexIndex = 0;
+  let flexWidth = -1;
+  for (let index = 0; index < columnCount; index += 1) {
+    const align = next[index].halign ?? "left";
+    const width = next[index].cellWidth ?? 0;
+    if (align !== "right" && width >= flexWidth) {
+      flexIndex = index;
+      flexWidth = width;
+    }
+  }
+  next[flexIndex].cellWidth = (next[flexIndex].cellWidth ?? 0) + leftover;
+  return next;
+}
+
+function resolveTableColumnStyles(
+  headers: string[],
+  contentWidth: number,
+  columnStyles?: Record<number, TablePdfColumnStyle>,
+) {
+  return fillTableColumnWidths(
+    columnStyles ?? buildDefaultTableColumnStyles(headers, contentWidth),
+    headers.length,
+    contentWidth,
+  );
+}
+
+function lastPdfTableY(doc: jsPDF) {
+  return (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+}
+
+function ensurePdfTableSpace(doc: jsPDF, startY: number, needed: number, margin: number) {
+  const pageHeight = doc.internal.pageSize.getHeight();
+  if (startY + needed <= pageHeight - 16) return startY;
+  doc.addPage();
+  return margin + 8;
+}
+
 function buildDefaultTableColumnStyles(
   headers: string[],
   contentWidth: number,
@@ -153,11 +232,11 @@ function buildDefaultTableColumnStyles(
 
   labels.forEach((label, index) => {
     if (["id", "transaction", "ref", "voucher"].some((key) => label.includes(key)) || label === "receipt") {
-      fixedWidths[index] = 22;
+      fixedWidths[index] = 24;
       return;
     }
     if (["account", "name", "payee", "student", "staff"].some((key) => label.includes(key))) {
-      fixedWidths[index] = 36;
+      fixedWidths[index] = 42;
       return;
     }
     if (label.includes("class") || label.includes("cls")) {
@@ -186,12 +265,12 @@ function buildDefaultTableColumnStyles(
       return;
     }
     if (label.includes("amount")) {
-      fixedWidths[index] = 22;
+      fixedWidths[index] = 28;
       styles[index] = { halign: "right" };
       return;
     }
     if (["time", "date"].some((key) => label.includes(key))) {
-      fixedWidths[index] = 32;
+      fixedWidths[index] = label.includes("time") ? 40 : 28;
       return;
     }
     if (label.includes("type")) {
@@ -203,7 +282,7 @@ function buildDefaultTableColumnStyles(
       return;
     }
     if (label.includes("status")) {
-      fixedWidths[index] = 18;
+      fixedWidths[index] = 22;
       return;
     }
     if (label.includes("role")) {
@@ -243,7 +322,7 @@ function buildDefaultTableColumnStyles(
         "statement",
       ].some((key) => label.includes(key))
     ) {
-      fixedWidths[index] = label.includes("balance") || label.includes("statement") ? 24 : 20;
+      fixedWidths[index] = label.includes("balance") || label.includes("statement") ? 28 : 22;
       styles[index] = { halign: "right" };
     }
   });
@@ -275,9 +354,11 @@ function buildDefaultTableColumnStyles(
   });
 
   if (headers.length === 2) {
-    const amountIndex = labels.findIndex((label) => label.includes("amount"));
+    const amountIndex = labels.findIndex(
+      (label) => label.includes("amount") || label.includes("rs."),
+    );
     const labelIndex = amountIndex === 0 ? 1 : 0;
-    const amountWidth = 34;
+    const amountWidth = 42;
     if (amountIndex >= 0) {
       styles[amountIndex] = { ...styles[amountIndex], cellWidth: amountWidth, halign: "right" };
     }
@@ -288,7 +369,7 @@ function buildDefaultTableColumnStyles(
     };
   }
 
-  return styles;
+  return fillTableColumnWidths(styles, headers.length, contentWidth);
 }
 
 type TablePdfSummaryItem = {
@@ -305,17 +386,18 @@ function drawPdfSummaryStrip(
   brand: ReturnType<typeof getActiveBrandPalette>,
 ) {
   if (!items.length) return startY;
+  const y = ensurePdfTableSpace(doc, startY, 22, margin);
   const columnWidth = contentWidth / items.length;
   autoTable(doc, {
-    startY,
-    margin: { left: margin, right: margin },
+    startY: y,
+    margin: { left: margin, right: margin, top: margin, bottom: 16 },
     tableWidth: contentWidth,
     head: [items.map((item) => pdfSafe(item.label))],
     body: [items.map((item) => pdfSafe(item.value))],
     theme: "grid",
     styles: {
-      fontSize: 8.5,
-      cellPadding: { top: 3, right: 3, bottom: 3, left: 3 },
+      fontSize: 8,
+      cellPadding: { top: 3.2, right: 3, bottom: 3.2, left: 3 },
       halign: "center",
       valign: "middle",
       textColor: [15, 23, 42],
@@ -327,25 +409,115 @@ function drawPdfSummaryStrip(
       fillColor: brand.softRgb,
       textColor: [71, 85, 105],
       fontStyle: "bold",
+      fontSize: 7.5,
       halign: "center",
       valign: "middle",
     },
     bodyStyles: {
       fontStyle: "bold",
+      fontSize: 9,
       halign: "center",
     },
     columnStyles: Object.fromEntries(
       items.map((_, index) => [index, { cellWidth: columnWidth }]),
     ),
   });
-  return (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+  return lastPdfTableY(doc);
 }
 
 type TablePdfAppendTable = {
   title?: string;
   headers: string[];
-  rows: (string | number)[][];
+  rows: TablePdfRowCell[][];
+  emptyMessage?: string;
+  striped?: boolean;
+  columnStyles?: Record<number, TablePdfColumnStyle>;
 };
+
+function drawPdfSectionTitle(doc: jsPDF, title: string, y: number, margin: number) {
+  doc.setFont(pdfFontName(), "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(15, 23, 42);
+  doc.text(pdfSafe(title), margin, y + 4);
+  return y + 8;
+}
+
+function applyAlignedPdfTable(
+  doc: jsPDF,
+  options: {
+    startY: number;
+    margin: number;
+    contentWidth: number;
+    headers: string[];
+    body: ReturnType<typeof normalizePdfTableCell>[][];
+    brand: ReturnType<typeof getActiveBrandPalette>;
+    fontSize: number;
+    striped?: boolean;
+    columnStyles?: Record<number, TablePdfColumnStyle>;
+  },
+) {
+  const columnStyles = resolveTableColumnStyles(
+    options.headers,
+    options.contentWidth,
+    options.columnStyles,
+  );
+  autoTable(doc, {
+    startY: options.startY,
+    margin: { left: options.margin, right: options.margin, top: 16, bottom: 16 },
+    tableWidth: options.contentWidth,
+    head: [options.headers.map((header) => pdfSafe(header))],
+    body: options.body,
+    theme: "grid",
+    styles: {
+      fontSize: options.fontSize,
+      cellPadding: { top: 2.2, right: 3, bottom: 2.2, left: 3 },
+      overflow: "linebreak",
+      valign: "middle",
+      textColor: [15, 23, 42],
+      lineColor: [226, 232, 240],
+      lineWidth: 0.1,
+    },
+    headStyles: {
+      fillColor: options.brand.primaryRgb,
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+      fontSize: options.fontSize,
+      valign: "middle",
+    },
+    ...(options.striped === false ? {} : { alternateRowStyles: { fillColor: options.brand.softRgb } }),
+    columnStyles,
+    showHead: "everyPage",
+    didParseCell: (data) => {
+      if (data.section !== "head") return;
+      const align = columnStyles[data.column.index]?.halign;
+      if (align) data.cell.styles.halign = align;
+    },
+  });
+  return lastPdfTableY(doc);
+}
+
+function tablePdfBody(
+  headers: string[],
+  rows: TablePdfRowCell[][],
+  emptyMessage?: string,
+) {
+  if (rows.length > 0) {
+    return rows.map((row) => row.map((cell) => normalizePdfTableCell(cell)));
+  }
+  return [
+    [
+      {
+        content: pdfSafe(emptyMessage ?? "No records for this period"),
+        colSpan: headers.length,
+        styles: {
+          halign: "center" as const,
+          fontStyle: "italic" as const,
+          textColor: [100, 116, 139] as [number, number, number],
+        },
+      },
+    ],
+  ];
+}
 
 function drawPdfAppendTable(
   doc: jsPDF,
@@ -355,73 +527,96 @@ function drawPdfAppendTable(
   table: TablePdfAppendTable,
   brand: ReturnType<typeof getActiveBrandPalette>,
 ) {
-  let y = startY;
-  if (table.title) {
-    doc.setFont(pdfFontName(), "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(15, 23, 42);
-    doc.text(pdfSafe(table.title), margin, y + 4);
-    y += 8;
-  }
-  const colCount = table.headers.length;
-  const fontSize = colCount > 4 ? 8 : 8.5;
-  autoTable(doc, {
+  let y = ensurePdfTableSpace(doc, startY, table.title ? 28 : 20, margin);
+  if (table.title) y = drawPdfSectionTitle(doc, table.title, y, margin);
+  const fontSize = table.headers.length > 4 ? 8 : 8.5;
+  return applyAlignedPdfTable(doc, {
     startY: y,
-    margin: { left: margin, right: margin },
-    tableWidth: contentWidth,
-    head: [table.headers.map((header) => pdfSafe(header))],
-    body: table.rows.map((row) => row.map((cell) => pdfSafe(String(cell)))),
-    theme: "grid",
-    styles: {
-      fontSize,
-      cellPadding: { top: 2.5, right: 2.5, bottom: 2.5, left: 2.5 },
-      overflow: "linebreak",
-      valign: "middle",
-      textColor: [15, 23, 42],
-      lineColor: [226, 232, 240],
-      lineWidth: 0.1,
-    },
-    headStyles: {
-      fillColor: brand.primaryRgb,
-      textColor: [255, 255, 255],
-      fontStyle: "bold",
-      fontSize,
-      halign: "left",
-      valign: "middle",
-    },
-    columnStyles: buildDefaultTableColumnStyles(table.headers, contentWidth),
+    margin,
+    contentWidth,
+    headers: table.headers,
+    body: tablePdfBody(table.headers, table.rows, table.emptyMessage),
+    brand,
+    fontSize,
+    striped: table.striped,
+    columnStyles: table.columnStyles,
   });
-  return (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+}
+
+function stampTablePdfPages(
+  doc: jsPDF,
+  margin: number,
+  brand: ReturnType<typeof getActiveBrandPalette>,
+  title: string,
+  footerLeft?: string,
+) {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const pageCount = doc.getNumberOfPages();
+  for (let page = 1; page <= pageCount; page += 1) {
+    doc.setPage(page);
+    doc.setFillColor(...brand.primaryRgb);
+    doc.rect(0, 0, pageWidth, 3, "F");
+    if (page > 1) {
+      doc.setFont(pdfFontName(), "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(...brand.primaryRgb);
+      doc.text(pdfSafe(title), margin, 10);
+    }
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.2);
+    doc.line(margin, pageHeight - 10, pageWidth - margin, pageHeight - 10);
+    doc.setFont(pdfFontName(), "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    if (footerLeft) {
+      const clipped = doc.splitTextToSize(pdfSafe(footerLeft), pageWidth / 2 - margin)[0];
+      doc.text(clipped, margin, pageHeight - 6);
+    }
+    doc.text(`Page ${page} of ${pageCount}`, pageWidth - margin, pageHeight - 6, {
+      align: "right",
+    });
+  }
 }
 
 type TablePdfOptions = {
   filename: string;
   title: string;
   subtitle?: string;
+  meta?: string;
+  tableTitle?: string;
   headers: string[];
   rows: TablePdfRowCell[][];
   footer?: string;
   summaryItems?: TablePdfSummaryItem[];
+  summaryPlacement?: "before" | "after";
   appendTables?: TablePdfAppendTable[];
   emptyMessage?: string;
   action?: PdfEmitAction;
   landscape?: boolean;
+  striped?: boolean;
   columnStyles?: Record<number, TablePdfColumnStyle>;
+  footerPlacement?: "after-main" | "end";
 };
 
 export function downloadTablePdf({
   filename,
   title,
   subtitle,
+  meta,
+  tableTitle,
   headers,
   rows,
   footer,
   summaryItems,
+  summaryPlacement = "after",
   appendTables,
   emptyMessage,
   action = "download",
   landscape,
+  striped,
   columnStyles,
+  footerPlacement = "end",
 }: TablePdfOptions) {
   const brand = getActiveBrandPalette();
   const colCount = headers.length;
@@ -432,95 +627,83 @@ export function downloadTablePdf({
     format: "a4",
   });
   const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 10;
+  const margin = 12;
   const contentWidth = pageWidth - margin * 2;
   const fontSize = colCount > 7 ? 7.5 : 8.5;
-  const tableBody =
-    rows.length > 0
-      ? rows.map((row) => row.map((cell) => normalizePdfTableCell(cell)))
-      : [
-          [
-            {
-              content: pdfSafe(emptyMessage ?? "No records for this period"),
-              colSpan: colCount,
-              styles: {
-                halign: "center" as const,
-                fontStyle: "italic" as const,
-                textColor: [100, 116, 139] as [number, number, number],
-              },
-            },
-          ],
-        ];
 
   doc.setFillColor(...brand.primaryRgb);
   doc.rect(0, 0, pageWidth, 3, "F");
   doc.setFont(pdfFontName(), "bold");
   doc.setFontSize(16);
   doc.setTextColor(...brand.primaryRgb);
-  doc.text(pdfSafe(title), margin, 18);
-  if (subtitle) {
+  doc.text(pdfSafe(title), margin, 16);
+  if (meta) {
     doc.setFont(pdfFontName(), "normal");
-    doc.setFontSize(10);
+    doc.setFontSize(8.5);
     doc.setTextColor(100, 116, 139);
-    doc.text(pdfSafe(subtitle), margin, 26);
+    doc.text(pdfSafe(meta), pageWidth - margin, 16, { align: "right" });
   }
 
-  autoTable(doc, {
-    startY: subtitle ? 32 : 24,
-    margin: { left: margin, right: margin, top: margin, bottom: 14 },
-    tableWidth: contentWidth,
-    head: [headers.map((header) => pdfSafe(header))],
-    body: tableBody,
-    theme: "grid",
-    styles: {
-      fontSize,
-      cellPadding: { top: 2.5, right: 2.5, bottom: 2.5, left: 2.5 },
-      overflow: "linebreak",
-      valign: "middle",
-      textColor: [15, 23, 42],
-      lineColor: [226, 232, 240],
-      lineWidth: 0.1,
-    },
-    headStyles: {
-      fillColor: brand.primaryRgb,
-      textColor: [255, 255, 255],
-      fontStyle: "bold",
-      fontSize,
-      halign: "left",
-      valign: "middle",
-    },
-    alternateRowStyles: { fillColor: brand.softRgb },
-    columnStyles: columnStyles ?? buildDefaultTableColumnStyles(headers, contentWidth),
-    showHead: "everyPage",
-    didDrawPage: (data) => {
-      const pageCount = doc.getNumberOfPages();
-      doc.setFont(pdfFontName(), "normal");
-      doc.setFontSize(8);
-      doc.setTextColor(148, 163, 184);
-      doc.text(
-        `Page ${data.pageNumber} of ${pageCount}`,
-        pageWidth - margin,
-        pageHeight - 6,
-        { align: "right" },
-      );
-    },
-  });
-
-  let finalY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
-  if (summaryItems?.length) {
-    finalY = drawPdfSummaryStrip(doc, finalY, margin, contentWidth, summaryItems, brand) + 6;
-  } else if (footer) {
+  let cursorY = 16;
+  if (subtitle) {
+    cursorY = 23;
     doc.setFont(pdfFontName(), "normal");
-    doc.setFontSize(9);
-    doc.setTextColor(80, 80, 80);
+    doc.setFontSize(9.5);
+    doc.setTextColor(100, 116, 139);
+    const subtitleLines = doc.splitTextToSize(pdfSafe(subtitle), contentWidth);
+    doc.text(subtitleLines, margin, cursorY);
+    cursorY += subtitleLines.length * 4.5;
+  }
+  cursorY += 3;
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.35);
+  doc.line(margin, cursorY, pageWidth - margin, cursorY);
+  cursorY += 6;
+
+  const drawFooterNote = (startY: number) => {
+    if (!footer) return startY;
+    const y = ensurePdfTableSpace(doc, startY, 12, margin);
+    doc.setFont(pdfFontName(), "italic");
+    doc.setFontSize(8.5);
+    doc.setTextColor(71, 85, 105);
     const lines = doc.splitTextToSize(pdfSafe(footer), contentWidth);
-    doc.text(lines, margin, finalY + 2);
-    finalY += lines.length * 4 + 4;
+    doc.text(lines, margin, y + 2);
+    return y + lines.length * 4 + 4;
+  };
+
+  if (summaryItems?.length && summaryPlacement === "before") {
+    cursorY = drawPdfSummaryStrip(doc, cursorY, margin, contentWidth, summaryItems, brand) + 7;
+  }
+  if (tableTitle) {
+    cursorY = ensurePdfTableSpace(doc, cursorY, 16, margin);
+    cursorY = drawPdfSectionTitle(doc, tableTitle, cursorY, margin);
+  }
+
+  cursorY = applyAlignedPdfTable(doc, {
+    startY: cursorY,
+    margin,
+    contentWidth,
+    headers,
+    body: tablePdfBody(headers, rows, emptyMessage),
+    brand,
+    fontSize,
+    striped,
+    columnStyles,
+  }) + 6;
+
+  if (summaryItems?.length && summaryPlacement !== "before") {
+    cursorY = drawPdfSummaryStrip(doc, cursorY, margin, contentWidth, summaryItems, brand) + 6;
+  }
+  if (footer && footerPlacement === "after-main") {
+    cursorY = drawFooterNote(cursorY);
   }
   for (const table of appendTables ?? []) {
-    finalY = drawPdfAppendTable(doc, finalY, margin, contentWidth, table, brand) + 6;
+    cursorY = drawPdfAppendTable(doc, cursorY, margin, contentWidth, table, brand) + 6;
   }
+  if (footer && footerPlacement !== "after-main") {
+    drawFooterNote(cursorY);
+  }
+  stampTablePdfPages(doc, margin, brand, title, subtitle);
   emitPdf(doc, filename, action);
 }
 
@@ -2102,29 +2285,13 @@ export type StudentFeeReportInput = {
     totalFee: number;
     totalPaid: number;
     totalDue: number;
-    ledger: {
-      date: string;
-      desc: string;
-      due: string;
-      charge: number;
-      paid: number;
-      balance: number;
-      status: string;
-      dueIso?: string;
-    }[];
-    receipts: {
-      id: string;
-      date: string;
-      amount: number;
-      mode: string;
-      cat?: string;
-      period?: string;
-    }[];
+    ledger: StudentLedgerRow[];
+    receipts: StudentReceipt[];
     tuition?: {
       totalFee: number;
       totalPaid: number;
       totalDue: number;
-      ledger: StudentFeeReportInput["statement"]["ledger"];
+      ledger: StudentLedgerRow[];
     };
     vehicle?: {
       applicable: boolean;
@@ -2135,7 +2302,7 @@ export type StudentFeeReportInput = {
       totalFee: number;
       totalPaid: number;
       totalDue: number;
-      ledger: StudentFeeReportInput["statement"]["ledger"];
+      ledger: StudentLedgerRow[];
     };
   };
   branding?: ReceiptBranding;
@@ -2146,7 +2313,7 @@ function appendFeeLedgerTable(
   margin: number,
   contentWidth: number,
   title: string,
-  rows: StudentFeeReportInput["statement"]["ledger"],
+  rows: StudentLedgerRow[],
   startY: number,
 ): number {
   if (rows.length === 0) return startY;
@@ -2273,13 +2440,20 @@ export async function downloadStudentFeeReportPdf(
   doc.setTextColor(...receiptInk().muted);
   doc.text(`Generated ${generatedAt}`, rightX, metaTop, { align: "right" });
 
+  const headlineLedger = [
+    ...(statement.tuition?.ledger ?? statement.ledger),
+    ...(statement.vehicle?.applicable ? statement.vehicle.ledger ?? [] : []),
+  ];
+  const headlineReceipts = uniqueStudentReceipts(statement.receipts);
+  const headline = feeStatementHeadline(headlineLedger, headlineReceipts);
+
   const summaryTop = leftEnd + 6;
   const colGap = 4;
   const colW = (contentWidth - colGap * 2) / 3;
   const summaryItems = [
-    { label: "Total Fee", value: formatInrPdf(statement.totalFee) },
-    { label: "Total Paid", value: formatInrPdf(statement.totalPaid) },
-    { label: "Total Due", value: formatInrPdf(statement.totalDue) },
+    { label: "Total Fee", value: formatInrPdf(headline.totalFee) },
+    { label: "Total Paid", value: formatInrPdf(headline.totalPaid) },
+    { label: "Total Due", value: formatInrPdf(headline.totalDue) },
   ];
   summaryItems.forEach((item, index) => {
     const x = margin + index * (colW + colGap);
@@ -2292,7 +2466,7 @@ export async function downloadStudentFeeReportPdf(
     doc.text(item.label.toUpperCase(), x + 4, summaryTop + 6);
     doc.setFont(pdfFontName(), "bold");
     doc.setFontSize(12);
-    if (index === 2 && statement.totalDue > 0) {
+    if (index === 2 && headline.totalDue > 0) {
       doc.setTextColor(185, 28, 28);
     } else {
       doc.setTextColor(...receiptInk().ink);
@@ -2301,7 +2475,19 @@ export async function downloadStudentFeeReportPdf(
   });
 
   let tableStart = summaryTop + 28;
-  const tuitionLedger = statement.tuition?.ledger ?? statement.ledger;
+  if (headline.unallocatedPaid > 0) {
+    doc.setFont(pdfFontName(), "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(...receiptInk().muted);
+    const creditNote = `${formatInrPdf(headline.unallocatedPaid)} received against vehicle or other heads is included in Total Paid and deducted from Total Due. It is not allocated to the academic lines below.`;
+    const creditLines = doc.splitTextToSize(creditNote, contentWidth);
+    doc.text(creditLines, margin, tableStart);
+    tableStart += creditLines.length * 4 + 4;
+  }
+
+  const tuitionLedger = (statement.tuition?.ledger ?? statement.ledger).filter(
+    isScheduledFeeLedgerRow,
+  );
   tableStart = appendFeeLedgerTable(
     doc,
     margin,
@@ -2311,18 +2497,19 @@ export async function downloadStudentFeeReportPdf(
     tableStart,
   );
 
-  if (statement.vehicle?.applicable && (statement.vehicle.ledger?.length ?? 0) > 0) {
+  const vehicleLedger = (statement.vehicle?.ledger ?? []).filter(isScheduledFeeLedgerRow);
+  if (statement.vehicle?.applicable && vehicleLedger.length > 0) {
     tableStart = appendFeeLedgerTable(
       doc,
       margin,
       contentWidth,
       "Vehicle / Transport Fees",
-      statement.vehicle.ledger,
+      vehicleLedger,
       tableStart,
     );
   }
 
-  if (statement.receipts.length > 0) {
+  if (headlineReceipts.length > 0) {
     doc.setFont(pdfFontName(), "bold");
     doc.setFontSize(10);
     doc.setTextColor(...receiptInk().tealDeep);
@@ -2334,7 +2521,7 @@ export async function downloadStudentFeeReportPdf(
       tableWidth: contentWidth,
       showHead: "everyPage",
       head: [["Receipt", "Date", "Category", "Mode", "Amount"]],
-      body: statement.receipts.map((row) => [
+      body: headlineReceipts.map((row) => [
         pdfSafe(row.id),
         pdfSafe(row.date),
         pdfSafe(row.period ? `${row.cat || "Fee"} · ${row.period}` : row.cat || "Fee"),
@@ -2380,7 +2567,7 @@ export async function downloadStudentFeeReportPdf(
         ["Student", pdfSafe(student.name)],
         ["Student ID", pdfSafe(student.id)],
         ["Class", pdfSafe(student.cls || "—")],
-        ["Total Due", formatInrPdf(statement.totalDue)],
+        ["Total Due", formatInrPdf(headline.totalDue)],
       ],
     },
   );

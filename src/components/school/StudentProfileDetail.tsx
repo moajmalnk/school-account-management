@@ -2284,11 +2284,11 @@ function ReceiptsList({
         </div>
       ) : (
         <ul className="divide-y divide-[#F0F0F0]">
-          {receipts.map((r) => {
+          {receipts.map((r, index) => {
             const isSending = sendingId === r.id;
             return (
               <li
-                key={r.id}
+                key={`${r.id}::${r.date}::${index}`}
                 className="-mx-2 flex items-center gap-3 rounded-lg px-3 py-3.5 transition-colors hover:bg-[#F4F4F5] sm:gap-4"
               >
                 <div className="min-w-0 flex-1">

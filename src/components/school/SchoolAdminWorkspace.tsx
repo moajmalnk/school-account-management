@@ -243,6 +243,7 @@ import {
   type Staff,
   type StaffAttendanceMonth,
   type Student,
+  type StudentYearLedger,
   type ThemeSettings,
   type TransportRoute,
   type TransportVehicle,
@@ -251,13 +252,14 @@ import {
   type VehicleDocumentKind,
   type VehicleOwnership,
 } from "@/lib/tenant-store";
+import { classSelectOptions } from "@/lib/class-options";
 import { StudentProfileDetail } from "@/components/school/StudentProfileDetail";
 import {
   StudentConcessionSection,
   emptyConcessionState,
   type StudentConcessionState,
 } from "@/components/school/StudentConcessionSection";
-import { isPeriodOnBreak, buildStudentFeeStatement } from "@/lib/student-fees";
+import { isPeriodOnBreak, sumStudentFeeRoster } from "@/lib/student-fees";
 import {
   concessionOtherFeePrefillAmount,
   concessionVehiclePrefillAmount,
@@ -410,6 +412,16 @@ import {
   STUDENT_CSV_HEADERS,
 } from "@/lib/student-csv";
 import { isDuplicateStaff, parseStaffCsv, staffFromCsvRow } from "@/lib/staff-csv";
+import {
+  parseTransportRouteCsv,
+  resolveTransportRouteImport,
+  transportRouteCsvDemoRows,
+  transportRouteCsvTemplateRows,
+  transportRouteToCsvRow,
+  TRANSPORT_ROUTE_CSV_HEADERS,
+  TRANSPORT_ROUTE_EXPORT_HEADERS,
+  type ResolvedTransportRouteImport,
+} from "@/lib/transport-route-csv";
 import { chunkItems, importRowsSequentially, isExcelFilename, parseIndianDate } from "@/lib/csv-import";
 import {
   EXPENSE_CSV_HEADERS,
@@ -431,7 +443,11 @@ import {
   type FeeCsvIssue,
   type ResolvedFeeImport,
 } from "@/lib/fee-collection-csv";
-import { CsvBulkImportDialog, FinanceCsvImportMenu } from "@/components/school/CsvBulkImportDialog";
+import {
+  CsvBulkImportDialog,
+  FinanceCsvImportMenu,
+  type CsvImportIssue,
+} from "@/components/school/CsvBulkImportDialog";
 import { resolveMediaUrl, fetchMediaBlob } from "@/lib/media";
 import {
   defaultSealToPng,
@@ -452,7 +468,7 @@ import {
   normalizePayeeType,
   type PayeeType,
 } from "@/lib/dashboard-finance";
-import { upsertDisbursementInCache, useDisbursements } from "@/lib/use-disbursements";
+import { syncDisbursementsCache, upsertDisbursementInCache, useDisbursements } from "@/lib/use-disbursements";
 import {
   useSettingsUnsavedGuard,
   useSettingsUnsavedRegistration,
@@ -503,6 +519,37 @@ type MadePayment = {
   status: "Queued" | "Cleared";
   attachments?: PaymentAttachment[];
 };
+
+function mapApiDisbursementToMadePayment(
+  row: {
+    id?: string;
+    payee: string;
+    desc: string;
+    amount: number;
+    mode: string;
+    payeeType?: string;
+    ledgerId?: string | null;
+    time?: string;
+    status?: string;
+    attachments?: unknown;
+  },
+  index = 0,
+): MadePayment {
+  return {
+    id: row.id || `DISB-${index}-${row.payee}-${row.time || ""}`,
+    payee: row.payee,
+    desc: row.desc,
+    amount: row.amount,
+    mode: row.mode,
+    payeeType: normalizePayeeType(row.payeeType),
+    ledgerId: row.ledgerId ?? null,
+    time: isBlankDate(row.time) ? toSqlDateTime(new Date()) : String(row.time),
+    status: row.status === "Queued" ? "Queued" : "Cleared",
+    attachments: Array.isArray(row.attachments)
+      ? (row.attachments as PaymentAttachment[])
+      : undefined,
+  };
+}
 
 const MAX_PAYMENT_ATTACHMENTS = 8;
 const MAX_PAYMENT_ATTACHMENT_BYTES = 5 * 1024 * 1024;
@@ -876,12 +923,13 @@ type PremiumDashboardProps = {
   periodExpenseCount: number;
   periodPayments: Payment[];
   totalDue: number;
+  outstandingStudentCount: number;
+  feePaidCount: number;
   salaryOutstanding: number;
   salaryOutstandingStaff: number;
   inHand: number;
   inBank: number;
   totalBalance: number;
-  overdueStudents: Student[];
   recentReceipts: Payment[];
   period: PaymentPeriod;
   setPeriod: (p: PaymentPeriod) => void;
@@ -1155,12 +1203,13 @@ function PremiumDashboard({
   periodExpenseCount,
   periodPayments,
   totalDue,
+  outstandingStudentCount,
+  feePaidCount,
   salaryOutstanding,
   salaryOutstandingStaff,
   inHand,
   inBank,
   totalBalance,
-  overdueStudents,
   recentReceipts,
   period,
   setPeriod,
@@ -1177,7 +1226,7 @@ function PremiumDashboard({
 }: PremiumDashboardProps) {
   const liveStudents = students.filter((s) => !isRecordDeleted(s.deletedAt));
   const liveStaff = staff.filter((s) => !isRecordDeleted(s.deletedAt));
-  const paidCount = liveStudents.filter((s) => s.due === 0).length;
+  const paidCount = feePaidCount;
   const activeStaff = liveStaff.filter((s) => s.active).length;
 
   const admissionWeeks = useMemo(() => {
@@ -1330,7 +1379,7 @@ function PremiumDashboard({
                 </div>
                 <div className="min-w-0">
                   <div className="text-[11px] font-medium text-slate-500">
-                    {overdueStudents.length} students
+                    {outstandingStudentCount} students
                   </div>
                   <DashboardAmount value={totalDue} className="mt-1 text-slate-900" />
                 </div>
@@ -1604,7 +1653,6 @@ function PremiumDashboard({
             </div>
             <Link
               to="/tenant/finance"
-              search={{ tab: "receive" }}
               className="text-[12px] font-semibold text-teal-700 hover:text-teal-900 hover:underline dark:text-teal-100 dark:hover:text-white"
             >
               View All
@@ -1613,13 +1661,19 @@ function PremiumDashboard({
           <div className="mt-4 flex-1 divide-y divide-teal-200/70 dark:divide-white/10">
             {recentReceipts.length === 0 && (
               <div className="py-6 text-center text-[12px] text-slate-600 dark:text-teal-100/70">
-                No receipts logged yet
+                No receipts or expenses yet
               </div>
             )}
-            {recentReceipts.map((payment) => (
+            {recentReceipts.map((payment) => {
+              const isExpenseRow = /^DISB-/i.test(payment.id);
+              return (
               <div key={payment.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-teal-100 text-teal-700 dark:bg-white/15 dark:text-emerald-300">
-                  <ArrowUpRight className="h-4 w-4" />
+                  {isExpenseRow ? (
+                    <ArrowUpFromLine className="h-4 w-4" />
+                  ) : (
+                    <ArrowUpRight className="h-4 w-4" />
+                  )}
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[13px] font-semibold text-slate-900 dark:text-white">
@@ -1631,11 +1685,13 @@ function PremiumDashboard({
                 </div>
                 <div className="shrink-0 text-right">
                   <div className="font-mono text-[13px] font-semibold text-slate-900 dark:text-white">
-                    {formatInr(payment.amount)}
+                    {isExpenseRow ? "−" : ""}
+                    {formatInr(Math.abs(payment.amount))}
                   </div>
                   <div className="mt-0.5 text-[10px] text-slate-500 dark:text-teal-100/60">
                     {formatEventDateTime(payment.time)}
                   </div>
+                  {!isExpenseRow && (
                   <div className="mt-1.5 flex items-center justify-end gap-1">
                     <button
                       type="button"
@@ -1657,9 +1713,11 @@ function PremiumDashboard({
                       <Download className="h-3.5 w-3.5" />
                     </button>
                   </div>
+                  )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       </div>
@@ -1782,6 +1840,10 @@ export function SchoolDashboard() {
     activeBranch,
     branches,
     schoolDetails,
+    classes,
+    activeFeeTerms,
+    transportRoutes,
+    studentFeeBreaks,
   } = useTenantStore();
   const schoolName = schoolDetails.name || "School";
   const [viewingPayment, setViewingPayment] = useState<Payment | null>(null);
@@ -1830,10 +1892,28 @@ export function SchoolDashboard() {
   const [period, setPeriod] = useState<PaymentPeriod>("this_month");
   const [customRange, setCustomRange] = useState<CustomDateRange>({ from: "", to: "" });
 
-  const liveStudents = students.filter((s) => !isRecordDeleted(s.deletedAt));
-  const liveStaff = staff.filter((s) => !isRecordDeleted(s.deletedAt));
-  const totalDue = liveStudents.reduce((acc, s) => acc + s.due, 0);
-  const overdueStudents = liveStudents.filter((s) => s.due > 0);
+  const feeRoster = useMemo(
+    () =>
+      sumStudentFeeRoster({
+        students: students.filter((s) => !isRecordDeleted(s.deletedAt)),
+        payments,
+        classes,
+        feeTerms: activeFeeTerms,
+        transportRoutes,
+        academicYear,
+        feeBreaks: studentFeeBreaks,
+      }),
+    [
+      students,
+      payments,
+      classes,
+      activeFeeTerms,
+      transportRoutes,
+      academicYear,
+      studentFeeBreaks,
+    ],
+  );
+  const totalDue = feeRoster.outstanding;
 
   const filteredPayments = useMemo(
     () => filterPaymentsByPeriod(payments, period, customRange),
@@ -1861,7 +1941,20 @@ export function SchoolDashboard() {
   const salaryOutstandingRows = useMemo(() => queuedSalaryPayables(disbursements), [disbursements]);
   const salaryOutstanding = useMemo(() => salaryPayable(disbursements), [disbursements]);
 
-  const recentReceipts = useMemo(() => filteredPayments.slice(0, 5), [filteredPayments]);
+  const recentReceipts = useMemo(() => {
+    const income: Payment[] = payments.slice();
+    const expenses: Payment[] = disbursements.filter(isClearedDisbursement).map((row) => ({
+      id: row.id || `DISB-${row.payee}-${row.time || ""}`,
+      name: row.payee,
+      cat: normalizePayeeType(row.payeeType),
+      mode: row.mode || "Cash",
+      amount: row.amount,
+      time: row.time || "",
+    }));
+    return [...income, ...expenses]
+      .sort((a, b) => (b.time || "").localeCompare(a.time || ""))
+      .slice(0, 5);
+  }, [payments, disbursements]);
 
   if (!hydrated || branchSyncing) {
     return <TenantDashboardSkeleton />;
@@ -1878,13 +1971,14 @@ export function SchoolDashboard() {
         periodExpenseCount={periodExpenseCount}
         periodPayments={filteredPayments}
         totalDue={totalDue}
+        outstandingStudentCount={feeRoster.outstandingCount}
+        feePaidCount={feeRoster.paidCount}
         salaryOutstanding={salaryOutstanding}
         salaryOutstandingStaff={salaryOutstandingRows.length}
         inHand={inHand}
         inBank={inBank}
         totalBalance={totalBalance}
         expensesReady={disbursementsLoaded}
-        overdueStudents={overdueStudents}
         recentReceipts={recentReceipts}
         period={period}
         setPeriod={setPeriod}
@@ -1968,6 +2062,42 @@ function studentBelongsToClass(studentCls: string, selectedClass: string) {
   if (!target.division) return true;
   if (!student.division) return false;
   return student.division.toLowerCase() === target.division.toLowerCase();
+}
+
+function classEnrollmentLabels(classConfig: ClassConfig): string[] {
+  const normalized = normalizeClassConfig(classConfig);
+  const composed = composeClassName(normalized.grade || "", normalized.section || "");
+  return Array.from(
+    new Set(
+      [classConfig.className, normalized.className, composed, normalized.grade]
+        .map((label) => label.trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function studentMatchesClassTier(studentCls: string, classConfig: ClassConfig): boolean {
+  return classEnrollmentLabels(classConfig).some((label) =>
+    studentBelongsToClass(studentCls, label),
+  );
+}
+
+/** Any student still attached to this class (current roster, recycle bin, or other years). */
+function classBlockingEnrollmentCount(
+  classConfig: ClassConfig,
+  roster: Student[],
+  ledgers: StudentYearLedger[] = [],
+): number {
+  const ids = new Set<string>();
+  for (const student of roster) {
+    if (studentMatchesClassTier(student.cls, classConfig)) ids.add(student.id);
+  }
+  for (const ledger of ledgers) {
+    for (const [studentId, fields] of Object.entries(ledger.byStudentId)) {
+      if (studentMatchesClassTier(fields.cls, classConfig)) ids.add(studentId);
+    }
+  }
+  return ids.size;
 }
 
 function buildClassDivisionIndex(classNames: string[]) {
@@ -2230,52 +2360,6 @@ function StudentFeesStatusBadge({ due }: { due: number }) {
   );
 }
 
-function DirectoryEnrollmentStatusControl({
-  active,
-  onChange,
-}: {
-  active: boolean;
-  onChange: (nextActive: boolean) => void;
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
-          aria-label={`Change status · currently ${active ? "Active" : "Inactive"}`}
-          className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E] focus-visible:ring-offset-1"
-        >
-          <EnrollmentStatusBadge active={active} className="cursor-pointer hover:opacity-90" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="start"
-        sideOffset={6}
-        collisionPadding={12}
-        className="z-[250] w-40 rounded-lg border-[#E5E5E5] bg-white p-1 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <DropdownMenuItem
-          className="cursor-pointer rounded-md text-[13px]"
-          disabled={active}
-          onClick={() => onChange(true)}
-        >
-          Active
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          className="cursor-pointer rounded-md text-[13px]"
-          disabled={!active}
-          onClick={() => onChange(false)}
-        >
-          Inactive
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 function StudentsDirectoryTable({
   students,
   selectedIds,
@@ -2283,7 +2367,6 @@ function StudentsDirectoryTable({
   onToggleSelectAll,
   onViewProfile,
   onEditData,
-  onChangeStatus,
   bulkBar,
 }: {
   students: Student[];
@@ -2292,7 +2375,6 @@ function StudentsDirectoryTable({
   onToggleSelectAll: (selected: boolean) => void;
   onViewProfile: (id: string) => void;
   onEditData: (id: string) => void;
-  onChangeStatus: (id: string, nextActive: boolean) => void;
   bulkBar?: ReactNode;
 }) {
   const allSelected = students.length > 0 && students.every((s) => selectedIds.has(s.id));
@@ -2331,7 +2413,6 @@ function StudentsDirectoryTable({
             const hasPhone = digits.length > 0;
             const waHref = `https://wa.me/${digits.length === 10 ? "91" : ""}${digits}`;
             const isSelected = selectedIds.has(student.id);
-            const isActive = isRecordActive(student.active);
             return (
               <div
                 key={student.id}
@@ -2381,10 +2462,6 @@ function StudentsDirectoryTable({
 
                 <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                   <span className={directoryMintChipClass}>{student.cls}</span>
-                  <DirectoryEnrollmentStatusControl
-                    active={isActive}
-                    onChange={(next) => onChangeStatus(student.id, next)}
-                  />
                 </div>
 
                 <div className="flex items-center justify-between gap-2 border-t border-[#F0F0F0] pt-2 dark:border-white/10 sm:pt-2.5">
@@ -2427,14 +2504,13 @@ function StudentsDirectoryTable({
       <div className="mobile-scrollbar-none hidden w-full max-w-full overflow-x-auto lg:block">
         <div className={glassTableWrapClass}>
           {bulkBar}
-          <table className="w-full min-w-[900px] table-fixed border-collapse text-left">
+          <table className="w-full min-w-[760px] table-fixed border-collapse text-left">
             <colgroup>
               <col className="w-[44px]" />
-              <col className="w-[20%]" />
-              <col className="w-[15%]" />
-              <col className="w-[12%]" />
-              <col className="w-[21%]" />
-              <col className="w-[28%]" />
+              <col className="w-[24%]" />
+              <col className="w-[16%]" />
+              <col className="w-[24%]" />
+              <col className="w-[36%]" />
             </colgroup>
             <thead>
               <tr>
@@ -2446,7 +2522,7 @@ function StudentsDirectoryTable({
                     disabled={students.length === 0}
                   />
                 </th>
-                {["Student", "Class", "Status", "Guardian & Contact", "Fees Status"].map(
+                {["Student", "Class", "Guardian & Contact", "Fees Status"].map(
                   (header) => (
                     <th
                       key={header}
@@ -2465,7 +2541,7 @@ function StudentsDirectoryTable({
               {students.length === 0 && (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={5}
                     className="px-4 py-10 text-center text-[13px] text-black/55 dark:text-zinc-400 sm:px-6"
                   >
                     No students enrolled for this academic year.
@@ -2477,7 +2553,6 @@ function StudentsDirectoryTable({
                 const hasPhone = digits.length > 0;
                 const waHref = `https://wa.me/${digits.length === 10 ? "91" : ""}${digits}`;
                 const isSelected = selectedIds.has(student.id);
-                const isActive = isRecordActive(student.active);
                 return (
                   <tr
                     key={student.id}
@@ -2537,12 +2612,6 @@ function StudentsDirectoryTable({
                       >
                         {student.cls}
                       </span>
-                    </td>
-                    <td className="px-3 py-3.5 align-middle sm:px-4 lg:px-6">
-                      <DirectoryEnrollmentStatusControl
-                        active={isActive}
-                        onChange={(next) => onChangeStatus(student.id, next)}
-                      />
                     </td>
                     <td className="min-w-0 px-3 py-3.5 align-middle sm:px-4 lg:px-6">
                       <div className="min-w-0">
@@ -3031,6 +3100,8 @@ export function StudentsLedger() {
   const [bulkWhatsAppOpen, setBulkWhatsAppOpen] = useState(false);
   const [bulkWhatsAppMsg, setBulkWhatsAppMsg] = useState("");
   const [bulkWhatsAppSending, setBulkWhatsAppSending] = useState(false);
+  const [bulkClassOpen, setBulkClassOpen] = useState(false);
+  const [bulkTargetClass, setBulkTargetClass] = useState("");
   const reconciledClassKeysRef = useRef(new Set<string>());
 
   useEffect(() => {
@@ -3182,6 +3253,24 @@ export function StudentsLedger() {
       .filter((row): row is { student: Student; number: string } => Boolean(row.number));
   }, [selectedStudents]);
 
+  const selectedClassMix = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const student of selectedStudents) {
+      const label = student.cls.trim() || "Unassigned";
+      counts.set(label, (counts.get(label) ?? 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], undefined, { numeric: true }))
+      .map(([cls, count]) => ({ cls, count }));
+  }, [selectedStudents]);
+
+  const bulkClassMoveCount = useMemo(() => {
+    const dest = bulkTargetClass.trim();
+    if (!dest) return selectedStudents.length;
+    const destKey = normalizeClassKey(dest);
+    return selectedStudents.filter((s) => normalizeClassKey(s.cls) !== destKey).length;
+  }, [selectedStudents, bulkTargetClass]);
+
   const toggleSelect = (id: string, selected: boolean) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -3222,21 +3311,6 @@ export function StudentsLedger() {
         ? `${matches.length} paid student${matches.length === 1 ? "" : "s"} selected`
         : `${matches.length} overdue student${matches.length === 1 ? "" : "s"} selected`,
     );
-  };
-
-  const changeStudentStatus = (id: string, nextActive: boolean) => {
-    const target = liveStudents.find((s) => s.id === id);
-    if (!target || isRecordActive(target.active) === nextActive) return;
-    const updated = { ...target, active: nextActive };
-    setStudents((prev) => prev.map((s) => (s.id === id ? updated : s)));
-    void apiUpsertStudent(updated).catch((err) =>
-      toast.error("Could not update student status on server", {
-        description: err instanceof Error ? err.message : "Save failed",
-      }),
-    );
-    toast.success(nextActive ? `${target.name} reactivated` : `${target.name} deactivated`, {
-      description: target.id,
-    });
   };
 
   const restoreStudent = (id: string) => {
@@ -3281,6 +3355,57 @@ export function StudentsLedger() {
         ? `${ids.size} student${ids.size === 1 ? "" : "s"} set to Active`
         : `${ids.size} student${ids.size === 1 ? "" : "s"} set to Inactive`,
     );
+    clearSelection();
+  };
+
+  const openBulkChangeClass = () => {
+    if (!selectedIds.size) {
+      toast.error("Select at least one student");
+      return;
+    }
+    setBulkTargetClass("");
+    setBulkClassOpen(true);
+  };
+
+  const confirmBulkChangeClass = () => {
+    const destRaw = bulkTargetClass.trim();
+    if (!destRaw) {
+      toast.error("Choose a destination class");
+      return;
+    }
+    const destConfig = classes.find(
+      (cls) => normalizeClassKey(cls.className) === normalizeClassKey(destRaw),
+    );
+    const destName = destConfig?.className ?? destRaw;
+    const destKey = normalizeClassKey(destName);
+    const targets = selectedStudents.filter((s) => normalizeClassKey(s.cls) !== destKey);
+    if (!targets.length) {
+      toast.message("All selected students are already in this class");
+      setBulkClassOpen(false);
+      setBulkTargetClass("");
+      return;
+    }
+    const skipped = selectedStudents.length - targets.length;
+    for (const student of targets) {
+      enrollStudentInActiveYear(student.id, {
+        cls: destName,
+        due: student.due,
+        active: isRecordActive(student.active),
+      });
+      void apiUpsertStudent({ ...student, cls: destName }).catch((err) =>
+        toast.error(`Could not move ${student.name} on server`, {
+          description: err instanceof Error ? err.message : "Update failed",
+        }),
+      );
+    }
+    toast.success(
+      `${targets.length} student${targets.length === 1 ? "" : "s"} moved to ${destName}`,
+      skipped > 0
+        ? { description: `${skipped} already in ${destName} skipped` }
+        : { description: academicYear ? `Enrollment updated for ${academicYear}` : undefined },
+    );
+    setBulkClassOpen(false);
+    setBulkTargetClass("");
     clearSelection();
   };
 
@@ -3424,38 +3549,29 @@ export function StudentsLedger() {
   );
 
   /** Same totals as each student Payments tab, summed across the active-year roster. */
-  const feeTotals = useMemo(() => {
-    let totalFee = 0;
-    let totalPaid = 0;
-    let totalDue = 0;
-    let overdueDue = 0;
-    for (const student of liveStudents) {
-      const statement = buildStudentFeeStatement({
-        student,
+  const feeTotals = useMemo(
+    () =>
+      sumStudentFeeRoster({
+        students: liveStudents,
         payments: activePayments,
         classes,
         feeTerms: activeFeeTerms,
         transportRoutes,
         academicYear,
         feeBreaks: studentFeeBreaks,
-      });
-      totalFee += statement.totalFee;
-      totalPaid += statement.totalPaid;
-      totalDue += Math.max(0, statement.totalDue - statement.overdueDue);
-      overdueDue += statement.overdueDue;
-    }
-    return { totalFee, totalPaid, totalDue, overdueDue };
-  }, [
-    liveStudents,
-    activePayments,
-    classes,
-    activeFeeTerms,
-    transportRoutes,
-    academicYear,
-    studentFeeBreaks,
-  ]);
+      }),
+    [
+      liveStudents,
+      activePayments,
+      classes,
+      activeFeeTerms,
+      transportRoutes,
+      academicYear,
+      studentFeeBreaks,
+    ],
+  );
 
-  const feeTotalDueCleared = feeTotals.totalDue <= 0;
+  const feeTotalDueCleared = feeTotals.pendingDue <= 0;
   const feeOverdueActive = feeTotals.overdueDue > 0;
 
   const exportCsv = () => {
@@ -3805,6 +3921,14 @@ export function StudentsLedger() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            <button
+              type="button"
+              onClick={openBulkChangeClass}
+              className={cn(mobileOutlineBtn, "h-9 rounded-lg px-3")}
+            >
+              <GraduationCap className="h-3.5 w-3.5" />
+              Change Class
+            </button>
             <button type="button" onClick={openBulkWhatsApp} className={bulkActionWhatsAppBtn}>
               <MessageCircle className="h-3.5 w-3.5" />
               Bulk WhatsApp
@@ -3889,7 +4013,7 @@ export function StudentsLedger() {
                 "max-w-full break-words text-[15px] sm:text-[18px] md:text-[26px] lg:text-[32px]",
               )}
             >
-              {formatInr(feeTotals.totalDue)}
+              {formatInr(feeTotals.pendingDue)}
             </div>
             <span
               className={cn(
@@ -4279,7 +4403,6 @@ export function StudentsLedger() {
             onToggleSelectAll={toggleSelectAll}
             onViewProfile={openStudent}
             onEditData={openStudentEdit}
-            onChangeStatus={changeStudentStatus}
             bulkBar={studentsBulkBar}
           />
         </>
@@ -4310,6 +4433,113 @@ export function StudentsLedger() {
         description={`Move ${selectedIds.size} selected student${selectedIds.size === 1 ? "" : "s"} to the recycle bin? You can restore them later from Recycle.`}
         onConfirm={confirmBulkDeleteStudents}
       />
+
+      <Dialog
+        open={bulkClassOpen}
+        onOpenChange={(open) => {
+          setBulkClassOpen(open);
+          if (!open) setBulkTargetClass("");
+        }}
+      >
+        <DialogContent className="flex max-h-[min(90dvh,640px)] w-[calc(100%-1.5rem)] max-w-lg flex-col gap-0 overflow-hidden rounded-xl border border-[#E5E5E5] bg-white p-0 sm:max-w-lg">
+          <DialogHeader className="shrink-0 space-y-1.5 border-b border-[#F0F0F0] px-5 pb-4 pt-5 pr-12 text-left sm:px-6 sm:pt-6">
+            <DialogTitle className="text-[20px] font-semibold text-black">Change class</DialogTitle>
+            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
+              Move {selectedStudents.length} selected student
+              {selectedStudents.length === 1 ? "" : "s"}
+              {academicYear ? ` for ${academicYear}` : ""}. Receipts stay with the student; upcoming
+              fee periods follow the destination class.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4 sm:px-6">
+            <div>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                Currently enrolled
+              </p>
+              {selectedClassMix.length ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedClassMix.map((row) => (
+                    <span
+                      key={row.cls}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-[#CCFBF1] bg-[#F0FDFA] px-2.5 py-1 text-[12px] font-medium text-[#0F766E]"
+                    >
+                      {row.cls}
+                      <span className="font-mono text-[10.5px] text-[#0F766E]/70">×{row.count}</span>
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[13px] text-slate-500">No students selected.</p>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                Destination class
+              </Label>
+              {classes.length ? (
+                <FieldSelect
+                  value={bulkTargetClass}
+                  onValueChange={setBulkTargetClass}
+                  options={classSelectOptions(classes, bulkTargetClass)}
+                  placeholder="Select class"
+                  searchable={classes.length > 8}
+                  searchPlaceholder="Search class…"
+                  contentClassName="z-[300]"
+                />
+              ) : (
+                <div className="rounded-lg border border-dashed border-[#E5E5E5] bg-[#FAFAFA] px-3.5 py-3 text-[13px] leading-relaxed text-slate-600">
+                  No class tiers yet. Add classes in Settings before moving students.
+                  <button
+                    type="button"
+                    className="mt-2 block text-[12.5px] font-semibold text-[#0F766E] hover:underline"
+                    onClick={() => {
+                      setBulkClassOpen(false);
+                      navigate({ to: "/tenant/settings", search: { tab: "classes" } });
+                    }}
+                  >
+                    Open Class Tier
+                  </button>
+                </div>
+              )}
+              {bulkTargetClass && bulkClassMoveCount === 0 ? (
+                <p className="text-[12px] text-amber-700">
+                  All selected students are already in this class.
+                </p>
+              ) : bulkTargetClass && bulkClassMoveCount < selectedStudents.length ? (
+                <p className="text-[12px] text-slate-500">
+                  {bulkClassMoveCount} will move · {selectedStudents.length - bulkClassMoveCount}{" "}
+                  already in {bulkTargetClass} skipped.
+                </p>
+              ) : null}
+            </div>
+          </div>
+
+          <DialogFooter className="shrink-0 flex-row justify-end gap-2 border-t border-[#F0F0F0] bg-white px-5 py-4 sm:px-6">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setBulkClassOpen(false);
+                setBulkTargetClass("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={!bulkTargetClass.trim() || bulkClassMoveCount === 0}
+              className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+              onClick={confirmBulkChangeClass}
+            >
+              {bulkClassMoveCount > 0
+                ? `Move ${bulkClassMoveCount} student${bulkClassMoveCount === 1 ? "" : "s"}`
+                : "Move students"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={bulkWhatsAppOpen} onOpenChange={setBulkWhatsAppOpen}>
         <DialogContent className="flex max-h-[min(90dvh,760px)] w-[calc(100%-1.5rem)] max-w-2xl flex-col gap-0 overflow-hidden rounded-xl border border-[#E5E5E5] bg-white p-0 sm:max-w-2xl">
@@ -6519,6 +6749,34 @@ function FinanceOverview({
     [disbursements],
   );
 
+  const financeTransactions = useMemo(() => {
+    const receipts = payments.map((p) => ({
+      key: `rc-${p.id}`,
+      kind: "receipt" as const,
+      id: p.id,
+      name: p.name,
+      detail: `${p.cat} · ${p.mode}${p.payerType === "external" ? " · External" : ""}${
+        p.narration ? ` · ${p.narration}` : ""
+      }`,
+      amount: p.amount,
+      time: p.time,
+      status: "Complete",
+      payment: p,
+    }));
+    const expenses = disbursements.map((d, index) => ({
+      key: `ex-${d.id || index}`,
+      kind: "expense" as const,
+      id: d.id || `DISB-${index}`,
+      name: d.payee,
+      detail: `${normalizePayeeType(d.payeeType)} · ${d.desc || "Expense"} · ${d.mode}`,
+      amount: d.amount,
+      time: d.time || "",
+      status: d.status === "Queued" ? "Queued" : "Cleared",
+      payment: null as Payment | null,
+    }));
+    return [...receipts, ...expenses].sort((a, b) => (b.time || "").localeCompare(a.time || ""));
+  }, [payments, disbursements]);
+
   const transactionPdfHeaders = [
     "ID",
     "Account",
@@ -6532,20 +6790,20 @@ function FinanceOverview({
   ] as const;
 
   const buildTransactionPdfRows = () =>
-    payments.map((p) => [
-      p.id,
-      p.name,
-      p.cat,
-      resolvePaymentFeePeriod(p) ?? "—",
-      p.mode,
-      p.amount.toLocaleString("en-IN"),
-      formatEventDateTime(p.time),
-      "Complete",
-      truncatePdfCell(p.narration ?? "", 88),
+    financeTransactions.map((tx) => [
+      tx.id,
+      tx.name,
+      tx.kind === "expense" ? "Expense" : (tx.payment?.cat ?? "Receipt"),
+      tx.kind === "receipt" && tx.payment ? (resolvePaymentFeePeriod(tx.payment) ?? "—") : "—",
+      tx.kind === "receipt" && tx.payment ? tx.payment.mode : tx.detail,
+      `${tx.kind === "expense" ? "-" : ""}${tx.amount.toLocaleString("en-IN")}`,
+      formatEventDateTime(tx.time),
+      tx.status,
+      truncatePdfCell(tx.kind === "receipt" ? (tx.payment?.narration ?? "") : tx.detail, 88),
     ]);
 
   const exportTransactionsCsv = () => {
-    if (!payments.length) {
+    if (!financeTransactions.length) {
       toast.error("Nothing to export · no transactions yet");
       return;
     }
@@ -6557,34 +6815,30 @@ function FinanceOverview({
       }),
       [
         "Transaction ID",
+        "Type",
         "Account",
-        "Category",
-        "Fee Period",
-        "Mode",
+        "Detail",
         "Amount (INR)",
         "Time",
         "Status",
-        "Narration",
       ],
-      payments.map((p) => [
-        p.id,
-        p.name,
-        p.cat,
-        resolvePaymentFeePeriod(p) ?? "",
-        p.mode,
-        p.amount,
-        formatEventDateTime(p.time),
-        "Complete",
-        p.narration ?? "",
+      financeTransactions.map((tx) => [
+        tx.id,
+        tx.kind === "expense" ? "Expense" : "Receipt",
+        tx.name,
+        tx.detail,
+        tx.kind === "expense" ? -tx.amount : tx.amount,
+        formatEventDateTime(tx.time),
+        tx.status,
       ]),
     );
     toast.success("Transactions exported", {
-      description: `${payments.length} row${payments.length === 1 ? "" : "s"} saved to CSV`,
+      description: `${financeTransactions.length} row${financeTransactions.length === 1 ? "" : "s"} saved to CSV`,
     });
   };
 
   const exportTransactionsPdf = () => {
-    if (!payments.length) {
+    if (!financeTransactions.length) {
       toast.error("Nothing to export · no transactions yet");
       return;
     }
@@ -6604,7 +6858,7 @@ function FinanceOverview({
   };
 
   const printTransactionsPdf = () => {
-    if (!payments.length) {
+    if (!financeTransactions.length) {
       toast.error("Nothing to print · no transactions yet");
       return;
     }
@@ -6674,25 +6928,28 @@ function FinanceOverview({
   };
 
   const shareTransactionsSummary = () => {
-    if (!payments.length) {
+    if (!financeTransactions.length) {
       toast.error("Nothing to share · no transactions yet");
       return;
     }
-    const total = payments.reduce((sum, p) => sum + p.amount, 0);
+    const total = financeTransactions.reduce(
+      (sum, tx) => sum + (tx.kind === "expense" ? -tx.amount : tx.amount),
+      0,
+    );
     const lines = [
       `${schoolName} · Transactions`,
       `Academic year: ${academicYear}`,
-      `${payments.length} receipt${payments.length === 1 ? "" : "s"} · Total ₹ ${total.toLocaleString("en-IN")}`,
+      `${financeTransactions.length} transaction${financeTransactions.length === 1 ? "" : "s"} · Net ₹ ${total.toLocaleString("en-IN")}`,
       "",
-      ...payments
+      ...financeTransactions
         .slice(0, 12)
         .map(
-          (p) =>
-            `• ${p.id} · ${p.name} · ₹ ${p.amount.toLocaleString("en-IN")} · ${formatEventDateTime(p.time)}`,
+          (tx) =>
+            `• ${tx.id} · ${tx.name} · ${tx.kind === "expense" ? "−" : ""}₹ ${tx.amount.toLocaleString("en-IN")} · ${formatEventDateTime(tx.time)}`,
         ),
     ];
-    if (payments.length > 12) {
-      lines.push(`…and ${payments.length - 12} more`);
+    if (financeTransactions.length > 12) {
+      lines.push(`…and ${financeTransactions.length - 12} more`);
     }
     void sharePayload("Finance Transactions", lines.join("\n"));
   };
@@ -7073,7 +7330,8 @@ function FinanceOverview({
           <div className="min-w-0">
             <h3 className="text-[15px] font-bold text-slate-900">Transactions</h3>
             <p className="mt-0.5 text-[12px] text-slate-500">
-              {payments.length} receipt{payments.length === 1 ? "" : "s"} · most recent first
+              {financeTransactions.length} transaction{financeTransactions.length === 1 ? "" : "s"} ·
+              receipts and expenses · newest first
             </p>
           </div>
           <div className="relative z-30 flex w-full shrink-0 flex-wrap gap-2 sm:w-auto sm:justify-end">
@@ -7130,59 +7388,63 @@ function FinanceOverview({
           </div>
         </div>
 
-        <div className="mt-4 space-y-2.5 md:hidden">
-          {payments.length === 0 && (
+        <div className="mt-4 max-h-[min(70vh,720px)] space-y-2.5 overflow-y-auto overscroll-contain pr-1 md:hidden">
+          {financeTransactions.length === 0 && (
             <div className="rounded-xl border border-dashed border-[#E5E5E5] bg-white/60 px-4 py-8 text-center text-[12px] text-black/55 dark:text-zinc-400">
               No transactions recorded yet
             </div>
           )}
-          {payments.map((p) => (
+          {financeTransactions.map((tx) => (
             <div
-              key={p.id}
+              key={tx.key}
               className="rounded-xl border border-[#E5E5E5] bg-white p-3.5 shadow-sm shadow-slate-200/40"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="truncate text-[13.5px] font-semibold text-slate-900">
-                    {p.name}
+                    {tx.name}
                   </div>
                   <div className="mt-0.5 truncate font-mono text-[10.5px] text-black/45">
-                    {p.id}
+                    {tx.id}
                   </div>
                 </div>
                 <div className="shrink-0 text-right">
                   <div className="font-mono text-[14px] font-bold text-slate-900">
-                    ₹ {p.amount.toLocaleString("en-IN")}
+                    {tx.kind === "expense" ? "−" : ""}₹ {tx.amount.toLocaleString("en-IN")}
                   </div>
-                  <span className="mt-1 inline-flex rounded-full bg-[#D1F2E1] px-2 py-0.5 text-[9.5px] font-semibold text-[#059669]">
-                    Complete
+                  <span
+                    className={cn(
+                      "mt-1 inline-flex rounded-full px-2 py-0.5 text-[9.5px] font-semibold",
+                      tx.kind === "expense"
+                        ? tx.status === "Queued"
+                          ? "bg-black/8 text-black/55"
+                          : "bg-[#FEE2E2] text-[#B91C1C]"
+                        : "bg-[#D1F2E1] text-[#059669]",
+                    )}
+                  >
+                    {tx.kind === "expense" ? tx.status : "Complete"}
                   </span>
                 </div>
               </div>
 
               <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
                 <span className="inline-flex max-w-full truncate rounded-full bg-[#CCFBF1] px-2 py-0.5 text-[10px] font-semibold text-[#0F172A]">
-                  {p.cat}
+                  {tx.kind === "expense" ? "Expense" : "Receipt"}
                 </span>
                 <span className="inline-flex max-w-full truncate rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-medium text-black/70">
-                  {p.mode}
+                  {tx.detail}
                 </span>
-                {p.payerType === "external" && (
-                  <span className="inline-flex rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[10px] font-semibold text-[#B45309]">
-                    External
-                  </span>
-                )}
               </div>
 
-              {p.narration && (
+              {tx.payment?.narration && (
                 <p className="mt-2 line-clamp-2 text-[11.5px] leading-snug text-black/55 dark:text-zinc-400">
-                  {p.narration}
+                  {tx.payment.narration}
                 </p>
               )}
 
-              {(p.attachments?.length ?? 0) > 0 && (
+              {(tx.payment?.attachments?.length ?? 0) > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  {p.attachments!.map((file) => (
+                  {tx.payment!.attachments!.map((file) => (
                     <button
                       key={file.id}
                       type="button"
@@ -7198,66 +7460,78 @@ function FinanceOverview({
 
               <div className="mt-2.5 flex flex-col gap-2 border-t border-[#F0F0F0] pt-2.5 sm:flex-row sm:items-center sm:justify-between">
                 <span className="min-w-0 truncate font-mono text-[10.5px] text-black/45">
-                  {formatEventDateTime(p.time)}
+                  {formatEventDateTime(tx.time)}
                 </span>
                 <div className="flex flex-wrap items-center justify-end gap-1.5">
-                  {isAdmin && (
+                  {tx.kind === "expense" ? (
+                    <Link
+                      to="/tenant/finance"
+                      search={{ tab: "make" }}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#E5E5E5] px-2.5 text-[11px] font-semibold text-black/65 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                    >
+                      View expense
+                    </Link>
+                  ) : tx.payment ? (
                     <>
+                      {isAdmin && (
+                        <>
+                          <button
+                            type="button"
+                            aria-label={`Edit receipt ${tx.id}`}
+                            onClick={() => openEditPayment(tx.payment!)}
+                            className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Delete receipt ${tx.id}`}
+                            onClick={() => setPendingDeletePayment(tx.payment)}
+                            className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </>
+                      )}
                       <button
                         type="button"
-                        aria-label={`Edit receipt ${p.id}`}
-                        onClick={() => openEditPayment(p)}
-                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                        aria-label={`Download receipt ${tx.id}`}
+                        onClick={() => downloadTransaction(tx.payment!)}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#E5E5E5] px-2.5 text-[11px] font-semibold text-black/65 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
                       >
-                        <Pencil className="h-3.5 w-3.5" />
+                        <Download className="h-3.5 w-3.5" />
+                        PDF
                       </button>
                       <button
                         type="button"
-                        aria-label={`Delete receipt ${p.id}`}
-                        onClick={() => setPendingDeletePayment(p)}
-                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                        aria-label={`Print receipt ${tx.id}`}
+                        title="Print"
+                        onClick={() => printTransaction(tx.payment!)}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#E5E5E5] px-2.5 text-[11px] font-semibold text-black/65 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Printer className="h-3.5 w-3.5" />
+                        Print
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Share receipt ${tx.id}`}
+                        onClick={() => shareTransaction(tx.payment!)}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#CCFBF1] bg-[#F0FDFA] px-2.5 text-[11px] font-semibold text-[#0F766E] transition-colors hover:bg-[#CCFBF1]"
+                      >
+                        <Share2 className="h-3.5 w-3.5" />
+                        Share
                       </button>
                     </>
-                  )}
-                  <button
-                    type="button"
-                    aria-label={`Download receipt ${p.id}`}
-                    onClick={() => downloadTransaction(p)}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#E5E5E5] px-2.5 text-[11px] font-semibold text-black/65 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                    PDF
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Print receipt ${p.id}`}
-                    title="Print"
-                    onClick={() => printTransaction(p)}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#E5E5E5] px-2.5 text-[11px] font-semibold text-black/65 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
-                  >
-                    <Printer className="h-3.5 w-3.5" />
-                    Print
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Share receipt ${p.id}`}
-                    onClick={() => shareTransaction(p)}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#CCFBF1] bg-[#F0FDFA] px-2.5 text-[11px] font-semibold text-[#0F766E] transition-colors hover:bg-[#CCFBF1]"
-                  >
-                    <Share2 className="h-3.5 w-3.5" />
-                    Share
-                  </button>
+                  ) : null}
                 </div>
               </div>
             </div>
           ))}
         </div>
 
-        <div className="mobile-scrollbar-none relative z-0 mt-4 hidden overflow-x-auto rounded-lg border border-[#E5E5E5] md:block">
+        <div className="relative z-0 mt-4 hidden max-h-[min(70vh,720px)] overflow-auto rounded-lg border border-[#E5E5E5] md:block">
           <table className="w-full min-w-[720px] text-left text-[12.5px]">
-            <thead>
+            <thead className="sticky top-0 z-10">
               <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5]">
                 {["Transaction", "Account", "Date / Time", "Amount", "Status", "Actions"].map(
                   (header) => (
@@ -7275,7 +7549,7 @@ function FinanceOverview({
               </tr>
             </thead>
             <tbody>
-              {payments.length === 0 && (
+              {financeTransactions.length === 0 && (
                 <tr>
                   <td
                     colSpan={6}
@@ -7285,82 +7559,96 @@ function FinanceOverview({
                   </td>
                 </tr>
               )}
-              {payments.map((p) => (
-                <tr key={p.id} className="border-b border-[#F0F0F0] last:border-0">
-                  <td className="px-3 py-3 font-mono text-[11px] text-black/70">{p.id}</td>
+              {financeTransactions.map((tx) => (
+                <tr key={tx.key} className="border-b border-[#F0F0F0] last:border-0">
+                  <td className="px-3 py-3 font-mono text-[11px] text-black/70">{tx.id}</td>
                   <td className="px-3 py-3">
-                    <div className="font-medium text-black">{p.name}</div>
-                    <div className="text-[11px] text-black/50">
-                      {p.cat} · {p.mode}
-                      {p.payerType === "external" ? " · External" : ""}
-                      {p.narration ? ` · ${p.narration}` : ""}
-                      {(p.attachments?.length ?? 0) > 0
-                        ? ` · ${p.attachments!.length} file${p.attachments!.length === 1 ? "" : "s"}`
-                        : ""}
-                    </div>
+                    <div className="font-medium text-black">{tx.name}</div>
+                    <div className="text-[11px] text-black/50">{tx.detail}</div>
                   </td>
                   <td className="px-3 py-3 font-mono text-[11px] text-black/55 dark:text-zinc-400">
-                    {formatEventDateTime(p.time)}
+                    {formatEventDateTime(tx.time)}
                   </td>
                   <td className="px-3 py-3 font-mono font-semibold text-black">
-                    ₹ {p.amount.toLocaleString("en-IN")}
+                    {tx.kind === "expense" ? "−" : ""}₹ {tx.amount.toLocaleString("en-IN")}
                   </td>
                   <td className="px-3 py-3">
-                    <span className="inline-flex rounded-full bg-[#D1F2E1] px-2.5 py-1 text-[10px] font-semibold text-[#059669]">
-                      Complete
+                    <span
+                      className={cn(
+                        "inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold",
+                        tx.kind === "expense"
+                          ? tx.status === "Queued"
+                            ? "bg-black/8 text-black/55"
+                            : "bg-[#FEE2E2] text-[#B91C1C]"
+                          : "bg-[#D1F2E1] text-[#059669]",
+                      )}
+                    >
+                      {tx.kind === "expense" ? tx.status : "Complete"}
                     </span>
                   </td>
                   <td className="px-3 py-3">
                     <div className="flex flex-wrap items-center justify-end gap-1">
-                      {isAdmin && (
+                      {tx.kind === "expense" ? (
+                        <Link
+                          to="/tenant/finance"
+                          search={{ tab: "make" }}
+                          className="inline-flex h-8 items-center rounded-full border border-[#E5E5E5] px-2.5 text-[11px] font-semibold text-black/65 hover:border-black hover:bg-[#F4F4F5]"
+                        >
+                          View
+                        </Link>
+                      ) : tx.payment ? (
                         <>
+                          {isAdmin && (
+                            <>
+                              <button
+                                type="button"
+                                aria-label={`Edit receipt ${tx.id}`}
+                                title="Edit"
+                                onClick={() => openEditPayment(tx.payment!)}
+                                className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={`Delete receipt ${tx.id}`}
+                                title="Delete"
+                                onClick={() => setPendingDeletePayment(tx.payment)}
+                                className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </>
+                          )}
                           <button
                             type="button"
-                            aria-label={`Edit receipt ${p.id}`}
-                            title="Edit"
-                            onClick={() => openEditPayment(p)}
+                            aria-label={`Download receipt ${tx.id}`}
+                            title="Download"
+                            onClick={() => downloadTransaction(tx.payment!)}
                             className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
                           >
-                            <Pencil className="h-3.5 w-3.5" />
+                            <Download className="h-3.5 w-3.5" />
                           </button>
                           <button
                             type="button"
-                            aria-label={`Delete receipt ${p.id}`}
-                            title="Delete"
-                            onClick={() => setPendingDeletePayment(p)}
-                            className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2]"
+                            aria-label={`Print receipt ${tx.id}`}
+                            title="Print"
+                            onClick={() => printTransaction(tx.payment!)}
+                            className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            <Printer className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Share receipt ${tx.id}`}
+                            title="Share"
+                            onClick={() => shareTransaction(tx.payment!)}
+                            className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-[#0F766E] hover:bg-[#CCFBF1] hover:text-[#0F766E]"
+                          >
+                            <Share2 className="h-3.5 w-3.5" />
                           </button>
                         </>
-                      )}
-                      <button
-                        type="button"
-                        aria-label={`Download receipt ${p.id}`}
-                        title="Download"
-                        onClick={() => downloadTransaction(p)}
-                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={`Print receipt ${p.id}`}
-                        title="Print"
-                        onClick={() => printTransaction(p)}
-                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black"
-                      >
-                        <Printer className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={`Share receipt ${p.id}`}
-                        title="Share"
-                        onClick={() => shareTransaction(p)}
-                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-[#0F766E] hover:bg-[#CCFBF1] hover:text-[#0F766E]"
-                      >
-                        <Share2 className="h-3.5 w-3.5" />
-                      </button>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
@@ -7491,17 +7779,6 @@ function orderedFeeDescriptionOptions(
     value: category.label,
     label: category.label,
   }));
-}
-
-export function classSelectOptions(classes: ClassConfig[], currentClass: string) {
-  const options = classes.map((c) => ({ value: c.className, label: c.className }));
-  if (
-    currentClass.trim() &&
-    !options.some((o) => o.value.toLowerCase() === currentClass.trim().toLowerCase())
-  ) {
-    options.push({ value: currentClass, label: currentClass });
-  }
-  return options;
 }
 
 function isOtherFeeDescription(label: string) {
@@ -11682,6 +11959,7 @@ function MakePayment() {
   const [expenseImportProgress, setExpenseImportProgress] = useState({ current: 0, total: 0 });
   const [expenseImportReady, setExpenseImportReady] = useState<ResolvedExpenseImport[]>([]);
   const [expenseImportIssues, setExpenseImportIssues] = useState<ExpenseCsvIssue[]>([]);
+  const [expenseListQuery, setExpenseListQuery] = useState("");
   const paymentTotal = Number(amount.replace(/[^0-9]/g, "")) || 0;
   const splitOk = splitMatchesTotal(mode, bankSplitAmount, cashSplitAmount, paymentTotal);
 
@@ -11699,22 +11977,11 @@ function MakePayment() {
       .then((rows) => {
         if (cancelled) return;
         const list = Array.isArray(rows) ? rows : [];
-        setMadePayments(
-          list.map((row) => ({
-            id: row.id || `DISB-${Date.now()}`,
-            payee: row.payee,
-            desc: row.desc,
-            amount: row.amount,
-            mode: row.mode,
-            payeeType: normalizePayeeType(row.payeeType),
-            ledgerId: row.ledgerId ?? null,
-            time: isBlankDate(row.time) ? toSqlDateTime(new Date()) : String(row.time),
-            status: (row.status === "Queued" ? "Queued" : "Cleared") as "Queued" | "Cleared",
-            attachments: Array.isArray(row.attachments)
-              ? (row.attachments as PaymentAttachment[])
-              : undefined,
-          })),
-        );
+        const mapped = list
+          .map((row, index) => mapApiDisbursementToMadePayment(row, index))
+          .sort((a, b) => (b.time || "").localeCompare(a.time || ""));
+        setMadePayments(mapped);
+        syncDisbursementsCache(activeBranchId, list);
       })
       .catch(() => {
         if (cancelled) return;
@@ -11723,7 +11990,7 @@ function MakePayment() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [activeBranchId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -11923,6 +12190,19 @@ function MakePayment() {
         .slice(0, 5),
     [madePayments],
   );
+
+  const visibleMadePayments = useMemo(() => {
+    const q = expenseListQuery.trim().toLowerCase();
+    const filtered = q
+      ? madePayments.filter((payment) =>
+          [payment.payee, payment.desc, payment.mode, payment.payeeType, String(payment.amount)]
+            .join(" ")
+            .toLowerCase()
+            .includes(q),
+        )
+      : madePayments;
+    return [...filtered].sort((a, b) => (b.time || "").localeCompare(a.time || ""));
+  }, [madePayments, expenseListQuery]);
 
   const applySalaryMonth = (month: string) => {
     const next = month || currentPayrollMonth();
@@ -12306,6 +12586,17 @@ function MakePayment() {
         toast.success(`${ok} expense${ok === 1 ? "" : "s"} imported`, {
           description: parts.join(" · ") || "Saved to made payments",
         });
+        void apiListDisbursements()
+          .then((list) => {
+            const rows = Array.isArray(list) ? list : [];
+            setMadePayments(
+              rows
+                .map((row, index) => mapApiDisbursementToMadePayment(row, index))
+                .sort((a, b) => (b.time || "").localeCompare(a.time || "")),
+            );
+            syncDisbursementsCache(activeBranchId, rows);
+          })
+          .catch(() => {});
       } else {
         toast.error("No expenses imported", {
           description: parts.join(" · ") || "Check the CSV and try again",
@@ -13156,7 +13447,10 @@ function MakePayment() {
           <div>
             <DashboardPanelHeading icon={CheckCircle2} title="Made Payment Details" />
             <div className="mt-1 text-[11.5px] text-black/55 dark:text-zinc-400">
-              {madePayments.length} disbursals · most recent
+              {madePayments.length} disbursal{madePayments.length === 1 ? "" : "s"} · newest first
+              {expenseListQuery.trim() && visibleMadePayments.length !== madePayments.length
+                ? ` · ${visibleMadePayments.length} match${visibleMadePayments.length === 1 ? "" : "es"}`
+                : ""}
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -13176,14 +13470,31 @@ function MakePayment() {
             </button>
           </div>
         </div>
-        <div className="mobile-scrollbar-none mt-3 max-h-[420px] divide-y divide-[#F0F0F0] overflow-y-auto">
+        {madePayments.length > 0 && (
+          <div className="relative mt-3">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-black/40" />
+            <input
+              type="search"
+              value={expenseListQuery}
+              onChange={(e) => setExpenseListQuery(e.target.value)}
+              placeholder="Search payee, category, amount…"
+              className="h-9 w-full rounded-full border border-[#E5E5E5] bg-white py-0 pl-9 pr-3 text-[12px] text-black outline-none placeholder:text-black/40 focus:border-black/30 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100"
+            />
+          </div>
+        )}
+        <div className="mt-3 max-h-[min(70vh,640px)] divide-y divide-[#F0F0F0] overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]">
           {madePayments.length === 0 && (
             <div className="py-6 text-center text-[12px] text-black/55 dark:text-zinc-400">
               No outbound payments recorded yet
             </div>
           )}
-          {madePayments.map((payment) => (
-            <div key={payment.id} className="py-2.5">
+          {madePayments.length > 0 && visibleMadePayments.length === 0 && (
+            <div className="py-6 text-center text-[12px] text-black/55 dark:text-zinc-400">
+              No disbursals match “{expenseListQuery.trim()}”
+            </div>
+          )}
+          {visibleMadePayments.map((payment, index) => (
+            <div key={`${payment.id}-${index}`} className="py-2.5">
               <div className="flex items-start justify-between gap-2 text-[12.5px]">
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium text-black">{payment.payee}</div>
@@ -13559,7 +13870,7 @@ function MakePayment() {
 }
 
 function LedgerAnalytics() {
-  const { activePayments: payments } = useTenantStore();
+  const { activePayments: payments, academicYear } = useTenantStore();
   const { disbursements } = useDisbursements();
 
   const incomeSegments = useMemo(() => {
@@ -13578,27 +13889,99 @@ function LedgerAnalytics() {
     [disbursements],
   );
 
+  const incomeTotal = useMemo(
+    () => incomeSegments.reduce((sum, segment) => sum + segment.value, 0),
+    [incomeSegments],
+  );
+  const outflowTotal = useMemo(
+    () => outflowSegments.reduce((sum, segment) => sum + segment.value, 0),
+    [outflowSegments],
+  );
+  const net = incomeTotal - outflowTotal;
+
   return (
-    <div className="grid grid-cols-12 gap-3 sm:gap-4 lg:gap-5">
-      <div className="col-span-6 min-w-0">
-        <FinanceDonutCard title="Income Distribution" cornerSide="tr" segments={incomeSegments} />
-      </div>
-      <div className="col-span-6 min-w-0">
+    <div className="flex flex-col gap-4 sm:gap-5">
+      <OrganicCard tone="white" cornerSide="tr" padded className="shrink-0">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
+            <div className="text-title text-slate-900 dark:text-zinc-50">Analytics</div>
+            <p className="mt-1 text-[12px] text-black/55 dark:text-zinc-400">
+              Income and outflow mix · {academicYear || "current year"}
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+          <div className="rounded-2xl bg-gradient-to-br from-teal-50 to-white p-3 ring-1 ring-teal-100/80 dark:from-teal-950/40 dark:to-zinc-900 dark:ring-teal-500/20 sm:p-4">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-teal-800/70 dark:text-teal-300/80">
+              Total income
+            </div>
+            <div className="mt-1 truncate font-mono text-[18px] font-semibold tracking-tight text-teal-950 dark:text-teal-100 sm:text-[20px]">
+              ₹ {incomeTotal.toLocaleString("en-IN")}
+            </div>
+            <div className="mt-1 text-[11px] text-teal-800/60 dark:text-teal-300/70">
+              {incomeSegments.length} categor{incomeSegments.length === 1 ? "y" : "ies"}
+            </div>
+          </div>
+          <div className="rounded-2xl bg-gradient-to-br from-rose-50 to-white p-3 ring-1 ring-rose-100/80 dark:from-rose-950/40 dark:to-zinc-900 dark:ring-rose-500/20 sm:p-4">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-rose-800/70 dark:text-rose-300/80">
+              Total outflow
+            </div>
+            <div className="mt-1 truncate font-mono text-[18px] font-semibold tracking-tight text-rose-950 dark:text-rose-100 sm:text-[20px]">
+              ₹ {outflowTotal.toLocaleString("en-IN")}
+            </div>
+            <div className="mt-1 text-[11px] text-rose-800/60 dark:text-rose-300/70">
+              {outflowSegments.length} categor{outflowSegments.length === 1 ? "y" : "ies"}
+            </div>
+          </div>
+          <div className="col-span-2 rounded-2xl bg-gradient-to-br from-slate-50 to-white p-3 ring-1 ring-slate-200/80 dark:from-zinc-900 dark:to-zinc-950 dark:ring-white/10 sm:col-span-2 sm:p-4">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+              Net movement
+            </div>
+            <div
+              className={cn(
+                "mt-1 truncate font-mono text-[18px] font-semibold tracking-tight sm:text-[20px]",
+                net >= 0
+                  ? "text-emerald-700 dark:text-emerald-300"
+                  : "text-rose-700 dark:text-rose-300",
+              )}
+            >
+              {net >= 0 ? "+" : "−"} ₹ {Math.abs(net).toLocaleString("en-IN")}
+            </div>
+            <div className="mt-1 text-[11px] text-black/45 dark:text-zinc-500">
+              {net >= 0 ? "Surplus for this year" : "Outflow exceeds income"}
+            </div>
+          </div>
+        </div>
+      </OrganicCard>
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:gap-5">
         <FinanceDonutCard
-          title="Monthly Outflow Breakdown"
-          cornerSide="bl"
-          segments={outflowSegments}
+          title="Income Distribution"
+          cornerSide="tr"
+          palette="income"
+          segments={incomeSegments}
+          emptyHint="Record fee receipts to see how income splits by category."
         />
-      </div>
-      <div className="col-span-6 min-w-0">
-        <FinanceBarCard title="Income by Category" cornerSide="tr" segments={incomeSegments} />
-      </div>
-      <div className="col-span-6 min-w-0">
+        <FinanceDonutCard
+          title="Outflow Breakdown"
+          cornerSide="bl"
+          palette="outflow"
+          segments={outflowSegments}
+          emptyHint="Make a payment to see salaries and expenses by category."
+        />
+        <FinanceBarCard
+          title="Income by Category"
+          cornerSide="tr"
+          palette="income"
+          segments={incomeSegments}
+          emptyHint="No receipts yet for this academic year."
+        />
         <FinanceBarCard
           title="Outflow by Category"
           cornerSide="bl"
-          fill="#0F766E"
+          palette="outflow"
           segments={outflowSegments}
+          emptyHint="No cleared payments yet for this academic year."
         />
       </div>
     </div>
@@ -13645,7 +14028,9 @@ export function SchoolSettings() {
     setSchoolDetails,
     staff,
     setStaff,
-    activeStudents: students,
+    students,
+    activeStudents,
+    studentYearLedgers,
     setStudents,
     hydrated,
     branchSyncing,
@@ -13665,7 +14050,6 @@ export function SchoolSettings() {
       { id: "school", label: "School Details" },
       { id: "branches", label: "Branches" },
       { id: "classes", label: "Class Tier" },
-      { id: "departments", label: "Departments" },
       { id: "leave", label: "Leave" },
       { id: "fees", label: "Fee Category" },
       { id: "users", label: "Users" },
@@ -13677,9 +14061,30 @@ export function SchoolSettings() {
   );
 
   const settingsTabs = useMemo(
-    () => allSettingsTabs.filter((tab) => sessionCanAccessSettingsTab(session, tab.id)),
+    () =>
+      allSettingsTabs.filter((tab) => {
+        if (tab.id === "classes") {
+          return (
+            sessionCanAccessSettingsTab(session, "classes") ||
+            sessionCanAccessSettingsTab(session, "departments") ||
+            sessionCanAccessSettingsTab(session, "roles")
+          );
+        }
+        return sessionCanAccessSettingsTab(session, tab.id);
+      }),
     [allSettingsTabs, session],
   );
+
+  const classTierOpen =
+    activeTab === "classes" || activeTab === "departments" || activeTab === "roles";
+  const canViewClasses = sessionCanAccessSettingsTab(session, "classes");
+  const canViewDepartments =
+    sessionCanAccessSettingsTab(session, "departments") ||
+    sessionCanAccessSettingsTab(session, "roles");
+  const classTierSection: "classes" | "departments" =
+    activeTab === "departments" || activeTab === "roles" || !canViewClasses
+      ? "departments"
+      : "classes";
 
   useEffect(() => {
     if (!sessionCanAccessSettings(session)) {
@@ -13689,8 +14094,16 @@ export function SchoolSettings() {
     }
     // On the mobile menu (no tab), skip tab-level redirects.
     if (!tabParam) return;
-    // Positions live under Departments; Vehicles under Bus Point.
+    // Positions and Departments live under Class Tier; Vehicles under Bus Point.
     if (tabParam === "roles") {
+      navigate({ to: "/tenant/settings", search: { tab: "departments" }, replace: true });
+      return;
+    }
+    if (tabParam === "departments" && !canViewDepartments && canViewClasses) {
+      navigate({ to: "/tenant/settings", search: { tab: "classes" }, replace: true });
+      return;
+    }
+    if (tabParam === "classes" && !canViewClasses && canViewDepartments) {
       navigate({ to: "/tenant/settings", search: { tab: "departments" }, replace: true });
       return;
     }
@@ -13698,10 +14111,10 @@ export function SchoolSettings() {
       navigate({ to: "/tenant/settings", search: { tab: "transport" }, replace: true });
       return;
     }
-    if (!sessionCanAccessSettingsTab(session, activeTab)) {
+    if (!sessionCanAccessSettingsTab(session, activeTab) && !classTierOpen) {
       navigate({ to: "/tenant/settings", search: {}, replace: true });
     }
-  }, [session, activeTab, navigate, tabParam]);
+  }, [session, activeTab, navigate, tabParam, canViewClasses, canViewDepartments, classTierOpen]);
 
   const [schoolDirty, setSchoolDirty] = useState(false);
   const { tryNavigate } = useSettingsUnsavedGuard();
@@ -13779,7 +14192,7 @@ export function SchoolSettings() {
       content
     );
 
-  const renderSettingsContent = (listLayout: "cards" | "table") => (
+  const renderSettingsContent = (listLayout: "cards" | "table", pinSupport = false) => (
     <>
       {activeTab === "school" && (
         <>
@@ -13813,47 +14226,81 @@ export function SchoolSettings() {
           listLayout,
         )}
 
-      {activeTab === "classes" && (
+      {classTierOpen && (
         <>
           {campusHint}
-          {renderSettingsPanel(
-            <ClassesCard
-              classes={classes}
-              setClasses={setClasses}
-              students={students}
-              setStudents={setStudents}
-              staff={staff}
-              feeTerms={feeTerms}
-            />,
-            "Loading class tiers",
-            listLayout,
-          )}
-        </>
-      )}
-
-      {activeTab === "departments" && (
-        <>
-          {campusHint}
-          {renderSettingsPanel(
-            <div className="space-y-3">
-              <DepartmentsCard
-                departments={departments}
-                setDepartments={setDepartments}
-                staff={staff}
-                setStaff={setStaff}
-                roles={roles}
-              />
-              <RolesCard
-                roles={roles}
-                setRoles={setRoles}
-                departments={departments}
-                staff={staff}
-                setStaff={setStaff}
-              />
-            </div>,
-            "Loading departments",
-            listLayout,
-          )}
+          {canViewClasses && canViewDepartments ? (
+            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="inline-flex w-full max-w-md rounded-full border border-[#E5E5E5] bg-white/90 p-1 shadow-sm dark:border-white/10 dark:bg-zinc-900/80 sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setTab("classes")}
+                  className={cn(
+                    "flex-1 rounded-full px-4 py-1.5 text-[12px] font-semibold transition-colors sm:flex-none sm:px-5",
+                    classTierSection === "classes"
+                      ? "bg-[#0F766E] text-white shadow-sm"
+                      : "text-slate-600 hover:bg-slate-100 dark:text-zinc-400 dark:hover:bg-white/10",
+                  )}
+                >
+                  Classes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab("departments")}
+                  className={cn(
+                    "flex-1 rounded-full px-4 py-1.5 text-[12px] font-semibold transition-colors sm:flex-none sm:px-5",
+                    classTierSection === "departments"
+                      ? "bg-[#0F766E] text-white shadow-sm"
+                      : "text-slate-600 hover:bg-slate-100 dark:text-zinc-400 dark:hover:bg-white/10",
+                  )}
+                >
+                  Departments
+                </button>
+              </div>
+              <p className="text-[12px] text-black/50 dark:text-zinc-400">
+                {classTierSection === "classes"
+                  ? "Fee schedule, divisions, and class teachers for Receive Payment."
+                  : "Staff divisions and positions used in Recruit Staff and Users."}
+              </p>
+            </div>
+          ) : null}
+          {classTierSection === "classes"
+            ? renderSettingsPanel(
+                <ClassesCard
+                  classes={classes}
+                  setClasses={setClasses}
+                  students={activeStudents}
+                  allStudents={students}
+                  studentYearLedgers={(studentYearLedgers ?? []).filter(
+                    (l) => l.academicYear === academicYear,
+                  )}
+                  setStudents={setStudents}
+                  staff={staff}
+                  feeTerms={feeTerms}
+                />,
+                "Loading class tiers",
+                listLayout,
+              )
+            : renderSettingsPanel(
+                <div className="space-y-3">
+                  <DepartmentsCard
+                    departments={departments}
+                    setDepartments={setDepartments}
+                    staff={staff}
+                    setStaff={setStaff}
+                    roles={roles}
+                  />
+                  <RolesCard
+                    roles={roles}
+                    setRoles={setRoles}
+                    departments={departments}
+                    staff={staff}
+                    setStaff={setStaff}
+                  />
+                </div>,
+                "Loading departments",
+                listLayout,
+              )}
         </>
       )}
 
@@ -13955,7 +14402,9 @@ export function SchoolSettings() {
           <TenantSystemSkeleton />
         ))}
 
-      {activeTab === "support" && <CustomerSupportCard onBackToSettings={backToMenu} />}
+      {activeTab === "support" && (
+        <CustomerSupportCard onBackToSettings={backToMenu} pinToViewport={pinSupport} />
+      )}
     </>
   );
 
@@ -14035,10 +14484,11 @@ export function SchoolSettings() {
           "col-span-12 min-w-0 lg:hidden",
           showMobileMenu && "hidden",
           !showMobileMenu && "-mt-1",
+          activeTab === "support" && "max-md:h-0 max-md:overflow-visible",
         )}
       >
         <SettingsMobileNavProvider onBack={backToMenu}>
-          {renderSettingsContent("cards")}
+          {renderSettingsContent("cards", true)}
         </SettingsMobileNavProvider>
       </div>
 
@@ -14047,7 +14497,7 @@ export function SchoolSettings() {
         <div className="mobile-scrollbar-none overflow-x-auto rounded-full border border-[#E5E5E5] bg-white/80 p-1 shadow-sm dark:border-white/10 dark:bg-zinc-900/80">
           <div className="flex min-w-max gap-1 lg:min-w-0 lg:w-full">
             {settingsTabs.map((tab) => {
-              const active = activeTab === tab.id;
+              const active = tab.id === "classes" ? classTierOpen : activeTab === tab.id;
               return (
                 <button
                   key={tab.id}
@@ -14078,11 +14528,13 @@ function CardHeader({
   subtitle,
   actionLabel,
   onAction,
+  extraActions,
 }: {
   title: string;
   subtitle: string;
   actionLabel: string;
   onAction: () => void;
+  extraActions?: ReactNode;
 }) {
   const addButton = (
     <button
@@ -14098,7 +14550,16 @@ function CardHeader({
     <SettingsResponsiveCardHeader
       title={title}
       subtitle={subtitle}
-      action={addButton}
+      action={
+        extraActions ? (
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
+            {extraActions}
+            {addButton}
+          </div>
+        ) : (
+          addButton
+        )
+      }
       subtitleClassName="lg:text-black/55"
     />
   );
@@ -14904,6 +15365,8 @@ function ClassesCard({
   classes,
   setClasses,
   students,
+  allStudents,
+  studentYearLedgers,
   setStudents,
   staff,
   feeTerms,
@@ -14911,6 +15374,8 @@ function ClassesCard({
   classes: ClassConfig[];
   setClasses: React.Dispatch<React.SetStateAction<ClassConfig[]>>;
   students: Student[];
+  allStudents: Student[];
+  studentYearLedgers: StudentYearLedger[];
   setStudents: React.Dispatch<React.SetStateAction<Student[]>>;
   staff: Staff[];
   feeTerms: FeeTerm[];
@@ -15220,12 +15685,25 @@ function ClassesCard({
         description: `₹ ${next.tuitionFeeAmount.toLocaleString("en-IN")} · ${scheduleSummary({ ...next, id: editingId })}`,
       });
     } else {
-      const nextId = `CLS-${(classes.length + 1).toString().padStart(3, "0")}`;
+      const nextId = nextPrefixedId(
+        "CLS",
+        classes.map((c) => c.id),
+        3,
+      );
       const created = { id: nextId, ...next };
       setClasses((prev) => [...prev, created]);
-      void apiUpsertClass(created).catch((err) =>
-        toast.error(err instanceof Error ? err.message : "Could not sync class"),
-      );
+      void apiUpsertClass(created)
+        .then((saved) => {
+          if (!saved?.id) return;
+          setClasses((prev) =>
+            prev.map((c) =>
+              c.id === created.id || c.id === saved.id ? { ...c, ...saved } : c,
+            ),
+          );
+        })
+        .catch((err) =>
+          toast.error(err instanceof Error ? err.message : "Could not sync class"),
+        );
       toast.success(`${className} added`, {
         description: `₹ ${next.tuitionFeeAmount.toLocaleString("en-IN")} · ${scheduleSummary(created)}`,
       });
@@ -15238,8 +15716,11 @@ function ClassesCard({
       (s) => !isRecordDeleted(s.deletedAt) && studentBelongsToClass(s.cls, className),
     ).length;
 
+  const blockingCount = (classConfig: ClassConfig) =>
+    classBlockingEnrollmentCount(classConfig, allStudents, studentYearLedgers);
+
   const requestDelete = (c: ClassConfig) => {
-    const count = enrolledCount(c.className);
+    const count = blockingCount(c);
     if (count > 0) {
       toast.error(`${c.className} cannot be deleted`, {
         description: `${count} student${count === 1 ? "" : "s"} enrolled · move them to another class first`,
@@ -15250,7 +15731,7 @@ function ClassesCard({
   };
 
   const remove = (c: ClassConfig) => {
-    const count = enrolledCount(c.className);
+    const count = blockingCount(c);
     if (count > 0) {
       toast.error(`${c.className} cannot be deleted`, {
         description: `${count} student${count === 1 ? "" : "s"} enrolled · move them to another class first`,
@@ -15258,10 +15739,14 @@ function ClassesCard({
       return;
     }
     setClasses((prev) => prev.filter((x) => x.id !== c.id));
-    void apiDeleteClass(c.id).catch((err) =>
-      toast.error(err instanceof Error ? err.message : "Could not delete class"),
-    );
-    toast.success(`${c.className} removed`);
+    void apiDeleteClass(c.id)
+      .then(() => {
+        toast.success(`${c.className} removed`);
+      })
+      .catch((err) => {
+        setClasses((prev) => (prev.some((x) => x.id === c.id) ? prev : [...prev, c]));
+        toast.error(err instanceof Error ? err.message : "Could not delete class");
+      });
   };
 
   const confirmDelete = () => {
@@ -15298,126 +15783,228 @@ function ClassesCard({
     [classes],
   );
 
+  const classTierMeta = (c: ClassConfig) => {
+    const normalized = withClassFeeSchedule(normalizeClassConfig(c), feeTerms);
+    const parts = splitClassName(normalized.className);
+    const grade = (normalized.grade || parts.grade || normalized.className).trim();
+    const div = (normalized.section || parts.section || "").trim();
+    const teacher = teacherName(normalized.classTeacherId);
+    const count = enrolledCount(normalized.className);
+    const blockedByStudents = blockingCount(c);
+    return {
+      normalized,
+      grade: grade || "—",
+      div: div || "—",
+      teacher,
+      count,
+      blockedByStudents,
+      canDelete: blockedByStudents === 0,
+    };
+  };
+
+  const classTierActions = (
+    c: ClassConfig,
+    className: string,
+    blockedByStudents: number,
+    canDelete: boolean,
+  ) => (
+    <div className="flex items-center gap-1.5">
+      <button
+        type="button"
+        onClick={() => startEdit(c)}
+        aria-label={`Edit ${className}`}
+        className="grid h-9 w-9 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-400 lg:h-8 lg:w-8"
+      >
+        <Pencil className="h-3.5 w-3.5" />
+      </button>
+      {canDelete ? (
+        <button
+          type="button"
+          onClick={() => requestDelete(c)}
+          aria-label={`Delete ${className}`}
+          title={`Delete ${className}`}
+          className="grid h-9 w-9 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2] lg:h-8 lg:w-8"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      ) : (
+        <span
+          className="grid h-9 w-9 place-items-center rounded-full border border-[#E5E5E5] bg-[#F8F8F9] text-black/30 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-600 lg:h-8 lg:w-8"
+          title={`Cannot delete while ${blockedByStudents} student${blockedByStudents === 1 ? "" : "s"} are enrolled`}
+          aria-label={`${className} cannot be deleted while ${blockedByStudents} students are enrolled`}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </span>
+      )}
+    </div>
+  );
+
   return (
     <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
       <CardHeader
-        title="Class Tier"
+        title="Classes"
         subtitle="Per-class fee schedule for Receive Payment"
         actionLabel="Add Class"
         onAction={startCreate}
       />
 
-      <div className="mt-4 overflow-x-auto rounded-lg border border-[#EFEFEF]">
-        <table className="w-full min-w-[720px] table-fixed border-collapse text-center">
-          <colgroup>
-            <col className="w-[8%]" />
-            <col className="w-[14%]" />
-            <col className="w-[8%]" />
-            <col className="w-[12%]" />
-            <col className="w-[14%]" />
-            <col className="w-[14%]" />
-            <col className="w-[18%]" />
-            <col className="w-[12%]" />
-          </colgroup>
-          <thead>
-            <tr className="bg-[#F4F4F5] text-[10px] font-semibold uppercase tracking-wider text-black/55 dark:bg-white/5 dark:text-zinc-400">
-              <th className="px-2 py-2.5 font-semibold">Sl. No</th>
-              <th className="px-2 py-2.5 font-semibold">Class</th>
-              <th className="px-2 py-2.5 font-semibold">Div</th>
-              <th className="px-2 py-2.5 font-semibold">No. of students</th>
-              <th className="px-2 py-2.5 font-semibold">Total fee</th>
-              <th className="px-2 py-2.5 font-semibold">Term / month</th>
-              <th className="px-2 py-2.5 font-semibold">Class teacher</th>
-              <th className="px-2 py-2.5 font-semibold">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortedClasses.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={8}
-                  className="px-3 py-8 text-center text-[12.5px] text-black/50 dark:text-zinc-400"
+      {sortedClasses.length === 0 ? (
+        <div className="mt-4">
+          <EmptyRow label="No class tiers configured" />
+        </div>
+      ) : (
+        <>
+          <div className="mt-4 space-y-3 lg:hidden">
+            {sortedClasses.map((c, index) => {
+              const meta = classTierMeta(c);
+              return (
+                <article
+                  key={c.id}
+                  className="overflow-hidden rounded-2xl border border-[#E8EEEC] bg-white shadow-[0_10px_28px_-18px_rgba(15,23,42,0.45)] dark:border-white/10 dark:bg-zinc-900"
                 >
-                  No class tiers configured
-                </td>
-              </tr>
-            ) : (
-              sortedClasses.map((c, index) => {
-                const normalized = withClassFeeSchedule(normalizeClassConfig(c), feeTerms);
-                const parts = splitClassName(normalized.className);
-                const grade = (normalized.grade || parts.grade || normalized.className).trim();
-                const div = (normalized.section || parts.section || "").trim();
-                const teacher = teacherName(normalized.classTeacherId);
-                const count = enrolledCount(normalized.className);
-                const canDelete = count === 0;
-                return (
-                  <tr
-                    key={c.id}
-                    className="border-t border-[#EFEFEF] text-[12.5px] transition-colors hover:bg-[#F8F8F9] dark:border-white/10 dark:hover:bg-white/[0.03]"
-                  >
-                    <td className="px-2 py-2.5 align-middle font-mono text-black/60 dark:text-zinc-400">
-                      {index + 1}
-                    </td>
-                    <td className="px-2 py-2.5 align-middle font-semibold text-black dark:text-zinc-100">
-                      {grade || "—"}
-                    </td>
-                    <td className="px-2 py-2.5 align-middle text-black/80 dark:text-zinc-300">
-                      {div || "—"}
-                    </td>
-                    <td className="px-2 py-2.5 align-middle font-mono text-black dark:text-zinc-100">
-                      {count}
-                    </td>
-                    <td className="px-2 py-2.5 align-middle font-mono font-medium text-black dark:text-zinc-100">
-                      ₹ {normalized.tuitionFeeAmount.toLocaleString("en-IN")}
-                    </td>
-                    <td className="px-2 py-2.5 align-middle text-black/75 dark:text-zinc-300">
-                      {termMonthLabel(c)}
-                    </td>
-                    <td className="truncate px-2 py-2.5 align-middle text-black/75 dark:text-zinc-300">
-                      {teacher || "—"}
-                    </td>
-                    <td className="px-2 py-2.5 align-middle">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => startEdit(c)}
-                          aria-label={`Edit ${normalized.className}`}
-                          className="grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] bg-white text-black/55 transition-colors hover:border-black/20 hover:bg-[#F4F4F5] hover:text-black dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-400"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => requestDelete(c)}
-                          disabled={!canDelete}
-                          aria-label={
-                            canDelete
-                              ? `Delete ${normalized.className}`
-                              : `${normalized.className} cannot be deleted while ${count} students are enrolled`
-                          }
-                          title={
-                            canDelete
-                              ? `Delete ${normalized.className}`
-                              : `Move ${count} enrolled student${count === 1 ? "" : "s"} before deleting`
-                          }
-                          className={cn(
-                            "grid h-8 w-8 place-items-center rounded-full border transition-colors",
-                            canDelete
-                              ? "border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] hover:border-[#F87171] hover:bg-[#FEE2E2]"
-                              : "cursor-not-allowed border-[#E5E5E5] bg-[#F8F8F9] text-black/25 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-600",
+                  <div className="flex items-start justify-between gap-3 px-4 pt-4">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-black/40 dark:text-zinc-500">
+                        Class {String(index + 1).padStart(2, "0")}
+                      </p>
+                      <h3 className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-[18px] font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
+                        <span className="truncate">{meta.grade}</span>
+                        {meta.div !== "—" ? (
+                          <span className="rounded-full bg-[#F0FDFA] px-2 py-0.5 text-[11.5px] font-semibold text-[#0F766E] dark:bg-teal-950/60 dark:text-teal-300">
+                            Div {meta.div}
+                          </span>
+                        ) : null}
+                      </h3>
+                      <p className="mt-1.5 truncate text-[12.5px] text-black/55 dark:text-zinc-400">
+                        {meta.teacher
+                          ? `Class teacher · ${meta.teacher}`
+                          : "No class teacher assigned"}
+                      </p>
+                    </div>
+                    {classTierActions(
+                      c,
+                      meta.normalized.className,
+                      meta.blockedByStudents,
+                      meta.canDelete,
+                    )}
+                  </div>
+
+                  <dl className="mx-4 mt-3 grid grid-cols-3 overflow-hidden rounded-xl bg-[#F7F8F8] dark:bg-white/5">
+                    <div className="px-2 py-2.5 text-center">
+                      <dt className="text-[9.5px] font-semibold uppercase tracking-wider text-black/40 dark:text-zinc-500">
+                        Students
+                      </dt>
+                      <dd className="mt-0.5 font-mono text-[14px] font-semibold text-slate-900 dark:text-zinc-100">
+                        {meta.count}
+                      </dd>
+                    </div>
+                    <div className="border-x border-black/5 px-2 py-2.5 text-center dark:border-white/10">
+                      <dt className="text-[9.5px] font-semibold uppercase tracking-wider text-black/40 dark:text-zinc-500">
+                        Total fee
+                      </dt>
+                      <dd className="mt-0.5 font-mono text-[13px] font-semibold text-slate-900 dark:text-zinc-100">
+                        ₹ {meta.normalized.tuitionFeeAmount.toLocaleString("en-IN")}
+                      </dd>
+                    </div>
+                    <div className="px-2 py-2.5 text-center">
+                      <dt className="text-[9.5px] font-semibold uppercase tracking-wider text-black/40 dark:text-zinc-500">
+                        Cycle
+                      </dt>
+                      <dd className="mt-0.5 text-[13px] font-semibold text-slate-900 dark:text-zinc-100">
+                        {termMonthLabel(c)}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  <div className="mt-3 border-t border-[#F0F0F0] px-4 py-2.5 dark:border-white/10">
+                    {meta.canDelete ? (
+                      <p className="text-[11.5px] text-black/45 dark:text-zinc-500">
+                        No students enrolled · this class can be removed
+                      </p>
+                    ) : (
+                      <p className="text-[11.5px] text-black/45 dark:text-zinc-500">
+                        {meta.blockedByStudents} student
+                        {meta.blockedByStudents === 1 ? "" : "s"} enrolled · move them before
+                        deleting
+                      </p>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+
+          <div className="mt-4 hidden overflow-x-auto rounded-lg border border-[#EFEFEF] lg:block dark:border-white/10">
+            <table className="w-full min-w-[720px] table-fixed border-collapse text-center">
+              <colgroup>
+                <col className="w-[8%]" />
+                <col className="w-[14%]" />
+                <col className="w-[8%]" />
+                <col className="w-[12%]" />
+                <col className="w-[14%]" />
+                <col className="w-[14%]" />
+                <col className="w-[18%]" />
+                <col className="w-[12%]" />
+              </colgroup>
+              <thead>
+                <tr className="bg-[#F4F4F5] text-[10px] font-semibold uppercase tracking-wider text-black/55 dark:bg-white/5 dark:text-zinc-400">
+                  <th className="px-2 py-2.5 font-semibold">Sl. No</th>
+                  <th className="px-2 py-2.5 font-semibold">Class</th>
+                  <th className="px-2 py-2.5 font-semibold">Div</th>
+                  <th className="px-2 py-2.5 font-semibold">No. of students</th>
+                  <th className="px-2 py-2.5 font-semibold">Total fee</th>
+                  <th className="px-2 py-2.5 font-semibold">Term / month</th>
+                  <th className="px-2 py-2.5 font-semibold">Class teacher</th>
+                  <th className="px-2 py-2.5 font-semibold">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedClasses.map((c, index) => {
+                  const meta = classTierMeta(c);
+                  return (
+                    <tr
+                      key={c.id}
+                      className="border-t border-[#EFEFEF] text-[12.5px] transition-colors hover:bg-[#F8F8F9] dark:border-white/10 dark:hover:bg-white/[0.03]"
+                    >
+                      <td className="px-2 py-2.5 align-middle font-mono text-black/60 dark:text-zinc-400">
+                        {index + 1}
+                      </td>
+                      <td className="px-2 py-2.5 align-middle font-semibold text-black dark:text-zinc-100">
+                        {meta.grade}
+                      </td>
+                      <td className="px-2 py-2.5 align-middle text-black/80 dark:text-zinc-300">
+                        {meta.div}
+                      </td>
+                      <td className="px-2 py-2.5 align-middle font-mono text-black dark:text-zinc-100">
+                        {meta.count}
+                      </td>
+                      <td className="px-2 py-2.5 align-middle font-mono font-medium text-black dark:text-zinc-100">
+                        ₹ {meta.normalized.tuitionFeeAmount.toLocaleString("en-IN")}
+                      </td>
+                      <td className="px-2 py-2.5 align-middle text-black/75 dark:text-zinc-300">
+                        {termMonthLabel(c)}
+                      </td>
+                      <td className="truncate px-2 py-2.5 align-middle text-black/75 dark:text-zinc-300">
+                        {meta.teacher || "—"}
+                      </td>
+                      <td className="px-2 py-2.5 align-middle">
+                        <div className="flex items-center justify-center">
+                          {classTierActions(
+                            c,
+                            meta.normalized.className,
+                            meta.blockedByStudents,
+                            meta.canDelete,
                           )}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       <DeleteConfirmDialog
         open={Boolean(pendingDelete)}
@@ -15427,18 +16014,18 @@ function ClassesCard({
         title="Delete Class Tier"
         description={
           pendingDelete
-            ? enrolledCount(pendingDelete.className) > 0
-              ? `${pendingDelete.className} still has ${enrolledCount(pendingDelete.className)} enrolled student(s). Move them to another class before deleting.`
+            ? blockingCount(pendingDelete) > 0
+              ? `${pendingDelete.className} still has ${blockingCount(pendingDelete)} enrolled student(s). Move them to another class before deleting.`
               : `Are you sure you want to delete ${pendingDelete.className}? Tuition prefills for this class will stop working.`
             : "Are you sure you want to delete this class tier?"
         }
         onConfirm={confirmDelete}
-        confirmDisabled={pendingDelete ? enrolledCount(pendingDelete.className) > 0 : false}
+        confirmDisabled={pendingDelete ? blockingCount(pendingDelete) > 0 : false}
       />
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
-          className="mobile-scrollbar-none max-h-[90vh] overflow-y-auto sm:max-w-xl"
+          className="flex max-h-[min(92dvh,calc(100dvh-1.25rem))] w-[calc(100%-1.25rem)] max-w-xl flex-col gap-0 overflow-hidden rounded-2xl border border-[#E5E5E5] bg-white p-0 dark:border-white/10 dark:bg-zinc-950 sm:max-w-xl"
           onPointerDownOutside={(e) => {
             const target = e.target as HTMLElement | null;
             if (target?.closest("[data-radix-popper-content-wrapper]")) e.preventDefault();
@@ -15448,14 +16035,15 @@ function ClassesCard({
             if (target?.closest("[data-radix-popper-content-wrapper]")) e.preventDefault();
           }}
         >
-          <DialogHeader>
+          <DialogHeader className="shrink-0 space-y-1 border-b border-[#F0F0F0] px-4 pb-3 pt-5 pr-12 text-left dark:border-white/10 sm:px-6 sm:pt-5">
             <DialogTitle>{editingId ? "Edit Class Tier" : "Add Class Tier"}</DialogTitle>
             <DialogDescription>
               Set the class, then define installments and one-time fees. Totals prefill Finance ·
               Receive Payment.
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={submit} className="space-y-4">
+          <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
             <div className="space-y-3">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
                 Class identity
@@ -15499,7 +16087,7 @@ function ClassesCard({
               </div>
             </div>
 
-            <div className="space-y-3 rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] p-3.5">
+            <div className="space-y-3 rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] p-3.5 dark:border-white/10 dark:bg-zinc-900/60">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
                   Fee structure
@@ -15537,7 +16125,7 @@ function ClassesCard({
                         key={option.cycle}
                         type="button"
                         onClick={() => applyBillingCycle(option.cycle)}
-                        className="rounded-xl border border-[#E5E5E5] bg-white px-3.5 py-3 text-left transition-colors hover:border-[#0F766E]/50 hover:bg-[#F0FDFA]"
+                        className="rounded-xl border border-[#E5E5E5] bg-white px-3.5 py-3 text-left transition-colors hover:border-[#0F766E]/50 hover:bg-[#F0FDFA] dark:border-white/10 dark:bg-zinc-900 dark:hover:border-[#0F766E]/50 dark:hover:bg-teal-950/40"
                       >
                         <div className="text-[14px] font-semibold text-black">{option.title}</div>
                         <p className="mt-1 text-[11px] leading-snug text-black/50">{option.hint}</p>
@@ -15574,7 +16162,7 @@ function ClassesCard({
                     <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                       Amounts
                     </Label>
-                    <div className="flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
+                    <div className="flex flex-col gap-1 rounded-2xl border border-[#E5E5E5] bg-white p-1 dark:border-white/10 dark:bg-zinc-900 sm:flex-row sm:rounded-full">
                       {(
                         [
                           {
@@ -15628,8 +16216,10 @@ function ClassesCard({
                               });
                             }}
                             className={cn(
-                              "flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors",
-                              active ? "bg-[#0F766E] text-white" : "text-black/65 hover:text-black",
+                              "rounded-full px-3 py-2 text-[12px] font-medium transition-colors sm:flex-1 sm:py-1.5",
+                              active
+                                ? "bg-[#0F766E] text-white"
+                                : "text-black/65 hover:text-black dark:text-zinc-400 dark:hover:text-zinc-100",
                             )}
                           >
                             {option.label}
@@ -15668,7 +16258,7 @@ function ClassesCard({
                           }));
                         }}
                         placeholder={form.billingCycle === "Term" ? "4" : "12"}
-                        className="font-mono bg-white"
+                        className="font-mono bg-white dark:bg-zinc-900 dark:text-zinc-100"
                       />
                     </div>
                     {form.feeAmountMode === "fixed" ? (
@@ -15699,7 +16289,7 @@ function ClassesCard({
                             });
                           }}
                           placeholder="0"
-                          className="font-mono bg-white"
+                          className="font-mono bg-white dark:bg-zinc-900 dark:text-zinc-100"
                         />
                       </div>
                     ) : (
@@ -15712,7 +16302,7 @@ function ClassesCard({
                     )}
                   </div>
 
-                  <div className="space-y-2 rounded-xl border border-[#E8E8EA] bg-white p-3">
+                  <div className="space-y-2 rounded-xl border border-[#E8E8EA] bg-white p-3 dark:border-white/10 dark:bg-zinc-900">
                     <div className="flex items-center justify-between gap-2">
                       <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
                         {form.billingCycle === "Term" ? "Term schedule" : "Installment schedule"}
@@ -15753,101 +16343,114 @@ function ClassesCard({
                     </div>
 
                     <div
-                      className={cn(
-                        "grid items-end gap-2 px-0.5 text-[10px] font-semibold uppercase tracking-wider text-black/40",
-                        form.feeAmountMode === "custom"
-                          ? "grid-cols-[minmax(0,1fr)_6.5rem_minmax(10rem,1fr)_auto]"
-                          : "grid-cols-[minmax(0,1fr)_6.5rem_minmax(10rem,1fr)]",
-                      )}
+                      className="hidden items-end gap-2 px-0.5 text-[10px] font-semibold uppercase tracking-wider text-black/40 sm:grid sm:grid-cols-[minmax(0,1.1fr)_5.75rem_minmax(0,1fr)_auto]"
                     >
                       <span>Label</span>
                       <span>Amount</span>
                       <span>Due date</span>
                       {form.feeAmountMode === "custom" ? (
                         <span className="sr-only">Remove</span>
-                      ) : null}
+                      ) : (
+                        <span />
+                      )}
                     </div>
 
                     {termScheduleRows.map((row, index) => (
                       <div
                         key={row.id}
-                        className={cn(
-                          "grid items-center gap-2",
-                          form.feeAmountMode === "custom"
-                            ? "grid-cols-[minmax(0,1fr)_6.5rem_minmax(10rem,1fr)_auto]"
-                            : "grid-cols-[minmax(0,1fr)_6.5rem_minmax(10rem,1fr)]",
-                        )}
+                        className="grid grid-cols-1 gap-2 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3 dark:border-white/10 dark:bg-zinc-800 sm:grid-cols-[minmax(0,1.1fr)_5.75rem_minmax(0,1fr)_auto] sm:items-center sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0 sm:dark:bg-transparent"
                       >
-                        <Input
-                          value={row.label}
-                          onChange={(e) => patchInstallmentRow(index, { label: e.target.value })}
-                          className="h-9 bg-[#FAFAFA] text-[13px]"
-                        />
-                        {form.feeAmountMode === "fixed" ? (
-                          <div className="flex h-9 items-center rounded-md border border-[#EFEFEF] bg-[#F7F7F8] px-2.5 font-mono text-[13px] text-black/70">
-                            {row.amount ? `₹ ${Number(row.amount).toLocaleString("en-IN")}` : "—"}
+                        <div className="space-y-1 sm:space-y-0">
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-black/40 sm:hidden">
+                            Label
+                          </span>
+                          <Input
+                            value={row.label}
+                            onChange={(e) => patchInstallmentRow(index, { label: e.target.value })}
+                            className="h-10 bg-white text-[13px] dark:bg-zinc-900 dark:text-zinc-100 sm:h-9 sm:bg-[#FAFAFA] sm:dark:bg-zinc-800"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 sm:contents">
+                          <div className="min-w-0 space-y-1 sm:space-y-0">
+                            <span className="text-[10px] font-semibold uppercase tracking-wider text-black/40 sm:hidden">
+                              Amount
+                            </span>
+                            {form.feeAmountMode === "fixed" ? (
+                              <div className="flex h-10 items-center rounded-md border border-[#EFEFEF] bg-[#FAFAFA] px-2.5 font-mono text-[13px] text-black/70 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-100 sm:h-9">
+                                {row.amount ? `₹ ${Number(row.amount).toLocaleString("en-IN")}` : "—"}
+                              </div>
+                            ) : (
+                              <Input
+                                inputMode="numeric"
+                                value={row.amount}
+                                onChange={(e) =>
+                                  patchInstallmentRow(index, {
+                                    amount: e.target.value.replace(/[^0-9]/g, ""),
+                                  })
+                                }
+                                placeholder="0"
+                                className="h-10 font-mono bg-white dark:bg-zinc-900 dark:text-zinc-100 sm:h-9"
+                              />
+                            )}
+                          </div>
+                          <div className="min-w-0 space-y-1 sm:space-y-0">
+                            <span className="text-[10px] font-semibold uppercase tracking-wider text-black/40 sm:hidden">
+                              Due date
+                            </span>
+                            <DatePicker
+                              value={row.dueDate}
+                              onChange={(dueDate) => patchInstallmentRow(index, { dueDate })}
+                              placeholder="dd/mm/yyyy"
+                              valueFormat="iso"
+                              className="h-10 w-full min-w-0 text-[12px] sm:h-9"
+                              quickPicks={[
+                                { label: "Today", getDate: (t) => t },
+                                {
+                                  label: "+30d",
+                                  getDate: (t) =>
+                                    new Date(t.getFullYear(), t.getMonth(), t.getDate() + 30),
+                                },
+                              ]}
+                            />
+                          </div>
+                        </div>
+                        {form.feeAmountMode === "custom" ? (
+                          <div className="flex justify-end sm:block">
+                            <button
+                              type="button"
+                              aria-label={`Remove ${row.label}`}
+                              onClick={() =>
+                                setForm((prev) => {
+                                  const rows = ensureInstallmentRows(
+                                    prev,
+                                    Math.max(1, Math.floor(Number(prev.installmentCount) || 0)),
+                                  ).filter((_, i) => i !== index);
+                                  const nextRows =
+                                    rows.length > 0
+                                      ? rows
+                                      : [
+                                          {
+                                            id: `fl-i-1`,
+                                            label: installmentLabel(0, prev.billingCycle),
+                                            amount: prev.fixedAmount,
+                                            dueDate: "",
+                                          },
+                                        ];
+                                  return {
+                                    ...prev,
+                                    installments: nextRows,
+                                    installmentCount: String(nextRows.length),
+                                  };
+                                })
+                              }
+                              className="grid h-10 w-10 place-items-center rounded-full text-black/40 hover:bg-[#FEE2E2] hover:text-[#EF4444] dark:text-zinc-500 dark:hover:bg-red-950/50 sm:h-9 sm:w-9"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
                           </div>
                         ) : (
-                          <Input
-                            inputMode="numeric"
-                            value={row.amount}
-                            onChange={(e) =>
-                              patchInstallmentRow(index, {
-                                amount: e.target.value.replace(/[^0-9]/g, ""),
-                              })
-                            }
-                            placeholder="0"
-                            className="h-9 font-mono bg-white"
-                          />
+                          <span className="hidden sm:block" />
                         )}
-                        <DatePicker
-                          value={row.dueDate}
-                          onChange={(dueDate) => patchInstallmentRow(index, { dueDate })}
-                          placeholder="dd/mm/yyyy"
-                          valueFormat="iso"
-                          className="h-9 text-[12px]"
-                          quickPicks={[
-                            { label: "Today", getDate: (t) => t },
-                            {
-                              label: "+30d",
-                              getDate: (t) =>
-                                new Date(t.getFullYear(), t.getMonth(), t.getDate() + 30),
-                            },
-                          ]}
-                        />
-                        {form.feeAmountMode === "custom" ? (
-                          <button
-                            type="button"
-                            aria-label={`Remove ${row.label}`}
-                            onClick={() =>
-                              setForm((prev) => {
-                                const rows = ensureInstallmentRows(
-                                  prev,
-                                  Math.max(1, Math.floor(Number(prev.installmentCount) || 0)),
-                                ).filter((_, i) => i !== index);
-                                const nextRows =
-                                  rows.length > 0
-                                    ? rows
-                                    : [
-                                        {
-                                          id: `fl-i-1`,
-                                          label: installmentLabel(0, prev.billingCycle),
-                                          amount: prev.fixedAmount,
-                                          dueDate: "",
-                                        },
-                                      ];
-                                return {
-                                  ...prev,
-                                  installments: nextRows,
-                                  installmentCount: String(nextRows.length),
-                                };
-                              })
-                            }
-                            className="grid h-9 w-9 place-items-center rounded-full text-black/40 hover:bg-[#FEE2E2] hover:text-[#EF4444]"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        ) : null}
                       </div>
                     ))}
                   </div>
@@ -15864,7 +16467,7 @@ function ClassesCard({
                         }
                         options={FEE_MONTHS.map((month) => ({ value: month, label: month }))}
                         placeholder="Select month"
-                        triggerClassName="h-10 bg-white"
+                        triggerClassName="h-10"
                       />
                       <p className="text-[11px] text-black/45 dark:text-zinc-500">
                         Installment 1 maps to this month when recording fee receipts.
@@ -15901,7 +16504,7 @@ function ClassesCard({
                     Add fee
                   </button>
                 </div>
-                <div className="grid grid-cols-[minmax(0,1fr)_6.5rem_minmax(10rem,1fr)_auto] items-end gap-2 px-0.5 text-[10px] font-semibold uppercase tracking-wider text-black/40">
+                <div className="hidden grid-cols-[minmax(0,1.1fr)_5.75rem_minmax(0,1fr)_auto] items-end gap-2 px-0.5 text-[10px] font-semibold uppercase tracking-wider text-black/40 sm:grid">
                   <span>Fee</span>
                   <span>Amount</span>
                   <span>Due date</span>
@@ -15910,97 +16513,123 @@ function ClassesCard({
                 {form.oneTimeFees.map((row) => (
                   <div
                     key={row.id}
-                    className="grid grid-cols-[minmax(0,1fr)_6.5rem_minmax(10rem,1fr)_auto] items-center gap-2"
+                    className="grid grid-cols-1 gap-2 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3 dark:border-white/10 dark:bg-zinc-800 sm:grid-cols-[minmax(0,1.1fr)_5.75rem_minmax(0,1fr)_auto] sm:items-center sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0 sm:dark:bg-transparent"
                   >
-                    <Input
-                      value={row.label}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          oneTimeFees: form.oneTimeFees.map((item) =>
-                            item.id === row.id ? { ...item, label: e.target.value } : item,
-                          ),
-                        })
-                      }
-                      placeholder="Admission Fee"
-                      className="h-9 bg-white text-[13px]"
-                    />
-                    <Input
-                      inputMode="numeric"
-                      value={row.amount}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          oneTimeFees: form.oneTimeFees.map((item) =>
-                            item.id === row.id
-                              ? { ...item, amount: e.target.value.replace(/[^0-9]/g, "") }
-                              : item,
-                          ),
-                        })
-                      }
-                      placeholder="0"
-                      className="h-9 font-mono bg-white"
-                    />
-                    <DatePicker
-                      value={row.dueDate}
-                      onChange={(dueDate) =>
-                        setForm({
-                          ...form,
-                          oneTimeFees: form.oneTimeFees.map((item) =>
-                            item.id === row.id ? { ...item, dueDate } : item,
-                          ),
-                        })
-                      }
-                      placeholder="dd/mm/yyyy"
-                      valueFormat="iso"
-                      className="h-9 text-[12px]"
-                      quickPicks={[
-                        { label: "Today", getDate: (t) => t },
-                        {
-                          label: "+30d",
-                          getDate: (t) => new Date(t.getFullYear(), t.getMonth(), t.getDate() + 30),
-                        },
-                      ]}
-                    />
-                    <button
-                      type="button"
-                      aria-label={`Remove ${row.label || "fee"}`}
-                      onClick={() =>
-                        setForm({
-                          ...form,
-                          oneTimeFees: form.oneTimeFees.filter((item) => item.id !== row.id),
-                        })
-                      }
-                      className="grid h-9 w-9 place-items-center rounded-full text-black/40 hover:bg-[#FEE2E2] hover:text-[#EF4444]"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    <div className="space-y-1 sm:space-y-0">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-black/40 sm:hidden">
+                        Fee
+                      </span>
+                      <Input
+                        value={row.label}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            oneTimeFees: form.oneTimeFees.map((item) =>
+                              item.id === row.id ? { ...item, label: e.target.value } : item,
+                            ),
+                          })
+                        }
+                        placeholder="Admission Fee"
+                        className="h-10 bg-white text-[13px] dark:bg-zinc-900 dark:text-zinc-100 sm:h-9"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 sm:contents">
+                      <div className="min-w-0 space-y-1 sm:space-y-0">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-black/40 sm:hidden">
+                          Amount
+                        </span>
+                        <Input
+                          inputMode="numeric"
+                          value={row.amount}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              oneTimeFees: form.oneTimeFees.map((item) =>
+                                item.id === row.id
+                                  ? { ...item, amount: e.target.value.replace(/[^0-9]/g, "") }
+                                  : item,
+                              ),
+                            })
+                          }
+                          placeholder="0"
+                          className="h-10 font-mono bg-white dark:bg-zinc-900 dark:text-zinc-100 sm:h-9"
+                        />
+                      </div>
+                      <div className="min-w-0 space-y-1 sm:space-y-0">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-black/40 sm:hidden">
+                          Due date
+                        </span>
+                        <DatePicker
+                          value={row.dueDate}
+                          onChange={(dueDate) =>
+                            setForm({
+                              ...form,
+                              oneTimeFees: form.oneTimeFees.map((item) =>
+                                item.id === row.id ? { ...item, dueDate } : item,
+                              ),
+                            })
+                          }
+                          placeholder="dd/mm/yyyy"
+                          valueFormat="iso"
+                          className="h-10 w-full min-w-0 text-[12px] sm:h-9"
+                          quickPicks={[
+                            { label: "Today", getDate: (t) => t },
+                            {
+                              label: "+30d",
+                              getDate: (t) => new Date(t.getFullYear(), t.getMonth(), t.getDate() + 30),
+                            },
+                          ]}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end sm:block">
+                      <button
+                        type="button"
+                        aria-label={`Remove ${row.label || "fee"}`}
+                        onClick={() =>
+                          setForm({
+                            ...form,
+                            oneTimeFees: form.oneTimeFees.filter((item) => item.id !== row.id),
+                          })
+                        }
+                        className="grid h-10 w-10 place-items-center rounded-full text-black/40 hover:bg-[#FEE2E2] hover:text-[#EF4444] dark:text-zinc-500 dark:hover:bg-red-950/50 sm:h-9 sm:w-9"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
                 ))}
                 <p className="text-[10.5px] text-black/40">
                   Leave amount blank to skip a row. Due date is optional.
                 </p>
               </div>
+            </div>
+            </div>
 
-              <div className="flex items-center justify-between rounded-lg border border-[#D1FAE5] bg-white px-3 py-2.5">
+            <div className="shrink-0 space-y-3 border-t border-[#F0F0F0] bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:border-white/10 dark:bg-zinc-950 sm:px-6">
+              <div className="flex items-center justify-between rounded-lg border border-[#D1FAE5] bg-[#F0FDFA] px-3 py-2.5">
                 <span className="text-[12px] text-black/55">Class total</span>
                 <span className="font-mono text-[15px] font-semibold text-[#0F766E]">
                   ₹ {schedulePreview.total.toLocaleString("en-IN")}
                 </span>
               </div>
+              <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end sm:space-x-0 sm:gap-2">
+                <Button
+                  type="submit"
+                  className="h-11 w-full rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488] sm:h-10 sm:w-auto"
+                >
+                  {editingId ? "Save Changes" : "Add Class"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 w-full rounded-full sm:h-10 sm:w-auto"
+                  onClick={() => setOpen(false)}
+                >
+                  Cancel
+                </Button>
+              </DialogFooter>
             </div>
-
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
-              >
-                {editingId ? "Save Changes" : "Add Class"}
-              </Button>
-            </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
@@ -17123,7 +17752,7 @@ function TransportCard({
 }) {
   type RouteFeeDraftRow = { id: string; label: string; amount: string; dueDate: string };
 
-  const { students } = useTenantStore();
+  const { students, schoolDetails } = useTenantStore();
   const orphanedBusPoints = useMemo(
     () =>
       collectOrphanedStudentBusPoints(
@@ -17137,6 +17766,12 @@ function TransportCard({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<TransportRoute | null>(null);
   const [vehicleQuery, setVehicleQuery] = useState("");
+  const routeImportRef = useRef<HTMLInputElement>(null);
+  const [routeImportOpen, setRouteImportOpen] = useState(false);
+  const [routeImporting, setRouteImporting] = useState(false);
+  const [routeImportReady, setRouteImportReady] = useState<ResolvedTransportRouteImport[]>([]);
+  const [routeImportIssues, setRouteImportIssues] = useState<CsvImportIssue[]>([]);
+  const [routeImportProgress, setRouteImportProgress] = useState({ current: 0, total: 0 });
   const [form, setForm] = useState({
     mapFrom: "",
     mapTo: "",
@@ -17464,6 +18099,149 @@ function TransportCard({
     setPendingDelete(null);
   };
 
+  const downloadRouteTemplate = () => {
+    downloadCsv(
+      "bus-routes-bulk-upload-template.csv",
+      [...TRANSPORT_ROUTE_CSV_HEADERS],
+      transportRouteCsvTemplateRows(),
+    );
+    toast.success("Bus route template downloaded", {
+      description: "Fill From, To, and shift fees · Vehicles are optional fleet names",
+    });
+  };
+
+  const downloadRouteDemoCsv = () => {
+    downloadCsv(
+      "bus-routes-demo.csv",
+      [...TRANSPORT_ROUTE_CSV_HEADERS],
+      transportRouteCsvDemoRows(),
+    );
+    toast.success("Demo bus route CSV downloaded", {
+      description: "Sample pickup → drop rows with morning, evening, and both-shift fees",
+    });
+  };
+
+  const exportRoutesCsv = () => {
+    if (!transportRoutes.length) {
+      toast.error("No routes to export", {
+        description: "Add a route or download the template to start a bulk list",
+      });
+      return;
+    }
+    const schoolSlug = (schoolDetails.name || "school")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    downloadCsv(
+      `bus-routes-${schoolSlug || "school"}-${todayStamp()}.csv`,
+      [...TRANSPORT_ROUTE_EXPORT_HEADERS],
+      transportRoutes.map((route) => transportRouteToCsvRow(route, transportVehicles)),
+    );
+    toast.success(
+      `${transportRoutes.length} route${transportRoutes.length === 1 ? "" : "s"} exported`,
+      { description: "CSV ready in your downloads folder" },
+    );
+  };
+
+  const handleRouteImportClick = () => routeImportRef.current?.click();
+
+  const handleRouteImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (isExcelFilename(file.name)) {
+      toast.error("Excel files are not supported yet", {
+        description: "Open the sheet in Excel/Sheets and Save as CSV, then upload",
+      });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const parsed = parseTransportRouteCsv(String(reader.result ?? ""));
+      if (!parsed.ok) {
+        toast.error(parsed.error, { description: parsed.description });
+        return;
+      }
+      const resolved = resolveTransportRouteImport(parsed.drafts, {
+        routes: transportRoutes,
+        vehicles: transportVehicles,
+        feeTerms,
+      });
+      const issues: CsvImportIssue[] = [...parsed.issues, ...resolved.issues].map((issue) => ({
+        line: issue.line,
+        rowLabel: issue.rowLabel,
+        message: issue.message,
+      }));
+      setRouteImportReady(resolved.ready);
+      setRouteImportIssues(issues);
+      setRouteImportProgress({ current: 0, total: resolved.ready.length });
+      setRouteImportOpen(true);
+      if (!resolved.ready.length) {
+        toast.error("No bus routes ready to import", {
+          description: issues[0]?.message || "Check From, To, and fee columns",
+        });
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const confirmRouteImport = () => {
+    if (!routeImportReady.length || routeImporting) return;
+    void (async () => {
+      setRouteImporting(true);
+      setRouteImportProgress({ current: 0, total: routeImportReady.length });
+      let usedIds = transportRoutes.map((route) => route.id);
+      const nextRoutes = [...transportRoutes];
+      const applied: TransportRoute[] = [];
+      let created = 0;
+      let updated = 0;
+
+      try {
+        for (let index = 0; index < routeImportReady.length; index += 1) {
+          const row = routeImportReady[index];
+          const id = row.existingId || nextPrefixedId("TR", usedIds, 3);
+          if (!row.existingId) {
+            usedIds = [...usedIds, id];
+            created += 1;
+          } else {
+            updated += 1;
+          }
+          const saved: TransportRoute = { ...row.route, id };
+          const existingIndex = nextRoutes.findIndex((route) => route.id === id);
+          if (existingIndex >= 0) nextRoutes[existingIndex] = saved;
+          else nextRoutes.push(saved);
+          applied.push(saved);
+          if (row.applyVehicles) syncRouteVehicles(id, row.vehicleIds);
+          setRouteImportProgress({ current: index + 1, total: routeImportReady.length });
+        }
+
+        setTransportRoutes(nextRoutes);
+        const synced = await importRowsSequentially(applied, async (route) => {
+          await apiUpsertTransportRoute(route);
+        });
+
+        setRouteImportOpen(false);
+        setRouteImportReady([]);
+        setRouteImportIssues([]);
+        toast.success(
+          `${applied.length} route${applied.length === 1 ? "" : "s"} imported`,
+          {
+            description: [
+              created ? `${created} new` : "",
+              updated ? `${updated} updated` : "",
+              synced.failed ? `${synced.failed} failed to sync` : "",
+            ]
+              .filter(Boolean)
+              .join(" · "),
+          },
+        );
+      } finally {
+        setRouteImporting(false);
+      }
+    })();
+  };
+
   const inr = (n: number) => `₹ ${n.toLocaleString("en-IN")}`;
 
   return (
@@ -17473,6 +18251,25 @@ function TransportCard({
         subtitle={`${transportRoutes.length} routes · morning, evening & both-shift fees`}
         actionLabel="Add Route"
         onAction={startCreate}
+        extraActions={
+          <>
+            <button
+              type="button"
+              onClick={exportRoutesCsv}
+              disabled={routeImporting}
+              className="inline-flex h-9 shrink-0 items-center justify-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-3 text-[11.5px] font-semibold text-black transition-colors hover:border-black/20 hover:bg-[#F4F4F5] disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Export
+            </button>
+            <FinanceCsvImportMenu
+              disabled={routeImporting}
+              onTemplate={downloadRouteTemplate}
+              onDemo={downloadRouteDemoCsv}
+              onUploadClick={handleRouteImportClick}
+            />
+          </>
+        }
       />
 
       {orphanedBusPoints.pickups.length > 0 || orphanedBusPoints.drops.length > 0 ? (
@@ -17769,6 +18566,45 @@ function TransportCard({
         </div>
       )}
 
+      <input
+        ref={routeImportRef}
+        type="file"
+        accept=".csv,text/csv"
+        className="hidden"
+        onChange={handleRouteImportFile}
+      />
+
+      <CsvBulkImportDialog
+        open={routeImportOpen}
+        onOpenChange={(next) => {
+          if (routeImporting) return;
+          setRouteImportOpen(next);
+          if (!next) {
+            setRouteImportReady([]);
+            setRouteImportIssues([]);
+          }
+        }}
+        title="Import bus routes"
+        description="New From → To pairs are added. Matching Route ID or pickup/drop updates fees and keeps map pins. Unknown vehicles are skipped."
+        validCount={routeImportReady.filter((row) => !row.existingId).length}
+        invalidCount={routeImportIssues.length}
+        duplicateCount={routeImportReady.filter((row) => row.existingId).length}
+        totalAmount={routeImportReady.reduce((sum, row) => sum + row.bothFee, 0)}
+        issues={routeImportIssues}
+        previewRows={routeImportReady.map((row) => ({
+          line: row.line,
+          label: row.previewLabel,
+          amount: row.bothFee,
+          extra: row.previewExtra,
+          duplicate: Boolean(row.existingId),
+        }))}
+        importing={routeImporting}
+        progress={routeImportProgress}
+        onConfirm={confirmRouteImport}
+        skipDuplicates={false}
+        duplicateStatLabel="Updates"
+      />
+
       <DeleteConfirmDialog
         open={Boolean(pendingDelete)}
         onOpenChange={(next) => {
@@ -17949,7 +18785,7 @@ function TransportCard({
                 </p>
               </div>
 
-              <div className="space-y-3 rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] p-3.5">
+              <div className="space-y-3 rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] p-3.5 dark:border-white/10 dark:bg-zinc-900/60">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
                     Fee structure
@@ -18025,7 +18861,7 @@ function TransportCard({
                   <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                     Amounts
                   </Label>
-                  <div className="flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1">
+                  <div className="flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1 dark:border-white/10 dark:bg-zinc-900">
                     {(
                       [
                         {
@@ -18080,7 +18916,9 @@ function TransportCard({
                           }}
                           className={cn(
                             "flex-1 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors",
-                            active ? "bg-[#0F766E] text-white" : "text-black/65 hover:text-black",
+                            active
+                              ? "bg-[#0F766E] text-white"
+                              : "text-black/65 hover:text-black dark:text-zinc-400 dark:hover:text-zinc-100",
                           )}
                         >
                           {option.label}
@@ -18113,7 +18951,7 @@ function TransportCard({
                         }));
                       }}
                       placeholder={form.billingCycle === "Term" ? "4" : "12"}
-                      className="font-mono bg-white"
+                      className="font-mono bg-white dark:bg-zinc-900 dark:text-zinc-100"
                     />
                   </div>
                   {form.feeAmountMode === "fixed" ? (
@@ -18143,7 +18981,7 @@ function TransportCard({
                           });
                         }}
                         placeholder="0"
-                        className="font-mono bg-white"
+                        className="font-mono bg-white dark:bg-zinc-900 dark:text-zinc-100"
                       />
                     </div>
                   ) : (
@@ -18156,7 +18994,7 @@ function TransportCard({
                   )}
                 </div>
 
-                <div className="space-y-2 rounded-xl border border-[#E8E8EA] bg-white p-3">
+                <div className="space-y-2 rounded-xl border border-[#E8E8EA] bg-white p-3 dark:border-white/10 dark:bg-zinc-900">
                   <div className="flex items-center justify-between gap-2">
                     <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
                       {form.billingCycle === "Term" ? "Term schedule" : "Installment schedule"}
@@ -18225,10 +19063,10 @@ function TransportCard({
                       <Input
                         value={row.label}
                         onChange={(e) => patchInstallmentRow(index, { label: e.target.value })}
-                        className="h-9 bg-[#FAFAFA] text-[13px]"
+                        className="h-9 bg-[#FAFAFA] text-[13px] dark:bg-zinc-800 dark:text-zinc-100"
                       />
                       {form.feeAmountMode === "fixed" ? (
-                        <div className="flex h-9 items-center rounded-md border border-[#EFEFEF] bg-[#F7F7F8] px-2.5 font-mono text-[13px] text-black/70">
+                        <div className="flex h-9 items-center rounded-md border border-[#EFEFEF] bg-[#FAFAFA] px-2.5 font-mono text-[13px] text-black/70 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-100">
                           {row.amount ? `₹ ${Number(row.amount).toLocaleString("en-IN")}` : "—"}
                         </div>
                       ) : (
@@ -18241,7 +19079,7 @@ function TransportCard({
                             })
                           }
                           placeholder="0"
-                          className="h-9 font-mono bg-white"
+                          className="h-9 font-mono bg-white dark:bg-zinc-900 dark:text-zinc-100"
                         />
                       )}
                       <DatePicker
@@ -18308,7 +19146,7 @@ function TransportCard({
                       }
                       options={FEE_MONTHS.map((month) => ({ value: month, label: month }))}
                       placeholder="Select month"
-                      triggerClassName="h-10 bg-white"
+                        triggerClassName="h-10"
                     />
                   </div>
                 ) : null}
@@ -20035,19 +20873,20 @@ export function FeePeriodMultiSelect({
           {stableChoices.map((choice) => {
             const checked = stableSelected.includes(choice.value);
             return (
-              <button
+              <label
                 key={choice.value}
-                type="button"
-                onClick={() => toggle(choice.value)}
                 className={cn(
-                  "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-left text-[13px] transition-colors hover:bg-[#F4F4F5] dark:hover:bg-zinc-800",
+                  "flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-left text-[13px] transition-colors hover:bg-[#F4F4F5] dark:hover:bg-zinc-800",
                   checked &&
                     "bg-[#ECFDF5] font-medium text-[#0F766E] dark:bg-teal-950/40 dark:text-[#2DD4BF]",
                 )}
               >
-                <Checkbox checked={checked} className="pointer-events-none" />
+                <Checkbox
+                  checked={checked}
+                  onCheckedChange={() => toggle(choice.value)}
+                />
                 <span className="min-w-0 flex-1 truncate">{choice.label}</span>
-              </button>
+              </label>
             );
           })}
         </div>

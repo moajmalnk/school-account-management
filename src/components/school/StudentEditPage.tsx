@@ -24,7 +24,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { FieldSelect, classSelectOptions } from "@/components/school/SchoolAdminWorkspace";
+import { FieldSelect } from "@/components/school/SchoolAdminWorkspace";
+import { classSelectOptions } from "@/lib/class-options";
 import { FeePeriodChecklist } from "@/components/school/FeePeriodChecklist";
 import {
   StudentConcessionSection,

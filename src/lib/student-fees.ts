@@ -1,8 +1,8 @@
 import { filterByAcademicYear } from "@/lib/academic-year";
 import { formatEventDate, parseEventDate, parseFlexibleDate, toIsoDate } from "@/lib/dates";
 import {
-  categoryFeeTermKind,
   isVehicleFeeCategory,
+  resolvePaymentFeeLines,
   resolvePaymentFeePeriod,
   resolveTransportFeeShift,
   routeScheduleForShift,
@@ -39,6 +39,8 @@ export type StudentLedgerRow = {
   periodLabel?: string;
   /** ISO `YYYY-MM-DD` for chronological sort (display `due` may be "Today"). */
   dueIso?: string;
+  /** Receipt-only rows must not inflate Total Fee. */
+  origin?: "schedule" | "receipt";
 };
 
 export type StudentReceipt = {
@@ -259,6 +261,7 @@ type ChargeDraft = {
   paid: number;
   periodLabel?: string;
   onBreak?: boolean;
+  origin?: "schedule" | "receipt";
 };
 
 function expectedTuitionChargeLines(
@@ -429,6 +432,94 @@ function markBreaksOnCharges(
   });
 }
 
+function chargeDueTime(charge: ChargeDraft): number {
+  const parsed = parseFlexibleDate(charge.due);
+  return parsed?.getTime() ?? Number.POSITIVE_INFINITY;
+}
+
+function chargeHasRoom(charge: ChargeDraft): boolean {
+  return !charge.onBreak && charge.paid < charge.charge;
+}
+
+function periodMatchesCharge(charge: ChargeDraft, period: string): boolean {
+  const needle = period.trim();
+  if (!needle) return false;
+  return (
+    feePeriodLabelMatches(charge.desc, needle) ||
+    feePeriodLabelMatches(charge.periodLabel || "", needle) ||
+    (charge.periodLabel ? needle.toLowerCase().includes(charge.periodLabel.toLowerCase()) : false)
+  );
+}
+
+function earliestUnpaidIndex(charges: ChargeDraft[]): number {
+  let best = -1;
+  let bestTime = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < charges.length; i += 1) {
+    const charge = charges[i];
+    if (!chargeHasRoom(charge)) continue;
+    const time = chargeDueTime(charge);
+    if (time < bestTime) {
+      bestTime = time;
+      best = i;
+    }
+  }
+  return best;
+}
+
+function findChargeIndex(
+  charges: ChargeDraft[],
+  match: (charge: ChargeDraft) => boolean,
+): number {
+  let best = -1;
+  let bestTime = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < charges.length; i += 1) {
+    const charge = charges[i];
+    if (!chargeHasRoom(charge) || !match(charge)) continue;
+    const time = chargeDueTime(charge);
+    if (time < bestTime) {
+      bestTime = time;
+      best = i;
+    }
+  }
+  return best;
+}
+
+function applyToCharge(
+  charges: ChargeDraft[],
+  index: number,
+  amount: number,
+  paymentTime?: string,
+): number {
+  const charge = charges[index];
+  const room = Math.max(0, charge.charge - charge.paid);
+  const applied = Math.min(room, Math.max(0, amount));
+  if (applied <= 0) return 0;
+  charges[index] = {
+    ...charge,
+    paid: charge.paid + applied,
+    date: charge.date === "—" ? formatDisplayDate(paymentTime) : charge.date,
+  };
+  return applied;
+}
+
+function applyAmountToCharges(
+  charges: ChargeDraft[],
+  amount: number,
+  paymentTime: string | undefined,
+  preferredIndex: number,
+): number {
+  let remaining = Math.max(0, amount);
+  if (preferredIndex >= 0) {
+    remaining -= applyToCharge(charges, preferredIndex, remaining, paymentTime);
+  }
+  while (remaining > 0) {
+    const nextIndex = earliestUnpaidIndex(charges);
+    if (nextIndex < 0) break;
+    remaining -= applyToCharge(charges, nextIndex, remaining, paymentTime);
+  }
+  return remaining;
+}
+
 function allocatePaymentsToCharges(
   charges: ChargeDraft[],
   studentPayments: Payment[],
@@ -437,59 +528,58 @@ function allocatePaymentsToCharges(
   const leftovers: Payment[] = [];
 
   for (const payment of studentPayments) {
-    const period = resolvePaymentFeePeriod(payment);
-    const termKind = categoryFeeTermKind(payment.cat);
-    let matchedIndex = -1;
+    let remaining = Math.max(0, payment.amount);
+    const lines = resolvePaymentFeeLines(payment).filter((line) => line.amount > 0);
 
-    if (period) {
-      const needle = period.trim().toLowerCase();
-      matchedIndex = next.findIndex(
-        (c) =>
-          !c.onBreak &&
-          c.paid < c.charge &&
-          (c.desc.trim().toLowerCase() === needle ||
-            c.periodLabel?.trim().toLowerCase() === needle ||
-            c.desc.toLowerCase().includes(needle) ||
-            needle.includes(c.desc.toLowerCase()) ||
-            (c.periodLabel ? needle.includes(c.periodLabel.toLowerCase()) : false)),
+    for (const line of lines) {
+      if (remaining <= 0) break;
+      const lineAmount = Math.min(remaining, line.amount);
+      const preferred = findChargeIndex(
+        next,
+        (charge) =>
+          periodMatchesCharge(charge, line.feePeriod) ||
+          (line.description
+            ? charge.desc.toLowerCase().includes(line.description.trim().toLowerCase())
+            : false),
+      );
+      const leftover = applyAmountToCharges(next, lineAmount, payment.time, preferred);
+      remaining -= lineAmount - leftover;
+    }
+
+    if (remaining > 0) {
+      const period = resolvePaymentFeePeriod(payment);
+      const cat = payment.cat?.trim() || "";
+      const byPeriod = period
+        ? findChargeIndex(next, (charge) => periodMatchesCharge(charge, period))
+        : -1;
+      const byCategory =
+        byPeriod < 0 && cat.length >= 4
+          ? findChargeIndex(next, (charge) => {
+              const desc = charge.desc.toLowerCase();
+              const needle = cat.toLowerCase();
+              return desc.includes(needle) || needle.includes(desc.split("·")[0]?.trim() || desc);
+            })
+          : -1;
+      remaining = applyAmountToCharges(
+        next,
+        remaining,
+        payment.time,
+        byPeriod >= 0 ? byPeriod : byCategory,
       );
     }
-    if (matchedIndex < 0 && payment.cat) {
-      const cat = payment.cat.trim().toLowerCase();
-      matchedIndex = next.findIndex(
-        (c) =>
-          !c.onBreak &&
-          c.paid < c.charge &&
-          (c.desc.toLowerCase().includes(cat) || cat.includes(c.desc.toLowerCase())),
-      );
+
+    if (remaining > 0) {
+      leftovers.push({ ...payment, amount: remaining });
     }
-    if (matchedIndex < 0) {
-      matchedIndex = next.findIndex(
-        (c) =>
-          !c.onBreak &&
-          c.paid < c.charge &&
-          /installment|term|annual|vehicle|transport|bus/i.test(c.desc),
-      );
-    }
-    if (matchedIndex < 0 && termKind) {
-      matchedIndex = next.findIndex((c) => !c.onBreak && c.paid < c.charge);
-    }
-    if (matchedIndex < 0) {
-      leftovers.push(payment);
-      continue;
-    }
-    next[matchedIndex] = {
-      ...next[matchedIndex],
-      paid: next[matchedIndex].paid + payment.amount,
-      date:
-        next[matchedIndex].date === "—" ? formatDisplayDate(payment.time) : next[matchedIndex].date,
-    };
   }
 
   return { charges: next, leftovers };
 }
 
-function leftoverPaymentLine(payment: Payment): ChargeDraft {
+function leftoverPaymentLine(
+  payment: Payment,
+  origin: "schedule" | "receipt" = "receipt",
+): ChargeDraft {
   const period = resolvePaymentFeePeriod(payment);
   const desc = period ? `${payment.cat} · ${period}` : payment.cat || "Fee Payment";
   return {
@@ -500,6 +590,7 @@ function leftoverPaymentLine(payment: Payment): ChargeDraft {
     charge: payment.amount,
     paid: payment.amount,
     periodLabel: period || undefined,
+    origin,
   };
 }
 
@@ -517,20 +608,23 @@ function toLedgerRow(draft: ChargeDraft): StudentLedgerRow {
       status: "On Break",
       periodLabel: draft.periodLabel,
       dueIso,
+      origin: draft.origin ?? "schedule",
     };
   }
-  const charge = Math.max(draft.charge, draft.paid);
-  const balance = Math.max(0, charge - draft.paid);
+  const charge = Math.max(0, draft.charge);
+  const paid = Math.max(0, draft.paid);
+  const balance = Math.max(0, charge - paid);
   return {
     date: draft.date,
     desc: draft.desc,
     due: formatDisplayDate(draft.due),
     charge,
-    paid: draft.paid,
+    paid,
     balance,
-    status: resolveStudentLedgerStatus(charge, draft.paid, draft.due),
+    status: resolveStudentLedgerStatus(charge, paid, draft.due),
     periodLabel: draft.periodLabel,
     dueIso,
+    origin: draft.origin ?? "schedule",
   };
 }
 
@@ -566,6 +660,84 @@ function mapReceipts(payments: Payment[]): StudentReceipt[] {
   }));
 }
 
+function uniqueReceipts(rows: StudentReceipt[]): StudentReceipt[] {
+  const seen = new Set<string>();
+  const out: StudentReceipt[] = [];
+  for (const row of rows) {
+    const key = row.id.trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+  return out;
+}
+
+export function uniqueStudentReceipts(rows: StudentReceipt[]): StudentReceipt[] {
+  return uniqueReceipts(rows);
+}
+
+export function isScheduledFeeLedgerRow(row: StudentLedgerRow): boolean {
+  if (row.status === "On Break") return false;
+  if (row.origin === "receipt") return false;
+  return true;
+}
+
+export function feeStatementHeadline(
+  ledger: StudentLedgerRow[],
+  receipts: StudentReceipt[],
+): {
+  totalFee: number;
+  totalPaid: number;
+  totalDue: number;
+  allocatedPaid: number;
+  unallocatedPaid: number;
+} {
+  const scheduled = ledger.filter(isScheduledFeeLedgerRow);
+  const totalFee = scheduled.reduce((sum, row) => sum + row.charge, 0);
+  const totalPaid = uniqueReceipts(receipts).reduce((sum, row) => sum + row.amount, 0);
+  const allocatedPaid = scheduled.reduce((sum, row) => sum + row.paid, 0);
+  return {
+    totalFee,
+    totalPaid,
+    totalDue: Math.max(0, totalFee - totalPaid),
+    allocatedPaid,
+    unallocatedPaid: Math.max(0, totalPaid - allocatedPaid),
+  };
+}
+
+function paymentMatchesOtherCharge(payment: Payment, charges: ChargeDraft[]): boolean {
+  if (charges.length === 0 || isVehiclePayment(payment)) return false;
+  const cat = (payment.cat || "").trim().toLowerCase();
+  if (!cat) return false;
+  return charges.some((charge) => {
+    const desc = charge.desc.toLowerCase();
+    const feeName = desc.split("·")[0]?.trim() || desc;
+    return Boolean(feeName) && (desc.includes(cat) || cat.includes(feeName));
+  });
+}
+
+function computeFeeTotals(
+  ledger: StudentLedgerRow[],
+  receipts: StudentReceipt[],
+): Pick<
+  StudentFeeSection,
+  "totalFee" | "totalPaid" | "totalDue" | "overdueDue" | "dueToday" | "overdue"
+> {
+  const headline = feeStatementHeadline(ledger, receipts);
+  const { overdueDue, dueToday } = summarizeStudentDueBuckets(ledger);
+  return {
+    totalFee: headline.totalFee,
+    totalPaid: headline.totalPaid,
+    totalDue: headline.totalDue,
+    overdueDue: Math.min(overdueDue, headline.totalDue),
+    dueToday: Math.min(
+      dueToday,
+      Math.max(0, headline.totalDue - Math.min(overdueDue, headline.totalDue)),
+    ),
+    overdue: headline.totalDue > 0 && ledger.some((row) => row.status === "Overdue"),
+  };
+}
+
 function summarizeSection(
   expected: ChargeDraft[],
   payments: Payment[],
@@ -574,8 +746,10 @@ function summarizeSection(
   const { charges, leftovers } = allocatePaymentsToCharges(expected, payments);
   const drafts =
     expected.length > 0
-      ? [...charges, ...(includeLeftovers ? leftovers.map(leftoverPaymentLine) : [])]
-      : payments.map(leftoverPaymentLine);
+      ? charges
+      : includeLeftovers
+        ? leftovers.map((payment) => leftoverPaymentLine(payment, "schedule"))
+        : [];
 
   const ledger = sortLedger(
     drafts
@@ -583,58 +757,26 @@ function summarizeSection(
       .filter((row) => row.charge > 0 || row.paid > 0 || row.status === "On Break"),
   );
 
-  const receipts = mapReceipts(payments);
-  const totalPaid = receipts.reduce((s, r) => s + r.amount, 0);
-  const billable = ledger.filter((r) => r.status !== "On Break");
-  const totalFee = Math.max(
-    billable.reduce((s, r) => s + r.charge, 0),
-    totalPaid,
-  );
-  const ledgerOutstanding = billable.reduce((s, r) => s + r.balance, 0);
-  const totalDue = Math.max(ledgerOutstanding, Math.max(0, totalFee - totalPaid));
-  const { overdueDue, dueToday } = summarizeStudentDueBuckets(ledger, new Date());
-
   return {
-    totalFee,
-    totalPaid,
-    totalDue,
-    overdueDue,
-    dueToday,
-    overdue: totalDue > 0 && billable.some((r) => r.status === "Overdue"),
     ledger,
-    receipts,
+    receipts: uniqueReceipts(mapReceipts(payments)),
+    ...computeFeeTotals(ledger, mapReceipts(payments)),
   };
 }
 
 function mergeSections(
   a: StudentFeeSection,
   b: StudentFeeSection,
-  studentDue: number,
+  _studentDue: number,
 ): StudentFeeSection {
   const ledger = sortLedger([...a.ledger, ...b.ledger]);
-  const receipts = [...a.receipts, ...b.receipts].sort((x, y) =>
+  const receipts = uniqueReceipts([...a.receipts, ...b.receipts]).sort((x, y) =>
     String(y.date).localeCompare(String(x.date)),
   );
-  const totalPaid = a.totalPaid + b.totalPaid;
-  const totalFee = Math.max(a.totalFee + b.totalFee, totalPaid);
-  const billable = ledger.filter((r) => r.status !== "On Break");
-  const ledgerOutstanding = billable.reduce((s, r) => s + r.balance, 0);
-  const totalDue = Math.max(
-    ledgerOutstanding,
-    Math.max(0, studentDue),
-    Math.max(0, totalFee - totalPaid),
-  );
-  const { overdueDue, dueToday } = summarizeStudentDueBuckets(ledger, new Date());
-
   return {
-    totalFee,
-    totalPaid,
-    totalDue,
-    overdueDue,
-    dueToday,
-    overdue: totalDue > 0 && billable.some((r) => r.status === "Overdue"),
     ledger,
     receipts,
+    ...computeFeeTotals(ledger, receipts),
   };
 }
 
@@ -659,10 +801,7 @@ export function buildStudentFeeStatement(input: {
   const studentPayments = yearPayments
     .filter((p) => paymentMatchesStudent(p, student))
     .slice()
-    .sort((a, b) => String(b.time).localeCompare(String(a.time)));
-
-  const tuitionPayments = studentPayments.filter((p) => !isVehiclePayment(p));
-  const vehiclePayments = studentPayments.filter((p) => isVehiclePayment(p));
+    .sort((a, b) => String(a.time).localeCompare(String(b.time)));
 
   const classConfig = input.classes.find((c) => c.className === student.cls);
   const tuitionExpected = markBreaksOnCharges(
@@ -680,10 +819,16 @@ export function buildStudentFeeStatement(input: {
     "vehicle",
   );
   const otherExpected = expectedOtherConcessionChargeLines(student);
+  const otherPayments = studentPayments.filter((p) => paymentMatchesOtherCharge(p, otherExpected));
+  const otherPaymentIds = new Set(otherPayments.map((p) => p.id));
+  const tuitionPayments = studentPayments.filter(
+    (p) => !isVehiclePayment(p) && !otherPaymentIds.has(p.id),
+  );
+  const vehiclePayments = studentPayments.filter((p) => isVehiclePayment(p));
 
   const tuition = summarizeSection(tuitionExpected, tuitionPayments);
   const vehicleBase = summarizeSection(vehicleExpected, vehiclePayments, false);
-  const otherBase = summarizeSection(otherExpected, studentPayments, false);
+  const otherBase = summarizeSection(otherExpected, otherPayments, false);
 
   const transport = resolveTransportFeeForStudent(
     student,
@@ -705,15 +850,10 @@ export function buildStudentFeeStatement(input: {
 
   // student.due may still include amounts covered by breaks until adjusted — prefer ledger.
   const combined = mergeSections(mergeSections(tuition, vehicle, 0), otherBase, 0);
+
   if (
-    student.due > 0 &&
-    combined.totalDue === 0 &&
-    combined.ledger.every((r) => r.status === "On Break" || r.balance <= 0)
-  ) {
-    // All remaining schedule is on break / paid — do not surface stale due as overdue.
-  } else if (
     student.due > combined.totalDue &&
-    combined.ledger.filter((r) => r.status !== "On Break").length === 0
+    combined.ledger.filter((r) => r.status !== "On Break" && isScheduledFeeLedgerRow(r)).length === 0
   ) {
     combined.ledger.push({
       date: "—",
@@ -723,29 +863,19 @@ export function buildStudentFeeStatement(input: {
       paid: 0,
       balance: student.due,
       status: "Overdue",
+      origin: "schedule",
     });
-    combined.totalFee = Math.max(combined.totalFee, student.due);
-    combined.totalDue = student.due;
-    combined.overdue = true;
-  } else {
-    // Cap displayed due to ledger outstanding when breaks reduced billable schedule
-    const ledgerOutstanding = combined.ledger
-      .filter((r) => r.status !== "On Break")
-      .reduce((s, r) => s + r.balance, 0);
-    combined.totalDue = Math.max(
-      ledgerOutstanding,
-      Math.max(0, combined.totalFee - combined.totalPaid),
-    );
-    combined.overdue = combined.totalDue > 0 && combined.ledger.some((r) => r.status === "Overdue");
   }
 
-  const dueBuckets = summarizeStudentDueBuckets(combined.ledger);
-  combined.overdueDue = dueBuckets.overdueDue;
-  combined.dueToday = dueBuckets.dueToday;
+  Object.assign(combined, computeFeeTotals(combined.ledger, combined.receipts));
+  combined.overdue = combined.totalDue > 0 && combined.ledger.some((r) => r.status === "Overdue");
 
   return {
     ...combined,
-    tuition,
+    tuition: {
+      ...tuition,
+      ledger: sortLedger([...tuition.ledger, ...otherBase.ledger]),
+    },
     vehicle,
   };
 }
@@ -860,4 +990,62 @@ export function unpaidAmountCoveredByBreak(input: {
     feeBreaks: [...withoutDraft, draftBreak],
   });
   return Math.max(0, before.totalDue - after.totalDue);
+}
+
+export type StudentFeeRosterTotals = {
+  totalFee: number;
+  totalPaid: number;
+  /** Upcoming / pending (excludes overdue). */
+  pendingDue: number;
+  overdueDue: number;
+  /** Remaining unpaid (pending + overdue). */
+  outstanding: number;
+  outstandingCount: number;
+  paidCount: number;
+};
+
+/** Same totals as each student Payments tab, summed across a roster. */
+export function sumStudentFeeRoster(input: {
+  students: Student[];
+  payments: Payment[];
+  classes: ClassConfig[];
+  feeTerms: FeeTerm[];
+  transportRoutes?: TransportRoute[];
+  academicYear: string;
+  feeBreaks?: StudentFeeBreak[];
+}): StudentFeeRosterTotals {
+  let totalFee = 0;
+  let totalPaid = 0;
+  let pendingDue = 0;
+  let overdueDue = 0;
+  let outstandingCount = 0;
+  let paidCount = 0;
+
+  for (const student of input.students) {
+    const statement = buildStudentFeeStatement({
+      student,
+      payments: input.payments,
+      classes: input.classes,
+      feeTerms: input.feeTerms,
+      transportRoutes: input.transportRoutes,
+      academicYear: input.academicYear,
+      feeBreaks: input.feeBreaks,
+    });
+    totalFee += statement.totalFee;
+    totalPaid += statement.totalPaid;
+    pendingDue += Math.max(0, statement.totalDue - statement.overdueDue);
+    overdueDue += statement.overdueDue;
+    if (statement.totalDue > 0) outstandingCount += 1;
+    else paidCount += 1;
+  }
+
+  return {
+    totalFee,
+    totalPaid,
+    pendingDue,
+    overdueDue,
+    outstanding: pendingDue + overdueDue,
+    outstandingCount,
+    paidCount,
+  };
 }

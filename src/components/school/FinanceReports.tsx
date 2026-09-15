@@ -1,10 +1,12 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import {
   AlertTriangle,
   CheckCircle2,
   Download,
   FileSpreadsheet,
   Landmark,
+  Plus,
   Printer,
   RotateCcw,
   Search,
@@ -24,6 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -31,7 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { MonthPicker } from "@/components/ui/date-picker";
+import { MonthPicker, DatePicker } from "@/components/ui/date-picker";
 import { FinanceBarCard, FinanceDonutCard } from "@/components/school/finance-charts";
 import { OrganicCard } from "@/components/ui/organic-card";
 import {
@@ -45,10 +48,22 @@ import {
   totalOperatingExpense,
   type FinanceDisbursement,
 } from "@/lib/dashboard-finance";
-import { formatEventDate, formatEventDateTime } from "@/lib/dates";
-import { downloadCsv, downloadTablePdf, truncatePdfCell } from "@/lib/finance-export";
+import {
+  formatEventDate,
+  formatEventDateTime,
+  formatInAppZone,
+  formatNow,
+  parseEventDate,
+} from "@/lib/dates";
+import {
+  downloadCsv,
+  downloadTablePdf,
+  truncatePdfCell,
+  type TablePdfRichCell,
+} from "@/lib/finance-export";
 import { formatDownloadFilename, slugYear, todayStamp } from "@/lib/download-names";
 import { useDisbursements } from "@/lib/use-disbursements";
+import { apiCreateExpenseLedger, apiListExpenseLedgers } from "@/lib/api/records";
 import {
   useTenantStore,
   normalizePaymentCategoryLabel,
@@ -62,6 +77,12 @@ import {
   type Student,
 } from "@/lib/tenant-store";
 import { cn } from "@/lib/utils";
+import {
+  PAYMENT_PERIOD_OPTIONS,
+  timestampMatchesPeriod,
+  type CustomDateRange,
+  type PaymentPeriod,
+} from "@/lib/payment-period";
 
 export type LedgerRow = {
   date: string;
@@ -79,6 +100,26 @@ function inr(n: number) {
 
 function pdfInr(n: number) {
   return `Rs. ${n.toLocaleString("en-IN")}`;
+}
+
+function pdfEventDateTime(value?: string | Date | null) {
+  const parsed = value instanceof Date ? value : parseEventDate(value);
+  if (!parsed) return String(value ?? "—");
+  return formatInAppZone(parsed, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).replace(/,/g, "");
+}
+
+function pdfStatementCell(
+  content: string,
+  extra?: TablePdfRichCell["styles"],
+): TablePdfRichCell {
+  return { content, styles: extra };
 }
 
 function reportDownloadName(
@@ -106,14 +147,22 @@ function formatLedgerDate(raw: string | undefined | null): string {
 function buildLedgerRows(payments: Payment[], disbursements: FinanceDisbursement[]): LedgerRow[] {
   const expenseRows: Omit<LedgerRow, "balance">[] = disbursements
     .filter((d) => (d.status || "Cleared") !== "Queued")
-    .map((e) => ({
-      date: formatLedgerDate(e.time),
-      voucher: e.id || "",
-      particulars: `${e.payee}${e.desc ? ` · ${e.desc}` : ""}`,
-      account: e.payeeType ? normalizePayeeType(e.payeeType) : "Expense",
-      debit: e.amount,
-      credit: 0,
-    }));
+    .map((e) => {
+      const salary = isSalaryDisbursement(e);
+      const ledgerName = e.payee?.trim() || (salary ? "Salary" : "Other Expense");
+      const detail = e.desc?.trim() ?? "";
+      return {
+        date: formatLedgerDate(e.time),
+        voucher: e.id || "",
+        particulars:
+          detail && detail.toLowerCase() !== ledgerName.toLowerCase()
+            ? `${ledgerName} · ${detail}`
+            : ledgerName,
+        account: salary ? "Salary" : ledgerName,
+        debit: e.amount,
+        credit: 0,
+      };
+    });
 
   const receiptRows: Omit<LedgerRow, "balance">[] = [...payments].reverse().map((p) => ({
     date: formatLedgerDate(p.time),
@@ -532,14 +581,45 @@ function SummaryStrip({ items }: { items: { label: string; value: string; accent
   );
 }
 
+function mapExpenseLedgerRows(
+  rows: { id?: string; name?: string; label?: string }[],
+): { id: string; name: string }[] {
+  return (Array.isArray(rows) ? rows : [])
+    .filter((row) => row?.id && (row.name || row.label))
+    .map((row) => ({ id: row.id as string, name: (row.name || row.label || "").trim() }))
+    .filter((row) => row.name);
+}
+
 export function GeneralLedgerReport() {
-  const { activePayments: payments, academicYear, schoolDetails } = useTenantStore();
+  const { activePayments: payments, academicYear, schoolDetails, activeBranchId } =
+    useTenantStore();
   const { disbursements } = useDisbursements();
+  const navigate = useNavigate();
   const schoolName = schoolDetails.name || "School";
 
   const [query, setQuery] = useState("");
   const [entryType, setEntryType] = useState<"all" | "credit" | "debit">("all");
   const [account, setAccount] = useState("all");
+  const [expenseLedgers, setExpenseLedgers] = useState<{ id: string; name: string }[]>([]);
+  const [createLedgerOpen, setCreateLedgerOpen] = useState(false);
+  const [newLedgerName, setNewLedgerName] = useState("");
+  const [creatingLedger, setCreatingLedger] = useState(false);
+  const [ledgerNameError, setLedgerNameError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    void apiListExpenseLedgers()
+      .then((rows) => {
+        if (cancelled) return;
+        setExpenseLedgers(mapExpenseLedgerRows(rows));
+      })
+      .catch(() => {
+        if (!cancelled) setExpenseLedgers([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeBranchId]);
 
   const allRows = useMemo(
     () => buildLedgerRows(payments, disbursements),
@@ -548,10 +628,13 @@ export function GeneralLedgerReport() {
 
   const accountOptions = useMemo(
     () =>
-      Array.from(new Set(allRows.map((r) => r.account).filter(Boolean))).sort((a, b) =>
-        a.localeCompare(b),
-      ),
-    [allRows],
+      Array.from(
+        new Set([
+          ...allRows.map((row) => row.account).filter(Boolean),
+          ...expenseLedgers.map((ledger) => ledger.name),
+        ]),
+      ).sort((a, b) => a.localeCompare(b)),
+    [allRows, expenseLedgers],
   );
 
   const filteredRows = useMemo(() => {
@@ -627,11 +710,77 @@ export function GeneralLedgerReport() {
   ];
 
   const exportMeta = `${schoolName} · ${academicYear}`;
+  const selectedHasNoPostings =
+    account !== "all" && !allRows.some((row) => row.account === account);
+  const selectedIsExpenseLedger = expenseLedgers.some((ledger) => ledger.name === account);
 
   const clearFilters = () => {
     setQuery("");
     setEntryType("all");
     setAccount("all");
+  };
+
+  const openCreateLedger = () => {
+    setNewLedgerName("");
+    setLedgerNameError("");
+    setCreateLedgerOpen(true);
+  };
+
+  const closeCreateLedger = () => {
+    if (creatingLedger) return;
+    setCreateLedgerOpen(false);
+    setNewLedgerName("");
+    setLedgerNameError("");
+  };
+
+  const createExpenseLedger = async () => {
+    const name = newLedgerName.trim();
+    if (!name) {
+      setLedgerNameError("Enter a ledger name");
+      return;
+    }
+    const duplicate = expenseLedgers.find(
+      (ledger) => ledger.name.toLowerCase() === name.toLowerCase(),
+    );
+    if (duplicate) {
+      setAccount(duplicate.name);
+      setQuery("");
+      setEntryType("all");
+      setCreateLedgerOpen(false);
+      setNewLedgerName("");
+      setLedgerNameError("");
+      toast.message(`Ledger “${duplicate.name}” already exists`);
+      return;
+    }
+    setCreatingLedger(true);
+    try {
+      const saved = await apiCreateExpenseLedger({ name });
+      const entry = { id: saved.id, name: saved.name || name };
+      setExpenseLedgers((prev) => {
+        if (prev.some((ledger) => ledger.id === entry.id)) {
+          return prev.map((ledger) => (ledger.id === entry.id ? entry : ledger));
+        }
+        return [
+          ...prev.filter((ledger) => ledger.name.toLowerCase() !== entry.name.toLowerCase()),
+          entry,
+        ];
+      });
+      setAccount(entry.name);
+      setQuery("");
+      setEntryType("all");
+      setCreateLedgerOpen(false);
+      setNewLedgerName("");
+      setLedgerNameError("");
+      toast.success(`Ledger “${entry.name}” created`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not create ledger");
+    } finally {
+      setCreatingLedger(false);
+    }
+  };
+
+  const openMakePayment = () => {
+    navigate({ to: "/tenant/finance", search: { tab: "make" } });
   };
 
   const handleCsv = () => {
@@ -682,22 +831,91 @@ export function GeneralLedgerReport() {
 
   return (
     <div className="flex flex-col gap-4 sm:gap-5">
+      <Dialog
+        open={createLedgerOpen}
+        onOpenChange={(open) => {
+          if (open) openCreateLedger();
+          else closeCreateLedger();
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create expense ledger</DialogTitle>
+            <DialogDescription>
+              Add a reusable head for this campus. It appears in Make Payment under Other Expense
+              and in the account filter on this page.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void createExpenseLedger();
+            }}
+          >
+            <div className="space-y-1.5">
+              <Label htmlFor="general-ledger-new-head">Ledger name</Label>
+              <Input
+                id="general-ledger-new-head"
+                value={newLedgerName}
+                onChange={(event) => {
+                  setNewLedgerName(event.target.value);
+                  if (ledgerNameError) setLedgerNameError("");
+                }}
+                placeholder="e.g. Books, Electricity, Transport"
+                autoFocus
+                aria-invalid={Boolean(ledgerNameError)}
+              />
+              {ledgerNameError ? (
+                <p className="text-[12px] text-red-600">{ledgerNameError}</p>
+              ) : (
+                <p className="text-[12px] text-black/45">
+                  Use the same name you will select when recording an Other Expense payment.
+                </p>
+              )}
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button type="button" variant="outline" onClick={closeCreateLedger}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={creatingLedger} className="rounded-full bg-[#0F766E]">
+                {creatingLedger ? "Creating…" : "Create ledger"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       <OrganicCard tone="white" cornerSide="tr" padded className="shrink-0">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 flex-1">
             <div className="text-title text-slate-900 dark:text-zinc-50">General Ledger</div>
             <p className="mt-1 text-[12px] text-black/55">
               Chronological double-entry view · {filteredRows.length}
-              {filtersActive ? ` of ${allRows.length}` : ""} postings · {academicYear}
+              {filtersActive ? ` of ${allRows.length}` : ""} postings
+              {expenseLedgers.length
+                ? ` · ${expenseLedgers.length} expense ledger${expenseLedgers.length === 1 ? "" : "s"}`
+                : ""}{" "}
+              · {academicYear}
             </p>
           </div>
-          <div className="w-full shrink-0 lg:w-auto lg:min-w-[260px]">
-            <ExportActions
-              onCsv={handleCsv}
-              onPdf={handlePdf}
-              onPrint={handlePrint}
-              confirmTitle="General Ledger"
-            />
+          <div className="flex w-full shrink-0 flex-col gap-2 min-[520px]:flex-row min-[520px]:items-stretch lg:w-auto">
+            <button
+              type="button"
+              onClick={openCreateLedger}
+              className="inline-flex min-h-10 w-full shrink-0 items-center justify-center gap-1.5 rounded-full border border-[#0F766E]/40 bg-white px-4 py-1.5 text-[12px] font-semibold text-[#0F766E] transition-colors hover:bg-[#0F766E]/5 min-[520px]:w-auto dark:border-teal-400/30 dark:bg-zinc-900 dark:text-teal-300 dark:hover:bg-teal-400/10"
+            >
+              <Plus className="h-3.5 w-3.5 shrink-0" />
+              Create ledger
+            </button>
+            <div className="min-w-0 flex-1 lg:min-w-[260px]">
+              <ExportActions
+                onCsv={handleCsv}
+                onPdf={handlePdf}
+                onPrint={handlePrint}
+                confirmTitle="General Ledger"
+              />
+            </div>
           </div>
         </div>
         <SummaryStrip
@@ -748,20 +966,74 @@ export function GeneralLedgerReport() {
               <SelectItem value="debit">Debits only</SelectItem>
             </SelectContent>
           </Select>
-          <ReportFilterSelect
+          <Select
             value={account}
-            onChange={setAccount}
-            placeholder="All accounts"
-            options={accountOptions}
-            className="sm:col-span-1 xl:col-span-1"
-          />
+            onValueChange={(next) => {
+              if (next === "__create_ledger__") {
+                openCreateLedger();
+                return;
+              }
+              setAccount(next);
+            }}
+          >
+            <SelectTrigger className="h-10 w-full rounded-xl border-[#E5E5E5] bg-white">
+              <SelectValue placeholder="All accounts" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem
+                value="__create_ledger__"
+                className="font-semibold text-[#0F766E] focus:text-[#0F766E]"
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  <Plus className="h-3.5 w-3.5" />
+                  Create new ledger
+                </span>
+              </SelectItem>
+              <SelectItem value="all">All accounts</SelectItem>
+              {accountOptions.map((option) => (
+                <SelectItem key={option} value={option}>
+                  {option}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {filteredRows.length === 0 ? (
-          <div className="mt-4 rounded-2xl border border-dashed border-black/15 px-4 py-10 text-center text-[13px] text-black/55">
-            {allRows.length === 0
-              ? "No ledger postings yet"
-              : "No postings match your search or filters"}
+          <div className="mt-4 rounded-2xl border border-dashed border-black/15 px-4 py-10 text-center">
+            <Landmark className="mx-auto h-8 w-8 text-[#0F766E]/50" />
+            <p className="mt-3 text-[14px] font-semibold text-slate-800 dark:text-zinc-100">
+              {selectedHasNoPostings
+                ? `Ledger “${account}” is ready`
+                : allRows.length === 0
+                  ? "No ledger postings yet"
+                  : "No postings match your search or filters"}
+            </p>
+            <p className="mx-auto mt-1.5 max-w-md text-[13px] text-black/55">
+              {selectedHasNoPostings && selectedIsExpenseLedger
+                ? "Record an Other Expense from Make Payment against this head to see it here."
+                : allRows.length === 0
+                  ? "Create an expense ledger head, then record payments from Make Payment. Those postings appear in this chronological view."
+                  : "Try another account, clear filters, or create a new expense ledger."}
+            </p>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full border-[#0F766E]/40 text-[#0F766E]"
+                onClick={openCreateLedger}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Create ledger
+              </Button>
+              <Button
+                type="button"
+                className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+                onClick={openMakePayment}
+              >
+                Record payment
+              </Button>
+            </div>
           </div>
         ) : (
           <>
@@ -2225,6 +2497,7 @@ export function SalaryReport() {
 type DayBookEntry = {
   id: string;
   time: string;
+  paidAt: string;
   particular: string;
   account: string;
   mode: string;
@@ -2302,6 +2575,8 @@ export function DayBookReport() {
   const schoolName = schoolDetails.name || "School";
 
   const [query, setQuery] = useState("");
+  const [period, setPeriod] = useState<PaymentPeriod>("all");
+  const [customRange, setCustomRange] = useState<CustomDateRange>({ from: "", to: "" });
   const [entryType, setEntryType] = useState<"all" | "Receipt" | "Payment">("all");
   const [mode, setMode] = useState("all");
 
@@ -2309,6 +2584,7 @@ export function DayBookReport() {
     const receipts: DayBookEntry[] = payments.map((p) => ({
       id: p.id,
       time: formatEventDateTime(p.time),
+      paidAt: p.time,
       particular: p.name,
       account: p.cat,
       mode: p.mode,
@@ -2322,6 +2598,7 @@ export function DayBookReport() {
       .map((e) => ({
         id: e.id || "",
         time: formatEventDateTime(e.time),
+        paidAt: e.time || "",
         particular: e.payee,
         account: e.payeeType ? normalizePayeeType(e.payeeType) : "Expense",
         mode: e.mode || "Bank",
@@ -2330,7 +2607,7 @@ export function DayBookReport() {
         narration: e.desc,
       }));
 
-    return [...receipts, ...outflows];
+    return [...receipts, ...outflows].sort((a, b) => (b.paidAt || "").localeCompare(a.paidAt || ""));
   }, [payments, disbursements]);
 
   const modeOptions = useMemo(
@@ -2341,6 +2618,7 @@ export function DayBookReport() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return entries.filter((e) => {
+      if (!timestampMatchesPeriod(e.paidAt, period, customRange)) return false;
       if (entryType !== "all" && e.type !== entryType) return false;
       if (mode !== "all" && e.mode !== mode) return false;
       if (!q) return true;
@@ -2359,7 +2637,7 @@ export function DayBookReport() {
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [entries, query, entryType, mode]);
+  }, [entries, query, period, customRange, entryType, mode]);
 
   const totalReceipts = filtered
     .filter((e) => e.type === "Receipt")
@@ -2412,8 +2690,13 @@ export function DayBookReport() {
     { label: "Net Movement", value: pdfInr(net) },
   ];
 
+  const periodLabel =
+    PAYMENT_PERIOD_OPTIONS.find((option) => option.value === period)?.label ?? "All";
+
   const clearFilters = () => {
     setQuery("");
+    setPeriod("all");
+    setCustomRange({ from: "", to: "" });
     setEntryType("all");
     setMode("all");
   };
@@ -2451,7 +2734,7 @@ export function DayBookReport() {
     downloadTablePdf({
       filename: reportDownloadName("day-book", "pdf", schoolName, academicYear),
       title: "Day Book",
-      subtitle: `${schoolName} · ${academicYear}`,
+      subtitle: `${schoolName} · ${academicYear} · ${periodLabel}`,
       headers: [...dayBookPdfHeaders],
       rows: buildDayBookPdfRows(),
       summaryItems: dayBookPdfSummary(),
@@ -2465,7 +2748,7 @@ export function DayBookReport() {
     downloadTablePdf({
       filename: reportDownloadName("day-book", "pdf", schoolName, academicYear),
       title: "Day Book",
-      subtitle: `${schoolName} · ${academicYear}`,
+      subtitle: `${schoolName} · ${academicYear} · ${periodLabel}`,
       headers: [...dayBookPdfHeaders],
       rows: buildDayBookPdfRows(),
       summaryItems: dayBookPdfSummary(),
@@ -2510,9 +2793,10 @@ export function DayBookReport() {
             <div className="text-title text-slate-900 dark:text-zinc-50">Day Book Entries</div>
             <p className="mt-1 text-[12px] text-black/55">
               {filtered.length} of {entries.length} entr{entries.length === 1 ? "y" : "ies"}
+              {period !== "all" ? ` · ${periodLabel}` : ""}
             </p>
           </div>
-          {(query || entryType !== "all" || mode !== "all") && (
+          {(query || period !== "all" || entryType !== "all" || mode !== "all") && (
             <button
               type="button"
               onClick={clearFilters}
@@ -2524,15 +2808,23 @@ export function DayBookReport() {
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="sm:col-span-2 xl:col-span-4">
-            <ReportSearchInput
-              value={query}
-              onChange={setQuery}
-              placeholder="Search voucher, particulars, account, narration…"
-            />
-          </div>
+          <Select
+            value={period}
+            onValueChange={(value) => setPeriod(value as PaymentPeriod)}
+          >
+            <SelectTrigger className="h-10 w-full rounded-full border-[#E5E5E5] bg-white text-[13px] font-semibold">
+              <SelectValue placeholder="Period" />
+            </SelectTrigger>
+            <SelectContent>
+              {PAYMENT_PERIOD_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={entryType} onValueChange={(v) => setEntryType(v as typeof entryType)}>
-            <SelectTrigger className="h-10 w-full rounded-xl border-[#E5E5E5] bg-white">
+            <SelectTrigger className="h-10 w-full rounded-full border-[#E5E5E5] bg-white">
               <SelectValue placeholder="All types" />
             </SelectTrigger>
             <SelectContent>
@@ -2546,8 +2838,39 @@ export function DayBookReport() {
             onChange={setMode}
             placeholder="All modes"
             options={modeOptions}
-            className="sm:col-span-1 xl:col-span-1"
+            className="rounded-full sm:col-span-1 xl:col-span-1"
           />
+          <div className="sm:col-span-2 xl:col-span-4">
+            <ReportSearchInput
+              value={query}
+              onChange={setQuery}
+              placeholder="Search voucher, particulars, account, narration…"
+            />
+          </div>
+          {period === "custom" && (
+            <div className="grid grid-cols-1 gap-2 sm:col-span-2 sm:grid-cols-2 xl:col-span-4">
+              <DatePicker
+                value={customRange.from}
+                onChange={(from) => setCustomRange({ ...customRange, from })}
+                placeholder="From date"
+                valueFormat="iso"
+                variant="pill"
+                max={customRange.to || undefined}
+                quickPicks={[{ label: "Today", getDate: (t) => t }]}
+                className="h-10 w-full"
+              />
+              <DatePicker
+                value={customRange.to}
+                onChange={(to) => setCustomRange({ ...customRange, to })}
+                placeholder="To date"
+                valueFormat="iso"
+                variant="pill"
+                min={customRange.from || undefined}
+                quickPicks={[{ label: "Today", getDate: (t) => t }]}
+                className="h-10 w-full"
+              />
+            </div>
+          )}
         </div>
 
         {filtered.length === 0 ? (
@@ -2598,6 +2921,7 @@ export function DayBookReport() {
 type BankReconTxn = {
   id: string;
   time: string;
+  rawTime: string;
   name: string;
   cat: string;
   mode: string;
@@ -2615,6 +2939,7 @@ export function BankReconciliationReport() {
         .map((p) => ({
           id: p.id,
           time: formatEventDateTime(p.time),
+          rawTime: p.time,
           name: p.name,
           cat: p.cat,
           mode: p.mode,
@@ -2685,24 +3010,30 @@ export function BankReconciliationReport() {
     ["Unreconciled Difference", inr(difference)],
   ];
 
-  const bankReconPdfHeaders = [
-    "Voucher",
-    "Date/Time",
-    "Account",
-    "Mode",
-    "Amount",
-    "Status",
-  ] as const;
+  const txnPdfHeaders = ["Voucher", "Date / Time", "Account", "Mode", "Amount (Rs.)"] as const;
 
-  const buildBankReconPdfRows = () =>
-    bankTxns.map((t) => [
-      t.id,
-      t.time,
-      t.name,
-      t.mode,
-      t.amount.toLocaleString("en-IN"),
-      isCleared(t.id) ? "Cleared" : "Uncleared",
-    ]);
+  const mapTxnPdfRow = (txn: BankReconTxn) => [
+    txn.id,
+    pdfEventDateTime(txn.rawTime),
+    truncatePdfCell(txn.name, 64),
+    txn.mode,
+    txn.amount.toLocaleString("en-IN"),
+  ];
+
+  const txnPdfTotalRow = (items: BankReconTxn[]): TablePdfRichCell[] => {
+    const total = items.reduce((sum, txn) => sum + txn.amount, 0);
+    return [
+      {
+        content: `Total (${items.length})`,
+        colSpan: 4,
+        styles: { fontStyle: "bold" },
+      },
+      {
+        content: total.toLocaleString("en-IN"),
+        styles: { fontStyle: "bold", halign: "right" },
+      },
+    ];
+  };
 
   const bankReconPdfSummary = () => [
     { label: "Statement Balance", value: pdfInr(statementBalance) },
@@ -2711,13 +3042,79 @@ export function BankReconciliationReport() {
     { label: "Difference", value: pdfInr(difference) },
   ];
 
-  const buildBankReconStatementPdfRows = () => [
-    ["Balance as per Bank Statement", pdfInr(statementBalance)],
-    [`Add: Deposits in transit (${unclearedCount} uncleared)`, pdfInr(unclearedTotal)],
-    ["Adjusted Balance (per Books)", pdfInr(statementBalance + unclearedTotal)],
-    ["Balance as per Books", pdfInr(bookBalance)],
-    ["Unreconciled Difference", pdfInr(difference)],
-  ];
+  const buildBankReconStatementPdfRows = () => {
+    const totalFill: [number, number, number] = [241, 245, 249];
+    const diffFill: [number, number, number] = reconciled ? [240, 253, 244] : [255, 247, 237];
+    const diffText: [number, number, number] = reconciled ? [5, 150, 105] : [194, 65, 12];
+    return [
+      ["Balance as per Bank Statement", pdfInr(statementBalance)],
+      [`Add: Deposits in transit (${unclearedCount} uncleared)`, pdfInr(unclearedTotal)],
+      [
+        pdfStatementCell("Adjusted Balance (per Books)", {
+          fontStyle: "bold",
+          fillColor: totalFill,
+        }),
+        pdfStatementCell(pdfInr(statementBalance + unclearedTotal), {
+          fontStyle: "bold",
+          fillColor: totalFill,
+          halign: "right",
+        }),
+      ],
+      ["Balance as per Books", pdfInr(bookBalance)],
+      [
+        pdfStatementCell("Unreconciled Difference", {
+          fontStyle: "bold",
+          fillColor: diffFill,
+          textColor: diffText,
+        }),
+        pdfStatementCell(pdfInr(difference), {
+          fontStyle: "bold",
+          fillColor: diffFill,
+          textColor: diffText,
+          halign: "right",
+        }),
+      ],
+    ];
+  };
+
+  const emitBankReconPdf = (action: "download" | "print" = "download") => {
+    const cleared = bankTxns.filter((txn) => isCleared(txn.id));
+    const uncleared = bankTxns.filter((txn) => !isCleared(txn.id));
+    const schedule = (title: string, items: BankReconTxn[]) => ({
+      title,
+      headers: [...txnPdfHeaders],
+      rows: items.length ? [...items.map(mapTxnPdfRow), txnPdfTotalRow(items)] : [],
+      emptyMessage: "None",
+    });
+
+    downloadTablePdf({
+      filename: reportDownloadName("bank-reconciliation", "pdf", schoolName, academicYear),
+      title: "Bank Reconciliation Statement",
+      subtitle: `${schoolName} | ${academicYear} | ${reconciled ? "Reconciled" : "Out of balance"}`,
+      meta: `Generated ${formatNow({ dateStyle: "medium", timeStyle: "short" })}`,
+      tableTitle: "Reconciliation",
+      headers: ["Particulars", "Amount (Rs.)"],
+      rows: buildBankReconStatementPdfRows(),
+      summaryItems: bankReconPdfSummary(),
+      summaryPlacement: "before",
+      striped: false,
+      landscape: false,
+      appendTables: [
+        ...(uncleared.length
+          ? [schedule(`Deposits in Transit (${uncleared.length} uncleared)`, uncleared)]
+          : []),
+        schedule(
+          `Cleared Bank & UPI Receipts (${cleared.length})`,
+          cleared,
+        ),
+      ],
+      footer: reconciled
+        ? "Books agree with the bank statement. Difference is nil."
+        : `Out of balance by ${pdfInr(Math.abs(difference))}. Review uncleared items and the statement closing balance.`,
+      footerPlacement: "after-main",
+      action,
+    });
+  };
 
   const handleCsv = () => {
     downloadCsv(
@@ -2725,7 +3122,7 @@ export function BankReconciliationReport() {
       ["Voucher", "Date/Time", "Account", "Category", "Mode", "Amount (INR)", "Status"],
       bankTxns.map((t) => [
         t.id,
-        t.time,
+        pdfEventDateTime(t.rawTime),
         t.name,
         t.cat,
         t.mode,
@@ -2737,45 +3134,12 @@ export function BankReconciliationReport() {
   };
 
   const handlePdf = () => {
-    downloadTablePdf({
-      filename: reportDownloadName("bank-reconciliation", "pdf", schoolName, academicYear),
-      title: "Bank Reconciliation Statement",
-      subtitle: `${schoolName} · ${academicYear}`,
-      headers: [...bankReconPdfHeaders],
-      rows: buildBankReconPdfRows(),
-      summaryItems: bankReconPdfSummary(),
-      appendTables: [
-        {
-          title: "Reconciliation Statement",
-          headers: ["Particulars", "Amount"],
-          rows: buildBankReconStatementPdfRows(),
-        },
-      ],
-      emptyMessage: "No bank or UPI transactions to reconcile",
-      landscape: true,
-    });
+    emitBankReconPdf("download");
     toast.success("Bank reconciliation PDF downloaded");
   };
 
   const handlePrint = () => {
-    downloadTablePdf({
-      filename: reportDownloadName("bank-reconciliation", "pdf", schoolName, academicYear),
-      title: "Bank Reconciliation Statement",
-      subtitle: `${schoolName} · ${academicYear}`,
-      headers: [...bankReconPdfHeaders],
-      rows: buildBankReconPdfRows(),
-      summaryItems: bankReconPdfSummary(),
-      appendTables: [
-        {
-          title: "Reconciliation Statement",
-          headers: ["Particulars", "Amount"],
-          rows: buildBankReconStatementPdfRows(),
-        },
-      ],
-      emptyMessage: "No bank or UPI transactions to reconcile",
-      landscape: true,
-      action: "print",
-    });
+    emitBankReconPdf("print");
     toast.success("Print dialog opened");
   };
 

@@ -199,18 +199,20 @@ export function DatePicker({
           type="button"
           disabled={disabled}
           className={cn(
-            "inline-flex h-10 w-full items-center justify-between gap-2 border bg-white text-left text-[13px] font-medium text-black transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E] focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50",
+            "inline-flex h-10 w-full items-center justify-between gap-2 border bg-white text-left text-[13px] font-medium text-black transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E] focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-900 dark:text-zinc-100",
             variant === "pill"
-              ? "rounded-lg border-black px-4 hover:bg-[#FAFAFA]"
-              : "rounded-lg border-[#E5E5E5] px-3 hover:border-black/30 focus-visible:ring-black/15",
-            !selected && "text-black/45",
+              ? "rounded-lg border-black px-4 hover:bg-[#FAFAFA] dark:border-white/25 dark:hover:bg-zinc-800"
+              : "rounded-lg border-[#E5E5E5] px-3 hover:border-black/30 focus-visible:ring-black/15 dark:border-white/10 dark:hover:border-white/25",
+            !selected && "text-black/45 dark:text-zinc-500",
             className,
           )}
         >
           <span className={cn("truncate tracking-tight", variant === "pill" ? "" : "font-mono")}>
             {displayText ?? placeholder}
           </span>
-          {variant !== "pill" && <CalendarIcon className="h-3.5 w-3.5 shrink-0 text-black/45" />}
+          {variant !== "pill" && (
+            <CalendarIcon className="h-3.5 w-3.5 shrink-0 text-black/45 dark:text-zinc-500" />
+          )}
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -218,13 +220,13 @@ export function DatePicker({
         sideOffset={6}
         collisionPadding={12}
         sticky="always"
-        className="z-[250] w-[min(280px,calc(100vw-1.5rem))] overflow-hidden rounded-lg border border-[#E5E5E5] bg-white p-0 shadow-[0_24px_60px_-24px_rgba(0,0,0,0.25)]"
+        className="z-[250] w-[min(280px,calc(100vw-1.5rem))] overflow-hidden rounded-lg border border-[#E5E5E5] bg-white p-0 shadow-[0_24px_60px_-24px_rgba(0,0,0,0.25)] dark:border-white/10 dark:bg-zinc-900"
       >
-        <div className="flex items-center gap-1.5 border-b border-[#EEEEEE] px-2.5 py-2">
+        <div className="flex items-center gap-1.5 border-b border-[#EEEEEE] px-2.5 py-2 dark:border-white/10">
           <button
             type="button"
             onClick={() => shiftMonth(-1)}
-            className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-black/55 transition hover:bg-[#F4F4F5] hover:text-black"
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-black/55 transition hover:bg-[#F4F4F5] hover:text-black dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-zinc-50"
             aria-label="Previous month"
           >
             <ChevronLeft className="h-3.5 w-3.5" />
@@ -272,7 +274,7 @@ export function DatePicker({
           <button
             type="button"
             onClick={() => shiftMonth(1)}
-            className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-black/55 transition hover:bg-[#F4F4F5] hover:text-black"
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-black/55 transition hover:bg-[#F4F4F5] hover:text-black dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-zinc-50"
             aria-label="Next month"
           >
             <ChevronRight className="h-3.5 w-3.5" />
@@ -284,7 +286,7 @@ export function DatePicker({
             {WEEKDAYS.map((w, i) => (
               <div
                 key={i}
-                className="grid h-6 place-items-center text-[10px] font-semibold uppercase tracking-wider text-black/45"
+                className="grid h-6 place-items-center text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-500"
               >
                 {w}
               </div>
@@ -309,11 +311,11 @@ export function DatePicker({
                       isSel
                         ? "bg-[#0F766E] font-semibold text-white shadow-[0_4px_10px_-6px_rgba(0,0,0,0.35)]"
                         : isToday
-                          ? "ring-1 ring-inset ring-black/60 group-hover/cell:bg-black/5"
-                          : "group-hover/cell:bg-[#F4F4F5]",
-                      !inMonth && !isSel && "text-black/30",
-                      inMonth && !isSel && "text-black/85",
-                      off && "cursor-not-allowed text-black/20 group-hover/cell:bg-transparent",
+                          ? "ring-1 ring-inset ring-black/60 group-hover/cell:bg-black/5 dark:ring-zinc-400 dark:group-hover/cell:bg-white/10"
+                          : "group-hover/cell:bg-[#F4F4F5] dark:group-hover/cell:bg-white/10",
+                      !inMonth && !isSel && "text-black/30 dark:text-zinc-600",
+                      inMonth && !isSel && "text-black/85 dark:text-zinc-200",
+                      off && "cursor-not-allowed text-black/20 group-hover/cell:bg-transparent dark:text-zinc-700",
                     )}
                   >
                     {date.getDate()}
@@ -325,14 +327,14 @@ export function DatePicker({
         </div>
 
         {quickPicks.length > 0 && (
-          <div className="flex items-center gap-1 border-t border-[#EEEEEE] px-2.5 py-2">
+          <div className="flex items-center gap-1 border-t border-[#EEEEEE] px-2.5 py-2 dark:border-white/10">
             <div className="flex flex-1 items-center gap-1 overflow-hidden">
               {quickPicks.map((q) => (
                 <button
                   key={q.label}
                   type="button"
                   onClick={() => commit(stripTime(q.getDate(today)))}
-                  className="inline-flex shrink-0 items-center rounded-full border border-[#E5E5E5] bg-white px-2 py-1 text-[10.5px] font-semibold text-black/70 transition hover:border-black hover:bg-black hover:text-white"
+                  className="inline-flex shrink-0 items-center rounded-full border border-[#E5E5E5] bg-white px-2 py-1 text-[10.5px] font-semibold text-black/70 transition hover:border-black hover:bg-black hover:text-white dark:border-white/15 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:border-white/40 dark:hover:bg-zinc-700"
                 >
                   {q.label}
                 </button>
@@ -344,7 +346,7 @@ export function DatePicker({
                 onChange("");
                 setOpen(false);
               }}
-              className="shrink-0 rounded-full px-2 py-1 text-[10.5px] font-semibold text-black/55 transition hover:bg-[#F4F4F5] hover:text-black"
+              className="shrink-0 rounded-full px-2 py-1 text-[10.5px] font-semibold text-black/55 transition hover:bg-[#F4F4F5] hover:text-black dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-zinc-50"
             >
               Clear
             </button>
@@ -611,7 +613,7 @@ function toMonthKey(year: number, monthIndex: number) {
 }
 
 function formatMonthDisplay(year: number, monthIndex: number) {
-  return `${MONTHS[monthIndex]} ${year}`;
+  return `${MONTH_ABBR[monthIndex]} ${year}`;
 }
 
 export type MonthPickerProps = {

@@ -1,4 +1,4 @@
-import { apiRequest, getApiToken } from "@/lib/api/client";
+import { ApiError, apiRequest, getApiToken } from "@/lib/api/client";
 import type {
   ClassConfig,
   Department,
@@ -179,9 +179,32 @@ export async function apiUpsertClass(cls: ClassConfig): Promise<ClassConfig> {
 
 export async function apiDeleteClass(id: string): Promise<void> {
   if (!hasToken()) return;
-  await apiRequest(`/api/settings/classes.php?id=${encodeURIComponent(id)}`, {
-    method: "DELETE",
-  });
+  try {
+    await apiRequest("/api/settings/classes.php", {
+      method: "POST",
+      body: { id, _delete: true },
+    });
+    return;
+  } catch (err) {
+    // 409 = students still enrolled — never swallow.
+    if (!(err instanceof ApiError) || ![404, 405, 422].includes(err.status)) {
+      throw err;
+    }
+  }
+  try {
+    await apiRequest(`/api/settings/classes.php?id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      body: { id },
+    });
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      const list = await apiRequest<ClassConfig[]>("/api/settings/classes.php");
+      if (!list.some((c) => c.id === id)) {
+        return;
+      }
+    }
+    throw err;
+  }
 }
 
 export async function apiUpsertDepartment(dept: Department): Promise<Department> {

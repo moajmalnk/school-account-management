@@ -3,12 +3,12 @@ import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { ArrowLeft, Loader2, Mail, Plus } from "lucide-react";
 import { toast } from "sonner";
 
-import { mobileChatViewportClass } from "@/components/layout/MobileTabBar";
 import {
   SupportChatBubble,
   SupportChatShell,
   ConversationMeta,
 } from "@/components/support/SupportChatBubble";
+import { usePinnedChatFrame } from "@/hooks/usePinnedChatFrame";
 import { SupportComposer } from "@/components/support/SupportComposer";
 import { Button } from "@/components/ui/button";
 import {
@@ -79,7 +79,13 @@ function formatStamp(raw: string): string {
   return formatChatStamp(raw, "list");
 }
 
-export function CustomerSupportCard({ onBackToSettings }: { onBackToSettings?: () => void }) {
+export function CustomerSupportCard({
+  onBackToSettings,
+  pinToViewport = false,
+}: {
+  onBackToSettings?: () => void;
+  pinToViewport?: boolean;
+}) {
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/settings" });
   const chatId = search.chat;
@@ -226,6 +232,7 @@ export function CustomerSupportCard({ onBackToSettings }: { onBackToSettings?: (
   const activeTicket =
     chatId && chatId !== "new" ? (tickets.find((t) => t.id === chatId) ?? null) : null;
   const onMobileThread = Boolean(activeTicket) || composing;
+  const frameRef = usePinnedChatFrame(pinToViewport);
 
   useEffect(() => {
     setEditingMessage(null);
@@ -371,47 +378,47 @@ export function CustomerSupportCard({ onBackToSettings }: { onBackToSettings?: (
       });
   }, [chatId, tickets]);
 
-  const mobileShellHeight = onBackToSettings
-    ? mobileChatViewportClass
-    : "max-lg:h-[calc(100dvh-9.5rem-env(safe-area-inset-top,0px)-(60px+0.75rem+env(safe-area-inset-bottom,0px)))]";
-
-  if (loading) {
-    return (
-      <OrganicCard
-        tone="white"
-        cornerSide="tr"
-        padded={false}
-        className={cn(workspacePanelClass, "overflow-hidden p-0")}
-      >
-        <div
-          className={cn(
-            "flex min-h-[22rem] items-center justify-center gap-2 text-[13px] text-black/45 dark:text-zinc-400",
-            mobileShellHeight,
-          )}
-        >
-          <Loader2 className="h-4 w-4 animate-spin" /> Opening chat…
-        </div>
-      </OrganicCard>
-    );
-  }
+  const shellClass =
+    "flex h-full min-h-0 flex-col overflow-hidden md:h-[min(calc(100dvh-8rem),760px)] lg:h-[min(calc(100dvh-11rem),760px)] lg:flex-row";
+  const frameClass = cn(
+    "h-full min-h-0",
+    pinToViewport &&
+      "max-md:fixed max-md:inset-x-0 max-md:top-[calc(4rem+env(safe-area-inset-top,0px))] max-md:bottom-[calc(60px+0.75rem+env(safe-area-inset-bottom,0px))] max-md:z-20 max-md:overflow-hidden",
+  );
 
   return (
     <>
-      <OrganicCard
-        tone="white"
-        cornerSide="br"
-        padded={false}
-        className={cn(workspacePanelClass, "col-span-12 overflow-hidden p-0")}
-      >
-        <div
-          className={cn(
-            "flex min-h-[22rem] flex-col lg:h-[min(calc(100dvh-11rem),760px)] lg:flex-row",
-            mobileShellHeight,
-          )}
-        >
+      <div ref={frameRef} className={frameClass}>
+        {loading ? (
+          <OrganicCard
+            tone="white"
+            cornerSide="tr"
+            padded={false}
+            className={cn(workspacePanelClass, "h-full overflow-hidden p-0 max-md:rounded-none")}
+          >
+            <div
+              className={cn(
+                "flex items-center justify-center gap-2 text-[13px] text-black/45 dark:text-zinc-400",
+                shellClass,
+              )}
+            >
+              <Loader2 className="h-4 w-4 animate-spin" /> Opening chat…
+            </div>
+          </OrganicCard>
+        ) : (
+          <OrganicCard
+            tone="white"
+            cornerSide="br"
+            padded={false}
+            className={cn(
+              workspacePanelClass,
+              "col-span-12 h-full overflow-hidden p-0 max-md:rounded-none",
+            )}
+          >
+            <div className={shellClass}>
           <div
             className={cn(
-              "flex w-full shrink-0 flex-col border-[#EFEFEF] bg-white dark:border-white/10 dark:bg-zinc-950 lg:w-[300px] lg:border-r",
+              "flex w-full min-h-0 flex-1 flex-col border-[#EFEFEF] bg-white dark:border-white/10 dark:bg-zinc-950 lg:w-[300px] lg:max-w-[300px] lg:flex-none lg:border-r",
               onMobileThread ? "hidden lg:flex" : "flex",
             )}
           >
@@ -573,7 +580,7 @@ export function CustomerSupportCard({ onBackToSettings }: { onBackToSettings?: (
                 </div>
                 <div
                   ref={threadScrollRef}
-                  className="mobile-scrollbar-none min-h-0 flex-1 overflow-y-auto px-2 py-3 sm:px-3"
+                  className="mobile-scrollbar-none min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-3 sm:px-3"
                 >
                   <div className="flex min-h-full flex-col justify-end gap-1">
                     {(activeTicket.messages ?? []).map((msg) => (
@@ -596,7 +603,7 @@ export function CustomerSupportCard({ onBackToSettings }: { onBackToSettings?: (
                     ))}
                   </div>
                 </div>
-                <div className="shrink-0 px-1.5 pb-1.5 pt-1 sm:px-2 lg:pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+                <div className="shrink-0 bg-[#E8EEE9] px-1.5 pb-2 pt-1 sm:px-2 md:pb-[max(0.5rem,env(safe-area-inset-bottom))] dark:bg-zinc-950">
                   {activeTicket.status === "closed" ? (
                     <p className="rounded-2xl bg-white/80 px-3 py-2 text-center text-[12px] text-black/50 dark:bg-zinc-900/80 dark:text-zinc-400">
                       Chat closed. Reopen it from the header, or start a new one from the list.
@@ -660,7 +667,7 @@ export function CustomerSupportCard({ onBackToSettings }: { onBackToSettings?: (
                 </div>
                 <div
                   ref={threadScrollRef}
-                  className="mobile-scrollbar-none min-h-0 flex-1 overflow-y-auto px-2 py-3 sm:px-3"
+                  className="mobile-scrollbar-none min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-3 sm:px-3"
                 >
                   <div className="flex min-h-full flex-col justify-end gap-1">
                     {chat.map((line) => (
@@ -702,7 +709,7 @@ export function CustomerSupportCard({ onBackToSettings }: { onBackToSettings?: (
                     ) : null}
                   </div>
                 </div>
-                <div className="shrink-0 px-1.5 pb-1.5 pt-1 sm:px-2 lg:pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+                <div className="shrink-0 bg-[#E8EEE9] px-1.5 pb-2 pt-1 sm:px-2 md:pb-[max(0.5rem,env(safe-area-inset-bottom))] dark:bg-zinc-950">
                   <SupportComposer
                     placeholder="Message"
                     autoFocus={composing}
@@ -715,7 +722,9 @@ export function CustomerSupportCard({ onBackToSettings }: { onBackToSettings?: (
             )}
           </SupportChatShell>
         </div>
-      </OrganicCard>
+          </OrganicCard>
+        )}
+      </div>
 
       <AlertDialog
         open={pendingStatusChange !== null}
