@@ -15,7 +15,7 @@ import {
 } from "@/lib/api/document-sequences";
 import { cn } from "@/lib/utils";
 
-const KIND_ORDER: DocumentSequenceKind[] = ["receipt", "voucher", "salary_slip"];
+const KIND_ORDER: DocumentSequenceKind[] = ["receipt", "voucher", "salary_slip", "journal"];
 
 function seedDefaults(): DocumentSequence[] {
   return KIND_ORDER.map((kind) => {
@@ -75,8 +75,7 @@ export function DocumentNumbersPanel({
         }),
       );
       setDirty(false);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not load document numbers");
+    } catch {
       setRows(seedDefaults());
     } finally {
       setLoading(false);
@@ -116,10 +115,17 @@ export function DocumentNumbersPanel({
           padding: r.padding,
         })),
       );
-      setRows(saved.sequences.length ? saved.sequences : rows);
+      if (!saved.sequences.length) {
+        setDirty(false);
+        toast.error("Server did not store document numbers", {
+          description: "Upload school.php and lib/document_sequences.php to Hostinger, then save again",
+        });
+        return;
+      }
+      setRows(saved.sequences);
       setDirty(false);
       toast.success(`Document numbers saved for ${campusLabel}`, {
-        description: "Next receipt, voucher, and salary slip will use these sequences",
+        description: "Next receipt, voucher, salary slip, and journal will use these sequences",
       });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not save document numbers");
@@ -176,7 +182,7 @@ export function DocumentNumbersPanel({
           Loading sequences…
         </div>
       ) : (
-        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
           {rows.map((row) => {
             const meta = DOCUMENT_SEQUENCE_KIND_META[row.kind];
             return (

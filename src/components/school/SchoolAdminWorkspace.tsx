@@ -27,7 +27,6 @@ import {
   Camera,
   Check,
   ClipboardList,
-  Share2,
   ChevronDown,
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -280,6 +279,7 @@ import {
   TenantSettingsListSkeleton,
   TenantSystemSkeleton,
   TopExpensesSkeleton,
+  WorkspaceOpeningScreen,
 } from "@/components/school/TenantDirectorySkeleton";
 import {
   EnrollmentStatusBadge,
@@ -337,6 +337,7 @@ import {
   sendWhatsAppNotify,
   sendPersonalizedWhatsApp,
   toNotifyWhatsAppNumber,
+  openWhatsAppShare,
   templateHasPlaceholders,
   renderWhatsAppTemplate,
   buildStudentWhatsAppVars,
@@ -344,6 +345,11 @@ import {
   DEFAULT_OVERDUE_WHATSAPP_TEMPLATE,
   DEFAULT_GENERAL_WHATSAPP_TEMPLATE,
 } from "@/lib/whatsapp-notify";
+import {
+  WhatsAppIcon,
+  whatsappIconBtnClass,
+  whatsappTextBtnClass,
+} from "@/components/ui/whatsapp-icon";
 import { FinanceBarCard, FinanceDonutCard } from "@/components/school/finance-charts";
 import { LocationPicker } from "@/components/school/LocationPicker";
 import {
@@ -355,6 +361,13 @@ import {
   ProfitLossReport,
   SalaryReport,
 } from "@/components/school/FinanceReports";
+import {
+  GlAccountStatementReport,
+  GlBalanceSheetReport,
+  GlJournalsReport,
+  GlProfitLossReport,
+  GlTrialBalanceReport,
+} from "@/components/school/GeneralLedgerBooks";
 import {
   downloadCsv,
   downloadPaymentVoucherPdf,
@@ -2004,7 +2017,12 @@ export function SchoolDashboard() {
   }, [payments, disbursements]);
 
   if (!hydrated || !branchContentReady) {
-    return <TenantDashboardSkeleton />;
+    return (
+      <WorkspaceOpeningScreen
+        label="Opening dashboard"
+        detail="Loading school overview and books…"
+      />
+    );
   }
 
   return (
@@ -6839,6 +6857,8 @@ export function FinanceModule() {
     | "make"
     | "analytics"
     | "ledger"
+    | "journals"
+    | "trial"
     | "pl"
     | "balance"
     | "fees"
@@ -6863,6 +6883,8 @@ export function FinanceModule() {
       "make",
       "analytics",
       "ledger",
+      "journals",
+      "trial",
       "pl",
       "balance",
       "fees",
@@ -6925,7 +6947,23 @@ export function FinanceModule() {
   if (view === "ledger") {
     return (
       <div className="w-full space-y-4 sm:space-y-5">
-        <GeneralLedgerReport />
+        {getApiToken() ? <GlAccountStatementReport /> : <GeneralLedgerReport />}
+      </div>
+    );
+  }
+
+  if (view === "journals") {
+    return (
+      <div className="w-full space-y-4 sm:space-y-5">
+        <GlJournalsReport />
+      </div>
+    );
+  }
+
+  if (view === "trial") {
+    return (
+      <div className="w-full space-y-4 sm:space-y-5">
+        <GlTrialBalanceReport />
       </div>
     );
   }
@@ -6933,7 +6971,7 @@ export function FinanceModule() {
   if (view === "pl") {
     return (
       <div className="w-full space-y-4 sm:space-y-5">
-        <ProfitLossReport />
+        {getApiToken() ? <GlProfitLossReport /> : <ProfitLossReport />}
       </div>
     );
   }
@@ -6941,7 +6979,7 @@ export function FinanceModule() {
   if (view === "balance") {
     return (
       <div className="w-full space-y-4 sm:space-y-5">
-        <BalanceSheetReport />
+        {getApiToken() ? <GlBalanceSheetReport /> : <BalanceSheetReport />}
       </div>
     );
   }
@@ -7033,7 +7071,7 @@ const FINANCE_REPORT_TILES = [
   {
     k: "ledger" as const,
     l: "Ledger",
-    d: "Account entries",
+    d: "Account statements",
     icon: ListTodo,
     surface:
       "border-indigo-200/55 bg-gradient-to-br from-indigo-50/95 via-indigo-50/35 to-white hover:border-indigo-300/60 dark:border-indigo-500/20 dark:from-indigo-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-indigo-400/30",
@@ -7041,6 +7079,30 @@ const FINANCE_REPORT_TILES = [
       "bg-white/95 text-indigo-600 ring-1 ring-indigo-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-indigo-300 dark:ring-indigo-500/25",
     arrowHover:
       "group-hover:text-indigo-600 dark:group-hover:text-indigo-400 dark:group-hover:ring-indigo-500/30",
+  },
+  {
+    k: "journals" as const,
+    l: "Journals",
+    d: "Vouchers & opening",
+    icon: BookOpen,
+    surface:
+      "border-violet-200/55 bg-gradient-to-br from-violet-50/95 via-violet-50/35 to-white hover:border-violet-300/60 dark:border-violet-500/20 dark:from-violet-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-violet-400/30",
+    iconWrap:
+      "bg-white/95 text-violet-700 ring-1 ring-violet-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-violet-300 dark:ring-violet-500/25",
+    arrowHover:
+      "group-hover:text-violet-600 dark:group-hover:text-violet-400 dark:group-hover:ring-violet-500/30",
+  },
+  {
+    k: "trial" as const,
+    l: "Trial Balance",
+    d: "Debit = credit check",
+    icon: Scale,
+    surface:
+      "border-slate-200/55 bg-gradient-to-br from-slate-50/95 via-slate-50/35 to-white hover:border-slate-300/60 dark:border-slate-500/20 dark:from-slate-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-slate-400/30",
+    iconWrap:
+      "bg-white/95 text-slate-700 ring-1 ring-slate-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-slate-300 dark:ring-slate-500/25",
+    arrowHover:
+      "group-hover:text-slate-600 dark:group-hover:text-slate-400 dark:group-hover:ring-slate-500/30",
   },
   {
     k: "pl" as const,
@@ -7101,6 +7163,8 @@ function FinanceOverview({
       | "make"
       | "analytics"
       | "ledger"
+      | "journals"
+      | "trial"
       | "pl"
       | "balance"
       | "fees"
@@ -7325,23 +7389,20 @@ function FinanceOverview({
     }
   };
 
-  const sharePayload = async (title: string, text: string) => {
-    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
-      try {
-        await navigator.share({ title, text });
-        toast.success("Shared", { description: title });
-        return;
-      } catch (err) {
-        if ((err as Error).name === "AbortError") return;
-      }
+  const sharePayload = (title: string, text: string, phone?: string | null) => {
+    if (openWhatsAppShare(text, phone)) {
+      toast.success("Opening WhatsApp", {
+        description: phone?.trim() ? title : `${title} · pick a chat`,
+      });
+      return;
     }
     try {
-      await navigator.clipboard.writeText(text);
-      toast.success("Copied to clipboard", {
-        description: "Paste into WhatsApp, email, or chat",
+      void navigator.clipboard.writeText(text);
+      toast.success("Copied for WhatsApp", {
+        description: "Paste into WhatsApp if the app did not open",
       });
     } catch {
-      toast.error("Could not share · copy failed");
+      toast.error("Could not open WhatsApp");
     }
   };
 
@@ -7369,10 +7430,11 @@ function FinanceOverview({
     if (financeTransactions.length > 12) {
       lines.push(`…and ${financeTransactions.length - 12} more`);
     }
-    void sharePayload("Finance Transactions", lines.join("\n"));
+    sharePayload("Finance Transactions", lines.join("\n"));
   };
 
   const shareTransaction = (payment: Payment) => {
+    const student = findReceiptStudent(students, payment);
     const text = [
       `${schoolName} · Fee Receipt`,
       `Receipt: ${payment.id}`,
@@ -7390,7 +7452,7 @@ function FinanceOverview({
     ]
       .filter(Boolean)
       .join("\n");
-    void sharePayload(`Receipt ${payment.id}`, text);
+    sharePayload(`Receipt ${payment.id}`, text, student?.phone);
   };
 
   const isStudentReceipt = (payment: Payment) => payment.payerType !== "external";
@@ -7438,7 +7500,7 @@ function FinanceOverview({
       `AY: ${academicYear}`,
       "Status: Open",
     ].join("\n");
-    void sharePayload(`Overdue · ${bill.name}`, text);
+    sharePayload(`Overdue · ${bill.name}`, text);
   };
 
   const payOverdueBill = (bill: (typeof overdueBills)[number]) => {
@@ -7730,10 +7792,10 @@ function FinanceOverview({
                     <button
                       type="button"
                       onClick={() => shareOverdueBill(bill)}
-                      className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 text-[11.5px] font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-white/20 dark:hover:bg-zinc-800"
+                      className={cn(whatsappTextBtnClass, "flex-1")}
                     >
-                      <Share2 className="h-3.5 w-3.5" />
-                      Share
+                      <WhatsAppIcon className="h-3.5 w-3.5" />
+                      WhatsApp
                     </button>
                   </div>
                 </div>
@@ -7797,11 +7859,14 @@ function FinanceOverview({
             <Button
               type="button"
               variant="outline"
-              className="h-9 flex-1 rounded-full border-[#E5E5E5] bg-white px-3.5 text-[12px] sm:flex-none"
+              className={cn(
+                "h-9 flex-1 rounded-full px-3.5 text-[12px] sm:flex-none",
+                "border-[#25D366]/40 bg-[#25D366]/10 text-[#128C7E] hover:bg-[#25D366]/18",
+              )}
               onClick={shareTransactionsSummary}
             >
-              <Share2 className="mr-1.5 h-3.5 w-3.5" />
-              Share
+              <WhatsAppIcon className="mr-1.5 h-3.5 w-3.5" />
+              WhatsApp
             </Button>
           </div>
         </div>
@@ -7932,12 +7997,12 @@ function FinanceOverview({
                       </button>
                       <button
                         type="button"
-                        aria-label={`Share receipt ${tx.id}`}
+                        aria-label={`WhatsApp receipt ${tx.id}`}
                         onClick={() => shareTransaction(tx.payment!)}
-                        className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#CCFBF1] bg-[#F0FDFA] px-2.5 text-[11px] font-semibold text-[#0F766E] transition-colors hover:bg-[#CCFBF1]"
+                        className={whatsappTextBtnClass}
                       >
-                        <Share2 className="h-3.5 w-3.5" />
-                        Share
+                        <WhatsAppIcon className="h-3.5 w-3.5" />
+                        WhatsApp
                       </button>
                     </>
                   ) : null}
@@ -8058,12 +8123,12 @@ function FinanceOverview({
                           </button>
                           <button
                             type="button"
-                            aria-label={`Share receipt ${tx.id}`}
-                            title="Share"
+                            aria-label={`WhatsApp receipt ${tx.id}`}
+                            title="WhatsApp"
                             onClick={() => shareTransaction(tx.payment!)}
-                            className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-[#0F766E] hover:bg-[#CCFBF1] hover:text-[#0F766E]"
+                            className={whatsappIconBtnClass}
                           >
-                            <Share2 className="h-3.5 w-3.5" />
+                            <WhatsAppIcon />
                           </button>
                         </>
                       ) : null}
@@ -10453,23 +10518,20 @@ function ReceivePayment() {
     }
   };
 
-  const sharePayload = async (title: string, text: string) => {
-    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
-      try {
-        await navigator.share({ title, text });
-        toast.success("Shared", { description: title });
-        return;
-      } catch (err) {
-        if ((err as Error).name === "AbortError") return;
-      }
+  const sharePayload = (title: string, text: string, phone?: string | null) => {
+    if (openWhatsAppShare(text, phone)) {
+      toast.success("Opening WhatsApp", {
+        description: phone?.trim() ? title : `${title} · pick a chat`,
+      });
+      return;
     }
     try {
-      await navigator.clipboard.writeText(text);
-      toast.success("Copied to clipboard", {
-        description: "Paste into WhatsApp, email, or chat",
+      void navigator.clipboard.writeText(text);
+      toast.success("Copied for WhatsApp", {
+        description: "Paste into WhatsApp if the app did not open",
       });
     } catch {
-      toast.error("Could not share · copy failed");
+      toast.error("Could not open WhatsApp");
     }
   };
 
@@ -10487,6 +10549,7 @@ function ReceivePayment() {
   };
 
   const shareHistoryReceipt = (payment: Payment) => {
+    const student = findReceiptStudent(students, payment);
     const periodLabel = formatPaymentPeriodsLabel(payment);
     const periodKind = resolvePaymentFeePeriodKind(payment);
     const text = [
@@ -10507,7 +10570,7 @@ function ReceivePayment() {
     ]
       .filter(Boolean)
       .join("\n");
-    void sharePayload(`Receipt ${payment.id}`, text);
+    sharePayload(`Receipt ${payment.id}`, text, student?.phone);
   };
 
   const resetRecordForm = () => {
@@ -11953,11 +12016,11 @@ function ReceivePayment() {
                   </button>
                   <button
                     type="button"
-                    aria-label={`Share receipt ${p.id}`}
+                    aria-label={`WhatsApp receipt ${p.id}`}
                     onClick={() => shareHistoryReceipt(p)}
-                    className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#CCFBF1] bg-[#F0FDFA] text-[#0F766E] transition-colors hover:bg-[#CCFBF1]"
+                    className={whatsappIconBtnClass}
                   >
-                    <Share2 className="h-3.5 w-3.5" />
+                    <WhatsAppIcon />
                   </button>
                   {isAdmin && (
                     <>
@@ -12097,12 +12160,12 @@ function ReceivePayment() {
                       </button>
                       <button
                         type="button"
-                        aria-label={`Share receipt ${p.id}`}
-                        title="Share"
+                        aria-label={`WhatsApp receipt ${p.id}`}
+                        title="WhatsApp"
                         onClick={() => shareHistoryReceipt(p)}
-                        className="inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-[#0F766E] hover:bg-[#CCFBF1] hover:text-[#0F766E]"
+                        className={whatsappIconBtnClass}
                       >
-                        <Share2 className="h-3.5 w-3.5" />
+                        <WhatsAppIcon />
                       </button>
                       {isAdmin && (
                         <button
@@ -13244,23 +13307,20 @@ function MakePayment() {
     });
   };
 
-  const sharePayload = async (title: string, text: string) => {
-    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
-      try {
-        await navigator.share({ title, text });
-        toast.success("Shared", { description: title });
-        return;
-      } catch (err) {
-        if ((err as Error).name === "AbortError") return;
-      }
+  const sharePayload = (title: string, text: string, phone?: string | null) => {
+    if (openWhatsAppShare(text, phone)) {
+      toast.success("Opening WhatsApp", {
+        description: phone?.trim() ? title : `${title} · pick a chat`,
+      });
+      return;
     }
     try {
-      await navigator.clipboard.writeText(text);
-      toast.success("Copied to clipboard", {
-        description: "Paste into WhatsApp, email, or chat",
+      void navigator.clipboard.writeText(text);
+      toast.success("Copied for WhatsApp", {
+        description: "Paste into WhatsApp if the app did not open",
       });
     } catch {
-      toast.error("Could not share · copy failed");
+      toast.error("Could not open WhatsApp");
     }
   };
 
@@ -13351,6 +13411,9 @@ function MakePayment() {
   };
 
   const shareDisbursal = (payment: MadePayment) => {
+    const member =
+      staff.find((s) => s.id === payment.payee) ||
+      staff.find((s) => s.name.trim().toLowerCase() === payment.payee.trim().toLowerCase());
     const text = [
       `Payment Voucher · ${payment.id}`,
       `Payee: ${payment.payee}`,
@@ -13361,7 +13424,7 @@ function MakePayment() {
       `Status: ${payment.status}`,
       `Time: ${formatEventDateTime(payment.time)}`,
     ].join("\n");
-    void sharePayload(`Payment ${payment.id}`, text);
+    sharePayload(`Payment ${payment.id}`, text, member?.phone);
   };
 
   const openEditDisbursal = (payment: MadePayment) => {
@@ -13980,12 +14043,12 @@ function MakePayment() {
                     </button>
                     <button
                       type="button"
-                      aria-label={`Share payment ${payment.id}`}
-                      title="Share"
+                      aria-label={`WhatsApp payment ${payment.id}`}
+                      title="WhatsApp"
                       onClick={() => shareDisbursal(payment)}
-                      className="inline-grid h-7 w-7 place-items-center rounded-full border border-[#E5E5E5] text-black/55 dark:text-zinc-400 transition-colors hover:border-[#0F766E] hover:bg-[#CCFBF1] hover:text-[#0F766E]"
+                      className={cn(whatsappIconBtnClass, "h-7 w-7")}
                     >
-                      <Share2 className="h-3.5 w-3.5" />
+                      <WhatsAppIcon className="h-3.5 w-3.5" />
                     </button>
                     <button
                       type="button"

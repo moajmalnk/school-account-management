@@ -4957,7 +4957,10 @@ export function TenantStoreProvider({
   );
   const [hydrated, setHydrated] = useState(() => !liveApi || cachedSnapshot !== null);
   const [branchSyncing, setBranchSyncing] = useState(false);
-  const [branchContentReady, setBranchContentReady] = useState(true);
+  /** Cold start without cache: hold content until first hydrate finishes. */
+  const [branchContentReady, setBranchContentReady] = useState(
+    () => !liveApi || cachedSnapshot !== null,
+  );
   const branchSwitchSeq = useRef(0);
   const branchesRef = useRef(branches);
   branchesRef.current = branches;
@@ -5243,6 +5246,7 @@ export function TenantStoreProvider({
               setBranchContext(tenantId ?? null, remote.activeBranchId);
             }
             setHydrated(true);
+            setBranchContentReady(true);
             return;
           }
         } catch {
@@ -5289,6 +5293,7 @@ export function TenantStoreProvider({
           });
         }
         setHydrated(true);
+        setBranchContentReady(true);
         return;
       }
 
@@ -5305,6 +5310,7 @@ export function TenantStoreProvider({
         });
       }
       setHydrated(true);
+      setBranchContentReady(true);
     };
 
     void hydrate();

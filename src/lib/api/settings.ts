@@ -420,3 +420,15 @@ export async function apiDeleteBranch(id: string): Promise<void> {
     method: "DELETE",
   });
 }
+
+/** Persist campus switcher order (1-based positions from array index). */
+export async function apiReorderBranches(orderedIds: string[]): Promise<void> {
+  if (!hasToken() || orderedIds.length === 0) return;
+  const ids = orderedIds.map((id) => id.trim()).filter(Boolean);
+  if (ids.length === 0) return;
+  // `id` keeps older Hostinger builds from 422'ing; newer builds persist `reorder`.
+  await apiRequest("/api/settings/branches.php", {
+    method: "PUT",
+    body: { id: ids[0], reorder: ids },
+  });
+}

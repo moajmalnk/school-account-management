@@ -268,6 +268,8 @@ export type FinanceViewKey =
   | "make"
   | "analytics"
   | "ledger"
+  | "journals"
+  | "trial"
   | "pl"
   | "balance"
   | "fees"
@@ -281,6 +283,8 @@ const FINANCE_VIEW_PERMISSION: Record<FinanceViewKey, PermissionKey> = {
   make: "finance.make",
   analytics: "finance.analytics",
   ledger: "finance.ledger",
+  journals: "finance.ledger",
+  trial: "finance.ledger",
   pl: "finance.pl",
   balance: "finance.balance",
   fees: "finance.fees_report",

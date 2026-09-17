@@ -16,6 +16,7 @@ import {
   SettingsUnsavedProvider,
   useTenantNavigationGuard,
 } from "@/components/school/settings-unsaved-guard";
+import { WorkspaceOpeningScreen } from "@/components/school/TenantDirectorySkeleton";
 import {
   MobileTabBar,
   mobileMainPadding,
@@ -37,6 +38,7 @@ import { cn, glassInsetClass } from "@/lib/utils";
 
 export const Route = createFileRoute("/tenant")({
   component: TenantLayout,
+  pendingComponent: WorkspaceOpeningScreen,
 });
 
 const MOBILE_TABS: MobileTabItem[] = [
@@ -105,11 +107,23 @@ function TenantLayout() {
 
 function TenantShell() {
   const { session, updateSession } = useAuth();
-  const { themeSettings } = useTenantStore();
+  const {
+    themeSettings,
+    hydrated,
+    branchSyncing,
+    activeBranchId,
+    branches,
+    openBranch,
+  } = useTenantStore();
   const placement = themeSettings.navPlacement ?? "Left";
   const isVertical = placement === "Left" || placement === "Right";
   const isBottom = placement === "Bottom";
   const isTop = placement === "Top";
+
+  // Warm the heavy workspace chunk while chrome paints — avoids a blank main pane.
+  useEffect(() => {
+    void import("@/components/school/SchoolAdminWorkspace");
+  }, []);
 
   // Refresh subscription plan flags so Super Admin Plan toggles apply without re-login.
   useEffect(() => {
@@ -141,7 +155,6 @@ function TenantShell() {
   }, [session?.impersonated, updateSession]);
 
   // If this login is limited to specific campuses, leave any campus they cannot open.
-  const { activeBranchId, branches, openBranch, hydrated } = useTenantStore();
   useEffect(() => {
     if (!hydrated || !session) return;
     const allowed = sessionAllowedBranchIds(session);
@@ -168,6 +181,15 @@ function TenantShell() {
 
         <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col">
           <TenantDesktopTopBar />
+          {/* Thin progress while campus sync runs with content already visible */}
+          {(branchSyncing || !hydrated) && (
+            <div
+              className="pointer-events-none absolute inset-x-0 top-0 z-20 h-0.5 overflow-hidden bg-teal-900/5 dark:bg-white/5"
+              aria-hidden
+            >
+              <div className="h-full w-1/3 animate-[workspace-boot-bar_1.1s_ease-in-out_infinite] rounded-full bg-[#0F766E] dark:bg-[#2DD4BF]" />
+            </div>
+          )}
           <main
             className={cn(
               "flex min-h-0 min-w-0 flex-1 flex-col",
@@ -176,7 +198,14 @@ function TenantShell() {
             )}
           >
             <AcademicYearBooksFade>
-              <Outlet />
+              {!hydrated ? (
+                <WorkspaceOpeningScreen
+                  label="Opening workspace"
+                  detail="Preparing campus data for this school…"
+                />
+              ) : (
+                <Outlet />
+              )}
             </AcademicYearBooksFade>
           </main>
         </div>

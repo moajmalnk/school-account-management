@@ -20,6 +20,23 @@ export function toNotifyWhatsAppNumber(raw?: string): string | null {
   return null;
 }
 
+/** Build a wa.me URL — with phone when known, otherwise open chat picker with text filled. */
+export function buildWhatsAppShareUrl(message: string, phone?: string | null): string {
+  const text = message.trim();
+  const digits = toNotifyWhatsAppNumber(phone ?? undefined);
+  const q = `text=${encodeURIComponent(text)}`;
+  return digits ? `https://wa.me/${digits}?${q}` : `https://wa.me/?${q}`;
+}
+
+/** Open WhatsApp (app or web) with a prefilled message. Returns false if blocked / empty. */
+export function openWhatsAppShare(message: string, phone?: string | null): boolean {
+  const text = message.trim();
+  if (!text || typeof window === "undefined") return false;
+  const href = buildWhatsAppShareUrl(text, phone);
+  const win = window.open(href, "_blank", "noopener,noreferrer");
+  return win !== null;
+}
+
 export type WhatsAppNotifyResult = {
   ok: boolean;
   status: number;

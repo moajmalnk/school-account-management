@@ -259,7 +259,7 @@ export function AddBranchDialog({
           </div>
           <div className="col-span-12 -mt-1 sm:col-span-12">
             <p className="text-[11px] text-black/50 dark:text-zinc-500">
-              Dropdown order · lower numbers appear first in the campus switcher
+              Campus switcher position · you can also drag rows on the Branches list
               {!editing ? ` · suggested ${suggestedOrder}` : ""}.
             </p>
           </div>

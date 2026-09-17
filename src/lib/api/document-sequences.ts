@@ -1,6 +1,6 @@
 import { apiRequest, getApiToken } from "@/lib/api/client";
 
-export type DocumentSequenceKind = "receipt" | "voucher" | "salary_slip";
+export type DocumentSequenceKind = "receipt" | "voucher" | "salary_slip" | "journal";
 
 export type DocumentSequence = {
   kind: DocumentSequenceKind;
@@ -47,6 +47,13 @@ export const DOCUMENT_SEQUENCE_KIND_META: Record<
     defaultNext: 1,
     defaultPadding: 4,
   },
+  journal: {
+    label: "Journal voucher",
+    description: "Manual journals and opening balances",
+    defaultPrefix: "JV-",
+    defaultNext: 1,
+    defaultPadding: 4,
+  },
 };
 
 export function formatDocumentNumberPreview(
@@ -60,6 +67,47 @@ export function formatDocumentNumberPreview(
   return `${prefix}${body}`;
 }
 
+type SchoolSequencesResponse = {
+  activeBranchId?: string;
+  branchId?: string;
+  branchName?: string;
+  sequences?: DocumentSequence[];
+  documentSequences?: DocumentSequence[];
+  kinds?: DocumentSequenceKindMeta[];
+};
+
+function emptySequencesResult(): {
+  branchId: string;
+  branchName: string;
+  sequences: DocumentSequence[];
+  kinds: DocumentSequenceKindMeta[];
+} {
+  return {
+    branchId: "",
+    branchName: "",
+    sequences: [],
+    kinds: [],
+  };
+}
+
+function mapSequencesResponse(data: SchoolSequencesResponse | null | undefined) {
+  const sequences = Array.isArray(data?.sequences)
+    ? data.sequences
+    : Array.isArray(data?.documentSequences)
+      ? data.documentSequences
+      : [];
+  return {
+    branchId: data?.branchId || data?.activeBranchId || "",
+    branchName: data?.branchName || "",
+    sequences,
+    kinds: Array.isArray(data?.kinds) ? data.kinds : [],
+  };
+}
+
+/**
+ * Read/write via school.php (already live on api.feezo.app).
+ * The dedicated document-sequences.php file 404s until it is uploaded.
+ */
 export async function apiFetchDocumentSequences(): Promise<{
   branchId: string;
   branchName: string;
@@ -67,14 +115,10 @@ export async function apiFetchDocumentSequences(): Promise<{
   kinds: DocumentSequenceKindMeta[];
 }> {
   if (!getApiToken()) {
-    return {
-      branchId: "",
-      branchName: "",
-      sequences: [],
-      kinds: [],
-    };
+    return emptySequencesResult();
   }
-  return apiRequest("/api/settings/document-sequences.php");
+  const data = await apiRequest<SchoolSequencesResponse>("/api/settings/school.php");
+  return mapSequencesResponse(data);
 }
 
 export async function apiSaveDocumentSequences(
@@ -88,8 +132,9 @@ export async function apiSaveDocumentSequences(
   if (!getApiToken()) {
     return { sequences: [] };
   }
-  return apiRequest("/api/settings/document-sequences.php", {
+  const data = await apiRequest<SchoolSequencesResponse>("/api/settings/school.php", {
     method: "PUT",
     body: { sequences },
   });
+  return { sequences: mapSequencesResponse(data).sequences };
 }

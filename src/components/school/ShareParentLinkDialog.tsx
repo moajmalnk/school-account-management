@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { Check, ClipboardList, Copy } from "lucide-react";
 import { toast } from "sonner";
-import { Check, ClipboardList, Copy, MessageCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -12,20 +12,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { WhatsAppIcon } from "@/components/ui/whatsapp-icon";
 import { parentStudentAbsoluteUrl } from "@/lib/tenant-store";
-
-function digitsOnly(raw?: string) {
-  return (raw ?? "").replace(/\D/g, "");
-}
-
-function toWhatsAppNumber(raw?: string) {
-  const digits = digitsOnly(raw);
-  if (!digits) return null;
-  if (digits.length === 10) return `91${digits}`;
-  if (digits.length === 12 && digits.startsWith("91")) return digits;
-  if (digits.length >= 10) return digits;
-  return null;
-}
+import { openWhatsAppShare, toNotifyWhatsAppNumber } from "@/lib/whatsapp-notify";
 
 export function ShareParentLinkDialog({
   open,
@@ -50,7 +39,7 @@ export function ShareParentLinkDialog({
     if (open) setPhone(guardianPhone ?? "");
   }, [open, guardianPhone]);
 
-  const whatsappNumber = useMemo(() => toWhatsAppNumber(phone), [phone]);
+  const whatsappNumber = useMemo(() => toNotifyWhatsAppNumber(phone), [phone]);
 
   const shareMessage = useMemo(() => {
     const greeting = guardianName?.trim() ? `Hi ${guardianName.trim()},` : "Hi,";
@@ -86,13 +75,13 @@ export function ShareParentLinkDialog({
       });
       return;
     }
-    const href = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(shareMessage)}`;
-    window.open(href, "_blank", "noopener,noreferrer");
-    toast.success("Opening WhatsApp", {
-      description: guardianName?.trim()
-        ? `Message drafted for ${guardianName.trim()}`
-        : "Collection link attached to the message",
-    });
+    if (openWhatsAppShare(shareMessage, phone)) {
+      toast.success("Opening WhatsApp", {
+        description: guardianName?.trim()
+          ? `Message drafted for ${guardianName.trim()}`
+          : "Collection link attached to the message",
+      });
+    }
   };
 
   return (
@@ -151,7 +140,7 @@ export function ShareParentLinkDialog({
             onClick={shareOnWhatsApp}
             className="rounded-full bg-[#25D366] text-white hover:bg-[#1EBE57]"
           >
-            <MessageCircle className="mr-1.5 h-4 w-4" />
+            <WhatsAppIcon className="mr-1.5 h-4 w-4" />
             WhatsApp
           </Button>
         </DialogFooter>

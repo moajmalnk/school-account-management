@@ -3,6 +3,8 @@ export const FINANCE_TABS = [
   "make",
   "analytics",
   "ledger",
+  "journals",
+  "trial",
   "pl",
   "balance",
   "fees",

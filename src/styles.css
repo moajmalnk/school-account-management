@@ -509,6 +509,15 @@
     }
   }
 
+  @keyframes workspace-boot-bar {
+    0% {
+      transform: translateX(-120%);
+    }
+    100% {
+      transform: translateX(320%);
+    }
+  }
+
   .skeleton-shimmer::after {
     content: "";
     position: absolute;
