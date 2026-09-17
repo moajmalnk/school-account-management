@@ -757,7 +757,12 @@ export function GlAccountStatementReport() {
                       {statement.lines.length === 0 ? (
                         <tr>
                           <td colSpan={6} className="px-3 py-6 text-center text-black/40">
-                            No journals yet — sync ledgers, then Fill from old receipts
+                            {selected?.name === "Fee Income"
+                              ? "This is the fallback income head. Open Tuition Fee or Donation for live collections, then tap Update all books."
+                              : selected?.nature === "expense" &&
+                                  /fee|registration/i.test(selected.name)
+                                ? "This is a Make Payment (expense) ledger, not fee collections. Use Tuition Fee / Donation under incomes."
+                                : "No journals yet — tap Update all books to post Payment History"}
                           </td>
                         </tr>
                       ) : null}
