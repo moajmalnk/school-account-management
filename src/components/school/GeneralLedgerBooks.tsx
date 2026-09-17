@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/select";
 import { OrganicCard } from "@/components/ui/organic-card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DatePicker } from "@/components/ui/date-picker";
 import { getApiToken } from "@/lib/api/client";
 import {
   apiGlChartTree,
@@ -1410,11 +1411,14 @@ export function GlJournalsReport() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-[10px] uppercase tracking-wider text-black/45">Date</Label>
-              <Input
-                type="date"
+              <DatePicker
                 value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="mt-1 h-9 rounded-xl"
+                onChange={setDate}
+                valueFormat="iso"
+                variant="pill"
+                placeholder="Pick a date"
+                quickPicks={[{ label: "Today", getDate: (t) => t }]}
+                className="mt-1 h-9 w-full"
               />
             </div>
             <div>

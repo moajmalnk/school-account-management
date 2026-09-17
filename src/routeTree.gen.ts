@@ -32,6 +32,7 @@ import { Route as TenantNotificationsRouteImport } from './routes/tenant/notific
 import { Route as TenantFinanceRouteImport } from './routes/tenant/finance'
 import { Route as TenantDashboardRouteImport } from './routes/tenant/dashboard'
 import { Route as TenantBillingRouteImport } from './routes/tenant/billing'
+import { Route as TenantAiRouteImport } from './routes/tenant/ai'
 import { Route as SuperAdminTenantsRouteImport } from './routes/super-admin/tenants'
 import { Route as SuperAdminSupportRouteImport } from './routes/super-admin/support'
 import { Route as SuperAdminPlansRouteImport } from './routes/super-admin/plans'
@@ -161,6 +162,11 @@ const TenantBillingRoute = TenantBillingRouteImport.update({
   path: '/billing',
   getParentRoute: () => TenantRoute,
 } as any)
+const TenantAiRoute = TenantAiRouteImport.update({
+  id: '/ai',
+  path: '/ai',
+  getParentRoute: () => TenantRoute,
+} as any)
 const SuperAdminTenantsRoute = SuperAdminTenantsRouteImport.update({
   id: '/tenants',
   path: '/tenants',
@@ -248,6 +254,7 @@ export interface FileRoutesByFullPath {
   '/super-admin/plans': typeof SuperAdminPlansRoute
   '/super-admin/support': typeof SuperAdminSupportRouteWithChildren
   '/super-admin/tenants': typeof SuperAdminTenantsRoute
+  '/tenant/ai': typeof TenantAiRoute
   '/tenant/billing': typeof TenantBillingRoute
   '/tenant/dashboard': typeof TenantDashboardRoute
   '/tenant/finance': typeof TenantFinanceRoute
@@ -282,6 +289,7 @@ export interface FileRoutesByTo {
   '/super-admin/overview': typeof SuperAdminOverviewRoute
   '/super-admin/plans': typeof SuperAdminPlansRoute
   '/super-admin/tenants': typeof SuperAdminTenantsRoute
+  '/tenant/ai': typeof TenantAiRoute
   '/tenant/billing': typeof TenantBillingRoute
   '/tenant/dashboard': typeof TenantDashboardRoute
   '/tenant/finance': typeof TenantFinanceRoute
@@ -321,6 +329,7 @@ export interface FileRoutesById {
   '/super-admin/plans': typeof SuperAdminPlansRoute
   '/super-admin/support': typeof SuperAdminSupportRouteWithChildren
   '/super-admin/tenants': typeof SuperAdminTenantsRoute
+  '/tenant/ai': typeof TenantAiRoute
   '/tenant/billing': typeof TenantBillingRoute
   '/tenant/dashboard': typeof TenantDashboardRoute
   '/tenant/finance': typeof TenantFinanceRoute
@@ -361,6 +370,7 @@ export interface FileRouteTypes {
     | '/super-admin/plans'
     | '/super-admin/support'
     | '/super-admin/tenants'
+    | '/tenant/ai'
     | '/tenant/billing'
     | '/tenant/dashboard'
     | '/tenant/finance'
@@ -395,6 +405,7 @@ export interface FileRouteTypes {
     | '/super-admin/overview'
     | '/super-admin/plans'
     | '/super-admin/tenants'
+    | '/tenant/ai'
     | '/tenant/billing'
     | '/tenant/dashboard'
     | '/tenant/finance'
@@ -433,6 +444,7 @@ export interface FileRouteTypes {
     | '/super-admin/plans'
     | '/super-admin/support'
     | '/super-admin/tenants'
+    | '/tenant/ai'
     | '/tenant/billing'
     | '/tenant/dashboard'
     | '/tenant/finance'
@@ -633,6 +645,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TenantBillingRouteImport
       parentRoute: typeof TenantRoute
     }
+    '/tenant/ai': {
+      id: '/tenant/ai'
+      path: '/ai'
+      fullPath: '/tenant/ai'
+      preLoaderRoute: typeof TenantAiRouteImport
+      parentRoute: typeof TenantRoute
+    }
     '/super-admin/tenants': {
       id: '/super-admin/tenants'
       path: '/tenants'
@@ -778,6 +797,7 @@ const SuperAdminRouteWithChildren = SuperAdminRoute._addFileChildren(
 )
 
 interface TenantRouteChildren {
+  TenantAiRoute: typeof TenantAiRoute
   TenantBillingRoute: typeof TenantBillingRoute
   TenantDashboardRoute: typeof TenantDashboardRoute
   TenantFinanceRoute: typeof TenantFinanceRoute
@@ -792,6 +812,7 @@ interface TenantRouteChildren {
 }
 
 const TenantRouteChildren: TenantRouteChildren = {
+  TenantAiRoute: TenantAiRoute,
   TenantBillingRoute: TenantBillingRoute,
   TenantDashboardRoute: TenantDashboardRoute,
   TenantFinanceRoute: TenantFinanceRoute,

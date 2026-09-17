@@ -89,6 +89,16 @@ export type GlAccount = {
   name: string;
   isCash: boolean;
   isBank: boolean;
+  bankName?: string | null;
+  bankAccountNo?: string | null;
+  bankIfsc?: string | null;
+  bankBranch?: string | null;
+  bankAccountHolder?: string | null;
+  bankAccountType?: string | null;
+  bankAddress?: string | null;
+  bankCity?: string | null;
+  bankState?: string | null;
+  bankMicr?: string | null;
   isPartyStudent: boolean;
   isPartyStaff: boolean;
   isSystem: boolean;
@@ -347,13 +357,35 @@ export async function apiGlCreateAccount(body: {
   openingBalance?: number;
   openingDate?: string;
   academicYear?: string;
+  bankName?: string;
+  bankAccountNo?: string;
+  bankIfsc?: string;
+  bankBranch?: string;
+  bankAccountHolder?: string;
+  bankAccountType?: string;
+  bankAddress?: string;
+  bankCity?: string;
+  bankState?: string;
+  bankMicr?: string;
 }): Promise<GlAccount> {
   return glMutate(() => apiRequest(glResourcePath("chart"), { method: "POST", body }));
 }
 
 export async function apiGlUpdateAccount(
   id: string,
-  body: Partial<GlAccount> & { groupId?: string },
+  body: Partial<GlAccount> & {
+    groupId?: string;
+    bankName?: string | null;
+    bankAccountNo?: string | null;
+    bankIfsc?: string | null;
+    bankBranch?: string | null;
+    bankAccountHolder?: string | null;
+    bankAccountType?: string | null;
+    bankAddress?: string | null;
+    bankCity?: string | null;
+    bankState?: string | null;
+    bankMicr?: string | null;
+  },
 ): Promise<GlAccount> {
   return glMutate(() =>
     apiRequest(glResourcePath("chart"), {
@@ -361,6 +393,10 @@ export async function apiGlUpdateAccount(
       body: { id, ...body },
     }),
   );
+}
+
+export async function apiGlDeleteAccount(id: string): Promise<GlAccount> {
+  return apiGlUpdateAccount(id, { active: false });
 }
 
 export async function apiGlBackfill(): Promise<{
@@ -455,6 +491,21 @@ export async function apiGlCreateJournal(body: {
   lines: Array<{ accountId: string; debit: number; credit: number; description?: string }>;
 }): Promise<GlJournal> {
   return glMutate(() => apiRequest(glResourcePath("journals"), { method: "POST", body }));
+}
+
+export async function apiGlUpdateJournal(body: {
+  id: string;
+  date: string;
+  academicYear?: string;
+  narration?: string;
+  lines: Array<{ accountId: string; debit: number; credit: number; description?: string }>;
+}): Promise<GlJournal> {
+  return glMutate(() =>
+    apiRequest(glResourcePath("journals"), {
+      method: "POST",
+      body: { _update: true, ...body },
+    }),
+  );
 }
 
 export async function apiGlVoidJournal(id: string): Promise<GlJournal> {

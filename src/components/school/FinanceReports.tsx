@@ -54,6 +54,7 @@ import {
   totalOperatingExpense,
   type FinanceDisbursement,
 } from "@/lib/dashboard-finance";
+import { useCashPosition } from "@/lib/use-gl-cash-position";
 import {
   formatEventDate,
   formatEventDateTime,
@@ -1290,14 +1291,17 @@ export function BalanceSheetReport() {
     [disbursements],
   );
 
-  const cashOnHandTotal = useMemo(
+  const cashbookCash = useMemo(
     () => cashOnHand(payments, disbursements),
     [payments, disbursements],
   );
-  const bankBalanceTotal = useMemo(
+  const cashbookBank = useMemo(
     () => bankBalance(payments, disbursements),
     [payments, disbursements],
   );
+  const cashPosition = useCashPosition(cashbookCash, cashbookBank, true);
+  const cashOnHandTotal = cashPosition.cash;
+  const bankBalanceTotal = cashPosition.bank;
   const liveStudents = useMemo(
     () => students.filter((st) => !isRecordDeleted(st.deletedAt)),
     [students],
@@ -3690,10 +3694,12 @@ export function BankReconciliationReport() {
     });
   }, [bankTxns, query, mode]);
 
-  const bookBalance = useMemo(
+  const cashbookBank = useMemo(
     () => bankBalance(payments, disbursements),
     [payments, disbursements],
   );
+  const cashPosition = useCashPosition(0, cashbookBank, true);
+  const bookBalance = cashPosition.bank;
   const clearedTotal = useMemo(
     () => bankTxns.filter((t) => isCleared(t.id)).reduce((s, t) => s + t.amount, 0),
     [bankTxns, pending],

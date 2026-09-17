@@ -1,6 +1,8 @@
 export const FINANCE_TABS = [
   "receive",
   "make",
+  "transfer",
+  "transfers",
   "analytics",
   "ledger",
   "journals",

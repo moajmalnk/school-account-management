@@ -33,6 +33,16 @@ CREATE TABLE IF NOT EXISTS accounts (
   name                VARCHAR(255)    NOT NULL,
   is_cash             TINYINT(1)      NOT NULL DEFAULT 0,
   is_bank             TINYINT(1)      NOT NULL DEFAULT 0,
+  bank_name           VARCHAR(128)    NULL,
+  bank_account_no     VARCHAR(64)     NULL,
+  bank_ifsc           VARCHAR(16)     NULL,
+  bank_branch         VARCHAR(128)    NULL,
+  bank_account_holder VARCHAR(255)    NULL,
+  bank_account_type   VARCHAR(32)     NULL,
+  bank_address        VARCHAR(512)    NULL,
+  bank_city           VARCHAR(64)     NULL,
+  bank_state          VARCHAR(64)     NULL,
+  bank_micr           VARCHAR(16)     NULL,
   is_party_student    TINYINT(1)      NOT NULL DEFAULT 0,
   is_party_staff      TINYINT(1)      NOT NULL DEFAULT 0,
   is_system           TINYINT(1)      NOT NULL DEFAULT 0,
@@ -48,7 +58,8 @@ CREATE TABLE IF NOT EXISTS accounts (
   UNIQUE KEY uq_acct_name (tenant_id, branch_id, name),
   KEY idx_acct_branch (tenant_id, branch_id),
   KEY idx_acct_group (group_id),
-  KEY idx_acct_flags (tenant_id, branch_id, is_cash, is_bank)
+  KEY idx_acct_flags (tenant_id, branch_id, is_cash, is_bank),
+  KEY idx_acct_bank_ifsc (tenant_id, branch_id, bank_ifsc)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS accounting_periods (

@@ -30,6 +30,7 @@ import {
   ChevronDown,
   ArrowDownToLine,
   ArrowUpFromLine,
+  ArrowLeftRight,
   ArrowDownRight,
   ArrowUpRight,
   ChartPie,
@@ -157,6 +158,7 @@ import {
   resolveFinancialYearInput,
 } from "@/components/school/FinancialYearFields";
 import { SignaturePadDialog } from "@/components/school/SignaturePadDialog";
+import { BankAccountsManager } from "@/components/school/BankAccountsManager";
 import { OrganicCard } from "@/components/ui/organic-card";
 import { ImageCropDialog } from "@/components/ui/image-crop-dialog";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
@@ -375,6 +377,7 @@ import {
   GlProfitLossReport,
   GlTrialBalanceReport,
 } from "@/components/school/GeneralLedgerBooks";
+import { FundTransferPanel, TransferReports } from "@/components/school/FundTransferPanel";
 import {
   downloadCsv,
   downloadBlobFile,
@@ -505,6 +508,7 @@ import {
   normalizePayeeType,
   type PayeeType,
 } from "@/lib/dashboard-finance";
+import { useCashPosition, type CashPositionSnapshot } from "@/lib/use-gl-cash-position";
 import { syncDisbursementsCache, upsertDisbursementInCache, useDisbursements } from "@/lib/use-disbursements";
 import {
   useSettingsUnsavedGuard,
@@ -996,9 +1000,7 @@ type PremiumDashboardProps = {
   feePaidCount: number;
   salaryOutstanding: number;
   salaryOutstandingStaff: number;
-  inHand: number;
-  inBank: number;
-  totalBalance: number;
+  cashPosition: CashPositionSnapshot;
   recentReceipts: Payment[];
   period: PaymentPeriod;
   setPeriod: (p: PaymentPeriod) => void;
@@ -1011,6 +1013,7 @@ type PremiumDashboardProps = {
   onViewStaff: () => void;
   onShowReceipt: (payment: Payment) => void;
   onDownloadReceipt: (payment: Payment) => void;
+  onOpenTransferReports?: () => void;
   expensesReady?: boolean;
 };
 
@@ -1276,9 +1279,7 @@ function PremiumDashboard({
   feePaidCount,
   salaryOutstanding,
   salaryOutstandingStaff,
-  inHand,
-  inBank,
-  totalBalance,
+  cashPosition,
   recentReceipts,
   period,
   setPeriod,
@@ -1291,10 +1292,16 @@ function PremiumDashboard({
   onViewStaff,
   onShowReceipt,
   onDownloadReceipt,
+  onOpenTransferReports,
   expensesReady = true,
 }: PremiumDashboardProps) {
   const liveStudents = students.filter((s) => !isRecordDeleted(s.deletedAt));
   const liveStaff = staff.filter((s) => !isRecordDeleted(s.deletedAt));
+  const inHand = cashPosition.cash;
+  const inBank = cashPosition.bank;
+  const totalBalance = cashPosition.total;
+  const bankLines = cashPosition.lines.filter((l) => l.kind === "bank");
+  const cashReady = expensesReady && cashPosition.ready;
   const paidCount = feePaidCount;
   const activeStaff = liveStaff.filter((s) => s.active).length;
 
@@ -1482,13 +1489,26 @@ function PremiumDashboard({
             </div>
           </section>
 
-          {/* Cash Position — cash book: receipts minus cleared payments by mode */}
+          {/* Cash Position — GL cash/bank ledgers when available (includes fund transfers) */}
           <section className={cn(dashCardClass, DASH.cash, "flex min-w-0 flex-col p-4 sm:p-5")}>
-            <div>
-              <DashboardPanelHeading icon={Landmark} title="Cash Position" />
-              <p className="mt-1 pl-[2.625rem] text-[11px] font-medium leading-snug text-slate-500 dark:text-zinc-400">
-                Receipts minus cleared payments. Queued bills are not deducted.
-              </p>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <DashboardPanelHeading icon={Landmark} title="Cash Position" />
+                <p className="mt-1 pl-[2.625rem] text-[11px] font-medium leading-snug text-slate-500 dark:text-zinc-400">
+                  {cashPosition.source === "gl"
+                    ? "Cash & bank ledgers · fund transfers included · queued bills not deducted"
+                    : "Receipts minus cleared payments by mode · queued bills not deducted"}
+                </p>
+              </div>
+              {onOpenTransferReports ? (
+                <button
+                  type="button"
+                  onClick={onOpenTransferReports}
+                  className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-violet-700 ring-1 ring-violet-200/80 transition-colors hover:bg-violet-50 dark:text-violet-300 dark:ring-violet-500/30 dark:hover:bg-violet-500/10"
+                >
+                  Transfers
+                </button>
+              ) : null}
             </div>
             <div className="mt-4 grid min-w-0 flex-1 grid-cols-1 gap-2 min-[20rem]:grid-cols-2 sm:gap-3">
               <div
@@ -1500,7 +1520,7 @@ function PremiumDashboard({
                 <div className="flex items-center justify-between gap-1.5 text-[#047857] dark:text-emerald-300">
                   <span
                     className="min-w-0 text-[11px] font-semibold leading-snug text-emerald-950 sm:text-[12px] dark:text-emerald-50"
-                    title="Cash receipts minus cash payments"
+                    title="Cash ledger balance"
                   >
                     <span className="min-[22rem]:hidden">Cash</span>
                     <span className="hidden min-[22rem]:inline">Cash In Hand</span>
@@ -1512,7 +1532,7 @@ function PremiumDashboard({
                 <DashboardAmount
                   value={inHand}
                   compact
-                  pending={!expensesReady}
+                  pending={!cashReady}
                   className={
                     inHand < 0
                       ? "text-rose-700 dark:text-rose-300"
@@ -1529,10 +1549,16 @@ function PremiumDashboard({
                 <div className="flex items-center justify-between gap-1.5 text-violet-700 dark:text-violet-300">
                   <span
                     className="min-w-0 text-[11px] font-semibold leading-snug text-violet-950 sm:text-[12px] dark:text-violet-50"
-                    title="Bank receipts minus bank payments"
+                    title={
+                      bankLines.length > 1
+                        ? bankLines.map((b) => `${b.name}: ₹ ${b.balance.toLocaleString("en-IN")}`).join(" · ")
+                        : "Bank ledger balance"
+                    }
                   >
                     <span className="min-[22rem]:hidden">Bank</span>
-                    <span className="hidden min-[22rem]:inline">Bank Balance</span>
+                    <span className="hidden min-[22rem]:inline">
+                      {bankLines.length > 1 ? `Banks (${bankLines.length})` : "Bank Balance"}
+                    </span>
                   </span>
                   <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-white/80 text-violet-700 shadow-sm dark:bg-white/10 dark:text-violet-300">
                     <Landmark className="h-3.5 w-3.5 shrink-0" />
@@ -1541,13 +1567,38 @@ function PremiumDashboard({
                 <DashboardAmount
                   value={inBank}
                   compact
-                  pending={!expensesReady}
+                  pending={!cashReady}
                   className={
                     inBank < 0
                       ? "text-rose-700 dark:text-rose-300"
                       : "text-violet-950 dark:text-violet-50"
                   }
                 />
+                {bankLines.length > 1 && cashReady ? (
+                  <div className="mt-1.5 space-y-0.5 border-t border-violet-200/50 pt-1.5 dark:border-violet-500/20">
+                    {bankLines.slice(0, 3).map((b) => (
+                      <div
+                        key={b.accountId}
+                        className="flex items-center justify-between gap-2 text-[10px] leading-tight text-violet-900/75 dark:text-violet-100/70"
+                      >
+                        <span className="min-w-0 truncate font-medium">{b.name}</span>
+                        <span
+                          className={cn(
+                            "shrink-0 font-mono font-semibold",
+                            b.balance < 0 && "text-rose-600 dark:text-rose-300",
+                          )}
+                        >
+                          ₹ {b.balance.toLocaleString("en-IN")}
+                        </span>
+                      </div>
+                    ))}
+                    {bankLines.length > 3 ? (
+                      <p className="text-[9px] text-violet-700/60 dark:text-violet-200/50">
+                        +{bankLines.length - 3} more
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
               <div
                 className={cn(
@@ -1563,7 +1614,7 @@ function PremiumDashboard({
                 </div>
                 <DashboardAmount
                   value={totalBalance}
-                  pending={!expensesReady}
+                  pending={!cashReady}
                   className="text-white"
                 />
               </div>
@@ -2021,15 +2072,15 @@ export function SchoolDashboard() {
     [filteredPayments],
   );
 
-  const inHand = useMemo(
+  const cashbookCash = useMemo(
     () => cashOnHand(payments, disbursements),
     [payments, disbursements],
   );
-  const inBank = useMemo(
+  const cashbookBank = useMemo(
     () => bankBalance(payments, disbursements),
     [payments, disbursements],
   );
-  const totalBalance = inHand + inBank;
+  const cashPosition = useCashPosition(cashbookCash, cashbookBank, disbursementsLoaded);
   const expenseTotal = useMemo(
     () => operatingExpenseForPeriod(disbursements, period, customRange),
     [disbursements, period, customRange],
@@ -2082,9 +2133,7 @@ export function SchoolDashboard() {
         feePaidCount={feeRoster.paidCount}
         salaryOutstanding={salaryOutstanding}
         salaryOutstandingStaff={salaryOutstandingRows.length}
-        inHand={inHand}
-        inBank={inBank}
-        totalBalance={totalBalance}
+        cashPosition={cashPosition}
         expensesReady={disbursementsLoaded}
         recentReceipts={recentReceipts}
         period={period}
@@ -2093,6 +2142,9 @@ export function SchoolDashboard() {
         setCustomRange={setCustomRange}
         onReceivePayment={() => navigate({ to: "/tenant/finance", search: { tab: "receive" } })}
         onMakePayment={() => navigate({ to: "/tenant/finance", search: { tab: "make" } })}
+        onOpenTransferReports={() =>
+          navigate({ to: "/tenant/finance", search: { tab: "transfers" } })
+        }
         onViewStudents={() => navigate({ to: "/tenant/students" })}
         onAdmitStudent={() => navigate({ to: "/tenant/students/admit" })}
         onViewStaff={() => navigate({ to: "/tenant/staff" })}
@@ -2337,9 +2389,11 @@ function DirectoryFloatingAddButton({
 function FinanceFloatingPaymentActions({
   onReceive,
   onMake,
+  onTransfer,
 }: {
   onReceive: () => void;
   onMake: () => void;
+  onTransfer: () => void;
 }) {
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-40 px-3 md:hidden">
@@ -2353,7 +2407,7 @@ function FinanceFloatingPaymentActions({
           role="tab"
           onClick={onReceive}
           aria-label="Receive payment"
-          className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[#059669] px-3 text-[12.5px] font-semibold text-white shadow-sm shadow-emerald-900/20 transition-transform active:scale-[0.98] dark:bg-[#10B981] dark:text-zinc-950"
+          className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#059669] px-2 text-[11.5px] font-semibold text-white shadow-sm shadow-emerald-900/20 transition-transform active:scale-[0.98] dark:bg-[#10B981] dark:text-zinc-950"
         >
           <ArrowDownToLine className="h-4 w-4 shrink-0" strokeWidth={2.25} />
           <span className="truncate">Receive</span>
@@ -2363,10 +2417,20 @@ function FinanceFloatingPaymentActions({
           role="tab"
           onClick={onMake}
           aria-label="Make payment"
-          className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[#DC2626] px-3 text-[12.5px] font-semibold text-white shadow-sm shadow-rose-900/20 transition-transform active:scale-[0.98] dark:bg-[#EF4444] dark:text-zinc-950"
+          className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#DC2626] px-2 text-[11.5px] font-semibold text-white shadow-sm shadow-rose-900/20 transition-transform active:scale-[0.98] dark:bg-[#EF4444] dark:text-zinc-950"
         >
           <ArrowUpFromLine className="h-4 w-4 shrink-0" strokeWidth={2.25} />
           <span className="truncate">Make</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          onClick={onTransfer}
+          aria-label="Transfer money"
+          className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#0284C7] px-2 text-[11.5px] font-semibold text-white shadow-sm shadow-sky-900/20 transition-transform active:scale-[0.98] dark:bg-[#0EA5E9] dark:text-zinc-950"
+        >
+          <ArrowLeftRight className="h-4 w-4 shrink-0" strokeWidth={2.25} />
+          <span className="truncate">Transfer</span>
         </button>
       </div>
     </div>
@@ -6966,6 +7030,8 @@ export function FinanceModule() {
     | "overview"
     | "receive"
     | "make"
+    | "transfer"
+    | "transfers"
     | "analytics"
     | "ledger"
     | "journals"
@@ -6993,6 +7059,8 @@ export function FinanceModule() {
       "overview",
       "receive",
       "make",
+      "transfer",
+      "transfers",
       "analytics",
       "ledger",
       "journals",
@@ -7045,6 +7113,22 @@ export function FinanceModule() {
     return (
       <div className="w-full space-y-4 sm:space-y-5">
         <MakePayment />
+      </div>
+    );
+  }
+
+  if (view === "transfer") {
+    return (
+      <div className="w-full space-y-4 sm:space-y-5">
+        <FundTransferPanel />
+      </div>
+    );
+  }
+
+  if (view === "transfers") {
+    return (
+      <div className="w-full space-y-4 sm:space-y-5">
+        <TransferReports />
       </div>
     );
   }
@@ -7146,11 +7230,14 @@ const financeReceiveActionClass =
 const financeMakeActionClass =
   "group relative flex min-h-[96px] items-center gap-4 overflow-hidden rounded-2xl border border-rose-300/40 bg-gradient-to-br from-rose-500 via-red-500 to-red-600 p-4 text-left shadow-[0_10px_30px_-12px_rgba(239,68,68,0.38)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_16px_40px_-12px_rgba(239,68,68,0.48)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/45 dark:border-rose-500/25 dark:from-rose-900/95 dark:via-red-950 dark:to-zinc-950 dark:shadow-[0_12px_36px_-14px_rgba(239,68,68,0.28)] dark:hover:shadow-[0_18px_44px_-12px_rgba(239,68,68,0.36)] sm:p-5";
 
+const financeTransferActionClass =
+  "group relative flex min-h-[96px] items-center gap-4 overflow-hidden rounded-2xl border border-sky-300/40 bg-gradient-to-br from-sky-500 via-blue-600 to-indigo-700 p-4 text-left shadow-[0_10px_30px_-12px_rgba(14,165,233,0.4)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_16px_40px_-12px_rgba(14,165,233,0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/45 dark:border-sky-500/25 dark:from-sky-900/95 dark:via-blue-950 dark:to-zinc-950 dark:shadow-[0_12px_36px_-14px_rgba(14,165,233,0.3)] dark:hover:shadow-[0_18px_44px_-12px_rgba(14,165,233,0.38)] sm:p-5";
+
 const financeActionIconShell =
   "grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-white/20 text-white ring-1 ring-white/35 backdrop-blur-md transition-transform duration-300 group-hover:scale-[1.03] dark:bg-white/10 dark:ring-white/20";
 
 const financeReportTileShell =
-  "group relative flex min-h-[118px] min-w-0 flex-col items-start justify-between gap-3 overflow-hidden rounded-2xl border p-3.5 text-left backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/35 sm:min-h-[128px] sm:p-4 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_8px_26px_-10px_rgba(15,23,42,0.1)] hover:shadow-[0_12px_32px_-12px_rgba(15,23,42,0.14)] dark:shadow-[0_1px_0_rgba(255,255,255,0.05),0_10px_34px_-12px_rgba(0,0,0,0.55)] dark:hover:shadow-[0_14px_38px_-10px_rgba(0,0,0,0.62)]";
+  "group relative flex min-h-[84px] min-w-0 items-center gap-3 overflow-hidden rounded-2xl border p-3 text-left backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/35 sm:min-h-[92px] sm:gap-3.5 sm:p-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_10px_28px_-14px_rgba(15,23,42,0.12)] hover:shadow-[0_14px_36px_-14px_rgba(15,23,42,0.18)] dark:shadow-[0_1px_0_rgba(255,255,255,0.04),0_12px_32px_-14px_rgba(0,0,0,0.55)] dark:hover:shadow-[0_16px_40px_-12px_rgba(0,0,0,0.65)]";
 
 const FINANCE_REPORT_GROUPS = [
   {
@@ -7163,11 +7250,12 @@ const FINANCE_REPORT_GROUPS = [
         d: "Collections, due & overdue",
         icon: GraduationCap,
         surface:
-          "border-teal-200/55 bg-gradient-to-br from-teal-50/95 via-teal-50/35 to-white hover:border-teal-300/60 dark:border-teal-500/20 dark:from-teal-500/[0.14] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-teal-400/30",
+          "border-teal-200/60 bg-gradient-to-br from-teal-50 via-white to-white hover:border-teal-300/70 dark:border-teal-500/25 dark:from-teal-500/[0.16] dark:via-zinc-900 dark:to-zinc-950 dark:hover:border-teal-400/35",
         iconWrap:
-          "bg-white/95 text-teal-700 ring-1 ring-teal-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-teal-300 dark:ring-teal-500/25",
+          "bg-gradient-to-br from-teal-500 to-teal-600 text-white shadow-md shadow-teal-600/25 ring-1 ring-teal-400/40 dark:from-teal-500 dark:to-teal-700",
+        glow: "bg-teal-400/30",
         arrowHover:
-          "group-hover:text-teal-600 dark:group-hover:text-teal-400 dark:group-hover:ring-teal-500/30",
+          "group-hover:border-teal-300 group-hover:bg-teal-50 group-hover:text-teal-700 dark:group-hover:border-teal-500/40 dark:group-hover:bg-teal-500/10 dark:group-hover:text-teal-300",
       },
       {
         k: "concession" as const,
@@ -7175,11 +7263,12 @@ const FINANCE_REPORT_GROUPS = [
         d: "Waivers & fee relief",
         icon: HandCoins,
         surface:
-          "border-orange-200/55 bg-gradient-to-br from-orange-50/95 via-orange-50/35 to-white hover:border-orange-300/60 dark:border-orange-500/20 dark:from-orange-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-orange-400/30",
+          "border-orange-200/60 bg-gradient-to-br from-orange-50 via-white to-white hover:border-orange-300/70 dark:border-orange-500/25 dark:from-orange-500/[0.14] dark:via-zinc-900 dark:to-zinc-950 dark:hover:border-orange-400/35",
         iconWrap:
-          "bg-white/95 text-orange-700 ring-1 ring-orange-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-orange-300 dark:ring-orange-500/25",
+          "bg-gradient-to-br from-orange-500 to-amber-600 text-white shadow-md shadow-orange-500/25 ring-1 ring-orange-400/40",
+        glow: "bg-orange-400/30",
         arrowHover:
-          "group-hover:text-orange-600 dark:group-hover:text-orange-400 dark:group-hover:ring-orange-500/30",
+          "group-hover:border-orange-300 group-hover:bg-orange-50 group-hover:text-orange-700 dark:group-hover:border-orange-500/40 dark:group-hover:bg-orange-500/10 dark:group-hover:text-orange-300",
       },
       {
         k: "salary" as const,
@@ -7187,11 +7276,12 @@ const FINANCE_REPORT_GROUPS = [
         d: "Payroll & staff payables",
         icon: Users,
         surface:
-          "border-violet-200/55 bg-gradient-to-br from-violet-50/95 via-violet-50/35 to-white hover:border-violet-300/60 dark:border-violet-500/20 dark:from-violet-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-violet-400/30",
+          "border-violet-200/60 bg-gradient-to-br from-violet-50 via-white to-white hover:border-violet-300/70 dark:border-violet-500/25 dark:from-violet-500/[0.14] dark:via-zinc-900 dark:to-zinc-950 dark:hover:border-violet-400/35",
         iconWrap:
-          "bg-white/95 text-violet-600 ring-1 ring-violet-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-violet-300 dark:ring-violet-500/25",
+          "bg-gradient-to-br from-violet-500 to-indigo-600 text-white shadow-md shadow-violet-500/25 ring-1 ring-violet-400/40",
+        glow: "bg-violet-400/30",
         arrowHover:
-          "group-hover:text-violet-600 dark:group-hover:text-violet-400 dark:group-hover:ring-violet-500/30",
+          "group-hover:border-violet-300 group-hover:bg-violet-50 group-hover:text-violet-700 dark:group-hover:border-violet-500/40 dark:group-hover:bg-violet-500/10 dark:group-hover:text-violet-300",
       },
       {
         k: "daybook" as const,
@@ -7199,17 +7289,18 @@ const FINANCE_REPORT_GROUPS = [
         d: "Daily cash activity",
         icon: BookOpen,
         surface:
-          "border-sky-200/55 bg-gradient-to-br from-sky-50/95 via-sky-50/35 to-white hover:border-sky-300/60 dark:border-sky-500/20 dark:from-sky-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-sky-400/30",
+          "border-sky-200/60 bg-gradient-to-br from-sky-50 via-white to-white hover:border-sky-300/70 dark:border-sky-500/25 dark:from-sky-500/[0.14] dark:via-zinc-900 dark:to-zinc-950 dark:hover:border-sky-400/35",
         iconWrap:
-          "bg-white/95 text-sky-700 ring-1 ring-sky-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-sky-300 dark:ring-sky-500/25",
+          "bg-gradient-to-br from-sky-500 to-blue-600 text-white shadow-md shadow-sky-500/25 ring-1 ring-sky-400/40",
+        glow: "bg-sky-400/30",
         arrowHover:
-          "group-hover:text-sky-600 dark:group-hover:text-sky-400 dark:group-hover:ring-sky-500/30",
+          "group-hover:border-sky-300 group-hover:bg-sky-50 group-hover:text-sky-700 dark:group-hover:border-sky-500/40 dark:group-hover:bg-sky-500/10 dark:group-hover:text-sky-300",
       },
     ],
   },
   {
     title: "Books & statements",
-    description: "Ledgers, trial balance, and statutory reports",
+    description: "Ledgers, trial balance, transfers, and statutory reports",
     tiles: [
       {
         k: "analytics" as const,
@@ -7217,11 +7308,12 @@ const FINANCE_REPORT_GROUPS = [
         d: "Financial insights",
         icon: ChartPie,
         surface:
-          "border-amber-200/55 bg-gradient-to-br from-amber-50/95 via-amber-50/35 to-white hover:border-amber-300/60 dark:border-amber-500/20 dark:from-amber-500/[0.11] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-amber-400/30",
+          "border-amber-200/60 bg-gradient-to-br from-amber-50 via-white to-white hover:border-amber-300/70 dark:border-amber-500/25 dark:from-amber-500/[0.13] dark:via-zinc-900 dark:to-zinc-950 dark:hover:border-amber-400/35",
         iconWrap:
-          "bg-white/95 text-amber-700 ring-1 ring-amber-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-amber-300 dark:ring-amber-500/25",
+          "bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-md shadow-amber-500/25 ring-1 ring-amber-400/40",
+        glow: "bg-amber-400/30",
         arrowHover:
-          "group-hover:text-amber-600 dark:group-hover:text-amber-400 dark:group-hover:ring-amber-500/30",
+          "group-hover:border-amber-300 group-hover:bg-amber-50 group-hover:text-amber-700 dark:group-hover:border-amber-500/40 dark:group-hover:bg-amber-500/10 dark:group-hover:text-amber-300",
       },
       {
         k: "ledger" as const,
@@ -7229,11 +7321,12 @@ const FINANCE_REPORT_GROUPS = [
         d: "Account statements",
         icon: ListTodo,
         surface:
-          "border-indigo-200/55 bg-gradient-to-br from-indigo-50/95 via-indigo-50/35 to-white hover:border-indigo-300/60 dark:border-indigo-500/20 dark:from-indigo-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-indigo-400/30",
+          "border-indigo-200/60 bg-gradient-to-br from-indigo-50 via-white to-white hover:border-indigo-300/70 dark:border-indigo-500/25 dark:from-indigo-500/[0.14] dark:via-zinc-900 dark:to-zinc-950 dark:hover:border-indigo-400/35",
         iconWrap:
-          "bg-white/95 text-indigo-600 ring-1 ring-indigo-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-indigo-300 dark:ring-indigo-500/25",
+          "bg-gradient-to-br from-indigo-500 to-blue-700 text-white shadow-md shadow-indigo-500/25 ring-1 ring-indigo-400/40",
+        glow: "bg-indigo-400/30",
         arrowHover:
-          "group-hover:text-indigo-600 dark:group-hover:text-indigo-400 dark:group-hover:ring-indigo-500/30",
+          "group-hover:border-indigo-300 group-hover:bg-indigo-50 group-hover:text-indigo-700 dark:group-hover:border-indigo-500/40 dark:group-hover:bg-indigo-500/10 dark:group-hover:text-indigo-300",
       },
       {
         k: "journals" as const,
@@ -7241,11 +7334,12 @@ const FINANCE_REPORT_GROUPS = [
         d: "Vouchers & opening",
         icon: BookOpen,
         surface:
-          "border-violet-200/55 bg-gradient-to-br from-violet-50/95 via-violet-50/35 to-white hover:border-violet-300/60 dark:border-violet-500/20 dark:from-violet-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-violet-400/30",
+          "border-fuchsia-200/60 bg-gradient-to-br from-fuchsia-50 via-white to-white hover:border-fuchsia-300/70 dark:border-fuchsia-500/25 dark:from-fuchsia-500/[0.14] dark:via-zinc-900 dark:to-zinc-950 dark:hover:border-fuchsia-400/35",
         iconWrap:
-          "bg-white/95 text-violet-700 ring-1 ring-violet-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-violet-300 dark:ring-violet-500/25",
+          "bg-gradient-to-br from-fuchsia-500 to-violet-600 text-white shadow-md shadow-fuchsia-500/25 ring-1 ring-fuchsia-400/40",
+        glow: "bg-fuchsia-400/30",
         arrowHover:
-          "group-hover:text-violet-600 dark:group-hover:text-violet-400 dark:group-hover:ring-violet-500/30",
+          "group-hover:border-fuchsia-300 group-hover:bg-fuchsia-50 group-hover:text-fuchsia-700 dark:group-hover:border-fuchsia-500/40 dark:group-hover:bg-fuchsia-500/10 dark:group-hover:text-fuchsia-300",
       },
       {
         k: "trial" as const,
@@ -7253,11 +7347,12 @@ const FINANCE_REPORT_GROUPS = [
         d: "Debit = credit check",
         icon: Scale,
         surface:
-          "border-slate-200/55 bg-gradient-to-br from-slate-50/95 via-slate-50/35 to-white hover:border-slate-300/60 dark:border-slate-500/20 dark:from-slate-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-slate-400/30",
+          "border-slate-200/70 bg-gradient-to-br from-slate-50 via-white to-white hover:border-slate-300/80 dark:border-slate-500/25 dark:from-slate-500/[0.14] dark:via-zinc-900 dark:to-zinc-950 dark:hover:border-slate-400/35",
         iconWrap:
-          "bg-white/95 text-slate-700 ring-1 ring-slate-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-slate-300 dark:ring-slate-500/25",
+          "bg-gradient-to-br from-slate-600 to-slate-800 text-white shadow-md shadow-slate-600/25 ring-1 ring-slate-400/40",
+        glow: "bg-slate-400/25",
         arrowHover:
-          "group-hover:text-slate-600 dark:group-hover:text-slate-400 dark:group-hover:ring-slate-500/30",
+          "group-hover:border-slate-300 group-hover:bg-slate-50 group-hover:text-slate-700 dark:group-hover:border-slate-500/40 dark:group-hover:bg-slate-500/10 dark:group-hover:text-slate-300",
       },
       {
         k: "pl" as const,
@@ -7265,11 +7360,12 @@ const FINANCE_REPORT_GROUPS = [
         d: "Income vs expense",
         icon: TrendingUp,
         surface:
-          "border-emerald-200/55 bg-gradient-to-br from-emerald-50/95 via-emerald-50/35 to-white hover:border-emerald-300/60 dark:border-emerald-500/20 dark:from-emerald-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-emerald-400/30",
+          "border-emerald-200/60 bg-gradient-to-br from-emerald-50 via-white to-white hover:border-emerald-300/70 dark:border-emerald-500/25 dark:from-emerald-500/[0.14] dark:via-zinc-900 dark:to-zinc-950 dark:hover:border-emerald-400/35",
         iconWrap:
-          "bg-white/95 text-emerald-700 ring-1 ring-emerald-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-emerald-300 dark:ring-emerald-500/25",
+          "bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-500/25 ring-1 ring-emerald-400/40",
+        glow: "bg-emerald-400/30",
         arrowHover:
-          "group-hover:text-emerald-600 dark:group-hover:text-emerald-400 dark:group-hover:ring-emerald-500/30",
+          "group-hover:border-emerald-300 group-hover:bg-emerald-50 group-hover:text-emerald-700 dark:group-hover:border-emerald-500/40 dark:group-hover:bg-emerald-500/10 dark:group-hover:text-emerald-300",
       },
       {
         k: "balance" as const,
@@ -7277,11 +7373,12 @@ const FINANCE_REPORT_GROUPS = [
         d: "Assets & liabilities",
         icon: Scale,
         surface:
-          "border-rose-200/55 bg-gradient-to-br from-rose-50/95 via-rose-50/35 to-white hover:border-rose-300/60 dark:border-rose-500/20 dark:from-rose-500/[0.11] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-rose-400/30",
+          "border-rose-200/60 bg-gradient-to-br from-rose-50 via-white to-white hover:border-rose-300/70 dark:border-rose-500/25 dark:from-rose-500/[0.13] dark:via-zinc-900 dark:to-zinc-950 dark:hover:border-rose-400/35",
         iconWrap:
-          "bg-white/95 text-rose-600 ring-1 ring-rose-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-rose-300 dark:ring-rose-500/25",
+          "bg-gradient-to-br from-rose-500 to-pink-600 text-white shadow-md shadow-rose-500/25 ring-1 ring-rose-400/40",
+        glow: "bg-rose-400/30",
         arrowHover:
-          "group-hover:text-rose-600 dark:group-hover:text-rose-400 dark:group-hover:ring-rose-500/30",
+          "group-hover:border-rose-300 group-hover:bg-rose-50 group-hover:text-rose-700 dark:group-hover:border-rose-500/40 dark:group-hover:bg-rose-500/10 dark:group-hover:text-rose-300",
       },
       {
         k: "reconciliation" as const,
@@ -7289,11 +7386,25 @@ const FINANCE_REPORT_GROUPS = [
         d: "Match statement & books",
         icon: Landmark,
         surface:
-          "border-cyan-200/55 bg-gradient-to-br from-cyan-50/95 via-cyan-50/35 to-white hover:border-cyan-300/60 dark:border-cyan-500/20 dark:from-cyan-500/[0.11] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-cyan-400/30",
+          "border-cyan-200/60 bg-gradient-to-br from-cyan-50 via-white to-white hover:border-cyan-300/70 dark:border-cyan-500/25 dark:from-cyan-500/[0.13] dark:via-zinc-900 dark:to-zinc-950 dark:hover:border-cyan-400/35",
         iconWrap:
-          "bg-white/95 text-cyan-700 ring-1 ring-cyan-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-cyan-300 dark:ring-cyan-500/25",
+          "bg-gradient-to-br from-cyan-500 to-teal-600 text-white shadow-md shadow-cyan-500/25 ring-1 ring-cyan-400/40",
+        glow: "bg-cyan-400/30",
         arrowHover:
-          "group-hover:text-cyan-600 dark:group-hover:text-cyan-400 dark:group-hover:ring-cyan-500/30",
+          "group-hover:border-cyan-300 group-hover:bg-cyan-50 group-hover:text-cyan-700 dark:group-hover:border-cyan-500/40 dark:group-hover:bg-cyan-500/10 dark:group-hover:text-cyan-300",
+      },
+      {
+        k: "transfers" as const,
+        l: "Transfer Reports",
+        d: "Cash & bank movements",
+        icon: ArrowLeftRight,
+        surface:
+          "border-blue-200/60 bg-gradient-to-br from-blue-50 via-white to-white hover:border-blue-300/70 dark:border-blue-500/25 dark:from-blue-500/[0.14] dark:via-zinc-900 dark:to-zinc-950 dark:hover:border-blue-400/35",
+        iconWrap:
+          "bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md shadow-blue-500/25 ring-1 ring-blue-400/40",
+        glow: "bg-blue-400/30",
+        arrowHover:
+          "group-hover:border-blue-300 group-hover:bg-blue-50 group-hover:text-blue-700 dark:group-hover:border-blue-500/40 dark:group-hover:bg-blue-500/10 dark:group-hover:text-blue-300",
       },
     ],
   },
@@ -7306,6 +7417,8 @@ function FinanceOverview({
     view:
       | "receive"
       | "make"
+      | "transfer"
+      | "transfers"
       | "analytics"
       | "ledger"
       | "journals"
@@ -7685,7 +7798,7 @@ function FinanceOverview({
 
   return (
     <div className="w-full space-y-5 pb-24 md:pb-0">
-      <div className="hidden md:grid md:grid-cols-2 md:gap-4">
+      <div className="hidden md:grid md:grid-cols-3 md:gap-4">
         {sessionCanAccessFinanceView(session, "receive") && (
           <button
             type="button"
@@ -7724,76 +7837,102 @@ function FinanceOverview({
             </div>
           </button>
         )}
+        {sessionCanAccessFinanceView(session, "transfer") && (
+          <button
+            type="button"
+            onClick={() => onOpenView("transfer")}
+            className={financeTransferActionClass}
+          >
+            <span
+              aria-hidden
+              className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-white/20 blur-2xl dark:bg-white/[0.07]"
+            />
+            <span className={financeActionIconShell}>
+              <ArrowLeftRight className="h-5 w-5 text-white" strokeWidth={2.25} />
+            </span>
+            <div className="relative min-w-0">
+              <div className="text-[15px] font-bold tracking-tight text-white">Transfer money</div>
+              <p className="mt-0.5 text-[12px] text-white/85">Cash, banks, and deposits</p>
+            </div>
+          </button>
+        )}
       </div>
 
-      <section className={cn(glassCardClass, "space-y-6 p-4 sm:p-5")}>
-        <div>
-          <h3 className="text-[15px] font-bold tracking-tight text-slate-900 dark:text-zinc-50">
-            Reports
-          </h3>
-          <p className="mt-0.5 text-[12px] text-slate-500 dark:text-zinc-400">
-            Fee operations first, then books and statements
-          </p>
+      <section className={cn(glassCardClass, "space-y-7 p-4 sm:p-6")}>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h3 className="text-[17px] font-bold tracking-tight text-slate-900 dark:text-zinc-50">
+              Reports
+            </h3>
+            <p className="mt-1 text-[12.5px] text-slate-500 dark:text-zinc-400">
+              Fee operations first, then books and statements
+            </p>
+          </div>
         </div>
         {FINANCE_REPORT_GROUPS.map((group) => {
           const tiles = group.tiles.filter((item) => sessionCanAccessFinanceView(session, item.k));
           if (!tiles.length) return null;
           return (
-            <div key={group.title}>
-              <div className="mb-3">
-                <h4 className="text-[12px] font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-                  {group.title}
-                </h4>
-                <p className="mt-0.5 text-[11px] text-slate-400 dark:text-zinc-500">
-                  {group.description}
-                </p>
+            <div key={group.title} className="space-y-3.5">
+              <div className="flex items-center gap-3">
+                <div className="min-w-0">
+                  <h4 className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-zinc-400">
+                    {group.title}
+                  </h4>
+                  <p className="mt-0.5 text-[11.5px] text-slate-400 dark:text-zinc-500">
+                    {group.description}
+                  </p>
+                </div>
+                <div
+                  aria-hidden
+                  className="h-px min-w-[2rem] flex-1 bg-gradient-to-r from-slate-200/90 to-transparent dark:from-white/10"
+                />
               </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-3.5 xl:grid-cols-4">
-                {tiles.map((item, index, items) => {
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-3.5 xl:grid-cols-4">
+                {tiles.map((item) => {
                   const Icon = item.icon;
                   return (
                     <button
                       key={item.k}
                       type="button"
                       onClick={() => onOpenView(item.k)}
-                      className={cn(
-                        financeReportTileShell,
-                        item.surface,
-                        items.length % 2 === 1 &&
-                          index === items.length - 1 &&
-                          "col-span-2 sm:col-span-1",
-                      )}
+                      className={cn(financeReportTileShell, item.surface)}
                     >
                       <span
                         aria-hidden
-                        className="pointer-events-none absolute inset-x-3 top-0 h-px bg-gradient-to-r from-transparent via-white/90 to-transparent dark:via-white/10"
+                        className={cn(
+                          "pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full blur-2xl transition-opacity duration-300 opacity-50 group-hover:opacity-90",
+                          item.glow,
+                        )}
                       />
-                      <div className="flex w-full items-start justify-between gap-2">
-                        <span
-                          className={cn(
-                            "grid h-9 w-9 shrink-0 place-items-center rounded-xl sm:h-10 sm:w-10",
-                            item.iconWrap,
-                          )}
-                        >
-                          <Icon className="h-4 w-4 sm:h-[18px] sm:w-[18px]" strokeWidth={2} />
-                        </span>
-                        <span
-                          className={cn(
-                            "grid h-7 w-7 place-items-center rounded-full text-slate-400 ring-1 ring-slate-200/80 transition-colors dark:text-zinc-500 dark:ring-white/10",
-                            item.arrowHover,
-                          )}
-                        >
-                          <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.25} />
-                        </span>
-                      </div>
-                      <div className="min-w-0">
-                        <div className="truncate text-[13px] font-semibold tracking-tight text-slate-900 dark:text-zinc-50 sm:text-[14px]">
+                      <span
+                        aria-hidden
+                        className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-white to-transparent dark:via-white/15"
+                      />
+                      <span
+                        className={cn(
+                          "relative grid h-11 w-11 shrink-0 place-items-center rounded-2xl transition-transform duration-300 group-hover:scale-[1.05] sm:h-12 sm:w-12",
+                          item.iconWrap,
+                        )}
+                      >
+                        <Icon className="h-[18px] w-[18px] sm:h-5 sm:w-5" strokeWidth={2.25} />
+                      </span>
+                      <div className="relative min-w-0 flex-1 pr-1">
+                        <div className="truncate text-[13.5px] font-semibold tracking-tight text-slate-900 dark:text-zinc-50 sm:text-[14px]">
                           {item.l}
                         </div>
                         <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-slate-500 dark:text-zinc-400">
                           {item.d}
                         </p>
                       </div>
+                      <span
+                        className={cn(
+                          "relative grid h-8 w-8 shrink-0 place-items-center rounded-full text-slate-400 ring-1 ring-slate-200/80 transition-all duration-300 group-hover:translate-x-0.5 dark:text-zinc-500 dark:ring-white/10",
+                          item.arrowHover,
+                        )}
+                      >
+                        <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
+                      </span>
                     </button>
                   );
                 })}
@@ -8359,6 +8498,7 @@ function FinanceOverview({
       <FinanceFloatingPaymentActions
         onReceive={() => onOpenView("receive")}
         onMake={() => onOpenView("make")}
+        onTransfer={() => onOpenView("transfer")}
       />
     </div>
   );
@@ -20861,6 +21001,10 @@ function SchoolDetailsCard({
                 className="mt-1.5"
               />
             </div>
+          </div>
+
+          <div className="border-t border-[#E5E5E5] pt-5 dark:border-white/10">
+            <BankAccountsManager />
           </div>
         </div>
       </form>

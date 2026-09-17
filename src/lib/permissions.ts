@@ -266,6 +266,8 @@ export type FinanceViewKey =
   | "overview"
   | "receive"
   | "make"
+  | "transfer"
+  | "transfers"
   | "analytics"
   | "ledger"
   | "journals"
@@ -282,6 +284,8 @@ const FINANCE_VIEW_PERMISSION: Record<FinanceViewKey, PermissionKey> = {
   overview: "finance.overview",
   receive: "finance.receive",
   make: "finance.make",
+  transfer: "finance.ledger",
+  transfers: "finance.ledger",
   analytics: "finance.analytics",
   ledger: "finance.ledger",
   journals: "finance.ledger",

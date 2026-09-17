@@ -17,6 +17,7 @@ import {
   useTenantNavigationGuard,
 } from "@/components/school/settings-unsaved-guard";
 import { WorkspaceOpeningScreen } from "@/components/school/TenantDirectorySkeleton";
+import { FeezoAssistant } from "@/components/ai/FeezoAssistant";
 import {
   MobileTabBar,
   mobileMainPadding,
@@ -219,6 +220,7 @@ function TenantShell() {
       )}
 
       <TenantMobileNav />
+      <FeezoAssistant />
     </div>
   );
 }
