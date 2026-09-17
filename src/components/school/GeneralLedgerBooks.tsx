@@ -591,14 +591,14 @@ function ChartOfAccountsDialog({
           <DialogHeader>
             <DialogTitle>Chart of accounts</DialogTitle>
             <DialogDescription>
-              Finbro-style groups by sector. Leaf ledgers post to P&amp;L and balance sheet.
+              Standard account groups by sector. Leaf ledgers feed P&amp;L and the balance sheet.
             </DialogDescription>
           </DialogHeader>
           <div className="mt-3 flex gap-2">
             <Input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Identify resource parameter…"
+              placeholder="Search groups or ledgers…"
               className="h-9 rounded-xl text-[12px]"
             />
             <Button
@@ -612,7 +612,7 @@ function ChartOfAccountsDialog({
                 void apiGlBackfill()
                   .then((r) => {
                     toast.success(
-                      `Backfilled ${r.payments} receipts · ${r.disbursements} payments`,
+                      `Posted ${r.payments} receipts · ${r.disbursements} payments into the ledger`,
                       { description: `${r.skipped} already posted or skipped` },
                     );
                     onRefresh();
@@ -628,7 +628,7 @@ function ChartOfAccountsDialog({
               ) : (
                 <RotateCcw className="mr-1 h-3.5 w-3.5" />
               )}
-              Backfill GL
+              Sync past entries
             </Button>
           </div>
         </div>

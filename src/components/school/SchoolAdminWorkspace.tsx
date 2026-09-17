@@ -7843,7 +7843,7 @@ function FinanceOverview({
         </section>
       </div>
 
-      <section className={cn(glassCardClass, "overflow-hidden p-4 sm:p-5")}>
+      <section className={cn(glassCardClass, "p-4 sm:p-5")}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <h3 className="text-[15px] font-bold text-slate-900">Transactions</h3>
@@ -7909,7 +7909,7 @@ function FinanceOverview({
           </div>
         </div>
 
-        <div className="mt-4 max-h-[min(70vh,720px)] space-y-2.5 overflow-y-auto overscroll-contain pr-1 md:hidden">
+        <div className="mt-4 space-y-2.5 md:hidden">
           {financeTransactions.length === 0 && (
             <div className="rounded-xl border border-dashed border-[#E5E5E5] bg-white/60 px-4 py-8 text-center text-[12px] text-black/55 dark:text-zinc-400">
               No transactions recorded yet
@@ -8050,7 +8050,7 @@ function FinanceOverview({
           ))}
         </div>
 
-        <div className="relative z-0 mt-4 hidden max-h-[min(70vh,720px)] overflow-auto rounded-lg border border-[#E5E5E5] md:block">
+        <div className="relative z-0 mt-4 hidden overflow-x-auto rounded-lg border border-[#E5E5E5] md:block">
           <table className="w-full min-w-[720px] text-left text-[12.5px]">
             <thead className="sticky top-0 z-10">
               <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5]">
@@ -14015,7 +14015,7 @@ function MakePayment() {
             />
           </div>
         )}
-        <div className="mt-3 max-h-[min(70vh,640px)] divide-y divide-[#F0F0F0] overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]">
+        <div className="mt-3 divide-y divide-[#F0F0F0]">
           {madePayments.length === 0 && (
             <div className="py-6 text-center text-[12px] text-black/55 dark:text-zinc-400">
               No outbound payments recorded yet
