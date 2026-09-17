@@ -65,7 +65,59 @@ import { useTenantStore } from "@/lib/tenant-store";
 import { cn } from "@/lib/utils";
 
 function inr(n: number) {
-  return `₹ ${Math.abs(n).toLocaleString("en-IN")}`;
+  const abs = Math.abs(n).toLocaleString("en-IN");
+  if (n < 0) return `₹ −${abs}`;
+  return `₹ ${abs}`;
+}
+
+/** Prefer Cash/Bank and Receive / Make Payment heads over rarely used system ledgers. */
+function ledgerPaymentPriority(account: GlAccount): number {
+  if (account.isCash || account.isBank) return 1000;
+  const name = account.name.toLowerCase();
+  const group = account.groupName.toLowerCase();
+  if (account.nature === "income" || account.sector === "income") {
+    if (/tuition|fee income|donation|vehicle|admission|transport/.test(name)) return 920;
+    return 850;
+  }
+  if (account.nature === "expense" || account.sector === "expenses") {
+    if (/salary|payroll/.test(name)) return 880;
+    return 800;
+  }
+  if (
+    account.isPartyStudent ||
+    /receivable|debtor/.test(name) ||
+    /debtor/.test(group)
+  ) {
+    return 650;
+  }
+  if (
+    account.isPartyStaff ||
+    /payable|creditor|salary payable/.test(name) ||
+    /creditor/.test(group)
+  ) {
+    return 620;
+  }
+  if (account.nature === "equity" || /retained|capital|drawing/.test(name)) return 200;
+  if (/suspense/.test(name)) return 50;
+  return 400;
+}
+
+function sortLedgersByUsage(
+  accounts: GlAccount[],
+  activityById: Map<string, number>,
+): GlAccount[] {
+  return [...accounts].sort((a, b) => {
+    const actA = activityById.get(a.id) ?? 0;
+    const actB = activityById.get(b.id) ?? 0;
+    const usedA = actA > 0 ? 1 : 0;
+    const usedB = actB > 0 ? 1 : 0;
+    if (usedB !== usedA) return usedB - usedA;
+    if (actB !== actA) return actB - actA;
+    const priB = ledgerPaymentPriority(b);
+    const priA = ledgerPaymentPriority(a);
+    if (priB !== priA) return priB - priA;
+    return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+  });
 }
 
 function useGlUpdateAllBooks(onDone?: () => void) {
@@ -148,70 +200,30 @@ function Bone({ className }: { className?: string }) {
   );
 }
 
-function GlStatPillsSkeleton({ count = 4 }: { count?: number }) {
-  return (
-    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-      {Array.from({ length: count }).map((_, i) => (
-        <div
-          key={i}
-          className="rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] px-3 py-2 dark:border-white/10 dark:bg-zinc-900/40"
-        >
-          <Bone className="h-2.5 w-14 rounded-md" />
-          <Bone className="mt-2 h-5 w-[4.5rem] rounded-md" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function GlReportColumnSkeleton({ rows = 4 }: { rows?: number }) {
-  return (
-    <div className="rounded-xl border border-[#EFEFEF] dark:border-white/10">
-      <div className="flex items-center justify-between border-b border-[#EFEFEF] bg-[#FAFAFA] px-3 py-2.5 dark:border-white/10 dark:bg-zinc-900/40">
-        <Bone className="h-3 w-16 rounded-md" />
-        <Bone className="h-3.5 w-20 rounded-md" />
-      </div>
-      <div className="space-y-3.5 p-3">
-        {Array.from({ length: rows }).map((_, i) => (
-          <div key={i} className="space-y-1.5">
-            <div className="flex items-center justify-between gap-3">
-              <Bone className="h-3 w-[42%] rounded-md" />
-              <Bone className="h-3 w-14 shrink-0 rounded-md" />
-            </div>
-            <Bone className="h-2.5 w-[78%] rounded-md bg-black/[0.05] dark:bg-white/[0.05]" />
-            <Bone className="h-2.5 w-[62%] rounded-md bg-black/[0.05] dark:bg-white/[0.05]" />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function GlBalanceSheetSkeleton() {
-  return (
-    <div className="mt-3" aria-busy="true" aria-live="polite" aria-label="Loading balance sheet">
-      <GlStatPillsSkeleton />
-      <div className="mt-4 grid gap-4 md:grid-cols-2">
-        <GlReportColumnSkeleton rows={5} />
-        <div className="space-y-4">
-          <GlReportColumnSkeleton rows={3} />
-          <GlReportColumnSkeleton rows={2} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function GlProfitLossSkeleton() {
   return (
     <div
-      className="mt-4 grid gap-4 md:grid-cols-2"
+      className="mt-4 overflow-hidden rounded-xl border border-[#E5E5E5] dark:border-white/10"
       aria-busy="true"
       aria-live="polite"
       aria-label="Loading profit and loss"
     >
-      <GlReportColumnSkeleton rows={5} />
-      <GlReportColumnSkeleton rows={5} />
+      <div className="grid grid-cols-[1fr_4.5rem_6.5rem] gap-2 bg-[#F4F4F5] px-3 py-2.5 dark:bg-zinc-900">
+        <Bone className="h-2.5 w-24 rounded-md" />
+        <Bone className="ml-auto h-2.5 w-10 rounded-md" />
+        <Bone className="ml-auto h-2.5 w-14 rounded-md" />
+      </div>
+      <div className="divide-y divide-[#EFEFEF] dark:divide-white/10">
+        {Array.from({ length: 10 }).map((_, i) => (
+          <div key={i} className="grid grid-cols-[1fr_4.5rem_6.5rem] items-center gap-2 px-3 py-2.5">
+            <Bone
+              className={cn("h-3 rounded-md", i % 4 === 0 ? "w-28" : "w-[70%]")}
+            />
+            <Bone className="ml-auto h-3 w-8 rounded-md" />
+            <Bone className="ml-auto h-3 w-14 rounded-md" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -343,6 +355,7 @@ export function GlAccountStatementReport() {
   const branchId = useBranchKey();
   const [tree, setTree] = useState<GlAccountGroup[]>([]);
   const [accounts, setAccounts] = useState<GlAccount[]>([]);
+  const [activityById, setActivityById] = useState<Map<string, number>>(() => new Map());
   const [accountId, setAccountId] = useState<string>("");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -354,13 +367,20 @@ export function GlAccountStatementReport() {
   const [setupBusy, setSetupBusy] = useState<"sync" | "fill" | null>(null);
 
   const applyChart = useCallback(
-    (t: Awaited<ReturnType<typeof apiGlChartTree>>, a: GlAccount[], p: GlPeriod | null) => {
+    (
+      t: Awaited<ReturnType<typeof apiGlChartTree>>,
+      a: GlAccount[],
+      p: GlPeriod | null,
+      activity: Map<string, number>,
+    ) => {
       setTree(t.groups.length ? t.groups : defaultGlAccountGroups());
-      setAccounts(a);
+      const ordered = sortLedgersByUsage(a, activity);
+      setAccounts(ordered);
+      setActivityById(activity);
       setPeriod(p);
       setAccountId((prev) => {
-        if (prev && a.some((row) => row.id === prev)) return prev;
-        return a[0]?.id ?? "";
+        if (prev && ordered.some((row) => row.id === prev)) return prev;
+        return ordered[0]?.id ?? "";
       });
     },
     [],
@@ -370,6 +390,7 @@ export function GlAccountStatementReport() {
     if (!getApiToken()) {
       setTree(defaultGlAccountGroups());
       setAccounts([]);
+      setActivityById(new Map());
       setLoading(false);
       return;
     }
@@ -377,13 +398,31 @@ export function GlAccountStatementReport() {
     try {
       // No auto POST here — live Hostinger reports.php still returns 405 for ?gl=chart
       // until chart.php + libs are uploaded. Use “Sync existing ledgers” after deploy.
-      const [t, a, p] = await Promise.all([
+      const [t, a, p, tb] = await Promise.all([
         apiGlChartTree(),
         apiGlListAccounts(true),
         academicYear ? apiGlGetPeriod(academicYear).catch(() => null) : Promise.resolve(null),
+        apiGlReportTrialBalance({ academicYear: academicYear || undefined }).catch(() => ({
+          rows: [] as GlTrialBalanceRow[],
+          totalDebit: 0,
+          totalCredit: 0,
+          balanced: true,
+        })),
       ]);
 
-      applyChart(t, a, p);
+      const activity = new Map<string, number>();
+      for (const row of tb.rows) {
+        const raw = row as GlTrialBalanceRow & {
+          turnoverDebit?: number;
+          turnoverCredit?: number;
+        };
+        const turnover =
+          (Number(raw.turnoverDebit) || 0) + (Number(raw.turnoverCredit) || 0);
+        const closing = (Number(row.debit) || 0) + (Number(row.credit) || 0);
+        activity.set(row.accountId, turnover > 0 ? turnover : closing);
+      }
+
+      applyChart(t, a, p, activity);
     } catch (e) {
       setTree(defaultGlAccountGroups());
       toast.error(e instanceof Error ? e.message : "Could not load chart of accounts");
@@ -467,14 +506,16 @@ export function GlAccountStatementReport() {
 
   const filteredAccounts = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return accounts;
-    return accounts.filter(
-      (a) =>
-        a.name.toLowerCase().includes(q) ||
-        a.code.toLowerCase().includes(q) ||
-        a.groupName.toLowerCase().includes(q),
-    );
-  }, [accounts, query]);
+    const matched = !q
+      ? accounts
+      : accounts.filter(
+          (a) =>
+            a.name.toLowerCase().includes(q) ||
+            a.code.toLowerCase().includes(q) ||
+            a.groupName.toLowerCase().includes(q),
+        );
+    return sortLedgersByUsage(matched, activityById);
+  }, [accounts, activityById, query]);
 
   const selected = accounts.find((a) => a.id === accountId);
 
@@ -487,7 +528,7 @@ export function GlAccountStatementReport() {
               Ledgers
             </h2>
             <p className="mt-0.5 text-[12px] text-black/50 dark:text-zinc-400">
-              Same books as Receive Payment &amp; Make Payment · {academicYear || "this year"}
+              Most-used payment ledgers first · {academicYear || "this year"}
               {period?.status === "closed" ? " · year closed" : ""}
             </p>
           </div>
@@ -582,23 +623,50 @@ export function GlAccountStatementReport() {
                     </div>
                   </li>
                 ) : (
-                  filteredAccounts.map((a) => (
-                    <li key={a.id}>
-                      <button
-                        type="button"
-                        onClick={() => setAccountId(a.id)}
-                        className={cn(
-                          "flex w-full flex-col rounded-lg px-2.5 py-2 text-left transition-colors",
-                          accountId === a.id
-                            ? "bg-[#0F766E]/10 text-[#0F766E]"
-                            : "hover:bg-black/[0.03] dark:hover:bg-white/5",
-                        )}
-                      >
-                        <span className="text-[12.5px] font-semibold">{a.name}</span>
-                        <span className="text-[10px] opacity-70">{a.groupName}</span>
-                      </button>
-                    </li>
-                  ))
+                  filteredAccounts.map((a) => {
+                    const activity = activityById.get(a.id) ?? 0;
+                    const isPaymentHead =
+                      a.isCash ||
+                      a.isBank ||
+                      a.nature === "income" ||
+                      a.nature === "expense" ||
+                      a.sector === "income" ||
+                      a.sector === "expenses";
+                    return (
+                      <li key={a.id}>
+                        <button
+                          type="button"
+                          onClick={() => setAccountId(a.id)}
+                          className={cn(
+                            "flex w-full items-start justify-between gap-2 rounded-lg px-2.5 py-2 text-left transition-colors",
+                            accountId === a.id
+                              ? "bg-[#0F766E]/10 text-[#0F766E]"
+                              : "hover:bg-black/[0.03] dark:hover:bg-white/5",
+                          )}
+                        >
+                          <span className="min-w-0">
+                            <span className="block text-[12.5px] font-semibold">{a.name}</span>
+                            <span className="mt-0.5 block text-[10px] opacity-70">
+                              {a.groupName}
+                              {isPaymentHead ? " · Payment book" : ""}
+                            </span>
+                          </span>
+                          {activity > 0 ? (
+                            <span
+                              className={cn(
+                                "shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[10px] font-semibold",
+                                accountId === a.id
+                                  ? "bg-[#0F766E]/15 text-[#0F766E]"
+                                  : "bg-black/[0.04] text-black/55 dark:bg-white/10 dark:text-zinc-300",
+                              )}
+                            >
+                              {inr(activity)}
+                            </span>
+                          ) : null}
+                        </button>
+                      </li>
+                    );
+                  })
                 )}
               </ul>
             )}
@@ -1527,51 +1595,211 @@ export function GlProfitLossReport() {
       .finally(() => setLoading(false));
   }, [academicYear, branchId, reloadKey]);
 
+  const incomeGroups = (data?.groups ?? []).filter((g) => g.sector === "income");
+  const expenseGroups = (data?.groups ?? []).filter((g) => g.sector === "expenses");
+  const net = data?.netProfit ?? 0;
+  const isProfit = net >= 0;
+
   return (
     <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass()}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h2 className="text-[18px] font-semibold">Profit &amp; Loss</h2>
-          <p className="text-[12px] text-black/50">
-            From general ledger · {academicYear || "all"}
+          <h2 className="text-[18px] font-semibold">Profit &amp; Loss Statement</h2>
+          <p className="mt-1 text-[12px] text-black/50">
+            Income − Expenses = Net Profit / (Loss) · {academicYear || "all periods"}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <GlUpdateAllBooksButton onDone={() => setReloadKey((k) => k + 1)} />
-          {loading ? (
-            <Bone className="h-6 w-[5.5rem] rounded-full" />
-          ) : data ? (
+        <GlUpdateAllBooksButton onDone={() => setReloadKey((k) => k + 1)} />
+      </div>
+
+      {!loading && data ? (
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <StatPill label="A · Total Income" value={data.totalIncome} />
+          <StatPill label="B · Total Expenses" value={data.totalExpenses} />
+          <div
+            className={cn(
+              "rounded-xl border px-3 py-2",
+              isProfit
+                ? "border-emerald-200 bg-emerald-50/80 dark:border-emerald-500/30 dark:bg-emerald-950/30"
+                : "border-rose-200 bg-rose-50/80 dark:border-rose-500/30 dark:bg-rose-950/30",
+            )}
+          >
+            <div className="text-[9px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
+              A − B · Net {isProfit ? "Profit" : "Loss"}
+            </div>
             <div
               className={cn(
-                "rounded-xl px-3 py-2 text-right text-white",
-                data.netProfit >= 0 ? "bg-[#0F766E]" : "bg-rose-600",
+                "font-mono text-[14px] font-semibold",
+                isProfit ? "text-emerald-700 dark:text-emerald-300" : "text-rose-700 dark:text-rose-300",
               )}
             >
-              <div className="text-[9px] font-semibold uppercase tracking-wider opacity-80">
-                Net {data.netProfit >= 0 ? "profit" : "loss"}
-              </div>
-              <div className="font-mono text-[16px] font-bold">{inr(data.netProfit)}</div>
+              {inr(net)}
             </div>
-          ) : null}
+          </div>
         </div>
-      </div>
+      ) : null}
+
       {loading ? (
         <GlProfitLossSkeleton />
+      ) : !data || (incomeGroups.length === 0 && expenseGroups.length === 0) ? (
+        <div className="mt-4 rounded-xl border border-dashed border-black/15 px-4 py-10 text-center text-[12px] text-black/55">
+          No income or expense journals yet — tap{" "}
+          <span className="font-medium text-[#0F766E]">Update all books</span>
+        </div>
       ) : (
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <GlReportGroupColumn
-            title="Income"
-            total={data?.totalIncome ?? 0}
-            groups={(data?.groups ?? []).filter((g) => g.sector === "income")}
-          />
-          <GlReportGroupColumn
-            title="Expenses"
-            total={data?.totalExpenses ?? 0}
-            groups={(data?.groups ?? []).filter((g) => g.sector === "expenses")}
-          />
+        <div className="mobile-scrollbar-none relative z-0 mt-4 overflow-x-auto rounded-xl border border-[#E5E5E5] dark:border-white/10">
+          <table className="w-full min-w-[520px] border-collapse text-left text-[12.5px]">
+            <thead>
+              <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5] dark:border-white/10 dark:bg-zinc-900/80">
+                <th className="px-3.5 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/55">
+                  Particulars
+                </th>
+                <th className="w-[5.5rem] px-3 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-black/55">
+                  Ledger
+                </th>
+                <th className="w-[8rem] px-3.5 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-black/55">
+                  Amount (₹)
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <GlStatementSectionHeader label="Income" />
+              {incomeGroups.map((g) => (
+                <GlStatementGroupRows key={`in-${g.groupName}`} group={g} />
+              ))}
+              <GlStatementTotalRow
+                label="A. Total Income"
+                amount={data.totalIncome}
+                tone="section"
+              />
+
+              <GlStatementSectionHeader label="Expenses" />
+              {expenseGroups.map((g) => (
+                <GlStatementGroupRows key={`ex-${g.groupName}`} group={g} />
+              ))}
+              <GlStatementTotalRow
+                label="B. Total Expenses"
+                amount={data.totalExpenses}
+                tone="section"
+              />
+
+              <GlStatementTotalRow
+                label={isProfit ? "Net Profit (A − B)" : "Net Loss (A − B)"}
+                amount={net}
+                tone={isProfit ? "profit" : "loss"}
+              />
+            </tbody>
+          </table>
         </div>
       )}
     </OrganicCard>
+  );
+}
+
+type GlStatementGroup = {
+  groupName: string;
+  accounts: Array<{
+    accountId: string;
+    code: string;
+    name: string;
+    amount: number;
+    signed?: number;
+  }>;
+  total: number;
+};
+
+function GlStatementSectionHeader({ label }: { label: string }) {
+  return (
+    <tr className="border-b border-[#E5E5E5] bg-[#FAFAFA] dark:border-white/10 dark:bg-zinc-900/50">
+      <td
+        colSpan={3}
+        className="px-3.5 py-2 text-[11px] font-bold uppercase tracking-wider text-black/70 dark:text-zinc-200"
+      >
+        {label}
+      </td>
+    </tr>
+  );
+}
+
+function GlStatementGroupRows({ group }: { group: GlStatementGroup }) {
+  return (
+    <>
+      <tr className="border-b border-[#F0F0F0] bg-white dark:border-white/5 dark:bg-transparent">
+        <td className="px-3.5 py-2 text-[12px] font-semibold text-[#0F766E]" colSpan={2}>
+          {group.groupName}
+        </td>
+        <td className="px-3.5 py-2 text-right font-mono text-[12px] font-semibold text-[#0F766E]">
+          {inr(group.total)}
+        </td>
+      </tr>
+      {group.accounts.map((a) => {
+        const signed = typeof a.signed === "number" ? a.signed : a.amount;
+        return (
+          <tr
+            key={a.accountId}
+            className="border-b border-[#F5F5F5] last:border-0 dark:border-white/5"
+          >
+            <td className="py-2 pl-8 pr-3.5 text-[12.5px] text-black dark:text-zinc-100">
+              {a.name}
+            </td>
+            <td className="px-3 py-2 text-right font-mono text-[11px] text-black/45">
+              {a.code || "—"}
+            </td>
+            <td
+              className={cn(
+                "px-3.5 py-2 text-right font-mono text-[12.5px] tabular-nums",
+                signed < 0 ? "text-[#B91C1C]" : "text-black dark:text-zinc-100",
+              )}
+            >
+              {inr(signed)}
+            </td>
+          </tr>
+        );
+      })}
+    </>
+  );
+}
+
+function GlStatementTotalRow({
+  label,
+  amount,
+  tone,
+}: {
+  label: string;
+  amount: number;
+  tone: "section" | "profit" | "loss";
+}) {
+  return (
+    <tr
+      className={cn(
+        "border-b border-[#E5E5E5] dark:border-white/10",
+        tone === "section" && "bg-[#F4F4F5] dark:bg-zinc-900/70",
+        tone === "profit" && "bg-emerald-50 dark:bg-emerald-950/40",
+        tone === "loss" && "bg-rose-50 dark:bg-rose-950/40",
+      )}
+    >
+      <td
+        colSpan={2}
+        className={cn(
+          "px-3.5 py-3 text-[13px] font-bold",
+          tone === "profit" && "text-emerald-800 dark:text-emerald-200",
+          tone === "loss" && "text-rose-800 dark:text-rose-200",
+          tone === "section" && "text-black dark:text-zinc-50",
+        )}
+      >
+        {label}
+      </td>
+      <td
+        className={cn(
+          "px-3.5 py-3 text-right font-mono text-[13px] font-bold tabular-nums",
+          tone === "profit" && "text-emerald-800 dark:text-emerald-200",
+          tone === "loss" && "text-rose-800 dark:text-rose-200",
+          tone === "section" && "text-black dark:text-zinc-50",
+        )}
+      >
+        {inr(amount)}
+      </td>
+    </tr>
   );
 }
 
@@ -1596,12 +1824,17 @@ export function GlBalanceSheetReport() {
       .finally(() => setLoading(false));
   }, [academicYear, branchId, reloadKey]);
 
+  const assetGroups = (data?.groups ?? []).filter((g) => g.sector === "assets");
+  const liabilityGroups = (data?.groups ?? []).filter((g) => g.sector === "liabilities");
+  const equityGroups = (data?.groups ?? []).filter((g) => g.sector === "equity");
+  const liabilitiesAndEquity = (data?.totalLiabilities ?? 0) + (data?.totalEquity ?? 0);
+
   return (
     <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass()}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h2 className="text-[18px] font-semibold">Balance sheet</h2>
-          <p className="text-[12px] text-black/50">
+          <h2 className="text-[18px] font-semibold">Balance Sheet</h2>
+          <p className="mt-1 text-[12px] text-black/50">
             Assets = Liabilities + Equity · {academicYear || "as of now"}
           </p>
         </div>
@@ -1623,41 +1856,92 @@ export function GlBalanceSheetReport() {
           ) : null}
         </div>
       </div>
+
+      {!loading && data ? (
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <StatPill label="Assets" value={data.totalAssets} />
+          <StatPill label="Liabilities" value={data.totalLiabilities} />
+          <StatPill label="Equity" value={data.totalEquity} />
+          <StatPill label="Period P&L" value={data.currentPeriodProfit} />
+        </div>
+      ) : null}
+
       {loading ? (
-        <GlBalanceSheetSkeleton />
+        <GlProfitLossSkeleton />
+      ) : !data || data.groups.length === 0 ? (
+        <div className="mt-4 rounded-xl border border-dashed border-black/15 px-4 py-10 text-center text-[12px] text-black/55">
+          No journals yet — tap{" "}
+          <span className="font-medium text-[#0F766E]">Update all books</span>
+        </div>
       ) : (
-        <>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <StatPill label="Assets" value={data?.totalAssets ?? 0} />
-            <StatPill label="Liabilities" value={data?.totalLiabilities ?? 0} />
-            <StatPill label="Equity" value={data?.totalEquity ?? 0} />
-            <StatPill label="Period P&L" value={data?.currentPeriodProfit ?? 0} />
-          </div>
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
-            <GlReportGroupColumn
-              title="Assets"
-              total={data?.totalAssets ?? 0}
-              groups={(data?.groups ?? []).filter((g) => g.sector === "assets")}
-            />
-            <div className="space-y-4">
-              <GlReportGroupColumn
-                title="Liabilities"
-                total={data?.totalLiabilities ?? 0}
-                groups={(data?.groups ?? []).filter((g) => g.sector === "liabilities")}
+        <div className="mobile-scrollbar-none relative z-0 mt-4 overflow-x-auto rounded-xl border border-[#E5E5E5] dark:border-white/10">
+          <table className="w-full min-w-[520px] border-collapse text-left text-[12.5px]">
+            <thead>
+              <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5] dark:border-white/10 dark:bg-zinc-900/80">
+                <th className="px-3.5 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/55">
+                  Particulars
+                </th>
+                <th className="w-[5.5rem] px-3 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-black/55">
+                  Ledger
+                </th>
+                <th className="w-[8rem] px-3.5 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-black/55">
+                  Amount (₹)
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <GlStatementSectionHeader label="Assets" />
+              {assetGroups.map((g) => (
+                <GlStatementGroupRows key={`as-${g.groupName}`} group={g} />
+              ))}
+              <GlStatementTotalRow
+                label="Total Assets"
+                amount={data.totalAssets}
+                tone="section"
               />
-              <GlReportGroupColumn
-                title="Equity"
-                total={data?.totalEquity ?? 0}
-                groups={(data?.groups ?? []).filter((g) => g.sector === "equity")}
-                footer={
-                  data?.currentPeriodProfit
-                    ? `Includes current period P&L ${inr(data.currentPeriodProfit)}`
-                    : undefined
-                }
+
+              <GlStatementSectionHeader label="Liabilities" />
+              {liabilityGroups.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="px-3.5 py-2.5 text-[12px] text-black/40">
+                    No liabilities
+                  </td>
+                </tr>
+              ) : (
+                liabilityGroups.map((g) => (
+                  <GlStatementGroupRows key={`li-${g.groupName}`} group={g} />
+                ))
+              )}
+              <GlStatementTotalRow
+                label="Total Liabilities"
+                amount={data.totalLiabilities}
+                tone="section"
               />
-            </div>
-          </div>
-        </>
+
+              <GlStatementSectionHeader label="Equity" />
+              {equityGroups.map((g) => (
+                <GlStatementGroupRows key={`eq-${g.groupName}`} group={g} />
+              ))}
+              {data.currentPeriodProfit !== 0 ? (
+                <tr className="border-b border-[#F5F5F5] dark:border-white/5">
+                  <td colSpan={3} className="px-3.5 py-2 text-[11px] text-black/45">
+                    Includes current period P&amp;L {inr(data.currentPeriodProfit)}
+                  </td>
+                </tr>
+              ) : null}
+              <GlStatementTotalRow
+                label="Total Equity"
+                amount={data.totalEquity}
+                tone="section"
+              />
+              <GlStatementTotalRow
+                label="Total Liabilities + Equity"
+                amount={liabilitiesAndEquity}
+                tone={data.balanced ? "profit" : "loss"}
+              />
+            </tbody>
+          </table>
+        </div>
       )}
     </OrganicCard>
   );
@@ -1668,58 +1952,6 @@ function StatPill({ label, value }: { label: string; value: number }) {
     <div className="rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] px-3 py-2 dark:border-white/10 dark:bg-zinc-900/40">
       <div className="text-[9px] font-semibold uppercase tracking-wider text-black/45">{label}</div>
       <div className="font-mono text-[14px] font-semibold">{inr(value)}</div>
-    </div>
-  );
-}
-
-function GlReportGroupColumn({
-  title,
-  total,
-  groups,
-  footer,
-}: {
-  title: string;
-  total: number;
-  groups: Array<{
-    groupName: string;
-    accounts: Array<{ accountId: string; code: string; name: string; amount: number }>;
-    total: number;
-  }>;
-  footer?: string;
-}) {
-  return (
-    <div className="rounded-xl border border-[#EFEFEF] dark:border-white/10">
-      <div className="flex items-center justify-between border-b border-[#EFEFEF] bg-[#FAFAFA] px-3 py-2 dark:border-white/10 dark:bg-zinc-900/40">
-        <span className="text-[12px] font-semibold uppercase tracking-wider">{title}</span>
-        <span className="font-mono text-[13px] font-bold">{inr(total)}</span>
-      </div>
-      <div className="max-h-[420px] space-y-3 overflow-y-auto p-3">
-        {groups.map((g) => (
-          <div key={g.groupName}>
-            <div className="mb-1 flex justify-between text-[11px] font-semibold text-[#0F766E]">
-              <span>{g.groupName}</span>
-              <span className="font-mono">{inr(Math.abs(g.total))}</span>
-            </div>
-            <ul className="space-y-0.5">
-              {g.accounts.map((a) => (
-                <li key={a.accountId} className="flex justify-between text-[12px]">
-                  <span>
-                    {a.name}{" "}
-                    <span className="font-mono text-[10px] text-black/35">#{a.code}</span>
-                  </span>
-                  <span className="font-mono">{inr(a.amount)}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-        {groups.length === 0 ? (
-          <p className="text-[12px] text-black/40">
-            No journals yet — tap <span className="font-medium text-[#0F766E]">Update all books</span>
-          </p>
-        ) : null}
-        {footer ? <p className="text-[10.5px] text-black/45">{footer}</p> : null}
-      </div>
     </div>
   );
 }

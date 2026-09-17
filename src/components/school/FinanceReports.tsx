@@ -47,7 +47,9 @@ import {
   isClearedDisbursement,
   isSalaryDisbursement,
   normalizePayeeType,
+  paymentBankAmount,
   queuedPayables,
+  salaryPayable,
   totalAccountsPayable,
   totalOperatingExpense,
   type FinanceDisbursement,
@@ -1279,6 +1281,14 @@ export function BalanceSheetReport() {
   const { disbursements } = useDisbursements();
   const schoolName = schoolDetails.name || "School";
   const openPayables = useMemo(() => queuedPayables(disbursements), [disbursements]);
+  const salaryPayableTotal = useMemo(() => salaryPayable(disbursements), [disbursements]);
+  const otherPayableTotal = useMemo(
+    () =>
+      queuedPayables(disbursements)
+        .filter((row) => !isSalaryDisbursement(row))
+        .reduce((sum, row) => sum + row.amount, 0),
+    [disbursements],
+  );
 
   const cashOnHandTotal = useMemo(
     () => cashOnHand(payments, disbursements),
@@ -1325,7 +1335,9 @@ export function BalanceSheetReport() {
     ["Total Assets", inr(totalAssets)],
   ];
   const liabilityRows = [
-    ["Accounts Payable", inr(payables)],
+    ["Salary Payable (Queued)", inr(salaryPayableTotal)],
+    ["Other Accounts Payable", inr(otherPayableTotal)],
+    ["Accounts Payable (Total)", inr(payables)],
     ["Retained Surplus / Equity", inr(equity)],
     ["Total Liabilities & Equity", inr(payables + equity)],
   ];
@@ -1372,7 +1384,9 @@ export function BalanceSheetReport() {
     balanceSheetAmountRow("Accounts Receivable (Fees Due)", receivables),
     balanceSheetAmountRow("Total Assets", totalAssets, true),
     balanceSheetSectionRow("LIABILITIES & EQUITY"),
-    balanceSheetAmountRow("Accounts Payable", payables),
+    balanceSheetAmountRow("Salary Payable (Queued)", salaryPayableTotal),
+    balanceSheetAmountRow("Other Accounts Payable", otherPayableTotal),
+    balanceSheetAmountRow("Accounts Payable (Total)", payables),
     balanceSheetAmountRow("Retained Surplus / Equity", equity),
     balanceSheetAmountRow("Total Liabilities & Equity", payables + equity, true),
   ];
@@ -1391,7 +1405,9 @@ export function BalanceSheetReport() {
       ["Bank & UPI", bankBalanceTotal],
       ["Accounts Receivable", receivables],
       ["Total Assets", totalAssets],
-      ["Accounts Payable", payables],
+      ["Salary Payable (Queued)", salaryPayableTotal],
+      ["Other Accounts Payable", otherPayableTotal],
+      ["Accounts Payable (Total)", payables],
       ["Retained Surplus / Equity", equity],
       ["Total Liabilities & Equity", payables + equity],
     ]);
@@ -1476,7 +1492,14 @@ export function BalanceSheetReport() {
                 key={p.id || p.payee}
                 className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5 text-[12.5px]"
               >
-                <span className="min-w-0 flex-1 truncate font-medium text-black">{p.payee}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-medium text-black">{p.payee}</div>
+                  <div className="mt-0.5 text-[11px] text-black/45">
+                    {isSalaryDisbursement(p) ? "Salary Payable" : "Accounts Payable"}
+                    {p.mode ? ` · ${p.mode}` : ""}
+                    {" · Queued"}
+                  </div>
+                </div>
                 <span className="shrink-0 font-mono text-black">{inr(p.amount)}</span>
               </div>
             ))
@@ -3579,31 +3602,61 @@ type BankReconTxn = {
   name: string;
   cat: string;
   mode: string;
+  /** Signed: receipts positive, bank/UPI Made Payments negative. */
   amount: number;
+  kind: "Receipt" | "Payment";
 };
 
 export function BankReconciliationReport() {
   const { activePayments: payments, academicYear, schoolDetails } = useTenantStore();
+  const { disbursements } = useDisbursements();
   const schoolName = schoolDetails.name || "Silver Hills Global";
 
-  const bankTxns = useMemo<BankReconTxn[]>(
-    () =>
-      payments
-        .filter((p) => p.mode !== "Cash")
-        .map((p) => ({
-          id: p.id,
-          time: formatEventDateTime(p.time),
-          rawTime: p.time,
-          name: p.name,
-          cat: p.cat,
-          mode: p.mode,
-          amount: p.amount,
-        })),
-    [payments],
-  );
+  const bankTxns = useMemo<BankReconTxn[]>(() => {
+    const receipts: BankReconTxn[] = [];
+    for (const p of payments) {
+      const bankAmt = paymentBankAmount(p);
+      if (bankAmt <= 0) continue;
+      receipts.push({
+        id: p.id,
+        time: formatEventDateTime(p.time),
+        rawTime: p.time,
+        name: p.name,
+        cat: p.cat,
+        mode: p.mode,
+        amount: bankAmt,
+        kind: "Receipt",
+      });
+    }
 
-  // Transactions are cleared by default; toggling adds them to the "pending" set
-  // (deposits in transit — recorded in books but not yet on the bank statement).
+    const outflows: BankReconTxn[] = [];
+    for (const d of disbursements) {
+      if (!isClearedDisbursement(d)) continue;
+      const bankAmt = paymentBankAmount({
+        mode: d.mode || "Bank",
+        amount: d.amount,
+        narration: d.desc,
+      });
+      if (bankAmt <= 0) continue;
+      outflows.push({
+        id: d.id || `pay-${d.payee}-${d.amount}-${d.time || ""}`,
+        time: formatEventDateTime(d.time),
+        rawTime: d.time || "",
+        name: d.payee,
+        cat: d.payeeType ? normalizePayeeType(d.payeeType) : "Expense",
+        mode: d.mode || "Bank",
+        amount: -bankAmt,
+        kind: "Payment",
+      });
+    }
+
+    return [...receipts, ...outflows].sort((a, b) =>
+      (b.rawTime || "").localeCompare(a.rawTime || ""),
+    );
+  }, [payments, disbursements]);
+
+  // Cleared by default; uncleared receipts = deposits in transit,
+  // uncleared payments = outstanding bank/UPI outflows.
   const [pending, setPending] = useState<Set<string>>(() => new Set());
   const [statementInput, setStatementInput] = useState("");
   const [query, setQuery] = useState("");
@@ -3630,23 +3683,44 @@ export function BankReconciliationReport() {
     return bankTxns.filter((t) => {
       if (mode !== "all" && t.mode !== mode) return false;
       if (!q) return true;
-      const haystack = [t.id, t.time, t.name, t.cat, t.mode, String(t.amount)]
+      const haystack = [t.id, t.time, t.name, t.cat, t.mode, t.kind, String(t.amount)]
         .join(" ")
         .toLowerCase();
       return haystack.includes(q);
     });
   }, [bankTxns, query, mode]);
 
-  const bookBalance = useMemo(() => bankTxns.reduce((s, t) => s + t.amount, 0), [bankTxns]);
+  const bookBalance = useMemo(
+    () => bankBalance(payments, disbursements),
+    [payments, disbursements],
+  );
   const clearedTotal = useMemo(
     () => bankTxns.filter((t) => isCleared(t.id)).reduce((s, t) => s + t.amount, 0),
     [bankTxns, pending],
   );
-  const unclearedTotal = bookBalance - clearedTotal;
+  const unclearedTxns = useMemo(
+    () => bankTxns.filter((t) => !isCleared(t.id)),
+    [bankTxns, pending],
+  );
+  const depositsInTransit = useMemo(
+    () => unclearedTxns.filter((t) => t.kind === "Receipt").reduce((s, t) => s + t.amount, 0),
+    [unclearedTxns],
+  );
+  const outstandingPayments = useMemo(
+    () =>
+      unclearedTxns
+        .filter((t) => t.kind === "Payment")
+        .reduce((s, t) => s + Math.abs(t.amount), 0),
+    [unclearedTxns],
+  );
+  const unclearedNet = depositsInTransit - outstandingPayments;
   const unclearedCount = pending.size;
+  const depositCount = unclearedTxns.filter((t) => t.kind === "Receipt").length;
+  const outstandingCount = unclearedTxns.filter((t) => t.kind === "Payment").length;
 
   const statementBalance =
     statementInput.trim() === "" ? clearedTotal : Number(statementInput) || 0;
+  const adjustedBalance = statementBalance + depositsInTransit - outstandingPayments;
   const difference = statementBalance - clearedTotal;
   const reconciled = Math.abs(difference) < 0.5;
 
@@ -3656,20 +3730,25 @@ export function BankReconciliationReport() {
     setStatementInput("");
   };
 
+  const formatSignedInr = (amount: number) =>
+    amount < 0 ? `−${inr(Math.abs(amount))}` : inr(amount);
+
   const reconStatementRows: (string | number)[][] = [
     ["Balance as per Bank Statement", inr(statementBalance)],
-    [`Add: Deposits in transit (${unclearedCount} uncleared)`, inr(unclearedTotal)],
-    ["Adjusted Balance (per Books)", inr(statementBalance + unclearedTotal)],
+    [`Add: Deposits in transit (${depositCount})`, inr(depositsInTransit)],
+    [`Less: Outstanding payments (${outstandingCount})`, inr(outstandingPayments)],
+    ["Adjusted Balance (per Books)", inr(adjustedBalance)],
     ["Balance as per Books", inr(bookBalance)],
     ["Unreconciled Difference", inr(difference)],
   ];
 
-  const txnPdfHeaders = ["Voucher", "Date / Time", "Account", "Mode", "Amount (Rs.)"] as const;
+  const txnPdfHeaders = ["Voucher", "Date / Time", "Account", "Type", "Mode", "Amount (Rs.)"] as const;
 
   const mapTxnPdfRow = (txn: BankReconTxn) => [
     txn.id,
     pdfEventDateTime(txn.rawTime),
     truncatePdfCell(txn.name, 64),
+    txn.kind,
     txn.mode,
     txn.amount.toLocaleString("en-IN"),
   ];
@@ -3679,7 +3758,7 @@ export function BankReconciliationReport() {
     return [
       {
         content: `Total (${items.length})`,
-        colSpan: 4,
+        colSpan: 5,
         styles: { fontStyle: "bold" },
       },
       {
@@ -3692,7 +3771,8 @@ export function BankReconciliationReport() {
   const bankReconPdfSummary = () => [
     { label: "Statement Balance", value: pdfInr(statementBalance) },
     { label: "Cleared", value: pdfInr(clearedTotal) },
-    { label: "Uncleared", value: pdfInr(unclearedTotal) },
+    { label: "Deposits in transit", value: pdfInr(depositsInTransit) },
+    { label: "Outstanding payments", value: pdfInr(outstandingPayments) },
     { label: "Difference", value: pdfInr(difference) },
   ];
 
@@ -3702,13 +3782,14 @@ export function BankReconciliationReport() {
     const diffText: [number, number, number] = reconciled ? [5, 150, 105] : [194, 65, 12];
     return [
       ["Balance as per Bank Statement", pdfInr(statementBalance)],
-      [`Add: Deposits in transit (${unclearedCount} uncleared)`, pdfInr(unclearedTotal)],
+      [`Add: Deposits in transit (${depositCount})`, pdfInr(depositsInTransit)],
+      [`Less: Outstanding payments (${outstandingCount})`, pdfInr(outstandingPayments)],
       [
         pdfStatementCell("Adjusted Balance (per Books)", {
           fontStyle: "bold",
           fillColor: totalFill,
         }),
-        pdfStatementCell(pdfInr(statementBalance + unclearedTotal), {
+        pdfStatementCell(pdfInr(adjustedBalance), {
           fontStyle: "bold",
           fillColor: totalFill,
           halign: "right",
@@ -3733,7 +3814,8 @@ export function BankReconciliationReport() {
 
   const emitBankReconPdf = (action: "download" | "print" = "download") => {
     const cleared = bankTxns.filter((txn) => isCleared(txn.id));
-    const uncleared = bankTxns.filter((txn) => !isCleared(txn.id));
+    const unclearedReceipts = unclearedTxns.filter((txn) => txn.kind === "Receipt");
+    const unclearedPayments = unclearedTxns.filter((txn) => txn.kind === "Payment");
     const schedule = (title: string, items: BankReconTxn[]) => ({
       title,
       headers: [...txnPdfHeaders],
@@ -3754,13 +3836,18 @@ export function BankReconciliationReport() {
       striped: false,
       landscape: false,
       appendTables: [
-        ...(uncleared.length
-          ? [schedule(`Deposits in Transit (${uncleared.length} uncleared)`, uncleared)]
+        ...(unclearedReceipts.length
+          ? [schedule(`Deposits in Transit (${unclearedReceipts.length})`, unclearedReceipts)]
           : []),
-        schedule(
-          `Cleared Bank & UPI Receipts (${cleared.length})`,
-          cleared,
-        ),
+        ...(unclearedPayments.length
+          ? [
+              schedule(
+                `Outstanding Bank / UPI Payments (${unclearedPayments.length})`,
+                unclearedPayments,
+              ),
+            ]
+          : []),
+        schedule(`Cleared Bank & UPI Items (${cleared.length})`, cleared),
       ],
       footer: reconciled
         ? "Books agree with the bank statement. Difference is nil."
@@ -3773,12 +3860,13 @@ export function BankReconciliationReport() {
   const handleCsv = () => {
     downloadCsv(
       reportDownloadName("bank-reconciliation", "csv", schoolName, academicYear),
-      ["Voucher", "Date/Time", "Account", "Category", "Mode", "Amount (INR)", "Status"],
+      ["Voucher", "Date/Time", "Account", "Category", "Type", "Mode", "Amount (INR)", "Status"],
       bankTxns.map((t) => [
         t.id,
         pdfEventDateTime(t.rawTime),
         t.name,
         t.cat,
+        t.kind,
         t.mode,
         t.amount,
         isCleared(t.id) ? "Cleared" : "Uncleared",
@@ -3804,7 +3892,8 @@ export function BankReconciliationReport() {
           <div className="min-w-0 flex-1">
             <div className="text-title text-slate-900 dark:text-zinc-50">Bank Reconciliation</div>
             <p className="mt-1 text-[12px] text-black/55">
-              Match recorded bank &amp; UPI receipts against the bank statement · {academicYear}
+              Match bank &amp; UPI receipts and Made Payments against the bank statement ·{" "}
+              {academicYear}
             </p>
           </div>
           <div className="w-full shrink-0 lg:w-auto lg:min-w-[260px]">
@@ -3820,7 +3909,11 @@ export function BankReconciliationReport() {
           items={[
             { label: "Balance per Books", value: inr(bookBalance) },
             { label: "Cleared on Statement", value: inr(clearedTotal) },
-            { label: "Deposits in Transit", value: inr(unclearedTotal), accent: true },
+            {
+              label: "Net Uncleared",
+              value: formatSignedInr(unclearedNet),
+              accent: true,
+            },
           ]}
         />
       </OrganicCard>
@@ -4028,6 +4121,9 @@ export function BankReconciliationReport() {
                             {t.id}
                           </span>
                           <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-black/55 ring-1 ring-black/5 dark:bg-zinc-800 dark:text-zinc-400">
+                            {t.kind}
+                          </span>
+                          <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-black/55 ring-1 ring-black/5 dark:bg-zinc-800 dark:text-zinc-400">
                             {t.mode}
                           </span>
                         </div>
@@ -4039,34 +4135,43 @@ export function BankReconciliationReport() {
                           {t.time ? ` · ${t.time}` : ""}
                         </p>
                       </div>
-                      <div className="shrink-0 text-right font-mono text-[13px] font-semibold text-black dark:text-zinc-100">
-                        {inr(t.amount)}
+                      <div
+                        className={cn(
+                          "shrink-0 text-right font-mono text-[13px] font-semibold",
+                          t.amount < 0
+                            ? "text-[#B91C1C] dark:text-red-400"
+                            : "text-black dark:text-zinc-100",
+                        )}
+                      >
+                        {formatSignedInr(t.amount)}
                       </div>
                     </div>
                   </article>
                 );
               })}
               <div className="rounded-2xl border border-[#E5E5E5] bg-white px-3.5 py-3 text-[12px] font-semibold text-black dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100">
-                Cleared {inr(clearedTotal)} · Uncleared {inr(unclearedTotal)} · Book{" "}
+                Cleared {inr(clearedTotal)} · Uncleared {formatSignedInr(unclearedNet)} · Book{" "}
                 {inr(bookBalance)}
               </div>
             </div>
 
             <div className="mobile-scrollbar-none relative z-0 mt-4 hidden overflow-x-auto rounded-lg border border-[#E5E5E5] md:block">
-              <table className="w-full min-w-[600px] text-left text-[12.5px]">
+              <table className="w-full min-w-[680px] text-left text-[12.5px]">
                 <thead>
                   <tr className="border-b border-[#E5E5E5] bg-[#F4F4F5]">
-                    {["Cleared", "Voucher", "Account", "Mode", "Date / Time", "Amount"].map((h) => (
-                      <th
-                        key={h}
-                        className={cn(
-                          "px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/55",
-                          h === "Amount" && "text-right",
-                        )}
-                      >
-                        {h}
-                      </th>
-                    ))}
+                    {["Cleared", "Voucher", "Account", "Type", "Mode", "Date / Time", "Amount"].map(
+                      (h) => (
+                        <th
+                          key={h}
+                          className={cn(
+                            "px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/55",
+                            h === "Amount" && "text-right",
+                          )}
+                        >
+                          {h}
+                        </th>
+                      ),
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -4092,12 +4197,18 @@ export function BankReconciliationReport() {
                           <div className="font-medium text-black">{t.name}</div>
                           <div className="text-[11px] text-black/45">{t.cat}</div>
                         </td>
+                        <td className="px-3 py-2.5 text-black/70">{t.kind}</td>
                         <td className="px-3 py-2.5 text-black/70">{t.mode}</td>
                         <td className="px-3 py-2.5 font-mono text-[11px] text-black/55">
                           {t.time}
                         </td>
-                        <td className="px-3 py-2.5 text-right font-mono font-semibold text-black">
-                          {inr(t.amount)}
+                        <td
+                          className={cn(
+                            "px-3 py-2.5 text-right font-mono font-semibold",
+                            t.amount < 0 ? "text-[#B91C1C]" : "text-black",
+                          )}
+                        >
+                          {formatSignedInr(t.amount)}
                         </td>
                       </tr>
                     );
@@ -4105,8 +4216,8 @@ export function BankReconciliationReport() {
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-[#E5E5E5] bg-[#FAFAFA] text-[12px] font-semibold text-black">
-                    <td className="px-3 py-3" colSpan={5}>
-                      Cleared {inr(clearedTotal)} · Uncleared {inr(unclearedTotal)}
+                    <td className="px-3 py-3" colSpan={6}>
+                      Cleared {inr(clearedTotal)} · Uncleared {formatSignedInr(unclearedNet)}
                     </td>
                     <td className="px-3 py-3 text-right font-mono">{inr(bookBalance)}</td>
                   </tr>
