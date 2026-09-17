@@ -1,6 +1,7 @@
 export {
   apiBaseUrl,
   apiRequest,
+  apiRequestOrigin,
   getApiToken,
   setApiToken,
   ApiError,

@@ -1,6 +1,6 @@
 import {
-  apiBaseUrl,
   apiRequest,
+  apiRequestOrigin,
   getAuthSessionId,
   getOrCreateDeviceId,
   guessDeviceName,
@@ -68,7 +68,7 @@ export async function apiLogoutCurrentDevice(): Promise<void> {
   const token = window.localStorage.getItem(ACCESS_TOKEN_KEY);
   if (!token) return;
   try {
-    await fetch(`${apiBaseUrl()}/api/auth/logout-device.php`, {
+    await fetch(`${apiRequestOrigin()}/api/auth/logout-device.php`, {
       method: "POST",
       headers: {
         Accept: "application/json",

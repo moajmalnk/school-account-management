@@ -172,6 +172,86 @@ function GlTrialBalanceSkeleton() {
   );
 }
 
+function GlJournalsTableSkeleton() {
+  return (
+    <div
+      className="mt-4 overflow-hidden rounded-xl border border-[#EFEFEF] dark:border-white/10"
+      aria-busy="true"
+      aria-live="polite"
+      aria-label="Loading journals"
+    >
+      <div className="grid grid-cols-6 gap-2 bg-[#F8FAFC] px-3 py-2 dark:bg-zinc-900">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Bone key={i} className={cn("h-2.5 rounded-md", i === 5 && "ml-auto w-12")} />
+        ))}
+      </div>
+      <div className="divide-y divide-[#EFEFEF] dark:divide-white/10">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="grid grid-cols-6 items-center gap-2 px-3 py-2.5">
+            <Bone className="h-3 w-16 rounded-md" />
+            <Bone className="h-3 w-[70%] rounded-md" />
+            <Bone className="h-3 w-12 rounded-md" />
+            <Bone className="h-3 w-[85%] rounded-md" />
+            <Bone className="h-3 w-14 rounded-md" />
+            <Bone className="ml-auto h-3 w-8 rounded-md" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function GlAccountListSkeleton() {
+  return (
+    <ul
+      className="mt-2 max-h-[420px] space-y-1 overflow-hidden rounded-xl border border-[#EFEFEF] p-1.5 dark:border-white/10"
+      aria-busy="true"
+      aria-label="Loading ledgers"
+    >
+      {Array.from({ length: 8 }).map((_, i) => (
+        <li key={i} className="rounded-lg px-2.5 py-2">
+          <Bone className="h-3.5 w-[68%] rounded-md" />
+          <Bone className="mt-1.5 h-2.5 w-[42%] rounded-md" />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function GlStatementSkeleton() {
+  return (
+    <div
+      className="rounded-xl border border-[#EFEFEF] dark:border-white/10"
+      aria-busy="true"
+      aria-label="Loading account statement"
+    >
+      <div className="flex items-start justify-between gap-2 border-b border-[#EFEFEF] bg-[#FAFAFA] px-3 py-3 dark:border-white/10 dark:bg-zinc-900/40">
+        <div className="space-y-2">
+          <Bone className="h-4 w-40 rounded-md" />
+          <Bone className="h-2.5 w-28 rounded-md" />
+        </div>
+        <Bone className="h-12 w-[5.5rem] rounded-xl" />
+      </div>
+      <div className="grid grid-cols-3 gap-2 border-b border-[#EFEFEF] px-3 py-2 dark:border-white/10">
+        <Bone className="h-3 w-24 rounded-md" />
+        <Bone className="h-3 w-20 rounded-md" />
+        <Bone className="h-3 w-20 rounded-md" />
+      </div>
+      <div className="divide-y divide-[#EFEFEF] dark:divide-white/10">
+        {Array.from({ length: 7 }).map((_, i) => (
+          <div key={i} className="grid grid-cols-6 items-center gap-2 px-3 py-2.5">
+            <Bone className="h-3 w-16 rounded-md" />
+            <Bone className="h-3 w-[70%] rounded-md" />
+            <Bone className="col-span-2 h-3 w-[90%] rounded-md" />
+            <Bone className="ml-auto h-3 w-12 rounded-md" />
+            <Bone className="ml-auto h-3 w-12 rounded-md" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function useAcademicYear() {
   const { academicYear } = useTenantStore();
   return academicYear;
@@ -195,6 +275,7 @@ export function GlAccountStatementReport() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [statement, setStatement] = useState<GlAccountLedger | null>(null);
+  const [statementLoading, setStatementLoading] = useState(false);
   const [chartOpen, setChartOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [period, setPeriod] = useState<GlPeriod | null>(null);
@@ -232,15 +313,20 @@ export function GlAccountStatementReport() {
   useEffect(() => {
     if (!accountId || !getApiToken()) {
       setStatement(null);
+      setStatementLoading(false);
       return;
     }
     let cancelled = false;
+    setStatementLoading(true);
     void apiGlReportAccountLedger({ accountId, academicYear: academicYear || undefined })
       .then((s) => {
         if (!cancelled) setStatement(s);
       })
       .catch(() => {
         if (!cancelled) setStatement(null);
+      })
+      .finally(() => {
+        if (!cancelled) setStatementLoading(false);
       });
     return () => {
       cancelled = true;
@@ -307,39 +393,41 @@ export function GlAccountStatementReport() {
                 className="h-9 rounded-xl pl-8 text-[12px]"
               />
             </div>
-            <ul className="mt-2 max-h-[420px] space-y-1 overflow-y-auto rounded-xl border border-[#EFEFEF] p-1.5 dark:border-white/10">
-              {loading ? (
-                <li className="flex items-center gap-2 px-2 py-3 text-[12px] text-black/45">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…
-                </li>
-              ) : filteredAccounts.length === 0 ? (
-                <li className="px-2 py-3 text-[12px] text-black/45">No ledgers yet</li>
-              ) : (
-                filteredAccounts.map((a) => (
-                  <li key={a.id}>
-                    <button
-                      type="button"
-                      onClick={() => setAccountId(a.id)}
-                      className={cn(
-                        "flex w-full flex-col rounded-lg px-2.5 py-2 text-left transition-colors",
-                        accountId === a.id
-                          ? "bg-[#0F766E]/10 text-[#0F766E]"
-                          : "hover:bg-black/[0.03] dark:hover:bg-white/5",
-                      )}
-                    >
-                      <span className="text-[12.5px] font-semibold">{a.name}</span>
-                      <span className="font-mono text-[10px] opacity-70">
-                        #{a.code} · {a.groupName}
-                      </span>
-                    </button>
-                  </li>
-                ))
-              )}
-            </ul>
+            {loading ? (
+              <GlAccountListSkeleton />
+            ) : (
+              <ul className="mt-2 max-h-[420px] space-y-1 overflow-y-auto rounded-xl border border-[#EFEFEF] p-1.5 dark:border-white/10">
+                {filteredAccounts.length === 0 ? (
+                  <li className="px-2 py-3 text-[12px] text-black/45">No ledgers yet</li>
+                ) : (
+                  filteredAccounts.map((a) => (
+                    <li key={a.id}>
+                      <button
+                        type="button"
+                        onClick={() => setAccountId(a.id)}
+                        className={cn(
+                          "flex w-full flex-col rounded-lg px-2.5 py-2 text-left transition-colors",
+                          accountId === a.id
+                            ? "bg-[#0F766E]/10 text-[#0F766E]"
+                            : "hover:bg-black/[0.03] dark:hover:bg-white/5",
+                        )}
+                      >
+                        <span className="text-[12.5px] font-semibold">{a.name}</span>
+                        <span className="font-mono text-[10px] opacity-70">
+                          #{a.code} · {a.groupName}
+                        </span>
+                      </button>
+                    </li>
+                  ))
+                )}
+              </ul>
+            )}
           </div>
 
           <div className="lg:col-span-8">
-            {selected && statement ? (
+            {loading || statementLoading ? (
+              <GlStatementSkeleton />
+            ) : selected && statement ? (
               <div className="rounded-xl border border-[#EFEFEF] dark:border-white/10">
                 <div className="flex flex-wrap items-start justify-between gap-2 border-b border-[#EFEFEF] bg-[#FAFAFA] px-3 py-3 dark:border-white/10 dark:bg-zinc-900/40">
                   <div>
@@ -431,7 +519,7 @@ export function GlAccountStatementReport() {
               </div>
             ) : (
               <div className="grid min-h-[200px] place-items-center rounded-xl border border-dashed border-[#E5E5E5] text-[13px] text-black/40 dark:border-white/10">
-                {loading ? "Loading chart…" : "Select a ledger to view its statement"}
+                Select a ledger to view its statement
               </div>
             )}
           </div>
@@ -757,11 +845,21 @@ export function GlTrialBalanceReport() {
         <span
           className={cn(
             "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold",
-            balanced ? "bg-emerald-500/15 text-emerald-700" : "bg-rose-500/15 text-rose-700",
+            loading
+              ? "bg-black/[0.04] dark:bg-white/5"
+              : balanced
+                ? "bg-emerald-500/15 text-emerald-700"
+                : "bg-rose-500/15 text-rose-700",
           )}
         >
-          <CheckCircle2 className="h-3.5 w-3.5" />
-          {balanced ? "Balanced" : "Out of balance"}
+          {loading ? (
+            <Bone className="h-3 w-16 rounded-full" />
+          ) : (
+            <>
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              {balanced ? "Balanced" : "Out of balance"}
+            </>
+          )}
         </span>
       </div>
       {loading ? (
@@ -943,9 +1041,7 @@ export function GlJournalsReport() {
         </div>
 
         {loading ? (
-          <div className="mt-6 flex items-center gap-2 text-[12px] text-black/45">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…
-          </div>
+          <GlJournalsTableSkeleton />
         ) : (
           <div className="mt-4 overflow-auto rounded-xl border border-[#EFEFEF] dark:border-white/10">
             <table className="w-full text-left text-[12px]">

@@ -33,11 +33,26 @@ export const PRODUCTION_API_BASE_URL = "https://api.feezo.app";
 /** Fail fast when api.feezo.app is unreachable instead of waiting for browser TCP timeout. */
 export const API_REQUEST_TIMEOUT_MS = 12_000;
 
-/** API base URL for School Admin Console backend (api.feezo.app). */
+/** API origin for media / absolute links (always Hostinger, including in Vite). */
 export function apiBaseUrl(): string {
   const raw = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
   if (raw) return raw.replace(/\/$/, "");
   return PRODUCTION_API_BASE_URL;
+}
+
+function isLocalBrowserHost(): boolean {
+  if (typeof window === "undefined") return false;
+  const host = window.location.hostname;
+  return host === "localhost" || host === "127.0.0.1" || host === "::1";
+}
+
+/**
+ * Origin used by fetch(). Vite proxies `/api` → api.feezo.app, so local
+ * requests stay same-origin and skip CORS on missing Hostinger PHP files.
+ */
+export function apiRequestOrigin(): string {
+  if (import.meta.env.DEV || isLocalBrowserHost()) return "";
+  return apiBaseUrl();
 }
 
 export function isApiConfigured(): boolean {
@@ -238,7 +253,7 @@ async function postRefresh(refreshToken: string): Promise<{
   status: number;
   data: RefreshResponse | null;
 }> {
-  const res = await fetch(`${apiBaseUrl()}/api/auth/refresh.php`, {
+  const res = await fetch(`${apiRequestOrigin()}/api/auth/refresh.php`, {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -391,7 +406,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     }
   }
 
-  const url = `${apiBaseUrl()}${path.startsWith("/") ? path : `/${path}`}`;
+  const url = `${apiRequestOrigin()}${path.startsWith("/") ? path : `/${path}`}`;
   const timeoutController = new AbortController();
   const timeoutId =
     timeoutMs > 0

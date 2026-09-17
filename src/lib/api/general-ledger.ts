@@ -104,17 +104,57 @@ function hasToken() {
   return Boolean(getApiToken());
 }
 
+/** Live `reports.php` — chart.php / journals.php / periods.php are not on Hostinger yet. */
+function glResourcePath(
+  resource: "chart" | "journals" | "periods",
+  params?: Record<string, string | undefined>,
+): string {
+  const q = new URLSearchParams();
+  q.set("gl", resource);
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      if (value) q.set(key, value);
+    }
+  }
+  return `/api/finance/reports.php?${q}`;
+}
+
+async function glSafe<T>(run: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await run();
+  } catch {
+    return fallback;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 export async function apiGlChartTree(): Promise<{
   sectors: string[];
   groups: GlAccountGroup[];
 }> {
   if (!hasToken()) return { sectors: [], groups: [] };
-  return apiRequest("/api/finance/chart.php?resource=tree");
+  const empty = { sectors: [] as string[], groups: [] as GlAccountGroup[] };
+  const data = await glSafe(
+    () => apiRequest<unknown>(glResourcePath("chart", { resource: "tree" })),
+    empty,
+  );
+  if (!isRecord(data) || !Array.isArray(data.groups)) return empty;
+  return {
+    sectors: Array.isArray(data.sectors) ? (data.sectors as string[]) : [],
+    groups: data.groups as GlAccountGroup[],
+  };
 }
 
 export async function apiGlListAccounts(activeOnly = true): Promise<GlAccount[]> {
   if (!hasToken()) return [];
-  return apiRequest(`/api/finance/chart.php?active=${activeOnly ? "1" : "0"}`);
+  const data = await glSafe(
+    () => apiRequest<unknown>(glResourcePath("chart", { active: activeOnly ? "1" : "0" })),
+    [] as unknown,
+  );
+  return Array.isArray(data) ? (data as GlAccount[]) : [];
 }
 
 export async function apiGlCreateAccount(body: {
@@ -126,14 +166,14 @@ export async function apiGlCreateAccount(body: {
   isPartyStudent?: boolean;
   isPartyStaff?: boolean;
 }): Promise<GlAccount> {
-  return apiRequest("/api/finance/chart.php", { method: "POST", body });
+  return apiRequest(glResourcePath("chart"), { method: "POST", body });
 }
 
 export async function apiGlUpdateAccount(
   id: string,
   body: Partial<GlAccount> & { groupId?: string },
 ): Promise<GlAccount> {
-  return apiRequest("/api/finance/chart.php", {
+  return apiRequest(glResourcePath("chart"), {
     method: "PUT",
     body: { id, ...body },
   });
@@ -144,7 +184,7 @@ export async function apiGlBackfill(): Promise<{
   disbursements: number;
   skipped: number;
 }> {
-  return apiRequest("/api/finance/chart.php", {
+  return apiRequest(glResourcePath("chart"), {
     method: "POST",
     body: { _backfill: true },
   });
@@ -157,13 +197,19 @@ export async function apiGlListJournals(params?: {
   voucherType?: string;
 }): Promise<GlJournal[]> {
   if (!hasToken()) return [];
-  const q = new URLSearchParams();
-  if (params?.from) q.set("from", params.from);
-  if (params?.to) q.set("to", params.to);
-  if (params?.academicYear) q.set("academicYear", params.academicYear);
-  if (params?.voucherType) q.set("voucherType", params.voucherType);
-  const qs = q.toString();
-  return apiRequest(`/api/finance/journals.php${qs ? `?${qs}` : ""}`);
+  const data = await glSafe(
+    () =>
+      apiRequest<unknown>(
+        glResourcePath("journals", {
+          from: params?.from,
+          to: params?.to,
+          academicYear: params?.academicYear,
+          voucherType: params?.voucherType,
+        }),
+      ),
+    [] as unknown,
+  );
+  return Array.isArray(data) ? (data as GlJournal[]) : [];
 }
 
 export async function apiGlCreateJournal(body: {
@@ -173,11 +219,11 @@ export async function apiGlCreateJournal(body: {
   narration?: string;
   lines: Array<{ accountId: string; debit: number; credit: number; description?: string }>;
 }): Promise<GlJournal> {
-  return apiRequest("/api/finance/journals.php", { method: "POST", body });
+  return apiRequest(glResourcePath("journals"), { method: "POST", body });
 }
 
 export async function apiGlVoidJournal(id: string): Promise<GlJournal> {
-  return apiRequest("/api/finance/journals.php", {
+  return apiRequest(glResourcePath("journals"), {
     method: "POST",
     body: { _void: true, id },
   });
@@ -189,10 +235,6 @@ function glReportsQuery(params: Record<string, string | undefined>): string {
     if (value) q.set(key, value);
   }
   return `/api/finance/reports.php?${q}`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 export async function apiGlReportTrialBalance(params?: {
@@ -230,16 +272,22 @@ export async function apiGlReportAccountLedger(params: {
   from?: string;
   to?: string;
   academicYear?: string;
-}): Promise<GlAccountLedger> {
-  return apiRequest(
-    glReportsQuery({
-      report: "accountLedger",
-      accountId: params.accountId,
-      from: params.from,
-      to: params.to,
-      academicYear: params.academicYear,
-    }),
+}): Promise<GlAccountLedger | null> {
+  const data = await glSafe(
+    () =>
+      apiRequest<unknown>(
+        glReportsQuery({
+          report: "accountLedger",
+          accountId: params.accountId,
+          from: params.from,
+          to: params.to,
+          academicYear: params.academicYear,
+        }),
+      ),
+    null,
   );
+  if (!isRecord(data) || !isRecord(data.account) || !Array.isArray(data.lines)) return null;
+  return data as unknown as GlAccountLedger;
 }
 
 export async function apiGlReportProfitLoss(params?: {
@@ -339,18 +387,29 @@ export async function apiGlReportBalanceSheet(params?: {
 }
 
 export async function apiGlGetPeriod(year: string): Promise<GlPeriod> {
-  return apiRequest(`/api/finance/periods.php?academicYear=${encodeURIComponent(year)}`);
+  const fallback: GlPeriod = { yearLabel: year, status: "open" };
+  const data = await glSafe(
+    () => apiRequest<unknown>(glResourcePath("periods", { academicYear: year })),
+    fallback,
+  );
+  if (!isRecord(data) || typeof data.status !== "string") return fallback;
+  return {
+    yearLabel: typeof data.yearLabel === "string" ? data.yearLabel : year,
+    status: data.status,
+    closedAt: typeof data.closedAt === "string" ? data.closedAt : null,
+    reopenNote: typeof data.reopenNote === "string" ? data.reopenNote : null,
+  };
 }
 
 export async function apiGlClosePeriod(year: string): Promise<GlPeriod> {
-  return apiRequest("/api/finance/periods.php", {
+  return apiRequest(glResourcePath("periods"), {
     method: "POST",
     body: { action: "close", academicYear: year },
   });
 }
 
 export async function apiGlReopenPeriod(year: string, note?: string): Promise<GlPeriod> {
-  return apiRequest("/api/finance/periods.php", {
+  return apiRequest(glResourcePath("periods"), {
     method: "POST",
     body: { action: "reopen", academicYear: year, note: note ?? "Reopened" },
   });
