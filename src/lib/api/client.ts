@@ -40,18 +40,8 @@ export function apiBaseUrl(): string {
   return PRODUCTION_API_BASE_URL;
 }
 
-function isLocalBrowserHost(): boolean {
-  if (typeof window === "undefined") return false;
-  const host = window.location.hostname;
-  return host === "localhost" || host === "127.0.0.1" || host === "::1";
-}
-
-/**
- * Origin used by fetch(). Vite proxies `/api` → api.feezo.app, so local
- * requests stay same-origin and skip CORS on missing Hostinger PHP files.
- */
+/** Browser fetch always hits production Hostinger — never a local PHP server. */
 export function apiRequestOrigin(): string {
-  if (import.meta.env.DEV || isLocalBrowserHost()) return "";
   return apiBaseUrl();
 }
 

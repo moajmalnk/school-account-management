@@ -259,7 +259,12 @@ import {
   emptyConcessionState,
   type StudentConcessionState,
 } from "@/components/school/StudentConcessionSection";
-import { isPeriodOnBreak, sumStudentFeeRoster } from "@/lib/student-fees";
+import {
+  isPeriodOnBreak,
+  buildStudentFeeStatement,
+  sumStudentFeeRoster,
+  withLiveStudentFeeDues,
+} from "@/lib/student-fees";
 import {
   concessionOtherFeePrefillAmount,
   concessionVehiclePrefillAmount,
@@ -3406,9 +3411,63 @@ export function StudentsLedger() {
     }
   }, [classDivisionIndex, gradeFilter, divisionFilter]);
 
+  /** Same totals / dues as each student Payments tab — not the stored student.due cache. */
+  const feeTotals = useMemo(
+    () =>
+      sumStudentFeeRoster({
+        students: liveStudents,
+        payments: activePayments,
+        classes,
+        feeTerms: activeFeeTerms,
+        transportRoutes,
+        academicYear,
+        feeBreaks: studentFeeBreaks,
+      }),
+    [
+      liveStudents,
+      activePayments,
+      classes,
+      activeFeeTerms,
+      transportRoutes,
+      academicYear,
+      studentFeeBreaks,
+    ],
+  );
+
+  const directoryStudents = useMemo(
+    () => withLiveStudentFeeDues(liveStudents, feeTotals.dueByStudentId),
+    [liveStudents, feeTotals.dueByStudentId],
+  );
+
+  // Heal stale student.due (often left at 0 on admit) from the live fee statement.
+  useEffect(() => {
+    if (!hydrated || !branchContentReady) return;
+    const dueById = feeTotals.dueByStudentId;
+    const needsHeal = liveStudents.some((s) => {
+      const live = dueById[s.id];
+      if (typeof live !== "number" || !Number.isFinite(live)) return false;
+      return Math.round(s.due) !== Math.max(0, Math.round(live));
+    });
+    if (!needsHeal) return;
+    setStudents((prev) =>
+      prev.map((s) => {
+        const live = dueById[s.id];
+        if (typeof live !== "number" || !Number.isFinite(live)) return s;
+        const due = Math.max(0, Math.round(live));
+        return Math.round(s.due) === due ? s : { ...s, due };
+      }),
+    );
+  }, [
+    hydrated,
+    branchContentReady,
+    liveStudents,
+    feeTotals.dueByStudentId,
+    setStudents,
+  ]);
+
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return liveStudents
+    return directoryStudents
       .filter((s) => studentMatchesClassDivisionFilter(s.cls, gradeFilter, divisionFilter))
       .filter((s) =>
         statusFilter === "all" ? true : statusFilter === "paid" ? s.due === 0 : s.due > 0,
@@ -3424,7 +3483,7 @@ export function StudentsLedger() {
           .toLowerCase();
         return haystack.includes(q);
       });
-  }, [liveStudents, gradeFilter, divisionFilter, statusFilter, enrollmentFilter, searchQuery]);
+  }, [directoryStudents, gradeFilter, divisionFilter, statusFilter, enrollmentFilter, searchQuery]);
 
   useEffect(() => {
     setSelectedIds((prev) => {
@@ -3778,36 +3837,13 @@ export function StudentsLedger() {
 
   const analytics = useMemo(
     () => ({
-      paid: liveStudents.filter((s) => s.due === 0).length,
-      overdue: liveStudents.filter((s) => s.due > 0).length,
-      total: liveStudents.length,
-      male: liveStudents.filter((s) => s.gender === "M").length,
-      female: liveStudents.filter((s) => s.gender === "F").length,
+      paid: feeTotals.paidCount,
+      overdue: feeTotals.outstandingCount,
+      total: directoryStudents.length,
+      male: directoryStudents.filter((s) => s.gender === "M").length,
+      female: directoryStudents.filter((s) => s.gender === "F").length,
     }),
-    [liveStudents],
-  );
-
-  /** Same totals as each student Payments tab, summed across the active-year roster. */
-  const feeTotals = useMemo(
-    () =>
-      sumStudentFeeRoster({
-        students: liveStudents,
-        payments: activePayments,
-        classes,
-        feeTerms: activeFeeTerms,
-        transportRoutes,
-        academicYear,
-        feeBreaks: studentFeeBreaks,
-      }),
-    [
-      liveStudents,
-      activePayments,
-      classes,
-      activeFeeTerms,
-      transportRoutes,
-      academicYear,
-      studentFeeBreaks,
-    ],
+    [directoryStudents, feeTotals.paidCount, feeTotals.outstandingCount],
   );
 
   const feeTotalDueCleared = feeTotals.pendingDue <= 0;
@@ -7438,10 +7474,16 @@ function FinanceOverview({
       return;
     }
     try {
-      void navigator.clipboard.writeText(text);
-      toast.success("Copied for WhatsApp", {
-        description: "Paste into WhatsApp if the app did not open",
-      });
+      void navigator.clipboard.writeText(text).then(
+        () => {
+          toast.success("Copied for WhatsApp", {
+            description: "Paste into WhatsApp if the app did not open",
+          });
+        },
+        () => {
+          toast.error("Could not copy · WhatsApp did not open");
+        },
+      );
     } catch {
       toast.error("Could not open WhatsApp");
     }
@@ -10588,10 +10630,16 @@ function ReceivePayment() {
       return;
     }
     try {
-      void navigator.clipboard.writeText(text);
-      toast.success("Copied for WhatsApp", {
-        description: "Paste into WhatsApp if the app did not open",
-      });
+      void navigator.clipboard.writeText(text).then(
+        () => {
+          toast.success("Copied for WhatsApp", {
+            description: "Paste into WhatsApp if the app did not open",
+          });
+        },
+        () => {
+          toast.error("Could not copy · WhatsApp did not open");
+        },
+      );
     } catch {
       toast.error("Could not open WhatsApp");
     }
@@ -11033,16 +11081,25 @@ function ReceivePayment() {
         reduceDue: true,
         studentId: selected.id,
       });
-      setPayments((prev) => [saved, ...prev.filter((p) => p.id !== saved.id)]);
+      const paymentsAfter = [saved, ...payments.filter((p) => p.id !== saved.id)];
+      const liveDue = buildStudentFeeStatement({
+        student: selected,
+        payments: paymentsAfter,
+        classes: classConfigs,
+        feeTerms,
+        transportRoutes,
+        academicYear,
+        feeBreaks: studentFeeBreaks,
+      }).totalDue;
+      setPayments(paymentsAfter);
       setStudents((prev) =>
-        prev.map((s) => (s.id === selected.id ? { ...s, due: Math.max(0, s.due - value) } : s)),
+        prev.map((s) => (s.id === selected.id ? { ...s, due: liveDue } : s)),
       );
-      const remaining = Math.max(0, selected.due - value);
       toast.success(`Receipt ${saved.id} · ₹ ${value.toLocaleString("en-IN")} captured`, {
         description:
-          remaining === 0
+          liveDue === 0
             ? `${selected.name}'s balance is now Cleared · ${periodLabel}`
-            : `${selected.name} · ${periodLabel} · balance ₹ ${remaining.toLocaleString("en-IN")}`,
+            : `${selected.name} · ${periodLabel} · balance ₹ ${liveDue.toLocaleString("en-IN")}`,
       });
       const resetPeriod = defaultFeePeriod(
         feeTerms,
@@ -11236,7 +11293,20 @@ function ReceivePayment() {
     setFeeImportProgress({ current: 0, total: rows.length });
     const previewSkipped = feeImportReady.filter((row) => row.duplicate).length;
     const invalidSkipped = feeImportIssues.length;
-    const dueByStudent = new Map(students.map((s) => [s.id, s.due]));
+    const dueByStudent = new Map(
+      students.map((s) => [
+        s.id,
+        buildStudentFeeStatement({
+          student: s,
+          payments,
+          classes: classConfigs,
+          feeTerms,
+          transportRoutes,
+          academicYear,
+          feeBreaks: studentFeeBreaks,
+        }).totalDue,
+      ]),
+    );
 
     const finish = (ok: number, failed: number, extraSkipped: number) => {
       const skipped = previewSkipped + extraSkipped;
@@ -13395,10 +13465,16 @@ function MakePayment() {
       return;
     }
     try {
-      void navigator.clipboard.writeText(text);
-      toast.success("Copied for WhatsApp", {
-        description: "Paste into WhatsApp if the app did not open",
-      });
+      void navigator.clipboard.writeText(text).then(
+        () => {
+          toast.success("Copied for WhatsApp", {
+            description: "Paste into WhatsApp if the app did not open",
+          });
+        },
+        () => {
+          toast.error("Could not copy · WhatsApp did not open");
+        },
+      );
     } catch {
       toast.error("Could not open WhatsApp");
     }

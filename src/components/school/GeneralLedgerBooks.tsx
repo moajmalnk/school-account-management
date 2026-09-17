@@ -25,7 +25,9 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -47,6 +49,8 @@ import {
   apiGlReportProfitLoss,
   apiGlReportTrialBalance,
   apiGlVoidJournal,
+  defaultGlAccountGroups,
+  GL_SECTORS,
   type GlAccount,
   type GlAccountGroup,
   type GlAccountLedger,
@@ -282,7 +286,7 @@ export function GlAccountStatementReport() {
 
   const loadChart = useCallback(async () => {
     if (!getApiToken()) {
-      setTree([]);
+      setTree(defaultGlAccountGroups());
       setAccounts([]);
       setLoading(false);
       return;
@@ -294,11 +298,12 @@ export function GlAccountStatementReport() {
         apiGlListAccounts(true),
         academicYear ? apiGlGetPeriod(academicYear).catch(() => null) : Promise.resolve(null),
       ]);
-      setTree(t.groups);
+      setTree(t.groups.length ? t.groups : defaultGlAccountGroups());
       setAccounts(a);
       setPeriod(p);
       if (!accountId && a[0]) setAccountId(a[0].id);
     } catch (e) {
+      setTree(defaultGlAccountGroups());
       toast.error(e instanceof Error ? e.message : "Could not load chart of accounts");
     } finally {
       setLoading(false);
@@ -536,6 +541,7 @@ export function GlAccountStatementReport() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         groups={tree}
+        academicYear={academicYear}
         onCreated={(acct) => {
           void loadChart().then(() => setAccountId(acct.id));
         }}
@@ -682,43 +688,62 @@ function CreateLedgerDialog({
   open,
   onOpenChange,
   groups,
+  academicYear,
   onCreated,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   groups: GlAccountGroup[];
+  academicYear: string;
   onCreated: (a: GlAccount) => void;
 }) {
   const [name, setName] = useState("");
   const [groupId, setGroupId] = useState("");
-  const [isCash, setIsCash] = useState(false);
-  const [isBank, setIsBank] = useState(false);
-  const [isPartyStudent, setIsPartyStudent] = useState(false);
-  const [isPartyStaff, setIsPartyStaff] = useState(false);
+  const [opening, setOpening] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (open && !groupId && groups[0]) setGroupId(groups[0].id);
-  }, [open, groups, groupId]);
+    if (!open) return;
+    setName("");
+    setOpening("");
+    setGroupId(groups[0]?.id ?? "");
+  }, [open, groups]);
+
+  const selectedGroup = groups.find((g) => g.id === groupId);
+  const sectorLabel: Record<string, string> = {
+    assets: "Money & property",
+    liabilities: "Loans & payables",
+    equity: "Capital",
+    income: "Income",
+    expenses: "Expenses",
+    other: "Other",
+  };
 
   const submit = async () => {
-    if (!name.trim() || !groupId) {
-      toast.error("Name and ledger group are required");
+    if (groups.length === 0) {
+      toast.error("Chart of accounts is not installed on this server yet");
       return;
     }
+    if (!name.trim() || !groupId) {
+      toast.error("Enter a ledger name and choose a group");
+      return;
+    }
+    const openingAmount = Math.round(Math.abs(Number.parseFloat(opening.replace(/,/g, "")) || 0));
     setSaving(true);
     try {
       const acct = await apiGlCreateAccount({
         name: name.trim(),
         groupId,
-        isCash,
-        isBank,
-        isPartyStudent,
-        isPartyStaff,
+        openingBalance: openingAmount || undefined,
+        openingDate: new Date().toISOString().slice(0, 10),
+        academicYear: academicYear || undefined,
       });
-      toast.success(`Ledger ${acct.name} created`, { description: `Code #${acct.code}` });
+      toast.success(`${acct.name} is ready`, {
+        description: openingAmount
+          ? `Opening balance ₹ ${openingAmount.toLocaleString("en-IN")}`
+          : `Code #${acct.code}`,
+      });
       onOpenChange(false);
-      setName("");
       onCreated(acct);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not create ledger");
@@ -732,56 +757,63 @@ function CreateLedgerDialog({
       <DialogContent className="max-w-md rounded-2xl">
         <DialogHeader>
           <DialogTitle>New ledger</DialogTitle>
-          <DialogDescription>Account code is assigned automatically from the group.</DialogDescription>
+          <DialogDescription>
+            Name the account, choose where it belongs, and add an opening balance if money is
+            already sitting there.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div>
-            <Label className="text-[10px] uppercase tracking-wider text-black/45">Ledger name</Label>
+            <Label className="text-[10px] uppercase tracking-wider text-black/45">Name</Label>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="mt-1 h-9 rounded-xl"
-              placeholder="e.g. HDFC Current"
+              placeholder="e.g. HDFC Current, Petty cash, Fee income"
             />
           </div>
           <div>
-            <Label className="text-[10px] uppercase tracking-wider text-black/45">Ledger group</Label>
+            <Label className="text-[10px] uppercase tracking-wider text-black/45">Group</Label>
             <Select value={groupId} onValueChange={setGroupId}>
               <SelectTrigger className="mt-1 h-9 rounded-xl">
-                <SelectValue placeholder="Select group" />
+                <SelectValue placeholder="Where does this belong?" />
               </SelectTrigger>
               <SelectContent>
-                {groups.map((g) => (
-                  <SelectItem key={g.id} value={g.id}>
-                    {g.name} ({g.sector})
-                  </SelectItem>
-                ))}
+                {GL_SECTORS.map((sector) => {
+                  const items = groups.filter((g) => g.sector === sector);
+                  if (items.length === 0) return null;
+                  return (
+                    <SelectGroup key={sector}>
+                      <SelectLabel className="uppercase tracking-wider text-black/40">
+                        {sectorLabel[sector] ?? sector}
+                      </SelectLabel>
+                      {items.map((g) => (
+                        <SelectItem key={g.id} value={g.id}>
+                          {g.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  );
+                })}
               </SelectContent>
             </Select>
           </div>
-          <div className="grid grid-cols-2 gap-2 text-[11px]">
-            {(
-              [
-                ["Cash account", isCash, setIsCash],
-                ["Bank account", isBank, setIsBank],
-                ["Student related", isPartyStudent, setIsPartyStudent],
-                ["Employee related", isPartyStaff, setIsPartyStaff],
-              ] as const
-            ).map(([label, val, set]) => (
-              <button
-                key={label}
-                type="button"
-                onClick={() => set(!val)}
-                className={cn(
-                  "rounded-full border px-2 py-1.5",
-                  val
-                    ? "border-[#0F766E] bg-[#0F766E] text-white"
-                    : "border-[#E5E5E5] bg-white dark:border-white/10",
-                )}
-              >
-                {label}
-              </button>
-            ))}
+          <div>
+            <Label className="text-[10px] uppercase tracking-wider text-black/45">
+              Opening balance
+            </Label>
+            <Input
+              inputMode="decimal"
+              value={opening}
+              onChange={(e) => setOpening(e.target.value)}
+              className="mt-1 h-9 rounded-xl"
+              placeholder="0"
+            />
+            <p className="mt-1.5 text-[11px] text-black/45">
+              {selectedGroup?.nature === "liability" || selectedGroup?.nature === "income"
+                ? "Amount already payable or earned. Leave 0 if this starts empty."
+                : "Amount already in this account. Leave 0 if this starts empty."}
+            </p>
           </div>
         </div>
         <DialogFooter>
@@ -791,7 +823,7 @@ function CreateLedgerDialog({
           <Button
             type="button"
             className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
-            disabled={saving}
+            disabled={saving || groups.length === 0}
             onClick={() => void submit()}
           >
             {saving ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1 h-3.5 w-3.5" />}

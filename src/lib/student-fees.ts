@@ -1002,6 +1002,8 @@ export type StudentFeeRosterTotals = {
   outstanding: number;
   outstandingCount: number;
   paidCount: number;
+  /** Live outstanding per student id — same source as the Payments tab. */
+  dueByStudentId: Record<string, number>;
 };
 
 /** Same totals as each student Payments tab, summed across a roster. */
@@ -1020,6 +1022,7 @@ export function sumStudentFeeRoster(input: {
   let overdueDue = 0;
   let outstandingCount = 0;
   let paidCount = 0;
+  const dueByStudentId: Record<string, number> = {};
 
   for (const student of input.students) {
     const statement = buildStudentFeeStatement({
@@ -1035,6 +1038,7 @@ export function sumStudentFeeRoster(input: {
     totalPaid += statement.totalPaid;
     pendingDue += Math.max(0, statement.totalDue - statement.overdueDue);
     overdueDue += statement.overdueDue;
+    dueByStudentId[student.id] = statement.totalDue;
     if (statement.totalDue > 0) outstandingCount += 1;
     else paidCount += 1;
   }
@@ -1047,5 +1051,19 @@ export function sumStudentFeeRoster(input: {
     outstanding: pendingDue + overdueDue,
     outstandingCount,
     paidCount,
+    dueByStudentId,
   };
+}
+
+/** Overlay live fee-statement dues onto a roster for directory / report status. */
+export function withLiveStudentFeeDues(
+  students: Student[],
+  dueByStudentId: Record<string, number>,
+): Student[] {
+  return students.map((student) => {
+    const liveDue = dueByStudentId[student.id];
+    if (typeof liveDue !== "number" || !Number.isFinite(liveDue)) return student;
+    const due = Math.max(0, Math.round(liveDue));
+    return student.due === due ? student : { ...student, due };
+  });
 }

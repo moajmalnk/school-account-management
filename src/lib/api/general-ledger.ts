@@ -1,4 +1,4 @@
-import { apiRequest, getApiToken } from "@/lib/api/client";
+import { ApiError, apiRequest, getApiToken } from "@/lib/api/client";
 
 export type GlSector =
   | "assets"
@@ -18,6 +18,66 @@ export type GlAccountGroup = {
   isSystem: boolean;
   accounts?: GlAccount[];
 };
+
+/** Matches backend `gl_default_account_groups()` so the picker works before Hostinger GL tables exist. */
+const GL_DEFAULT_GROUP_SEED: Array<{
+  sector: GlSector;
+  name: string;
+  uid: string;
+  nature: string;
+  sort: number;
+}> = [
+  { sector: "assets", name: "Bank Accounts", uid: "Bank Acc", nature: "asset", sort: 10 },
+  { sector: "assets", name: "Bank OD A/c", uid: "Bank OD", nature: "asset", sort: 20 },
+  { sector: "assets", name: "Cash-in-Hand", uid: "Cash-in-", nature: "asset", sort: 30 },
+  { sector: "assets", name: "Current Assets", uid: "Current", nature: "asset", sort: 40 },
+  { sector: "assets", name: "Deposits (Asset)", uid: "Deposits", nature: "asset", sort: 50 },
+  { sector: "assets", name: "Fixed Assets", uid: "Fixed As", nature: "asset", sort: 60 },
+  { sector: "assets", name: "Investments", uid: "Investme", nature: "asset", sort: 70 },
+  { sector: "assets", name: "Loans & Advances (Asset)", uid: "Loans &", nature: "asset", sort: 80 },
+  { sector: "assets", name: "Misc. Expenses (Asset)", uid: "Misc. Ex", nature: "asset", sort: 90 },
+  { sector: "assets", name: "Sundry Debtors", uid: "Sundry D", nature: "asset", sort: 100 },
+  { sector: "liabilities", name: "Current Liabilities", uid: "Current L", nature: "liability", sort: 110 },
+  { sector: "liabilities", name: "Duties & Taxes", uid: "Duties &", nature: "liability", sort: 120 },
+  { sector: "liabilities", name: "Loans (Liability)", uid: "Loans (L", nature: "liability", sort: 130 },
+  { sector: "liabilities", name: "Provisions", uid: "Provisio", nature: "liability", sort: 140 },
+  { sector: "liabilities", name: "Secured Loans", uid: "Secured", nature: "liability", sort: 150 },
+  { sector: "liabilities", name: "Sundry Creditors", uid: "Sundry C", nature: "liability", sort: 160 },
+  { sector: "liabilities", name: "Unsecured Loans", uid: "Unsecure", nature: "liability", sort: 170 },
+  { sector: "equity", name: "Capital Account", uid: "Capital", nature: "equity", sort: 180 },
+  { sector: "equity", name: "Drawings", uid: "Drawings", nature: "equity", sort: 190 },
+  { sector: "equity", name: "Reserves & Surplus", uid: "Reserves", nature: "equity", sort: 200 },
+  { sector: "equity", name: "Retained Earnings", uid: "Retained", nature: "equity", sort: 210 },
+  { sector: "income", name: "Direct Incomes", uid: "Direct I", nature: "income", sort: 220 },
+  { sector: "income", name: "Indirect Incomes", uid: "Indirect I", nature: "income", sort: 230 },
+  { sector: "income", name: "Sales Accounts", uid: "Sales Ac", nature: "income", sort: 240 },
+  { sector: "expenses", name: "Direct Expenses", uid: "Direct E", nature: "expense", sort: 250 },
+  { sector: "expenses", name: "Indirect Expenses", uid: "Indirect E", nature: "expense", sort: 260 },
+  { sector: "expenses", name: "Purchase Accounts", uid: "Purchase", nature: "expense", sort: 270 },
+  { sector: "other", name: "Suspense A/c", uid: "Suspense", nature: "other", sort: 280 },
+];
+
+export const GL_SECTORS: GlSector[] = [
+  "assets",
+  "liabilities",
+  "equity",
+  "income",
+  "expenses",
+  "other",
+];
+
+export function defaultGlAccountGroups(): GlAccountGroup[] {
+  return GL_DEFAULT_GROUP_SEED.map((g) => ({
+    id: g.uid,
+    sector: g.sector,
+    name: g.name,
+    uid: g.uid,
+    nature: g.nature,
+    sortOrder: g.sort,
+    isSystem: true,
+    accounts: [],
+  }));
+}
 
 export type GlAccount = {
   id: string;
@@ -127,6 +187,20 @@ async function glSafe<T>(run: () => Promise<T>, fallback: T): Promise<T> {
   }
 }
 
+const GL_NOT_INSTALLED =
+  "Chart of accounts is not installed on this server yet. Upload the general ledger PHP files to Hostinger, then try again.";
+
+async function glMutate<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (e) {
+    if (e instanceof ApiError && (e.status === 405 || e.status === 503 || e.status === 404)) {
+      throw new ApiError(GL_NOT_INSTALLED, e.status);
+    }
+    throw e;
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -135,15 +209,17 @@ export async function apiGlChartTree(): Promise<{
   sectors: string[];
   groups: GlAccountGroup[];
 }> {
-  if (!hasToken()) return { sectors: [], groups: [] };
-  const empty = { sectors: [] as string[], groups: [] as GlAccountGroup[] };
+  const fallback = { sectors: GL_SECTORS as string[], groups: defaultGlAccountGroups() };
+  if (!hasToken()) return fallback;
   const data = await glSafe(
     () => apiRequest<unknown>(glResourcePath("chart", { resource: "tree" })),
-    empty,
+    fallback,
   );
-  if (!isRecord(data) || !Array.isArray(data.groups)) return empty;
+  if (!isRecord(data) || !Array.isArray(data.groups) || data.groups.length === 0) {
+    return fallback;
+  }
   return {
-    sectors: Array.isArray(data.sectors) ? (data.sectors as string[]) : [],
+    sectors: Array.isArray(data.sectors) ? (data.sectors as string[]) : GL_SECTORS,
     groups: data.groups as GlAccountGroup[],
   };
 }
@@ -161,22 +237,23 @@ export async function apiGlCreateAccount(body: {
   name: string;
   groupId: string;
   code?: string;
-  isCash?: boolean;
-  isBank?: boolean;
-  isPartyStudent?: boolean;
-  isPartyStaff?: boolean;
+  openingBalance?: number;
+  openingDate?: string;
+  academicYear?: string;
 }): Promise<GlAccount> {
-  return apiRequest(glResourcePath("chart"), { method: "POST", body });
+  return glMutate(() => apiRequest(glResourcePath("chart"), { method: "POST", body }));
 }
 
 export async function apiGlUpdateAccount(
   id: string,
   body: Partial<GlAccount> & { groupId?: string },
 ): Promise<GlAccount> {
-  return apiRequest(glResourcePath("chart"), {
-    method: "PUT",
-    body: { id, ...body },
-  });
+  return glMutate(() =>
+    apiRequest(glResourcePath("chart"), {
+      method: "PUT",
+      body: { id, ...body },
+    }),
+  );
 }
 
 export async function apiGlBackfill(): Promise<{
@@ -184,10 +261,12 @@ export async function apiGlBackfill(): Promise<{
   disbursements: number;
   skipped: number;
 }> {
-  return apiRequest(glResourcePath("chart"), {
-    method: "POST",
-    body: { _backfill: true },
-  });
+  return glMutate(() =>
+    apiRequest(glResourcePath("chart"), {
+      method: "POST",
+      body: { _backfill: true },
+    }),
+  );
 }
 
 export async function apiGlListJournals(params?: {
@@ -219,14 +298,16 @@ export async function apiGlCreateJournal(body: {
   narration?: string;
   lines: Array<{ accountId: string; debit: number; credit: number; description?: string }>;
 }): Promise<GlJournal> {
-  return apiRequest(glResourcePath("journals"), { method: "POST", body });
+  return glMutate(() => apiRequest(glResourcePath("journals"), { method: "POST", body }));
 }
 
 export async function apiGlVoidJournal(id: string): Promise<GlJournal> {
-  return apiRequest(glResourcePath("journals"), {
-    method: "POST",
-    body: { _void: true, id },
-  });
+  return glMutate(() =>
+    apiRequest(glResourcePath("journals"), {
+      method: "POST",
+      body: { _void: true, id },
+    }),
+  );
 }
 
 function glReportsQuery(params: Record<string, string | undefined>): string {
@@ -402,15 +483,19 @@ export async function apiGlGetPeriod(year: string): Promise<GlPeriod> {
 }
 
 export async function apiGlClosePeriod(year: string): Promise<GlPeriod> {
-  return apiRequest(glResourcePath("periods"), {
-    method: "POST",
-    body: { action: "close", academicYear: year },
-  });
+  return glMutate(() =>
+    apiRequest(glResourcePath("periods"), {
+      method: "POST",
+      body: { action: "close", academicYear: year },
+    }),
+  );
 }
 
 export async function apiGlReopenPeriod(year: string, note?: string): Promise<GlPeriod> {
-  return apiRequest(glResourcePath("periods"), {
-    method: "POST",
-    body: { action: "reopen", academicYear: year, note: note ?? "Reopened" },
-  });
+  return glMutate(() =>
+    apiRequest(glResourcePath("periods"), {
+      method: "POST",
+      body: { action: "reopen", academicYear: year, note: note ?? "Reopened" },
+    }),
+  );
 }

@@ -76,6 +76,7 @@ import {
   type Payment,
   type Student,
 } from "@/lib/tenant-store";
+import { sumStudentFeeRoster, withLiveStudentFeeDues } from "@/lib/student-fees";
 import { cn } from "@/lib/utils";
 import {
   PAYMENT_PERIOD_OPTIONS,
@@ -1252,6 +1253,10 @@ export function BalanceSheetReport() {
     activeStudents: students,
     academicYear,
     schoolDetails,
+    classes,
+    activeFeeTerms,
+    transportRoutes,
+    studentFeeBreaks,
   } = useTenantStore();
   const { disbursements } = useDisbursements();
   const schoolName = schoolDetails.name || "School";
@@ -1259,10 +1264,32 @@ export function BalanceSheetReport() {
 
   const cashOnHandTotal = useMemo(() => cashOnHand(payments), [payments]);
   const bankBalanceTotal = useMemo(() => bankBalance(payments), [payments]);
-  const receivables = useMemo(
-    () => students.filter((st) => !isRecordDeleted(st.deletedAt)).reduce((s, st) => s + st.due, 0),
+  const liveStudents = useMemo(
+    () => students.filter((st) => !isRecordDeleted(st.deletedAt)),
     [students],
   );
+  const feeRoster = useMemo(
+    () =>
+      sumStudentFeeRoster({
+        students: liveStudents,
+        payments,
+        classes,
+        feeTerms: activeFeeTerms,
+        transportRoutes,
+        academicYear,
+        feeBreaks: studentFeeBreaks,
+      }),
+    [
+      liveStudents,
+      payments,
+      classes,
+      activeFeeTerms,
+      transportRoutes,
+      academicYear,
+      studentFeeBreaks,
+    ],
+  );
+  const receivables = feeRoster.outstanding;
   const payables = totalAccountsPayable(disbursements);
   const totalAssets = cashOnHandTotal + bankBalanceTotal + receivables;
   const equity = totalAssets - payables;
@@ -1437,8 +1464,7 @@ export function BalanceSheetReport() {
           </div>
           <div className="mt-1 font-mono text-[18px] font-semibold">{inr(receivables)}</div>
           <p className="mt-1 text-[11px] text-black/55">
-            Aggregated from{" "}
-            {students.filter((s) => !isRecordDeleted(s.deletedAt) && s.due > 0).length} students
+            Aggregated from {feeRoster.outstandingCount} students
             with open balances
           </p>
         </div>
@@ -1553,6 +1579,10 @@ export function FeesReport() {
     activeStudents: students,
     academicYear,
     schoolDetails,
+    classes,
+    activeFeeTerms,
+    transportRoutes,
+    studentFeeBreaks,
   } = useTenantStore();
   const schoolName = schoolDetails.name || "Silver Hills Global";
 
@@ -1563,6 +1593,36 @@ export function FeesReport() {
 
   const [duesQuery, setDuesQuery] = useState("");
   const [duesClass, setDuesClass] = useState("all");
+
+  const liveStudents = useMemo(
+    () => students.filter((s) => !isRecordDeleted(s.deletedAt)),
+    [students],
+  );
+  const feeRoster = useMemo(
+    () =>
+      sumStudentFeeRoster({
+        students: liveStudents,
+        payments,
+        classes,
+        feeTerms: activeFeeTerms,
+        transportRoutes,
+        academicYear,
+        feeBreaks: studentFeeBreaks,
+      }),
+    [
+      liveStudents,
+      payments,
+      classes,
+      activeFeeTerms,
+      transportRoutes,
+      academicYear,
+      studentFeeBreaks,
+    ],
+  );
+  const studentsWithLiveDues = useMemo(
+    () => withLiveStudentFeeDues(liveStudents, feeRoster.dueByStudentId),
+    [liveStudents, feeRoster.dueByStudentId],
+  );
 
   const feeReceipts = useMemo(
     () =>
@@ -1623,8 +1683,8 @@ export function FeesReport() {
   }, [feeReceipts, collectionQuery, collectionCategory, collectionMode, collectionClass]);
 
   const overdueStudents = useMemo(
-    () => students.filter((s) => !isRecordDeleted(s.deletedAt) && s.due > 0),
-    [students],
+    () => studentsWithLiveDues.filter((s) => s.due > 0),
+    [studentsWithLiveDues],
   );
 
   const filteredDues = useMemo(() => {
