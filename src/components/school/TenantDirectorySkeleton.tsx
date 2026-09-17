@@ -462,3 +462,31 @@ export function TenantSystemSkeleton() {
     </div>
   );
 }
+
+/** Matches Make Payment → Top Expenses rose rows while disbursements load. */
+export function TopExpensesSkeleton({ rows = 5 }: { rows?: number }) {
+  return (
+    <div
+      className="mt-3 space-y-3"
+      aria-busy="true"
+      aria-live="polite"
+      aria-label="Loading top expenses"
+    >
+      {Array.from({ length: rows }).map((_, i) => (
+        <div
+          key={i}
+          className="rounded-lg bg-[#FFF1F2]/80 p-3 dark:bg-rose-950/30"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <Bone className="h-3.5 w-[42%] max-w-[9rem] rounded-md" />
+            <Bone className="h-3.5 w-16 shrink-0 rounded-md bg-rose-200/70 dark:bg-rose-900/50" />
+          </div>
+          <div className="mt-2.5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <Bone className="h-2.5 w-[70%] max-w-[12rem] rounded-md bg-black/[0.05] dark:bg-white/[0.06]" />
+            <Bone className="h-5 w-[5.5rem] shrink-0 rounded-full bg-black/[0.06] dark:bg-white/[0.07]" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}

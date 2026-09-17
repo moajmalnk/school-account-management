@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ArrowLeft, Ban, KeyRound, Loader2, ShieldAlert, UserX } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { ApiError, setImpersonationApiToken } from "@/lib/api/client";
+import { ApiError, apiRequest, setImpersonationApiToken } from "@/lib/api/client";
 import { impersonateSuperAdminTenant } from "@/lib/api/super-admin";
 import { readPersistentSession, writeImpersonationSession } from "@/lib/auth";
 import {
@@ -13,7 +13,11 @@ import {
   normalizePlanFlags,
   type PermissionKey,
 } from "@/lib/permissions";
-import { findTenantUserById } from "@/lib/tenant-store";
+import {
+  findTenantUserById,
+  normalizeTenantUser,
+  type TenantUser,
+} from "@/lib/tenant-store";
 import { cn } from "@/lib/utils";
 
 type ImpersonateSearch = {
@@ -22,9 +26,45 @@ type ImpersonateSearch = {
   /** Or preview an ephemeral permission set (comma-separated keys or "*"). */
   perms?: string;
   name?: string;
+  email?: string;
+  /** Campus public ids this preview may open (comma-separated). */
+  branches?: string;
   /** Super-admin tenant impersonation (opens in this tab via API). */
   tenant?: string;
 };
+
+function parseBranchIdsParam(raw: string | undefined): string[] {
+  if (!raw?.trim()) return [];
+  return Array.from(
+    new Set(
+      raw
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+async function resolveTenantUserForImpersonate(userId: string): Promise<TenantUser | null> {
+  const local = findTenantUserById(userId);
+  try {
+    const list = await apiRequest<unknown[]>("/api/settings/users.php");
+    if (Array.isArray(list)) {
+      const raw = list.find(
+        (row) =>
+          row &&
+          typeof row === "object" &&
+          typeof (row as { id?: unknown }).id === "string" &&
+          (row as { id: string }).id === userId &&
+          typeof (row as { email?: unknown }).email === "string",
+      ) as (Partial<TenantUser> & Pick<TenantUser, "id" | "email">) | undefined;
+      if (raw) return normalizeTenantUser(raw);
+    }
+  } catch {
+    // Offline / API error — use local snapshot.
+  }
+  return local;
+}
 
 type ImpersonateErrorInfo = {
   title: string;
@@ -41,6 +81,8 @@ export const Route = createFileRoute("/impersonate")({
     user: str(search.user),
     perms: str(search.perms),
     name: str(search.name),
+    email: str(search.email),
+    branches: str(search.branches),
     tenant: str(search.tenant),
   }),
   component: ImpersonatePage,
@@ -140,7 +182,14 @@ function interpretError(message: string): ImpersonateErrorInfo {
 }
 
 function ImpersonatePage() {
-  const { user: userId, perms, name, tenant: tenantId } = Route.useSearch();
+  const {
+    user: userId,
+    perms,
+    name,
+    email: emailParam,
+    branches: branchesParam,
+    tenant: tenantId,
+  } = Route.useSearch();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -155,6 +204,8 @@ function ImpersonatePage() {
         setError("Sign in as an admin first, then use Impersonate again.");
         return;
       }
+
+      const branchesFromQuery = parseBranchIdsParam(branchesParam);
 
       if (tenantId) {
         if (adminSession.role !== "super_admin") {
@@ -200,7 +251,8 @@ function ImpersonatePage() {
       }
 
       if (userId) {
-        const user = findTenantUserById(userId);
+        const user = await resolveTenantUserForImpersonate(userId);
+        if (cancelled) return;
         if (!user) {
           setError("User not found. It may have been deleted.");
           return;
@@ -209,15 +261,20 @@ function ImpersonatePage() {
           setError(`${user.displayName} is inactive. Activate the user before impersonating.`);
           return;
         }
+        // URL branches win (explicit ACL from Settings); fall back to API/stored campuses.
+        const branchIds =
+          branchesFromQuery.length > 0 ? branchesFromQuery : (user.branchIds ?? []);
         writeImpersonationSession({
           role: "tenant_user",
           email: user.email,
           displayName: user.displayName,
           tenantName: adminSession.tenantName,
+          tenantId: adminSession.tenantId,
           issuedAt: Date.now(),
           userId: user.id,
           staffId: user.staffId,
           permissions: user.permissions,
+          branchIds,
           impersonationSource: "school_admin",
         });
         window.location.replace(firstAllowedTenantPath(user.permissions));
@@ -232,11 +289,13 @@ function ImpersonatePage() {
         }
         writeImpersonationSession({
           role: "tenant_user",
-          email: "preview@test",
+          email: emailParam?.trim().toLowerCase() || "preview@test",
           displayName: name || "Permission preview",
           tenantName: adminSession.tenantName,
+          tenantId: adminSession.tenantId,
           issuedAt: Date.now(),
           permissions,
+          branchIds: branchesFromQuery,
           impersonationSource: "school_admin",
         });
         window.location.replace(firstAllowedTenantPath(permissions));
@@ -250,7 +309,7 @@ function ImpersonatePage() {
     return () => {
       cancelled = true;
     };
-  }, [userId, perms, name, tenantId]);
+  }, [userId, perms, name, emailParam, branchesParam, tenantId]);
 
   const info = useMemo(() => (error ? interpretError(error) : null), [error]);
 

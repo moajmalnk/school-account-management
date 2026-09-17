@@ -41,9 +41,9 @@ async function mutate<T>(
 }
 
 /**
- * Create-first upsert — avoids probing get.php (which 404s for every new ID and
- * floods the browser console during bulk admit). On duplicate public_id, update.
- * Pass createOnly for bulk admit so collisions don't overwrite an existing student.
+ * Create or update a student without probing get.php (avoids console 404 spam).
+ * Default: update first (edits), create on 404.
+ * createOnly: insert only — on duplicate public_id, let the server allocate a new id.
  */
 export async function apiUpsertStudent(
   student: Student,
@@ -53,22 +53,37 @@ export async function apiUpsertStudent(
     throw new Error("Not signed in to API — log in again to save student changes");
   }
   const payload = await withUploadedPhoto(student);
+
+  if (opts?.createOnly) {
+    try {
+      return await apiRequest<Student>("/api/students/create.php", {
+        method: "POST",
+        body: payload,
+      });
+    } catch (err) {
+      if (!isDuplicateKeyError(err)) throw err;
+      try {
+        return await mutate<Student>("/api/students/update.php", payload);
+      } catch {
+        const { id: _ignored, shareToken: _share, ...withoutId } = payload;
+        return apiRequest<Student>("/api/students/create.php", {
+          method: "POST",
+          body: { ...withoutId, id: "" },
+        });
+      }
+    }
+  }
+
   try {
-    return await apiRequest<Student>("/api/students/create.php", {
-      method: "POST",
-      body: payload,
-    });
+    return await mutate<Student>("/api/students/update.php", payload);
   } catch (err) {
-    if (!isDuplicateKeyError(err)) throw err;
-    if (opts?.createOnly) {
-      // Collision on client-picked ID / share token — server allocates a fresh public_id.
-      const { id: _ignored, shareToken: _share, ...withoutId } = payload;
+    if (err instanceof ApiError && err.status === 404) {
       return apiRequest<Student>("/api/students/create.php", {
         method: "POST",
-        body: { ...withoutId, id: "" },
+        body: payload,
       });
     }
-    return mutate<Student>("/api/students/update.php", payload);
+    throw err;
   }
 }
 
@@ -100,6 +115,11 @@ export async function apiSyncStudentYearFields(
   await mutate("/api/students/year-fields.php", { entries });
 }
 
+/**
+ * Create or update staff without probing get.php.
+ * Default: update first (edits), create on 404.
+ * createOnly: insert only — on duplicate public_id, restore/update that id instead of minting a twin.
+ */
 export async function apiUpsertStaff(
   staff: Staff,
   opts?: { createOnly?: boolean },
@@ -107,22 +127,55 @@ export async function apiUpsertStaff(
   if (!hasToken()) {
     throw new Error("Not signed in to API — log in again to save staff changes");
   }
-  const payload = await withUploadedPhoto(staff);
+  const withPhoto = await withUploadedPhoto(staff);
+  // Send only columns create/update.php accept — avoids oversized / noisy payloads.
+  const payload = {
+    id: withPhoto.id,
+    name: withPhoto.name,
+    role: withPhoto.role,
+    dept: withPhoto.dept,
+    active: withPhoto.active,
+    joinedAt: withPhoto.joinedAt,
+    phone: withPhoto.phone ?? null,
+    altPhone: withPhoto.altPhone ?? null,
+    guardianPhone: withPhoto.guardianPhone ?? null,
+    photoUrl: withPhoto.photoUrl ?? null,
+    basicSalary: withPhoto.basicSalary ?? 0,
+    additionalAllowances: withPhoto.additionalAllowances ?? 0,
+    documents: withPhoto.documents ?? [],
+  };
+
+  if (opts?.createOnly) {
+    try {
+      return await apiRequest<Staff>("/api/staff/create.php", {
+        method: "POST",
+        body: payload,
+      });
+    } catch (err) {
+      if (!isDuplicateKeyError(err)) throw err;
+      // Public id taken (often soft-deleted) — create.php should restore; fall back to update.
+      try {
+        return await mutate<Staff>("/api/staff/update.php", payload);
+      } catch {
+        const { id: _ignored, ...withoutId } = payload;
+        return apiRequest<Staff>("/api/staff/create.php", {
+          method: "POST",
+          body: { ...withoutId, id: "" },
+        });
+      }
+    }
+  }
+
   try {
-    return await apiRequest<Staff>("/api/staff/create.php", {
-      method: "POST",
-      body: payload,
-    });
+    return await mutate<Staff>("/api/staff/update.php", payload);
   } catch (err) {
-    if (!isDuplicateKeyError(err)) throw err;
-    if (opts?.createOnly) {
-      const { id: _ignored, ...withoutId } = payload;
+    if (err instanceof ApiError && err.status === 404) {
       return apiRequest<Staff>("/api/staff/create.php", {
         method: "POST",
-        body: { ...withoutId, id: "" },
+        body: payload,
       });
     }
-    return mutate<Staff>("/api/staff/update.php", payload);
+    throw err;
   }
 }
 

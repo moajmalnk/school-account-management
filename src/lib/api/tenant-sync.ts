@@ -38,6 +38,7 @@ import {
   type TransportRoute,
   type TransportVehicle,
   normalizeCampusBranch,
+  normalizeTenantUser,
   sortCampusBranches,
 } from "@/lib/tenant-store";
 import {
@@ -199,7 +200,13 @@ function mapBundleToRemote(
     paymentCategories: Array.isArray(data.paymentCategories) ? data.paymentCategories : [],
     feeTerms: Array.isArray(data.feeTerms) ? data.feeTerms : [],
     studentFeeBreaks: Array.isArray(data.studentFeeBreaks) ? data.studentFeeBreaks : [],
-    tenantUsers: Array.isArray(data.tenantUsers) ? data.tenantUsers : [],
+    tenantUsers: Array.isArray(data.tenantUsers)
+      ? data.tenantUsers
+          .filter((u): u is TenantUser & { email: string; id: string } =>
+            Boolean(u && typeof (u as TenantUser).id === "string" && typeof (u as TenantUser).email === "string"),
+          )
+          .map((u) => normalizeTenantUser(u))
+      : [],
     notifications: Array.isArray(data.notifications) ? data.notifications : [],
     schoolDetails: data.schoolDetails ?? { ...EMPTY_SCHOOL_DETAILS },
     themeSettings: data.themeSettings ?? { ...SEED_THEME_SETTINGS },
@@ -565,7 +572,13 @@ async function loadRemoteTenantBundleSequential(
         paymentCategories,
         feeTerms: allFeeTerms,
         studentFeeBreaks: Array.isArray(studentFeeBreaks) ? studentFeeBreaks : [],
-        tenantUsers: users,
+        tenantUsers: Array.isArray(users)
+          ? users
+              .filter((u): u is TenantUser & { email: string; id: string } =>
+                Boolean(u && typeof u.id === "string" && typeof u.email === "string"),
+              )
+              .map((u) => normalizeTenantUser(u))
+          : [],
         notifications,
         schoolDetails: school?.schoolDetails ?? { ...EMPTY_SCHOOL_DETAILS },
         themeSettings: school?.themeSettings ?? { ...SEED_THEME_SETTINGS },

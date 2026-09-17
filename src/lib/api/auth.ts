@@ -20,6 +20,7 @@ export type ApiLoginSession = {
   userId?: string;
   staffId?: string | null;
   permissions: PermissionSet;
+  branchIds?: string[];
   tier?: string;
   planName?: string;
   planFlags?: PlanFlags;

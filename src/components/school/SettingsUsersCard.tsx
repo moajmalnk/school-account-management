@@ -33,7 +33,14 @@ import {
   type PermissionKey,
   type PermissionSet,
 } from "@/lib/permissions";
-import { normalizeTenantUser, type Role, type Staff, type TenantUser } from "@/lib/tenant-store";
+import {
+  normalizeTenantUser,
+  sortCampusBranches,
+  type CampusBranch,
+  type Role,
+  type Staff,
+  type TenantUser,
+} from "@/lib/tenant-store";
 import { cn } from "@/lib/utils";
 import { SettingsResponsiveCardHeader } from "@/components/school/SettingsMobileNav";
 
@@ -70,7 +77,7 @@ function CardHeader({
   );
 }
 
-const emptyForm = () => ({
+const emptyForm = (defaultBranchIds: string[] = []) => ({
   displayName: "",
   email: "",
   password: "",
@@ -79,13 +86,27 @@ const emptyForm = () => ({
   active: true,
   permissions: [] as PermissionKey[],
   allFunctions: false,
+  branchIds: defaultBranchIds,
 });
+
+function branchSummary(
+  branchIds: string[],
+  branches: CampusBranch[],
+): string {
+  if (branchIds.length === 0) return "All campuses";
+  if (branchIds.length === 1) {
+    const b = branches.find((x) => x.id === branchIds[0]);
+    return b ? b.name : "1 campus";
+  }
+  return `${branchIds.length} campuses`;
+}
 
 export function SettingsUsersCard({
   tenantUsers,
   setTenantUsers,
   roles,
   staff,
+  branches = [],
   canAddUser = true,
   currentUser,
 }: {
@@ -93,6 +114,7 @@ export function SettingsUsersCard({
   setTenantUsers: React.Dispatch<React.SetStateAction<TenantUser[]>>;
   roles: Role[];
   staff: Staff[];
+  branches?: CampusBranch[];
   canAddUser?: boolean;
   /** Signed-in workspace user — excluded from this management list */
   currentUser?: { userId?: string; email?: string };
@@ -100,7 +122,12 @@ export function SettingsUsersCard({
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<TenantUser | null>(null);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState(() => emptyForm());
+
+  const orderedBranches = useMemo(
+    () => sortCampusBranches(branches.filter((b) => b.isActive !== false)),
+    [branches],
+  );
 
   const isSignedInUser = (user: TenantUser) => {
     if (!currentUser) return false;
@@ -139,13 +166,21 @@ export function SettingsUsersCard({
       return;
     }
     setEditingId(null);
-    setForm({ ...emptyForm(), roleId: roles[0]?.id ?? "" });
+    const defaults =
+      orderedBranches.length === 1
+        ? [orderedBranches[0]!.id]
+        : orderedBranches.map((b) => b.id);
+    setForm({ ...emptyForm(defaults), roleId: roles[0]?.id ?? "" });
     setOpen(true);
   };
 
   const startEdit = (user: TenantUser) => {
     setEditingId(user.id);
     const all = hasFullAccess(user.permissions);
+    const assigned =
+      user.branchIds.length > 0
+        ? user.branchIds
+        : orderedBranches.map((b) => b.id);
     setForm({
       displayName: user.displayName,
       email: user.email,
@@ -155,8 +190,26 @@ export function SettingsUsersCard({
       active: user.active,
       permissions: all ? [] : ([...user.permissions] as PermissionKey[]),
       allFunctions: all,
+      branchIds: assigned,
     });
     setOpen(true);
+  };
+
+  const toggleBranch = (branchId: string, checked: boolean) => {
+    setForm((prev) => {
+      const next = new Set(prev.branchIds);
+      if (checked) next.add(branchId);
+      else next.delete(branchId);
+      return { ...prev, branchIds: Array.from(next) };
+    });
+  };
+
+  const selectAllBranches = () => {
+    setForm((prev) => ({ ...prev, branchIds: orderedBranches.map((b) => b.id) }));
+  };
+
+  const clearBranches = () => {
+    setForm((prev) => ({ ...prev, branchIds: [] }));
   };
 
   const togglePerm = (key: PermissionKey, checked: boolean) => {
@@ -166,6 +219,25 @@ export function SettingsUsersCard({
       else next.delete(key);
       return { ...prev, allFunctions: false, permissions: Array.from(next) };
     });
+  };
+
+  const toggleGroup = (keys: PermissionKey[], checked: boolean) => {
+    setForm((prev) => {
+      const next = new Set(prev.permissions);
+      for (const key of keys) {
+        if (checked) next.add(key);
+        else next.delete(key);
+      }
+      return { ...prev, allFunctions: false, permissions: Array.from(next) };
+    });
+  };
+
+  const groupState = (keys: PermissionKey[]) => {
+    if (form.allFunctions) return { checked: true as const, indeterminate: false };
+    const selected = keys.filter((k) => form.permissions.includes(k)).length;
+    if (selected === 0) return { checked: false as const, indeterminate: false };
+    if (selected === keys.length) return { checked: true as const, indeterminate: false };
+    return { checked: false as const, indeterminate: true };
   };
 
   const applyPreset = (preset: "all" | "finance" | "clear") => {
@@ -183,6 +255,16 @@ export function SettingsUsersCard({
     }
     setForm((prev) => ({ ...prev, allFunctions: false, permissions: [] }));
   };
+
+  const activePreset = form.allFunctions
+    ? "all"
+    : form.permissions.length === FINANCE_ONLY_PRESET.length &&
+        FINANCE_ONLY_PRESET.every((k) => form.permissions.includes(k)) &&
+        form.permissions.every((k) => FINANCE_ONLY_PRESET.includes(k))
+      ? "finance"
+      : form.permissions.length === 0
+        ? "clear"
+        : null;
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -206,6 +288,10 @@ export function SettingsUsersCard({
       toast.error("Assign at least one permission or choose All functions");
       return;
     }
+    if (orderedBranches.length > 0 && form.branchIds.length === 0) {
+      toast.error("Select at least one campus");
+      return;
+    }
     const duplicate = tenantUsers.some((u) => u.email === email && u.id !== editingId);
     if (duplicate) {
       toast.error("Email already used by another user");
@@ -223,6 +309,8 @@ export function SettingsUsersCard({
       }
     }
 
+    const branchIds = [...form.branchIds];
+
     if (editingId) {
       const updated = normalizeTenantUser({
         id: editingId,
@@ -233,6 +321,7 @@ export function SettingsUsersCard({
         staffId: form.staffId || undefined,
         permissions,
         active: form.active,
+        branchIds,
         createdAt:
           tenantUsers.find((u) => u.id === editingId)?.createdAt ?? new Date().toISOString(),
       });
@@ -252,6 +341,7 @@ export function SettingsUsersCard({
         staffId: form.staffId || undefined,
         permissions,
         active: form.active,
+        branchIds,
         createdAt: new Date().toISOString(),
       });
       setTenantUsers((prev) => [created, ...prev]);
@@ -283,8 +373,11 @@ export function SettingsUsersCard({
   };
 
   const impersonateUser = (user: TenantUser) => {
+    const branches = (user.branchIds ?? []).filter(Boolean).join(",");
+    const qs = new URLSearchParams({ user: user.id });
+    if (branches) qs.set("branches", branches);
     openImpersonate(
-      `/impersonate?user=${encodeURIComponent(user.id)}`,
+      `/impersonate?${qs.toString()}`,
       `Opening workspace as ${user.displayName}`,
     );
   };
@@ -295,9 +388,22 @@ export function SettingsUsersCard({
       toast.error("Pick at least one permission to test");
       return;
     }
+    if (orderedBranches.length > 0 && form.branchIds.length === 0) {
+      toast.error("Select at least one campus to test");
+      return;
+    }
     const name = form.displayName.trim() || "Permission preview";
+    const qs = new URLSearchParams({
+      perms: permissions,
+      name,
+    });
+    const email = form.email.trim().toLowerCase();
+    if (email) qs.set("email", email);
+    if (form.branchIds.length > 0) {
+      qs.set("branches", form.branchIds.join(","));
+    }
     openImpersonate(
-      `/impersonate?perms=${encodeURIComponent(permissions)}&name=${encodeURIComponent(name)}`,
+      `/impersonate?${qs.toString()}`,
       `Opening permission preview · ${name}`,
     );
   };
@@ -319,6 +425,9 @@ export function SettingsUsersCard({
     setPendingDelete(null);
   };
 
+  const allBranchesSelected =
+    orderedBranches.length > 0 && form.branchIds.length === orderedBranches.length;
+
   return (
     <>
       <OrganicCard tone="white" cornerSide="bl" padded className="min-w-0">
@@ -328,8 +437,8 @@ export function SettingsUsersCard({
             !canAddUser
               ? "This plan includes your administrator login only · upgrade to Premium to add team logins"
               : teamUsers.length === 0
-                ? "No additional team logins yet · add users with limited module access"
-                : `${teamUsers.length} team login${teamUsers.length === 1 ? "" : "s"} · assign modules & finance permissions`
+                ? "No additional team logins yet · add users with campus + module access"
+                : `${teamUsers.length} team login${teamUsers.length === 1 ? "" : "s"} · campuses, modules & finance`
           }
           actionLabel={canAddUser ? "Add User" : undefined}
           onAction={canAddUser ? startCreate : undefined}
@@ -376,6 +485,7 @@ export function SettingsUsersCard({
                     {linkedStaff ? ` · Staff: ${linkedStaff.name}` : ""}
                   </div>
                   <div className="mt-0.5 text-[11px] text-black/45">
+                    {branchSummary(user.branchIds, orderedBranches)} ·{" "}
                     {summarizePermissions(user.permissions)}
                   </div>
                 </div>
@@ -416,146 +526,269 @@ export function SettingsUsersCard({
       </OrganicCard>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-          <DialogHeader>
+        <DialogContent
+          className="flex h-[min(92vh,56rem)] w-[calc(100vw-1.25rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl"
+          onPointerDownOutside={(e) => {
+            const target = e.target as HTMLElement | null;
+            if (target?.closest("[data-radix-select-content]")) e.preventDefault();
+          }}
+          onInteractOutside={(e) => {
+            const target = e.target as HTMLElement | null;
+            if (target?.closest("[data-radix-select-content]")) e.preventDefault();
+          }}
+        >
+          <DialogHeader className="shrink-0 space-y-1 border-b border-[#EFEFEF] px-5 py-4 pr-12 text-left dark:border-white/10 sm:px-6">
             <DialogTitle>{editingId ? "Edit User" : "Add User"}</DialogTitle>
             <DialogDescription>
-              Workspace login with module and finance permissions. Sign in via School Admin tier.
+              Assign campuses and module access for this workspace login.
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={submit} className="space-y-3">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label>Display name</Label>
-                <Input
-                  value={form.displayName}
-                  onChange={(e) => setForm({ ...form, displayName: e.target.value })}
-                  placeholder="e.g. Fee Clerk"
-                  autoFocus
-                />
+          <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4 sm:px-6">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Display name</Label>
+                  <Input
+                    value={form.displayName}
+                    onChange={(e) => setForm({ ...form, displayName: e.target.value })}
+                    placeholder="e.g. Fee Clerk"
+                    autoFocus
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Email</Label>
+                  <Input
+                    type="email"
+                    value={form.email}
+                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                    placeholder="user@school.edu"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Password</Label>
+                  <Input
+                    type="text"
+                    value={form.password}
+                    onChange={(e) => setForm({ ...form, password: e.target.value })}
+                    placeholder="Min 4 characters"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Position / Role</Label>
+                  <Select
+                    value={form.roleId || "__none__"}
+                    onValueChange={(v) => setForm({ ...form, roleId: v === "__none__" ? "" : v })}
+                  >
+                    <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
+                      <SelectValue placeholder="Optional role" />
+                    </SelectTrigger>
+                    <SelectContent position="popper" className="z-[250]">
+                      <SelectItem value="__none__">No role</SelectItem>
+                      {roles.map((r) => (
+                        <SelectItem key={r.id} value={r.id}>
+                          {r.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Link staff (optional)</Label>
+                  <Select
+                    value={form.staffId || "__none__"}
+                    onValueChange={(v) => setForm({ ...form, staffId: v === "__none__" ? "" : v })}
+                  >
+                    <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
+                      <SelectValue placeholder="Optional staff" />
+                    </SelectTrigger>
+                    <SelectContent position="popper" className="z-[250]">
+                      <SelectItem value="__none__">No staff link</SelectItem>
+                      {liveStaff.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name} · {s.id}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <div className="space-y-1.5">
-                <Label>Email</Label>
-                <Input
-                  type="email"
-                  value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  placeholder="user@school.edu"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Password</Label>
-                <Input
-                  type="text"
-                  value={form.password}
-                  onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  placeholder="Min 4 characters"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Position / Role</Label>
-                <Select
-                  value={form.roleId || "__none__"}
-                  onValueChange={(v) => setForm({ ...form, roleId: v === "__none__" ? "" : v })}
-                >
-                  <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
-                    <SelectValue placeholder="Optional role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">No role</SelectItem>
-                    {roles.map((r) => (
-                      <SelectItem key={r.id} value={r.id}>
-                        {r.title}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Link staff (optional)</Label>
-                <Select
-                  value={form.staffId || "__none__"}
-                  onValueChange={(v) => setForm({ ...form, staffId: v === "__none__" ? "" : v })}
-                >
-                  <SelectTrigger className="h-10 w-full rounded-lg border-[#E5E5E5] bg-white">
-                    <SelectValue placeholder="Optional staff" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">No staff link</SelectItem>
-                    {liveStaff.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name} · {s.id}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
-                Presets
-              </span>
-              <button
-                type="button"
-                onClick={() => applyPreset("all")}
-                className="rounded-full border border-[#E5E5E5] bg-white px-2.5 py-1 text-[11px] font-semibold hover:bg-[#F4F4F5]"
-              >
-                All functions
-              </button>
-              <button
-                type="button"
-                onClick={() => applyPreset("finance")}
-                className="rounded-full border border-[#E5E5E5] bg-white px-2.5 py-1 text-[11px] font-semibold hover:bg-[#F4F4F5]"
-              >
-                Finance only
-              </button>
-              <button
-                type="button"
-                onClick={() => applyPreset("clear")}
-                className="rounded-full border border-[#E5E5E5] bg-white px-2.5 py-1 text-[11px] font-semibold hover:bg-[#F4F4F5]"
-              >
-                Clear
-              </button>
-            </div>
-
-            <div className="space-y-3 rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] p-3">
-              {PERMISSION_GROUPS.map((group) => (
-                <div key={group.id}>
-                  <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                    {group.label}
+              {orderedBranches.length > 0 ? (
+                <section className="space-y-2.5 rounded-xl border border-[#E5E5E5] bg-[#FAFAFA]/80 p-3.5 dark:border-white/10 dark:bg-zinc-900/40">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <h3 className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-zinc-400">
+                        Campuses
+                      </h3>
+                      <p className="mt-0.5 text-[12px] text-slate-500 dark:text-zinc-400">
+                        One or more campuses this login can open in the switcher.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        onClick={selectAllBranches}
+                        className="rounded-full border border-[#E5E5E5] bg-white px-2.5 py-1 text-[11px] font-semibold hover:bg-[#F4F4F5] dark:border-white/10 dark:bg-zinc-950 dark:hover:bg-white/5"
+                      >
+                        All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={clearBranches}
+                        className="rounded-full border border-[#E5E5E5] bg-white px-2.5 py-1 text-[11px] font-semibold hover:bg-[#F4F4F5] dark:border-white/10 dark:bg-zinc-950 dark:hover:bg-white/5"
+                      >
+                        Clear
+                      </button>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                    {group.keys.map((key) => {
-                      const checked = form.allFunctions || form.permissions.includes(key);
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                    {orderedBranches.map((b) => {
+                      const checked = form.branchIds.includes(b.id);
                       return (
                         <label
-                          key={key}
-                          className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-[12.5px] text-black hover:bg-white dark:text-zinc-100 dark:hover:bg-white/5"
+                          key={b.id}
+                          className={cn(
+                            "flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2.5 text-[12.5px] transition-colors",
+                            checked
+                              ? "border-[#99F6E4] bg-[#F0FDFA] text-slate-900 dark:border-teal-700/50 dark:bg-teal-950/30 dark:text-zinc-100"
+                              : "border-[#EFEFEF] bg-white text-slate-900 hover:border-[#D4D4D8] dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-100",
+                          )}
                         >
                           <Checkbox
                             checked={checked}
-                            disabled={form.allFunctions}
-                            onCheckedChange={(v) => togglePerm(key, v === true)}
+                            onCheckedChange={(v) => toggleBranch(b.id, v === true)}
+                            className="mt-0.5"
                           />
-                          {PERMISSION_LABELS[key]}
+                          <span className="min-w-0">
+                            <span className="block truncate font-semibold">{b.name}</span>
+                            <span className="block truncate text-[11px] text-slate-500 dark:text-zinc-500">
+                              {b.code}
+                            </span>
+                          </span>
                         </label>
                       );
                     })}
                   </div>
+                  <p className="text-[11px] text-slate-500 dark:text-zinc-500">
+                    {allBranchesSelected
+                      ? "All campuses selected"
+                      : form.branchIds.length === 0
+                        ? "Select at least one campus"
+                        : `${form.branchIds.length} of ${orderedBranches.length} selected`}
+                  </p>
+                </section>
+              ) : null}
+
+              <section className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-zinc-400">
+                      Module access
+                    </h3>
+                    <p className="mt-0.5 text-[12px] text-slate-500 dark:text-zinc-400">
+                      Pick a preset, or fine-tune each module below.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(
+                      [
+                        ["all", "All functions"],
+                        ["finance", "Finance only"],
+                        ["clear", "Clear"],
+                      ] as const
+                    ).map(([id, label]) => (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => applyPreset(id)}
+                        className={cn(
+                          "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
+                          activePreset === id
+                            ? "border-[#0F766E] bg-[#CCFBF1] text-[#0F766E] dark:border-teal-500/50 dark:bg-teal-950/50 dark:text-teal-200"
+                            : "border-[#E5E5E5] bg-white text-slate-700 hover:bg-[#F4F4F5] dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-white/5",
+                        )}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              ))}
+
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+                  {PERMISSION_GROUPS.map((group) => {
+                    const state = groupState(group.keys);
+                    const cols =
+                      group.keys.length <= 3
+                        ? "grid-cols-1"
+                        : group.keys.length <= 6
+                          ? "grid-cols-1 sm:grid-cols-2"
+                          : "grid-cols-1 sm:grid-cols-2";
+                    return (
+                      <div
+                        key={group.id}
+                        className={cn(
+                          "rounded-xl border border-[#E5E5E5] bg-white p-3.5 dark:border-white/10 dark:bg-zinc-950/60",
+                          group.id === "finance" && "lg:col-span-2",
+                        )}
+                      >
+                        <div className="mb-3 flex items-start justify-between gap-2 border-b border-[#F4F4F5] pb-2.5 dark:border-white/10">
+                          <div className="min-w-0">
+                            <div className="text-[12px] font-bold text-slate-900 dark:text-zinc-100">
+                              {group.label}
+                            </div>
+                            <div className="text-[11px] text-slate-500 dark:text-zinc-500">
+                              {group.description}
+                            </div>
+                          </div>
+                          <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-slate-600 dark:text-zinc-300">
+                            <Checkbox
+                              checked={state.indeterminate ? "indeterminate" : state.checked}
+                              disabled={form.allFunctions}
+                              onCheckedChange={(v) => toggleGroup(group.keys, v === true)}
+                            />
+                            All
+                          </label>
+                        </div>
+                        <div className={cn("grid gap-1.5", cols)}>
+                          {group.keys.map((key) => {
+                            const checked = form.allFunctions || form.permissions.includes(key);
+                            return (
+                              <label
+                                key={key}
+                                className={cn(
+                                  "flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2 text-[12.5px] transition-colors",
+                                  checked
+                                    ? "bg-[#F0FDFA] text-slate-900 dark:bg-teal-950/35 dark:text-zinc-100"
+                                    : "text-slate-800 hover:bg-[#F8FAFC] dark:text-zinc-200 dark:hover:bg-white/5",
+                                  form.allFunctions && "opacity-80",
+                                )}
+                              >
+                                <Checkbox
+                                  checked={checked}
+                                  disabled={form.allFunctions}
+                                  onCheckedChange={(v) => togglePerm(key, v === true)}
+                                />
+                                <span className="leading-snug">{PERMISSION_LABELS[key]}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <label className="flex cursor-pointer items-center gap-2 text-[13px] font-medium text-slate-800 dark:text-zinc-200">
+                <Checkbox
+                  checked={form.active}
+                  onCheckedChange={(v) => setForm({ ...form, active: v === true })}
+                />
+                Active (can sign in)
+              </label>
             </div>
 
-            <label className="flex cursor-pointer items-center gap-2 text-[13px]">
-              <Checkbox
-                checked={form.active}
-                onCheckedChange={(v) => setForm({ ...form, active: v === true })}
-              />
-              Active (can sign in)
-            </label>
-
-            <DialogFooter className="gap-2 sm:justify-between">
+            <DialogFooter className="shrink-0 gap-2 border-t border-[#EFEFEF] px-5 py-3.5 dark:border-white/10 sm:justify-between sm:px-6">
               <Button
                 type="button"
                 variant="outline"

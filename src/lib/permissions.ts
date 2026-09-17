@@ -31,22 +31,26 @@ export const FINANCE_PERMISSION_KEYS = PERMISSION_KEYS.filter((k) =>
 export const PERMISSION_GROUPS: {
   id: string;
   label: string;
+  description: string;
   keys: PermissionKey[];
 }[] = [
   {
-    id: "modules",
-    label: "Modules",
-    keys: ["dashboard", "students", "staff", "settings"],
+    id: "workspace",
+    label: "Workspace",
+    description: "Core school modules",
+    keys: ["dashboard", "students", "staff"],
   },
   {
     id: "finance",
     label: "Finance",
+    description: "Collections, payments & reports",
     keys: [...FINANCE_PERMISSION_KEYS],
   },
   {
-    id: "settings_extra",
-    label: "Settings extras",
-    keys: ["settings.fees", "settings.users"],
+    id: "administration",
+    label: "Administration",
+    description: "Settings and team access",
+    keys: ["settings", "settings.fees", "settings.users"],
   },
 ];
 
@@ -54,20 +58,20 @@ export const PERMISSION_LABELS: Record<PermissionKey, string> = {
   dashboard: "Dashboard",
   students: "Students",
   staff: "Staff",
-  settings: "Settings",
+  settings: "Settings hub",
   "finance.overview": "Finance overview",
-  "finance.receive": "Receive Payment",
-  "finance.make": "Make Payment",
+  "finance.receive": "Receive payment",
+  "finance.make": "Make payment",
   "finance.analytics": "Analytics",
-  "finance.ledger": "General Ledger",
-  "finance.pl": "Profit & Loss",
-  "finance.balance": "Balance Sheet",
-  "finance.fees_report": "Fees Report",
-  "finance.salary": "Salary Report",
-  "finance.daybook": "Day Book",
-  "finance.reconciliation": "Bank Reconciliation",
-  "settings.fees": "Fee Categories",
-  "settings.users": "Users",
+  "finance.ledger": "General ledger",
+  "finance.pl": "Profit & loss",
+  "finance.balance": "Balance sheet",
+  "finance.fees_report": "Fees report",
+  "finance.salary": "Salary report",
+  "finance.daybook": "Day book",
+  "finance.reconciliation": "Bank reconciliation",
+  "settings.fees": "Fee categories",
+  "settings.users": "Team users",
 };
 
 export const ALL_PERMISSIONS: PermissionSet = ["*"];

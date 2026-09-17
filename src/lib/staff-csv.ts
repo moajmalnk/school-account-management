@@ -201,18 +201,118 @@ function digits(value?: string): string {
   return (value ?? "").replace(/\D/g, "");
 }
 
+/** Collapse spacing / accents so "MUHAMMED  BILAL" matches "Muhammed Bilal". */
+export function normalizeStaffName(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function preferStaffCanonical(candidates: Staff[]): Staff {
+  return [...candidates].sort((a, b) => {
+    if (a.active !== b.active) return a.active ? -1 : 1;
+    return a.id.localeCompare(b.id);
+  })[0]!;
+}
+
 export function isDuplicateStaff(
   existing: Staff[],
   row: Pick<StaffCsvRow, "name" | "phone">,
 ): boolean {
-  const name = row.name.trim().toLowerCase();
+  return Boolean(findDuplicateStaff(existing, row));
+}
+
+/**
+ * Match roster row by normalized name.
+ * Phone (when both sides have one) prefers that twin; name alone is enough to avoid re-creating.
+ */
+export function findDuplicateStaff(
+  existing: Staff[],
+  row: Pick<StaffCsvRow, "name" | "phone">,
+  opts?: { includeDeleted?: boolean },
+): Staff | undefined {
+  const name = normalizeStaffName(row.name);
   const phone = digits(row.phone);
-  return existing.some((member) => {
-    if (member.deletedAt) return false;
-    if (member.name.trim().toLowerCase() !== name) return false;
-    if (phone && digits(member.phone) && digits(member.phone) === phone) return true;
-    return false;
-  });
+
+  const pool = existing.filter((member) => opts?.includeDeleted || !member.deletedAt);
+
+  if (phone) {
+    const byPhone = pool.find((member) => digits(member.phone) === phone);
+    if (byPhone) return byPhone;
+  }
+
+  if (!name) return undefined;
+  const candidates = pool.filter((member) => normalizeStaffName(member.name) === name);
+  if (!candidates.length) return undefined;
+  return preferStaffCanonical(candidates);
+}
+
+/** Extra live copies of the same person (same normalized name), excluding the kept id. */
+export function findStaffNameTwins(
+  existing: Staff[],
+  name: string,
+  keepId: string,
+): Staff[] {
+  const key = normalizeStaffName(name);
+  if (!key) return [];
+  return existing.filter(
+    (member) =>
+      !member.deletedAt &&
+      member.id !== keepId &&
+      normalizeStaffName(member.name) === key,
+  );
+}
+
+/** How many live rows are surplus copies (group size − 1 per name). */
+export function countStaffDuplicateExtras(existing: Staff[]): number {
+  const groups = new Map<string, number>();
+  for (const member of existing) {
+    if (member.deletedAt) continue;
+    const key = normalizeStaffName(member.name);
+    if (!key) continue;
+    groups.set(key, (groups.get(key) ?? 0) + 1);
+  }
+  let extras = 0;
+  for (const count of groups.values()) {
+    if (count > 1) extras += count - 1;
+  }
+  return extras;
+}
+
+/**
+ * Keep one canonical row per normalized name; return ids of surplus twins to recycle.
+ */
+export function planStaffDuplicateMerge(existing: Staff[]): {
+  keepIds: string[];
+  recycleIds: string[];
+} {
+  const groups = new Map<string, Staff[]>();
+  for (const member of existing) {
+    if (member.deletedAt) continue;
+    const key = normalizeStaffName(member.name);
+    if (!key) continue;
+    const list = groups.get(key) ?? [];
+    list.push(member);
+    groups.set(key, list);
+  }
+  const keepIds: string[] = [];
+  const recycleIds: string[] = [];
+  for (const list of groups.values()) {
+    if (list.length === 1) {
+      keepIds.push(list[0]!.id);
+      continue;
+    }
+    const keep = preferStaffCanonical(list);
+    keepIds.push(keep.id);
+    for (const member of list) {
+      if (member.id !== keep.id) recycleIds.push(member.id);
+    }
+  }
+  return { keepIds, recycleIds };
 }
 
 export function staffFromCsvRow(

@@ -56,6 +56,11 @@ export type Session = {
   userId?: string;
   staffId?: string;
   permissions: PermissionSet;
+  /**
+   * Campus public ids this login may open.
+   * Empty / omitted = every campus (school admin or unrestricted).
+   */
+  branchIds?: string[];
   /** Subscription tier name (Basic / Premium / Enterprise). */
   tier?: string;
   planName?: string;
@@ -83,7 +88,14 @@ type AuthState = {
     patch: Partial<
       Pick<
         Session,
-        "displayName" | "tenantName" | "permissions" | "staffId" | "tier" | "planName" | "planFlags"
+        | "displayName"
+        | "tenantName"
+        | "permissions"
+        | "staffId"
+        | "tier"
+        | "planName"
+        | "planFlags"
+        | "branchIds"
       >
     >,
   ) => void;
@@ -159,6 +171,9 @@ function sessionFromApiLogin(
     userId: data.session.userId,
     staffId: data.session.staffId || undefined,
     permissions,
+    branchIds: Array.isArray(data.session.branchIds)
+      ? data.session.branchIds.filter((id): id is string => typeof id === "string" && id.trim() !== "")
+      : [],
     tier: data.session.tier,
     planName: data.session.planName,
     planFlags: data.session.planFlags ? normalizePlanFlags(data.session.planFlags) : undefined,
@@ -193,6 +208,9 @@ function parseSessionRaw(raw: string, impersonated: boolean): Session | null {
     userId: parsed.userId,
     staffId: parsed.staffId,
     permissions,
+    branchIds: Array.isArray(parsed.branchIds)
+      ? parsed.branchIds.filter((id): id is string => typeof id === "string" && id.trim() !== "")
+      : [],
     tier: typeof parsed.tier === "string" ? parsed.tier : undefined,
     planName: typeof parsed.planName === "string" ? parsed.planName : undefined,
     planFlags: parsed.planFlags ? normalizePlanFlags(parsed.planFlags) : undefined,
@@ -330,6 +348,26 @@ export function sessionCanAccessSettings(session: Session | null | undefined): b
   if (!session) return false;
   if (session.role === "school_admin" || session.role === "super_admin") return true;
   return canAccessSettingsModulePerm(session.permissions);
+}
+
+/** Empty branchIds = every campus (school admin / unrestricted). */
+export function sessionCanAccessBranch(
+  session: Session | null | undefined,
+  branchId: string,
+): boolean {
+  if (!session) return false;
+  if (session.role === "school_admin" || session.role === "super_admin") return true;
+  const allowed = session.branchIds ?? [];
+  if (allowed.length === 0) return true;
+  return allowed.includes(branchId);
+}
+
+/** null = every campus; otherwise only these public ids. */
+export function sessionAllowedBranchIds(session: Session | null | undefined): string[] | null {
+  if (!session) return null;
+  if (session.role === "school_admin" || session.role === "super_admin") return null;
+  const allowed = session.branchIds ?? [];
+  return allowed.length === 0 ? null : allowed;
 }
 
 export function sessionCanAccessFinanceView(

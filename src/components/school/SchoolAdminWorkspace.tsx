@@ -48,6 +48,7 @@ import {
   Recycle,
   RotateCcw,
   Search,
+  Combine,
   Bus,
   Calendar,
   Clock,
@@ -278,6 +279,7 @@ import {
   TenantDirectorySkeleton,
   TenantSettingsListSkeleton,
   TenantSystemSkeleton,
+  TopExpensesSkeleton,
 } from "@/components/school/TenantDirectorySkeleton";
 import {
   EnrollmentStatusBadge,
@@ -286,6 +288,7 @@ import {
 } from "@/components/school/ProfileAccountActions";
 import { SettingsUsersCard } from "@/components/school/SettingsUsersCard";
 import { FeeCategoriesCard } from "@/components/school/FeeCategoriesCard";
+import { DocumentNumbersPanel } from "@/components/school/DocumentNumbersPanel";
 import {
   SettingsMobileNavProvider,
   SettingsMobileBackButton,
@@ -411,7 +414,14 @@ import {
   splitStudentClassForCsv,
   STUDENT_CSV_HEADERS,
 } from "@/lib/student-csv";
-import { isDuplicateStaff, parseStaffCsv, staffFromCsvRow } from "@/lib/staff-csv";
+import {
+  countStaffDuplicateExtras,
+  findDuplicateStaff,
+  findStaffNameTwins,
+  parseStaffCsv,
+  planStaffDuplicateMerge,
+  staffFromCsvRow,
+} from "@/lib/staff-csv";
 import {
   parseTransportRouteCsv,
   resolveTransportRouteImport,
@@ -660,10 +670,10 @@ const bulkActionDeleteBtn =
 const bulkActionWhatsAppBtn =
   "inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#10B981] px-3 text-[13px] font-semibold text-white transition-colors hover:bg-[#059669]";
 
-/** Equal-width outline actions for directory toolbars on small screens */
+/** Directory toolbar chips — equal 12-col cells on mobile; auto width from sm+ */
 const directoryToolbarBtn = cn(
   mobileOutlineBtn,
-  "h-8 min-w-0 flex-1 gap-1 px-1.5 text-[11px] sm:h-10 sm:flex-none sm:gap-1.5 sm:px-4 sm:text-[12.5px]",
+  "col-span-4 h-9 w-full min-w-0 justify-center gap-1 px-1.5 text-[11px] sm:col-auto sm:h-10 sm:w-auto sm:justify-center sm:gap-1.5 sm:px-3 sm:text-[12.5px]",
 );
 
 const mobilePrimaryBtn =
@@ -675,8 +685,35 @@ const admitFormInputClass =
 const admitFormOutlineBtnClass =
   "dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800";
 
+/** Mobile: title then full-width 12-col actions. sm+: title · buttons one row */
+const directoryHeaderRow =
+  "flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3";
+
 const directoryToolbarRow =
-  "flex w-full min-w-0 items-center gap-1.5 sm:w-auto sm:flex-wrap sm:justify-end sm:gap-2";
+  "grid w-full grid-cols-12 gap-1.5 sm:flex sm:w-auto sm:max-w-full sm:flex-wrap sm:items-center sm:justify-end sm:gap-2";
+
+const directoryFilterCardClass = cn(glassCardClass, "min-w-0 p-3 sm:p-3.5 md:p-5");
+
+/** Class/Dept + Division/Status + Search + count — one responsive strip */
+const directoryFilterStrip =
+  "flex w-full min-w-0 flex-col gap-2.5 sm:gap-3 lg:flex-row lg:items-end lg:gap-3 xl:gap-4";
+
+const directoryFilterSelectsRow =
+  "grid w-full min-w-0 grid-cols-2 gap-2 sm:gap-2.5 lg:flex lg:w-auto lg:shrink-0 lg:gap-3";
+
+const directoryFilterSelectCol =
+  "min-w-0 lg:w-[9.5rem] xl:w-[10.5rem]";
+
+const directoryFilterSelectColNarrow =
+  "min-w-0 lg:w-[8.25rem] xl:w-[9rem]";
+
+const directoryFilterSearchCol = "min-w-0 w-full flex-1";
+
+const directoryFilterMetaCol =
+  "flex shrink-0 items-center justify-between gap-2 lg:mb-1 lg:min-w-[4.5rem] lg:flex-col lg:items-end lg:justify-end lg:gap-0.5";
+
+const directoryFilterLabelClass =
+  "mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500";
 
 function MobileCompactStat({
   label,
@@ -2198,16 +2235,41 @@ const directoryEmptyClass = cn(
   "border-dashed px-4 py-10 text-center text-[13px] text-slate-500",
 );
 
-function DirectoryFloatingAddButton({ label, onClick }: { label: string; onClick: () => void }) {
+function DirectoryFloatingAddButton({
+  label,
+  onClick,
+  hidden = false,
+}: {
+  label: string;
+  onClick: () => void;
+  /** Hide while a dialog/profile overlay is open */
+  hidden?: boolean;
+}) {
+  if (hidden) return null;
+
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-4 z-40 grid h-14 w-14 place-items-center rounded-full bg-gradient-to-r from-teal-700 to-teal-800 text-white shadow-xl shadow-teal-900/30 transition-all duration-200 hover:opacity-95 active:scale-95 md:hidden"
+      className={cn(
+        "fixed z-40 inline-flex items-center justify-center gap-2 rounded-full",
+        "bg-gradient-to-br from-[#0F766E] via-[#0D9488] to-[#115E59] text-white",
+        "shadow-[0_14px_36px_-10px_rgba(15,118,110,0.55)]",
+        "transition-all duration-200 hover:brightness-110 hover:shadow-[0_18px_42px_-10px_rgba(15,118,110,0.65)]",
+        "active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2DD4BF] focus-visible:ring-offset-2",
+        // Mobile: icon FAB above bottom tab dock
+        "bottom-[calc(5rem+env(safe-area-inset-bottom))] right-4 h-14 w-14",
+        // Tablet/desktop: extended pill, clear of page chrome
+        "md:bottom-6 md:right-6 md:h-12 md:w-auto md:gap-2 md:px-5",
+        "lg:bottom-8 lg:right-8",
+      )}
     >
-      <Plus className="h-6 w-6" strokeWidth={2.5} />
+      <Plus className="h-6 w-6 shrink-0 md:h-5 md:w-5" strokeWidth={2.5} />
+      <span className="hidden max-w-[10rem] truncate text-[13px] font-semibold tracking-tight md:inline">
+        {label}
+      </span>
     </button>
   );
 }
@@ -2285,70 +2347,172 @@ function DirectoryBulkActionBar({
 function DirectoryRecycleBinList({
   items,
   emptyLabel,
+  entityLabel = "item",
   subtitleFor,
   onRestore,
   onPurge,
+  onBulkRestore,
+  onBulkPurge,
 }: {
   items: { id: string; name: string; photoUrl?: string; deletedAt?: string }[];
   emptyLabel: string;
+  /** Singular label for toasts/UI · e.g. "student" / "staff member" */
+  entityLabel?: string;
   subtitleFor: (item: { id: string; name: string; deletedAt?: string }) => string;
   onRestore: (id: string) => void;
   onPurge: (id: string) => void;
+  onBulkRestore: (ids: string[]) => void;
+  onBulkPurge: (ids: string[]) => void;
 }) {
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      const alive = new Set(items.map((item) => item.id));
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (alive.has(id)) next.add(id);
+      }
+      return next.size === prev.size ? prev : next;
+    });
+  }, [items]);
+
   if (items.length === 0) {
     return <div className={directoryEmptyClass}>{emptyLabel}</div>;
   }
 
+  const allSelected = items.length > 0 && items.every((item) => selectedIds.has(item.id));
+  const someSelected = items.some((item) => selectedIds.has(item.id));
+  const selectedCount = selectedIds.size;
+  const plural = selectedCount === 1 ? entityLabel : `${entityLabel}s`;
+
+  const toggleOne = (id: string, selected: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (selected) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const toggleAll = (selected: boolean) => {
+    setSelectedIds(selected ? new Set(items.map((item) => item.id)) : new Set());
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
   return (
-    <div className={directoryMobileListClass}>
-      {items.map((item) => {
-        const deletedLabel = item.deletedAt
-          ? formatInAppZone(new Date(item.deletedAt), {
-              dateStyle: "medium",
-              timeStyle: "short",
-            })
-          : "Deleted";
-        return (
-          <div
-            key={item.id}
-            className={cn(
-              directoryMobileCardClass,
-              "cursor-default sm:flex-row sm:items-center sm:justify-between",
-            )}
-          >
-            <div className="flex min-w-0 items-center gap-3">
-              <DirectoryPersonAvatar name={item.name} photoUrl={item.photoUrl} />
-              <div className="min-w-0">
-                <div className="truncate text-[14px] font-semibold leading-tight text-black">
-                  {item.name}
+    <div className="space-y-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+        <label className="inline-flex min-w-0 cursor-pointer items-center gap-2 text-[12.5px] font-medium text-slate-600 dark:text-zinc-300">
+          <Checkbox
+            checked={allSelected ? true : someSelected ? "indeterminate" : false}
+            onCheckedChange={(v) => toggleAll(v === true)}
+            aria-label={`Select all deleted ${entityLabel}s`}
+          />
+          <span className="truncate">
+            {selectedCount > 0
+              ? `${selectedCount} selected`
+              : `Select all · ${items.length} in Recycle`}
+          </span>
+        </label>
+
+        {selectedCount > 0 ? (
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                onBulkRestore(Array.from(selectedIds));
+                clearSelection();
+              }}
+              className="inline-flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-full border border-[#99F6E4] bg-[#F0FDFA] px-3 text-[12px] font-semibold text-[#0F766E] transition-colors hover:bg-[#CCFBF1] sm:flex-none"
+            >
+              <RotateCcw className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">Restore ({selectedCount})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onBulkPurge(Array.from(selectedIds))}
+              className="inline-flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-full border border-[#FECACA] bg-[#FEF2F2] px-3 text-[12px] font-semibold text-[#EF4444] transition-colors hover:bg-[#FEE2E2] sm:flex-none"
+            >
+              <Trash2 className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">Delete ({selectedCount})</span>
+            </button>
+            <button
+              type="button"
+              onClick={clearSelection}
+              className="inline-flex h-9 items-center justify-center rounded-full border border-[#E5E5E5] bg-white px-3 text-[12px] font-semibold text-slate-600 transition-colors hover:bg-slate-50 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              Clear
+            </button>
+          </div>
+        ) : (
+          <p className="text-[11.5px] text-slate-400 sm:text-right">
+            Select {plural} to restore or permanently delete in bulk
+          </p>
+        )}
+      </div>
+
+      <div className={directoryMobileListClass}>
+        {items.map((item) => {
+          const deletedLabel = item.deletedAt
+            ? formatInAppZone(new Date(item.deletedAt), {
+                dateStyle: "medium",
+                timeStyle: "short",
+              })
+            : "Deleted";
+          const isSelected = selectedIds.has(item.id);
+          return (
+            <div
+              key={item.id}
+              className={cn(
+                directoryMobileCardClass,
+                "cursor-default sm:flex-row sm:items-center sm:justify-between",
+                isSelected && "ring-2 ring-[#0F766E]/25",
+              )}
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <Checkbox
+                  checked={isSelected}
+                  onCheckedChange={(v) => toggleOne(item.id, v === true)}
+                  aria-label={`Select ${item.name}`}
+                  className="shrink-0"
+                />
+                <DirectoryPersonAvatar name={item.name} photoUrl={item.photoUrl} />
+                <div className="min-w-0">
+                  <div className="truncate text-[14px] font-semibold leading-tight text-black dark:text-zinc-100">
+                    {item.name}
+                  </div>
+                  <div className="mt-0.5 truncate font-mono text-[10.5px] text-black/45 dark:text-zinc-500">
+                    {subtitleFor(item)}
+                  </div>
+                  <div className="mt-1 text-[11px] text-black/40 dark:text-zinc-500">
+                    Deleted {deletedLabel}
+                  </div>
                 </div>
-                <div className="mt-0.5 truncate font-mono text-[10.5px] text-black/45">
-                  {subtitleFor(item)}
-                </div>
-                <div className="mt-1 text-[11px] text-black/40">Deleted {deletedLabel}</div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2 sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => onRestore(item.id)}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#99F6E4] bg-[#F0FDFA] px-3 text-[12px] font-semibold text-[#0F766E] transition-colors hover:bg-[#CCFBF1]"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Restore
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onPurge(item.id)}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#FECACA] bg-[#FEF2F2] px-3 text-[12px] font-semibold text-[#EF4444] transition-colors hover:bg-[#FEE2E2]"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete
+                </button>
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2 sm:justify-end">
-              <button
-                type="button"
-                onClick={() => onRestore(item.id)}
-                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#99F6E4] bg-[#F0FDFA] px-3 text-[12px] font-semibold text-[#0F766E] transition-colors hover:bg-[#CCFBF1]"
-              >
-                <RotateCcw className="h-3.5 w-3.5" />
-                Restore
-              </button>
-              <button
-                type="button"
-                onClick={() => onPurge(item.id)}
-                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#FECACA] bg-[#FEF2F2] px-3 text-[12px] font-semibold text-[#EF4444] transition-colors hover:bg-[#FEE2E2]"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Delete
-              </button>
-            </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -2810,7 +2974,7 @@ export function AdmitStudentPage() {
   };
 
   const persistAdmitted = (student: Student) => {
-    void apiUpsertStudent(student).catch((err) =>
+    void apiUpsertStudent(student, { createOnly: true }).catch((err) =>
       toast.error(err instanceof Error ? err.message : "Could not sync student to server"),
     );
   };
@@ -3103,6 +3267,7 @@ export function StudentsLedger() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showRecycleBin, setShowRecycleBin] = useState(false);
   const [pendingPurgeId, setPendingPurgeId] = useState<string | null>(null);
+  const [pendingBulkPurgeIds, setPendingBulkPurgeIds] = useState<string[] | null>(null);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
@@ -3346,6 +3511,49 @@ export function StudentsLedger() {
       }),
     );
     toast.error(`${target.name} permanently deleted`, { description: target.id });
+  };
+
+  const bulkRestoreStudents = (ids: string[]) => {
+    if (!ids.length) return;
+    const idSet = new Set(ids);
+    const names = deletedStudents.filter((s) => idSet.has(s.id)).map((s) => s.name);
+    setStudents((prev) =>
+      prev.map((s) => (idSet.has(s.id) ? { ...s, deletedAt: undefined } : s)),
+    );
+    for (const id of ids) {
+      void apiDeleteStudent(id, { restore: true }).catch((err) =>
+        toast.error("Could not restore student on server", {
+          description: err instanceof Error ? err.message : "Restore failed",
+        }),
+      );
+    }
+    toast.success(
+      `${ids.length} student${ids.length === 1 ? "" : "s"} restored`,
+      { description: names.slice(0, 3).join(", ") + (names.length > 3 ? "…" : "") },
+    );
+  };
+
+  const confirmBulkPurgeStudents = () => {
+    const ids = pendingBulkPurgeIds ?? [];
+    if (!ids.length) {
+      setPendingBulkPurgeIds(null);
+      return;
+    }
+    const idSet = new Set(ids);
+    const count = ids.length;
+    setStudents((prev) => prev.filter((s) => !idSet.has(s.id)));
+    setPendingBulkPurgeIds(null);
+    for (const id of ids) {
+      void apiDeleteStudent(id, { hard: true }).catch((err) =>
+        toast.error("Could not permanently delete student on server", {
+          description: err instanceof Error ? err.message : "Delete failed",
+        }),
+      );
+    }
+    toast.error(
+      `${count} student${count === 1 ? "" : "s"} permanently deleted`,
+      { description: "This cannot be undone" },
+    );
   };
 
   const bulkChangeStatus = (nextActive: boolean) => {
@@ -4116,11 +4324,11 @@ export function StudentsLedger() {
         </div>
       </div>
 
-      <div className="flex w-full min-w-0 flex-col gap-2 xl:flex-row xl:items-center xl:justify-between xl:gap-4">
-        <h1 className="shrink-0 text-[16px] font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50 md:text-[24px] md:font-semibold xl:min-w-0 xl:flex-1 xl:truncate xl:text-[28px]">
+      <div className={directoryHeaderRow}>
+        <h1 className="min-w-0 shrink text-[16px] font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50 md:text-[24px] md:font-semibold lg:text-[28px]">
           {showRecycleBin ? "Recycle Bin" : "Students Directory"}
         </h1>
-        <div className={cn(directoryToolbarRow, "xl:max-w-full xl:shrink-0")}>
+        <div className={directoryToolbarRow}>
           <button
             type="button"
             onClick={() => setShowRecycleBin((v) => !v)}
@@ -4129,13 +4337,11 @@ export function StudentsLedger() {
               showRecycleBin
                 ? "border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] hover:bg-[#FEE2E2]"
                 : "text-slate-900",
-              showRecycleBin && "sm:flex-none",
             )}
             aria-pressed={showRecycleBin}
           >
             <Recycle className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate sm:hidden">Bin</span>
-            <span className="hidden truncate sm:inline">Recycle</span>
+            <span>Recycle</span>
             {deletedStudents.length > 0 && (
               <span
                 className={cn(
@@ -4154,7 +4360,7 @@ export function StudentsLedger() {
                 <DropdownMenuTrigger asChild>
                   <button type="button" className={directoryToolbarBtn}>
                     <Filter className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">Filter</span>
+                    <span>Filter</span>
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
@@ -4203,40 +4409,11 @@ export function StudentsLedger() {
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button type="button" className={directoryToolbarBtn}>
-                    <Download className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">Export</span>
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  sideOffset={8}
-                  collisionPadding={12}
-                  className="z-[250] w-52 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
-                >
-                  <DropdownMenuItem
-                    onClick={downloadPdf}
-                    className="cursor-pointer gap-2 rounded-xl text-[13px]"
-                  >
-                    <Printer className="h-3.5 w-3.5" />
-                    Print
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={exportCsv}
-                    className="cursor-pointer gap-2 rounded-xl text-[13px]"
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                    Export CSV
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
                   <button type="button" className={directoryToolbarBtn} disabled={importing}>
-                    <Upload className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate sm:hidden">Upload</span>
-                    <span className="hidden truncate sm:inline">Bulk Upload</span>
+                    <ArrowUpFromLine className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate sm:hidden">Data</span>
+                    <span className="hidden truncate sm:inline">Import / Export</span>
+                    <ChevronDown className="hidden h-3.5 w-3.5 shrink-0 opacity-50 sm:inline" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
@@ -4245,6 +4422,27 @@ export function StudentsLedger() {
                   collisionPadding={12}
                   className="z-[250] w-56 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
                 >
+                  <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    Export
+                  </DropdownMenuLabel>
+                  <DropdownMenuItem
+                    onClick={downloadPdf}
+                    className="cursor-pointer gap-2 rounded-xl text-[13px]"
+                  >
+                    <Printer className="h-3.5 w-3.5" />
+                    Print directory
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={exportCsv}
+                    className="cursor-pointer gap-2 rounded-xl text-[13px]"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Export CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="my-2" />
+                  <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    Import
+                  </DropdownMenuLabel>
                   <DropdownMenuItem
                     onClick={downloadStudentTemplate}
                     className="cursor-pointer gap-2 rounded-xl text-[13px]"
@@ -4262,18 +4460,6 @@ export function StudentsLedger() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-
-              <button
-                type="button"
-                onClick={openAdmitPage}
-                className={cn(
-                  mobilePrimaryBtn,
-                  "hidden md:inline-flex md:rounded-full md:bg-gradient-to-r md:from-[#0F766E] md:to-[#115E59] md:shadow-md md:shadow-teal-900/15 md:hover:opacity-95 md:hover:bg-gradient-to-r",
-                )}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Admit Student
-              </button>
             </>
           )}
         </div>
@@ -4287,112 +4473,90 @@ export function StudentsLedger() {
           <DirectoryRecycleBinList
             items={deletedStudents}
             emptyLabel="Recycle bin is empty — no deleted students."
+            entityLabel="student"
             subtitleFor={(item) => {
               const student = deletedStudents.find((s) => s.id === item.id);
               return student ? `${student.id} · ${student.cls}` : item.id;
             }}
             onRestore={restoreStudent}
             onPurge={setPendingPurgeId}
+            onBulkRestore={bulkRestoreStudents}
+            onBulkPurge={setPendingBulkPurgeIds}
           />
         </div>
       ) : (
         <>
-          <div className={cn(glassCardClass, "min-w-0 p-2.5 md:p-5")}>
-            <div className="flex flex-col gap-2.5 md:flex-row md:items-end md:gap-3 lg:gap-4">
-              <div className="flex items-end gap-2 md:contents">
-                <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 md:contents">
-                  <div className="min-w-0 md:order-1 md:w-36 lg:w-40">
-                    <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
-                      Class / Grade
-                    </div>
-                    <Select value={gradeFilter} onValueChange={setGradeFilter}>
-                      <SelectTrigger
-                        className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
-                        aria-label="Class / Grade"
-                      >
-                        <SelectValue placeholder="All classes" />
-                      </SelectTrigger>
-                      <SelectContent
-                        position="popper"
-                        sideOffset={4}
-                        className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
-                      >
-                        <SelectItem value="all" className="rounded-md">
-                          All classes
-                        </SelectItem>
-                        {gradeOptions.map((grade) => (
-                          <SelectItem key={grade} value={grade} className="rounded-md">
-                            {grade}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+          <div className={directoryFilterCardClass}>
+            <div className={directoryFilterStrip}>
+              <div className={directoryFilterSelectsRow}>
+                <div className={directoryFilterSelectCol}>
+                  <div className={cn(directoryFilterLabelClass, "hidden sm:block")}>
+                    Class / Grade
                   </div>
-
-                  <div className="min-w-0 md:order-2 md:w-32 lg:w-36">
-                    <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
-                      Division
-                    </div>
-                    <Select
-                      value={divisionFilter}
-                      onValueChange={setDivisionFilter}
-                      disabled={gradeFilter === "all" && divisionOptions.length === 0}
+                  <Select value={gradeFilter} onValueChange={setGradeFilter}>
+                    <SelectTrigger
+                      className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white sm:h-10"
+                      aria-label="Class / Grade"
                     >
-                      <SelectTrigger
-                        className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
-                        aria-label="Division"
-                      >
-                        <SelectValue placeholder="All divisions" />
-                      </SelectTrigger>
-                      <SelectContent
-                        position="popper"
-                        sideOffset={4}
-                        className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
-                      >
-                        <SelectItem value="all" className="rounded-md">
-                          All divisions
+                      <SelectValue placeholder="All classes" />
+                    </SelectTrigger>
+                    <SelectContent
+                      position="popper"
+                      sideOffset={4}
+                      className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
+                    >
+                      <SelectItem value="all" className="rounded-md">
+                        All classes
+                      </SelectItem>
+                      {gradeOptions.map((grade) => (
+                        <SelectItem key={grade} value={grade} className="rounded-md">
+                          {grade}
                         </SelectItem>
-                        {divisionOptions.map((division) => (
-                          <SelectItem key={division} value={division} className="rounded-md">
-                            {division}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                <div className="flex shrink-0 flex-col items-end gap-0.5 max-md:pb-0.5 md:order-4 md:mb-0.5 lg:mb-1">
-                  <span className="font-mono text-[10px] tabular-nums text-slate-400 md:text-[11px]">
-                    {filtered.length} shown
-                  </span>
-                  {(gradeFilter !== "all" || divisionFilter !== "all" || searchQuery.trim()) && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setGradeFilter("all");
-                        setDivisionFilter("all");
-                        setSearchQuery("");
-                      }}
-                      className="text-[10px] font-semibold text-slate-500 underline-offset-2 hover:text-slate-900 hover:underline"
+                <div className={directoryFilterSelectColNarrow}>
+                  <div className={cn(directoryFilterLabelClass, "hidden sm:block")}>Division</div>
+                  <Select
+                    value={divisionFilter}
+                    onValueChange={setDivisionFilter}
+                    disabled={gradeFilter === "all" && divisionOptions.length === 0}
+                  >
+                    <SelectTrigger
+                      className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white sm:h-10"
+                      aria-label="Division"
                     >
-                      Clear
-                    </button>
-                  )}
+                      <SelectValue placeholder="All divisions" />
+                    </SelectTrigger>
+                    <SelectContent
+                      position="popper"
+                      sideOffset={4}
+                      className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
+                    >
+                      <SelectItem value="all" className="rounded-md">
+                        All divisions
+                      </SelectItem>
+                      {divisionOptions.map((division) => (
+                        <SelectItem key={division} value={division} className="rounded-md">
+                          {division}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
-              <div className="min-w-0 w-full md:order-3 md:flex-1">
-                <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
-                  Search
-                </div>
+              <div className={directoryFilterSearchCol}>
+                <div className={cn(directoryFilterLabelClass, "hidden sm:block")}>Search</div>
                 <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400 md:h-4 md:w-4" />
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400 sm:h-4 sm:w-4" />
                   <Input
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search name, ID, guardian, phone…"
-                    className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white pl-9 pr-9 md:h-10"
+                    className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white pl-9 pr-9 sm:h-10"
                     aria-label="Search students"
                   />
                   {searchQuery && (
@@ -4406,6 +4570,25 @@ export function StudentsLedger() {
                     </button>
                   )}
                 </div>
+              </div>
+
+              <div className={directoryFilterMetaCol}>
+                <span className="font-mono text-[10px] tabular-nums text-slate-400 sm:text-[11px]">
+                  {filtered.length} shown
+                </span>
+                {(gradeFilter !== "all" || divisionFilter !== "all" || searchQuery.trim()) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGradeFilter("all");
+                      setDivisionFilter("all");
+                      setSearchQuery("");
+                    }}
+                    className="text-[10px] font-semibold text-slate-500 underline-offset-2 hover:text-slate-900 hover:underline"
+                  >
+                    Clear
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -4466,6 +4649,16 @@ export function StudentsLedger() {
         onConfirm={() => {
           if (pendingPurgeId) purgeStudent(pendingPurgeId);
         }}
+      />
+
+      <DeleteConfirmDialog
+        open={Boolean(pendingBulkPurgeIds?.length)}
+        onOpenChange={(next) => {
+          if (!next) setPendingBulkPurgeIds(null);
+        }}
+        title="Delete permanently"
+        description={`Permanently delete ${pendingBulkPurgeIds?.length ?? 0} selected student${(pendingBulkPurgeIds?.length ?? 0) === 1 ? "" : "s"}? This cannot be undone.`}
+        onConfirm={confirmBulkPurgeStudents}
       />
 
       <DeleteConfirmDialog
@@ -4668,7 +4861,11 @@ export function StudentsLedger() {
         </DialogContent>
       </Dialog>
 
-      <DirectoryFloatingAddButton label="Admit Student" onClick={openAdmitPage} />
+      <DirectoryFloatingAddButton
+        label="Admit Student"
+        onClick={openAdmitPage}
+        hidden={showRecycleBin || Boolean(activeStudentViewId)}
+      />
     </div>
   );
 }
@@ -4741,6 +4938,7 @@ export function StaffRoster() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showRecycleBin, setShowRecycleBin] = useState(false);
   const [pendingPurgeId, setPendingPurgeId] = useState<string | null>(null);
+  const [pendingBulkPurgeIds, setPendingBulkPurgeIds] = useState<string[] | null>(null);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [bulkWhatsAppOpen, setBulkWhatsAppOpen] = useState(false);
@@ -4816,6 +5014,11 @@ export function StaffRoster() {
       return haystack.includes(q);
     });
   }, [liveStaff, deptFilter, statusFilter, searchQuery]);
+
+  const staffDuplicateExtras = useMemo(
+    () => countStaffDuplicateExtras(liveStaff),
+    [liveStaff],
+  );
 
   const staffFiltersActive = deptFilter !== "all" || statusFilter !== "all";
 
@@ -5010,6 +5213,31 @@ export function StaffRoster() {
     });
   };
 
+  const mergeDuplicateStaff = () => {
+    const { recycleIds } = planStaffDuplicateMerge(liveStaff);
+    if (!recycleIds.length) {
+      toast.success("No duplicate staff to merge");
+      return;
+    }
+    const ids = new Set(recycleIds);
+    const stamp = new Date().toISOString();
+    setStaff((prev) => prev.map((s) => (ids.has(s.id) ? { ...s, deletedAt: stamp } : s)));
+    for (const id of recycleIds) {
+      void apiDeleteStaff(id).catch((err) =>
+        toast.error("Could not move duplicate to Recycle", {
+          description: err instanceof Error ? err.message : "Delete failed",
+        }),
+      );
+    }
+    clearStaffSelection();
+    toast.success(
+      `${recycleIds.length} duplicate${recycleIds.length === 1 ? "" : "s"} moved to Recycle`,
+      {
+        description: "Kept one record per name · restore from Recycle if needed",
+      },
+    );
+  };
+
   const openStaffBulkWhatsApp = () => {
     if (!selectedIds.size) {
       toast.error("Select at least one staff member");
@@ -5108,6 +5336,49 @@ export function StaffRoster() {
     toast.error(`${target.name} permanently deleted`, { description: target.id });
   };
 
+  const bulkRestoreStaff = (ids: string[]) => {
+    if (!ids.length) return;
+    const idSet = new Set(ids);
+    const names = deletedStaff.filter((s) => idSet.has(s.id)).map((s) => s.name);
+    setStaff((prev) =>
+      prev.map((s) => (idSet.has(s.id) ? { ...s, deletedAt: undefined } : s)),
+    );
+    for (const id of ids) {
+      void apiDeleteStaff(id, { restore: true }).catch((err) =>
+        toast.error("Could not restore staff on server", {
+          description: err instanceof Error ? err.message : "Restore failed",
+        }),
+      );
+    }
+    toast.success(
+      `${ids.length} staff member${ids.length === 1 ? "" : "s"} restored`,
+      { description: names.slice(0, 3).join(", ") + (names.length > 3 ? "…" : "") },
+    );
+  };
+
+  const confirmBulkPurgeStaff = () => {
+    const ids = pendingBulkPurgeIds ?? [];
+    if (!ids.length) {
+      setPendingBulkPurgeIds(null);
+      return;
+    }
+    const idSet = new Set(ids);
+    const count = ids.length;
+    setStaff((prev) => prev.filter((s) => !idSet.has(s.id)));
+    setPendingBulkPurgeIds(null);
+    for (const id of ids) {
+      void apiDeleteStaff(id, { hard: true }).catch((err) =>
+        toast.error("Could not permanently delete staff on server", {
+          description: err instanceof Error ? err.message : "Delete failed",
+        }),
+      );
+    }
+    toast.error(
+      `${count} staff member${count === 1 ? "" : "s"} permanently deleted`,
+      { description: "This cannot be undone" },
+    );
+  };
+
   const handleRecruitPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -5169,7 +5440,7 @@ export function StaffRoster() {
           payload = { ...payload, photoUrl: url };
           setStaff((prev) => prev.map((s) => (s.id === payload.id ? { ...s, photoUrl: url } : s)));
         }
-        await apiUpsertStaff(payload);
+        await apiUpsertStaff(payload, { createOnly: true });
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Could not sync staff to server");
       }
@@ -5306,36 +5577,58 @@ export function StaffRoster() {
         setImportingStaff(true);
         try {
           const live = staff.filter((s) => !isRecordDeleted(s.deletedAt));
-          const byId = new Map(live.map((s) => [s.id.toLowerCase(), s]));
+          const recycled = staff.filter((s) => isRecordDeleted(s.deletedAt));
+          const byId = new Map(staff.map((s) => [s.id.toLowerCase(), s]));
           let usedIds = staff.map((s) => s.id);
           const created: Staff[] = [];
           const updated: Staff[] = [];
-          let skipped = 0;
+          const restoredIds = new Set<string>();
+          const recycleTwinIds = new Set<string>();
+          let alreadyOnRoster = 0;
+
+          const poolForMatch = () => [
+            ...live.filter((s) => !recycleTwinIds.has(s.id)),
+            ...created,
+            ...updated,
+          ];
 
           for (const row of parsed.rows) {
             const idCell = row.id.trim();
             const existingById = idCell ? byId.get(idCell.toLowerCase()) : undefined;
 
-            if (!existingById && !idCell) {
-              if (
-                isDuplicateStaff(live, row) ||
-                isDuplicateStaff(created, row) ||
-                isDuplicateStaff(updated, row)
-              ) {
-                skipped += 1;
-                continue;
-              }
-            }
+            // Prefer live match, then soft-deleted (delete-all → re-upload same sheet)
+            const matchedLive =
+              (existingById && !isRecordDeleted(existingById.deletedAt) ? existingById : undefined) ||
+              findDuplicateStaff(poolForMatch(), row);
 
-            if (existingById) {
-              const next = staffFromCsvRow(row, {
-                id: existingById.id,
-                defaultRole,
-                defaultDept,
-                existing: existingById,
-              });
-              updated.push(next);
+            const matchedRecycled =
+              matchedLive
+                ? undefined
+                : (existingById && isRecordDeleted(existingById.deletedAt) ? existingById : undefined) ||
+                  findDuplicateStaff(recycled, row, { includeDeleted: true });
+
+            const matched = matchedLive || matchedRecycled;
+            if (matched) {
+              const next = {
+                ...staffFromCsvRow(row, {
+                  id: matched.id,
+                  defaultRole,
+                  defaultDept,
+                  existing: matched,
+                }),
+                deletedAt: undefined,
+              };
+              const already = updated.findIndex((s) => s.id === next.id);
+              if (already >= 0) updated[already] = next;
+              else updated.push(next);
               byId.set(next.id.toLowerCase(), next);
+
+              if (matchedRecycled) restoredIds.add(matched.id);
+
+              for (const twin of findStaffNameTwins(poolForMatch(), next.name, next.id)) {
+                recycleTwinIds.add(twin.id);
+              }
+              alreadyOnRoster += 1;
               continue;
             }
 
@@ -5350,52 +5643,112 @@ export function StaffRoster() {
             byId.set(draft.id.toLowerCase(), draft);
           }
 
-          if (!created.length && !updated.length) {
-            toast.error("No staff to import", {
-              description:
-                skipped > 0
-                  ? `${skipped} row${skipped === 1 ? "" : "s"} skipped · already on roster`
-                  : "Check the CSV columns and try again",
+          if (!created.length && !updated.length && recycleTwinIds.size === 0) {
+            toast.error("No staff rows to import", {
+              description: "Check the CSV has Name, Role, Department columns and at least one data row",
             });
             return;
           }
 
-          if (created.length || updated.length) {
+          // Re-upload of the exact same roster with no new people and no field sync needed yet
+          if (!created.length && updated.length > 0 && recycleTwinIds.size === 0 && restoredIds.size === 0) {
+            // Still sync updates (status/salary may change) — fall through
+          }
+
+          const stamp = new Date().toISOString();
+          if (created.length || updated.length || recycleTwinIds.size) {
             setStaff((prev) => {
               const map = new Map(prev.map((s) => [s.id, s]));
-              for (const member of updated) map.set(member.id, member);
-              const next = Array.from(map.values());
-              return [...created, ...next.filter((s) => !created.some((c) => c.id === s.id))];
+              for (const id of recycleTwinIds) {
+                const row = map.get(id);
+                if (row) map.set(id, { ...row, deletedAt: stamp });
+              }
+              for (const member of updated) map.set(member.id, { ...member, deletedAt: undefined });
+              const next = Array.from(map.values()).filter((s) => !created.some((c) => c.id === s.id));
+              return [...created, ...next];
             });
           }
 
-          for (const member of updated) {
-            await apiUpsertStaff(member).catch((err) => {
-              toast.error(err instanceof Error ? err.message : `Could not sync ${member.name}`);
+          for (const id of recycleTwinIds) {
+            void apiDeleteStaff(id).catch(() => {
+              /* local recycle kept */
             });
           }
+
+          let syncFailed = 0;
+          let syncOk = 0;
+
+          for (const member of updated) {
+            try {
+              if (restoredIds.has(member.id)) {
+                // Ensure server clears deleted_at even if update.php doesn't
+                await apiDeleteStaff(member.id, { restore: true }).catch(() => {
+                  /* create/update below may still restore */
+                });
+                await apiUpsertStaff(member, { createOnly: true });
+              } else {
+                await apiUpsertStaff(member);
+              }
+              syncOk += 1;
+            } catch (err) {
+              syncFailed += 1;
+              toast.error(err instanceof Error ? err.message : `Could not sync ${member.name}`);
+            }
+          }
+
           for (const member of created) {
             try {
               const saved = await apiUpsertStaff(member, { createOnly: true });
+              syncOk += 1;
               if (saved.id !== member.id) {
                 setStaff((prev) => [
-                  { ...member, ...saved, id: saved.id },
+                  { ...member, ...saved, id: saved.id, deletedAt: undefined },
                   ...prev.filter((s) => s.id !== member.id),
                 ]);
               }
             } catch (err) {
+              syncFailed += 1;
+              setStaff((prev) => prev.filter((s) => s.id !== member.id));
               toast.error(err instanceof Error ? err.message : `Could not sync ${member.name}`);
             }
           }
 
           const parts = [
             created.length ? `${created.length} added` : null,
-            updated.length ? `${updated.length} updated` : null,
-            skipped > 0 ? `${skipped} skipped` : null,
+            restoredIds.size ? `${restoredIds.size} restored from Recycle` : null,
+            updated.length && !restoredIds.size
+              ? `${updated.length} updated`
+              : updated.length > restoredIds.size
+                ? `${updated.length - restoredIds.size} updated`
+                : null,
+            recycleTwinIds.size
+              ? `${recycleTwinIds.size} duplicate${recycleTwinIds.size === 1 ? "" : "s"} moved to Recycle`
+              : null,
+            syncFailed > 0 ? `${syncFailed} sync failed` : null,
           ].filter(Boolean);
-          toast.success(`${created.length + updated.length} staff imported`, {
-            description: parts.join(" · ") || "Synced to staff directory",
-          });
+
+          if (syncFailed && !syncOk && !recycleTwinIds.size) {
+            toast.error("Staff import could not sync to the server", {
+              description: parts.join(" · ") || "Check your connection and try again",
+            });
+          } else if (!created.length && restoredIds.size === 0 && updated.length > 0 && syncOk === updated.length) {
+            toast.success(
+              alreadyOnRoster === updated.length
+                ? `${updated.length} staff already on roster · updated`
+                : `${updated.length} staff updated`,
+              { description: parts.join(" · ") || "Directory is up to date" },
+            );
+          } else {
+            const touched = created.length + updated.length;
+            toast.success(
+              touched === 0 && recycleTwinIds.size
+                ? "Duplicate staff cleaned up"
+                : `${Math.max(touched, syncOk)} staff imported`,
+              {
+                description: parts.join(" · ") || "Synced to staff directory",
+              },
+            );
+          }
         } finally {
           setImportingStaff(false);
           if (staffImportRef.current) staffImportRef.current.value = "";
@@ -5620,11 +5973,11 @@ export function StaffRoster() {
         </div>
       </div>
 
-      <div className="flex w-full min-w-0 flex-col gap-2 xl:flex-row xl:items-center xl:justify-between xl:gap-4">
-        <h1 className="shrink-0 text-[16px] font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50 md:text-[24px] md:font-semibold xl:min-w-0 xl:flex-1 xl:truncate xl:text-[28px]">
+      <div className={directoryHeaderRow}>
+        <h1 className="min-w-0 shrink text-[16px] font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50 md:text-[24px] md:font-semibold lg:text-[28px]">
           {showRecycleBin ? "Recycle Bin" : "Staff Directory"}
         </h1>
-        <div className={cn(directoryToolbarRow, "xl:max-w-full xl:shrink-0")}>
+        <div className={directoryToolbarRow}>
           <button
             type="button"
             onClick={() => setShowRecycleBin((v) => !v)}
@@ -5633,13 +5986,11 @@ export function StaffRoster() {
               showRecycleBin
                 ? "border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] hover:bg-[#FEE2E2]"
                 : "text-slate-900",
-              showRecycleBin && "sm:flex-none",
             )}
             aria-pressed={showRecycleBin}
           >
             <Recycle className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate sm:hidden">Bin</span>
-            <span className="hidden truncate sm:inline">Recycle</span>
+            <span>Recycle</span>
             {deletedStaff.length > 0 && (
               <span
                 className={cn(
@@ -5654,6 +6005,25 @@ export function StaffRoster() {
 
           {!showRecycleBin && (
             <>
+              {staffDuplicateExtras > 0 && (
+                <button
+                  type="button"
+                  onClick={mergeDuplicateStaff}
+                  className={cn(
+                    directoryToolbarBtn,
+                    "border-amber-200 bg-amber-50 text-amber-950 hover:bg-amber-100 dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:bg-amber-900/50",
+                  )}
+                  title="Keep one record per name and move extras to Recycle"
+                >
+                  <Combine className="h-3.5 w-3.5 shrink-0" />
+                  <span className="hidden sm:inline">Merge duplicates</span>
+                  <span className="sm:hidden">Merge</span>
+                  <span className="ml-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-600 px-1.5 font-mono text-[10px] font-bold text-white">
+                    {staffDuplicateExtras}
+                  </span>
+                </button>
+              )}
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
@@ -5666,7 +6036,7 @@ export function StaffRoster() {
                     )}
                   >
                     <Filter className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">Filter</span>
+                    <span>Filter</span>
                     {staffFiltersActive && (
                       <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[#0F766E] ring-2 ring-white dark:ring-zinc-950" />
                     )}
@@ -5716,30 +6086,40 @@ export function StaffRoster() {
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              <button
-                type="button"
-                onClick={handleExport}
-                disabled={importingStaff}
-                className={directoryToolbarBtn}
-              >
-                <Download className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">Export</span>
-              </button>
-
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button type="button" className={directoryToolbarBtn} disabled={importingStaff}>
-                    <Upload className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate sm:hidden">Upload</span>
-                    <span className="hidden truncate sm:inline">Bulk Upload</span>
+                  <button
+                    type="button"
+                    className={directoryToolbarBtn}
+                    disabled={importingStaff}
+                  >
+                    <ArrowUpFromLine className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate sm:hidden">Data</span>
+                    <span className="hidden truncate sm:inline">Import / Export</span>
+                    <ChevronDown className="hidden h-3.5 w-3.5 shrink-0 opacity-50 sm:inline" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   align="end"
                   sideOffset={8}
                   collisionPadding={12}
-                  className="z-[250] w-56 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
+                  className="z-[250] w-60 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
                 >
+                  <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    Export
+                  </DropdownMenuLabel>
+                  <DropdownMenuItem
+                    onClick={handleExport}
+                    disabled={importingStaff}
+                    className="cursor-pointer gap-2 rounded-xl text-[13px]"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Export CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="my-2" />
+                  <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    Import staff
+                  </DropdownMenuLabel>
                   <DropdownMenuItem
                     onClick={downloadStaffTemplate}
                     className="cursor-pointer gap-2 rounded-xl text-[13px]"
@@ -5755,25 +6135,9 @@ export function StaffRoster() {
                     <Upload className="h-3.5 w-3.5" />
                     Upload CSV
                   </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button type="button" className={directoryToolbarBtn}>
-                    <ClipboardList className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate sm:hidden">Attend.</span>
-                    <span className="hidden truncate sm:inline">Attendance</span>
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  sideOffset={8}
-                  collisionPadding={12}
-                  className="z-[250] w-64 rounded-lg border-[#E5E5E5] bg-white p-2 shadow-[0_16px_48px_-12px_rgba(0,0,0,0.22)]"
-                >
-                  <DropdownMenuLabel className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                    Payroll · {formatPayrollMonthLabel(payrollMonth)}
+                  <DropdownMenuSeparator className="my-2" />
+                  <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                    Attendance · {formatPayrollMonthLabel(payrollMonth)}
                   </DropdownMenuLabel>
                   <DropdownMenuItem
                     onClick={downloadAttendanceDemo}
@@ -5786,23 +6150,11 @@ export function StaffRoster() {
                     onClick={handleAttendanceImportClick}
                     className="cursor-pointer gap-2 rounded-xl text-[13px]"
                   >
-                    <Upload className="h-3.5 w-3.5" />
+                    <ClipboardList className="h-3.5 w-3.5" />
                     Upload attendance CSV
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-
-              <button
-                type="button"
-                onClick={() => setOpen(true)}
-                className={cn(
-                  mobilePrimaryBtn,
-                  "hidden md:inline-flex md:rounded-full md:bg-gradient-to-r md:from-[#0F766E] md:to-[#115E59] md:shadow-md md:shadow-teal-900/15 md:hover:opacity-95 md:hover:bg-gradient-to-r",
-                )}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Recruit Staff
-              </button>
             </>
           )}
         </div>
@@ -5853,112 +6205,88 @@ export function StaffRoster() {
           <DirectoryRecycleBinList
             items={deletedStaff}
             emptyLabel="Recycle bin is empty — no deleted staff."
+            entityLabel="staff member"
             subtitleFor={(item) => {
               const member = deletedStaff.find((s) => s.id === item.id);
               return member ? `${member.id} · ${member.role}` : item.id;
             }}
             onRestore={restoreStaffMember}
             onPurge={setPendingPurgeId}
+            onBulkRestore={bulkRestoreStaff}
+            onBulkPurge={setPendingBulkPurgeIds}
           />
         </div>
       ) : (
         <>
-          <div className={cn(glassCardClass, "min-w-0 p-2.5 md:p-5")}>
-            <div className="flex flex-col gap-2.5 md:flex-row md:items-end md:gap-3 lg:gap-4">
-              <div className="flex items-end gap-2 md:contents">
-                <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 md:contents">
-                  <div className="min-w-0 md:order-1 md:w-36 lg:w-40">
-                    <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
-                      Department
-                    </div>
-                    <Select value={deptFilter} onValueChange={setDeptFilter}>
-                      <SelectTrigger
-                        className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
-                        aria-label="Department"
-                      >
-                        <SelectValue placeholder="All departments" />
-                      </SelectTrigger>
-                      <SelectContent
-                        position="popper"
-                        sideOffset={4}
-                        className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
-                      >
-                        <SelectItem value="all" className="rounded-md">
-                          All departments
-                        </SelectItem>
-                        {departmentOptions.map((dept) => (
-                          <SelectItem key={dept} value={dept} className="rounded-md">
-                            {dept}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="min-w-0 md:order-2 md:w-32 lg:w-36">
-                    <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
-                      Status
-                    </div>
-                    <Select
-                      value={statusFilter}
-                      onValueChange={(value) => setStatusFilter(value as StaffStatusFilter)}
+          <div className={directoryFilterCardClass}>
+            <div className={directoryFilterStrip}>
+              <div className={directoryFilterSelectsRow}>
+                <div className={directoryFilterSelectCol}>
+                  <div className={cn(directoryFilterLabelClass, "hidden sm:block")}>Department</div>
+                  <Select value={deptFilter} onValueChange={setDeptFilter}>
+                    <SelectTrigger
+                      className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white sm:h-10"
+                      aria-label="Department"
                     >
-                      <SelectTrigger
-                        className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white md:h-10"
-                        aria-label="Status"
-                      >
-                        <SelectValue placeholder="All statuses" />
-                      </SelectTrigger>
-                      <SelectContent
-                        position="popper"
-                        sideOffset={4}
-                        className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
-                      >
-                        <SelectItem value="all" className="rounded-md">
-                          All statuses
+                      <SelectValue placeholder="All departments" />
+                    </SelectTrigger>
+                    <SelectContent
+                      position="popper"
+                      sideOffset={4}
+                      className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
+                    >
+                      <SelectItem value="all" className="rounded-md">
+                        All departments
+                      </SelectItem>
+                      {departmentOptions.map((dept) => (
+                        <SelectItem key={dept} value={dept} className="rounded-md">
+                          {dept}
                         </SelectItem>
-                        <SelectItem value="active" className="rounded-md">
-                          Active
-                        </SelectItem>
-                        <SelectItem value="inactive" className="rounded-md">
-                          Inactive
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                <div className="flex shrink-0 flex-col items-end gap-0.5 max-md:pb-0.5 md:order-4 md:mb-0.5 lg:mb-1">
-                  <span className="font-mono text-[10px] tabular-nums text-slate-400 md:text-[11px]">
-                    {filteredStaff.length} shown
-                  </span>
-                  {(deptFilter !== "all" || statusFilter !== "all" || searchQuery.trim()) && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDeptFilter("all");
-                        setStatusFilter("all");
-                        setSearchQuery("");
-                      }}
-                      className="text-[10px] font-semibold text-[#0F766E] underline-offset-2 hover:underline"
+                <div className={directoryFilterSelectColNarrow}>
+                  <div className={cn(directoryFilterLabelClass, "hidden sm:block")}>Status</div>
+                  <Select
+                    value={statusFilter}
+                    onValueChange={(value) => setStatusFilter(value as StaffStatusFilter)}
+                  >
+                    <SelectTrigger
+                      className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white sm:h-10"
+                      aria-label="Status"
                     >
-                      Clear
-                    </button>
-                  )}
+                      <SelectValue placeholder="All statuses" />
+                    </SelectTrigger>
+                    <SelectContent
+                      position="popper"
+                      sideOffset={4}
+                      className="z-[250] rounded-lg border-[#E5E5E5] bg-white"
+                    >
+                      <SelectItem value="all" className="rounded-md">
+                        All statuses
+                      </SelectItem>
+                      <SelectItem value="active" className="rounded-md">
+                        Active
+                      </SelectItem>
+                      <SelectItem value="inactive" className="rounded-md">
+                        Inactive
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
-              <div className="min-w-0 w-full md:order-3 md:flex-1">
-                <div className="mb-1.5 hidden text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:block">
-                  Search
-                </div>
+              <div className={directoryFilterSearchCol}>
+                <div className={cn(directoryFilterLabelClass, "hidden sm:block")}>Search</div>
                 <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400 md:h-4 md:w-4" />
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400 sm:h-4 sm:w-4" />
                   <Input
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search name, ID, role, phone…"
-                    className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white pl-9 pr-9 md:h-10"
+                    className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white pl-9 pr-9 sm:h-10"
                     aria-label="Search staff"
                   />
                   {searchQuery && (
@@ -5972,6 +6300,25 @@ export function StaffRoster() {
                     </button>
                   )}
                 </div>
+              </div>
+
+              <div className={directoryFilterMetaCol}>
+                <span className="font-mono text-[10px] tabular-nums text-slate-400 sm:text-[11px]">
+                  {filteredStaff.length} shown
+                </span>
+                {(deptFilter !== "all" || statusFilter !== "all" || searchQuery.trim()) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeptFilter("all");
+                      setStatusFilter("all");
+                      setSearchQuery("");
+                    }}
+                    className="text-[10px] font-semibold text-[#0F766E] underline-offset-2 hover:underline"
+                  >
+                    Clear
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -6216,6 +6563,16 @@ export function StaffRoster() {
         onConfirm={() => {
           if (pendingPurgeId) purgeStaffMember(pendingPurgeId);
         }}
+      />
+
+      <DeleteConfirmDialog
+        open={Boolean(pendingBulkPurgeIds?.length)}
+        onOpenChange={(next) => {
+          if (!next) setPendingBulkPurgeIds(null);
+        }}
+        title="Delete permanently"
+        description={`Permanently delete ${pendingBulkPurgeIds?.length ?? 0} selected staff member${(pendingBulkPurgeIds?.length ?? 0) === 1 ? "" : "s"}? This cannot be undone.`}
+        onConfirm={confirmBulkPurgeStaff}
       />
 
       <DeleteConfirmDialog
@@ -6466,7 +6823,11 @@ export function StaffRoster() {
         onDepartmentCreated={(dept) => setForm((prev) => ({ ...prev, dept: dept.name }))}
       />
 
-      <DirectoryFloatingAddButton label="Recruit Staff" onClick={() => setOpen(true)} />
+      <DirectoryFloatingAddButton
+        label="Recruit Staff"
+        onClick={() => setOpen(true)}
+        hidden={showRecycleBin || open || Boolean(activeStaffViewId)}
+      />
     </div>
   );
 }
@@ -11973,6 +12334,7 @@ function MakePayment() {
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/finance" });
   const [madePayments, setMadePayments] = useState<MadePayment[]>([]);
+  const [expensesReady, setExpensesReady] = useState(false);
   const [payeeType, setPayeeType] = useState<PayeeType>(search.staffId ? "Salary" : "Salary");
   const [selectedStaffId, setSelectedStaffId] = useState<string>(search.staffId ?? "");
   const [salaryMonth, setSalaryMonth] = useState(() => search.month ?? currentPayrollMonth());
@@ -12030,6 +12392,7 @@ function MakePayment() {
 
   useEffect(() => {
     let cancelled = false;
+    setExpensesReady(false);
     void apiListDisbursements()
       .then((rows) => {
         if (cancelled) return;
@@ -12043,6 +12406,9 @@ function MakePayment() {
       .catch(() => {
         if (cancelled) return;
         setMadePayments([]);
+      })
+      .finally(() => {
+        if (!cancelled) setExpensesReady(true);
       });
     return () => {
       cancelled = true;
@@ -12162,10 +12528,12 @@ function MakePayment() {
     const working = opts?.workingDays ?? attendance?.workingDays ?? 26;
     const paidLeave = opts?.paidLeaveDays ?? attendance?.paidLeaveDays ?? 0;
     const unpaidLeave = opts?.unpaidLeaveDays ?? attendance?.unpaidLeaveDays ?? 0;
-    setDaysPresent(String(present));
-    setWorkingDays(String(working));
-    setPaidLeaveDays(String(paidLeave));
-    setUnpaidLeaveDays(String(unpaidLeave));
+    // Keep zeros as empty + placeholder so typing doesn't require clearing first
+    const dayField = (n: number) => (n > 0 ? String(n) : "");
+    setDaysPresent(dayField(present));
+    setWorkingDays(working > 0 ? String(working) : "");
+    setPaidLeaveDays(dayField(paidLeave));
+    setUnpaidLeaveDays(dayField(unpaidLeave));
     const payDays = working > 0 ? Math.max(0, Math.min(present + paidLeave, working)) : 0;
     const computed = working > 0 ? Math.round(gross * (payDays / working)) : gross;
     const nextAmount = opts?.amount ?? (attendance ? computed : payable);
@@ -12173,7 +12541,7 @@ function MakePayment() {
       setAmount(String(nextAmount));
     }
     const attendanceNote =
-      working > 0
+      working > 0 && (present > 0 || paidLeave > 0)
         ? ` · ${payDays}/${working} payable days · ${formatPayrollMonthLabel(month)}`
         : ` · ${formatPayrollMonthLabel(month)}`;
     if (!description.trim() || /salary|payroll|staff|bus diesel/i.test(description)) {
@@ -12181,7 +12549,7 @@ function MakePayment() {
         `Salary · ${member.role}${member.dept ? ` · ${member.dept}` : ""}${attendanceNote}`,
       );
     }
-    if (!opts?.skipToast && opts?.amount === undefined && working > 0 && computed !== gross) {
+    if (!opts?.skipToast && opts?.amount === undefined && working > 0 && attendance && computed !== gross) {
       toast.message("Payroll adjusted for attendance", {
         description: `Gross ₹ ${gross.toLocaleString("en-IN")} → payable ₹ ${computed.toLocaleString("en-IN")} (${payDays || payableDays}/${working})`,
       });
@@ -12210,8 +12578,11 @@ function MakePayment() {
     const payableDays = Math.max(0, Math.min(safePresent + safePaid, working));
     setAmount(String(Math.round(gross * (payableDays / working))));
     if (!description.trim() || /salary|payroll|staff/i.test(description)) {
+      const hasAttendanceInput = presentRaw.trim() !== "" || paidLeaveRaw.trim() !== "";
       setDescription(
-        `Salary · ${member.role}${member.dept ? ` · ${member.dept}` : ""} · ${payableDays}/${working} payable days · ${formatPayrollMonthLabel(salaryMonth)}`,
+        hasAttendanceInput
+          ? `Salary · ${member.role}${member.dept ? ` · ${member.dept}` : ""} · ${payableDays}/${working} payable days · ${formatPayrollMonthLabel(salaryMonth)}`
+          : `Salary · ${member.role}${member.dept ? ` · ${member.dept}` : ""} · ${formatPayrollMonthLabel(salaryMonth)}`,
       );
     }
   };
@@ -13461,37 +13832,41 @@ function MakePayment() {
         className={cn(workspacePanelClass, "col-span-12 lg:col-span-4")}
       >
         <DashboardPanelHeading icon={Wallet} title="Top Expenses" />
-        <div className="mt-3 space-y-3">
-          {topExpenses.length === 0 && (
-            <div className="rounded-lg border border-dashed border-black/15 bg-[#F4F4F5]/40 px-4 py-6 text-center text-[12px] text-black/55 dark:text-zinc-400">
-              No expenses recorded yet
-            </div>
-          )}
-          {topExpenses.map((payment) => (
-            <div
-              key={payment.id}
-              className="rounded-lg bg-[#FFF1F2] p-3 text-[#0F172A]"
-            >
-              <div className="flex items-start justify-between gap-2 text-[12.5px]">
-                <span className="min-w-0 break-words font-semibold">{payment.payee}</span>
-                <span className="shrink-0 font-mono text-[#BE123C]">
-                  − ₹ {payment.amount.toLocaleString("en-IN")}
-                </span>
+        {!expensesReady ? (
+          <TopExpensesSkeleton />
+        ) : (
+          <div className="mt-3 space-y-3">
+            {topExpenses.length === 0 && (
+              <div className="rounded-lg border border-dashed border-black/15 bg-[#F4F4F5]/40 px-4 py-6 text-center text-[12px] text-black/55 dark:text-zinc-400">
+                No expenses recorded yet
               </div>
-              <div className="mt-1 flex flex-col gap-1.5 text-[10.5px] text-black/55 dark:text-zinc-400 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
-                <span className="min-w-0 break-words leading-snug">
-                  {payment.payeeType}
-                  {payment.desc ? ` · ${payment.desc}` : ""}
-                </span>
-                <span className="inline-flex w-fit shrink-0 rounded-full bg-black/10 px-2 py-0.5 whitespace-nowrap text-black/65">
-                  {formatEventDateTime(payment.time) === "—"
-                    ? payment.mode
-                    : formatEventDateTime(payment.time)}
-                </span>
+            )}
+            {topExpenses.map((payment) => (
+              <div
+                key={payment.id}
+                className="rounded-lg bg-[#FFF1F2] p-3 text-[#0F172A]"
+              >
+                <div className="flex items-start justify-between gap-2 text-[12.5px]">
+                  <span className="min-w-0 break-words font-semibold">{payment.payee}</span>
+                  <span className="shrink-0 font-mono text-[#BE123C]">
+                    − ₹ {payment.amount.toLocaleString("en-IN")}
+                  </span>
+                </div>
+                <div className="mt-1 flex flex-col gap-1.5 text-[10.5px] text-black/55 dark:text-zinc-400 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
+                  <span className="min-w-0 break-words leading-snug">
+                    {payment.payeeType}
+                    {payment.desc ? ` · ${payment.desc}` : ""}
+                  </span>
+                  <span className="inline-flex w-fit shrink-0 rounded-full bg-black/10 px-2 py-0.5 whitespace-nowrap text-black/65">
+                    {formatEventDateTime(payment.time) === "—"
+                      ? payment.mode
+                      : formatEventDateTime(payment.time)}
+                  </span>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </OrganicCard>
 
       <OrganicCard
@@ -14392,13 +14767,15 @@ export function SchoolSettings() {
         renderSettingsPanel(
           <div className="space-y-3">
             <p className="text-[12px] text-black/55 dark:text-zinc-400">
-              Users are organization-wide and can switch every campus.
+              Team logins can be limited to one or more campuses. School administrators keep access
+              to every campus.
             </p>
             <SettingsUsersCard
               tenantUsers={tenantUsers}
               setTenantUsers={setTenantUsers}
               roles={roles}
               staff={staff}
+              branches={branches}
               canAddUser={planAllowsExtraUsers(session?.planFlags)}
               currentUser={{
                 userId: session?.userId,
@@ -14438,7 +14815,8 @@ export function SchoolSettings() {
 
       {activeTab === "system" &&
         (hydrated && branchContentReady ? (
-          <div className="grid grid-cols-12 gap-3 sm:gap-4 lg:gap-5">
+          <div className="grid grid-cols-12 items-start gap-3 sm:gap-4 lg:gap-5">
+            {campusHint ? <div className="col-span-12">{campusHint}</div> : null}
             <CategoriesCard
               academicYears={academicYears}
               academicYear={academicYear}
@@ -20139,7 +20517,7 @@ function CategoriesCard({
   const [editEndMonthKey, setEditEndMonthKey] = useState("");
   const [pendingYearDelete, setPendingYearDelete] = useState<string | null>(null);
   const [editingYear, setEditingYear] = useState<string | null>(null);
-  const { payments, studentYearLedgers, feeTerms } = useTenantStore();
+  const { payments, studentYearLedgers, feeTerms, activeBranch, activeBranchId } = useTenantStore();
 
   const sortedYears = useMemo(
     () =>
@@ -20273,13 +20651,13 @@ function CategoriesCard({
     >
       <SettingsResponsiveCardHeader
         title="System Constants"
-        subtitle="Financial year books, then how the workspace, invoices, and bills look"
+        subtitle="Financial year books, document numbers per campus, then how the workspace and downloads look"
         titleClassName="text-black dark:text-zinc-50"
         subtitleClassName="text-black/55"
       />
 
-      <div className="mt-4 grid grid-cols-12 gap-3">
-        <div className="col-span-12 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-7 dark:border-white/10 dark:bg-zinc-900/40">
+      <div className="mt-4 grid grid-cols-12 items-start gap-3">
+        <div className="col-span-12 self-start rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-7 dark:border-white/10 dark:bg-zinc-900/40">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
@@ -20420,7 +20798,7 @@ function CategoriesCard({
           </form>
         </div>
 
-        <div className="col-span-12 space-y-4 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-5 dark:border-white/10 dark:bg-zinc-900/40">
+        <div className="col-span-12 self-start space-y-4 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-5 dark:border-white/10 dark:bg-zinc-900/40">
           <ThemeSection title="Colors">
             <ThemeColorField
               label="Primary"
@@ -20540,6 +20918,11 @@ function CategoriesCard({
             />
           </ThemeSection>
         </div>
+
+        <DocumentNumbersPanel
+          branchId={activeBranchId}
+          branchName={activeBranch?.name}
+        />
 
         <div className="col-span-12 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 dark:border-white/10 dark:bg-zinc-900/40">
           <div className="text-[10px] font-semibold uppercase tracking-wider text-black/35 dark:text-zinc-500">

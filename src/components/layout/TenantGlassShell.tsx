@@ -11,6 +11,7 @@ import {
   Loader2,
   LogOut,
   Moon,
+  MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
@@ -56,6 +57,8 @@ import { useTenantNavigationGuard } from "@/components/school/settings-unsaved-g
 import { FloatingDock, type FloatingDockItem } from "@/components/ui/floating-dock";
 import {
   endImpersonation,
+  sessionAllowedBranchIds,
+  sessionCanAccessBranch,
   sessionCanAccessSettings,
   sessionHasAnyFinance,
   sessionHasPermission,
@@ -217,17 +220,25 @@ export function ImpersonationChip({ compact = false }: { compact?: boolean }) {
 
 export function BranchSwitcher({ compact = false }: { compact?: boolean }) {
   const { session } = useAuth();
-  const { branches, activeBranchId, activeBranch, openBranch, hydrated, branchSyncing } =
+  const { branches, activeBranchId, openBranch, hydrated, branchSyncing } =
     useTenantStore();
   const unsavedGuard = useOptionalSettingsUnsavedGuard();
   const [addOpen, setAddOpen] = useState(false);
-  const selectable = useMemo(
-    () => sortCampusBranches(branches.filter((b) => b.isActive !== false)),
-    [branches],
-  );
+  const allowedBranchIds = sessionAllowedBranchIds(session);
+  const selectable = useMemo(() => {
+    const active = sortCampusBranches(branches.filter((b) => b.isActive !== false));
+    if (!allowedBranchIds) return active;
+    const allow = new Set(allowedBranchIds);
+    return active.filter((b) => allow.has(b.id));
+  }, [branches, allowedBranchIds]);
+  const effectiveBranchId =
+    selectable.find((b) => b.id === activeBranchId)?.id ?? selectable[0]?.id ?? "";
+  const label =
+    selectable.find((b) => b.id === effectiveBranchId)?.name ??
+    selectable[0]?.name ??
+    "No campus";
   const canManage = sessionCanAccessSettings(session);
   const canAdd = canManage && planAllowsMultipleBranches(session?.planFlags);
-  const label = activeBranch?.name ?? selectable[0]?.name ?? "Main Campus";
 
   if (!hydrated) {
     return (
@@ -257,6 +268,10 @@ export function BranchSwitcher({ compact = false }: { compact?: boolean }) {
 
   const switchToBranch = (id: string) => {
     if (branchSyncing || id === activeBranchId) return;
+    if (!sessionCanAccessBranch(session, id)) {
+      toast.error("You do not have access to this campus");
+      return;
+    }
     const run = () => {
       void (async () => {
         const stats = await openBranch(id);
@@ -306,7 +321,7 @@ export function BranchSwitcher({ compact = false }: { compact?: boolean }) {
           {selectable.length === 0 ? (
             <div className="px-2 py-2 text-[12px] text-slate-400">No campuses yet</div>
           ) : (
-            <DropdownMenuRadioGroup value={activeBranchId} onValueChange={switchToBranch}>
+            <DropdownMenuRadioGroup value={effectiveBranchId} onValueChange={switchToBranch}>
               {selectable.map((b) => (
                 <DropdownMenuRadioItem key={b.id} value={b.id} className="rounded-md text-[13px]">
                   <span className="flex min-w-0 flex-col">
@@ -326,7 +341,7 @@ export function BranchSwitcher({ compact = false }: { compact?: boolean }) {
               ))}
             </DropdownMenuRadioGroup>
           )}
-          {canManage ? (
+          {canAdd ? (
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem className="rounded-md text-[13px]" onSelect={requestAdd}>
@@ -865,10 +880,10 @@ export function TenantDesktopTopBar() {
       <header
         className={cn(
           glassPanelClass,
-          "mb-5 hidden min-w-0 items-center gap-2 rounded-2xl px-2.5 py-2.5 md:flex md:flex-nowrap md:gap-2.5 md:px-3.5 md:py-3 lg:gap-3 lg:px-5 lg:py-3.5",
+          "mb-4 hidden min-w-0 items-center gap-2 overflow-hidden rounded-2xl px-2.5 py-2 md:flex md:flex-nowrap md:gap-2 md:px-3 md:py-2.5 lg:mb-5 lg:gap-3 lg:px-4 lg:py-3 xl:px-5 xl:py-3.5",
         )}
       >
-        <div className="flex min-w-0 flex-1 items-center gap-2 lg:gap-2.5">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 lg:gap-2.5">
           {showBack && (
             <button
               type="button"
@@ -888,7 +903,7 @@ export function TenantDesktopTopBar() {
           )}
           <div className="min-w-0 flex-1 overflow-hidden">
             <h1
-              className="truncate text-[12px] font-bold uppercase tracking-wide text-slate-900 lg:text-[14px] xl:text-[16px] dark:text-zinc-100"
+              className="truncate text-[11px] font-bold uppercase tracking-wide text-slate-900 sm:text-[12px] lg:text-[14px] xl:text-[16px] dark:text-zinc-100"
               title={tenantName}
             >
               {tenantName}
@@ -899,14 +914,14 @@ export function TenantDesktopTopBar() {
           </div>
         </div>
 
-        <div className="flex min-w-0 shrink-0 flex-nowrap items-center justify-end gap-1 sm:gap-1.5 lg:gap-2">
+        <div className="flex min-w-0 shrink items-center justify-end gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] sm:gap-1.5 lg:gap-2 [&::-webkit-scrollbar]:hidden">
           <div className="flex min-w-0 flex-nowrap items-center gap-1 sm:gap-1.5 lg:gap-2">
             <ImpersonationChip compact />
             <BranchSwitcher compact />
             {!hydrated || !academicYear ? (
               <Skeleton
                 aria-label="Loading academic year"
-                className="h-8 w-[6.5rem] shrink-0 rounded-full bg-emerald-500/25 sm:w-[7.5rem] lg:h-9 lg:w-[10rem]"
+                className="h-8 w-[5.5rem] shrink-0 rounded-full bg-emerald-500/25 sm:w-[7rem] lg:h-9 lg:w-[10rem]"
               />
             ) : (
               <DropdownMenu>
@@ -914,7 +929,7 @@ export function TenantDesktopTopBar() {
                   <button
                     type="button"
                     title={academicYear}
-                    className="inline-flex h-8 max-w-[6.75rem] shrink-0 items-center gap-1 rounded-full bg-[#10B981] px-2 text-[10px] font-semibold text-white shadow-sm shadow-emerald-500/25 transition-opacity hover:opacity-90 sm:max-w-[8rem] sm:px-2.5 sm:text-[11px] lg:h-9 lg:max-w-[11rem] lg:gap-1.5 lg:px-3 lg:text-[12px] xl:max-w-[13rem]"
+                    className="inline-flex h-8 max-w-[5.75rem] shrink-0 items-center gap-1 rounded-full bg-[#10B981] px-2 text-[10px] font-semibold text-white shadow-sm shadow-emerald-500/25 transition-opacity hover:opacity-90 sm:max-w-[7.5rem] sm:px-2.5 sm:text-[11px] lg:h-9 lg:max-w-[11rem] lg:gap-1.5 lg:px-3 lg:text-[12px] xl:max-w-[13rem]"
                   >
                     <CheckCircle2
                       className="hidden h-3.5 w-3.5 shrink-0 xl:block"
@@ -989,41 +1004,102 @@ export function TenantDesktopTopBar() {
           <div className="flex shrink-0 flex-nowrap items-center gap-1 lg:gap-1.5">
             <ThemeModeToggle className="h-8 w-8 lg:h-9 lg:w-9 xl:h-10 xl:w-10" />
 
-            <HardRefreshButton className="h-8 w-8 lg:h-9 lg:w-9 xl:h-10 xl:w-10" />
+            {/* Full utility row on large screens */}
+            <div className="hidden items-center gap-1 lg:flex lg:gap-1.5">
+              <HardRefreshButton className="h-9 w-9 xl:h-10 xl:w-10" />
+              <button
+                type="button"
+                onClick={() => guardedNavigate("/tenant/settings")}
+                aria-label="Settings"
+                className="glass-inset grid h-9 w-9 place-items-center rounded-xl text-slate-600 transition-colors hover:text-[#0F766E] dark:text-zinc-300 dark:hover:text-[#2DD4BF] xl:h-10 xl:w-10"
+              >
+                <Settings className="h-[18px] w-[18px]" />
+              </button>
+              <button
+                type="button"
+                onClick={() => guardedNavigate("/tenant/notifications")}
+                aria-label="Notifications"
+                className="glass-inset relative grid h-9 w-9 place-items-center rounded-xl text-slate-600 transition-colors hover:text-[#0F766E] xl:h-10 xl:w-10"
+              >
+                <Bell className="h-[18px] w-[18px]" />
+                {unreadCount > 0 && (
+                  <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full border-2 border-white bg-[#0F766E]" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const openLogout = () => setPendingLogout(true);
+                  if (tryNavigate) tryNavigate(openLogout);
+                  else openLogout();
+                }}
+                aria-label="Logout"
+                className="glass-inset grid h-9 w-9 place-items-center rounded-xl text-slate-600 transition-colors hover:text-[#EF4444] xl:h-10 xl:w-10"
+              >
+                <LogOut className="h-[18px] w-[18px]" />
+              </button>
+            </div>
 
-            <button
-              type="button"
-              onClick={() => guardedNavigate("/tenant/settings")}
-              aria-label="Settings"
-              className="glass-inset grid h-8 w-8 place-items-center rounded-xl text-slate-600 transition-colors hover:text-[#0F766E] dark:text-zinc-300 dark:hover:text-[#2DD4BF] lg:h-9 lg:w-9 xl:h-10 xl:w-10"
-            >
-              <Settings className="h-4 w-4 lg:h-[18px] lg:w-[18px]" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => guardedNavigate("/tenant/notifications")}
-              aria-label="Notifications"
-              className="glass-inset relative grid h-8 w-8 place-items-center rounded-xl text-slate-600 transition-colors hover:text-[#0F766E] lg:h-9 lg:w-9 xl:h-10 xl:w-10"
-            >
-              <Bell className="h-4 w-4 lg:h-[18px] lg:w-[18px]" />
-              {unreadCount > 0 && (
-                <span className="absolute right-1 top-1 h-2 w-2 rounded-full border-2 border-white bg-[#0F766E] lg:right-1.5 lg:top-1.5" />
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                const openLogout = () => setPendingLogout(true);
-                if (tryNavigate) tryNavigate(openLogout);
-                else openLogout();
-              }}
-              aria-label="Logout"
-              className="glass-inset grid h-8 w-8 place-items-center rounded-xl text-slate-600 transition-colors hover:text-[#EF4444] lg:h-9 lg:w-9 xl:h-10 xl:w-10"
-            >
-              <LogOut className="h-4 w-4 lg:h-[18px] lg:w-[18px]" />
-            </button>
+            {/* Compact overflow menu on tablet widths */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="More actions"
+                  className="glass-inset relative grid h-8 w-8 place-items-center rounded-xl text-slate-600 transition-colors hover:text-[#0F766E] dark:text-zinc-300 lg:hidden"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                  {unreadCount > 0 && (
+                    <span className="absolute right-1 top-1 h-2 w-2 rounded-full border-2 border-white bg-[#0F766E]" />
+                  )}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="min-w-[12rem] rounded-lg border-white/60 bg-white/95 p-1 backdrop-blur-xl dark:border-white/10 dark:bg-zinc-900"
+              >
+                <DropdownMenuItem
+                  className="cursor-pointer gap-2 rounded-md text-[13px]"
+                  onSelect={() => {
+                    void hardRefreshApp();
+                  }}
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Hard refresh
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="cursor-pointer gap-2 rounded-md text-[13px]"
+                  onSelect={() => guardedNavigate("/tenant/settings")}
+                >
+                  <Settings className="h-3.5 w-3.5" />
+                  Settings
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="cursor-pointer gap-2 rounded-md text-[13px]"
+                  onSelect={() => guardedNavigate("/tenant/notifications")}
+                >
+                  <Bell className="h-3.5 w-3.5" />
+                  Notifications
+                  {unreadCount > 0 ? (
+                    <span className="ml-auto rounded-full bg-[#0F766E] px-1.5 py-0.5 font-mono text-[10px] font-bold text-white">
+                      {unreadCount}
+                    </span>
+                  ) : null}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="cursor-pointer gap-2 rounded-md text-[13px] text-rose-700 focus:bg-rose-50 focus:text-rose-800 dark:text-rose-300"
+                  onSelect={() => {
+                    const openLogout = () => setPendingLogout(true);
+                    if (tryNavigate) tryNavigate(openLogout);
+                    else openLogout();
+                  }}
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </header>

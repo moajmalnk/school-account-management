@@ -24,6 +24,7 @@ import {
 import {
   useAuth,
   isTenantWorkspaceSession,
+  sessionAllowedBranchIds,
   sessionCanAccessSettings,
   sessionHasAnyFinance,
   sessionHasPermission,
@@ -117,11 +118,18 @@ function TenantShell() {
     void (async () => {
       try {
         const me = await apiMe();
-        if (cancelled || !me.planFlags) return;
+        if (cancelled) return;
         updateSession({
-          tier: me.tier,
-          planName: me.planName,
-          planFlags: normalizePlanFlags(me.planFlags),
+          ...(me.planFlags
+            ? {
+                tier: me.tier,
+                planName: me.planName,
+                planFlags: normalizePlanFlags(me.planFlags),
+              }
+            : {}),
+          branchIds: Array.isArray(me.branchIds)
+            ? me.branchIds.filter((id): id is string => typeof id === "string" && id.trim() !== "")
+            : [],
         });
       } catch {
         // 401 is handled globally (logout). Other errors keep cached flags.
@@ -131,6 +139,17 @@ function TenantShell() {
       cancelled = true;
     };
   }, [session?.impersonated, updateSession]);
+
+  // If this login is limited to specific campuses, leave any campus they cannot open.
+  const { activeBranchId, branches, openBranch, hydrated } = useTenantStore();
+  useEffect(() => {
+    if (!hydrated || !session) return;
+    const allowed = sessionAllowedBranchIds(session);
+    if (!allowed || allowed.length === 0) return;
+    if (allowed.includes(activeBranchId)) return;
+    const next = branches.find((b) => allowed.includes(b.id) && b.isActive !== false);
+    if (next) void openBranch(next.id);
+  }, [hydrated, session, activeBranchId, branches, openBranch]);
 
   return (
     <div className="tenant-canvas flex min-h-dvh flex-col text-slate-900 dark:text-zinc-100">

@@ -350,6 +350,7 @@ export async function apiUpsertTenantUser(user: {
   staffId?: string;
   permissions: unknown;
   active: boolean;
+  branchIds?: string[];
 }): Promise<void> {
   if (!hasToken()) return;
   const list = await apiRequest<Array<{ id: string }>>("/api/settings/users.php");

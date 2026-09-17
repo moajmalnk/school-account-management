@@ -17,6 +17,7 @@ import {
   type BranchWorkspaceBundle,
 } from "@/lib/api/tenant-sync";
 import { getApiToken } from "@/lib/api/client";
+import { readSession, sessionCanAccessBranch } from "@/lib/auth";
 import {
   apiDeleteFeeTerm,
   apiSyncAcademicYears,
@@ -1619,12 +1620,28 @@ export type TenantUser = {
   permissions: PermissionSet;
   active: boolean;
   createdAt: string;
+  /**
+   * Campus public ids this login may open.
+   * Empty = every campus (school admin / unrestricted legacy users).
+   */
+  branchIds: string[];
 };
 
 export function normalizeTenantUser(
   raw: Partial<TenantUser> & Pick<TenantUser, "id" | "email">,
 ): TenantUser {
   const email = (raw.email ?? "").trim().toLowerCase();
+  const branchIdsRaw = (raw as { branchIds?: unknown; branch_ids?: unknown }).branchIds
+    ?? (raw as { branch_ids?: unknown }).branch_ids;
+  const branchIds = Array.isArray(branchIdsRaw)
+    ? Array.from(
+        new Set(
+          branchIdsRaw
+            .map((id) => (typeof id === "string" ? id.trim() : ""))
+            .filter(Boolean),
+        ),
+      )
+    : [];
   return {
     id: raw.id,
     email,
@@ -1636,6 +1653,7 @@ export function normalizeTenantUser(
     active: raw.active !== false,
     createdAt:
       typeof raw.createdAt === "string" && raw.createdAt ? raw.createdAt : new Date().toISOString(),
+    branchIds,
   };
 }
 
@@ -4753,9 +4771,29 @@ export function findTenantUserByStaffId(staffId: string): TenantUser | null {
 }
 
 export function findTenantUserById(userId: string): TenantUser | null {
-  const snap = readSnapshot();
-  if (!snap) return null;
-  return snap.tenantUsers.find((u) => u.id === userId) ?? null;
+  const id = userId.trim();
+  if (!id || typeof window === "undefined") return null;
+
+  const fromSnap = (snap: Snapshot | null): TenantUser | null =>
+    snap?.tenantUsers.find((u) => u.id === id) ?? null;
+
+  // Prefer the in-memory active campus key (same-tab impersonation).
+  const activeHit = fromSnap(readSnapshot());
+  if (activeHit) return activeHit;
+
+  // New-tab Impersonate boots without TenantStoreProvider, so activeStoreKey is
+  // still the default. Scan every campus snapshot for this user.
+  try {
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (!key || !key.startsWith(STORAGE_KEY)) continue;
+      const hit = fromSnap(readSnapshot(key));
+      if (hit) return hit;
+    }
+  } catch {
+    // private mode / quota
+  }
+  return null;
 }
 
 /** Persist a student into localStorage immediately (so parent links work before React effects flush). */
@@ -5784,6 +5822,9 @@ export function TenantStoreProvider({
       const nextId = branchId.trim();
       const target = branches.find((b) => b.id === nextId);
       if (!nextId || !target) {
+        return { students: 0, receipts: 0 };
+      }
+      if (!sessionCanAccessBranch(readSession(), nextId)) {
         return { students: 0, receipts: 0 };
       }
       if (nextId === activeBranchId && !branchSyncing) {

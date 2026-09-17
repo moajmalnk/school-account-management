@@ -289,7 +289,7 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/staff" });
   const { session } = useAuth();
-  const { setStaff, departments, roles, tenantUsers, setTenantUsers, schoolDetails } =
+  const { setStaff, departments, roles, tenantUsers, setTenantUsers, schoolDetails, activeBranchId } =
     useTenantStore();
   const schoolName = schoolDetails.name || session?.tenantName || "School";
 
@@ -379,6 +379,7 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
       return;
     }
     const matchedRole = roles.find((r) => r.title === staff.role);
+    const branchIds = activeBranchId ? [activeBranchId] : [];
     if (linkedUser) {
       setTenantUsers((prev) =>
         prev.map((u) =>
@@ -392,6 +393,7 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                 staffId: staff.id,
                 permissions,
                 active: loginForm.active,
+                branchIds: u.branchIds.length > 0 ? u.branchIds : branchIds,
               })
             : u,
         ),
@@ -407,6 +409,7 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
         staffId: staff.id,
         permissions,
         active: loginForm.active,
+        branchIds,
         createdAt: new Date().toISOString(),
       });
       setTenantUsers((prev) => [next, ...prev]);
