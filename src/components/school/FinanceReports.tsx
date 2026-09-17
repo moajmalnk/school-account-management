@@ -10,6 +10,7 @@ import {
   Printer,
   RotateCcw,
   Search,
+  Share2,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -37,10 +38,13 @@ import {
 import { MonthPicker, DatePicker } from "@/components/ui/date-picker";
 import { FinanceBarCard, FinanceDonutCard } from "@/components/school/finance-charts";
 import { OrganicCard } from "@/components/ui/organic-card";
+import { WhatsAppIcon, whatsappIconBtnClass } from "@/components/ui/whatsapp-icon";
+import { openWhatsAppShare } from "@/lib/whatsapp-notify";
 import {
   bankBalance,
   cashOnHand,
   expenseSegmentsFromDisbursements,
+  isClearedDisbursement,
   isSalaryDisbursement,
   normalizePayeeType,
   queuedPayables,
@@ -63,7 +67,7 @@ import {
 } from "@/lib/finance-export";
 import { formatDownloadFilename, slugYear, todayStamp } from "@/lib/download-names";
 import { useDisbursements } from "@/lib/use-disbursements";
-import { apiCreateExpenseLedger, apiListExpenseLedgers } from "@/lib/api/records";
+import { apiCreateExpenseLedger, apiListExpenseLedgers, apiUpsertStaff } from "@/lib/api/records";
 import {
   useTenantStore,
   normalizePaymentCategoryLabel,
@@ -72,14 +76,21 @@ import {
   formatPayrollMonthLabel,
   staffPayableSalary,
   salaryHistoryPayrollMonth,
+  salaryPaidAmountForMonth,
   isSalaryMonthSettled,
   type Payment,
   type Student,
 } from "@/lib/tenant-store";
+import {
+  salaryMonthFromDisbursementDesc,
+  staffPayrollMonthStatus,
+  syncStaffSalaryHistoryStatus,
+} from "@/lib/staff-payroll";
 import { sumStudentFeeRoster, withLiveStudentFeeDues } from "@/lib/student-fees";
+import { buildConcessionReportRows } from "@/lib/student-concession-fees";
 import { cn } from "@/lib/utils";
 import {
-  PAYMENT_PERIOD_OPTIONS,
+  DAY_BOOK_PERIOD_OPTIONS,
   timestampMatchesPeriod,
   type CustomDateRange,
   type PaymentPeriod,
@@ -195,11 +206,13 @@ function ExportActions({
   onPdf,
   onPrint,
   confirmTitle,
+  className,
 }: {
   onCsv: () => void;
   onPdf: () => void;
   onPrint: () => void;
   confirmTitle: string;
+  className?: string;
 }) {
   const [pendingExport, setPendingExport] = useState<"csv" | "pdf" | null>(null);
 
@@ -224,7 +237,12 @@ function ExportActions({
 
   return (
     <>
-      <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-3">
+      <div
+        className={cn(
+          "grid grid-cols-1 gap-2 min-[420px]:grid-cols-3",
+          className,
+        )}
+      >
         <button
           type="button"
           onClick={() => setPendingExport("csv")}
@@ -549,7 +567,7 @@ function SummaryStrip({ items }: { items: { label: string; value: string; accent
       className={cn(
         "mt-4 grid gap-2.5 sm:gap-3",
         items.length === 4
-          ? "grid-cols-2"
+          ? "grid-cols-2 lg:grid-cols-4"
           : items.length >= 3
             ? "grid-cols-3"
             : "grid-cols-1 sm:grid-cols-2",
@@ -1262,8 +1280,14 @@ export function BalanceSheetReport() {
   const schoolName = schoolDetails.name || "School";
   const openPayables = useMemo(() => queuedPayables(disbursements), [disbursements]);
 
-  const cashOnHandTotal = useMemo(() => cashOnHand(payments), [payments]);
-  const bankBalanceTotal = useMemo(() => bankBalance(payments), [payments]);
+  const cashOnHandTotal = useMemo(
+    () => cashOnHand(payments, disbursements),
+    [payments, disbursements],
+  );
+  const bankBalanceTotal = useMemo(
+    () => bankBalance(payments, disbursements),
+    [payments, disbursements],
+  );
   const liveStudents = useMemo(
     () => students.filter((st) => !isRecordDeleted(st.deletedAt)),
     [students],
@@ -1510,19 +1534,28 @@ function ReportSearchInput({
   value,
   onChange,
   placeholder,
+  className,
+  inputClassName,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
+  className?: string;
+  inputClassName?: string;
 }) {
   return (
-    <div className="relative min-w-0 flex-1">
+    <div className={cn("relative min-w-0 flex-1", className)}>
       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-black/40 dark:text-zinc-500" />
       <Input
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="h-10 rounded-xl border-[#E5E5E5] bg-white pl-9 pr-9"
+        className={cn(
+          "h-10 rounded-xl border border-[#E5E5E5] bg-white pl-9 pr-9 shadow-none",
+          "focus-visible:border-[#E5E5E5] focus-visible:ring-1 focus-visible:ring-[#0F766E]/25",
+          "dark:border-white/10 dark:bg-zinc-900",
+          inputClassName,
+        )}
       />
       {value && (
         <button
@@ -1553,7 +1586,14 @@ function ReportFilterSelect({
 }) {
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className={cn("h-10 w-full rounded-xl border-[#E5E5E5] bg-white", className)}>
+      <SelectTrigger
+        className={cn(
+          "h-10 w-full rounded-xl border border-[#E5E5E5] bg-white shadow-none",
+          "focus:border-[#E5E5E5] focus:ring-1 focus:ring-[#0F766E]/25",
+          "dark:border-white/10 dark:bg-zinc-900",
+          className,
+        )}
+      >
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
@@ -1690,30 +1730,49 @@ export function FeesReport() {
   const filteredDues = useMemo(() => {
     const q = duesQuery.trim().toLowerCase();
     return [...overdueStudents]
-      .filter((s) => {
-        if (duesClass !== "all" && s.cls !== duesClass) return false;
+      .map((s) => {
+        const pending = Math.max(0, feeRoster.pendingByStudentId[s.id] ?? 0);
+        const overdue = Math.max(0, feeRoster.overdueByStudentId[s.id] ?? 0);
+        return { student: s, pending, overdue, total: s.due };
+      })
+      .filter((row) => {
+        if (duesClass !== "all" && row.student.cls !== duesClass) return false;
         if (!q) return true;
+        const s = row.student;
         const haystack = [
           s.id,
           s.name,
           s.cls,
           s.guardian,
-          String(s.due),
-          s.due.toLocaleString("en-IN"),
+          String(row.pending),
+          String(row.overdue),
+          String(row.total),
+          row.pending.toLocaleString("en-IN"),
+          row.overdue.toLocaleString("en-IN"),
+          row.total.toLocaleString("en-IN"),
+          row.overdue > 0 ? "overdue" : "due",
         ]
           .join(" ")
           .toLowerCase();
         return haystack.includes(q);
       })
-      .sort((a, b) => b.due - a.due);
-  }, [overdueStudents, duesQuery, duesClass]);
+      .sort((a, b) => b.overdue - a.overdue || b.total - a.total);
+  }, [overdueStudents, duesQuery, duesClass, feeRoster.pendingByStudentId, feeRoster.overdueByStudentId]);
 
   const collected = useMemo(
     () => filteredCollections.reduce((sum, p) => sum + p.amount, 0),
     [filteredCollections],
   );
-  const outstanding = useMemo(
-    () => filteredDues.reduce((sum, s) => sum + s.due, 0),
+  const outstandingPending = useMemo(
+    () => filteredDues.reduce((sum, row) => sum + row.pending, 0),
+    [filteredDues],
+  );
+  const outstandingOverdue = useMemo(
+    () => filteredDues.reduce((sum, row) => sum + row.overdue, 0),
+    [filteredDues],
+  );
+  const studentsWithOverdue = useMemo(
+    () => filteredDues.filter((row) => row.overdue > 0).length,
     [filteredDues],
   );
 
@@ -1738,7 +1797,15 @@ export function FeesReport() {
     formatEventDateTime(p.time),
   ]);
 
-  const outstandingRows = filteredDues.map((s) => [s.id, s.name, s.cls, s.guardian, inr(s.due)]);
+  const outstandingRows = filteredDues.map((row) => [
+    row.student.id,
+    row.student.name,
+    row.student.cls,
+    row.student.guardian,
+    inr(row.pending),
+    inr(row.overdue),
+    inr(row.total),
+  ]);
 
   const feesReportPdfHeaders = [
     "Receipt",
@@ -1764,18 +1831,21 @@ export function FeesReport() {
     ]);
 
   const buildFeesOutstandingPdfRows = () =>
-    filteredDues.map((student) => [
-      student.id,
-      truncatePdfCell(student.name, 48),
-      student.cls,
-      truncatePdfCell(student.guardian, 40),
-      student.due.toLocaleString("en-IN"),
+    filteredDues.map((row) => [
+      row.student.id,
+      truncatePdfCell(row.student.name, 48),
+      row.student.cls,
+      truncatePdfCell(row.student.guardian, 40),
+      row.pending.toLocaleString("en-IN"),
+      row.overdue.toLocaleString("en-IN"),
+      row.total.toLocaleString("en-IN"),
     ]);
 
   const feesReportPdfSummary = () => [
     { label: "Fees Collected", value: pdfInr(collected) },
-    { label: "Outstanding", value: pdfInr(outstanding) },
-    { label: "Students Overdue", value: String(filteredDues.length) },
+    { label: "Due", value: pdfInr(outstandingPending) },
+    { label: "Overdue", value: pdfInr(outstandingOverdue) },
+    { label: "Students Overdue", value: String(studentsWithOverdue) },
   ];
 
   const clearCollectionFilters = () => {
@@ -1819,7 +1889,7 @@ export function FeesReport() {
       appendTables: [
         {
           title: "Outstanding Dues",
-          headers: ["ID", "Student", "Class", "Guardian", "Due (Rs.)"],
+          headers: ["ID", "Student", "Class", "Guardian", "Due (Rs.)", "Overdue (Rs.)", "Total (Rs.)"],
           rows: buildFeesOutstandingPdfRows(),
         },
       ],
@@ -1840,7 +1910,7 @@ export function FeesReport() {
       appendTables: [
         {
           title: "Outstanding Dues",
-          headers: ["ID", "Student", "Class", "Guardian", "Due (Rs.)"],
+          headers: ["ID", "Student", "Class", "Guardian", "Due (Rs.)", "Overdue (Rs.)", "Total (Rs.)"],
           rows: buildFeesOutstandingPdfRows(),
         },
       ],
@@ -1873,39 +1943,97 @@ export function FeesReport() {
         <SummaryStrip
           items={[
             { label: "Fees Collected", value: inr(collected) },
-            { label: "Outstanding", value: inr(outstanding) },
+            { label: "Due", value: inr(outstandingPending) },
+            { label: "Overdue", value: inr(outstandingOverdue) },
             {
               label: "Students Overdue",
-              value: String(filteredDues.length),
+              value: String(studentsWithOverdue),
               accent: true,
             },
           ]}
         />
       </OrganicCard>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:gap-5">
-        <OrganicCard tone="white" cornerSide="bl" padded>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
-              <div className="text-title text-slate-900 dark:text-zinc-50">Fee Collections</div>
-              <p className="mt-1 text-[12px] text-black/55">
-                {filteredCollections.length} of {feeReceipts.length} receipt
-                {feeReceipts.length === 1 ? "" : "s"}
-              </p>
-            </div>
-            {(collectionQuery ||
-              collectionCategory !== "all" ||
-              collectionMode !== "all" ||
-              collectionClass !== "all") && (
-              <button
-                type="button"
-                onClick={clearCollectionFilters}
-                className="shrink-0 text-[11px] font-semibold text-[#0F766E] hover:underline"
-              >
-                Clear filters
-              </button>
-            )}
+      <OrganicCard tone="white" cornerSide="tr" padded className="w-full">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="text-title text-slate-900 dark:text-zinc-50">Outstanding Dues</div>
+            <p className="mt-1 text-[12px] text-black/55">
+              {filteredDues.length} of {overdueStudents.length} student
+              {overdueStudents.length === 1 ? "" : "s"} with open balance
+              {outstandingOverdue > 0
+                ? ` · ${inr(outstandingPending)} due · ${inr(outstandingOverdue)} overdue`
+                : outstandingPending > 0
+                  ? ` · ${inr(outstandingPending)} due`
+                  : ""}
+            </p>
           </div>
+          {(duesQuery || duesClass !== "all") && (
+            <button
+              type="button"
+              onClick={clearDuesFilters}
+              className="shrink-0 text-[11px] font-semibold text-[#0F766E] hover:underline"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="sm:col-span-2 lg:col-span-3">
+            <ReportSearchInput
+              value={duesQuery}
+              onChange={setDuesQuery}
+              placeholder="Search student, class, guardian…"
+            />
+          </div>
+          <ReportFilterSelect
+            value={duesClass}
+            onChange={setDuesClass}
+            placeholder="All classes"
+            options={classOptions}
+            className="sm:col-span-2 lg:col-span-1"
+          />
+        </div>
+
+        {outstandingRows.length === 0 ? (
+          <div className="mt-4 rounded-lg border border-dashed border-black/15 px-4 py-6 text-center text-[12px] text-black/55">
+            {overdueStudents.length === 0
+              ? "All student balances are cleared"
+              : "No dues match your search or filters"}
+          </div>
+        ) : (
+            <ReportTable
+              headers={["ID", "Student", "Class", "Guardian", "Due", "Overdue", "Total"]}
+              rows={outstandingRows}
+              compact
+              className="[&_table]:min-w-[640px]"
+            />
+          )}
+        </OrganicCard>
+
+      <OrganicCard tone="white" cornerSide="bl" padded className="w-full">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="text-title text-slate-900 dark:text-zinc-50">Fee Collections</div>
+            <p className="mt-1 text-[12px] text-black/55">
+              {filteredCollections.length} of {feeReceipts.length} receipt
+              {feeReceipts.length === 1 ? "" : "s"}
+            </p>
+          </div>
+          {(collectionQuery ||
+            collectionCategory !== "all" ||
+            collectionMode !== "all" ||
+            collectionClass !== "all") && (
+            <button
+              type="button"
+              onClick={clearCollectionFilters}
+              className="shrink-0 text-[11px] font-semibold text-[#0F766E] hover:underline"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
 
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
           <div className="sm:col-span-2 xl:col-span-4">
@@ -1959,75 +2087,343 @@ export function FeesReport() {
         )}
       </OrganicCard>
 
-        <div className="flex min-h-0 flex-col gap-4">
-          <OrganicCard tone="white" cornerSide="tr" padded>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0">
-                <div className="text-title text-slate-900 dark:text-zinc-50">Outstanding Dues</div>
-                <p className="mt-1 text-[12px] text-black/55">
-                  {filteredDues.length} of {overdueStudents.length} student
-                  {overdueStudents.length === 1 ? "" : "s"} with open balance
-                </p>
-              </div>
-              {(duesQuery || duesClass !== "all") && (
-                <button
-                  type="button"
-                  onClick={clearDuesFilters}
-                  className="shrink-0 text-[11px] font-semibold text-[#0F766E] hover:underline"
-                >
-                  Clear filters
-                </button>
-              )}
-            </div>
+      {byCategory.length > 0 && (
+        <FinanceDonutCard
+          title="Collection by Category"
+          cornerSide="bl"
+          segments={byCategory}
+        />
+      )}
+    </div>
+  );
+}
 
-          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <ReportSearchInput
-                value={duesQuery}
-                onChange={setDuesQuery}
-                placeholder="Search student, class, guardian…"
-              />
-            </div>
-            <ReportFilterSelect
-              value={duesClass}
-              onChange={setDuesClass}
-              placeholder="All classes"
-              options={classOptions}
-              className="sm:col-span-2"
+export function ConcessionReport() {
+  const {
+    activeStudents: students,
+    academicYear,
+    schoolDetails,
+    classes,
+    activeFeeTerms,
+    transportRoutes,
+  } = useTenantStore();
+  const schoolName = schoolDetails.name || "School";
+
+  const [query, setQuery] = useState("");
+  const [classFilter, setClassFilter] = useState("all");
+  const [coverFilter, setCoverFilter] = useState<"all" | "tuition" | "vehicle" | "other">("all");
+
+  const liveStudents = useMemo(
+    () => students.filter((s) => !isRecordDeleted(s.deletedAt)),
+    [students],
+  );
+
+  const allRows = useMemo(
+    () =>
+      buildConcessionReportRows({
+        students: liveStudents,
+        classes,
+        feeTerms: activeFeeTerms,
+        transportRoutes,
+      }),
+    [liveStudents, classes, activeFeeTerms, transportRoutes],
+  );
+
+  const classOptions = useMemo(
+    () => Array.from(new Set(allRows.map((r) => r.cls).filter(Boolean))).sort(),
+    [allRows],
+  );
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return allRows.filter((row) => {
+      if (classFilter !== "all" && row.cls !== classFilter) return false;
+      if (coverFilter === "tuition" && !row.coversTuition) return false;
+      if (coverFilter === "vehicle" && !row.coversVehicle) return false;
+      if (coverFilter === "other" && !row.coversOther) return false;
+      if (!q) return true;
+      const haystack = [
+        row.studentId,
+        row.name,
+        row.cls,
+        row.guardian,
+        row.reason,
+        row.covers,
+        String(row.standardTotal),
+        String(row.concessionTotal),
+        String(row.relief),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [allRows, query, classFilter, coverFilter]);
+
+  const totals = useMemo(() => {
+    let standardTotal = 0;
+    let concessionTotal = 0;
+    let relief = 0;
+    let tuitionCount = 0;
+    let vehicleCount = 0;
+    let otherCount = 0;
+    for (const row of filtered) {
+      standardTotal += row.standardTotal;
+      concessionTotal += row.concessionTotal;
+      relief += row.relief;
+      if (row.coversTuition) tuitionCount += 1;
+      if (row.coversVehicle) vehicleCount += 1;
+      if (row.coversOther) otherCount += 1;
+    }
+    return {
+      students: filtered.length,
+      standardTotal,
+      concessionTotal,
+      relief,
+      tuitionCount,
+      vehicleCount,
+      otherCount,
+    };
+  }, [filtered]);
+
+  const tableRows = filtered.map((row) => [
+    row.studentId,
+    row.name,
+    row.cls,
+    row.covers,
+    row.reason,
+    inr(row.standardTotal),
+    inr(row.concessionTotal),
+    inr(row.relief),
+  ]);
+
+  const clearFilters = () => {
+    setQuery("");
+    setClassFilter("all");
+    setCoverFilter("all");
+  };
+
+  const handleCsv = () => {
+    downloadCsv(
+      reportDownloadName("concession-report", "csv", schoolName, academicYear),
+      [
+        "ID",
+        "Student",
+        "Class",
+        "Guardian",
+        "Covers",
+        "Reason",
+        "Standard Fee",
+        "Concession Fee",
+        "Relief",
+        "Tuition Standard",
+        "Tuition Concession",
+        "Vehicle Standard",
+        "Vehicle Concession",
+        "Other Fees",
+      ],
+      filtered.map((row) => [
+        row.studentId,
+        row.name,
+        row.cls,
+        row.guardian,
+        row.covers,
+        row.reason === "—" ? "" : row.reason,
+        row.standardTotal,
+        row.concessionTotal,
+        row.relief,
+        row.standardTuition,
+        row.concessionTuition,
+        row.standardVehicle,
+        row.concessionVehicle,
+        row.otherFees,
+      ]),
+    );
+    toast.success("Concession report exported", { description: "CSV download started" });
+  };
+
+  const pdfRows = () =>
+    filtered.map((row) => [
+      row.studentId,
+      truncatePdfCell(row.name, 40),
+      row.cls,
+      truncatePdfCell(row.covers, 28),
+      truncatePdfCell(row.reason, 32),
+      row.standardTotal.toLocaleString("en-IN"),
+      row.concessionTotal.toLocaleString("en-IN"),
+      row.relief.toLocaleString("en-IN"),
+    ]);
+
+  const pdfSummary = () => [
+    { label: "Students", value: String(totals.students) },
+    { label: "Standard Fee", value: pdfInr(totals.standardTotal) },
+    { label: "Concession Fee", value: pdfInr(totals.concessionTotal) },
+    { label: "Total Relief", value: pdfInr(totals.relief) },
+  ];
+
+  const pdfHeaders = [
+    "ID",
+    "Student",
+    "Class",
+    "Covers",
+    "Reason",
+    "Standard (Rs.)",
+    "Concession (Rs.)",
+    "Relief (Rs.)",
+  ] as const;
+
+  const handlePdf = () => {
+    downloadTablePdf({
+      filename: reportDownloadName("concession-report", "pdf", schoolName, academicYear),
+      title: "Concession Report",
+      subtitle: `${schoolName} · ${academicYear}`,
+      headers: [...pdfHeaders],
+      rows: pdfRows(),
+      summaryItems: pdfSummary(),
+      emptyMessage: "No students on fee concession",
+      landscape: true,
+    });
+    toast.success("Concession report PDF downloaded");
+  };
+
+  const handlePrint = () => {
+    downloadTablePdf({
+      filename: reportDownloadName("concession-report", "pdf", schoolName, academicYear),
+      title: "Concession Report",
+      subtitle: `${schoolName} · ${academicYear}`,
+      headers: [...pdfHeaders],
+      rows: pdfRows(),
+      summaryItems: pdfSummary(),
+      emptyMessage: "No students on fee concession",
+      landscape: true,
+      action: "print",
+    });
+    toast.success("Print dialog opened");
+  };
+
+  return (
+    <div className="flex flex-col gap-4 sm:gap-5">
+      <OrganicCard tone="white" cornerSide="tr" padded className="shrink-0">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="text-title text-slate-900 dark:text-zinc-50">Concession Report</div>
+            <p className="mt-1 text-[12px] text-black/55">
+              Fee waivers vs class schedule · relief granted · {academicYear}
+            </p>
+          </div>
+          <div className="w-full shrink-0 lg:w-auto lg:min-w-[260px]">
+            <ExportActions
+              onCsv={handleCsv}
+              onPdf={handlePdf}
+              onPrint={handlePrint}
+              confirmTitle="Concession Report"
             />
           </div>
+        </div>
+        <SummaryStrip
+          items={[
+            { label: "Students on Concession", value: String(totals.students) },
+            { label: "Standard Fee", value: inr(totals.standardTotal) },
+            { label: "Concession Fee", value: inr(totals.concessionTotal) },
+            {
+              label: "Total Relief",
+              value: inr(totals.relief),
+              accent: true,
+            },
+          ]}
+        />
+        <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-black/55">
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium dark:bg-zinc-800">
+            Tuition · {totals.tuitionCount}
+          </span>
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium dark:bg-zinc-800">
+            Vehicle · {totals.vehicleCount}
+          </span>
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium dark:bg-zinc-800">
+            Other · {totals.otherCount}
+          </span>
+        </div>
+      </OrganicCard>
 
-          {outstandingRows.length === 0 ? (
-            <div className="mt-4 rounded-lg border border-dashed border-black/15 px-4 py-6 text-center text-[12px] text-black/55">
-              {overdueStudents.length === 0
-                ? "All student balances are cleared"
-                : "No dues match your search or filters"}
-            </div>
-          ) : (
-            <ReportTable
-              headers={["ID", "Student", "Class", "Guardian", "Due"]}
-              rows={outstandingRows}
-              compact
-              className="[&_table]:min-w-[520px]"
-            />
+      <OrganicCard tone="white" cornerSide="bl" padded className="w-full">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="text-title text-slate-900 dark:text-zinc-50">Concession Register</div>
+            <p className="mt-1 text-[12px] text-black/55">
+              {filtered.length} of {allRows.length} student
+              {allRows.length === 1 ? "" : "s"} · standard schedule compared with concession rates
+            </p>
+          </div>
+          {(query || classFilter !== "all" || coverFilter !== "all") && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="shrink-0 text-[11px] font-semibold text-[#0F766E] hover:underline"
+            >
+              Clear filters
+            </button>
           )}
-        </OrganicCard>
+        </div>
 
-        {byCategory.length > 0 && (
-          <FinanceDonutCard
-            title="Collection by Category"
-            cornerSide="bl"
-            segments={byCategory}
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="sm:col-span-2 lg:col-span-2">
+            <ReportSearchInput
+              value={query}
+              onChange={setQuery}
+              placeholder="Search student, class, reason, covers…"
+            />
+          </div>
+          <ReportFilterSelect
+            value={classFilter}
+            onChange={setClassFilter}
+            placeholder="All classes"
+            options={classOptions}
+          />
+          <Select
+            value={coverFilter}
+            onValueChange={(v) => setCoverFilter(v as typeof coverFilter)}
+          >
+            <SelectTrigger className="h-10 rounded-lg border-[#E5E5E5] bg-white text-[13px] dark:border-white/10 dark:bg-zinc-900">
+              <SelectValue placeholder="All heads" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All heads</SelectItem>
+              <SelectItem value="tuition">Tuition</SelectItem>
+              <SelectItem value="vehicle">Vehicle</SelectItem>
+              <SelectItem value="other">Other fees</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {tableRows.length === 0 ? (
+          <div className="mt-4 rounded-lg border border-dashed border-black/15 px-4 py-8 text-center text-[12px] text-black/55">
+            {allRows.length === 0
+              ? "No students currently have a fee concession"
+              : "No concessions match your search or filters"}
+          </div>
+        ) : (
+          <ReportTable
+            headers={[
+              "ID",
+              "Student",
+              "Class",
+              "Covers",
+              "Reason",
+              "Standard",
+              "Concession",
+              "Relief",
+            ]}
+            rows={tableRows}
+            compact
+            className="[&_table]:min-w-[720px]"
           />
         )}
-        </div>
-      </div>
+      </OrganicCard>
     </div>
   );
 }
 
 export function SalaryReport() {
-  const { staff, academicYear, schoolDetails } = useTenantStore();
+  const { staff, setStaff, academicYear, schoolDetails } = useTenantStore();
   const { disbursements } = useDisbursements();
   const schoolName = schoolDetails.name || "School";
   const [payrollMonth, setPayrollMonth] = useState(currentPayrollMonth);
@@ -2039,6 +2435,41 @@ export function SalaryReport() {
   const [payableQuery, setPayableQuery] = useState("");
   const isCurrentPayrollMonth = payrollMonth === currentPayrollMonth();
   const payrollMonthLabel = formatPayrollMonthLabel(payrollMonth);
+
+  // Align salary history with Cleared Made Payments (fixes stale Queued rows).
+  useEffect(() => {
+    const clearedSalary = disbursements.filter(
+      (row) => isSalaryDisbursement(row) && isClearedDisbursement(row),
+    );
+    if (!clearedSalary.length) return;
+
+    setStaff((prev) => {
+      let dirty = false;
+      const next = prev.map((member) => {
+        let updated = member;
+        for (const row of clearedSalary) {
+          const matchesId = row.staffId && member.id === row.staffId;
+          const matchesName =
+            !row.staffId &&
+            member.name.trim().toLowerCase() === (row.payee || "").trim().toLowerCase();
+          if (!matchesId && !matchesName) continue;
+          const synced = syncStaffSalaryHistoryStatus(updated, {
+            amount: row.amount,
+            status: "Cleared",
+            month: salaryMonthFromDisbursementDesc(row.desc),
+            paidAt: (row.time || "").slice(0, 10),
+          });
+          if (synced !== updated) {
+            updated = synced;
+            dirty = true;
+          }
+        }
+        if (updated !== member) void apiUpsertStaff(updated).catch(() => {});
+        return updated;
+      });
+      return dirty ? next : prev;
+    });
+  }, [disbursements, setStaff]);
 
   const departmentOptions = useMemo(
     () => Array.from(new Set(staff.map((s) => s.dept))).sort(),
@@ -2100,10 +2531,23 @@ export function SalaryReport() {
   const totalGross = payrollRows.reduce((sum, row) => sum + row.gross, 0);
   const totalPayable = payrollRows.reduce((sum, row) => sum + row.payable, 0);
 
-  const salaryPayables = useMemo(
-    () => queuedPayables(disbursements).filter(isSalaryDisbursement),
-    [disbursements],
-  );
+  /** Staff still owed for the selected month (excludes months covered by salary history). */
+  const salaryPayables = useMemo(() => {
+    return staff
+      .filter((s) => !isRecordDeleted(s.deletedAt) && s.active)
+      .map((s) => {
+        const pay = staffPayableSalary(s, payrollMonth);
+        const paid = salaryPaidAmountForMonth(s.salaryHistory, payrollMonth);
+        const outstanding = Math.max(0, pay.payable - paid);
+        return {
+          id: s.id,
+          payee: s.name,
+          amount: outstanding,
+        };
+      })
+      .filter((row) => row.amount > 0)
+      .sort((a, b) => a.payee.localeCompare(b.payee));
+  }, [staff, payrollMonth]);
 
   const filteredPayables = useMemo(() => {
     const q = payableQuery.trim().toLowerCase();
@@ -2161,7 +2605,7 @@ export function SalaryReport() {
   );
 
   const tableRows = payrollRows.map(({ staff: s, gross, payable, attendanceLabel }) => {
-    const settled = isSalaryMonthSettled(s.salaryHistory, payrollMonth, payable);
+    const monthStatus = staffPayrollMonthStatus(s, payrollMonth);
     return [
       s.id,
       s.name,
@@ -2172,7 +2616,7 @@ export function SalaryReport() {
       inr(s.additionalAllowances),
       inr(gross),
       inr(payable),
-      settled ? "Paid" : "Due",
+      monthStatus === "No due" ? "—" : monthStatus,
     ];
   });
 
@@ -2204,6 +2648,81 @@ export function SalaryReport() {
     setStatus("active");
   };
 
+  const payrollRegisterActionClass =
+    "inline-grid h-8 w-8 place-items-center rounded-full border border-[#E5E5E5] text-black/55 transition-colors hover:border-black hover:bg-[#F4F4F5] hover:text-black dark:border-white/15 dark:text-zinc-400 dark:hover:border-white/35 dark:hover:bg-zinc-800 dark:hover:text-zinc-100";
+
+  const buildPayrollShareText = () => {
+    const lines = [
+      `${schoolName} · Payroll Register`,
+      `Month: ${payrollMonthLabel} (${payrollMonth})`,
+      `AY: ${academicYear}`,
+      `Staff shown: ${filteredStaff.length}`,
+      `Gross: ${inr(totalGross)}`,
+      `Payable: ${inr(totalPayable)}`,
+      `Settled: ${paidThisMonthCount}/${filteredStaff.length}`,
+      "",
+      ...payrollRows.slice(0, 12).map(({ staff: s, payable }) => {
+        const monthStatus = staffPayrollMonthStatus(s, payrollMonth);
+        return `• ${s.name} · ${s.role} · ${inr(payable)} · ${
+          monthStatus === "No due" ? "—" : monthStatus
+        }`;
+      }),
+    ];
+    if (payrollRows.length > 12) {
+      lines.push(`…and ${payrollRows.length - 12} more`);
+    }
+    return lines.join("\n");
+  };
+
+  const sharePayrollRegister = async () => {
+    if (!payrollRows.length) {
+      toast.error("Nothing to share · no staff in this view");
+      return;
+    }
+    const text = buildPayrollShareText();
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      try {
+        await navigator.share({
+          title: `Payroll Register · ${payrollMonthLabel}`,
+          text,
+        });
+        toast.success("Payroll register shared");
+        return;
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Payroll summary copied", {
+        description: "Paste into any app to share",
+      });
+    } catch {
+      toast.error("Could not share payroll register");
+    }
+  };
+
+  const whatsappPayrollRegister = () => {
+    if (!payrollRows.length) {
+      toast.error("Nothing to share · no staff in this view");
+      return;
+    }
+    const text = buildPayrollShareText();
+    if (openWhatsAppShare(text)) {
+      toast.success("Opening WhatsApp", {
+        description: "Payroll summary ready to send",
+      });
+      return;
+    }
+    void navigator.clipboard.writeText(text).then(
+      () =>
+        toast.success("Copied for WhatsApp", {
+          description: "Paste into WhatsApp if the app did not open",
+        }),
+      () => toast.error("Could not copy · WhatsApp did not open"),
+    );
+  };
+
   const salaryReportPdfHeaders = [
     "ID",
     "Name",
@@ -2218,18 +2737,21 @@ export function SalaryReport() {
   ] as const;
 
   const buildSalaryReportPdfRows = () =>
-    payrollRows.map(({ staff: s, gross, payable, attendanceLabel }) => [
-      s.id,
-      s.name,
-      s.role,
-      s.dept,
-      attendanceLabel,
-      s.basicSalary.toLocaleString("en-IN"),
-      s.additionalAllowances.toLocaleString("en-IN"),
-      gross.toLocaleString("en-IN"),
-      payable.toLocaleString("en-IN"),
-      isSalaryMonthSettled(s.salaryHistory, payrollMonth, payable) ? "Paid" : "Due",
-    ]);
+    payrollRows.map(({ staff: s, gross, payable, attendanceLabel }) => {
+      const monthStatus = staffPayrollMonthStatus(s, payrollMonth);
+      return [
+        s.id,
+        s.name,
+        s.role,
+        s.dept,
+        attendanceLabel,
+        s.basicSalary.toLocaleString("en-IN"),
+        s.additionalAllowances.toLocaleString("en-IN"),
+        gross.toLocaleString("en-IN"),
+        payable.toLocaleString("en-IN"),
+        monthStatus === "No due" ? "—" : monthStatus,
+      ];
+    });
 
   const salaryReportPdfSummary = () => [
     { label: "Staff Shown", value: String(filteredStaff.length) },
@@ -2254,19 +2776,22 @@ export function SalaryReport() {
         "Status",
         "Month",
       ],
-      payrollRows.map(({ staff: s, gross, payable, attendanceLabel }) => [
-        s.id,
-        s.name,
-        s.role,
-        s.dept,
-        attendanceLabel,
-        s.basicSalary,
-        s.additionalAllowances,
-        gross,
-        payable,
-        isSalaryMonthSettled(s.salaryHistory, payrollMonth, payable) ? "Paid" : "Due",
-        payrollMonth,
-      ]),
+      payrollRows.map(({ staff: s, gross, payable, attendanceLabel }) => {
+        const monthStatus = staffPayrollMonthStatus(s, payrollMonth);
+        return [
+          s.id,
+          s.name,
+          s.role,
+          s.dept,
+          attendanceLabel,
+          s.basicSalary,
+          s.additionalAllowances,
+          gross,
+          payable,
+          monthStatus === "No due" ? "—" : monthStatus,
+          payrollMonth,
+        ];
+      }),
     );
     toast.success("Salary report exported", { description: "CSV download started" });
   };
@@ -2333,8 +2858,8 @@ export function SalaryReport() {
               )}
             </div>
           </div>
-          <div className="flex w-full shrink-0 flex-col gap-3 sm:min-w-[260px] lg:w-[280px]">
-            <div>
+          <div className="flex w-full min-w-0 flex-wrap items-end gap-2 lg:max-w-[min(100%,42rem)] lg:justify-end">
+            <div className="min-w-[9.5rem] flex-1 basis-[9.5rem] sm:max-w-[11.5rem] sm:flex-none">
               <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/45">
                 Payroll month
               </div>
@@ -2351,6 +2876,7 @@ export function SalaryReport() {
               onPdf={handlePdf}
               onPrint={handlePrint}
               confirmTitle="Salary Report"
+              className="min-w-[16rem] flex-1 basis-[16rem] grid-cols-3 sm:max-w-none lg:flex-none"
             />
           </div>
         </div>
@@ -2371,15 +2897,15 @@ export function SalaryReport() {
         />
       </OrganicCard>
 
-      <div className="grid min-h-0 flex-1 grid-cols-12 content-stretch items-stretch gap-4 sm:gap-5">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 sm:gap-5">
         <OrganicCard
           tone="white"
           cornerSide="tl"
           padded
-          className="col-span-12 flex h-full min-h-0 flex-col lg:col-span-8"
+          className="flex w-full min-h-0 flex-col"
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
+            <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <div className="text-title text-slate-900 dark:text-zinc-50">Payroll Register</div>
                 <span className="rounded-full bg-[#F0FDFA] px-2.5 py-1 text-[11px] font-semibold text-[#0F766E] ring-1 ring-[#0F766E]/15">
@@ -2391,47 +2917,100 @@ export function SalaryReport() {
                 payable = gross × (days present ÷ working days)
               </p>
             </div>
-            {(query || department !== "all" || role !== "all" || status !== "active") && (
+            <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+              {(query || department !== "all" || role !== "all" || status !== "active") && (
+                <button
+                  type="button"
+                  onClick={clearPayrollFilters}
+                  className="mr-1 text-[11px] font-semibold text-[#0F766E] hover:underline"
+                >
+                  Clear filters
+                </button>
+              )}
               <button
                 type="button"
-                onClick={clearPayrollFilters}
-                className="text-[11px] font-semibold text-[#0F766E] hover:underline"
+                onClick={() => void sharePayrollRegister()}
+                aria-label="Share payroll register"
+                title="Share"
+                className={payrollRegisterActionClass}
               >
-                Clear filters
+                <Share2 className="h-3.5 w-3.5" />
               </button>
-            )}
+              <button
+                type="button"
+                onClick={handlePrint}
+                aria-label="Print payroll register"
+                title="Print"
+                className={payrollRegisterActionClass}
+              >
+                <Printer className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={handlePdf}
+                aria-label="Download payroll register"
+                title="Download"
+                className={payrollRegisterActionClass}
+              >
+                <Download className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={whatsappPayrollRegister}
+                aria-label="WhatsApp payroll register"
+                title="WhatsApp"
+                className={whatsappIconBtnClass}
+              >
+                <WhatsAppIcon />
+              </button>
+            </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="sm:col-span-2 xl:col-span-4">
-              <ReportSearchInput
-                value={query}
-                onChange={setQuery}
-                placeholder="Search staff, role, department…"
-              />
+          <div className="mt-4 -mx-1 overflow-x-auto px-1 pb-0.5">
+            <div className="flex min-w-0 flex-nowrap items-center gap-2 sm:flex-wrap lg:flex-nowrap">
+              <div className="min-w-[14rem] flex-1 basis-[14rem]">
+                <ReportSearchInput
+                  value={query}
+                  onChange={setQuery}
+                  placeholder="Search staff, role, department…"
+                  inputClassName="rounded-full"
+                />
+              </div>
+              <div className="w-[9.5rem] shrink-0">
+                <ReportFilterSelect
+                  value={department}
+                  onChange={setDepartment}
+                  placeholder="All departments"
+                  options={departmentOptions}
+                  className="rounded-full"
+                />
+              </div>
+              <div className="w-[8.5rem] shrink-0">
+                <ReportFilterSelect
+                  value={role}
+                  onChange={setRole}
+                  placeholder="All roles"
+                  options={roleOptions}
+                  className="rounded-full"
+                />
+              </div>
+              <Select value={status} onValueChange={(v) => setStatus(v as typeof status)}>
+                <SelectTrigger
+                  className={cn(
+                    "h-10 w-[8.75rem] shrink-0 rounded-full border border-[#E5E5E5] bg-white shadow-none",
+                    "focus:border-[#E5E5E5] focus:ring-1 focus:ring-[#0F766E]/25",
+                    "dark:border-white/10 dark:bg-zinc-900",
+                  )}
+                >
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All status</SelectItem>
+                  <SelectItem value="active">Active only</SelectItem>
+                  <SelectItem value="inactive">Inactive only</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <ReportFilterSelect
-              value={department}
-              onChange={setDepartment}
-              placeholder="All departments"
-              options={departmentOptions}
-            />
-            <ReportFilterSelect
-              value={role}
-              onChange={setRole}
-              placeholder="All roles"
-              options={roleOptions}
-            />
-            <Select value={status} onValueChange={(v) => setStatus(v as typeof status)}>
-              <SelectTrigger className="h-10 w-full rounded-xl border-[#E5E5E5] bg-white sm:col-span-2 xl:col-span-1">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All status</SelectItem>
-                <SelectItem value="active">Active only</SelectItem>
-                <SelectItem value="inactive">Inactive only</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
 
           <div className="mt-4 flex min-h-0 flex-1 flex-col">
@@ -2469,60 +3048,57 @@ export function SalaryReport() {
           </div>
         </OrganicCard>
 
-        <div className="col-span-12 flex h-full min-h-0 flex-col gap-4 lg:col-span-4">
-          <OrganicCard tone="white" cornerSide="tr" padded className="shrink-0">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="text-title text-slate-900 dark:text-zinc-50">
-                  Open Salary Obligations
-                </div>
-                <p className="mt-1 text-[12px] text-black/55">
-                  {filteredPayables.length} of {salaryPayables.length} payroll payable
-                  {salaryPayables.length === 1 ? "" : "s"}
-                </p>
+        <OrganicCard tone="white" cornerSide="tr" padded className="w-full shrink-0">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-title text-slate-900 dark:text-zinc-50">
+                Open Salary Obligations
               </div>
-              {payableQuery && (
-                <button
-                  type="button"
-                  onClick={() => setPayableQuery("")}
-                  className="text-[11px] font-semibold text-[#0F766E] hover:underline"
-                >
-                  Clear
-                </button>
-              )}
+              <p className="mt-1 text-[12px] text-black/55">
+                {filteredPayables.length} of {salaryPayables.length} unpaid for{" "}
+                {payrollMonthLabel}
+                {salaryPayableAmount > 0 ? ` · ${inr(salaryPayableAmount)}` : ""}
+              </p>
             </div>
-
-            <div className="mt-4">
-              <ReportSearchInput
-                value={payableQuery}
-                onChange={setPayableQuery}
-                placeholder="Search obligation…"
-              />
-            </div>
-
-            {payableRows.length === 0 ? (
-              <div className="mt-4 rounded-lg border border-dashed border-black/15 px-4 py-6 text-center text-[12px] text-black/55">
-                {salaryPayables.length === 0
-                  ? "No open salary payables"
-                  : "No obligations match your search"}
-              </div>
-            ) : (
-              <ReportTable headers={["Obligation", "Amount"]} rows={payableRows} compact />
+            {payableQuery && (
+              <button
+                type="button"
+                onClick={() => setPayableQuery("")}
+                className="text-[11px] font-semibold text-[#0F766E] hover:underline"
+              >
+                Clear
+              </button>
             )}
-          </OrganicCard>
+          </div>
 
-          {deptSegments.length > 0 ? (
-            <FinanceBarCard
-              title="Payable by Department"
-              cornerSide="br"
-              fill="#0F766E"
-              segments={deptSegments}
-              className="min-h-0 flex-1 sm:min-h-[220px]"
+          <div className="mt-4">
+            <ReportSearchInput
+              value={payableQuery}
+              onChange={setPayableQuery}
+              placeholder="Search obligation…"
             />
+          </div>
+
+          {payableRows.length === 0 ? (
+            <div className="mt-4 rounded-lg border border-dashed border-black/15 px-4 py-6 text-center text-[12px] text-black/55">
+              {salaryPayables.length === 0
+                ? `No open salary obligations for ${payrollMonthLabel}`
+                : "No obligations match your search"}
+            </div>
           ) : (
-            <div className="hidden min-h-0 flex-1 lg:block" aria-hidden />
+            <ReportTable headers={["Obligation", "Amount"]} rows={payableRows} compact />
           )}
-        </div>
+        </OrganicCard>
+
+        {deptSegments.length > 0 && (
+          <FinanceBarCard
+            title="Payable by Department"
+            cornerSide="br"
+            fill="#0F766E"
+            segments={deptSegments}
+            className="w-full sm:min-h-[220px]"
+          />
+        )}
       </div>
 
       <OrganicCard tone="white" cornerSide="bl" padded className="shrink-0">
@@ -2635,7 +3211,7 @@ export function DayBookReport() {
   const schoolName = schoolDetails.name || "School";
 
   const [query, setQuery] = useState("");
-  const [period, setPeriod] = useState<PaymentPeriod>("all");
+  const [period, setPeriod] = useState<PaymentPeriod>("today");
   const [customRange, setCustomRange] = useState<CustomDateRange>({ from: "", to: "" });
   const [entryType, setEntryType] = useState<"all" | "Receipt" | "Payment">("all");
   const [mode, setMode] = useState("all");
@@ -2751,11 +3327,11 @@ export function DayBookReport() {
   ];
 
   const periodLabel =
-    PAYMENT_PERIOD_OPTIONS.find((option) => option.value === period)?.label ?? "All";
+    DAY_BOOK_PERIOD_OPTIONS.find((option) => option.value === period)?.label ?? "Today";
 
   const clearFilters = () => {
     setQuery("");
-    setPeriod("all");
+    setPeriod("today");
     setCustomRange({ from: "", to: "" });
     setEntryType("all");
     setMode("all");
@@ -2853,10 +3429,14 @@ export function DayBookReport() {
             <div className="text-title text-slate-900 dark:text-zinc-50">Day Book Entries</div>
             <p className="mt-1 text-[12px] text-black/55">
               {filtered.length} of {entries.length} entr{entries.length === 1 ? "y" : "ies"}
-              {period !== "all" ? ` · ${periodLabel}` : ""}
+              {` · ${periodLabel}`}
             </p>
           </div>
-          {(query || period !== "all" || entryType !== "all" || mode !== "all") && (
+          {(query ||
+            period !== "today" ||
+            entryType !== "all" ||
+            mode !== "all" ||
+            Boolean(customRange.from || customRange.to)) && (
             <button
               type="button"
               onClick={clearFilters}
@@ -2867,70 +3447,84 @@ export function DayBookReport() {
           )}
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
-          <Select
-            value={period}
-            onValueChange={(value) => setPeriod(value as PaymentPeriod)}
-          >
-            <SelectTrigger className="h-10 w-full rounded-full border-[#E5E5E5] bg-white text-[13px] font-semibold">
-              <SelectValue placeholder="Period" />
-            </SelectTrigger>
-            <SelectContent>
-              {PAYMENT_PERIOD_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={entryType} onValueChange={(v) => setEntryType(v as typeof entryType)}>
-            <SelectTrigger className="h-10 w-full rounded-full border-[#E5E5E5] bg-white">
-              <SelectValue placeholder="All types" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All types</SelectItem>
-              <SelectItem value="Receipt">Receipts only</SelectItem>
-              <SelectItem value="Payment">Payments only</SelectItem>
-            </SelectContent>
-          </Select>
-          <ReportFilterSelect
-            value={mode}
-            onChange={setMode}
-            placeholder="All modes"
-            options={modeOptions}
-            className="rounded-full sm:col-span-1 xl:col-span-1"
-          />
-          <div className="sm:col-span-2 xl:col-span-4">
-            <ReportSearchInput
-              value={query}
-              onChange={setQuery}
-              placeholder="Search voucher, particulars, account, narration…"
-            />
-          </div>
-          {period === "custom" && (
-            <div className="grid grid-cols-1 gap-2 sm:col-span-2 sm:grid-cols-2 xl:col-span-4">
-              <DatePicker
-                value={customRange.from}
-                onChange={(from) => setCustomRange({ ...customRange, from })}
-                placeholder="From date"
-                valueFormat="iso"
-                variant="pill"
-                max={customRange.to || undefined}
-                quickPicks={[{ label: "Today", getDate: (t) => t }]}
-                className="h-10 w-full"
-              />
-              <DatePicker
-                value={customRange.to}
-                onChange={(to) => setCustomRange({ ...customRange, to })}
-                placeholder="To date"
-                valueFormat="iso"
-                variant="pill"
-                min={customRange.from || undefined}
-                quickPicks={[{ label: "Today", getDate: (t) => t }]}
-                className="h-10 w-full"
+        <div className="mt-4 -mx-1 overflow-x-auto px-1 pb-0.5">
+          <div className="flex min-w-0 flex-nowrap items-center gap-2 sm:flex-wrap lg:flex-nowrap">
+            <Select value={period} onValueChange={(value) => setPeriod(value as PaymentPeriod)}>
+              <SelectTrigger
+                className={cn(
+                  "h-10 w-[8.25rem] shrink-0 rounded-full border border-[#E5E5E5] bg-white text-[13px] font-semibold shadow-none",
+                  "focus:border-[#E5E5E5] focus:ring-1 focus:ring-[#0F766E]/25",
+                  "dark:border-white/10 dark:bg-zinc-900",
+                )}
+              >
+                <SelectValue placeholder="Period" />
+              </SelectTrigger>
+              <SelectContent>
+                {DAY_BOOK_PERIOD_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={entryType} onValueChange={(v) => setEntryType(v as typeof entryType)}>
+              <SelectTrigger
+                className={cn(
+                  "h-10 w-[8.75rem] shrink-0 rounded-full border border-[#E5E5E5] bg-white shadow-none",
+                  "focus:border-[#E5E5E5] focus:ring-1 focus:ring-[#0F766E]/25",
+                  "dark:border-white/10 dark:bg-zinc-900",
+                )}
+              >
+                <SelectValue placeholder="All types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All types</SelectItem>
+                <SelectItem value="Receipt">Receipts only</SelectItem>
+                <SelectItem value="Payment">Payments only</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="w-[8.75rem] shrink-0">
+              <ReportFilterSelect
+                value={mode}
+                onChange={setMode}
+                placeholder="All modes"
+                options={modeOptions}
+                className="rounded-full"
               />
             </div>
-          )}
+            <div className="min-w-[14rem] flex-1 basis-[14rem]">
+              <ReportSearchInput
+                value={query}
+                onChange={setQuery}
+                placeholder="Search voucher, particulars, account, narration…"
+                inputClassName="rounded-full"
+              />
+            </div>
+            {period === "custom" && (
+              <>
+                <DatePicker
+                  value={customRange.from}
+                  onChange={(from) => setCustomRange({ ...customRange, from })}
+                  placeholder="From date"
+                  valueFormat="iso"
+                  variant="pill"
+                  max={customRange.to || undefined}
+                  quickPicks={[{ label: "Today", getDate: (t) => t }]}
+                  className="h-10 w-[10.25rem] shrink-0 border border-[#E5E5E5] shadow-none dark:border-white/10"
+                />
+                <DatePicker
+                  value={customRange.to}
+                  onChange={(to) => setCustomRange({ ...customRange, to })}
+                  placeholder="To date"
+                  valueFormat="iso"
+                  variant="pill"
+                  min={customRange.from || undefined}
+                  quickPicks={[{ label: "Today", getDate: (t) => t }]}
+                  className="h-10 w-[10.25rem] shrink-0 border border-[#E5E5E5] shadow-none dark:border-white/10"
+                />
+              </>
+            )}
+          </div>
         </div>
 
         {filtered.length === 0 ? (

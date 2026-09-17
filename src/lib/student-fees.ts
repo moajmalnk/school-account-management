@@ -1001,9 +1001,15 @@ export type StudentFeeRosterTotals = {
   /** Remaining unpaid (pending + overdue). */
   outstanding: number;
   outstandingCount: number;
+  /** Students with past-due unpaid balances. */
+  overdueCount: number;
   paidCount: number;
   /** Live outstanding per student id — same source as the Payments tab. */
   dueByStudentId: Record<string, number>;
+  /** Pending (not yet overdue) portion per student. */
+  pendingByStudentId: Record<string, number>;
+  /** Overdue portion per student. */
+  overdueByStudentId: Record<string, number>;
 };
 
 /** Same totals as each student Payments tab, summed across a roster. */
@@ -1021,8 +1027,11 @@ export function sumStudentFeeRoster(input: {
   let pendingDue = 0;
   let overdueDue = 0;
   let outstandingCount = 0;
+  let overdueCount = 0;
   let paidCount = 0;
   const dueByStudentId: Record<string, number> = {};
+  const pendingByStudentId: Record<string, number> = {};
+  const overdueByStudentId: Record<string, number> = {};
 
   for (const student of input.students) {
     const statement = buildStudentFeeStatement({
@@ -1034,13 +1043,18 @@ export function sumStudentFeeRoster(input: {
       academicYear: input.academicYear,
       feeBreaks: input.feeBreaks,
     });
+    const pending = Math.max(0, statement.totalDue - statement.overdueDue);
+    const overdue = Math.max(0, statement.overdueDue);
     totalFee += statement.totalFee;
     totalPaid += statement.totalPaid;
-    pendingDue += Math.max(0, statement.totalDue - statement.overdueDue);
-    overdueDue += statement.overdueDue;
+    pendingDue += pending;
+    overdueDue += overdue;
     dueByStudentId[student.id] = statement.totalDue;
+    pendingByStudentId[student.id] = pending;
+    overdueByStudentId[student.id] = overdue;
     if (statement.totalDue > 0) outstandingCount += 1;
     else paidCount += 1;
+    if (overdue > 0) overdueCount += 1;
   }
 
   return {
@@ -1050,8 +1064,11 @@ export function sumStudentFeeRoster(input: {
     overdueDue,
     outstanding: pendingDue + overdueDue,
     outstandingCount,
+    overdueCount,
     paidCount,
     dueByStudentId,
+    pendingByStudentId,
+    overdueByStudentId,
   };
 }
 

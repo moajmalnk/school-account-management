@@ -35,7 +35,6 @@ import { OrganicCard } from "@/components/ui/organic-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getApiToken } from "@/lib/api/client";
 import {
-  apiGlBackfill,
   apiGlChartTree,
   apiGlClosePeriod,
   apiGlCreateAccount,
@@ -48,8 +47,12 @@ import {
   apiGlReportBalanceSheet,
   apiGlReportProfitLoss,
   apiGlReportTrialBalance,
+  apiGlSyncCatalogs,
+  apiGlUpdateAllBooks,
   apiGlVoidJournal,
   defaultGlAccountGroups,
+  glInstallHint,
+  resetGlTransportProbe,
   GL_SECTORS,
   type GlAccount,
   type GlAccountGroup,
@@ -65,9 +68,74 @@ function inr(n: number) {
   return `₹ ${Math.abs(n).toLocaleString("en-IN")}`;
 }
 
+function useGlUpdateAllBooks(onDone?: () => void) {
+  const [busy, setBusy] = useState(false);
+  const run = useCallback(async () => {
+    if (!getApiToken()) {
+      toast.error("Sign in to update finance books");
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await apiGlUpdateAllBooks();
+      toast.success(`Books updated · ${r.payments} receipts · ${r.disbursements} payments`, {
+        description: r.skipped
+          ? `${r.skipped} already posted`
+          : "Journals, trial balance, P&L and balance sheet refreshed",
+      });
+      onDone?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not update books", {
+        description: glInstallHint(),
+      });
+    } finally {
+      setBusy(false);
+    }
+  }, [onDone]);
+  return { busy, run };
+}
+
+function GlUpdateAllBooksButton({
+  onDone,
+  className,
+}: {
+  onDone?: () => void;
+  className?: string;
+}) {
+  const { busy, run } = useGlUpdateAllBooks(onDone);
+  return (
+    <Button
+      type="button"
+      size="sm"
+      className={cn(
+        "h-8 rounded-full bg-[#0F766E] text-[11px] text-white hover:bg-[#0D9488]",
+        className,
+      )}
+      disabled={busy}
+      onClick={() => void run()}
+    >
+      {busy ? (
+        <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+      ) : (
+        <RotateCcw className="mr-1 h-3.5 w-3.5" />
+      )}
+      Update all books
+    </Button>
+  );
+}
+
 function workspacePanelClass() {
   return "rounded-2xl border border-[#EFEFEF] bg-white/90 dark:border-white/10 dark:bg-zinc-950/60";
 }
+
+const GL_GROUP_KIND_LABEL: Record<string, string> = {
+  assets: "Money you have",
+  liabilities: "Money you owe",
+  equity: "School capital",
+  income: "Money coming in",
+  expenses: "Money going out",
+  other: "Other",
+};
 
 function Bone({ className }: { className?: string }) {
   return (
@@ -283,6 +351,20 @@ export function GlAccountStatementReport() {
   const [chartOpen, setChartOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [period, setPeriod] = useState<GlPeriod | null>(null);
+  const [setupBusy, setSetupBusy] = useState<"sync" | "fill" | null>(null);
+
+  const applyChart = useCallback(
+    (t: Awaited<ReturnType<typeof apiGlChartTree>>, a: GlAccount[], p: GlPeriod | null) => {
+      setTree(t.groups.length ? t.groups : defaultGlAccountGroups());
+      setAccounts(a);
+      setPeriod(p);
+      setAccountId((prev) => {
+        if (prev && a.some((row) => row.id === prev)) return prev;
+        return a[0]?.id ?? "";
+      });
+    },
+    [],
+  );
 
   const loadChart = useCallback(async () => {
     if (!getApiToken()) {
@@ -293,22 +375,67 @@ export function GlAccountStatementReport() {
     }
     setLoading(true);
     try {
+      // No auto POST here — live Hostinger reports.php still returns 405 for ?gl=chart
+      // until chart.php + libs are uploaded. Use “Sync existing ledgers” after deploy.
       const [t, a, p] = await Promise.all([
         apiGlChartTree(),
         apiGlListAccounts(true),
         academicYear ? apiGlGetPeriod(academicYear).catch(() => null) : Promise.resolve(null),
       ]);
-      setTree(t.groups.length ? t.groups : defaultGlAccountGroups());
-      setAccounts(a);
-      setPeriod(p);
-      if (!accountId && a[0]) setAccountId(a[0].id);
+
+      applyChart(t, a, p);
     } catch (e) {
       setTree(defaultGlAccountGroups());
       toast.error(e instanceof Error ? e.message : "Could not load chart of accounts");
     } finally {
       setLoading(false);
     }
-  }, [academicYear, accountId, branchId]);
+  }, [academicYear, applyChart, branchId]);
+
+  const syncExistingLedgers = useCallback(async () => {
+    if (!getApiToken()) {
+      toast.error("Sign in to sync ledgers");
+      return;
+    }
+    setSetupBusy("sync");
+    try {
+      resetGlTransportProbe();
+      const ok = await apiGlSyncCatalogs();
+      if (!ok) {
+        toast.error("General ledger tables are missing", {
+          description: glInstallHint(),
+        });
+        return;
+      }
+      await loadChart();
+      toast.success("Existing ledgers synced", {
+        description: "Income and expense heads from Receive / Make Payment are in Ledgers",
+      });
+    } finally {
+      setSetupBusy(null);
+    }
+  }, [loadChart]);
+
+  const fillFromOldReceipts = useCallback(async () => {
+    if (!getApiToken()) {
+      toast.error("Sign in to fill from receipts");
+      return;
+    }
+    setSetupBusy("fill");
+    try {
+      const r = await apiGlUpdateAllBooks();
+      await loadChart();
+      toast.success(`Added ${r.payments} receipts and ${r.disbursements} payments`, {
+        description: r.skipped ? `${r.skipped} were already there` : "Journals and reports updated",
+      });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Backfill failed", {
+        description: glInstallHint(),
+      });
+    } finally {
+      setSetupBusy(null);
+    }
+  }, [loadChart]);
 
   useEffect(() => {
     void loadChart();
@@ -357,14 +484,30 @@ export function GlAccountStatementReport() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-[18px] font-semibold text-black dark:text-zinc-50">
-              Account ledger
+              Ledgers
             </h2>
             <p className="mt-0.5 text-[12px] text-black/50 dark:text-zinc-400">
-              Double-entry statement by ledger · {academicYear || "all years"}
-              {period?.status === "closed" ? " · books closed" : ""}
+              Same books as Receive Payment &amp; Make Payment · {academicYear || "this year"}
+              {period?.status === "closed" ? " · year closed" : ""}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <GlUpdateAllBooksButton onDone={() => void loadChart()} />
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 rounded-full text-[11px]"
+              disabled={setupBusy !== null}
+              onClick={() => void syncExistingLedgers()}
+            >
+              {setupBusy === "sync" ? (
+                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RotateCcw className="mr-1 h-3.5 w-3.5" />
+              )}
+              Sync existing ledgers
+            </Button>
             <Button
               type="button"
               size="sm"
@@ -373,7 +516,7 @@ export function GlAccountStatementReport() {
               onClick={() => setChartOpen(true)}
             >
               <BookOpen className="mr-1 h-3.5 w-3.5" />
-              Chart of accounts
+              Groups
             </Button>
             <Button
               type="button"
@@ -394,7 +537,7 @@ export function GlAccountStatementReport() {
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search ledgers…"
+                placeholder="Search…"
                 className="h-9 rounded-xl pl-8 text-[12px]"
               />
             </div>
@@ -403,7 +546,41 @@ export function GlAccountStatementReport() {
             ) : (
               <ul className="mt-2 max-h-[420px] space-y-1 overflow-y-auto rounded-xl border border-[#EFEFEF] p-1.5 dark:border-white/10">
                 {filteredAccounts.length === 0 ? (
-                  <li className="px-2 py-3 text-[12px] text-black/45">No ledgers yet</li>
+                  <li className="space-y-3 px-2 py-3 text-[12px] leading-relaxed text-black/45">
+                    <p>
+                      No accounts yet. Sync ledgers already used on Receive Payment and Make Payment,
+                      then fill journals from old receipts.
+                    </p>
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-9 w-full rounded-full bg-[#0F766E] text-[12px] text-white hover:bg-[#0D9488]"
+                        disabled={setupBusy !== null}
+                        onClick={() => void syncExistingLedgers()}
+                      >
+                        {setupBusy === "sync" ? (
+                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        ) : null}
+                        Sync existing ledgers
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-9 w-full rounded-full text-[12px]"
+                        disabled={setupBusy !== null}
+                        onClick={() => void fillFromOldReceipts()}
+                      >
+                        {setupBusy === "fill" ? (
+                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                        )}
+                        Fill from old receipts
+                      </Button>
+                    </div>
+                  </li>
                 ) : (
                   filteredAccounts.map((a) => (
                     <li key={a.id}>
@@ -418,9 +595,7 @@ export function GlAccountStatementReport() {
                         )}
                       >
                         <span className="text-[12.5px] font-semibold">{a.name}</span>
-                        <span className="font-mono text-[10px] opacity-70">
-                          #{a.code} · {a.groupName}
-                        </span>
+                        <span className="text-[10px] opacity-70">{a.groupName}</span>
                       </button>
                     </li>
                   ))
@@ -514,7 +689,7 @@ export function GlAccountStatementReport() {
                       {statement.lines.length === 0 ? (
                         <tr>
                           <td colSpan={6} className="px-3 py-6 text-center text-black/40">
-                            No movements in this period
+                            No journals yet — sync ledgers, then Fill from old receipts
                           </td>
                         </tr>
                       ) : null}
@@ -524,7 +699,7 @@ export function GlAccountStatementReport() {
               </div>
             ) : (
               <div className="grid min-h-[200px] place-items-center rounded-xl border border-dashed border-[#E5E5E5] text-[13px] text-black/40 dark:border-white/10">
-                Select a ledger to view its statement
+                Tap an account on the left to see money in and out.
               </div>
             )}
           </div>
@@ -535,7 +710,9 @@ export function GlAccountStatementReport() {
         open={chartOpen}
         onOpenChange={setChartOpen}
         tree={tree}
-        onRefresh={() => void loadChart()}
+        onSync={() => void syncExistingLedgers()}
+        onFill={() => void fillFromOldReceipts()}
+        busy={setupBusy}
       />
       <CreateLedgerDialog
         open={createOpen}
@@ -554,15 +731,18 @@ function ChartOfAccountsDialog({
   open,
   onOpenChange,
   tree,
-  onRefresh,
+  onSync,
+  onFill,
+  busy,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   tree: GlAccountGroup[];
-  onRefresh: () => void;
+  onSync: () => void;
+  onFill: () => void;
+  busy: "sync" | "fill" | null;
 }) {
   const [q, setQ] = useState("");
-  const [backfilling, setBackfilling] = useState(false);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -595,89 +775,93 @@ function ChartOfAccountsDialog({
       <DialogContent className="max-h-[85vh] max-w-2xl overflow-hidden rounded-2xl p-0">
         <div className="border-b border-[#EFEFEF] px-5 py-4 dark:border-white/10">
           <DialogHeader>
-            <DialogTitle>Chart of accounts</DialogTitle>
+            <DialogTitle>Account groups</DialogTitle>
             <DialogDescription>
-              Standard account groups by sector. Leaf ledgers feed P&amp;L and the balance sheet.
+              Folders for your money — bank, cash, fees, salary. Sync pulls ledgers from Receive /
+              Make Payment; Fill posts old receipts into journals.
             </DialogDescription>
           </DialogHeader>
-          <div className="mt-3 flex gap-2">
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
             <Input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search groups or ledgers…"
-              className="h-9 rounded-xl text-[12px]"
+              placeholder="Search…"
+              className="h-9 flex-1 rounded-xl text-[12px]"
             />
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-9 shrink-0 rounded-full text-[11px]"
-              disabled={backfilling}
-              onClick={() => {
-                setBackfilling(true);
-                void apiGlBackfill()
-                  .then((r) => {
-                    toast.success(
-                      `Posted ${r.payments} receipts · ${r.disbursements} payments into the ledger`,
-                      { description: `${r.skipped} already posted or skipped` },
-                    );
-                    onRefresh();
-                  })
-                  .catch((e) =>
-                    toast.error(e instanceof Error ? e.message : "Backfill failed"),
-                  )
-                  .finally(() => setBackfilling(false));
-              }}
-            >
-              {backfilling ? (
-                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <RotateCcw className="mr-1 h-3.5 w-3.5" />
-              )}
-              Sync past entries
-            </Button>
+            <div className="flex shrink-0 gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-9 rounded-full text-[11px]"
+                disabled={busy !== null}
+                onClick={onSync}
+              >
+                {busy === "sync" ? (
+                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RotateCcw className="mr-1 h-3.5 w-3.5" />
+                )}
+                Sync existing ledgers
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-9 rounded-full text-[11px]"
+                disabled={busy !== null}
+                onClick={onFill}
+              >
+                {busy === "fill" ? (
+                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RotateCcw className="mr-1 h-3.5 w-3.5" />
+                )}
+                Fill from old receipts
+              </Button>
+            </div>
           </div>
         </div>
         <div className="max-h-[55vh] space-y-4 overflow-y-auto px-5 py-4">
           {[...bySector.entries()].map(([sector, groups]) => (
             <div key={sector}>
               <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#0F766E]">
-                {sector} sector
+                {GL_GROUP_KIND_LABEL[sector] ?? sector}
               </div>
               <div className="space-y-2">
                 {groups.map((g) => (
                   <div
                     key={g.id}
-                    className="rounded-xl border border-[#EFEFEF] p-2.5 dark:border-white/10"
+                    className="rounded-xl border border-[#EFEFEF] px-3 py-2 dark:border-white/10"
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-[13px] font-semibold">{g.name}</div>
-                      <span className="font-mono text-[10px] text-black/40">UID: {g.uid}</span>
+                    <div className="text-[12.5px] font-semibold text-black dark:text-zinc-50">
+                      {g.name}
                     </div>
-                    <ul className="mt-1.5 space-y-0.5">
-                      {(g.accounts ?? []).map((a) => (
-                        <li
-                          key={a.id}
-                          className="flex items-center justify-between rounded-lg px-2 py-1 text-[12px] hover:bg-black/[0.03] dark:hover:bg-white/5"
-                        >
-                          <span>
-                            {a.name}{" "}
-                            <span className="font-mono text-[10px] text-black/40">#{a.code}</span>
-                          </span>
-                          {!a.active ? (
-                            <span className="text-[10px] text-rose-500">inactive</span>
-                          ) : null}
-                        </li>
-                      ))}
-                      {(g.accounts ?? []).length === 0 ? (
-                        <li className="px-2 py-1 text-[11px] text-black/35">No leaf ledgers</li>
-                      ) : null}
-                    </ul>
+                    {(g.accounts?.length ?? 0) === 0 ? (
+                      <p className="mt-1 text-[11px] text-black/40">Nothing in this group yet.</p>
+                    ) : (
+                      <ul className="mt-1.5 space-y-0.5">
+                        {(g.accounts ?? []).map((a) => (
+                          <li
+                            key={a.id}
+                            className="flex justify-between text-[12px] text-black/70 dark:text-zinc-300"
+                          >
+                            <span>{a.name}</span>
+                            <span className="font-mono text-[10px] text-black/35">#{a.code}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
           ))}
+          {bySector.size === 0 ? (
+            <p className="py-6 text-center text-[12px] text-black/40">
+              No groups match your search. Sync existing ledgers to pull Receive / Make Payment heads.
+            </p>
+          ) : null}
         </div>
       </DialogContent>
     </Dialog>
@@ -710,14 +894,6 @@ function CreateLedgerDialog({
   }, [open, groups]);
 
   const selectedGroup = groups.find((g) => g.id === groupId);
-  const sectorLabel: Record<string, string> = {
-    assets: "Money & property",
-    liabilities: "Loans & payables",
-    equity: "Capital",
-    income: "Income",
-    expenses: "Expenses",
-    other: "Other",
-  };
 
   const submit = async () => {
     if (groups.length === 0) {
@@ -785,7 +961,7 @@ function CreateLedgerDialog({
                   return (
                     <SelectGroup key={sector}>
                       <SelectLabel className="uppercase tracking-wider text-black/40">
-                        {sectorLabel[sector] ?? sector}
+                        {GL_GROUP_KIND_LABEL[sector] ?? sector}
                       </SelectLabel>
                       {items.map((g) => (
                         <SelectItem key={g.id} value={g.id}>
@@ -847,6 +1023,7 @@ export function GlTrialBalanceReport() {
   const [totalCredit, setTotalCredit] = useState(0);
   const [balanced, setBalanced] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!getApiToken()) {
@@ -863,7 +1040,7 @@ export function GlTrialBalanceReport() {
       })
       .catch((e) => toast.error(e instanceof Error ? e.message : "Trial balance failed"))
       .finally(() => setLoading(false));
-  }, [academicYear, branchId]);
+  }, [academicYear, branchId, reloadKey]);
 
   return (
     <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass()}>
@@ -874,25 +1051,28 @@ export function GlTrialBalanceReport() {
             Closing debit/credit by ledger · {academicYear || "all"}
           </p>
         </div>
-        <span
-          className={cn(
-            "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold",
-            loading
-              ? "bg-black/[0.04] dark:bg-white/5"
-              : balanced
-                ? "bg-emerald-500/15 text-emerald-700"
-                : "bg-rose-500/15 text-rose-700",
-          )}
-        >
-          {loading ? (
-            <Bone className="h-3 w-16 rounded-full" />
-          ) : (
-            <>
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              {balanced ? "Balanced" : "Out of balance"}
-            </>
-          )}
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <GlUpdateAllBooksButton onDone={() => setReloadKey((k) => k + 1)} />
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold",
+              loading
+                ? "bg-black/[0.04] dark:bg-white/5"
+                : balanced
+                  ? "bg-emerald-500/15 text-emerald-700"
+                  : "bg-rose-500/15 text-rose-700",
+            )}
+          >
+            {loading ? (
+              <Bone className="h-3 w-16 rounded-full" />
+            ) : (
+              <>
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                {balanced ? "Balanced" : "Out of balance"}
+              </>
+            )}
+          </span>
+        </div>
       </div>
       {loading ? (
         <GlTrialBalanceSkeleton />
@@ -922,6 +1102,13 @@ export function GlTrialBalanceReport() {
                   </td>
                 </tr>
               ))}
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-3 py-8 text-center text-black/40">
+                    No journals yet — tap <span className="font-medium text-[#0F766E]">Update all books</span>
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
             <tfoot className="border-t-2 border-black/10 font-semibold dark:border-white/20">
               <tr>
@@ -1044,6 +1231,7 @@ export function GlJournalsReport() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <GlUpdateAllBooksButton onDone={() => void reload()} />
             <PeriodCloseControls period={period} year={academicYear} onChange={() => void reload()} />
             <Button
               type="button"
@@ -1124,7 +1312,8 @@ export function GlJournalsReport() {
                 {journals.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-3 py-8 text-center text-black/40">
-                      No journals yet — receive/make payments auto-post here after backfill
+                      No journals yet — tap <span className="font-medium text-[#0F766E]">Update all books</span> to
+                      post old receipts &amp; payments
                     </td>
                   </tr>
                 ) : null}
@@ -1324,6 +1513,7 @@ export function GlProfitLossReport() {
   const branchId = useBranchKey();
   const [data, setData] = useState<Awaited<ReturnType<typeof apiGlReportProfitLoss>> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!getApiToken()) {
@@ -1335,7 +1525,7 @@ export function GlProfitLossReport() {
       .then(setData)
       .catch((e) => toast.error(e instanceof Error ? e.message : "P&L failed"))
       .finally(() => setLoading(false));
-  }, [academicYear, branchId]);
+  }, [academicYear, branchId, reloadKey]);
 
   return (
     <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass()}>
@@ -1346,21 +1536,24 @@ export function GlProfitLossReport() {
             From general ledger · {academicYear || "all"}
           </p>
         </div>
-        {loading ? (
-          <Bone className="h-6 w-[5.5rem] rounded-full" />
-        ) : data ? (
-          <div
-            className={cn(
-              "rounded-xl px-3 py-2 text-right text-white",
-              data.netProfit >= 0 ? "bg-[#0F766E]" : "bg-rose-600",
-            )}
-          >
-            <div className="text-[9px] font-semibold uppercase tracking-wider opacity-80">
-              Net {data.netProfit >= 0 ? "profit" : "loss"}
+        <div className="flex flex-wrap items-center gap-2">
+          <GlUpdateAllBooksButton onDone={() => setReloadKey((k) => k + 1)} />
+          {loading ? (
+            <Bone className="h-6 w-[5.5rem] rounded-full" />
+          ) : data ? (
+            <div
+              className={cn(
+                "rounded-xl px-3 py-2 text-right text-white",
+                data.netProfit >= 0 ? "bg-[#0F766E]" : "bg-rose-600",
+              )}
+            >
+              <div className="text-[9px] font-semibold uppercase tracking-wider opacity-80">
+                Net {data.netProfit >= 0 ? "profit" : "loss"}
+              </div>
+              <div className="font-mono text-[16px] font-bold">{inr(data.netProfit)}</div>
             </div>
-            <div className="font-mono text-[16px] font-bold">{inr(data.netProfit)}</div>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </div>
       {loading ? (
         <GlProfitLossSkeleton />
@@ -1389,6 +1582,7 @@ export function GlBalanceSheetReport() {
     null,
   );
   const [loading, setLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!getApiToken()) {
@@ -1400,7 +1594,7 @@ export function GlBalanceSheetReport() {
       .then(setData)
       .catch((e) => toast.error(e instanceof Error ? e.message : "Balance sheet failed"))
       .finally(() => setLoading(false));
-  }, [academicYear, branchId]);
+  }, [academicYear, branchId, reloadKey]);
 
   return (
     <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass()}>
@@ -1411,18 +1605,23 @@ export function GlBalanceSheetReport() {
             Assets = Liabilities + Equity · {academicYear || "as of now"}
           </p>
         </div>
-        {loading ? (
-          <Bone className="h-6 w-[6.5rem] rounded-full" />
-        ) : data ? (
-          <span
-            className={cn(
-              "rounded-full px-2.5 py-1 text-[11px] font-semibold",
-              data.balanced ? "bg-emerald-500/15 text-emerald-700" : "bg-amber-500/15 text-amber-800",
-            )}
-          >
-            {data.balanced ? "In balance" : "Check Suspense / opening"}
-          </span>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          <GlUpdateAllBooksButton onDone={() => setReloadKey((k) => k + 1)} />
+          {loading ? (
+            <Bone className="h-6 w-[6.5rem] rounded-full" />
+          ) : data ? (
+            <span
+              className={cn(
+                "rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                data.balanced
+                  ? "bg-emerald-500/15 text-emerald-700"
+                  : "bg-amber-500/15 text-amber-800",
+              )}
+            >
+              {data.balanced ? "In balance" : "Check Suspense / opening"}
+            </span>
+          ) : null}
+        </div>
       </div>
       {loading ? (
         <GlBalanceSheetSkeleton />
@@ -1515,7 +1714,9 @@ function GlReportGroupColumn({
           </div>
         ))}
         {groups.length === 0 ? (
-          <p className="text-[12px] text-black/40">No balances yet — post receipts or backfill GL</p>
+          <p className="text-[12px] text-black/40">
+            No journals yet — tap <span className="font-medium text-[#0F766E]">Update all books</span>
+          </p>
         ) : null}
         {footer ? <p className="text-[10.5px] text-black/45">{footer}</p> : null}
       </div>

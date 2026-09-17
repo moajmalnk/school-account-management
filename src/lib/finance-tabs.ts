@@ -8,6 +8,7 @@ export const FINANCE_TABS = [
   "pl",
   "balance",
   "fees",
+  "concession",
   "salary",
   "daybook",
   "reconciliation",

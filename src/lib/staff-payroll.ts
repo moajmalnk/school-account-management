@@ -64,6 +64,90 @@ function ledgerStatus(
   return "Due";
 }
 
+/** Payroll register / report status for one staff month (Due · Partial · Queued · Paid). */
+export function staffPayrollMonthStatus(
+  staff: Staff,
+  month: string,
+): StaffPayrollLedgerStatus {
+  const pay = staffPayableSalary(staff, month);
+  const payments = (staff.salaryHistory ?? []).filter(
+    (entry) => salaryHistoryPayrollMonth(entry) === month,
+  );
+  const paid = payments.reduce((sum, entry) => sum + entry.amount, 0);
+  return ledgerStatus(pay.payable, paid, payments);
+}
+
+/** Update the best-matching salary history row to a new disbursement status. */
+export function syncStaffSalaryHistoryStatus(
+  member: Staff,
+  patch: {
+    amount: number;
+    status: StaffSalaryHistoryEntry["status"];
+    month?: string | null;
+    paidAt?: string | null;
+  },
+): Staff {
+  const history = member.salaryHistory ?? [];
+  if (!history.length) return member;
+
+  const month = patch.month?.trim() || null;
+  const paidDay = (patch.paidAt ?? "").slice(0, 10);
+  const amount = Math.round(Number(patch.amount) || 0);
+
+  let bestIdx = -1;
+  let bestScore = -1;
+  for (let i = 0; i < history.length; i++) {
+    const entry = history[i];
+    if (Math.round(entry.amount) !== amount) continue;
+    let score = 1;
+    const entryMonth = salaryHistoryPayrollMonth(entry);
+    if (month && entryMonth === month) score += 3;
+    if (paidDay && (entry.paidAt ?? "").slice(0, 10) === paidDay) score += 2;
+    if (entry.status !== patch.status) score += 1;
+    if (score > bestScore) {
+      bestScore = score;
+      bestIdx = i;
+    }
+  }
+  if (bestIdx < 0) return member;
+  const current = history[bestIdx];
+  if (current.status === patch.status) return member;
+  const nextHistory = history.map((entry, index) =>
+    index === bestIdx ? { ...entry, status: patch.status } : entry,
+  );
+  return { ...member, salaryHistory: nextHistory };
+}
+
+/**
+ * Infer payroll month from a salary disbursement description (named month or YYYY-MM).
+ */
+export function salaryMonthFromDisbursementDesc(desc: string | undefined | null): string | null {
+  const text = desc ?? "";
+  const iso = text.match(/\b(\d{4}-\d{2})\b/);
+  if (iso) return iso[1];
+  const named = text.match(
+    /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})\b/i,
+  );
+  if (!named) return null;
+  const months: Record<string, number> = {
+    january: 1,
+    february: 2,
+    march: 3,
+    april: 4,
+    may: 5,
+    june: 6,
+    july: 7,
+    august: 8,
+    september: 9,
+    october: 10,
+    november: 11,
+    december: 12,
+  };
+  const monthNum = months[named[1].toLowerCase()];
+  if (!monthNum) return null;
+  return `${named[2]}-${String(monthNum).padStart(2, "0")}`;
+}
+
 function attendanceLabelForMonth(pay: ReturnType<typeof staffPayableSalary>): string {
   if (!pay.attendance) return "Full gross · no attendance";
   const paidLeave = pay.attendance.paidLeaveDays || 0;

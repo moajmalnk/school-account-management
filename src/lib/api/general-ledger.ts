@@ -164,8 +164,51 @@ function hasToken() {
   return Boolean(getApiToken());
 }
 
-/** Live `reports.php` — chart.php / journals.php / periods.php are not on Hostinger yet. */
-function glResourcePath(
+/**
+ * GL transport:
+ * - "direct": `/api/finance/chart.php` (preferred when file exists with CORS)
+ * - "reports": `/api/finance/reports.php?gl=chart|journals|periods`
+ */
+type GlTransport = "direct" | "reports";
+let glTransport: GlTransport = "direct";
+
+const GL_UNAVAILABLE_KEY = "feezo.gl.mutateUnavailable";
+
+function readGlUnavailableFlag(): boolean {
+  try {
+    return sessionStorage.getItem(GL_UNAVAILABLE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeGlUnavailableFlag(value: boolean) {
+  try {
+    if (value) sessionStorage.setItem(GL_UNAVAILABLE_KEY, "1");
+    else sessionStorage.removeItem(GL_UNAVAILABLE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** After 404/405/503 on GL mutate, skip further POSTs this session (stops console spam). */
+let glMutateUnavailable = readGlUnavailableFlag();
+
+function glDirectPath(
+  resource: "chart" | "journals" | "periods",
+  params?: Record<string, string | undefined>,
+): string {
+  const q = new URLSearchParams();
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      if (value) q.set(key, value);
+    }
+  }
+  const qs = q.toString();
+  return `/api/finance/${resource}.php${qs ? `?${qs}` : ""}`;
+}
+
+function glReportsProxyPath(
   resource: "chart" | "journals" | "periods",
   params?: Record<string, string | undefined>,
 ): string {
@@ -179,6 +222,36 @@ function glResourcePath(
   return `/api/finance/reports.php?${q}`;
 }
 
+function glResourcePath(
+  resource: "chart" | "journals" | "periods",
+  params?: Record<string, string | undefined>,
+): string {
+  return glTransport === "direct"
+    ? glDirectPath(resource, params)
+    : glReportsProxyPath(resource, params);
+}
+
+async function glGet<T>(
+  resource: "chart" | "journals" | "periods",
+  params: Record<string, string | undefined> | undefined,
+  fallback: T,
+): Promise<T> {
+  if (!hasToken()) return fallback;
+  try {
+    return (await apiRequest<unknown>(glResourcePath(resource, params))) as T;
+  } catch {
+    if (glTransport === "direct") {
+      try {
+        glTransport = "reports";
+        return (await apiRequest<unknown>(glResourcePath(resource, params))) as T;
+      } catch {
+        return fallback;
+      }
+    }
+    return fallback;
+  }
+}
+
 async function glSafe<T>(run: () => Promise<T>, fallback: T): Promise<T> {
   try {
     return await run();
@@ -188,13 +261,55 @@ async function glSafe<T>(run: () => Promise<T>, fallback: T): Promise<T> {
 }
 
 const GL_NOT_INSTALLED =
-  "Chart of accounts is not installed on this server yet. Upload the general ledger PHP files to Hostinger, then try again.";
+  "General ledger tables are missing. Import sql/schema_general_ledger.sql in phpMyAdmin, then tap Update all books.";
+
+const GL_INSTALL_HINT =
+  "phpMyAdmin → import sql/schema_general_ledger.sql, then re-upload chart.php + general_ledger.php if Sync still fails (see backend/UPLOAD_GENERAL_LEDGER.txt).";
+
+function markGlUnavailable(status?: number) {
+  if (status === 405 || status === 503 || status === 404) {
+    glMutateUnavailable = true;
+    writeGlUnavailableFlag(true);
+  }
+}
+
+/** True when Sync/Fill should not hammer a missing GL install. */
+export function isGlMutateUnavailable(): boolean {
+  return glMutateUnavailable || readGlUnavailableFlag();
+}
+
+/** After uploading PHP / importing SQL, call this (or hard-refresh) before Sync. */
+export function resetGlTransportProbe(): void {
+  glTransport = "direct";
+  glMutateUnavailable = false;
+  writeGlUnavailableFlag(false);
+}
+
+/** Force reports.php?gl= proxy (legacy). */
+export function preferReportsGlProxy(): void {
+  glTransport = "reports";
+  glMutateUnavailable = false;
+  writeGlUnavailableFlag(false);
+}
+
+/**
+ * Prefer dedicated chart.php once uploaded.
+ */
+export function preferDirectGlEndpoints(): void {
+  glTransport = "direct";
+  glMutateUnavailable = false;
+  writeGlUnavailableFlag(false);
+}
 
 async function glMutate<T>(run: () => Promise<T>): Promise<T> {
+  if (isGlMutateUnavailable()) {
+    throw new ApiError(GL_NOT_INSTALLED, 503);
+  }
   try {
     return await run();
   } catch (e) {
     if (e instanceof ApiError && (e.status === 405 || e.status === 503 || e.status === 404)) {
+      markGlUnavailable(e.status);
       throw new ApiError(GL_NOT_INSTALLED, e.status);
     }
     throw e;
@@ -210,11 +325,7 @@ export async function apiGlChartTree(): Promise<{
   groups: GlAccountGroup[];
 }> {
   const fallback = { sectors: GL_SECTORS as string[], groups: defaultGlAccountGroups() };
-  if (!hasToken()) return fallback;
-  const data = await glSafe(
-    () => apiRequest<unknown>(glResourcePath("chart", { resource: "tree" })),
-    fallback,
-  );
+  const data = await glGet<unknown>("chart", { resource: "tree" }, fallback);
   if (!isRecord(data) || !Array.isArray(data.groups) || data.groups.length === 0) {
     return fallback;
   }
@@ -225,11 +336,7 @@ export async function apiGlChartTree(): Promise<{
 }
 
 export async function apiGlListAccounts(activeOnly = true): Promise<GlAccount[]> {
-  if (!hasToken()) return [];
-  const data = await glSafe(
-    () => apiRequest<unknown>(glResourcePath("chart", { active: activeOnly ? "1" : "0" })),
-    [] as unknown,
-  );
+  const data = await glGet<unknown>("chart", { active: activeOnly ? "1" : "0" }, []);
   return Array.isArray(data) ? (data as GlAccount[]) : [];
 }
 
@@ -269,24 +376,73 @@ export async function apiGlBackfill(): Promise<{
   );
 }
 
+/** Mirror expense ledgers + fee categories into the chart of accounts (no-op if GL not installed). */
+export async function apiGlSyncCatalogs(): Promise<boolean> {
+  if (!hasToken() || isGlMutateUnavailable()) return false;
+  try {
+    await apiRequest(glResourcePath("chart"), {
+      method: "POST",
+      body: { _sync: true },
+    });
+    return true;
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404 && glTransport === "direct") {
+      preferReportsGlProxy();
+      try {
+        await apiRequest(glResourcePath("chart"), {
+          method: "POST",
+          body: { _sync: true },
+        });
+        return true;
+      } catch (e2) {
+        if (e2 instanceof ApiError) markGlUnavailable(e2.status);
+        return false;
+      }
+    }
+    if (e instanceof ApiError) markGlUnavailable(e.status);
+    return false;
+  }
+}
+
+/**
+ * Sync Receive/Make Payment ledgers into the chart, then post historical receipts & payments
+ * as journals so Journals / Trial balance / P&L / Balance sheet fill in.
+ */
+export async function apiGlUpdateAllBooks(): Promise<{
+  payments: number;
+  disbursements: number;
+  skipped: number;
+}> {
+  if (!hasToken()) {
+    throw new ApiError("Sign in to update finance books", 401);
+  }
+  resetGlTransportProbe();
+  const synced = await apiGlSyncCatalogs();
+  if (!synced) {
+    throw new ApiError(GL_NOT_INSTALLED, 503);
+  }
+  return apiGlBackfill();
+}
+
+export function glInstallHint(): string {
+  return GL_INSTALL_HINT;
+}
+
 export async function apiGlListJournals(params?: {
   from?: string;
   to?: string;
   academicYear?: string;
   voucherType?: string;
 }): Promise<GlJournal[]> {
-  if (!hasToken()) return [];
-  const data = await glSafe(
-    () =>
-      apiRequest<unknown>(
-        glResourcePath("journals", {
-          from: params?.from,
-          to: params?.to,
-          academicYear: params?.academicYear,
-          voucherType: params?.voucherType,
-        }),
-      ),
-    [] as unknown,
+  const data = await glGet<unknown>(
+    "journals",
+    {
+      from: params?.from,
+      to: params?.to,
+      academicYear: params?.academicYear,
+      voucherType: params?.voucherType,
+    },
+    [],
   );
   return Array.isArray(data) ? (data as GlJournal[]) : [];
 }
@@ -469,10 +625,7 @@ export async function apiGlReportBalanceSheet(params?: {
 
 export async function apiGlGetPeriod(year: string): Promise<GlPeriod> {
   const fallback: GlPeriod = { yearLabel: year, status: "open" };
-  const data = await glSafe(
-    () => apiRequest<unknown>(glResourcePath("periods", { academicYear: year })),
-    fallback,
-  );
+  const data = await glGet<unknown>("periods", { academicYear: year }, fallback);
   if (!isRecord(data) || typeof data.status !== "string") return fallback;
   return {
     yearLabel: typeof data.yearLabel === "string" ? data.yearLabel : year,

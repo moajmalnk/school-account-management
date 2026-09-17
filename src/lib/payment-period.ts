@@ -33,6 +33,13 @@ export const PAYMENT_PERIOD_OPTIONS: { value: PaymentPeriod; label: string }[] =
   { value: "custom", label: "Custom" },
 ];
 
+/** Day Book is a cash book — keep the period tight. */
+export const DAY_BOOK_PERIOD_OPTIONS: { value: PaymentPeriod; label: string }[] = [
+  { value: "today", label: "Today" },
+  { value: "yesterday", label: "Yesterday" },
+  { value: "custom", label: "Custom" },
+];
+
 function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }

@@ -167,20 +167,19 @@ export function parsePaymentModeSplit(
 /** Cash portion of a receipt — Cash mode full amount; Both mode uses narration split. */
 export function paymentCashAmount(payment: PaymentLike): number {
   const mode = (payment.mode || "").trim();
-  if (mode === "Cash") return payment.amount;
-  if (mode === "Both") {
+  if (/^cash$/i.test(mode)) return payment.amount;
+  if (/^both$/i.test(mode)) {
     const split = parsePaymentModeSplit(payment.narration);
     return split?.cash ?? 0;
   }
   return 0;
 }
 
-/** Bank portion of a receipt — Bank mode full amount; Both mode uses narration split. */
+/** Bank/UPI portion of a receipt — everything that is not cash. */
 export function paymentBankAmount(payment: PaymentLike): number {
   const mode = (payment.mode || "").trim();
-  if (mode === "Cash") return 0;
-  if (mode === "Bank") return payment.amount;
-  if (mode === "Both") {
+  if (/^cash$/i.test(mode)) return 0;
+  if (/^both$/i.test(mode)) {
     const split = parsePaymentModeSplit(payment.narration);
     if (split) return split.bank;
     return payment.amount;
@@ -188,14 +187,51 @@ export function paymentBankAmount(payment: PaymentLike): number {
   return payment.amount;
 }
 
-export function cashOnHand(payments: Payment[]): number {
-  return payments.reduce((sum, p) => sum + paymentCashAmount(p), 0);
+function disbursementAsPayment(row: FinanceDisbursement): PaymentLike {
+  return {
+    mode: row.mode || "Bank",
+    amount: row.amount,
+    narration: row.desc,
+  };
 }
 
-export function bankBalance(payments: Payment[]): number {
-  return payments.reduce((sum, p) => sum + paymentBankAmount(p), 0);
+function clearedOutflow(rows: FinanceDisbursement[]): FinanceDisbursement[] {
+  return rows.filter(isClearedDisbursement);
+}
+
+/**
+ * Cash in hand = cash receipts − cash payments (cleared only).
+ * Queued bills do not reduce cash until they are paid.
+ */
+export function cashOnHand(
+  payments: Payment[],
+  disbursements: FinanceDisbursement[] = [],
+): number {
+  const inflow = payments.reduce((sum, p) => sum + paymentCashAmount(p), 0);
+  const outflow = clearedOutflow(disbursements).reduce(
+    (sum, row) => sum + paymentCashAmount(disbursementAsPayment(row)),
+    0,
+  );
+  return inflow - outflow;
+}
+
+/**
+ * Bank / UPI balance = bank receipts − bank payments (cleared only).
+ */
+export function bankBalance(
+  payments: Payment[],
+  disbursements: FinanceDisbursement[] = [],
+): number {
+  const inflow = payments.reduce((sum, p) => sum + paymentBankAmount(p), 0);
+  const outflow = clearedOutflow(disbursements).reduce(
+    (sum, row) => sum + paymentBankAmount(disbursementAsPayment(row)),
+    0,
+  );
+  return inflow - outflow;
 }
 
 export function formatInr(amount: number): string {
-  return `₹\u00a0${amount.toLocaleString("en-IN")}`;
+  const n = Math.round(amount);
+  if (n < 0) return `₹\u00a0-${Math.abs(n).toLocaleString("en-IN")}`;
+  return `₹\u00a0${n.toLocaleString("en-IN")}`;
 }

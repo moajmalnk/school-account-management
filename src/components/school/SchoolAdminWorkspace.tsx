@@ -361,6 +361,7 @@ import { LocationPicker } from "@/components/school/LocationPicker";
 import {
   BalanceSheetReport,
   BankReconciliationReport,
+  ConcessionReport,
   DayBookReport,
   FeesReport,
   GeneralLedgerReport,
@@ -421,6 +422,7 @@ import {
   FINANCE_BULK_CHUNK,
   isFinanceBulkUnsupported,
 } from "@/lib/api/records";
+import { apiGlSyncCatalogs } from "@/lib/api/general-ledger";
 import { apiSaveDashboardTodos } from "@/lib/api/dashboard";
 import { apiUploadDataUrl } from "@/lib/api/settings";
 import { getApiToken } from "@/lib/api/client";
@@ -443,6 +445,10 @@ import {
   planStaffDuplicateMerge,
   staffFromCsvRow,
 } from "@/lib/staff-csv";
+import {
+  salaryMonthFromDisbursementDesc,
+  syncStaffSalaryHistoryStatus,
+} from "@/lib/staff-payroll";
 import {
   parseTransportRouteCsv,
   resolveTransportRouteImport,
@@ -546,6 +552,7 @@ type MadePayment = {
   mode: string;
   payeeType: PayeeType;
   ledgerId?: string | null;
+  staffId?: string;
   time: string;
   status: "Queued" | "Cleared";
   attachments?: PaymentAttachment[];
@@ -560,6 +567,7 @@ function mapApiDisbursementToMadePayment(
     mode: string;
     payeeType?: string;
     ledgerId?: string | null;
+    staffId?: string;
     time?: string;
     status?: string;
     attachments?: unknown;
@@ -574,6 +582,7 @@ function mapApiDisbursementToMadePayment(
     mode: row.mode,
     payeeType: normalizePayeeType(row.payeeType),
     ledgerId: row.ledgerId ?? null,
+    staffId: row.staffId?.trim() || undefined,
     time: isBlankDate(row.time) ? toSqlDateTime(new Date()) : String(row.time),
     status: row.status === "Queued" ? "Queued" : "Cleared",
     attachments: Array.isArray(row.attachments)
@@ -1473,9 +1482,14 @@ function PremiumDashboard({
             </div>
           </section>
 
-          {/* Cash Position */}
+          {/* Cash Position — cash book: receipts minus cleared payments by mode */}
           <section className={cn(dashCardClass, DASH.cash, "flex min-w-0 flex-col p-4 sm:p-5")}>
-            <DashboardPanelHeading icon={Landmark} title="Cash Position" />
+            <div>
+              <DashboardPanelHeading icon={Landmark} title="Cash Position" />
+              <p className="mt-1 pl-[2.625rem] text-[11px] font-medium leading-snug text-slate-500 dark:text-zinc-400">
+                Receipts minus cleared payments. Queued bills are not deducted.
+              </p>
+            </div>
             <div className="mt-4 grid min-w-0 flex-1 grid-cols-1 gap-2 min-[20rem]:grid-cols-2 sm:gap-3">
               <div
                 className={cn(
@@ -1486,7 +1500,7 @@ function PremiumDashboard({
                 <div className="flex items-center justify-between gap-1.5 text-[#047857] dark:text-emerald-300">
                   <span
                     className="min-w-0 text-[11px] font-semibold leading-snug text-emerald-950 sm:text-[12px] dark:text-emerald-50"
-                    title="Cash In Hand"
+                    title="Cash receipts minus cash payments"
                   >
                     <span className="min-[22rem]:hidden">Cash</span>
                     <span className="hidden min-[22rem]:inline">Cash In Hand</span>
@@ -1498,7 +1512,12 @@ function PremiumDashboard({
                 <DashboardAmount
                   value={inHand}
                   compact
-                  className="text-emerald-950 dark:text-emerald-50"
+                  pending={!expensesReady}
+                  className={
+                    inHand < 0
+                      ? "text-rose-700 dark:text-rose-300"
+                      : "text-emerald-950 dark:text-emerald-50"
+                  }
                 />
               </div>
               <div
@@ -1510,7 +1529,7 @@ function PremiumDashboard({
                 <div className="flex items-center justify-between gap-1.5 text-violet-700 dark:text-violet-300">
                   <span
                     className="min-w-0 text-[11px] font-semibold leading-snug text-violet-950 sm:text-[12px] dark:text-violet-50"
-                    title="Bank Balance"
+                    title="Bank receipts minus bank payments"
                   >
                     <span className="min-[22rem]:hidden">Bank</span>
                     <span className="hidden min-[22rem]:inline">Bank Balance</span>
@@ -1522,7 +1541,12 @@ function PremiumDashboard({
                 <DashboardAmount
                   value={inBank}
                   compact
-                  className="text-violet-950 dark:text-violet-50"
+                  pending={!expensesReady}
+                  className={
+                    inBank < 0
+                      ? "text-rose-700 dark:text-rose-300"
+                      : "text-violet-950 dark:text-violet-50"
+                  }
                 />
               </div>
               <div
@@ -1537,7 +1561,11 @@ function PremiumDashboard({
                     <Wallet className="h-4 w-4" />
                   </span>
                 </div>
-                <DashboardAmount value={totalBalance} className="text-white" />
+                <DashboardAmount
+                  value={totalBalance}
+                  pending={!expensesReady}
+                  className="text-white"
+                />
               </div>
             </div>
           </section>
@@ -1993,8 +2021,14 @@ export function SchoolDashboard() {
     [filteredPayments],
   );
 
-  const inHand = useMemo(() => cashOnHand(payments), [payments]);
-  const inBank = useMemo(() => bankBalance(payments), [payments]);
+  const inHand = useMemo(
+    () => cashOnHand(payments, disbursements),
+    [payments, disbursements],
+  );
+  const inBank = useMemo(
+    () => bankBalance(payments, disbursements),
+    [payments, disbursements],
+  );
   const totalBalance = inHand + inBank;
   const expenseTotal = useMemo(
     () => operatingExpenseForPeriod(disbursements, period, customRange),
@@ -6939,6 +6973,7 @@ export function FinanceModule() {
     | "pl"
     | "balance"
     | "fees"
+    | "concession"
     | "salary"
     | "daybook"
     | "reconciliation";
@@ -6965,6 +7000,7 @@ export function FinanceModule() {
       "pl",
       "balance",
       "fees",
+      "concession",
       "salary",
       "daybook",
       "reconciliation",
@@ -7069,6 +7105,14 @@ export function FinanceModule() {
     );
   }
 
+  if (view === "concession") {
+    return (
+      <div className="w-full space-y-4 sm:space-y-5">
+        <ConcessionReport />
+      </div>
+    );
+  }
+
   if (view === "salary") {
     return (
       <div className="flex w-full flex-1 flex-col space-y-4 sm:space-y-5">
@@ -7108,126 +7152,150 @@ const financeActionIconShell =
 const financeReportTileShell =
   "group relative flex min-h-[118px] min-w-0 flex-col items-start justify-between gap-3 overflow-hidden rounded-2xl border p-3.5 text-left backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/35 sm:min-h-[128px] sm:p-4 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_8px_26px_-10px_rgba(15,23,42,0.1)] hover:shadow-[0_12px_32px_-12px_rgba(15,23,42,0.14)] dark:shadow-[0_1px_0_rgba(255,255,255,0.05),0_10px_34px_-12px_rgba(0,0,0,0.55)] dark:hover:shadow-[0_14px_38px_-10px_rgba(0,0,0,0.62)]";
 
-const FINANCE_REPORT_TILES = [
+const FINANCE_REPORT_GROUPS = [
   {
-    k: "fees" as const,
-    l: "Fees Report",
-    d: "Collections & dues",
-    icon: GraduationCap,
-    surface:
-      "border-teal-200/55 bg-gradient-to-br from-teal-50/95 via-teal-50/35 to-white hover:border-teal-300/60 dark:border-teal-500/20 dark:from-teal-500/[0.14] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-teal-400/30",
-    iconWrap:
-      "bg-white/95 text-teal-700 ring-1 ring-teal-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-teal-300 dark:ring-teal-500/25",
-    arrowHover:
-      "group-hover:text-teal-600 dark:group-hover:text-teal-400 dark:group-hover:ring-teal-500/30",
+    title: "Student & staff fees",
+    description: "Collections, concessions, and payroll",
+    tiles: [
+      {
+        k: "fees" as const,
+        l: "Fees Report",
+        d: "Collections, due & overdue",
+        icon: GraduationCap,
+        surface:
+          "border-teal-200/55 bg-gradient-to-br from-teal-50/95 via-teal-50/35 to-white hover:border-teal-300/60 dark:border-teal-500/20 dark:from-teal-500/[0.14] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-teal-400/30",
+        iconWrap:
+          "bg-white/95 text-teal-700 ring-1 ring-teal-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-teal-300 dark:ring-teal-500/25",
+        arrowHover:
+          "group-hover:text-teal-600 dark:group-hover:text-teal-400 dark:group-hover:ring-teal-500/30",
+      },
+      {
+        k: "concession" as const,
+        l: "Concession Report",
+        d: "Waivers & fee relief",
+        icon: HandCoins,
+        surface:
+          "border-orange-200/55 bg-gradient-to-br from-orange-50/95 via-orange-50/35 to-white hover:border-orange-300/60 dark:border-orange-500/20 dark:from-orange-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-orange-400/30",
+        iconWrap:
+          "bg-white/95 text-orange-700 ring-1 ring-orange-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-orange-300 dark:ring-orange-500/25",
+        arrowHover:
+          "group-hover:text-orange-600 dark:group-hover:text-orange-400 dark:group-hover:ring-orange-500/30",
+      },
+      {
+        k: "salary" as const,
+        l: "Salary Report",
+        d: "Payroll & staff payables",
+        icon: Users,
+        surface:
+          "border-violet-200/55 bg-gradient-to-br from-violet-50/95 via-violet-50/35 to-white hover:border-violet-300/60 dark:border-violet-500/20 dark:from-violet-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-violet-400/30",
+        iconWrap:
+          "bg-white/95 text-violet-600 ring-1 ring-violet-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-violet-300 dark:ring-violet-500/25",
+        arrowHover:
+          "group-hover:text-violet-600 dark:group-hover:text-violet-400 dark:group-hover:ring-violet-500/30",
+      },
+      {
+        k: "daybook" as const,
+        l: "Day Book",
+        d: "Daily cash activity",
+        icon: BookOpen,
+        surface:
+          "border-sky-200/55 bg-gradient-to-br from-sky-50/95 via-sky-50/35 to-white hover:border-sky-300/60 dark:border-sky-500/20 dark:from-sky-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-sky-400/30",
+        iconWrap:
+          "bg-white/95 text-sky-700 ring-1 ring-sky-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-sky-300 dark:ring-sky-500/25",
+        arrowHover:
+          "group-hover:text-sky-600 dark:group-hover:text-sky-400 dark:group-hover:ring-sky-500/30",
+      },
+    ],
   },
   {
-    k: "daybook" as const,
-    l: "Day Book",
-    d: "Daily cash activity",
-    icon: BookOpen,
-    surface:
-      "border-sky-200/55 bg-gradient-to-br from-sky-50/95 via-sky-50/35 to-white hover:border-sky-300/60 dark:border-sky-500/20 dark:from-sky-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-sky-400/30",
-    iconWrap:
-      "bg-white/95 text-sky-700 ring-1 ring-sky-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-sky-300 dark:ring-sky-500/25",
-    arrowHover:
-      "group-hover:text-sky-600 dark:group-hover:text-sky-400 dark:group-hover:ring-sky-500/30",
-  },
-  {
-    k: "analytics" as const,
-    l: "Analytics",
-    d: "Financial insights",
-    icon: ChartPie,
-    surface:
-      "border-amber-200/55 bg-gradient-to-br from-amber-50/95 via-amber-50/35 to-white hover:border-amber-300/60 dark:border-amber-500/20 dark:from-amber-500/[0.11] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-amber-400/30",
-    iconWrap:
-      "bg-white/95 text-amber-700 ring-1 ring-amber-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-amber-300 dark:ring-amber-500/25",
-    arrowHover:
-      "group-hover:text-amber-600 dark:group-hover:text-amber-400 dark:group-hover:ring-amber-500/30",
-  },
-  {
-    k: "ledger" as const,
-    l: "Ledger",
-    d: "Account statements",
-    icon: ListTodo,
-    surface:
-      "border-indigo-200/55 bg-gradient-to-br from-indigo-50/95 via-indigo-50/35 to-white hover:border-indigo-300/60 dark:border-indigo-500/20 dark:from-indigo-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-indigo-400/30",
-    iconWrap:
-      "bg-white/95 text-indigo-600 ring-1 ring-indigo-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-indigo-300 dark:ring-indigo-500/25",
-    arrowHover:
-      "group-hover:text-indigo-600 dark:group-hover:text-indigo-400 dark:group-hover:ring-indigo-500/30",
-  },
-  {
-    k: "journals" as const,
-    l: "Journals",
-    d: "Vouchers & opening",
-    icon: BookOpen,
-    surface:
-      "border-violet-200/55 bg-gradient-to-br from-violet-50/95 via-violet-50/35 to-white hover:border-violet-300/60 dark:border-violet-500/20 dark:from-violet-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-violet-400/30",
-    iconWrap:
-      "bg-white/95 text-violet-700 ring-1 ring-violet-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-violet-300 dark:ring-violet-500/25",
-    arrowHover:
-      "group-hover:text-violet-600 dark:group-hover:text-violet-400 dark:group-hover:ring-violet-500/30",
-  },
-  {
-    k: "trial" as const,
-    l: "Trial Balance",
-    d: "Debit = credit check",
-    icon: Scale,
-    surface:
-      "border-slate-200/55 bg-gradient-to-br from-slate-50/95 via-slate-50/35 to-white hover:border-slate-300/60 dark:border-slate-500/20 dark:from-slate-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-slate-400/30",
-    iconWrap:
-      "bg-white/95 text-slate-700 ring-1 ring-slate-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-slate-300 dark:ring-slate-500/25",
-    arrowHover:
-      "group-hover:text-slate-600 dark:group-hover:text-slate-400 dark:group-hover:ring-slate-500/30",
-  },
-  {
-    k: "pl" as const,
-    l: "Profit & Loss",
-    d: "Income vs expense",
-    icon: TrendingUp,
-    surface:
-      "border-emerald-200/55 bg-gradient-to-br from-emerald-50/95 via-emerald-50/35 to-white hover:border-emerald-300/60 dark:border-emerald-500/20 dark:from-emerald-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-emerald-400/30",
-    iconWrap:
-      "bg-white/95 text-emerald-700 ring-1 ring-emerald-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-emerald-300 dark:ring-emerald-500/25",
-    arrowHover:
-      "group-hover:text-emerald-600 dark:group-hover:text-emerald-400 dark:group-hover:ring-emerald-500/30",
-  },
-  {
-    k: "balance" as const,
-    l: "Balance Sheet",
-    d: "Assets & liabilities",
-    icon: Scale,
-    surface:
-      "border-rose-200/55 bg-gradient-to-br from-rose-50/95 via-rose-50/35 to-white hover:border-rose-300/60 dark:border-rose-500/20 dark:from-rose-500/[0.11] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-rose-400/30",
-    iconWrap:
-      "bg-white/95 text-rose-600 ring-1 ring-rose-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-rose-300 dark:ring-rose-500/25",
-    arrowHover:
-      "group-hover:text-rose-600 dark:group-hover:text-rose-400 dark:group-hover:ring-rose-500/30",
-  },
-  {
-    k: "reconciliation" as const,
-    l: "Bank Reconciliation",
-    d: "Match statement & books",
-    icon: Landmark,
-    surface:
-      "border-cyan-200/55 bg-gradient-to-br from-cyan-50/95 via-cyan-50/35 to-white hover:border-cyan-300/60 dark:border-cyan-500/20 dark:from-cyan-500/[0.11] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-cyan-400/30",
-    iconWrap:
-      "bg-white/95 text-cyan-700 ring-1 ring-cyan-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-cyan-300 dark:ring-cyan-500/25",
-    arrowHover:
-      "group-hover:text-cyan-600 dark:group-hover:text-cyan-400 dark:group-hover:ring-cyan-500/30",
-  },
-  {
-    k: "salary" as const,
-    l: "Salary Report",
-    d: "Payroll & staff payables",
-    icon: Users,
-    surface:
-      "border-violet-200/55 bg-gradient-to-br from-violet-50/95 via-violet-50/35 to-white hover:border-violet-300/60 dark:border-violet-500/20 dark:from-violet-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-violet-400/30",
-    iconWrap:
-      "bg-white/95 text-violet-600 ring-1 ring-violet-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-violet-300 dark:ring-violet-500/25",
-    arrowHover:
-      "group-hover:text-violet-600 dark:group-hover:text-violet-400 dark:group-hover:ring-violet-500/30",
+    title: "Books & statements",
+    description: "Ledgers, trial balance, and statutory reports",
+    tiles: [
+      {
+        k: "analytics" as const,
+        l: "Analytics",
+        d: "Financial insights",
+        icon: ChartPie,
+        surface:
+          "border-amber-200/55 bg-gradient-to-br from-amber-50/95 via-amber-50/35 to-white hover:border-amber-300/60 dark:border-amber-500/20 dark:from-amber-500/[0.11] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-amber-400/30",
+        iconWrap:
+          "bg-white/95 text-amber-700 ring-1 ring-amber-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-amber-300 dark:ring-amber-500/25",
+        arrowHover:
+          "group-hover:text-amber-600 dark:group-hover:text-amber-400 dark:group-hover:ring-amber-500/30",
+      },
+      {
+        k: "ledger" as const,
+        l: "Ledger",
+        d: "Account statements",
+        icon: ListTodo,
+        surface:
+          "border-indigo-200/55 bg-gradient-to-br from-indigo-50/95 via-indigo-50/35 to-white hover:border-indigo-300/60 dark:border-indigo-500/20 dark:from-indigo-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-indigo-400/30",
+        iconWrap:
+          "bg-white/95 text-indigo-600 ring-1 ring-indigo-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-indigo-300 dark:ring-indigo-500/25",
+        arrowHover:
+          "group-hover:text-indigo-600 dark:group-hover:text-indigo-400 dark:group-hover:ring-indigo-500/30",
+      },
+      {
+        k: "journals" as const,
+        l: "Journals",
+        d: "Vouchers & opening",
+        icon: BookOpen,
+        surface:
+          "border-violet-200/55 bg-gradient-to-br from-violet-50/95 via-violet-50/35 to-white hover:border-violet-300/60 dark:border-violet-500/20 dark:from-violet-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-violet-400/30",
+        iconWrap:
+          "bg-white/95 text-violet-700 ring-1 ring-violet-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-violet-300 dark:ring-violet-500/25",
+        arrowHover:
+          "group-hover:text-violet-600 dark:group-hover:text-violet-400 dark:group-hover:ring-violet-500/30",
+      },
+      {
+        k: "trial" as const,
+        l: "Trial Balance",
+        d: "Debit = credit check",
+        icon: Scale,
+        surface:
+          "border-slate-200/55 bg-gradient-to-br from-slate-50/95 via-slate-50/35 to-white hover:border-slate-300/60 dark:border-slate-500/20 dark:from-slate-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-slate-400/30",
+        iconWrap:
+          "bg-white/95 text-slate-700 ring-1 ring-slate-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-slate-300 dark:ring-slate-500/25",
+        arrowHover:
+          "group-hover:text-slate-600 dark:group-hover:text-slate-400 dark:group-hover:ring-slate-500/30",
+      },
+      {
+        k: "pl" as const,
+        l: "Profit & Loss",
+        d: "Income vs expense",
+        icon: TrendingUp,
+        surface:
+          "border-emerald-200/55 bg-gradient-to-br from-emerald-50/95 via-emerald-50/35 to-white hover:border-emerald-300/60 dark:border-emerald-500/20 dark:from-emerald-500/[0.12] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-emerald-400/30",
+        iconWrap:
+          "bg-white/95 text-emerald-700 ring-1 ring-emerald-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-emerald-300 dark:ring-emerald-500/25",
+        arrowHover:
+          "group-hover:text-emerald-600 dark:group-hover:text-emerald-400 dark:group-hover:ring-emerald-500/30",
+      },
+      {
+        k: "balance" as const,
+        l: "Balance Sheet",
+        d: "Assets & liabilities",
+        icon: Scale,
+        surface:
+          "border-rose-200/55 bg-gradient-to-br from-rose-50/95 via-rose-50/35 to-white hover:border-rose-300/60 dark:border-rose-500/20 dark:from-rose-500/[0.11] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-rose-400/30",
+        iconWrap:
+          "bg-white/95 text-rose-600 ring-1 ring-rose-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-rose-300 dark:ring-rose-500/25",
+        arrowHover:
+          "group-hover:text-rose-600 dark:group-hover:text-rose-400 dark:group-hover:ring-rose-500/30",
+      },
+      {
+        k: "reconciliation" as const,
+        l: "Bank Reconciliation",
+        d: "Match statement & books",
+        icon: Landmark,
+        surface:
+          "border-cyan-200/55 bg-gradient-to-br from-cyan-50/95 via-cyan-50/35 to-white hover:border-cyan-300/60 dark:border-cyan-500/20 dark:from-cyan-500/[0.11] dark:via-zinc-900/95 dark:to-zinc-950 dark:hover:border-cyan-400/30",
+        iconWrap:
+          "bg-white/95 text-cyan-700 ring-1 ring-cyan-100/90 shadow-sm dark:bg-zinc-900/85 dark:text-cyan-300 dark:ring-cyan-500/25",
+        arrowHover:
+          "group-hover:text-cyan-600 dark:group-hover:text-cyan-400 dark:group-hover:ring-cyan-500/30",
+      },
+    ],
   },
 ] as const;
 
@@ -7245,6 +7313,7 @@ function FinanceOverview({
       | "pl"
       | "balance"
       | "fees"
+      | "concession"
       | "salary"
       | "daybook"
       | "reconciliation",
@@ -7657,65 +7726,81 @@ function FinanceOverview({
         )}
       </div>
 
-      <section className={cn(glassCardClass, "p-4 sm:p-5")}>
-        <h3 className="text-[15px] font-bold tracking-tight text-slate-900 dark:text-zinc-50">
-          Reports
-        </h3>
-        <p className="mt-0.5 text-[12px] text-slate-500 dark:text-zinc-400">
-          Financial statements and analytics
-        </p>
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-3.5 xl:grid-cols-4">
-          {FINANCE_REPORT_TILES.filter((item) => sessionCanAccessFinanceView(session, item.k)).map(
-            (item, index, items) => {
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.k}
-                  type="button"
-                  onClick={() => onOpenView(item.k)}
-                  className={cn(
-                    financeReportTileShell,
-                    item.surface,
-                    items.length % 2 === 1 &&
-                      index === items.length - 1 &&
-                      "col-span-2 sm:col-span-1",
-                  )}
-                >
-                  <span
-                    aria-hidden
-                    className="pointer-events-none absolute inset-x-3 top-0 h-px bg-gradient-to-r from-transparent via-white/90 to-transparent dark:via-white/10"
-                  />
-                  <div className="flex w-full items-start justify-between gap-2">
-                    <span
-                      className={cn(
-                        "grid h-9 w-9 shrink-0 place-items-center rounded-xl sm:h-10 sm:w-10",
-                        item.iconWrap,
-                      )}
-                    >
-                      <Icon className="h-4 w-4 sm:h-[18px] sm:w-[18px]" strokeWidth={2.25} />
-                    </span>
-                    <span
-                      className={cn(
-                        "grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/80 text-slate-400 ring-1 ring-black/[0.05] transition-all duration-300 group-hover:bg-white dark:bg-zinc-900/90 dark:text-zinc-500 dark:ring-white/10",
-                        item.arrowHover,
-                      )}
-                    >
-                      <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:-translate-y-px group-hover:translate-x-px" />
-                    </span>
-                  </div>
-                  <div className="relative min-w-0">
-                    <div className="text-[13px] font-bold leading-snug tracking-tight text-slate-900 dark:text-zinc-50 sm:text-[14px]">
-                      {item.l}
-                    </div>
-                    <p className="mt-1 text-[11px] leading-snug text-slate-500 dark:text-zinc-400">
-                      {item.d}
-                    </p>
-                  </div>
-                </button>
-              );
-            },
-          )}
+      <section className={cn(glassCardClass, "space-y-6 p-4 sm:p-5")}>
+        <div>
+          <h3 className="text-[15px] font-bold tracking-tight text-slate-900 dark:text-zinc-50">
+            Reports
+          </h3>
+          <p className="mt-0.5 text-[12px] text-slate-500 dark:text-zinc-400">
+            Fee operations first, then books and statements
+          </p>
         </div>
+        {FINANCE_REPORT_GROUPS.map((group) => {
+          const tiles = group.tiles.filter((item) => sessionCanAccessFinanceView(session, item.k));
+          if (!tiles.length) return null;
+          return (
+            <div key={group.title}>
+              <div className="mb-3">
+                <h4 className="text-[12px] font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+                  {group.title}
+                </h4>
+                <p className="mt-0.5 text-[11px] text-slate-400 dark:text-zinc-500">
+                  {group.description}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-3.5 xl:grid-cols-4">
+                {tiles.map((item, index, items) => {
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.k}
+                      type="button"
+                      onClick={() => onOpenView(item.k)}
+                      className={cn(
+                        financeReportTileShell,
+                        item.surface,
+                        items.length % 2 === 1 &&
+                          index === items.length - 1 &&
+                          "col-span-2 sm:col-span-1",
+                      )}
+                    >
+                      <span
+                        aria-hidden
+                        className="pointer-events-none absolute inset-x-3 top-0 h-px bg-gradient-to-r from-transparent via-white/90 to-transparent dark:via-white/10"
+                      />
+                      <div className="flex w-full items-start justify-between gap-2">
+                        <span
+                          className={cn(
+                            "grid h-9 w-9 shrink-0 place-items-center rounded-xl sm:h-10 sm:w-10",
+                            item.iconWrap,
+                          )}
+                        >
+                          <Icon className="h-4 w-4 sm:h-[18px] sm:w-[18px]" strokeWidth={2} />
+                        </span>
+                        <span
+                          className={cn(
+                            "grid h-7 w-7 place-items-center rounded-full text-slate-400 ring-1 ring-slate-200/80 transition-colors dark:text-zinc-500 dark:ring-white/10",
+                            item.arrowHover,
+                          )}
+                        >
+                          <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.25} />
+                        </span>
+                      </div>
+                      <div className="min-w-0">
+                        <div className="truncate text-[13px] font-semibold tracking-tight text-slate-900 dark:text-zinc-50 sm:text-[14px]">
+                          {item.l}
+                        </div>
+                        <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-slate-500 dark:text-zinc-400">
+                          {item.d}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
       </section>
 
       <div className="grid grid-cols-12 gap-5">
@@ -10512,14 +10597,21 @@ function ReceivePayment() {
     e.preventDefault();
     const label = newCategoryLabel.trim();
     if (!label) {
-      toast.error("Enter a fee description");
+      toast.error(
+        addCategoryTarget?.type === "ledger" ? "Enter a ledger name" : "Enter a fee description",
+      );
       return;
     }
     if (paymentCategories.some((c) => c.label.trim().toLowerCase() === label.toLowerCase())) {
-      toast.error("This fee description already exists");
+      toast.error(
+        addCategoryTarget?.type === "ledger"
+          ? "This ledger already exists"
+          : "This fee description already exists",
+      );
       return;
     }
     const draft: PaymentCategory = { id: newPaymentCategoryId(), label };
+    const targetType = addCategoryTarget?.type;
     setSavingCategory(true);
     try {
       const saved = getApiToken() ? await apiUpsertPaymentCategory(draft) : draft;
@@ -10529,14 +10621,25 @@ function ReceivePayment() {
       } else if (addCategoryTarget?.type === "ledger") {
         setLedgerCategory(saved.label);
       }
+      if (getApiToken()) {
+        void apiGlSyncCatalogs();
+      }
       setAddCategoryOpen(false);
       setAddCategoryTarget(null);
       setNewCategoryLabel("");
-      toast.success(`Added “${saved.label}”`, {
-        description: getApiToken() ? "Saved to fee categories" : "Available for this session",
-      });
+      toast.success(
+        targetType === "ledger" ? `Ledger “${saved.label}” ready` : `Added “${saved.label}”`,
+        {
+          description:
+            targetType === "ledger"
+              ? "Linked for receipts · also appears under Ledgers when chart is installed"
+              : getApiToken()
+                ? "Saved to fee categories"
+                : "Available for this session",
+        },
+      );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not add fee description");
+      toast.error(err instanceof Error ? err.message : "Could not add");
     } finally {
       setSavingCategory(false);
     }
@@ -11563,16 +11666,16 @@ function ReceivePayment() {
 
                 <div className="col-span-12 grid grid-cols-12 gap-x-4 gap-y-5 lg:col-span-6 lg:grid-cols-1">
                   <div className="col-span-12">
-                    <FieldLabel>Ledger Link</FieldLabel>
+                    <FieldLabel>Income ledger</FieldLabel>
                     <FieldSelect
                       className="min-w-0"
                       value={ledgerCategory}
                       onValueChange={setLedgerCategory}
                       options={descriptionOptions}
-                      placeholder="Select category"
+                      placeholder="Select ledger"
                       triggerClassName="h-11 sm:h-10"
                       onAddNew={() => openAddCategoryDialog({ type: "ledger" })}
-                      addNewLabel="Add new description"
+                      addNewLabel="Create new ledger"
                     />
                   </div>
                   <div className="col-span-12">
@@ -12358,20 +12461,28 @@ function ReceivePayment() {
       >
         <DialogContent className="max-w-sm rounded-xl">
           <DialogHeader>
-            <DialogTitle>Add fee description</DialogTitle>
+            <DialogTitle>
+              {addCategoryTarget?.type === "ledger" ? "Create income ledger" : "Add fee description"}
+            </DialogTitle>
             <DialogDescription>
-              Creates a reusable category for fee items, receipts, and ledger posting.
+              {addCategoryTarget?.type === "ledger"
+                ? "Used on receipts and mirrored into Ledgers under Direct Incomes when the chart is installed."
+                : "Creates a reusable category for fee line items on student receipts."}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={(e) => void submitNewCategory(e)} className="space-y-4">
             <div className="space-y-1.5">
               <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                Description
+                {addCategoryTarget?.type === "ledger" ? "Ledger name" : "Description"}
               </Label>
               <Input
                 value={newCategoryLabel}
                 onChange={(e) => setNewCategoryLabel(e.target.value)}
-                placeholder="e.g. Library Fee, Lab Fee"
+                placeholder={
+                  addCategoryTarget?.type === "ledger"
+                    ? "e.g. Donation, Grant, Alumni Fund"
+                    : "e.g. Library Fee, Lab Fee"
+                }
                 autoFocus
                 className="h-11"
               />
@@ -12394,8 +12505,10 @@ function ReceivePayment() {
                 {savingCategory ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Adding…
+                    {addCategoryTarget?.type === "ledger" ? "Creating…" : "Adding…"}
                   </>
+                ) : addCategoryTarget?.type === "ledger" ? (
+                  "Create ledger"
                 ) : (
                   "Add description"
                 )}
@@ -12567,7 +12680,7 @@ function MakePayment() {
   const [bankSplitAmount, setBankSplitAmount] = useState("");
   const [cashSplitAmount, setCashSplitAmount] = useState("");
   const [attachments, setAttachments] = useState<PaymentAttachment[]>([]);
-  const [pendingAuthorisation, setPendingAuthorisation] = useState(false);
+  const [pendingPayAction, setPendingPayAction] = useState<"hold" | "pay" | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const [previewAttachment, setPreviewAttachment] = useState<PaymentAttachment | null>(null);
@@ -12615,6 +12728,38 @@ function MakePayment() {
           .sort((a, b) => (b.time || "").localeCompare(a.time || ""));
         setMadePayments(mapped);
         syncDisbursementsCache(activeBranchId, list);
+
+        // Heal salary history still marked Queued when Made Payment already shows Cleared.
+        const clearedSalary = mapped.filter(
+          (row) => row.payeeType === "Salary" && row.status === "Cleared",
+        );
+        if (clearedSalary.length === 0) return;
+        setStaff((prev) => {
+          let dirty = false;
+          const next = prev.map((member) => {
+            let updated = member;
+            for (const row of clearedSalary) {
+              const matchesId = row.staffId && member.id === row.staffId;
+              const matchesName =
+                !row.staffId &&
+                member.name.trim().toLowerCase() === row.payee.trim().toLowerCase();
+              if (!matchesId && !matchesName) continue;
+              const synced = syncStaffSalaryHistoryStatus(updated, {
+                amount: row.amount,
+                status: "Cleared",
+                month: salaryMonthFromDisbursementDesc(row.desc),
+                paidAt: (row.time || "").slice(0, 10),
+              });
+              if (synced !== updated) {
+                updated = synced;
+                dirty = true;
+              }
+            }
+            if (updated !== member) void apiUpsertStaff(updated).catch(() => {});
+            return updated;
+          });
+          return dirty ? next : prev;
+        });
       })
       .catch(() => {
         if (cancelled) return;
@@ -12626,7 +12771,7 @@ function MakePayment() {
     return () => {
       cancelled = true;
     };
-  }, [activeBranchId]);
+  }, [activeBranchId, setStaff]);
 
   useEffect(() => {
     let cancelled = false;
@@ -12687,9 +12832,12 @@ function MakePayment() {
           payeeType: "Other Expense",
         }));
       }
+      void apiGlSyncCatalogs();
       setCreateLedgerOpen(false);
       setNewLedgerName("");
-      toast.success(`Ledger “${entry.name}” ready`);
+      toast.success(`Ledger “${entry.name}” ready`, {
+        description: "Ready for Make Payment · also appears under Ledgers when chart is installed",
+      });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not create ledger");
     } finally {
@@ -12927,7 +13075,7 @@ function MakePayment() {
     setAttachments((prev) => prev.filter((a) => a.id !== id));
   };
 
-  const requestAuthorisation = () => {
+  const requestAuthorisation = (action: "hold" | "pay") => {
     const value = Number(amount.replace(/[^0-9]/g, ""));
     if (payeeType === "Salary" && !selectedStaffId) {
       toast.error("Choose a staff member");
@@ -12978,22 +13126,33 @@ function MakePayment() {
     ) {
       setDescription((prev) => `${prev.trim()} · ${formatPayrollMonthLabel(salaryMonth)}`);
     }
-    setPendingAuthorisation(true);
+    setPendingPayAction(action);
   };
 
   const confirmAuthorisation = () => {
-    if (isSubmitting) return;
+    if (isSubmitting || !pendingPayAction) return;
     const value = Number(amount.replace(/[^0-9]/g, ""));
     if (!beneficiary.trim() || !description.trim() || !value || value <= 0) {
       toast.error("Complete all required fields before confirming");
-      setPendingAuthorisation(false);
+      setPendingPayAction(null);
       return;
     }
 
+    const payStatus: "Queued" | "Cleared" = pendingPayAction === "hold" ? "Queued" : "Cleared";
+    const isHold = pendingPayAction === "hold";
+
     setIsSubmitting(true);
-    setPendingAuthorisation(false);
+    setPendingPayAction(null);
 
     let desc = description.trim();
+    if (
+      payeeType === "Salary" &&
+      salaryMonth &&
+      !desc.toLowerCase().includes(formatPayrollMonthLabel(salaryMonth).toLowerCase()) &&
+      !desc.includes(salaryMonth)
+    ) {
+      desc = `${desc} · ${formatPayrollMonthLabel(salaryMonth)}`;
+    }
     if (mode === "Both") {
       desc = [
         desc,
@@ -13012,8 +13171,9 @@ function MakePayment() {
       mode,
       payeeType,
       ledgerId: payeeType === "Other Expense" ? selectedLedgerId || null : null,
+      staffId: payeeType === "Salary" ? selectedStaffId || undefined : undefined,
       time: toSqlDateTime(new Date()),
-      status: payeeType === "Salary" ? "Queued" : "Cleared",
+      status: payStatus,
       attachments: attachments.length ? attachments : undefined,
     };
     setMadePayments((prev) => [disbursal, ...prev]);
@@ -13028,10 +13188,7 @@ function MakePayment() {
     })
       .then((saved) => {
         const savedId = saved?.id;
-        const resolvedStatus =
-          saved?.status === "Queued" || saved?.status === "Cleared"
-            ? saved.status
-            : disbursal.status;
+        // Keep Hold / Pay Now intent — do not let API overwrite with Queued.
         const resolved: MadePayment = {
           ...disbursal,
           id: savedId && savedId !== disbursal.id ? savedId : disbursal.id,
@@ -13042,15 +13199,18 @@ function MakePayment() {
           payeeType: saved?.payeeType ? normalizePayeeType(saved.payeeType) : disbursal.payeeType,
           ledgerId: saved?.ledgerId ?? disbursal.ledgerId,
           time: saved?.time || disbursal.time,
-          status: resolvedStatus,
+          status: payStatus,
+          staffId: disbursal.staffId,
         };
-        if (savedId && savedId !== disbursal.id) {
-          setMadePayments((prev) => prev.map((p) => (p.id === disbursal.id ? resolved : p)));
-        }
+        setMadePayments((prev) => prev.map((p) => (p.id === disbursal.id ? resolved : p)));
         upsertDisbursementInCache(activeBranchId, {
           ...resolved,
           staffId: payeeType === "Salary" ? selectedStaffId || undefined : undefined,
         });
+        // If API ignored status, push an update so Cleared sticks.
+        if (saved?.status && saved.status !== payStatus && resolved.id) {
+          void apiUpdateDisbursement(resolved).catch(() => {});
+        }
       })
       .catch((err) =>
         toast.error("Could not save disbursement on server", {
@@ -13074,57 +13234,52 @@ function MakePayment() {
               unpaidLeaveDays: unpaidLeave,
             })
           : null;
+      const historyDesc =
+        desc.includes(salaryMonth) ||
+        desc.toLowerCase().includes(formatPayrollMonthLabel(salaryMonth).toLowerCase())
+          ? desc
+          : `${desc} · ${formatPayrollMonthLabel(salaryMonth)}`;
       setStaff((prev) =>
-        prev.map((member) =>
-          member.id === selectedStaffId
-            ? {
-                ...member,
-                ...(attendanceRow
-                  ? {
-                      attendanceByMonth: upsertStaffAttendanceMonth(
-                        member.attendanceByMonth,
-                        attendanceRow,
-                      ),
-                    }
-                  : {}),
-                salaryHistory: [
-                  {
-                    id: `SAL-${member.id}-${Date.now().toString().slice(-5)}`,
-                    amount: value,
-                    mode,
-                    paidAt,
-                    description: description.trim() || `Salary · ${member.name}`,
-                    status: "Queued" as const,
-                  },
-                  ...(member.salaryHistory ?? []),
-                ],
-              }
-            : member,
-        ),
+        prev.map((member) => {
+          if (member.id !== selectedStaffId) return member;
+          const nextMember = {
+            ...member,
+            ...(attendanceRow
+              ? {
+                  attendanceByMonth: upsertStaffAttendanceMonth(
+                    member.attendanceByMonth,
+                    attendanceRow,
+                  ),
+                }
+              : {}),
+            salaryHistory: [
+              {
+                id: `SAL-${member.id}-${Date.now().toString().slice(-5)}`,
+                amount: value,
+                mode,
+                paidAt,
+                description:
+                  historyDesc ||
+                  `Salary · ${member.name} · ${formatPayrollMonthLabel(salaryMonth)}`,
+                status: payStatus,
+              },
+              ...(member.salaryHistory ?? []),
+            ],
+          };
+          void apiUpsertStaff(nextMember).catch(() => {});
+          return nextMember;
+        }),
       );
-      const member = staff.find((s) => s.id === selectedStaffId);
-      if (member) {
-        const nextMember = {
-          ...member,
-          ...(attendanceRow
-            ? {
-                attendanceByMonth: upsertStaffAttendanceMonth(
-                  member.attendanceByMonth,
-                  attendanceRow,
-                ),
-              }
-            : {}),
-        };
-        void apiUpsertStaff(nextMember).catch(() => {});
-      }
     }
 
-    toast.success("Payment confirmed", {
-      description: `${beneficiary.trim()} · ₹ ${value.toLocaleString("en-IN")} via ${mode}${
-        attachments.length
-          ? ` · ${attachments.length} attachment${attachments.length === 1 ? "" : "s"}`
-          : ""
-      }`,
+    toast.success(isHold ? "Salary held" : "Payment confirmed", {
+      description: isHold
+        ? `${beneficiary.trim()} · ₹ ${value.toLocaleString("en-IN")} · Queued obligation`
+        : `${beneficiary.trim()} · ₹ ${value.toLocaleString("en-IN")} via ${mode}${
+            attachments.length
+              ? ` · ${attachments.length} attachment${attachments.length === 1 ? "" : "s"}`
+              : ""
+          }`,
     });
 
     resetForm();
@@ -13262,7 +13417,7 @@ function MakePayment() {
             mode: row.mode,
             paidAt: toIsoDate(row.time),
             description: row.desc || `Salary · ${member.name}`,
-            status: "Queued" as const,
+            status: "Cleared" as const,
           },
           ...(member.salaryHistory ?? []),
         ],
@@ -13321,6 +13476,7 @@ function MakePayment() {
       setExpenseLedgers((prev) =>
         prev.some((item) => item.id === entry.id) ? prev : [...prev, entry],
       );
+      void apiGlSyncCatalogs();
       return entry;
     };
 
@@ -13688,6 +13844,32 @@ function MakePayment() {
         description: err instanceof Error ? err.message : "Save failed",
       }),
     );
+
+    if (nextDisbursal.payeeType === "Salary") {
+      const month = salaryMonthFromDisbursementDesc(nextDisbursal.desc);
+      const paidAt = (nextDisbursal.time || "").slice(0, 10);
+      setStaff((prev) => {
+        let changed: (typeof prev)[number] | null = null;
+        const next = prev.map((member) => {
+          const matchesId = nextDisbursal.staffId && member.id === nextDisbursal.staffId;
+          const matchesName =
+            !nextDisbursal.staffId &&
+            member.name.trim().toLowerCase() === payee.trim().toLowerCase();
+          if (!matchesId && !matchesName) return member;
+          const synced = syncStaffSalaryHistoryStatus(member, {
+            amount: nextAmount,
+            status: nextDisbursal.status,
+            month,
+            paidAt,
+          });
+          if (synced !== member) changed = synced;
+          return synced;
+        });
+        if (changed) void apiUpsertStaff(changed).catch(() => {});
+        return next;
+      });
+    }
+
     toast.success(`Payment ${editingDisbursal.id} updated`);
     setEditingDisbursal(null);
   };
@@ -13711,7 +13893,8 @@ function MakePayment() {
           <DialogHeader>
             <DialogTitle>Create expense ledger</DialogTitle>
             <DialogDescription>
-              Add a reusable ledger head for this campus (Books, Electricity, Transport…).
+              Used on Make Payment and mirrored into Ledgers under Indirect Expenses when the chart
+              is installed (Books, Electricity, Transport…).
             </DialogDescription>
           </DialogHeader>
           <form
@@ -14032,15 +14215,39 @@ function MakePayment() {
             </div>
           </div>
         </div>
-        <div className="mt-5 flex justify-end">
-          <button
-            type="button"
-            onClick={requestAuthorisation}
-            disabled={isSubmitting}
-            className="inline-flex h-12 w-full items-center justify-center rounded-full bg-[#0F766E] px-8 text-[14px] font-semibold tracking-tight text-white shadow-[0_8px_24px_-10px_rgba(15,118,110,0.45)] transition-all hover:bg-[#0D9488] hover:shadow-[0_10px_28px_-10px_rgba(15,118,110,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none sm:w-auto sm:min-w-[200px]"
-          >
-            Confirm Payment
-          </button>
+        <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+          {payeeType === "Salary" ? (
+            <>
+              <p className="order-last text-center text-[11.5px] text-black/45 sm:order-first sm:mr-auto sm:text-left">
+                Hold = queued obligation · Pay Now = cleared payment
+              </p>
+              <button
+                type="button"
+                onClick={() => requestAuthorisation("hold")}
+                disabled={isSubmitting}
+                className="inline-flex h-12 w-full items-center justify-center rounded-full border border-[#E5E5E5] bg-white px-8 text-[14px] font-semibold tracking-tight text-black transition-colors hover:border-black/25 hover:bg-[#FAFAFA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10 disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto sm:min-w-[140px]"
+              >
+                Hold
+              </button>
+              <button
+                type="button"
+                onClick={() => requestAuthorisation("pay")}
+                disabled={isSubmitting}
+                className="inline-flex h-12 w-full items-center justify-center rounded-full bg-[#0F766E] px-8 text-[14px] font-semibold tracking-tight text-white shadow-[0_8px_24px_-10px_rgba(15,118,110,0.45)] transition-all hover:bg-[#0D9488] hover:shadow-[0_10px_28px_-10px_rgba(15,118,110,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none sm:w-auto sm:min-w-[160px]"
+              >
+                Pay Now
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => requestAuthorisation("pay")}
+              disabled={isSubmitting}
+              className="inline-flex h-12 w-full items-center justify-center rounded-full bg-[#0F766E] px-8 text-[14px] font-semibold tracking-tight text-white shadow-[0_8px_24px_-10px_rgba(15,118,110,0.45)] transition-all hover:bg-[#0D9488] hover:shadow-[0_10px_28px_-10px_rgba(15,118,110,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none sm:w-auto sm:min-w-[200px]"
+            >
+              Confirm Payment
+            </button>
+          )}
         </div>
       </OrganicCard>
 
@@ -14475,35 +14682,53 @@ function MakePayment() {
       />
 
       <Dialog
-        open={pendingAuthorisation}
+        open={pendingPayAction !== null}
         onOpenChange={(next) => {
-          if (!next) setPendingAuthorisation(false);
+          if (!next) setPendingPayAction(null);
         }}
       >
         <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6">
           <DialogHeader>
             <DialogTitle className="text-[22px] font-semibold text-black">
-              Confirm Payment
+              {pendingPayAction === "hold" ? "Hold salary?" : "Pay now?"}
             </DialogTitle>
             <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60 dark:text-zinc-400">
-              Pay ₹ {Number(amount || 0).toLocaleString("en-IN")} to {beneficiary.trim()} via {mode}
-              {attachments.length
-                ? ` with ${attachments.length} attachment${attachments.length === 1 ? "" : "s"}`
-                : ""}
-              ?
+              {pendingPayAction === "hold" ? (
+                <>
+                  Hold ₹ {Number(amount || 0).toLocaleString("en-IN")} for {beneficiary.trim()}
+                  {payeeType === "Salary" && salaryMonth
+                    ? ` · ${formatPayrollMonthLabel(salaryMonth)}`
+                    : ""}{" "}
+                  as a queued obligation. Pay it later from Made Payment Details.
+                </>
+              ) : (
+                <>
+                  Pay ₹ {Number(amount || 0).toLocaleString("en-IN")} to {beneficiary.trim()} via{" "}
+                  {mode}
+                  {attachments.length
+                    ? ` with ${attachments.length} attachment${attachments.length === 1 ? "" : "s"}`
+                    : ""}
+                  ? Status will be Cleared.
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="mt-5 flex-row justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setPendingAuthorisation(false)}>
+            <Button type="button" variant="outline" onClick={() => setPendingPayAction(null)}>
               Cancel
             </Button>
             <Button
               type="button"
               onClick={confirmAuthorisation}
               disabled={isSubmitting}
-              className="h-11 rounded-full bg-[#0F766E] px-6 text-[13px] font-semibold text-white hover:bg-[#0D9488]"
+              className={cn(
+                "h-11 rounded-full px-6 text-[13px] font-semibold text-white",
+                pendingPayAction === "hold"
+                  ? "bg-[#0F172A] hover:bg-black"
+                  : "bg-[#0F766E] hover:bg-[#0D9488]",
+              )}
             >
-              Confirm Payment
+              {pendingPayAction === "hold" ? "Hold" : "Pay Now"}
             </Button>
           </DialogFooter>
         </DialogContent>

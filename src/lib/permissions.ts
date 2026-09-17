@@ -273,6 +273,7 @@ export type FinanceViewKey =
   | "pl"
   | "balance"
   | "fees"
+  | "concession"
   | "salary"
   | "daybook"
   | "reconciliation";
@@ -288,6 +289,7 @@ const FINANCE_VIEW_PERMISSION: Record<FinanceViewKey, PermissionKey> = {
   pl: "finance.pl",
   balance: "finance.balance",
   fees: "finance.fees_report",
+  concession: "finance.fees_report",
   salary: "finance.salary",
   daybook: "finance.daybook",
   reconciliation: "finance.reconciliation",

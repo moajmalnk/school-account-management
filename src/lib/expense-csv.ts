@@ -349,7 +349,7 @@ export function resolveExpenseImportRows(
       mode: draft.mode,
       payeeType: draft.payeeType,
       time: draft.date,
-      status: draft.payeeType === "Salary" ? "Queued" : "Cleared",
+      status: "Cleared",
       staffId,
       staffName,
       salaryMonth,

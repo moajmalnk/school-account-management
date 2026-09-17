@@ -3,6 +3,7 @@ import {
   findTransportRouteForStudent,
   resolveTransportFeeShift,
   routeScheduleForShift,
+  studentNeedsTransport,
   sumFeeSchedule,
   withClassFeeSchedule,
   withRouteFeeSchedule,
@@ -301,4 +302,133 @@ export function validateConcessionFees(
     return "Enable at least one fee tier with amounts greater than zero";
   }
   return null;
+}
+
+export type ConcessionReportRow = {
+  studentId: string;
+  name: string;
+  cls: string;
+  guardian: string;
+  reason: string;
+  covers: string;
+  coversTuition: boolean;
+  coversVehicle: boolean;
+  coversOther: boolean;
+  standardTuition: number;
+  concessionTuition: number;
+  standardVehicle: number;
+  concessionVehicle: number;
+  otherFees: number;
+  /** Class/route schedule total for heads under concession. */
+  standardTotal: number;
+  /** Concession schedule total billed to the student. */
+  concessionTotal: number;
+  /** Standard − concession (never negative). */
+  relief: number;
+};
+
+function standardTuitionScheduleTotal(
+  classConfig: ClassConfig | undefined,
+  feeTerms: FeeTerm[],
+): number {
+  if (!classConfig) return 0;
+  const scheduled = withClassFeeSchedule(classConfig, feeTerms).feeSchedule.filter(
+    (line) => line.amount > 0 && !/vehicle|transport|bus/i.test(line.label),
+  );
+  if (scheduled.length > 0) return sumFeeSchedule(scheduled);
+  return Math.max(0, Math.round(classConfig.tuitionFeeAmount) || 0);
+}
+
+function standardVehicleScheduleTotal(
+  student: Student,
+  classConfig: ClassConfig | undefined,
+  transportRoutes: TransportRoute[],
+  feeTerms: FeeTerm[],
+): number {
+  if (!studentNeedsTransport(student)) return 0;
+  const shift = resolveTransportFeeShift(student);
+  const route = findTransportRouteForStudent(student, transportRoutes);
+  if (route) {
+    const schedule = routeScheduleForShift(withRouteFeeSchedule(route, feeTerms), shift);
+    if (schedule.length > 0) return sumFeeSchedule(schedule);
+  }
+  if (classConfig) {
+    const classVehicle = withClassFeeSchedule(classConfig, feeTerms).feeSchedule.filter(
+      (line) => line.amount > 0 && /vehicle|transport|bus/i.test(line.label),
+    );
+    if (classVehicle.length > 0) return sumFeeSchedule(classVehicle);
+    return Math.max(0, Math.round(classConfig.vehicleFeeAmount) || 0);
+  }
+  return 0;
+}
+
+/** Roster of active concession students with standard vs concession fee comparison. */
+export function buildConcessionReportRows(input: {
+  students: Student[];
+  classes: ClassConfig[];
+  feeTerms: FeeTerm[];
+  transportRoutes?: TransportRoute[];
+}): ConcessionReportRow[] {
+  const transportRoutes = input.transportRoutes ?? [];
+  const rows: ConcessionReportRow[] = [];
+
+  for (const student of input.students) {
+    if (!studentHasConcession(student)) continue;
+    const classConfig = input.classes.find((c) => c.className === student.cls);
+    const coversTuition = isConcessionTierEnabled(student.concessionFees?.tuition);
+    const coversVehicle = isConcessionTierEnabled(student.concessionFees?.vehicle);
+    const otherList = resolveConcessionOtherFees(student);
+    const coversOther = otherList.length > 0;
+    if (!coversTuition && !coversVehicle && !coversOther) continue;
+
+    const standardTuition = coversTuition
+      ? standardTuitionScheduleTotal(classConfig, input.feeTerms)
+      : 0;
+    const concessionTuition = coversTuition
+      ? sumFeeSchedule(student.concessionFees!.tuition!.feeSchedule)
+      : 0;
+    const standardVehicle = coversVehicle
+      ? standardVehicleScheduleTotal(student, classConfig, transportRoutes, input.feeTerms)
+      : 0;
+    const concessionVehicle = coversVehicle
+      ? sumFeeSchedule(student.concessionFees!.vehicle!.feeSchedule)
+      : 0;
+    const otherFees = otherList.reduce((sum, fee) => sum + sumFeeSchedule(fee.feeSchedule), 0);
+
+    const standardTotal = standardTuition + standardVehicle;
+    const concessionTotal = concessionTuition + concessionVehicle + otherFees;
+    const relief =
+      Math.max(0, standardTuition - concessionTuition) +
+      Math.max(0, standardVehicle - concessionVehicle);
+
+    const covers = [
+      coversTuition ? "Tuition" : null,
+      coversVehicle ? "Vehicle" : null,
+      coversOther ? "Other" : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+
+    rows.push({
+      studentId: student.id,
+      name: student.name,
+      cls: student.cls,
+      guardian: student.guardian,
+      reason: student.concessionReason?.trim() || "—",
+      covers: covers || "—",
+      coversTuition,
+      coversVehicle,
+      coversOther,
+      standardTuition,
+      concessionTuition,
+      standardVehicle,
+      concessionVehicle,
+      otherFees,
+      standardTotal,
+      concessionTotal,
+      relief,
+    });
+  }
+
+  return rows.sort((a, b) => b.relief - a.relief || a.name.localeCompare(b.name));
 }
