@@ -35,6 +35,10 @@ function triggerDownload(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+export function downloadBlobFile(blob: Blob, filename: string) {
+  triggerDownload(blob, filename);
+}
+
 export type PdfEmitAction = "download" | "print" | "preview";
 
 export function printJsPdf(doc: jsPDF) {
@@ -1007,13 +1011,12 @@ export function findReceiptStudent(students: Student[], payment: Payment): Stude
   return named[0];
 }
 
-export async function downloadReceiptPdf(
+async function createReceiptPdf(
   payment: Payment,
   schoolName: string,
   academicYear: string,
   branding?: ReceiptBranding,
-  action: PdfEmitAction = "download",
-) {
+): Promise<{ doc: jsPDF; filename: string }> {
   const [logo, letterhead] = await Promise.all([
     loadLogoForPdf(branding?.logoUrl),
     loadLetterheadForPdf(branding?.letterheadUrl),
@@ -1197,18 +1200,36 @@ export async function downloadReceiptPdf(
     branding,
   );
 
-  emitPdf(
-    doc,
-    formatDownloadFilename("receipt", "pdf", {
-      id: payment.id,
-      studentId: branding?.studentId,
-      name: payment.name,
-      school: schoolName,
-      year: slugYear(academicYear),
-      date: todayStamp(),
-    }),
-    action,
-  );
+  const filename = formatDownloadFilename("receipt", "pdf", {
+    id: payment.id,
+    studentId: branding?.studentId,
+    name: payment.name,
+    school: schoolName,
+    year: slugYear(academicYear),
+    date: todayStamp(),
+  });
+  return { doc, filename };
+}
+
+export async function buildReceiptPdfBlob(
+  payment: Payment,
+  schoolName: string,
+  academicYear: string,
+  branding?: ReceiptBranding,
+): Promise<{ blob: Blob; filename: string }> {
+  const { doc, filename } = await createReceiptPdf(payment, schoolName, academicYear, branding);
+  return { blob: doc.output("blob"), filename };
+}
+
+export async function downloadReceiptPdf(
+  payment: Payment,
+  schoolName: string,
+  academicYear: string,
+  branding?: ReceiptBranding,
+  action: PdfEmitAction = "download",
+) {
+  const { doc, filename } = await createReceiptPdf(payment, schoolName, academicYear, branding);
+  emitPdf(doc, filename, action);
 }
 
 export async function printReceiptPdf(

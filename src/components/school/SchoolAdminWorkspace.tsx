@@ -338,6 +338,7 @@ import {
   sendPersonalizedWhatsApp,
   toNotifyWhatsAppNumber,
   openWhatsAppShare,
+  sharePdfViaWhatsApp,
   templateHasPlaceholders,
   renderWhatsAppTemplate,
   buildStudentWhatsAppVars,
@@ -370,8 +371,10 @@ import {
 } from "@/components/school/GeneralLedgerBooks";
 import {
   downloadCsv,
+  downloadBlobFile,
   downloadPaymentVoucherPdf,
   downloadReceiptPdf,
+  buildReceiptPdfBlob,
   downloadSalarySlipPdf,
   downloadTablePdf,
   truncatePdfCell,
@@ -7471,26 +7474,47 @@ function FinanceOverview({
     sharePayload("Finance Transactions", lines.join("\n"));
   };
 
-  const shareTransaction = (payment: Payment) => {
+  const shareTransaction = async (payment: Payment) => {
     const student = findReceiptStudent(students, payment);
+    const branding = receiptBrandingFromSchool(schoolDetails, student);
     const text = [
-      `${schoolName} · Fee Receipt`,
-      `Receipt: ${payment.id}`,
+      `${schoolName} · Fee Receipt ${payment.id}`,
       `Account: ${payment.name}`,
-      `Category: ${payment.cat}`,
-      resolvePaymentFeePeriod(payment)
-        ? `${resolvePaymentFeePeriodKind(payment) === "term" ? "Fee term" : "Fee month"}: ${resolvePaymentFeePeriod(payment)}`
-        : "",
-      `Mode: ${payment.mode}`,
       `Amount: ₹ ${payment.amount.toLocaleString("en-IN")}`,
-      `Time: ${formatEventDateTime(payment.time)}`,
       `AY: ${academicYear}`,
-      "Status: Complete",
-      payment.narration ? `Note: ${payment.narration}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
-    sharePayload(`Receipt ${payment.id}`, text, student?.phone);
+      "Receipt PDF attached.",
+    ].join("\n");
+
+    try {
+      const { blob, filename } = await buildReceiptPdfBlob(
+        payment,
+        schoolName,
+        academicYear,
+        branding,
+      );
+      const result = await sharePdfViaWhatsApp({
+        blob,
+        filename,
+        message: text,
+        phone: student?.phone,
+        downloadFallback: downloadBlobFile,
+      });
+      if (result === "shared") {
+        toast.success("Shared receipt PDF", { description: `Receipt ${payment.id}` });
+      } else if (result === "whatsapp") {
+        toast.success("Opening WhatsApp", {
+          description: "Receipt PDF downloaded — attach it in the chat",
+        });
+      } else if (result === "copied") {
+        toast.success("PDF downloaded · message copied", {
+          description: "Paste into WhatsApp and attach the PDF",
+        });
+      } else if (result !== "aborted") {
+        toast.error("Could not share receipt PDF");
+      }
+    } catch {
+      toast.error(`Could not prepare receipt ${payment.id}`);
+    }
   };
 
   const isStudentReceipt = (payment: Payment) => payment.payerType !== "external";
@@ -8036,7 +8060,7 @@ function FinanceOverview({
                       <button
                         type="button"
                         aria-label={`WhatsApp receipt ${tx.id}`}
-                        onClick={() => shareTransaction(tx.payment!)}
+                        onClick={() => void shareTransaction(tx.payment!)}
                         className={whatsappTextBtnClass}
                       >
                         <WhatsAppIcon className="h-3.5 w-3.5" />
@@ -8163,7 +8187,7 @@ function FinanceOverview({
                             type="button"
                             aria-label={`WhatsApp receipt ${tx.id}`}
                             title="WhatsApp"
-                            onClick={() => shareTransaction(tx.payment!)}
+                            onClick={() => void shareTransaction(tx.payment!)}
                             className={whatsappIconBtnClass}
                           >
                             <WhatsAppIcon />
@@ -10586,29 +10610,47 @@ function ReceivePayment() {
     );
   };
 
-  const shareHistoryReceipt = (payment: Payment) => {
+  const shareHistoryReceipt = async (payment: Payment) => {
     const student = findReceiptStudent(students, payment);
-    const periodLabel = formatPaymentPeriodsLabel(payment);
-    const periodKind = resolvePaymentFeePeriodKind(payment);
+    const branding = receiptBrandingFromSchool(schoolDetails, student);
     const text = [
-      `${schoolName} · Fee Receipt`,
-      `Receipt: ${payment.id}`,
+      `${schoolName} · Fee Receipt ${payment.id}`,
       `Account: ${payment.name}`,
-      `Category: ${payment.cat}`,
-      periodLabel !== "—"
-        ? `${periodKind === "term" ? "Fee term" : "Fee period"}: ${periodLabel}`
-        : "",
-      `Mode: ${payment.mode}`,
       `Amount: ₹ ${payment.amount.toLocaleString("en-IN")}`,
-      `Time: ${formatEventDateTime(payment.time)}`,
       `AY: ${academicYear}`,
-      parseStoredReceiptNarration(payment.narration).note
-        ? `Note: ${parseStoredReceiptNarration(payment.narration).note}`
-        : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
-    sharePayload(`Receipt ${payment.id}`, text, student?.phone);
+      "Receipt PDF attached.",
+    ].join("\n");
+
+    try {
+      const { blob, filename } = await buildReceiptPdfBlob(
+        payment,
+        schoolName,
+        academicYear,
+        branding,
+      );
+      const result = await sharePdfViaWhatsApp({
+        blob,
+        filename,
+        message: text,
+        phone: student?.phone,
+        downloadFallback: downloadBlobFile,
+      });
+      if (result === "shared") {
+        toast.success("Shared receipt PDF", { description: `Receipt ${payment.id}` });
+      } else if (result === "whatsapp") {
+        toast.success("Opening WhatsApp", {
+          description: "Receipt PDF downloaded — attach it in the chat",
+        });
+      } else if (result === "copied") {
+        toast.success("PDF downloaded · message copied", {
+          description: "Paste into WhatsApp and attach the PDF",
+        });
+      } else if (result !== "aborted") {
+        toast.error("Could not share receipt PDF");
+      }
+    } catch {
+      toast.error(`Could not prepare receipt ${payment.id}`);
+    }
   };
 
   const resetRecordForm = () => {
@@ -12055,7 +12097,7 @@ function ReceivePayment() {
                   <button
                     type="button"
                     aria-label={`WhatsApp receipt ${p.id}`}
-                    onClick={() => shareHistoryReceipt(p)}
+                    onClick={() => void shareHistoryReceipt(p)}
                     className={whatsappIconBtnClass}
                   >
                     <WhatsAppIcon />
@@ -12200,7 +12242,7 @@ function ReceivePayment() {
                         type="button"
                         aria-label={`WhatsApp receipt ${p.id}`}
                         title="WhatsApp"
-                        onClick={() => shareHistoryReceipt(p)}
+                        onClick={() => void shareHistoryReceipt(p)}
                         className={whatsappIconBtnClass}
                       >
                         <WhatsAppIcon />

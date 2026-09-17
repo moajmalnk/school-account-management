@@ -37,6 +37,63 @@ export function openWhatsAppShare(message: string, phone?: string | null): boole
   return win !== null;
 }
 
+export type WhatsAppPdfShareResult = "shared" | "whatsapp" | "copied" | "aborted" | "failed";
+
+/**
+ * Share a PDF on WhatsApp when the browser supports file sharing (typical on phones).
+ * Otherwise downloads the PDF and opens WhatsApp with a caption so the user can attach it.
+ */
+export async function sharePdfViaWhatsApp(params: {
+  blob: Blob;
+  filename: string;
+  message: string;
+  phone?: string | null;
+  downloadFallback: (blob: Blob, filename: string) => void;
+}): Promise<WhatsAppPdfShareResult> {
+  const message = params.message.trim();
+  const file = new File([params.blob], params.filename, {
+    type: params.blob.type || "application/pdf",
+  });
+
+  if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+    const data: ShareData = {
+      files: [file],
+      title: params.filename,
+      text: message || undefined,
+    };
+    const canShareFiles =
+      typeof navigator.canShare !== "function" || navigator.canShare({ files: [file] });
+    if (canShareFiles) {
+      try {
+        await navigator.share(data);
+        return "shared";
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return "aborted";
+        // Fall through to download + wa.me
+      }
+    }
+  }
+
+  try {
+    params.downloadFallback(params.blob, params.filename);
+  } catch {
+    return "failed";
+  }
+
+  if (message && openWhatsAppShare(message, params.phone)) return "whatsapp";
+
+  if (message) {
+    try {
+      await navigator.clipboard.writeText(message);
+      return "copied";
+    } catch {
+      return "failed";
+    }
+  }
+
+  return "whatsapp";
+}
+
 export type WhatsAppNotifyResult = {
   ok: boolean;
   status: number;

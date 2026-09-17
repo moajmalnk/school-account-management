@@ -64,11 +64,13 @@ import { concessionSummaryLines } from "@/lib/student-concession-fees";
 import { FeePeriodChecklist } from "@/components/school/FeePeriodChecklist";
 import { ShareParentLinkDialog } from "@/components/school/ShareParentLinkDialog";
 import {
+  buildReceiptPdfBlob,
+  downloadBlobFile,
   downloadReceiptPdf,
   downloadStudentFeeReportPdf,
   receiptBrandingFromSchool,
 } from "@/lib/finance-export";
-import { sendWhatsAppNotify, toNotifyWhatsAppNumber } from "@/lib/whatsapp-notify";
+import { sendWhatsAppNotify, sharePdfViaWhatsApp, toNotifyWhatsAppNumber } from "@/lib/whatsapp-notify";
 import {
   apiCreateFeeBreak,
   apiDeleteFeeBreak,
@@ -2211,43 +2213,73 @@ function ReceiptsList({
 
   const handleSend = async (r: Receipt) => {
     const number = toNotifyWhatsAppNumber(phone);
-    if (!number) {
-      toast.error("No guardian phone on file", {
-        description: "Add a contact phone to send this receipt on WhatsApp.",
-      });
-      return;
-    }
-
     const greeting = guardian.trim() ? `Dear ${guardian.trim()},` : "Dear Parent,";
     const message = [
       greeting,
       "",
-      `Please find the fee receipt for ${student.name} (${student.id}).`,
-      "",
-      `${schoolName} · Fee Receipt`,
+      `Fee receipt for ${student.name} (${student.id}).`,
       `Receipt: ${r.id}`,
-      `Student: ${student.name} · ${student.cls}`,
-      `Mode: ${r.mode}`,
       `Amount: ${inr(r.amount)}`,
-      `Date: ${r.date}`,
       `AY: ${academicYear}`,
-      "Status: Complete",
-      "",
-      "Thank you.",
+      "Receipt PDF attached.",
     ].join("\n");
+
+    const payment = {
+      id: r.id,
+      name: student.name,
+      cat: r.cat || "Fee Payment",
+      mode: r.mode,
+      amount: r.amount,
+      time: r.date,
+      className: student.cls,
+      feePeriod: r.period,
+      payerType: "student" as const,
+    };
 
     setSendingId(r.id);
     try {
-      const result = await sendWhatsAppNotify({ numbers: [number], message });
-      if (!result.ok) {
-        toast.error(`Could not send receipt ${r.id}`, {
-          description: result.body.slice(0, 180) || `HTTP ${result.status}`,
-        });
-        return;
-      }
-      toast.success(`Receipt ${r.id} sent`, {
-        description: `WhatsApp · ${phone}`,
+      const { blob, filename } = await buildReceiptPdfBlob(
+        payment,
+        schoolName,
+        academicYear,
+        receiptBrandingFromSchool(schoolDetails, student),
+      );
+      const result = await sharePdfViaWhatsApp({
+        blob,
+        filename,
+        message,
+        phone,
+        downloadFallback: downloadBlobFile,
       });
+      if (result === "shared") {
+        toast.success(`Receipt ${r.id} shared`, {
+          description: number ? `WhatsApp · ${phone}` : "Pick a chat",
+        });
+      } else if (result === "whatsapp") {
+        toast.success("Opening WhatsApp", {
+          description: "Receipt PDF downloaded — attach it in the chat",
+        });
+      } else if (result === "copied") {
+        toast.success("PDF downloaded · message copied", {
+          description: "Paste into WhatsApp and attach the PDF",
+        });
+      } else if (result !== "aborted") {
+        // Last resort: API text send when share/open failed but phone exists
+        if (number) {
+          const apiResult = await sendWhatsAppNotify({ numbers: [number], message });
+          if (!apiResult.ok) {
+            toast.error(`Could not send receipt ${r.id}`, {
+              description: apiResult.body.slice(0, 180) || `HTTP ${apiResult.status}`,
+            });
+            return;
+          }
+          toast.success(`Receipt ${r.id} sent`, {
+            description: `WhatsApp · ${phone} · PDF downloaded separately`,
+          });
+        } else {
+          toast.error(`Could not share receipt ${r.id}`);
+        }
+      }
     } catch (err) {
       toast.error(`Could not send receipt ${r.id}`, {
         description: err instanceof Error ? err.message : "Network error",
