@@ -21,7 +21,8 @@ import {
   apiUpsertStudent,
 } from "@/lib/api/records";
 import { apiSaveSchoolDetails, apiSyncThemeSettings } from "@/lib/api/settings";
-import type { Payment, Staff, Student } from "@/lib/tenant-store";
+import { buildStudentFeeStatement } from "@/lib/student-fees";
+import { useTenantStore, type Payment, type Staff, type Student } from "@/lib/tenant-store";
 
 export type FeezoThreadMessage = {
   id: string;
@@ -35,6 +36,21 @@ export type FeezoThreadMessage = {
 
 const STORAGE_KEY = "feezo.ai.thread.v1";
 
+const FEE_MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+] as const;
+
 function uid() {
   return `m_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -43,6 +59,33 @@ function toHistory(messages: FeezoThreadMessage[]): FeezoChatMessage[] {
   return messages
     .filter((m) => m.role === "user" || m.role === "assistant")
     .map((m) => ({ role: m.role, content: m.content }));
+}
+
+function normalizeFeePeriod(raw: unknown): string | undefined {
+  if (typeof raw !== "string" || !raw.trim()) return undefined;
+  const lower = raw.trim().toLowerCase();
+  for (const month of FEE_MONTHS) {
+    const full = month.toLowerCase();
+    if (lower === full || lower.includes(full)) return month;
+  }
+  const aliases: Record<string, (typeof FEE_MONTHS)[number]> = {
+    jan: "January",
+    feb: "February",
+    mar: "March",
+    apr: "April",
+    jun: "June",
+    jul: "July",
+    aug: "August",
+    sep: "September",
+    sept: "September",
+    oct: "October",
+    nov: "November",
+    dec: "December",
+  };
+  for (const [alias, month] of Object.entries(aliases)) {
+    if (lower === alias || new RegExp(`\\b${alias}\\b`).test(lower)) return month;
+  }
+  return undefined;
 }
 
 function loadPersisted(): { locale: FeezoLocale; messages: FeezoThreadMessage[] } {
@@ -71,7 +114,6 @@ function persistThread(locale: FeezoLocale, messages: FeezoThreadMessage[]) {
           id: m.id,
           role: m.role,
           content: m.content,
-          // Keep light UI affordances; drop heavy pending payloads after confirm
           blocks: m.blocks,
           pendingActions: m.pendingActions?.filter((p) => p.status === "pending_confirmation"),
           navigations: m.navigations,
@@ -120,6 +162,19 @@ export function useFeezoAssistant() {
       return typeof search?.from === "string" ? search.from : undefined;
     },
   });
+
+  const {
+    academicYear,
+    students,
+    payments,
+    setStudents,
+    setStaff,
+    setPayments,
+    classes,
+    feeTerms,
+    transportRoutes,
+    studentFeeBreaks,
+  } = useTenantStore();
 
   const open = pathname === "/tenant/ai";
 
@@ -237,38 +292,124 @@ export function useFeezoAssistant() {
       setConfirmingId(action.id);
       try {
         switch (action.api) {
-          case "students.create":
-            await apiUpsertStudent(action.payload as unknown as Student, { createOnly: true });
+          case "students.create": {
+            const saved = await apiUpsertStudent(action.payload as unknown as Student, {
+              createOnly: true,
+            });
+            setStudents((prev) => {
+              const id = saved.id;
+              if (prev.some((s) => s.id === id)) {
+                return prev.map((s) => (s.id === id ? saved : s));
+              }
+              return [saved, ...prev];
+            });
             break;
-          case "students.update":
-            await apiUpsertStudent(action.payload as unknown as Student);
+          }
+          case "students.update": {
+            const saved = await apiUpsertStudent(action.payload as unknown as Student);
+            setStudents((prev) => prev.map((s) => (s.id === saved.id ? { ...s, ...saved } : s)));
             break;
+          }
           case "students.delete": {
             const id = String(action.payload.id ?? "");
             await apiDeleteStudent(id, { hard: Boolean(action.payload.hard) });
+            setStudents((prev) => prev.filter((s) => s.id !== id));
             break;
           }
-          case "staff.create":
-            await apiUpsertStaff(action.payload as unknown as Staff, { createOnly: true });
+          case "staff.create": {
+            const saved = await apiUpsertStaff(action.payload as unknown as Staff, {
+              createOnly: true,
+            });
+            setStaff((prev) => {
+              if (prev.some((s) => s.id === saved.id)) {
+                return prev.map((s) => (s.id === saved.id ? saved : s));
+              }
+              return [saved, ...prev];
+            });
             break;
-          case "staff.update":
-            await apiUpsertStaff(action.payload as unknown as Staff);
+          }
+          case "staff.update": {
+            const saved = await apiUpsertStaff(action.payload as unknown as Staff);
+            setStaff((prev) => prev.map((s) => (s.id === saved.id ? { ...s, ...saved } : s)));
             break;
+          }
           case "staff.delete": {
             const id = String(action.payload.id ?? "");
             await apiDeleteStaff(id, { hard: Boolean(action.payload.hard) });
+            setStaff((prev) => prev.filter((s) => s.id !== id));
             break;
           }
           case "finance.payments.create": {
             const payload = { ...action.payload } as Record<string, unknown>;
             const studentId = payload.studentId ? String(payload.studentId) : undefined;
-            const reduceDue = Boolean(payload.reduceDue);
+            const reduceDue = payload.reduceDue !== false && Boolean(studentId || payload.reduceDue);
             delete payload.reduceDue;
             delete payload.studentId;
-            await apiCreatePayment(payload as unknown as Payment, {
+
+            if (!payload.academicYear) {
+              payload.academicYear = academicYear;
+            }
+            const student = studentId ? students.find((s) => s.id === studentId) : undefined;
+            if (student) {
+              if (!payload.name) payload.name = student.name;
+              if (!payload.className) payload.className = student.cls;
+            }
+            const period =
+              normalizeFeePeriod(payload.feePeriod) ||
+              normalizeFeePeriod(payload.feeMonth) ||
+              normalizeFeePeriod(payload.narration) ||
+              normalizeFeePeriod(action.summary);
+            if (period) {
+              payload.feePeriod = period;
+              payload.feeMonth = period;
+              if (!payload.feePeriodKind) payload.feePeriodKind = "month";
+              if (!payload.narration) payload.narration = `${period} fee`;
+            }
+            if (!payload.cat || String(payload.cat).toLowerCase() === "fees") {
+              payload.cat = "Tuition Fee";
+            }
+            if (!payload.payerType) payload.payerType = "student";
+            if (!payload.mode) payload.mode = "Cash";
+            if (!payload.time) payload.time = new Date().toISOString();
+
+            const amount = Number(payload.amount);
+            if (!Number.isFinite(amount) || amount < 1) {
+              throw new Error("Payment amount is missing — ask Feezo to record the amount again");
+            }
+
+            const saved = await apiCreatePayment(payload as unknown as Payment, {
               reduceDue,
               studentId,
             });
+
+            const paymentsAfter = [saved, ...payments.filter((p) => p.id !== saved.id)];
+            setPayments(paymentsAfter);
+
+            if (studentId) {
+              const selected = students.find((s) => s.id === studentId) ?? student;
+              if (selected) {
+                const liveDue = buildStudentFeeStatement({
+                  student: selected,
+                  payments: paymentsAfter,
+                  classes,
+                  feeTerms,
+                  transportRoutes,
+                  academicYear: String(saved.academicYear || academicYear),
+                  feeBreaks: studentFeeBreaks,
+                }).totalDue;
+                setStudents((stuPrev) =>
+                  stuPrev.map((s) => (s.id === studentId ? { ...s, due: liveDue } : s)),
+                );
+              } else if (reduceDue) {
+                setStudents((stuPrev) =>
+                  stuPrev.map((s) =>
+                    s.id === studentId
+                      ? { ...s, due: Math.max(0, (s.due || 0) - saved.amount) }
+                      : s,
+                  ),
+                );
+              }
+            }
             break;
           }
           case "finance.disbursements.create":
@@ -311,7 +452,19 @@ export function useFeezoAssistant() {
         setConfirmingId(null);
       }
     },
-    [locale],
+    [
+      academicYear,
+      classes,
+      feeTerms,
+      locale,
+      payments,
+      setPayments,
+      setStaff,
+      setStudents,
+      studentFeeBreaks,
+      students,
+      transportRoutes,
+    ],
   );
 
   const dismissAction = useCallback((actionId: string) => {
