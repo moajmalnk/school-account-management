@@ -38,6 +38,7 @@ import {
   type TransportRoute,
   type TransportVehicle,
   normalizeCampusBranch,
+  sortCampusBranches,
 } from "@/lib/tenant-store";
 import {
   buildLedgerFromStudents,
@@ -171,7 +172,9 @@ function mapBundleToRemote(
   options?: { tenantId?: string },
 ): RemoteTenantBundle {
   const branches = Array.isArray(data.branches)
-    ? data.branches.map(normalizeCampusBranch).filter((b): b is CampusBranch => Boolean(b))
+    ? sortCampusBranches(
+        data.branches.map(normalizeCampusBranch).filter((b): b is CampusBranch => Boolean(b)),
+      )
     : [];
   const activeBranchId = pickActiveBranchId(
     branches,
@@ -479,19 +482,25 @@ async function loadRemoteTenantBundleSequential(
       } | null>("/api/settings/school.php", null);
 
       const fromSchool = Array.isArray(school?.branches)
-        ? school!.branches.map(normalizeCampusBranch).filter((b): b is CampusBranch => Boolean(b))
+        ? sortCampusBranches(
+            school!.branches
+              .map(normalizeCampusBranch)
+              .filter((b): b is CampusBranch => Boolean(b)),
+          )
         : [];
       const listed =
         fromSchool.length > 0
           ? fromSchool
-          : ((
-              await safe<{ branches?: unknown[]; activeBranchId?: string }>(
-                "/api/settings/branches.php",
-                { branches: [] },
-              )
-            ).branches
-              ?.map(normalizeCampusBranch)
-              .filter((b): b is CampusBranch => Boolean(b)) ?? []);
+          : sortCampusBranches(
+              (
+                await safe<{ branches?: unknown[]; activeBranchId?: string }>(
+                  "/api/settings/branches.php",
+                  { branches: [] },
+                )
+              ).branches
+                ?.map(normalizeCampusBranch)
+                .filter((b): b is CampusBranch => Boolean(b)) ?? [],
+            );
       const branches = listed.length ? listed : [];
       const activeBranchId = pickActiveBranchId(
         branches,

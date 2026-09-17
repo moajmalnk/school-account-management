@@ -132,7 +132,7 @@ export function TenantDashboardSkeleton() {
     >
       <div className="space-y-4 sm:space-y-5">
         <div className="grid min-w-0 grid-cols-1 gap-4 sm:gap-5 xl:grid-cols-12">
-          <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:col-span-8">
+          <div className="grid min-w-0 grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-2 xl:col-span-8">
             {/* School Overview */}
             <section
               className={cn(dashCardClass, DASH_SKELETON.overview, "flex min-w-0 flex-col p-4 sm:p-5")}

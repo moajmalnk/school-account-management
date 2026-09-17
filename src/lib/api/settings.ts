@@ -386,6 +386,8 @@ export type CampusBranchPayload = {
   lng?: number | null;
   isActive?: boolean;
   isMain?: boolean;
+  /** Lower numbers appear first in the campus switcher. */
+  sortOrder?: number;
   /** Seed catalogs + School Details from this campus (students/receipts stay empty). */
   copyFromId?: string;
 };

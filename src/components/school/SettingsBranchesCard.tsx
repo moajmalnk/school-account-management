@@ -15,7 +15,7 @@ import { OrganicCard } from "@/components/ui/organic-card";
 import { invalidateRemoteTenantBundleCache } from "@/lib/api/tenant-sync";
 import { apiDeleteBranch } from "@/lib/api/settings";
 import { getApiToken } from "@/lib/api/client";
-import { isMainCampusBranch, type CampusBranch } from "@/lib/tenant-store";
+import { isMainCampusBranch, sortCampusBranches, type CampusBranch } from "@/lib/tenant-store";
 import { cn, glassCardClass } from "@/lib/utils";
 import { SettingsResponsiveCardHeader } from "@/components/school/SettingsMobileNav";
 
@@ -70,6 +70,7 @@ export function SettingsBranchesCard({
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<CampusBranch | null>(null);
   const [pendingDelete, setPendingDelete] = useState<CampusBranch | null>(null);
+  const orderedBranches = sortCampusBranches(branches);
 
   const startCreate = () => {
     if (!canAddBranch) {
@@ -102,7 +103,7 @@ export function SettingsBranchesCard({
         await apiDeleteBranch(pendingDelete.id);
       }
       invalidateRemoteTenantBundleCache();
-      const remaining = branches.filter((b) => b.id !== pendingDelete.id);
+      const remaining = sortCampusBranches(branches.filter((b) => b.id !== pendingDelete.id));
       setBranches(remaining);
       if (pendingDelete.id === activeBranchId && remaining[0]) {
         await openBranch(remaining[0].id);
@@ -123,19 +124,19 @@ export function SettingsBranchesCard({
             ? "This plan includes one campus · upgrade to Premium or Enterprise to add more"
             : branches.length === 1
               ? "One campus · add Kozhikode, Malappuram, or another site to split books"
-              : `${branches.length} campuses · each campus has its own branding, catalogs, and books`
+              : `${branches.length} campuses · ordered for the campus switcher · each has its own branding, catalogs, and books`
         }
         actionLabel={canAddBranch ? "Add Branch" : undefined}
         onAction={canAddBranch ? startCreate : undefined}
       />
 
       <div className="mt-4 space-y-2">
-        {branches.length === 0 && (
+        {orderedBranches.length === 0 && (
           <div className="rounded-lg border border-dashed border-[#E5E5E5] px-4 py-8 text-center text-[13px] text-black/45 dark:border-white/10 dark:text-zinc-500">
             No campuses yet.
           </div>
         )}
-        {branches.map((b) => (
+        {orderedBranches.map((b) => (
           <div
             key={b.id}
             className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5 dark:border-white/10 dark:bg-zinc-900/70"
@@ -147,6 +148,11 @@ export function SettingsBranchesCard({
               <div className="min-w-0">
                 <div className="truncate text-[13px] font-semibold text-black dark:text-zinc-100">
                   {b.name}
+                  {b.sortOrder > 0 ? (
+                    <span className="ml-2 rounded-full bg-slate-500/10 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-slate-600 dark:bg-white/10 dark:text-zinc-300">
+                      #{b.sortOrder}
+                    </span>
+                  ) : null}
                   {b.id === activeBranchId ? (
                     <span className="ml-2 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
                       Open

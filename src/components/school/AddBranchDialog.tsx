@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
 import { LocationPicker } from "@/components/school/LocationPicker";
@@ -25,9 +25,15 @@ import { apiUpsertBranch } from "@/lib/api/settings";
 import { getApiToken } from "@/lib/api/client";
 import { planAllowsMultipleBranches } from "@/lib/permissions";
 import { useAuth } from "@/lib/auth";
-import { normalizeCampusBranch, useTenantStore, type CampusBranch } from "@/lib/tenant-store";
+import {
+  nextCampusSortOrder,
+  normalizeCampusBranch,
+  sortCampusBranches,
+  useTenantStore,
+  type CampusBranch,
+} from "@/lib/tenant-store";
 
-const emptyForm = () => ({
+const emptyForm = (sortOrder = 1) => ({
   name: "",
   code: "",
   address: "",
@@ -35,8 +41,15 @@ const emptyForm = () => ({
   email: "",
   lat: null as number | null,
   lng: null as number | null,
+  sortOrder: String(sortOrder),
   copyFromId: "",
 });
+
+function parseSortOrder(raw: string, fallback: number): number {
+  const n = Number.parseInt(raw.trim(), 10);
+  if (!Number.isFinite(n) || n < 1) return fallback;
+  return Math.min(999, n);
+}
 
 export function AddBranchDialog({
   open,
@@ -51,7 +64,9 @@ export function AddBranchDialog({
   const { branches, setBranches, activeBranchId, openBranch } = useTenantStore();
   const canAddBranch = planAllowsMultipleBranches(session?.planFlags);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState(() => emptyForm());
+  const orderedBranches = useMemo(() => sortCampusBranches(branches), [branches]);
+  const suggestedOrder = useMemo(() => nextCampusSortOrder(branches), [branches]);
 
   useEffect(() => {
     if (!open) return;
@@ -64,17 +79,22 @@ export function AddBranchDialog({
         email: editing.email,
         lat: editing.lat,
         lng: editing.lng,
+        sortOrder: String(editing.sortOrder > 0 ? editing.sortOrder : suggestedOrder),
         copyFromId: "",
       });
       return;
     }
-    setForm({ ...emptyForm(), copyFromId: activeBranchId });
-  }, [open, editing, activeBranchId]);
+    setForm({ ...emptyForm(suggestedOrder), copyFromId: activeBranchId });
+  }, [open, editing, activeBranchId, suggestedOrder]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const name = form.name.trim();
     const code = form.code.trim().toUpperCase();
+    const sortOrder = parseSortOrder(
+      form.sortOrder,
+      editing?.sortOrder && editing.sortOrder > 0 ? editing.sortOrder : suggestedOrder,
+    );
     if (!name || !code) {
       toast.error("Campus name and code are required");
       return;
@@ -96,28 +116,40 @@ export function AddBranchDialog({
         email: form.email.trim(),
         lat: form.lat,
         lng: form.lng,
+        sortOrder,
         isActive: true,
         ...(editing ? {} : { copyFromId: form.copyFromId || activeBranchId }),
       };
       if (getApiToken()) {
         const saved = await apiUpsertBranch(payload, !editing);
-        const normalized = normalizeCampusBranch(saved) ?? {
-          id: saved.id ?? editing?.id ?? `BR-${code}`,
-          name,
-          code,
-          address: payload.address,
-          phone: payload.phone,
-          email: payload.email,
-          lat: payload.lat ?? null,
-          lng: payload.lng ?? null,
-          isActive: true,
+        const fromApi = normalizeCampusBranch(saved);
+        const normalized: CampusBranch = {
+          id: fromApi?.id ?? saved.id ?? editing?.id ?? `BR-${code}`,
+          name: fromApi?.name ?? name,
+          code: fromApi?.code ?? code,
+          address: fromApi?.address ?? payload.address,
+          phone: fromApi?.phone ?? payload.phone,
+          email: fromApi?.email ?? payload.email,
+          lat: fromApi?.lat ?? payload.lat ?? null,
+          lng: fromApi?.lng ?? payload.lng ?? null,
+          isActive: fromApi?.isActive ?? true,
+          isMain: fromApi?.isMain,
+          // Prefer the value we just saved so order works even if the API omits it.
+          sortOrder:
+            typeof saved.sortOrder === "number" && Number.isFinite(saved.sortOrder) && saved.sortOrder > 0
+              ? Math.round(saved.sortOrder)
+              : sortOrder,
         };
         invalidateRemoteTenantBundleCache();
         if (editing) {
-          setBranches((prev) => prev.map((b) => (b.id === editing.id ? normalized : b)));
+          setBranches((prev) =>
+            sortCampusBranches(prev.map((b) => (b.id === editing.id ? normalized : b))),
+          );
           toast.success(`Campus updated · ${name}`);
         } else {
-          setBranches((prev) => [...prev.filter((b) => b.id !== normalized.id), normalized]);
+          setBranches((prev) =>
+            sortCampusBranches([...prev.filter((b) => b.id !== normalized.id), normalized]),
+          );
           toast.success(`Campus added · ${name}`, {
             description: "Classes and fees copied from the source campus · students stay empty",
           });
@@ -125,19 +157,22 @@ export function AddBranchDialog({
         }
       } else if (editing) {
         setBranches((prev) =>
-          prev.map((b) =>
-            b.id === editing.id
-              ? {
-                  ...b,
-                  name,
-                  code,
-                  address: form.address,
-                  phone: form.phone,
-                  email: form.email,
-                  lat: form.lat,
-                  lng: form.lng,
-                }
-              : b,
+          sortCampusBranches(
+            prev.map((b) =>
+              b.id === editing.id
+                ? {
+                    ...b,
+                    name,
+                    code,
+                    address: form.address,
+                    phone: form.phone,
+                    email: form.email,
+                    lat: form.lat,
+                    lng: form.lng,
+                    sortOrder,
+                  }
+                : b,
+            ),
           ),
         );
         toast.success(`Campus updated · ${name}`);
@@ -152,8 +187,9 @@ export function AddBranchDialog({
           lat: form.lat,
           lng: form.lng,
           isActive: true,
+          sortOrder,
         };
-        setBranches((prev) => [...prev, created]);
+        setBranches((prev) => sortCampusBranches([...prev, created]));
         toast.success(`Campus added · ${name}`);
         await openBranch(created.id);
       }
@@ -182,7 +218,7 @@ export function AddBranchDialog({
           <DialogTitle>{editing ? "Edit Branch" : "Add Branch"}</DialogTitle>
           <DialogDescription className="text-[13px] text-black/55">
             {editing
-              ? "Update this campus name, contact details, and map location."
+              ? "Update this campus name, contact details, map location, and dropdown order."
               : "Add a new campus. Classes and fee catalogs can be copied from an existing branch."}
           </DialogDescription>
         </DialogHeader>
@@ -197,7 +233,7 @@ export function AddBranchDialog({
               required
             />
           </div>
-          <div className="col-span-12 space-y-1.5 sm:col-span-6">
+          <div className="col-span-12 space-y-1.5 sm:col-span-3">
             <Label htmlFor="branch-code">Code</Label>
             <Input
               id="branch-code"
@@ -206,6 +242,26 @@ export function AddBranchDialog({
               placeholder="MLP"
               required
             />
+          </div>
+          <div className="col-span-12 space-y-1.5 sm:col-span-3">
+            <Label htmlFor="branch-order">Order</Label>
+            <Input
+              id="branch-order"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={999}
+              value={form.sortOrder}
+              onChange={(e) => setForm((f) => ({ ...f, sortOrder: e.target.value }))}
+              placeholder={String(suggestedOrder)}
+              required
+            />
+          </div>
+          <div className="col-span-12 -mt-1 sm:col-span-12">
+            <p className="text-[11px] text-black/50 dark:text-zinc-500">
+              Dropdown order · lower numbers appear first in the campus switcher
+              {!editing ? ` · suggested ${suggestedOrder}` : ""}.
+            </p>
           </div>
           <div className="col-span-12 space-y-1.5 sm:col-span-6">
             <Label htmlFor="branch-phone">Phone</Label>
@@ -243,7 +299,7 @@ export function AddBranchDialog({
               }
             />
           </div>
-          {!editing && branches.length > 0 ? (
+          {!editing && orderedBranches.length > 0 ? (
             <div className="col-span-12 space-y-1.5">
               <Label>Copy setup from</Label>
               <Select
@@ -254,7 +310,7 @@ export function AddBranchDialog({
                   <SelectValue placeholder="Select campus" />
                 </SelectTrigger>
                 <SelectContent>
-                  {branches.map((b) => (
+                  {orderedBranches.map((b) => (
                     <SelectItem key={b.id} value={b.id}>
                       {b.name} · {b.code}
                     </SelectItem>

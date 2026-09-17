@@ -1531,6 +1531,8 @@ export type CampusBranch = {
   lng: number | null;
   isActive: boolean;
   isMain?: boolean;
+  /** Lower numbers appear first in the campus switcher and Branches list. */
+  sortOrder: number;
 };
 
 /** First campus / code MAIN — tenants cannot delete this branch. */
@@ -1543,9 +1545,30 @@ export function isMainCampusBranch(
   return all.length <= 1;
 }
 
+export function compareCampusBranches(a: CampusBranch, b: CampusBranch): number {
+  const order = (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+  if (order !== 0) return order;
+  if (Boolean(a.isMain) !== Boolean(b.isMain)) return a.isMain ? -1 : 1;
+  return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+}
+
+export function sortCampusBranches(branches: CampusBranch[]): CampusBranch[] {
+  return [...branches].sort(compareCampusBranches);
+}
+
+/** Next free dropdown position (1-based) after the current highest. */
+export function nextCampusSortOrder(branches: CampusBranch[]): number {
+  if (branches.length === 0) return 1;
+  const max = Math.max(0, ...branches.map((b) => (Number.isFinite(b.sortOrder) ? b.sortOrder : 0)));
+  return max + 1;
+}
+
 function branchListFingerprint(list: CampusBranch[]): string {
   return list
-    .map((b) => `${b.id}\0${b.name}\0${b.code}\0${b.isActive === false ? 0 : 1}`)
+    .map(
+      (b) =>
+        `${b.id}\0${b.name}\0${b.code}\0${b.sortOrder ?? 0}\0${b.isActive === false ? 0 : 1}`,
+    )
     .join("\n");
 }
 
@@ -1558,6 +1581,13 @@ export function normalizeCampusBranch(raw: unknown): CampusBranch | null {
   const num = (v: unknown): number | null =>
     typeof v === "number" && Number.isFinite(v) ? v : null;
   const code = typeof r.code === "string" && r.code.trim() ? r.code.trim().toUpperCase() : "MAIN";
+  const rawOrder = r.sortOrder ?? r.sort_order;
+  const sortOrder =
+    typeof rawOrder === "number" && Number.isFinite(rawOrder)
+      ? Math.max(0, Math.round(rawOrder))
+      : typeof rawOrder === "string" && rawOrder.trim() && Number.isFinite(Number(rawOrder))
+        ? Math.max(0, Math.round(Number(rawOrder)))
+        : 0;
   return {
     id: r.id.trim(),
     name: r.name.trim(),
@@ -1569,6 +1599,7 @@ export function normalizeCampusBranch(raw: unknown): CampusBranch | null {
     lng: num(r.lng),
     isActive: r.isActive !== false,
     isMain: r.isMain === true || code === "MAIN",
+    sortOrder,
   };
 }
 
@@ -3886,6 +3917,7 @@ export const SEED_BRANCHES: CampusBranch[] = [
     lng: null,
     isActive: true,
     isMain: true,
+    sortOrder: 1,
   },
 ];
 
@@ -3987,6 +4019,11 @@ type TenantStoreValue = {
   hydrated: boolean;
   /** True while campus switch is loading branch-scoped workspace data. */
   branchSyncing: boolean;
+  /**
+   * False only during a blocking campus switch (no local cache to paint yet).
+   * When true during branchSyncing, cached campus data is already on screen.
+   */
+  branchContentReady: boolean;
   branches: CampusBranch[];
   setBranches: Dispatch<SetStateAction<CampusBranch[]>>;
   activeBranchId: string;
@@ -4301,9 +4338,11 @@ function parseSnapshot(raw: string): Snapshot | null {
           .map(normalizeTenantUser)
       : [...SEED_TENANT_USERS],
     branches: Array.isArray((parsed as Partial<Snapshot>).branches)
-      ? ((parsed as Partial<Snapshot>).branches as unknown[])
-          .map(normalizeCampusBranch)
-          .filter((b): b is CampusBranch => Boolean(b))
+      ? sortCampusBranches(
+          ((parsed as Partial<Snapshot>).branches as unknown[])
+            .map(normalizeCampusBranch)
+            .filter((b): b is CampusBranch => Boolean(b)),
+        )
       : [...SEED_BRANCHES],
     activeBranchId:
       typeof (parsed as Partial<Snapshot>).activeBranchId === "string"
@@ -4880,6 +4919,7 @@ export function TenantStoreProvider({
   );
   const [hydrated, setHydrated] = useState(() => !liveApi || cachedSnapshot !== null);
   const [branchSyncing, setBranchSyncing] = useState(false);
+  const [branchContentReady, setBranchContentReady] = useState(true);
   const branchSwitchSeq = useRef(0);
   const branchesRef = useRef(branches);
   branchesRef.current = branches;
@@ -5796,10 +5836,22 @@ export function TenantStoreProvider({
           activeBranchId: nextId,
           preserveOrgFields: true,
         });
+        // Cached campus stays visible while the network refresh finishes.
+        setBranchContentReady(true);
+      } else if (thisSwitch === branchSwitchSeq.current) {
+        // No cache — skeleton instead of flashing the previous campus's books.
+        setBranchContentReady(false);
       }
 
+      const finishSwitch = () => {
+        if (thisSwitch === branchSwitchSeq.current) {
+          setBranchSyncing(false);
+          setBranchContentReady(true);
+        }
+      };
+
       if (!getApiToken()) {
-        setBranchSyncing(false);
+        finishSwitch();
         return {
           students: (cached?.students ?? []).filter((s) => !s.deletedAt).length,
           receipts: academicYearBookStats({
@@ -5850,18 +5902,13 @@ export function TenantStoreProvider({
             }).receipts,
           };
 
-          if (thisSwitch === branchSwitchSeq.current) {
-            setBranchSyncing(false);
-          }
-
+          finishSwitch();
           return stats;
         }
       } catch {
         /* keep current campus data visible */
       } finally {
-        if (thisSwitch === branchSwitchSeq.current) {
-          setBranchSyncing(false);
-        }
+        finishSwitch();
       }
 
       return { students: 0, receipts: 0 };
@@ -5938,6 +5985,7 @@ export function TenantStoreProvider({
       resetTenant,
       hydrated,
       branchSyncing,
+      branchContentReady,
       branches,
       setBranches,
       activeBranchId,
@@ -5981,6 +6029,7 @@ export function TenantStoreProvider({
       notifications,
       hydrated,
       branchSyncing,
+      branchContentReady,
       branches,
       activeBranchId,
       activeBranch,

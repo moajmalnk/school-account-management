@@ -804,14 +804,16 @@ const dashboardCountClass =
 function dashboardAmountSize(formatted: string, compact = false): string {
   const len = formatted.replace(/\s/g, "").length;
   if (compact) {
-    if (len > 12) return "text-[11px] sm:text-[12px] md:text-[13px]";
-    if (len > 10) return "text-[12px] sm:text-[13px] md:text-[14px]";
-    if (len > 8) return "text-[13px] sm:text-[14px] md:text-[15px]";
+    if (len > 14) return "text-[10px] sm:text-[11px] md:text-[12px]";
+    if (len > 11) return "text-[11px] sm:text-[12px] md:text-[13px]";
+    if (len > 9) return "text-[12px] sm:text-[13px] md:text-[14px]";
+    if (len > 7) return "text-[13px] sm:text-[14px] md:text-[15px]";
     return "text-[14px] sm:text-[15px] md:text-[16px]";
   }
-  if (len > 12) return "text-[12px] sm:text-[13px] md:text-[15px]";
-  if (len > 10) return "text-[14px] sm:text-[15px] md:text-[17px]";
-  if (len > 8) return "text-[15px] sm:text-[17px] md:text-[19px]";
+  if (len > 14) return "text-[11px] sm:text-[12px] md:text-[13px]";
+  if (len > 11) return "text-[12px] sm:text-[13px] md:text-[15px]";
+  if (len > 9) return "text-[13px] sm:text-[15px] md:text-[17px]";
+  if (len > 7) return "text-[15px] sm:text-[17px] md:text-[19px]";
   return "text-[17px] sm:text-[19px] md:text-[21px]";
 }
 
@@ -830,7 +832,7 @@ function DashboardAmount({
     return (
       <div
         className={cn(
-          "min-w-0 max-w-full overflow-hidden font-mono font-bold leading-[1.15] tracking-tight",
+          "min-w-0 max-w-full font-mono font-bold leading-[1.15] tracking-tight",
           dashboardAmountSize("₹0", compact),
           className,
         )}
@@ -845,13 +847,13 @@ function DashboardAmount({
   return (
     <div
       className={cn(
-        "min-w-0 max-w-full overflow-hidden font-mono font-bold leading-[1.15] tracking-tight tabular-nums",
+        "min-w-0 max-w-full font-mono font-bold leading-[1.15] tracking-tight tabular-nums",
         dashboardAmountSize(formatted, compact),
         className,
       )}
       title={formatted}
     >
-      <span className="block truncate">{formatted}</span>
+      <span className="block break-words [overflow-wrap:anywhere]">{formatted}</span>
     </div>
   );
 }
@@ -873,17 +875,17 @@ function IncomeExpenseSummaryTiles({
 }) {
   const tileClass = compact
     ? "flex min-h-[84px] min-w-0 flex-col items-center justify-center overflow-hidden rounded-2xl px-2 py-2.5 text-center sm:min-h-[96px] sm:px-3 sm:py-3"
-    : "flex min-h-[96px] min-w-0 flex-col items-center justify-center overflow-hidden rounded-2xl px-2 py-3 text-center sm:min-h-[112px] sm:px-3.5 sm:py-4";
+    : "flex min-h-[96px] min-w-0 flex-col items-center justify-center overflow-hidden rounded-2xl px-2 py-3 text-center sm:min-h-[112px] sm:px-3 sm:py-4";
 
   return (
-    <div className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3">
+    <div className="grid min-w-0 grid-cols-1 gap-2 min-[22rem]:grid-cols-2 sm:gap-3">
       <div className={cn(dashIncomeTileClass, tileClass)}>
         <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-100">
           Total Income
         </div>
         <DashboardAmount
           value={income}
-          compact={compact}
+          compact
           className="mt-1.5 w-full text-center text-white"
         />
         <div className="mt-1 text-[10px] font-medium text-emerald-100/80">
@@ -896,7 +898,7 @@ function IncomeExpenseSummaryTiles({
         </div>
         <DashboardAmount
           value={expense}
-          compact={compact}
+          compact
           pending={expensePending}
           className="mt-1.5 w-full text-center text-white"
         />
@@ -1272,7 +1274,7 @@ function PremiumDashboard({
   return (
     <div className="space-y-4 sm:space-y-5">
       <div className="grid min-w-0 grid-cols-1 gap-4 sm:gap-5 xl:grid-cols-12">
-        <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:col-span-8">
+        <div className="grid min-w-0 grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-2 xl:col-span-8">
           {/* School Overview */}
           <section className={cn(dashCardClass, DASH.overview, "flex min-w-0 flex-col p-4 sm:p-5")}>
             <DashboardPanelHeading icon={Users} title="School Overview" />
@@ -1416,7 +1418,7 @@ function PremiumDashboard({
           {/* Cash Position */}
           <section className={cn(dashCardClass, DASH.cash, "flex min-w-0 flex-col p-4 sm:p-5")}>
             <DashboardPanelHeading icon={Landmark} title="Cash Position" />
-            <div className="mt-4 grid min-w-0 flex-1 grid-cols-2 gap-2 sm:gap-3">
+            <div className="mt-4 grid min-w-0 flex-1 grid-cols-1 gap-2 min-[20rem]:grid-cols-2 sm:gap-3">
               <div
                 className={cn(
                   dashCashInHandTileClass,
@@ -1424,8 +1426,12 @@ function PremiumDashboard({
                 )}
               >
                 <div className="flex items-center justify-between gap-1.5 text-[#047857] dark:text-emerald-300">
-                  <span className="min-w-0 truncate text-[11px] font-semibold text-emerald-950 sm:text-[12px] dark:text-emerald-50">
-                    Cash In Hand
+                  <span
+                    className="min-w-0 text-[11px] font-semibold leading-snug text-emerald-950 sm:text-[12px] dark:text-emerald-50"
+                    title="Cash In Hand"
+                  >
+                    <span className="min-[22rem]:hidden">Cash</span>
+                    <span className="hidden min-[22rem]:inline">Cash In Hand</span>
                   </span>
                   <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-white/80 text-[#047857] shadow-sm dark:bg-white/10 dark:text-emerald-300">
                     <Banknote className="h-3.5 w-3.5 shrink-0" />
@@ -1444,8 +1450,12 @@ function PremiumDashboard({
                 )}
               >
                 <div className="flex items-center justify-between gap-1.5 text-violet-700 dark:text-violet-300">
-                  <span className="min-w-0 truncate text-[11px] font-semibold text-violet-950 sm:text-[12px] dark:text-violet-50">
-                    Bank Balance
+                  <span
+                    className="min-w-0 text-[11px] font-semibold leading-snug text-violet-950 sm:text-[12px] dark:text-violet-50"
+                    title="Bank Balance"
+                  >
+                    <span className="min-[22rem]:hidden">Bank</span>
+                    <span className="hidden min-[22rem]:inline">Bank Balance</span>
                   </span>
                   <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-white/80 text-violet-700 shadow-sm dark:bg-white/10 dark:text-violet-300">
                     <Landmark className="h-3.5 w-3.5 shrink-0" />
@@ -1836,7 +1846,7 @@ export function SchoolDashboard() {
     activePayments: payments,
     academicYear,
     hydrated,
-    branchSyncing,
+    branchContentReady,
     activeBranch,
     branches,
     schoolDetails,
@@ -1886,10 +1896,10 @@ export function SchoolDashboard() {
   const tenantScope = `${session?.tenantId ?? session?.tenantName ?? "tenant"}|${academicYear}`;
   const { disbursements, loaded: disbursementsLoaded } = useDisbursements(
     tenantScope,
-    hydrated && !branchSyncing,
+    hydrated && branchContentReady,
   );
 
-  const [period, setPeriod] = useState<PaymentPeriod>("this_month");
+  const [period, setPeriod] = useState<PaymentPeriod>("all");
   const [customRange, setCustomRange] = useState<CustomDateRange>({ from: "", to: "" });
 
   const feeRoster = useMemo(
@@ -1956,7 +1966,7 @@ export function SchoolDashboard() {
       .slice(0, 5);
   }, [payments, disbursements]);
 
-  if (!hydrated || branchSyncing) {
+  if (!hydrated || !branchContentReady) {
     return <TenantDashboardSkeleton />;
   }
 
@@ -3068,7 +3078,7 @@ export function StudentsLedger() {
     admitStudentToActiveYear,
     academicYear,
     hydrated,
-    branchSyncing,
+    branchContentReady,
     activePayments,
     activeFeeTerms,
     transportRoutes,
@@ -3116,7 +3126,7 @@ export function StudentsLedger() {
   );
 
   useEffect(() => {
-    if (!hydrated || branchSyncing) return;
+    if (!hydrated || !branchContentReady) return;
     const enrolled = liveStudents.map((s) => s.cls);
     const missing = findMissingClassTiers(classes, enrolled).filter((cls) => {
       const key = normalizeClassLabelKey(cls.className);
@@ -3149,7 +3159,7 @@ export function StudentsLedger() {
         { description: "Configure fees in Settings → Class Tier" },
       );
     })();
-  }, [hydrated, branchSyncing, liveStudents, classes, setClasses]);
+  }, [hydrated, branchContentReady, liveStudents, classes, setClasses]);
   const deletedStudents = useMemo(
     () =>
       students
@@ -3650,6 +3660,7 @@ export function StudentsLedger() {
           let classPool = [...classes];
           const createdClasses: ClassConfig[] = [];
           const admitted: Student[] = [];
+          const reenrolled: Student[] = [];
           let skipped = 0;
           let usedIds = allStudents.map((s) => s.id);
 
@@ -3681,7 +3692,8 @@ export function StudentsLedger() {
             };
             if (
               isDuplicateStudent(students, duplicateOf) ||
-              isDuplicateStudent(admitted, duplicateOf)
+              isDuplicateStudent(admitted, duplicateOf) ||
+              isDuplicateStudent(reenrolled, duplicateOf)
             ) {
               skipped += 1;
               continue;
@@ -3701,7 +3713,7 @@ export function StudentsLedger() {
                 due: row.due,
                 active: true,
               });
-              admitted.push({
+              reenrolled.push({
                 ...prior,
                 cls: cls.className,
                 due: row.due,
@@ -3739,7 +3751,10 @@ export function StudentsLedger() {
             });
           }
 
-          const orphanTiers = findMissingClassTiers(classPool, admitted.map((s) => s.cls));
+          const orphanTiers = findMissingClassTiers(classPool, [
+            ...admitted.map((s) => s.cls),
+            ...reenrolled.map((s) => s.cls),
+          ]);
           if (orphanTiers.length) {
             setClasses((prev) => {
               const seen = new Set(prev.map((c) => normalizeClassLabelKey(c.className)));
@@ -3762,7 +3777,8 @@ export function StudentsLedger() {
             ),
           ];
 
-          if (!admitted.length) {
+          const totalAdmitted = admitted.length + reenrolled.length;
+          if (!totalAdmitted) {
             toast.error("No new students to admit", {
               description:
                 skipped > 0
@@ -3777,10 +3793,32 @@ export function StudentsLedger() {
               /* local class kept; settings sync can retry */
             });
           }
-          for (const student of admitted) {
+
+          let syncFailed = 0;
+          for (const student of reenrolled) {
             await apiUpsertStudent(student).catch((err) => {
+              syncFailed += 1;
               toast.error(err instanceof Error ? err.message : `Could not sync ${student.name}`);
             });
+          }
+          for (const student of admitted) {
+            try {
+              const saved = await apiUpsertStudent(student, { createOnly: true });
+              if (saved.id !== student.id) {
+                setStudents((prev) => [
+                  { ...student, ...saved, id: saved.id },
+                  ...prev.filter((s) => s.id !== student.id),
+                ]);
+                enrollStudentInActiveYear(saved.id, {
+                  cls: student.cls,
+                  due: student.due,
+                  active: true,
+                });
+              }
+            } catch (err) {
+              syncFailed += 1;
+              toast.error(err instanceof Error ? err.message : `Could not sync ${student.name}`);
+            }
           }
 
           const classNote =
@@ -3788,9 +3826,15 @@ export function StudentsLedger() {
               ? `${tiersToSync.length} class tier${tiersToSync.length === 1 ? "" : "s"} synced`
               : null;
           const skipNote = skipped > 0 ? `${skipped} skipped` : null;
-          toast.success(`${admitted.length} student${admitted.length === 1 ? "" : "s"} admitted`, {
-            description: [classNote, skipNote, academicYear].filter(Boolean).join(" · "),
-          });
+          const failNote = syncFailed > 0 ? `${syncFailed} sync failed` : null;
+          toast.success(
+            `${totalAdmitted} student${totalAdmitted === 1 ? "" : "s"} admitted`,
+            {
+              description: [classNote, skipNote, failNote, academicYear]
+                .filter(Boolean)
+                .join(" · "),
+            },
+          );
         } finally {
           setImporting(false);
           if (fileInputRef.current) fileInputRef.current.value = "";
@@ -3946,7 +3990,7 @@ export function StudentsLedger() {
       />
     ) : undefined;
 
-  if (!hydrated || branchSyncing) {
+  if (!hydrated || !branchContentReady) {
     return <TenantDirectorySkeleton label="Loading students directory" />;
   }
 
@@ -4676,7 +4720,7 @@ export function StaffRoster() {
     departments,
     roles,
     hydrated,
-    branchSyncing,
+    branchContentReady,
     schoolDetails,
     academicYear,
   } = useTenantStore();
@@ -5325,10 +5369,23 @@ export function StaffRoster() {
             });
           }
 
-          for (const member of [...created, ...updated]) {
+          for (const member of updated) {
             await apiUpsertStaff(member).catch((err) => {
               toast.error(err instanceof Error ? err.message : `Could not sync ${member.name}`);
             });
+          }
+          for (const member of created) {
+            try {
+              const saved = await apiUpsertStaff(member, { createOnly: true });
+              if (saved.id !== member.id) {
+                setStaff((prev) => [
+                  { ...member, ...saved, id: saved.id },
+                  ...prev.filter((s) => s.id !== member.id),
+                ]);
+              }
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : `Could not sync ${member.name}`);
+            }
           }
 
           const parts = [
@@ -5493,7 +5550,7 @@ export function StaffRoster() {
     reader.readAsText(file);
   };
 
-  if (!hydrated || branchSyncing) {
+  if (!hydrated || !branchContentReady) {
     return <TenantDirectorySkeleton label="Loading staff directory" />;
   }
 
@@ -14034,6 +14091,7 @@ export function SchoolSettings() {
     setStudents,
     hydrated,
     branchSyncing,
+    branchContentReady,
     branches,
     setBranches,
     activeBranchId,
@@ -14179,7 +14237,7 @@ export function SchoolSettings() {
       </p>
     ) : null;
 
-  const settingsDataLoading = !hydrated || branchSyncing;
+  const settingsDataLoading = !hydrated || !branchContentReady;
 
   const renderSettingsPanel = (
     content: React.ReactNode,
@@ -14379,7 +14437,7 @@ export function SchoolSettings() {
       )}
 
       {activeTab === "system" &&
-        (hydrated && !branchSyncing ? (
+        (hydrated && branchContentReady ? (
           <div className="grid grid-cols-12 gap-3 sm:gap-4 lg:gap-5">
             <CategoriesCard
               academicYears={academicYears}

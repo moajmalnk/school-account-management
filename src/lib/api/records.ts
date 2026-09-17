@@ -7,6 +7,13 @@ function hasToken() {
   return Boolean(getApiToken());
 }
 
+/** True when create hit UNIQUE (tenant_id, public_id) or similar. */
+export function isDuplicateKeyError(err: unknown): boolean {
+  if (!(err instanceof ApiError)) return false;
+  if (err.status === 409) return true;
+  return /duplicate entry|integrity constraint/i.test(err.message);
+}
+
 /** Upload oversized data-URL photos before DB write (photo_url is short-URL only). */
 async function withUploadedPhoto<T extends { photoUrl?: string }>(row: T): Promise<T> {
   if (!isDataUrl(row.photoUrl)) return row;
@@ -33,30 +40,35 @@ async function mutate<T>(
   throw lastErr instanceof Error ? lastErr : new Error("Request failed");
 }
 
-export async function apiUpsertStudent(student: Student): Promise<Student> {
+/**
+ * Create-first upsert — avoids probing get.php (which 404s for every new ID and
+ * floods the browser console during bulk admit). On duplicate public_id, update.
+ * Pass createOnly for bulk admit so collisions don't overwrite an existing student.
+ */
+export async function apiUpsertStudent(
+  student: Student,
+  opts?: { createOnly?: boolean },
+): Promise<Student> {
   if (!hasToken()) {
     throw new Error("Not signed in to API — log in again to save student changes");
   }
   const payload = await withUploadedPhoto(student);
   try {
-    await apiRequest(`/api/students/get.php?id=${encodeURIComponent(payload.id)}`);
-    return mutate<Student>("/api/students/update.php", payload);
+    return await apiRequest<Student>("/api/students/create.php", {
+      method: "POST",
+      body: payload,
+    });
   } catch (err) {
-    if (err instanceof ApiError && err.status === 404) {
+    if (!isDuplicateKeyError(err)) throw err;
+    if (opts?.createOnly) {
+      // Collision on client-picked ID / share token — server allocates a fresh public_id.
+      const { id: _ignored, shareToken: _share, ...withoutId } = payload;
       return apiRequest<Student>("/api/students/create.php", {
         method: "POST",
-        body: payload,
+        body: { ...withoutId, id: "" },
       });
     }
-    // get.php failed for other reasons — still try update, then create
-    try {
-      return await mutate<Student>("/api/students/update.php", payload);
-    } catch {
-      return apiRequest<Student>("/api/students/create.php", {
-        method: "POST",
-        body: payload,
-      });
-    }
+    return mutate<Student>("/api/students/update.php", payload);
   }
 }
 
@@ -88,29 +100,29 @@ export async function apiSyncStudentYearFields(
   await mutate("/api/students/year-fields.php", { entries });
 }
 
-export async function apiUpsertStaff(staff: Staff): Promise<Staff> {
+export async function apiUpsertStaff(
+  staff: Staff,
+  opts?: { createOnly?: boolean },
+): Promise<Staff> {
   if (!hasToken()) {
     throw new Error("Not signed in to API — log in again to save staff changes");
   }
   const payload = await withUploadedPhoto(staff);
   try {
-    await apiRequest(`/api/staff/get.php?id=${encodeURIComponent(payload.id)}`);
-    return mutate<Staff>("/api/staff/update.php", payload);
+    return await apiRequest<Staff>("/api/staff/create.php", {
+      method: "POST",
+      body: payload,
+    });
   } catch (err) {
-    if (err instanceof ApiError && err.status === 404) {
+    if (!isDuplicateKeyError(err)) throw err;
+    if (opts?.createOnly) {
+      const { id: _ignored, ...withoutId } = payload;
       return apiRequest<Staff>("/api/staff/create.php", {
         method: "POST",
-        body: payload,
+        body: { ...withoutId, id: "" },
       });
     }
-    try {
-      return await mutate<Staff>("/api/staff/update.php", payload);
-    } catch {
-      return apiRequest<Staff>("/api/staff/create.php", {
-        method: "POST",
-        body: payload,
-      });
-    }
+    return mutate<Staff>("/api/staff/update.php", payload);
   }
 }
 

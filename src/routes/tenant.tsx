@@ -208,7 +208,7 @@ function TenantMobileHeader() {
       data-tenant-mobile-header
       className="sticky top-0 z-30 bg-gradient-to-b from-white/80 to-transparent px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl dark:from-[#0a0a0a]/95 dark:via-[#0a0a0a]/65 dark:to-transparent md:hidden"
     >
-      <div className="flex w-full items-center gap-3">
+      <div className="flex w-full min-w-0 flex-nowrap items-center gap-1.5 sm:gap-2">
         {showBack ? (
           <button
             type="button"
@@ -219,7 +219,7 @@ function TenantMobileHeader() {
             aria-label={backLabel}
             className={cn(
               glassInsetClass,
-              "grid h-10 w-10 shrink-0 place-items-center text-slate-700 transition-colors hover:text-[#0F766E] dark:text-zinc-200 dark:hover:text-[#2DD4BF]",
+              "grid h-9 w-9 shrink-0 place-items-center text-slate-700 transition-colors hover:text-[#0F766E] dark:text-zinc-200 dark:hover:text-[#2DD4BF] sm:h-10 sm:w-10",
             )}
           >
             <ChevronLeft className="h-5 w-5" />
@@ -227,7 +227,7 @@ function TenantMobileHeader() {
         ) : (
           <div
             className={cn(
-              "grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl text-[11px] font-bold text-white",
+              "grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-xl text-[11px] font-bold text-white sm:h-10 sm:w-10",
               !logoUrl && "bg-gradient-to-br from-[#0F766E] to-[#115E59]",
             )}
           >
@@ -242,8 +242,11 @@ function TenantMobileHeader() {
             )}
           </div>
         )}
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[11px] font-bold uppercase leading-tight tracking-[0.04em] text-slate-900 dark:text-zinc-100">
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <div
+            className="truncate text-[10px] font-bold uppercase leading-tight tracking-[0.04em] text-slate-900 sm:text-[11px] dark:text-zinc-100"
+            title={`${tenantLabel} - ${sectionLabel}`}
+          >
             {tenantLabel} - {sectionLabel}
           </div>
           {branches.length > 1 && activeBranch?.name ? (
@@ -252,21 +255,23 @@ function TenantMobileHeader() {
             </div>
           ) : null}
         </div>
-        <ImpersonationChip compact />
-        <BranchSwitcher compact />
-        <ThemeModeToggle className="rounded-full border border-white/80 bg-white/70 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-200" />
-        <HardRefreshButton className="h-11 w-11 shrink-0 rounded-full border border-white/80 bg-white/70 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-200" />
-        <button
-          type="button"
-          onClick={() => guardedNavigate("/tenant/notifications")}
-          aria-label="Notifications"
-          className="relative grid h-11 w-11 shrink-0 place-items-center rounded-full border border-white/80 bg-white/70 text-slate-600 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-300"
-        >
-          <Bell className="h-[18px] w-[18px]" />
-          {unreadCount > 0 && (
-            <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full border-2 border-white bg-[#0F766E] dark:border-zinc-900" />
-          )}
-        </button>
+        <div className="flex shrink-0 flex-nowrap items-center gap-1 sm:gap-1.5">
+          <ImpersonationChip compact />
+          <BranchSwitcher compact />
+          <ThemeModeToggle className="h-9 w-9 shrink-0 rounded-full border border-white/80 bg-white/70 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-200 sm:h-10 sm:w-10" />
+          <HardRefreshButton className="h-9 w-9 shrink-0 rounded-full border border-white/80 bg-white/70 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-200 sm:h-10 sm:w-10" />
+          <button
+            type="button"
+            onClick={() => guardedNavigate("/tenant/notifications")}
+            aria-label="Notifications"
+            className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/80 bg-white/70 text-slate-600 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-300 sm:h-10 sm:w-10"
+          >
+            <Bell className="h-4 w-4 sm:h-[18px] sm:w-[18px]" />
+            {unreadCount > 0 && (
+              <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full border-2 border-white bg-[#0F766E] dark:border-zinc-900 sm:right-2.5 sm:top-2.5" />
+            )}
+          </button>
+        </div>
       </div>
     </header>
   );

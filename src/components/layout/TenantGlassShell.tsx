@@ -66,6 +66,7 @@ import { hardRefreshApp } from "@/lib/app-version";
 import {
   isMainCampusBranch,
   schoolInitials,
+  sortCampusBranches,
   useTenantStore,
   type ThemeSettings,
 } from "@/lib/tenant-store";
@@ -74,44 +75,69 @@ import { isFinanceTab } from "@/lib/finance-tabs";
 import { resolveMediaUrl } from "@/lib/media";
 import { cn, glassInsetClass, glassPanelClass } from "@/lib/utils";
 
-/** Soft fade when academic year books or campus switch. */
+/**
+ * Soft workspace transition when campus or academic-year books change.
+ * Never blanks the page (opacity-0) — keep content/skeleton visible under a status chip.
+ */
 export function AcademicYearBooksFade({ children }: { children: ReactNode }) {
-  const { academicYear, activeBranchId, hydrated } = useTenantStore();
-  const [visible, setVisible] = useState(true);
-  const booksKey = `${academicYear}|${activeBranchId}`;
-  const [displayKey, setDisplayKey] = useState(booksKey);
-  const booksReady = useRef(false);
+  const { academicYear, activeBranch, hydrated, branchSyncing } = useTenantStore();
+  const prevYearRef = useRef(academicYear);
+  const yearReady = useRef(false);
+  const [yearTransition, setYearTransition] = useState(false);
 
   useEffect(() => {
-    // Skip the fade on first hydrate so seed→API year swaps don't blink the page.
-    if (!hydrated) {
-      setDisplayKey(booksKey);
+    // Skip the first hydrate so seed→API year swaps don't flash a transition chip.
+    if (!hydrated) return;
+    if (!yearReady.current) {
+      yearReady.current = true;
+      prevYearRef.current = academicYear;
       return;
     }
-    if (!booksReady.current) {
-      booksReady.current = true;
-      setDisplayKey(booksKey);
-      setVisible(true);
-      return;
-    }
-    if (booksKey === displayKey) return;
-    setVisible(false);
-    const t = window.setTimeout(() => {
-      setDisplayKey(booksKey);
-      setVisible(true);
-    }, 140);
+    if (academicYear === prevYearRef.current) return;
+    prevYearRef.current = academicYear;
+    setYearTransition(true);
+    const t = window.setTimeout(() => setYearTransition(false), 320);
     return () => window.clearTimeout(t);
-  }, [booksKey, displayKey, hydrated]);
+  }, [academicYear, hydrated]);
+
+  const busy = branchSyncing || yearTransition;
+  const statusLabel = branchSyncing
+    ? `Opening ${activeBranch?.name?.trim() || "campus"}…`
+    : yearTransition
+      ? `Opening ${academicYear} books…`
+      : null;
 
   return (
-    <div
-      key={displayKey || "books-loading"}
-      className={cn(
-        "flex min-h-0 min-w-0 flex-1 flex-col transition-opacity duration-200 ease-out",
-        visible ? "opacity-100" : "opacity-0",
-      )}
-    >
-      {children}
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+      <div
+        className={cn(
+          "flex min-h-0 min-w-0 flex-1 flex-col transition-[opacity,filter] duration-200 ease-out",
+          busy ? "pointer-events-none opacity-[0.58] saturate-[0.9]" : "opacity-100",
+        )}
+        aria-busy={busy}
+      >
+        {children}
+      </div>
+      {busy && statusLabel ? (
+        <div
+          className="pointer-events-none absolute inset-x-0 top-5 z-20 flex justify-center px-4 sm:top-6"
+          role="status"
+          aria-live="polite"
+        >
+          <div
+            className={cn(
+              glassPanelClass,
+              "inline-flex max-w-[min(22rem,calc(100vw-2rem))] items-center gap-2 rounded-full border border-white/70 px-3.5 py-2 text-[12px] font-semibold text-slate-800 shadow-lg shadow-slate-900/10 backdrop-blur-xl dark:border-white/10 dark:text-zinc-100 dark:shadow-black/40",
+            )}
+          >
+            <Loader2
+              className="h-3.5 w-3.5 shrink-0 animate-spin text-[#0F766E] dark:text-[#2DD4BF]"
+              strokeWidth={2.5}
+            />
+            <span className="truncate">{statusLabel}</span>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -138,15 +164,23 @@ export function ImpersonationChip({ compact = false }: { compact?: boolean }) {
           type="button"
           aria-label={`Previewing ${workspace} as ${actor}. Open to exit impersonation.`}
           className={cn(
-            "inline-flex items-center gap-1 rounded-full border border-amber-300/80 bg-amber-50 px-2 py-2 text-[11px] font-semibold text-amber-950 shadow-sm backdrop-blur-md transition-colors hover:border-amber-400 hover:bg-amber-100/90 dark:border-amber-500/30 dark:bg-amber-950/50 dark:text-amber-100 dark:hover:bg-amber-900/60 sm:gap-1.5 sm:px-2.5 sm:text-[12px]",
-            compact && "h-8 w-8 justify-center px-0 py-0 sm:h-auto sm:w-auto sm:px-2 sm:py-1.5",
+            "inline-flex max-w-[7.5rem] items-center gap-1 rounded-full border border-amber-300/80 bg-amber-50 px-2 py-2 text-[11px] font-semibold text-amber-950 shadow-sm backdrop-blur-md transition-colors hover:border-amber-400 hover:bg-amber-100/90 dark:border-amber-500/30 dark:bg-amber-950/50 dark:text-amber-100 dark:hover:bg-amber-900/60 sm:gap-1.5 sm:px-2.5 sm:text-[12px] lg:max-w-[9rem]",
+            compact &&
+              "h-8 max-w-none shrink-0 justify-center px-2 py-0 sm:max-w-[6.5rem] sm:px-2 lg:h-9 lg:max-w-[7.5rem]",
           )}
         >
           <span className="relative grid h-3.5 w-3.5 shrink-0 place-items-center">
             <Eye className="h-3.5 w-3.5" strokeWidth={2.25} />
             <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-amber-500 ring-1 ring-amber-50 dark:ring-amber-950" />
           </span>
-          {compact ? <span className="sr-only">Preview</span> : <span className="truncate">Preview</span>}
+          {compact ? (
+            <>
+              <span className="hidden truncate sm:inline">Preview</span>
+              <span className="sr-only sm:hidden">Preview</span>
+            </>
+          ) : (
+            <span className="truncate">Preview</span>
+          )}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -187,7 +221,10 @@ export function BranchSwitcher({ compact = false }: { compact?: boolean }) {
     useTenantStore();
   const unsavedGuard = useOptionalSettingsUnsavedGuard();
   const [addOpen, setAddOpen] = useState(false);
-  const selectable = branches.filter((b) => b.isActive !== false);
+  const selectable = useMemo(
+    () => sortCampusBranches(branches.filter((b) => b.isActive !== false)),
+    [branches],
+  );
   const canManage = sessionCanAccessSettings(session);
   const canAdd = canManage && planAllowsMultipleBranches(session?.planFlags);
   const label = activeBranch?.name ?? selectable[0]?.name ?? "Main Campus";
@@ -245,14 +282,15 @@ export function BranchSwitcher({ compact = false }: { compact?: boolean }) {
             disabled={branchSyncing}
             aria-busy={branchSyncing}
             className={cn(
-              "inline-flex max-w-[11rem] items-center gap-1 rounded-full border border-slate-200/80 bg-white/80 px-2.5 py-2 text-[11px] font-semibold text-slate-800 shadow-sm backdrop-blur-md transition-colors hover:border-[#0F766E]/40 hover:text-[#0F766E] disabled:cursor-wait disabled:opacity-70 dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-100 dark:hover:text-[#2DD4BF] sm:max-w-none sm:gap-1.5 sm:px-3.5 sm:text-[12px]",
-              compact && "max-w-[9rem] px-2 py-1.5 text-[10px] sm:max-w-[11rem]",
+              "inline-flex max-w-[9.5rem] items-center gap-1 rounded-full border border-slate-200/80 bg-white/80 px-2.5 py-2 text-[11px] font-semibold text-slate-800 shadow-sm backdrop-blur-md transition-colors hover:border-[#0F766E]/40 hover:text-[#0F766E] disabled:cursor-wait disabled:opacity-70 dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-100 dark:hover:text-[#2DD4BF] lg:max-w-[12rem] lg:gap-1.5 lg:px-3.5 lg:text-[12px]",
+              compact &&
+                "h-8 max-w-[6.5rem] px-2 py-0 text-[10px] sm:max-w-[7.75rem] lg:h-9 lg:max-w-[10rem] lg:px-2.5 lg:text-[11px] xl:max-w-[12rem]",
             )}
           >
             {branchSyncing ? (
               <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" strokeWidth={2.25} />
             ) : (
-              <Building2 className="hidden h-3.5 w-3.5 shrink-0 sm:block" strokeWidth={2.25} />
+              <Building2 className="hidden h-3.5 w-3.5 shrink-0 lg:block" strokeWidth={2.25} />
             )}
             <span className="truncate">{label}</span>
             <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" />
@@ -827,10 +865,10 @@ export function TenantDesktopTopBar() {
       <header
         className={cn(
           glassPanelClass,
-          "mb-5 hidden items-center justify-between gap-2 rounded-2xl px-3 py-3 md:flex md:gap-3 md:px-5 md:py-3.5",
+          "mb-5 hidden min-w-0 items-center gap-2 rounded-2xl px-2.5 py-2.5 md:flex md:flex-nowrap md:gap-2.5 md:px-3.5 md:py-3 lg:gap-3 lg:px-5 lg:py-3.5",
         )}
       >
-        <div className="flex min-w-0 flex-1 basis-0 items-center gap-2.5 sm:gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-2 lg:gap-2.5">
           {showBack && (
             <button
               type="button"
@@ -841,141 +879,152 @@ export function TenantDesktopTopBar() {
               aria-label={backLabel}
               className={cn(
                 glassInsetClass,
-                "inline-flex h-9 w-9 shrink-0 items-center justify-center text-slate-700 transition-colors hover:text-[#0F766E] dark:text-zinc-300 dark:hover:text-[#2DD4BF] sm:h-10 sm:w-auto sm:gap-1.5 sm:px-3",
+                "inline-flex h-8 w-8 shrink-0 items-center justify-center text-slate-700 transition-colors hover:text-[#0F766E] dark:text-zinc-300 dark:hover:text-[#2DD4BF] lg:h-9 lg:w-auto lg:gap-1.5 lg:px-3 xl:h-10",
               )}
             >
               <ChevronLeft className="h-4 w-4 shrink-0" />
-              <span className="hidden text-[13px] font-semibold sm:inline">Back</span>
+              <span className="hidden text-[13px] font-semibold lg:inline">Back</span>
             </button>
           )}
-          <div className="min-w-0">
-            <h1 className="line-clamp-2 text-[13px] font-bold uppercase tracking-wide text-slate-900 sm:text-[14px] xl:line-clamp-1 xl:text-[16px] dark:text-zinc-100">
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <h1
+              className="truncate text-[12px] font-bold uppercase tracking-wide text-slate-900 lg:text-[14px] xl:text-[16px] dark:text-zinc-100"
+              title={tenantName}
+            >
               {tenantName}
             </h1>
-            <p className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-zinc-400">
+            <p className="mt-0.5 hidden truncate text-[11px] text-slate-500 xl:block dark:text-zinc-400">
               Tenant administration workspace
             </p>
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
-          <ImpersonationChip />
-          <BranchSwitcher />
-          {!hydrated || !academicYear ? (
-            <Skeleton
-              aria-label="Loading academic year"
-              className="h-9 w-[9.5rem] rounded-full bg-emerald-500/25 sm:w-[11rem]"
-            />
-          ) : (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className="inline-flex max-w-[11rem] items-center gap-1 rounded-full bg-[#10B981] px-2.5 py-2 text-[11px] font-semibold text-white shadow-sm shadow-emerald-500/25 transition-opacity hover:opacity-90 sm:max-w-none sm:gap-1.5 sm:px-3.5 sm:text-[12px]"
+        <div className="flex min-w-0 shrink-0 flex-nowrap items-center justify-end gap-1 sm:gap-1.5 lg:gap-2">
+          <div className="flex min-w-0 flex-nowrap items-center gap-1 sm:gap-1.5 lg:gap-2">
+            <ImpersonationChip compact />
+            <BranchSwitcher compact />
+            {!hydrated || !academicYear ? (
+              <Skeleton
+                aria-label="Loading academic year"
+                className="h-8 w-[6.5rem] shrink-0 rounded-full bg-emerald-500/25 sm:w-[7.5rem] lg:h-9 lg:w-[10rem]"
+              />
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    title={academicYear}
+                    className="inline-flex h-8 max-w-[6.75rem] shrink-0 items-center gap-1 rounded-full bg-[#10B981] px-2 text-[10px] font-semibold text-white shadow-sm shadow-emerald-500/25 transition-opacity hover:opacity-90 sm:max-w-[8rem] sm:px-2.5 sm:text-[11px] lg:h-9 lg:max-w-[11rem] lg:gap-1.5 lg:px-3 lg:text-[12px] xl:max-w-[13rem]"
+                  >
+                    <CheckCircle2
+                      className="hidden h-3.5 w-3.5 shrink-0 xl:block"
+                      strokeWidth={2.5}
+                    />
+                    <span className="min-w-0 truncate">
+                      {academicYear}
+                      <span className="hidden 2xl:inline"> Active</span>
+                    </span>
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-80" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  className="min-w-[11rem] rounded-lg border-white/60 bg-white/90 backdrop-blur-xl dark:border-white/10 dark:bg-zinc-900"
                 >
-                  <CheckCircle2
-                    className="hidden h-3.5 w-3.5 shrink-0 sm:block"
-                    strokeWidth={2.5}
-                  />
-                  <span className="truncate">{academicYear} Active</span>
-                  <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-80" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                className="min-w-[11rem] rounded-lg border-white/60 bg-white/90 backdrop-blur-xl dark:border-white/10 dark:bg-zinc-900"
-              >
-                <DropdownMenuRadioGroup
-                  value={academicYear}
-                  onValueChange={(y) => {
-                    const stats = openAcademicYear(y);
-                    toast.success(`Opened books for ${y}`, {
-                      description: `${stats.receipts} receipt${stats.receipts === 1 ? "" : "s"} · ${stats.enrolled} student${stats.enrolled === 1 ? "" : "s"} enrolled`,
-                    });
-                  }}
-                >
-                  {selectableYears.map((y) => (
-                    <DropdownMenuRadioItem key={y} value={y} className="rounded-md text-[13px]">
-                      {y}
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-                {closedAcademicYears.filter((y) => y !== academicYear).length > 0 && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400">
-                      Closed years
-                    </DropdownMenuLabel>
-                    {closedAcademicYears
-                      .filter((y) => y !== academicYear)
-                      .map((y) => (
-                        <DropdownMenuItem
-                          key={`closed-${y}`}
-                          className="rounded-md text-[13px] text-slate-500"
-                          onSelect={() => {
-                            const stats = openAcademicYear(y);
-                            toast.success(`Reopened books for ${y}`, {
-                              description: `${stats.receipts} receipt${stats.receipts === 1 ? "" : "s"} · ${stats.enrolled} student${stats.enrolled === 1 ? "" : "s"} enrolled`,
-                            });
-                          }}
-                        >
-                          {y} · reopen
-                        </DropdownMenuItem>
-                      ))}
-                  </>
-                )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="rounded-md text-[13px]"
-                  onSelect={() => {
-                    resetYearDraft();
-                    setAddYearOpen(true);
-                  }}
-                >
-                  <Plus className="mr-2 h-3.5 w-3.5" />
-                  Add academic year
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-
-          <ThemeModeToggle />
-
-          <HardRefreshButton />
-
-          <button
-            type="button"
-            onClick={() => guardedNavigate("/tenant/settings")}
-            aria-label="Settings"
-            className="glass-inset grid h-10 w-10 place-items-center rounded-xl text-slate-600 transition-colors hover:text-[#0F766E] dark:text-zinc-300 dark:hover:text-[#2DD4BF]"
-          >
-            <Settings className="h-[18px] w-[18px]" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => guardedNavigate("/tenant/notifications")}
-            aria-label="Notifications"
-            className="glass-inset relative grid h-10 w-10 place-items-center rounded-xl text-slate-600 transition-colors hover:text-[#0F766E]"
-          >
-            <Bell className="h-[18px] w-[18px]" />
-            {unreadCount > 0 && (
-              <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full border-2 border-white bg-[#0F766E]" />
+                  <DropdownMenuRadioGroup
+                    value={academicYear}
+                    onValueChange={(y) => {
+                      const stats = openAcademicYear(y);
+                      toast.success(`Opened books for ${y}`, {
+                        description: `${stats.receipts} receipt${stats.receipts === 1 ? "" : "s"} · ${stats.enrolled} student${stats.enrolled === 1 ? "" : "s"} enrolled`,
+                      });
+                    }}
+                  >
+                    {selectableYears.map((y) => (
+                      <DropdownMenuRadioItem key={y} value={y} className="rounded-md text-[13px]">
+                        {y}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                  {closedAcademicYears.filter((y) => y !== academicYear).length > 0 && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400">
+                        Closed years
+                      </DropdownMenuLabel>
+                      {closedAcademicYears
+                        .filter((y) => y !== academicYear)
+                        .map((y) => (
+                          <DropdownMenuItem
+                            key={`closed-${y}`}
+                            className="rounded-md text-[13px] text-slate-500"
+                            onSelect={() => {
+                              const stats = openAcademicYear(y);
+                              toast.success(`Reopened books for ${y}`, {
+                                description: `${stats.receipts} receipt${stats.receipts === 1 ? "" : "s"} · ${stats.enrolled} student${stats.enrolled === 1 ? "" : "s"} enrolled`,
+                              });
+                            }}
+                          >
+                            {y} · reopen
+                          </DropdownMenuItem>
+                        ))}
+                    </>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="rounded-md text-[13px]"
+                    onSelect={() => {
+                      resetYearDraft();
+                      setAddYearOpen(true);
+                    }}
+                  >
+                    <Plus className="mr-2 h-3.5 w-3.5" />
+                    Add academic year
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
-          </button>
+          </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              const openLogout = () => setPendingLogout(true);
-              if (tryNavigate) tryNavigate(openLogout);
-              else openLogout();
-            }}
-            aria-label="Logout"
-            className="glass-inset grid h-10 w-10 place-items-center rounded-xl text-slate-600 transition-colors hover:text-[#EF4444]"
-          >
-            <LogOut className="h-[18px] w-[18px]" />
-          </button>
+          <div className="flex shrink-0 flex-nowrap items-center gap-1 lg:gap-1.5">
+            <ThemeModeToggle className="h-8 w-8 lg:h-9 lg:w-9 xl:h-10 xl:w-10" />
+
+            <HardRefreshButton className="h-8 w-8 lg:h-9 lg:w-9 xl:h-10 xl:w-10" />
+
+            <button
+              type="button"
+              onClick={() => guardedNavigate("/tenant/settings")}
+              aria-label="Settings"
+              className="glass-inset grid h-8 w-8 place-items-center rounded-xl text-slate-600 transition-colors hover:text-[#0F766E] dark:text-zinc-300 dark:hover:text-[#2DD4BF] lg:h-9 lg:w-9 xl:h-10 xl:w-10"
+            >
+              <Settings className="h-4 w-4 lg:h-[18px] lg:w-[18px]" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => guardedNavigate("/tenant/notifications")}
+              aria-label="Notifications"
+              className="glass-inset relative grid h-8 w-8 place-items-center rounded-xl text-slate-600 transition-colors hover:text-[#0F766E] lg:h-9 lg:w-9 xl:h-10 xl:w-10"
+            >
+              <Bell className="h-4 w-4 lg:h-[18px] lg:w-[18px]" />
+              {unreadCount > 0 && (
+                <span className="absolute right-1 top-1 h-2 w-2 rounded-full border-2 border-white bg-[#0F766E] lg:right-1.5 lg:top-1.5" />
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const openLogout = () => setPendingLogout(true);
+                if (tryNavigate) tryNavigate(openLogout);
+                else openLogout();
+              }}
+              aria-label="Logout"
+              className="glass-inset grid h-8 w-8 place-items-center rounded-xl text-slate-600 transition-colors hover:text-[#EF4444] lg:h-9 lg:w-9 xl:h-10 xl:w-10"
+            >
+              <LogOut className="h-4 w-4 lg:h-[18px] lg:w-[18px]" />
+            </button>
+          </div>
         </div>
       </header>
 
