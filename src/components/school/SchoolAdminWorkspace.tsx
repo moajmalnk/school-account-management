@@ -3307,6 +3307,13 @@ export function StudentsLedger() {
     () => students.filter((s) => !isRecordDeleted(s.deletedAt)),
     [students],
   );
+  const deletedStudents = useMemo(
+    () =>
+      allStudents
+        .filter((s) => isRecordDeleted(s.deletedAt))
+        .sort((a, b) => (b.deletedAt ?? "").localeCompare(a.deletedAt ?? "")),
+    [allStudents],
+  );
 
   useEffect(() => {
     if (!hydrated || !branchContentReady) return;
@@ -3343,13 +3350,6 @@ export function StudentsLedger() {
       );
     })();
   }, [hydrated, branchContentReady, liveStudents, classes, setClasses]);
-  const deletedStudents = useMemo(
-    () =>
-      students
-        .filter((s) => isRecordDeleted(s.deletedAt))
-        .sort((a, b) => (b.deletedAt ?? "").localeCompare(a.deletedAt ?? "")),
-    [students],
-  );
 
   const activeStudent = useMemo(
     () =>
@@ -4343,9 +4343,27 @@ export function StudentsLedger() {
       </div>
 
       <div className={directoryHeaderRow}>
-        <h1 className="min-w-0 shrink text-[16px] font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50 md:text-[24px] md:font-semibold lg:text-[28px]">
-          {showRecycleBin ? "Recycle Bin" : "Students Directory"}
-        </h1>
+        <div className="min-w-0 flex-1">
+          {showRecycleBin ? (
+            <div className="flex min-w-0 flex-col gap-1">
+              <button
+                type="button"
+                onClick={() => setShowRecycleBin(false)}
+                className="inline-flex w-fit items-center gap-1 rounded-full px-1 py-0.5 text-[12px] font-medium text-[#0F766E] transition-colors hover:bg-[#F0FDFA] dark:text-teal-300 dark:hover:bg-teal-950/40"
+              >
+                <ChevronLeft className="h-3.5 w-3.5 shrink-0" />
+                Back to Students Directory
+              </button>
+              <h1 className="min-w-0 text-[16px] font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50 md:text-[24px] md:font-semibold lg:text-[28px]">
+                Recycle Bin
+              </h1>
+            </div>
+          ) : (
+            <h1 className="min-w-0 shrink text-[16px] font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50 md:text-[24px] md:font-semibold lg:text-[28px]">
+              Students Directory
+            </h1>
+          )}
+        </div>
         <div className={directoryToolbarRow}>
           <button
             type="button"
@@ -4357,9 +4375,10 @@ export function StudentsLedger() {
                 : "text-slate-900",
             )}
             aria-pressed={showRecycleBin}
+            aria-label={showRecycleBin ? "Close recycle bin" : "Open recycle bin"}
           >
             <Recycle className="h-3.5 w-3.5 shrink-0" />
-            <span>Recycle</span>
+            <span>{showRecycleBin ? "Close" : "Recycle"}</span>
             {deletedStudents.length > 0 && (
               <span
                 className={cn(
@@ -5992,9 +6011,27 @@ export function StaffRoster() {
       </div>
 
       <div className={directoryHeaderRow}>
-        <h1 className="min-w-0 shrink text-[16px] font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50 md:text-[24px] md:font-semibold lg:text-[28px]">
-          {showRecycleBin ? "Recycle Bin" : "Staff Directory"}
-        </h1>
+        <div className="min-w-0 flex-1">
+          {showRecycleBin ? (
+            <div className="flex min-w-0 flex-col gap-1">
+              <button
+                type="button"
+                onClick={() => setShowRecycleBin(false)}
+                className="inline-flex w-fit items-center gap-1 rounded-full px-1 py-0.5 text-[12px] font-medium text-[#0F766E] transition-colors hover:bg-[#F0FDFA] dark:text-teal-300 dark:hover:bg-teal-950/40"
+              >
+                <ChevronLeft className="h-3.5 w-3.5 shrink-0" />
+                Back to Staff Directory
+              </button>
+              <h1 className="min-w-0 text-[16px] font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50 md:text-[24px] md:font-semibold lg:text-[28px]">
+                Recycle Bin
+              </h1>
+            </div>
+          ) : (
+            <h1 className="min-w-0 shrink text-[16px] font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50 md:text-[24px] md:font-semibold lg:text-[28px]">
+              Staff Directory
+            </h1>
+          )}
+        </div>
         <div className={directoryToolbarRow}>
           <button
             type="button"
@@ -6006,9 +6043,10 @@ export function StaffRoster() {
                 : "text-slate-900",
             )}
             aria-pressed={showRecycleBin}
+            aria-label={showRecycleBin ? "Close recycle bin" : "Open recycle bin"}
           >
             <Recycle className="h-3.5 w-3.5 shrink-0" />
-            <span>Recycle</span>
+            <span>{showRecycleBin ? "Close" : "Recycle"}</span>
             {deletedStaff.length > 0 && (
               <span
                 className={cn(
