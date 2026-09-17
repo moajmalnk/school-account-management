@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { OrganicCard } from "@/components/ui/organic-card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { getApiToken } from "@/lib/api/client";
 import {
   apiGlBackfill,
@@ -62,6 +63,113 @@ function inr(n: number) {
 
 function workspacePanelClass() {
   return "rounded-2xl border border-[#EFEFEF] bg-white/90 dark:border-white/10 dark:bg-zinc-950/60";
+}
+
+function Bone({ className }: { className?: string }) {
+  return (
+    <Skeleton
+      className={cn(
+        "skeleton-shimmer relative overflow-hidden bg-black/[0.07] dark:bg-white/[0.08]",
+        className,
+      )}
+    />
+  );
+}
+
+function GlStatPillsSkeleton({ count = 4 }: { count?: number }) {
+  return (
+    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {Array.from({ length: count }).map((_, i) => (
+        <div
+          key={i}
+          className="rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] px-3 py-2 dark:border-white/10 dark:bg-zinc-900/40"
+        >
+          <Bone className="h-2.5 w-14 rounded-md" />
+          <Bone className="mt-2 h-5 w-[4.5rem] rounded-md" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GlReportColumnSkeleton({ rows = 4 }: { rows?: number }) {
+  return (
+    <div className="rounded-xl border border-[#EFEFEF] dark:border-white/10">
+      <div className="flex items-center justify-between border-b border-[#EFEFEF] bg-[#FAFAFA] px-3 py-2.5 dark:border-white/10 dark:bg-zinc-900/40">
+        <Bone className="h-3 w-16 rounded-md" />
+        <Bone className="h-3.5 w-20 rounded-md" />
+      </div>
+      <div className="space-y-3.5 p-3">
+        {Array.from({ length: rows }).map((_, i) => (
+          <div key={i} className="space-y-1.5">
+            <div className="flex items-center justify-between gap-3">
+              <Bone className="h-3 w-[42%] rounded-md" />
+              <Bone className="h-3 w-14 shrink-0 rounded-md" />
+            </div>
+            <Bone className="h-2.5 w-[78%] rounded-md bg-black/[0.05] dark:bg-white/[0.05]" />
+            <Bone className="h-2.5 w-[62%] rounded-md bg-black/[0.05] dark:bg-white/[0.05]" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function GlBalanceSheetSkeleton() {
+  return (
+    <div className="mt-3" aria-busy="true" aria-live="polite" aria-label="Loading balance sheet">
+      <GlStatPillsSkeleton />
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <GlReportColumnSkeleton rows={5} />
+        <div className="space-y-4">
+          <GlReportColumnSkeleton rows={3} />
+          <GlReportColumnSkeleton rows={2} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GlProfitLossSkeleton() {
+  return (
+    <div
+      className="mt-4 grid gap-4 md:grid-cols-2"
+      aria-busy="true"
+      aria-live="polite"
+      aria-label="Loading profit and loss"
+    >
+      <GlReportColumnSkeleton rows={5} />
+      <GlReportColumnSkeleton rows={5} />
+    </div>
+  );
+}
+
+function GlTrialBalanceSkeleton() {
+  return (
+    <div
+      className="mt-4 overflow-hidden rounded-xl border border-[#EFEFEF] dark:border-white/10"
+      aria-busy="true"
+      aria-live="polite"
+      aria-label="Loading trial balance"
+    >
+      <div className="grid grid-cols-5 gap-2 bg-[#F8FAFC] px-3 py-2 dark:bg-zinc-900">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Bone key={i} className={cn("h-2.5 rounded-md", i > 2 && "ml-auto w-12")} />
+        ))}
+      </div>
+      <div className="divide-y divide-[#EFEFEF] dark:divide-white/10">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="grid grid-cols-5 items-center gap-2 px-3 py-2.5">
+            <Bone className="h-3 w-10 rounded-md" />
+            <Bone className="h-3 w-[80%] rounded-md" />
+            <Bone className="h-3 w-[70%] rounded-md" />
+            <Bone className="ml-auto h-3 w-14 rounded-md" />
+            <Bone className="ml-auto h-3 w-14 rounded-md" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function useAcademicYear() {
@@ -657,9 +765,7 @@ export function GlTrialBalanceReport() {
         </span>
       </div>
       {loading ? (
-        <div className="mt-6 flex items-center gap-2 text-[12px] text-black/45">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…
-        </div>
+        <GlTrialBalanceSkeleton />
       ) : (
         <div className="mt-4 overflow-auto rounded-xl border border-[#EFEFEF] dark:border-white/10">
           <table className="w-full text-left text-[12px]">
@@ -1112,7 +1218,9 @@ export function GlProfitLossReport() {
             From general ledger · {academicYear || "all"}
           </p>
         </div>
-        {data ? (
+        {loading ? (
+          <Bone className="h-6 w-[5.5rem] rounded-full" />
+        ) : data ? (
           <div
             className={cn(
               "rounded-xl px-3 py-2 text-right text-white",
@@ -1126,21 +1234,19 @@ export function GlProfitLossReport() {
           </div>
         ) : null}
       </div>
-      {loading || !data ? (
-        <div className="mt-6 flex items-center gap-2 text-[12px] text-black/45">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…
-        </div>
+      {loading ? (
+        <GlProfitLossSkeleton />
       ) : (
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <GlReportGroupColumn
             title="Income"
-            total={data.totalIncome}
-            groups={data.groups.filter((g) => g.sector === "income")}
+            total={data?.totalIncome ?? 0}
+            groups={(data?.groups ?? []).filter((g) => g.sector === "income")}
           />
           <GlReportGroupColumn
             title="Expenses"
-            total={data.totalExpenses}
-            groups={data.groups.filter((g) => g.sector === "expenses")}
+            total={data?.totalExpenses ?? 0}
+            groups={(data?.groups ?? []).filter((g) => g.sector === "expenses")}
           />
         </div>
       )}
@@ -1177,7 +1283,9 @@ export function GlBalanceSheetReport() {
             Assets = Liabilities + Equity · {academicYear || "as of now"}
           </p>
         </div>
-        {data ? (
+        {loading ? (
+          <Bone className="h-6 w-[6.5rem] rounded-full" />
+        ) : data ? (
           <span
             className={cn(
               "rounded-full px-2.5 py-1 text-[11px] font-semibold",
@@ -1188,36 +1296,34 @@ export function GlBalanceSheetReport() {
           </span>
         ) : null}
       </div>
-      {loading || !data ? (
-        <div className="mt-6 flex items-center gap-2 text-[12px] text-black/45">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…
-        </div>
+      {loading ? (
+        <GlBalanceSheetSkeleton />
       ) : (
         <>
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <StatPill label="Assets" value={data.totalAssets} />
-            <StatPill label="Liabilities" value={data.totalLiabilities} />
-            <StatPill label="Equity" value={data.totalEquity} />
-            <StatPill label="Period P&L" value={data.currentPeriodProfit} />
+            <StatPill label="Assets" value={data?.totalAssets ?? 0} />
+            <StatPill label="Liabilities" value={data?.totalLiabilities ?? 0} />
+            <StatPill label="Equity" value={data?.totalEquity ?? 0} />
+            <StatPill label="Period P&L" value={data?.currentPeriodProfit ?? 0} />
           </div>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             <GlReportGroupColumn
               title="Assets"
-              total={data.totalAssets}
-              groups={data.groups.filter((g) => g.sector === "assets")}
+              total={data?.totalAssets ?? 0}
+              groups={(data?.groups ?? []).filter((g) => g.sector === "assets")}
             />
             <div className="space-y-4">
               <GlReportGroupColumn
                 title="Liabilities"
-                total={data.totalLiabilities}
-                groups={data.groups.filter((g) => g.sector === "liabilities")}
+                total={data?.totalLiabilities ?? 0}
+                groups={(data?.groups ?? []).filter((g) => g.sector === "liabilities")}
               />
               <GlReportGroupColumn
                 title="Equity"
-                total={data.totalEquity}
-                groups={data.groups.filter((g) => g.sector === "equity")}
+                total={data?.totalEquity ?? 0}
+                groups={(data?.groups ?? []).filter((g) => g.sector === "equity")}
                 footer={
-                  data.currentPeriodProfit !== 0
+                  data?.currentPeriodProfit
                     ? `Includes current period P&L ${inr(data.currentPeriodProfit)}`
                     : undefined
                 }
