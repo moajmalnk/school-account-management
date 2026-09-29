@@ -21,8 +21,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { InfoTip } from "@/components/ui/info-tip";
 import { OrganicCard } from "@/components/ui/organic-card";
 import { useAuth } from "@/lib/auth";
+import { SUPPORT_CHAT_TIP } from "@/lib/help/settings-tips";
 import { ApiError, getApiToken } from "@/lib/api/client";
 import {
   closeSupportTicket,
@@ -434,7 +436,10 @@ export function CustomerSupportCard({
                 </button>
               ) : null}
               <div className="min-w-0 flex-1 px-1">
-                <div className="text-[16px] font-semibold text-black dark:text-zinc-100">Chats</div>
+                <div className="flex items-center gap-1 text-[16px] font-semibold text-black dark:text-zinc-100">
+                  Chats
+                  <InfoTip content={SUPPORT_CHAT_TIP} side="bottom" />
+                </div>
               </div>
               <div className="flex shrink-0 items-center">
                 <Link

@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { InfoTip } from "@/components/ui/info-tip";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DOCUMENT_NUMBERS_TIP } from "@/lib/help/settings-tips";
 import { getApiToken } from "@/lib/api/client";
 import {
   apiFetchDocumentSequences,
@@ -149,8 +151,9 @@ export function DocumentNumbersPanel({
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+          <Label className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
             Document numbers
+            <InfoTip content={DOCUMENT_NUMBERS_TIP} className="-my-1" />
           </Label>
           <p className="mt-0.5 text-[11px] text-black/45 dark:text-zinc-500">
             Starting order for receipts, payment vouchers, and salary slips · scoped to{" "}

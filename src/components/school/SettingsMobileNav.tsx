@@ -1,6 +1,7 @@
 import { ArrowLeft } from "lucide-react";
 import { createContext, useContext, type ReactNode } from "react";
 
+import { InfoTip, type InfoTipContent } from "@/components/ui/info-tip";
 import { cn } from "@/lib/utils";
 
 const SettingsMobileNavContext = createContext<(() => void) | null>(null);
@@ -45,12 +46,14 @@ export function SettingsResponsiveCardHeader({
   action,
   titleClassName,
   subtitleClassName,
+  info,
 }: {
   title: string;
   subtitle: string;
   action?: ReactNode;
   titleClassName?: string;
   subtitleClassName?: string;
+  info?: InfoTipContent;
 }) {
   const onBack = useSettingsMobileBack();
 
@@ -59,7 +62,7 @@ export function SettingsResponsiveCardHeader({
       {onBack ? (
         <div className="mb-3 flex items-center gap-1 border-b border-[#EFEFEF] pb-2.5 dark:border-white/10 lg:hidden">
           <SettingsMobileBackButton />
-          <div className="min-w-0 flex-1 px-1">
+          <div className="flex min-w-0 flex-1 items-center gap-1 px-1">
             <div
               className={cn(
                 "truncate text-[16px] font-semibold text-black dark:text-zinc-100",
@@ -68,19 +71,23 @@ export function SettingsResponsiveCardHeader({
             >
               {title}
             </div>
+            {info ? <InfoTip content={info} side="bottom" /> : null}
           </div>
           {action ? <div className="shrink-0">{action}</div> : null}
         </div>
       ) : null}
       <div className={cn("flex items-start justify-between gap-3", onBack && "hidden lg:flex")}>
         <div className="min-w-0 flex-1">
-          <div
-            className={cn(
-              "truncate text-[18px] font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50",
-              titleClassName,
-            )}
-          >
-            {title}
+          <div className="flex min-w-0 items-center gap-1.5">
+            <div
+              className={cn(
+                "truncate text-[18px] font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50",
+                titleClassName,
+              )}
+            >
+              {title}
+            </div>
+            {info ? <InfoTip content={info} side="bottom" /> : null}
           </div>
           <p
             className={cn("mt-1 text-[12px] text-slate-500 dark:text-zinc-400", subtitleClassName)}

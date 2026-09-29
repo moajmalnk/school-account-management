@@ -3,6 +3,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
+import { InfoTip, type InfoTipContent } from "@/components/ui/info-tip";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -113,17 +114,28 @@ export function feeScheduleFromDraft(draft: FeeScheduleDraft): ClassFeeLine[] {
   });
 }
 
+export type FeeScheduleHints = Partial<
+  Record<
+    "structure" | "billingMode" | "amounts" | "count" | "schedule" | "startMonth",
+    InfoTipContent
+  >
+>;
+
 type FeeScheduleEditorProps = {
   value: FeeScheduleDraft;
   onChange: (next: FeeScheduleDraft) => void;
   amountLabel?: string;
+  hints?: FeeScheduleHints;
 };
 
 export function FeeScheduleEditor({
   value,
   onChange,
   amountLabel = moneyColumnLabel("Amount each"),
+  hints,
 }: FeeScheduleEditorProps) {
+  const tip = (key: keyof FeeScheduleHints) =>
+    hints?.[key] ? <InfoTip content={hints[key]} className="-my-1 ml-1" /> : null;
   const defaultCount = (cycle: FeeScheduleDraft["billingCycle"]) => (cycle === "Term" ? 4 : 10);
 
   const rebuildRows = (
@@ -179,8 +191,9 @@ export function FeeScheduleEditor({
   return (
     <div className="space-y-3 rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] p-3.5 dark:border-white/10 dark:bg-zinc-900/50">
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-500">
+        <p className="flex items-center text-[11px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-500">
           Fee structure
+          {tip("structure")}
         </p>
         <p className="mt-1 text-[12px] leading-snug text-black/50 dark:text-zinc-400">
           {value.billingModeChosen
@@ -193,8 +206,9 @@ export function FeeScheduleEditor({
 
       {!value.billingModeChosen ? (
         <div className="space-y-1.5">
-          <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+          <Label className="flex items-center text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
             Fee billing mode
+            {tip("billingMode")}
           </Label>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {(
@@ -231,8 +245,9 @@ export function FeeScheduleEditor({
         <>
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#CCFBF1] bg-[#F0FDFA] px-3 py-2.5 dark:border-teal-900/50 dark:bg-teal-950/30">
             <div className="min-w-0">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-[#0F766E]/70 dark:text-[#5EEAD4]/70">
+              <div className="flex items-center text-[10px] font-semibold uppercase tracking-wider text-[#0F766E]/70 dark:text-[#5EEAD4]/70">
                 Billing mode
+                {tip("billingMode")}
               </div>
               <div className="text-[14px] font-semibold text-[#0F766E] dark:text-[#5EEAD4]">
                 {value.billingCycle === "Term" ? "Term" : "Monthly"}
@@ -248,8 +263,9 @@ export function FeeScheduleEditor({
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+            <Label className="flex items-center text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
               Amounts
+              {tip("amounts")}
             </Label>
             <div className="flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1 dark:border-white/15 dark:bg-zinc-950">
               {(
@@ -305,8 +321,9 @@ export function FeeScheduleEditor({
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+              <Label className="flex items-center text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                 {value.billingCycle === "Term" ? "Number of terms" : "Number of installments"}
+                {tip("count")}
               </Label>
               <Input
                 inputMode="numeric"
@@ -359,8 +376,9 @@ export function FeeScheduleEditor({
 
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-500">
+              <p className="flex items-center text-[11px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-500">
                 {value.billingCycle === "Term" ? "Term schedule" : "Installment schedule"}
+                {tip("schedule")}
               </p>
               {value.feeAmountMode === "custom" ? (
                 <Button
@@ -475,8 +493,9 @@ export function FeeScheduleEditor({
 
           {value.billingCycle === "Monthly" ? (
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+              <Label className="flex items-center text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                 Fee collection starts from
+                {tip("startMonth")}
               </Label>
               <Select
                 value={value.feeCollectionStartMonth}

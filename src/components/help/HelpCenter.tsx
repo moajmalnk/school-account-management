@@ -14,6 +14,7 @@ import {
   Rocket,
   Search,
   Settings,
+  Sparkles,
   UserCog,
   Wallet,
   X,
@@ -32,8 +33,10 @@ import {
 import { WhatsAppIcon } from "@/components/ui/whatsapp-icon";
 import { useAuth } from "@/lib/auth";
 import { BRAND } from "@/lib/brand";
+import { askFeezo } from "@/lib/feezo-ai-bridge";
 import { canUseHelpAccess } from "@/lib/help/access";
 import { HELP_GLOSSARY, type GlossaryTerm } from "@/lib/help/glossary";
+import { searchHelp } from "@/lib/help/search";
 import {
   HELP_CATEGORIES,
   HELP_FAQS,
@@ -55,39 +58,6 @@ const CATEGORY_ICONS: Record<HelpCategoryId, LucideIcon> = {
   settings: Settings,
   subscription: CreditCard,
 };
-
-function normalize(text: string) {
-  return text.toLowerCase().normalize("NFKD");
-}
-
-function tokenize(query: string) {
-  return normalize(query)
-    .split(/[^a-z0-9&]+/)
-    .filter((t) => t.length > 1);
-}
-
-function scoreGuide(guide: HelpGuide, tokens: string[]): number {
-  const title = normalize(guide.title);
-  const summary = normalize(guide.summary);
-  const keywords = normalize(guide.keywords.join(" "));
-  const body = normalize(guide.steps.map((s) => `${s.title} ${s.body} ${s.tip ?? ""}`).join(" "));
-  let score = 0;
-  for (const token of tokens) {
-    let hit = 0;
-    if (title.includes(token)) hit += 6;
-    if (keywords.includes(token)) hit += 4;
-    if (summary.includes(token)) hit += 2;
-    if (body.includes(token)) hit += 1;
-    if (!hit) return 0;
-    score += hit;
-  }
-  return score;
-}
-
-function matchesAll(text: string, tokens: string[]) {
-  const hay = normalize(text);
-  return tokens.every((t) => hay.includes(t));
-}
 
 export function HelpCenter() {
   const { session } = useAuth();
@@ -144,26 +114,23 @@ export function HelpCenter() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
-  const tokens = useMemo(() => tokenize(query), [query]);
-  const searching = tokens.length > 0;
+  const searching = query.trim().length >= 2;
+  const results = useMemo(() => searchHelp(query, guides), [guides, query]);
 
-  const results = useMemo(() => {
-    if (!searching) return { guides: [], terms: [], faqs: [] };
-    const guideHits = guides
-      .map((g) => ({ g, s: scoreGuide(g, tokens) }))
-      .filter((x) => x.s > 0)
-      .sort((a, b) => b.s - a.s)
-      .map((x) => x.g);
-    const terms = HELP_GLOSSARY.filter((t) => matchesAll(`${t.term} ${t.meaning}`, tokens));
-    const faqs = HELP_FAQS.filter((f) => matchesAll(`${f.question} ${f.answer}`, tokens));
-    return { guides: guideHits, terms, faqs };
-  }, [guides, searching, tokens]);
+  const askAi = useCallback(
+    (prompt?: string) => {
+      const text = (prompt ?? query).trim();
+      askFeezo(text || "Help me set up my school in Feezo step by step.");
+    },
+    [query],
+  );
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     commitQuery(query);
     const top = results.guides[0];
     if (top) openGuide(top.id);
+    else if (searching) askAi();
   };
 
   const clearSearch = () => {
@@ -243,6 +210,26 @@ export function HelpCenter() {
               ))}
             </div>
           )}
+
+          <button
+            type="button"
+            onClick={() => askAi()}
+            className="group mt-5 flex w-full items-center gap-3 rounded-2xl border border-[#0F766E]/15 bg-white/90 p-3 text-left shadow-sm backdrop-blur transition-all hover:border-[#0F766E]/40 hover:shadow-[0_12px_30px_-16px_rgba(15,118,110,0.45)] dark:border-teal-400/15 dark:bg-zinc-900/80 dark:hover:border-teal-400/35 sm:max-w-xl"
+          >
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#0F766E] to-[#0D5C56] text-white shadow-sm ring-1 ring-white/25">
+              <Sparkles className="h-4 w-4" strokeWidth={2.35} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[13.5px] font-semibold text-slate-900 dark:text-zinc-50">
+                Ask Feezo AI instead
+              </span>
+              <span className="block text-[12px] leading-snug text-slate-500 dark:text-zinc-400">
+                Ask in your own words, in English or Malayalam. It answers from these guides and can
+                open the right screen for you.
+              </span>
+            </span>
+            <ArrowRight className="h-4 w-4 shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-[#0F766E] dark:text-zinc-600 dark:group-hover:text-[#2DD4BF]" />
+          </button>
         </div>
       </section>
 
@@ -254,6 +241,7 @@ export function HelpCenter() {
           faqs={results.faqs}
           onOpenGuide={openGuide}
           onClear={clearSearch}
+          onAskAi={() => askAi()}
         />
       ) : (
         <>
@@ -346,6 +334,9 @@ export function HelpCenter() {
           if (!open) closeGuide();
         }}
         onOpenGuide={openGuide}
+        onAskAi={(guide) =>
+          askAi(`I'm reading the guide "${guide.title}". Explain it simply and help me do it.`)
+        }
       />
     </div>
   );
@@ -387,6 +378,7 @@ function SearchResults({
   faqs,
   onOpenGuide,
   onClear,
+  onAskAi,
 }: {
   query: string;
   guides: HelpGuide[];
@@ -394,6 +386,7 @@ function SearchResults({
   faqs: HelpFaq[];
   onOpenGuide: (id: string) => void;
   onClear: () => void;
+  onAskAi: () => void;
 }) {
   const total = guides.length + terms.length + faqs.length;
   return (
@@ -413,9 +406,27 @@ function SearchResults({
         </button>
       </div>
 
+      <button
+        type="button"
+        onClick={onAskAi}
+        className="mt-3 flex w-full items-center gap-3 rounded-xl border border-[#0F766E]/20 bg-gradient-to-r from-[#F0FDFA] to-white p-3 text-left transition-colors hover:border-[#0F766E]/45 dark:border-teal-400/20 dark:from-teal-950/40 dark:to-zinc-900"
+      >
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#0F766E] text-white dark:bg-teal-700">
+          <Sparkles className="h-3.5 w-3.5" />
+        </span>
+        <span className="min-w-0 flex-1 text-[13px] text-slate-700 dark:text-zinc-200">
+          {total === 0 ? "No guide matches. " : ""}
+          <span className="font-semibold text-[#0F766E] dark:text-[#2DD4BF]">
+            Ask Feezo AI
+          </span>{" "}
+          <span className="break-words">“{query}”</span>
+        </span>
+        <ArrowRight className="h-4 w-4 shrink-0 text-[#0F766E] dark:text-[#2DD4BF]" />
+      </button>
+
       {total === 0 && (
         <p className="mt-2 text-[13px] text-slate-500 dark:text-zinc-400">
-          Try a simpler word like “fee”, “student” or “salary”, or ask the Feezo team below.
+          Or try a simpler word like “fee”, “student” or “salary”, or talk to the Feezo team below.
         </p>
       )}
 

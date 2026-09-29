@@ -1,12 +1,15 @@
 import {
   BarChart3,
+  BookOpen,
   FileText,
+  Headset,
   Loader2,
   Maximize2,
   MessageSquarePlus,
   Mic,
   MicOff,
   Minimize2,
+  Rocket,
   Send,
   Sparkles,
   UserRound,
@@ -19,6 +22,7 @@ import { createPortal } from "react-dom";
 import { FeezoConfirmCard } from "@/components/ai/FeezoConfirmCard";
 import { FeezoMessageActions } from "@/components/ai/FeezoMessageActions";
 import { FeezoMessageRenderer } from "@/components/ai/FeezoMessageRenderer";
+import { FeezoRichText } from "@/components/ai/FeezoRichText";
 import type { useFeezoAssistant } from "@/components/ai/useFeezoAssistant";
 import { useFeezoVoice } from "@/components/ai/useFeezoVoice";
 import { cn } from "@/lib/utils";
@@ -38,6 +42,12 @@ type Tip = {
 const TIPS_EN: Tip[] = [
   { label: "Financial status", prompt: "What is our current financial status?", icon: Wallet },
   { label: "Overdue fees", prompt: "Show overdue fee students", icon: BarChart3 },
+  { label: "How do I…", prompt: "How do I collect a fee and send the receipt?", icon: BookOpen },
+  {
+    label: "Set up my school",
+    prompt: "Help me set up my school in Feezo step by step",
+    icon: Rocket,
+  },
   { label: "Fees report", prompt: "Open fees report", icon: FileText },
   { label: "Student profile", prompt: "Open Muhammed class 4 profile", icon: UserRound },
 ];
@@ -45,6 +55,16 @@ const TIPS_EN: Tip[] = [
 const TIPS_ML: Tip[] = [
   { label: "സാമ്പത്തിക സ്ഥിതി", prompt: "ഇപ്പോഴത്തെ സാമ്പത്തിക സ്ഥിതി?", icon: Wallet },
   { label: "കുടിശ്ശിക", prompt: "കുടിശ്ശികയുള്ള വിദ്യാർത്ഥികൾ", icon: BarChart3 },
+  {
+    label: "എങ്ങനെ…",
+    prompt: "ഫീസ് വാങ്ങി രസീത് അയക്കുന്നത് എങ്ങനെ?",
+    icon: BookOpen,
+  },
+  {
+    label: "സ്കൂൾ സെറ്റപ്പ്",
+    prompt: "എന്റെ സ്കൂൾ Feezo-ൽ സെറ്റപ്പ് ചെയ്യാൻ സഹായിക്കൂ",
+    icon: Rocket,
+  },
   { label: "ഫീസ് റിപ്പോർട്ട്", prompt: "ഫീസ് റിപ്പോർട്ട് തുറക്കുക", icon: FileText },
   { label: "വിദ്യാർത്ഥി", prompt: "മുഹമ്മദ് ക്ലാസ് 4 പ്രൊഫൈൽ തുറക്കുക", icon: UserRound },
 ];
@@ -192,6 +212,9 @@ export function FeezoChatPanel({ assistant }: Props) {
 
   const iconBtn =
     "grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]/30 disabled:opacity-40 dark:text-zinc-400 dark:hover:bg-white/[0.08] dark:hover:text-zinc-100";
+
+  const helpLinkBtn =
+    "inline-flex items-center gap-1.5 rounded-full border border-slate-200/90 bg-white px-3 py-1.5 font-medium text-slate-600 transition hover:border-teal-300/70 hover:text-[#0F766E] dark:border-white/[0.08] dark:bg-zinc-900/70 dark:text-zinc-300 dark:hover:text-teal-300";
 
   const contentMax = fullscreen ? "mx-auto w-full max-w-3xl" : "";
 
@@ -400,6 +423,27 @@ export function FeezoChatPanel({ assistant }: Props) {
                   );
                 })}
               </div>
+
+              <div className="flex flex-wrap items-center justify-center gap-2 text-[11.5px]">
+                <button
+                  type="button"
+                  onClick={() => applyNavigation({ to: "/tenant/support" })}
+                  className={helpLinkBtn}
+                >
+                  <BookOpen className="h-3.5 w-3.5" />
+                  {locale === "ml" ? "സഹായ ഗൈഡുകൾ" : "Help guides"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    applyNavigation({ to: "/tenant/settings", search: { tab: "support" } })
+                  }
+                  className={helpLinkBtn}
+                >
+                  <Headset className="h-3.5 w-3.5" />
+                  {locale === "ml" ? "സപ്പോർട്ട് ടീമുമായി ചാറ്റ്" : "Chat with our team"}
+                </button>
+              </div>
             </div>
           ) : (
             <div className={cn("relative space-y-4 pb-2", contentMax)}>
@@ -440,7 +484,11 @@ export function FeezoChatPanel({ assistant }: Props) {
                             : "rounded-2xl rounded-tl-md border border-slate-200/90 bg-white text-slate-800 shadow-sm dark:border-white/[0.08] dark:bg-zinc-900 dark:text-zinc-100",
                         )}
                       >
-                        <div className="whitespace-pre-wrap">{m.content}</div>
+                        {isUser ? (
+                          <div className="whitespace-pre-wrap">{m.content}</div>
+                        ) : (
+                          <FeezoRichText text={m.content} />
+                        )}
                         {!isUser ? (
                           <>
                             <FeezoMessageRenderer

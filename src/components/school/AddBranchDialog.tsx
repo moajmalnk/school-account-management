@@ -11,8 +11,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { InfoTip } from "@/components/ui/info-tip";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BRANCH_CODE_TIP, BRANCH_COPY_TIP, BRANCH_ORDER_TIP } from "@/lib/help/settings-tips";
 import {
   Select,
   SelectContent,
@@ -234,7 +236,10 @@ export function AddBranchDialog({
             />
           </div>
           <div className="col-span-12 space-y-1.5 sm:col-span-3">
-            <Label htmlFor="branch-code">Code</Label>
+            <Label htmlFor="branch-code" className="flex items-center gap-1">
+              Code
+              <InfoTip content={BRANCH_CODE_TIP} className="-my-1" />
+            </Label>
             <Input
               id="branch-code"
               value={form.code}
@@ -244,7 +249,10 @@ export function AddBranchDialog({
             />
           </div>
           <div className="col-span-12 space-y-1.5 sm:col-span-3">
-            <Label htmlFor="branch-order">Order</Label>
+            <Label htmlFor="branch-order" className="flex items-center gap-1">
+              Order
+              <InfoTip content={BRANCH_ORDER_TIP} className="-my-1" />
+            </Label>
             <Input
               id="branch-order"
               type="number"
@@ -301,7 +309,10 @@ export function AddBranchDialog({
           </div>
           {!editing && orderedBranches.length > 0 ? (
             <div className="col-span-12 space-y-1.5">
-              <Label>Copy setup from</Label>
+              <Label className="flex items-center gap-1">
+                Copy setup from
+                <InfoTip content={BRANCH_COPY_TIP} className="-my-1" />
+              </Label>
               <Select
                 value={form.copyFromId || activeBranchId}
                 onValueChange={(v) => setForm((f) => ({ ...f, copyFromId: v }))}

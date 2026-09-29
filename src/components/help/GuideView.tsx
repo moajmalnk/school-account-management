@@ -6,6 +6,7 @@ import {
   Clock,
   ExternalLink,
   Lightbulb,
+  Sparkles,
   ThumbsDown,
   ThumbsUp,
 } from "lucide-react";
@@ -37,11 +38,13 @@ export function GuideView({
   related,
   onOpenChange,
   onOpenGuide,
+  onAskAi,
 }: {
   guide: HelpGuide | null;
   related: HelpGuide[];
   onOpenChange: (open: boolean) => void;
   onOpenGuide: (guideId: string) => void;
+  onAskAi: (guide: HelpGuide) => void;
 }) {
   const navigate = useNavigate();
   const [feedback, setFeedback] = useState<Feedback | undefined>();
@@ -214,24 +217,43 @@ export function GuideView({
                 ))}
                 {feedback === "down" && (
                   <span className="basis-full pt-1">
-                    Still stuck? Use the contact options at the bottom of the Support page.
+                    Still stuck?{" "}
+                    <button
+                      type="button"
+                      onClick={() => onAskAi(guide)}
+                      className="font-semibold text-[#0F766E] hover:underline dark:text-[#2DD4BF]"
+                    >
+                      Ask Feezo AI
+                    </button>{" "}
+                    or use the contact options at the bottom of the Support page.
                   </span>
                 )}
               </section>
             </div>
 
-            {guide.openTo && (
-              <footer className="shrink-0 border-t border-slate-200/80 bg-white/80 px-5 py-3.5 backdrop-blur dark:border-white/10 dark:bg-zinc-950/80 sm:px-6">
+            <footer className="flex shrink-0 gap-2 border-t border-slate-200/80 bg-white/80 px-5 py-3.5 backdrop-blur dark:border-white/10 dark:bg-zinc-950/80 sm:px-6">
+              <button
+                type="button"
+                onClick={() => onAskAi(guide)}
+                className={cn(
+                  "inline-flex h-11 items-center justify-center gap-2 rounded-full border border-[#0F766E]/25 bg-white px-4 text-[13.5px] font-semibold text-[#0F766E] transition-colors hover:border-[#0F766E]/50 hover:bg-[#F0FDFA] dark:border-teal-400/25 dark:bg-zinc-900 dark:text-[#2DD4BF] dark:hover:bg-teal-950/40",
+                  guide.openTo ? "shrink-0" : "w-full",
+                )}
+              >
+                <Sparkles className="h-4 w-4" />
+                Ask Feezo AI
+              </button>
+              {guide.openTo && (
                 <button
                   type="button"
                   onClick={openScreen}
-                  className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[#0F766E] px-5 text-[14px] font-semibold text-white shadow-[0_8px_24px_-10px_rgba(15,118,110,0.45)] transition-colors hover:bg-[#0D9488]"
+                  className="inline-flex h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-[#0F766E] px-5 text-[14px] font-semibold text-white shadow-[0_8px_24px_-10px_rgba(15,118,110,0.45)] transition-colors hover:bg-[#0D9488]"
                 >
-                  {guide.openTo.label}
-                  <ArrowRight className="h-4 w-4" />
+                  <span className="truncate">{guide.openTo.label}</span>
+                  <ArrowRight className="h-4 w-4 shrink-0" />
                 </button>
-              </footer>
-            )}
+              )}
+            </footer>
           </>
         )}
       </SheetContent>

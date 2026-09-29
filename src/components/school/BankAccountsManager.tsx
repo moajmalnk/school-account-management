@@ -11,8 +11,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { InfoTip } from "@/components/ui/info-tip";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BANK_DETAILS_TIP } from "@/lib/help/settings-tips";
 import {
   Select,
   SelectContent,
@@ -309,8 +311,9 @@ export function BankAccountsManager({ className }: { className?: string }) {
     <section className={cn("space-y-3", className)}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="text-[13px] font-bold tracking-tight text-slate-900 dark:text-zinc-50">
+          <h3 className="flex items-center gap-1 text-[13px] font-bold tracking-tight text-slate-900 dark:text-zinc-50">
             Bank details
+            <InfoTip content={BANK_DETAILS_TIP} className="-my-1" />
           </h3>
           <p className="mt-0.5 text-[12px] text-black/55 dark:text-zinc-400">
             Campus bank accounts used in transfers, day book, and ledgers

@@ -12,7 +12,8 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "help:kb": "npx --yes tsx scripts/export-help-kb.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

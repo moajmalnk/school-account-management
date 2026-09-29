@@ -304,6 +304,34 @@ import {
   useSettingsMobileBack,
 } from "@/components/school/SettingsMobileNav";
 import { SettingsBranchesCard } from "@/components/school/SettingsBranchesCard";
+import { InfoTip, type InfoTipContent } from "@/components/ui/info-tip";
+import {
+  CLASS_AMOUNTS_TIP,
+  CLASS_BILLING_MODE_TIP,
+  CLASS_IDENTITY_TIP,
+  CLASS_ONE_TIME_TIP,
+  CLASS_START_MONTH_TIP,
+  CLASSES_TIP,
+  DEPARTMENTS_TIP,
+  DOWNLOADS_TIP,
+  FINANCIAL_YEAR_TIP,
+  LEAVE_ACTIVE_TIP,
+  LEAVE_ALLOWANCE_TIP,
+  LEAVE_PAID_TIP,
+  LEAVE_TIP,
+  POSITIONS_TIP,
+  ROUTE_FEES_TIP,
+  ROUTE_POINTS_TIP,
+  ROUTE_VEHICLES_TIP,
+  ROUTES_TIP,
+  SCHOOL_DETAILS_TIP,
+  SCHOOL_MEDIA_TIPS,
+  SCHOOL_TEXT_FIELDS_TIP,
+  SYSTEM_TIP,
+  THEME_TIP,
+  VEHICLE_DOCS_TIP,
+  VEHICLES_TIP,
+} from "@/lib/help/settings-tips";
 import { CustomerSupportCard } from "@/components/school/CustomerSupportCard";
 import { DefaultSchoolSeal } from "@/components/school/DefaultSchoolSeal";
 import {
@@ -16046,12 +16074,14 @@ function CardHeader({
   actionLabel,
   onAction,
   extraActions,
+  info,
 }: {
   title: string;
   subtitle: string;
   actionLabel: string;
   onAction: () => void;
   extraActions?: ReactNode;
+  info?: InfoTipContent;
 }) {
   const addButton = (
     <button
@@ -16067,6 +16097,7 @@ function CardHeader({
     <SettingsResponsiveCardHeader
       title={title}
       subtitle={subtitle}
+      info={info}
       action={
         extraActions ? (
           <div className="flex flex-wrap items-center justify-end gap-1.5">
@@ -16220,6 +16251,7 @@ function DepartmentsCard({
     <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
       <CardHeader
         title="Departments"
+        info={DEPARTMENTS_TIP}
         subtitle={`${departments.length} divisions · positions below · live staff counts`}
         actionLabel="Add Department"
         onAction={startCreate}
@@ -16427,6 +16459,7 @@ function RolesCard({
     <OrganicCard tone="white" cornerSide="bl" padded className={workspacePanelClass}>
       <CardHeader
         title="Positions"
+        info={POSITIONS_TIP}
         subtitle={`${roles.length} position & role names · used in Recruit Staff and Users`}
         actionLabel="Add Position"
         onAction={startCreate}
@@ -16691,6 +16724,7 @@ function LeaveTypesCard({
     <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
       <CardHeader
         title="Leave Management"
+        info={LEAVE_TIP}
         subtitle={`${leaveTypes.length} leave types · paid leave counts toward salary · unpaid leave is loss of pay`}
         actionLabel="Add Leave Type"
         onAction={startCreate}
@@ -16818,8 +16852,9 @@ function LeaveTypesCard({
             </div>
             <div className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3 py-2.5 dark:border-white/10 dark:bg-zinc-900/70">
               <div>
-                <div className="text-[13px] font-semibold text-black dark:text-zinc-100">
+                <div className="flex items-center gap-1 text-[13px] font-semibold text-black dark:text-zinc-100">
                   Paid leave
+                  <InfoTip content={LEAVE_PAID_TIP} className="-my-1" />
                 </div>
                 <div className="text-[11.5px] text-black/55 dark:text-zinc-400">
                   Counts toward salary when marked in attendance
@@ -16831,8 +16866,9 @@ function LeaveTypesCard({
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+              <Label className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                 Annual allowance (days)
+                <InfoTip content={LEAVE_ALLOWANCE_TIP} className="-my-1" />
               </Label>
               <Input
                 value={form.annualAllowanceDays}
@@ -16848,8 +16884,9 @@ function LeaveTypesCard({
             </div>
             <div className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3 py-2.5 dark:border-white/10 dark:bg-zinc-900/70">
               <div>
-                <div className="text-[13px] font-semibold text-black dark:text-zinc-100">
+                <div className="flex items-center gap-1 text-[13px] font-semibold text-black dark:text-zinc-100">
                   Active
+                  <InfoTip content={LEAVE_ACTIVE_TIP} className="-my-1" />
                 </div>
                 <div className="text-[11.5px] text-black/55 dark:text-zinc-400">
                   Inactive types stay in history but are hidden from new entries
@@ -17355,6 +17392,7 @@ function ClassesCard({
     <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
       <CardHeader
         title="Classes"
+        info={CLASSES_TIP}
         subtitle="Per-class fee schedule for Receive Payment"
         actionLabel="Add Class"
         onAction={startCreate}
@@ -17557,8 +17595,9 @@ function ClassesCard({
           <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
               <div className="space-y-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-black/45">
                   Class identity
+                  <InfoTip content={CLASS_IDENTITY_TIP} className="-my-1" />
                 </p>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
@@ -17615,8 +17654,9 @@ function ClassesCard({
 
                 {!form.billingModeChosen ? (
                   <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                    <Label className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                       Fee billing mode
+                      <InfoTip content={CLASS_BILLING_MODE_TIP} className="-my-1" />
                     </Label>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       {(
@@ -17673,8 +17713,9 @@ function ClassesCard({
                     </div>
 
                     <div className="space-y-1.5">
-                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                      <Label className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                         Amounts
+                        <InfoTip content={CLASS_AMOUNTS_TIP} className="-my-1" />
                       </Label>
                       <div className="flex flex-col gap-1 rounded-2xl border border-[#E5E5E5] bg-white p-1 dark:border-white/10 dark:bg-zinc-900 sm:flex-row sm:rounded-full">
                         {(
@@ -17974,8 +18015,9 @@ function ClassesCard({
 
                     {form.billingCycle === "Monthly" ? (
                       <div className="space-y-1.5">
-                        <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                        <Label className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                           Fee collection starts from
+                          <InfoTip content={CLASS_START_MONTH_TIP} className="-my-1" />
                         </Label>
                         <FieldSelect
                           value={form.feeCollectionStartMonth}
@@ -17996,8 +18038,9 @@ function ClassesCard({
 
                 <div className="space-y-2 border-t border-[#E8E8EA] pt-3">
                   <div className="flex items-center justify-between gap-2">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                    <Label className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-black/55">
                       One-time fees
+                      <InfoTip content={CLASS_ONE_TIME_TIP} className="-my-1" />
                     </Label>
                     <button
                       type="button"
@@ -18662,6 +18705,7 @@ function VehicleCard({
         <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass}>
           <CardHeader
             title="Vehicle Management"
+            info={VEHICLES_TIP}
             subtitle={`${activeCount} active · ${transportVehicles.length} total in fleet`}
             actionLabel="Add Vehicle"
             onAction={startCreate}
@@ -19089,6 +19133,7 @@ function VehicleCard({
                 <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                   <Paperclip className="h-3.5 w-3.5" />
                   Documents & validity
+                  <InfoTip content={VEHICLE_DOCS_TIP} className="-my-1" />
                 </div>
                 <span className="text-[10px] text-black/40">Alerts before expiry</span>
               </div>
@@ -19760,6 +19805,7 @@ function TransportCard({
     <OrganicCard tone="white" cornerSide="bl" padded className={workspacePanelClass}>
       <CardHeader
         title="Transport Routes"
+        info={ROUTES_TIP}
         subtitle={`${transportRoutes.length} routes · morning, evening & both-shift fees`}
         actionLabel="Add Route"
         onAction={startCreate}
@@ -20153,6 +20199,10 @@ function TransportCard({
           </DialogHeader>
           <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-3 sm:px-6 sm:py-4">
+              <p className="-mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
+                Pickup & drop points
+                <InfoTip content={ROUTE_POINTS_TIP} className="-my-1" />
+              </p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
                 <LocationPicker
                   label="Map From · Bus Point 1 (pickup)"
@@ -20188,8 +20238,9 @@ function TransportCard({
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="space-y-1.5">
-                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                  <Label className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                     {moneyColumnLabel("Morning Fee")}
+                    <InfoTip content={ROUTE_FEES_TIP} className="-my-1" />
                   </Label>
                   <Input
                     inputMode="numeric"
@@ -20232,8 +20283,9 @@ function TransportCard({
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                <Label className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                   Assigned vehicles
+                  <InfoTip content={ROUTE_VEHICLES_TIP} className="-my-1" />
                 </Label>
                 {selectableVehicles.length === 0 ? (
                   <p className="rounded-lg border border-dashed border-[#E5E5E5] px-3 py-4 text-center text-[12px] text-black/45">
@@ -20370,8 +20422,9 @@ function TransportCard({
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                  <Label className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                     Amounts
+                    <InfoTip content={CLASS_AMOUNTS_TIP} className="-my-1" />
                   </Label>
                   <div className="flex gap-1 rounded-full border border-[#E5E5E5] bg-white p-1 dark:border-white/10 dark:bg-zinc-900">
                     {(
@@ -20648,8 +20701,9 @@ function TransportCard({
 
                 {form.billingCycle === "Monthly" ? (
                   <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                    <Label className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                       Fee collection starts from
+                      <InfoTip content={CLASS_START_MONTH_TIP} className="-my-1" />
                     </Label>
                     <FieldSelect
                       value={form.feeCollectionStartMonth}
@@ -20826,8 +20880,10 @@ function SchoolDetailsMediaField({
   onRemove,
   removeAriaLabel,
   extraActions,
+  info,
 }: {
   label: string;
+  info?: InfoTipContent;
   badge?: ReactNode;
   specs: SchoolBrandMediaSpec;
   preview: ReactNode;
@@ -20860,6 +20916,7 @@ function SchoolDetailsMediaField({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
           {label}
+          {info ? <InfoTip content={info} className="-mx-1 -my-1" /> : null}
           {badge}
         </span>
         <div className="flex flex-wrap items-center justify-end gap-1">
@@ -21188,16 +21245,18 @@ function SchoolDetailsCard({
           <div className="mb-3 flex items-center gap-1 border-b border-[#EFEFEF] pb-2.5 dark:border-white/10 lg:hidden">
             <SettingsMobileBackButton />
             <div className="min-w-0 flex-1 px-1">
-              <div className="text-[16px] font-semibold text-black dark:text-zinc-100">
+              <div className="flex items-center gap-1 text-[16px] font-semibold text-black dark:text-zinc-100">
                 School Details
+                <InfoTip content={SCHOOL_DETAILS_TIP} side="bottom" />
               </div>
             </div>
           </div>
         ) : null}
         <div className="flex flex-col gap-3 border-b border-black/[0.06] pb-4 dark:border-white/10 sm:flex-row sm:items-center sm:justify-between">
           <div className={cn("min-w-0 flex-1", onBackToSettings && "hidden lg:block")}>
-            <div className="text-[18px] font-bold leading-tight tracking-tight text-black dark:text-zinc-50">
+            <div className="flex items-center gap-1.5 text-[18px] font-bold leading-tight tracking-tight text-black dark:text-zinc-50">
               School Details
+              <InfoTip content={SCHOOL_DETAILS_TIP} side="bottom" />
             </div>
             <p className="mt-1 text-[12px] text-black/55 dark:text-zinc-400">
               Logo, letterhead, signature, and seal for this campus
@@ -21235,6 +21294,7 @@ function SchoolDetailsCard({
           <div className="grid grid-cols-12 gap-3">
             <SchoolDetailsMediaField
               label="Logo"
+              info={SCHOOL_MEDIA_TIPS.logo}
               specs={SCHOOL_BRAND_MEDIA_SPECS.logo}
               canAdjust={Boolean(draft.logoUrl)}
               adjustLoading={cropLoading === "logo"}
@@ -21259,6 +21319,7 @@ function SchoolDetailsCard({
 
             <SchoolDetailsMediaField
               label="Letterhead"
+              info={SCHOOL_MEDIA_TIPS.letterhead}
               specs={SCHOOL_BRAND_MEDIA_SPECS.letterhead}
               canAdjust={Boolean(draft.letterheadUrl)}
               adjustLoading={cropLoading === "letterhead"}
@@ -21286,6 +21347,7 @@ function SchoolDetailsCard({
           <div className="grid grid-cols-12 gap-3">
             <SchoolDetailsMediaField
               label="Seal"
+              info={SCHOOL_MEDIA_TIPS.seal}
               specs={SCHOOL_BRAND_MEDIA_SPECS.seal}
               badge={
                 !draft.sealUrl ? (
@@ -21319,6 +21381,7 @@ function SchoolDetailsCard({
 
             <SchoolDetailsMediaField
               label="Signature"
+              info={SCHOOL_MEDIA_TIPS.signature}
               specs={SCHOOL_BRAND_MEDIA_SPECS.signature}
               badge={
                 !draft.signatureUrl ? (
@@ -21383,8 +21446,9 @@ function SchoolDetailsCard({
 
           <div className="grid grid-cols-12 gap-3">
             <div className="col-span-12 lg:col-span-4">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+              <Label className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                 School Name
+                <InfoTip content={SCHOOL_TEXT_FIELDS_TIP} className="-my-1" />
               </Label>
               <Input
                 value={draft.name}
@@ -21735,6 +21799,7 @@ function CategoriesCard({
     >
       <SettingsResponsiveCardHeader
         title="System Constants"
+        info={SYSTEM_TIP}
         subtitle="Financial year books, document numbers per campus, then how the workspace and downloads look"
         titleClassName="text-black dark:text-zinc-50"
         subtitleClassName="text-black/55"
@@ -21744,8 +21809,9 @@ function CategoriesCard({
         <div className="col-span-12 self-start rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-7 dark:border-white/10 dark:bg-zinc-900/40">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+              <Label className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                 Financial Year
+                <InfoTip content={FINANCIAL_YEAR_TIP} className="-my-1" />
               </Label>
               <p className="mt-0.5 text-[11px] text-black/45">
                 Open books · close finished years · edit start and closing months · hard-delete
@@ -21883,7 +21949,7 @@ function CategoriesCard({
         </div>
 
         <div className="col-span-12 self-start space-y-4 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-5 dark:border-white/10 dark:bg-zinc-900/40">
-          <ThemeSection title="Colors">
+          <ThemeSection title="Colors" info={THEME_TIP}>
             <ThemeColorField
               label="Primary"
               value={themeSettings.primaryColor}
@@ -22006,8 +22072,9 @@ function CategoriesCard({
         <DocumentNumbersPanel branchId={activeBranchId} branchName={activeBranch?.name} />
 
         <div className="col-span-12 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 dark:border-white/10 dark:bg-zinc-900/40">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-black/35 dark:text-zinc-500">
+          <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-black/35 dark:text-zinc-500">
             Downloads
+            <InfoTip content={DOWNLOADS_TIP} className="-my-1" />
           </div>
           <p className="mt-1.5 text-[10.5px] leading-relaxed text-black/45 dark:text-zinc-500">
             File names for each download. Hover the{" "}
@@ -22149,11 +22216,20 @@ function CategoriesCard({
   );
 }
 
-function ThemeSection({ title, children }: { title: string; children: ReactNode }) {
+function ThemeSection({
+  title,
+  info,
+  children,
+}: {
+  title: string;
+  info?: InfoTipContent;
+  children: ReactNode;
+}) {
   return (
     <div className="space-y-2.5">
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/35 dark:text-zinc-500">
+      <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-black/35 dark:text-zinc-500">
         {title}
+        {info ? <InfoTip content={info} className="-my-1" /> : null}
       </div>
       <div className="space-y-2.5">{children}</div>
     </div>

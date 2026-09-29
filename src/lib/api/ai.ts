@@ -63,9 +63,17 @@ export type FeezoChatResponse = {
   model?: string;
 };
 
+export type FeezoPageContext = {
+  /** Tenant page the user was on, e.g. `/tenant/finance?tab=fees`. */
+  path?: string;
+  /** Help guide id open on the Support page. */
+  guide?: string;
+};
+
 export async function apiAiChat(input: {
   messages: FeezoChatMessage[];
   locale: FeezoLocale;
+  context?: FeezoPageContext;
 }): Promise<FeezoChatResponse> {
   const data = await apiRequest<FeezoChatResponse>("/api/ai/chat.php", {
     method: "POST",

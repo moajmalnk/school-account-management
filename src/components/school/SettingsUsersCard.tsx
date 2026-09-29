@@ -4,6 +4,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { InfoTip } from "@/components/ui/info-tip";
 import {
   Dialog,
   DialogContent,
@@ -16,6 +17,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OrganicCard } from "@/components/ui/organic-card";
 import { apiDeleteTenantUser, apiUpsertTenantUser } from "@/lib/api/settings";
+import {
+  USER_ACTIVE_TIP,
+  USER_CAMPUSES_TIP,
+  USER_MODULES_TIP,
+  USER_PASSWORD_TIP,
+  USER_ROLE_TIP,
+  USER_STAFF_TIP,
+  USERS_TIP,
+} from "@/lib/help/settings-tips";
 import {
   Select,
   SelectContent,
@@ -71,6 +81,7 @@ function CardHeader({
       title={title}
       subtitle={subtitle}
       action={action}
+      info={USERS_TIP}
       titleClassName="text-title font-bold"
       subtitleClassName="text-[11.5px]"
     />
@@ -565,7 +576,10 @@ export function SettingsUsersCard({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Password</Label>
+                  <Label className="flex items-center gap-1">
+                    Password
+                    <InfoTip content={USER_PASSWORD_TIP} className="-my-1" />
+                  </Label>
                   <Input
                     type="text"
                     value={form.password}
@@ -574,7 +588,10 @@ export function SettingsUsersCard({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Position / Role</Label>
+                  <Label className="flex items-center gap-1">
+                    Position / Role
+                    <InfoTip content={USER_ROLE_TIP} className="-my-1" />
+                  </Label>
                   <Select
                     value={form.roleId || "__none__"}
                     onValueChange={(v) => setForm({ ...form, roleId: v === "__none__" ? "" : v })}
@@ -593,7 +610,10 @@ export function SettingsUsersCard({
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Link staff (optional)</Label>
+                  <Label className="flex items-center gap-1">
+                    Link staff (optional)
+                    <InfoTip content={USER_STAFF_TIP} className="-my-1" />
+                  </Label>
                   <Select
                     value={form.staffId || "__none__"}
                     onValueChange={(v) => setForm({ ...form, staffId: v === "__none__" ? "" : v })}
@@ -617,8 +637,9 @@ export function SettingsUsersCard({
                 <section className="space-y-2.5 rounded-xl border border-[#E5E5E5] bg-[#FAFAFA]/80 p-3.5 dark:border-white/10 dark:bg-zinc-900/40">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
-                      <h3 className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-zinc-400">
+                      <h3 className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-zinc-400">
                         Campuses
+                        <InfoTip content={USER_CAMPUSES_TIP} className="-my-1" />
                       </h3>
                       <p className="mt-0.5 text-[12px] text-slate-500 dark:text-zinc-400">
                         One or more campuses this login can open in the switcher.
@@ -682,8 +703,9 @@ export function SettingsUsersCard({
               <section className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <h3 className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-zinc-400">
+                    <h3 className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-zinc-400">
                       Module access
+                      <InfoTip content={USER_MODULES_TIP} className="-my-1" />
                     </h3>
                     <p className="mt-0.5 text-[12px] text-slate-500 dark:text-zinc-400">
                       Pick a preset, or fine-tune each module below.
@@ -779,13 +801,16 @@ export function SettingsUsersCard({
                 </div>
               </section>
 
-              <label className="flex cursor-pointer items-center gap-2 text-[13px] font-medium text-slate-800 dark:text-zinc-200">
-                <Checkbox
-                  checked={form.active}
-                  onCheckedChange={(v) => setForm({ ...form, active: v === true })}
-                />
-                Active (can sign in)
-              </label>
+              <div className="flex items-center gap-1">
+                <label className="flex cursor-pointer items-center gap-2 text-[13px] font-medium text-slate-800 dark:text-zinc-200">
+                  <Checkbox
+                    checked={form.active}
+                    onCheckedChange={(v) => setForm({ ...form, active: v === true })}
+                  />
+                  Active (can sign in)
+                </label>
+                <InfoTip content={USER_ACTIVE_TIP} />
+              </div>
             </div>
 
             <DialogFooter className="shrink-0 gap-2 border-t border-[#EFEFEF] px-5 py-3.5 dark:border-white/10 sm:justify-between sm:px-6">

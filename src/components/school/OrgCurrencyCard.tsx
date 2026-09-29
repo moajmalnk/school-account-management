@@ -12,7 +12,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { InfoTip } from "@/components/ui/info-tip";
 import { Label } from "@/components/ui/label";
+import { BASE_CURRENCY_TIP } from "@/lib/help/settings-tips";
 import {
   Select,
   SelectContent,
@@ -65,8 +67,9 @@ export function OrgCurrencyCard() {
   return (
     <div className="grid grid-cols-12 gap-4">
       <div className="col-span-12 sm:col-span-6 lg:col-span-6">
-        <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+        <Label className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
           Base currency
+          <InfoTip content={BASE_CURRENCY_TIP} className="-my-1" />
         </Label>
         <div className="mt-1.5 flex items-center gap-2">
           <Select

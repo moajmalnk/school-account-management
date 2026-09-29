@@ -1,5 +1,5 @@
 import { useNavigate, useRouterState } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -7,10 +7,16 @@ import {
   type FeezoChatMessage,
   type FeezoLocale,
   type FeezoNavigation,
+  type FeezoPageContext,
   type FeezoPendingAction,
   type FeezoUiBlock,
 } from "@/lib/api/ai";
 import { normalizeFeezoNavigation } from "@/lib/ai-navigation";
+import { useAuth } from "@/lib/auth";
+import { FEEZO_ASK_EVENT, type FeezoAskDetail } from "@/lib/feezo-ai-bridge";
+import { canUseHelpAccess } from "@/lib/help/access";
+import { buildOfflineHelpReply } from "@/lib/help/ai-fallback";
+import { HELP_GUIDES } from "@/lib/help/guides";
 import {
   apiCreateDisbursement,
   apiCreateFeeBreak,
@@ -133,10 +139,7 @@ function isSafeTenantReturn(path: string | undefined): path is string {
 }
 
 /** Navigate to a stored return URL like `/tenant/finance?tab=fees`. */
-function navigateReturn(
-  navigate: ReturnType<typeof useNavigate>,
-  from: string | undefined,
-) {
+function navigateReturn(navigate: ReturnType<typeof useNavigate>, from: string | undefined) {
   if (!isSafeTenantReturn(from)) {
     void navigate({ to: "/tenant/dashboard" });
     return;
@@ -152,8 +155,23 @@ function navigateReturn(
   void navigate({ to: path as "/tenant/dashboard", search } as never);
 }
 
+function pageContextFrom(path: string | undefined): FeezoPageContext | undefined {
+  if (!path || !path.startsWith("/tenant")) return undefined;
+  const q = path.indexOf("?");
+  const guide =
+    path.startsWith("/tenant/support") && q >= 0
+      ? new URLSearchParams(path.slice(q + 1)).get("guide") || undefined
+      : undefined;
+  return { path: path.slice(0, 160), guide };
+}
+
 export function useFeezoAssistant() {
   const navigate = useNavigate();
+  const { session } = useAuth();
+  const helpGuides = useMemo(
+    () => HELP_GUIDES.filter((g) => canUseHelpAccess(session, g.access)),
+    [session],
+  );
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const searchStr = useRouterState({ select: (s) => s.location.searchStr });
   const fromParam = useRouterState({
@@ -253,21 +271,43 @@ export function useFeezoAssistant() {
         const res = await apiAiChat({
           messages: toHistory(next),
           locale,
+          context: pageContextFrom(open ? fromParam : `${pathname}${searchStr || ""}`),
         });
 
+        const guideIds = new Set(helpGuides.map((g) => g.id));
+        const isAllowedGuide = (nav: { to?: string; search?: Record<string, unknown> }) =>
+          nav.to !== "/tenant/support" ||
+          !nav.search?.guide ||
+          guideIds.has(String(nav.search.guide));
         const assistant: FeezoThreadMessage = {
           id: uid(),
           role: "assistant",
           content: res.reply,
-          blocks: res.blocks,
+          blocks: res.blocks.map((b) =>
+            b.type === "buttons" ? { ...b, items: b.items.filter(isAllowedGuide) } : b,
+          ),
           pendingActions: res.pendingActions,
-          navigations: res.navigations,
+          navigations: res.navigations.filter(isAllowedGuide),
           model: res.model,
         };
         setMessages((prev) => [...prev, assistant]);
         // Keep chat open with View button / profile card — user taps View to open.
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Feezo request failed";
+        const offline = buildOfflineHelpReply(trimmed, helpGuides, locale);
+        if (offline) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: uid(),
+              role: "assistant",
+              content: offline.content,
+              navigations: offline.navigations,
+              model: "help-centre",
+            },
+          ]);
+          return;
+        }
         toast.error(msg);
         setMessages((prev) => [
           ...prev,
@@ -284,8 +324,31 @@ export function useFeezoAssistant() {
         setBusy(false);
       }
     },
-    [busy, locale, messages],
+    [busy, fromParam, helpGuides, locale, messages, open, pathname, searchStr],
   );
+
+  const [pendingAsk, setPendingAsk] = useState<string | null>(null);
+  const sendRef = useRef(send);
+  useEffect(() => {
+    sendRef.current = send;
+  }, [send]);
+
+  useEffect(() => {
+    const onAsk = (event: Event) => {
+      const prompt = (event as CustomEvent<FeezoAskDetail>).detail?.prompt?.trim();
+      if (!prompt) return;
+      setPendingAsk(prompt);
+      setOpen(true);
+    };
+    window.addEventListener(FEEZO_ASK_EVENT, onAsk);
+    return () => window.removeEventListener(FEEZO_ASK_EVENT, onAsk);
+  }, [setOpen]);
+
+  useEffect(() => {
+    if (!open || busy || !pendingAsk) return;
+    setPendingAsk(null);
+    void sendRef.current(pendingAsk);
+  }, [busy, open, pendingAsk]);
 
   const confirmAction = useCallback(
     async (action: FeezoPendingAction) => {
@@ -342,7 +405,8 @@ export function useFeezoAssistant() {
           case "finance.payments.create": {
             const payload = { ...action.payload } as Record<string, unknown>;
             const studentId = payload.studentId ? String(payload.studentId) : undefined;
-            const reduceDue = payload.reduceDue !== false && Boolean(studentId || payload.reduceDue);
+            const reduceDue =
+              payload.reduceDue !== false && Boolean(studentId || payload.reduceDue);
             delete payload.reduceDue;
             delete payload.studentId;
 
@@ -437,7 +501,9 @@ export function useFeezoAssistant() {
             throw new Error(`Unsupported action: ${action.api}`);
         }
 
-        toast.success(locale === "ml" ? "സ്ഥിരീകരിച്ചു — മാറ്റം സേവ് ചെയ്തു" : "Confirmed — change saved");
+        toast.success(
+          locale === "ml" ? "സ്ഥിരീകരിച്ചു — മാറ്റം സേവ് ചെയ്തു" : "Confirmed — change saved",
+        );
         setMessages((prev) =>
           prev.map((m) => ({
             ...m,

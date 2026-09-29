@@ -22,6 +22,7 @@ import { OrganicCard } from "@/components/ui/organic-card";
 import { invalidateRemoteTenantBundleCache } from "@/lib/api/tenant-sync";
 import { apiDeleteBranch, apiReorderBranches } from "@/lib/api/settings";
 import { getApiToken } from "@/lib/api/client";
+import { BRANCHES_TIP } from "@/lib/help/settings-tips";
 import { isMainCampusBranch, sortCampusBranches, type CampusBranch } from "@/lib/tenant-store";
 import { cn, glassCardClass } from "@/lib/utils";
 import { SettingsResponsiveCardHeader } from "@/components/school/SettingsMobileNav";
@@ -55,6 +56,7 @@ function CardHeader({
       title={title}
       subtitle={subtitle}
       action={action}
+      info={BRANCHES_TIP}
       titleClassName="text-title font-bold"
       subtitleClassName="text-[11.5px]"
     />
