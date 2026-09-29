@@ -16,9 +16,9 @@ export function StoreBadge({
 
   return (
     <motion.a
-      href={isPlay ? BRAND.playStoreUrl : "#"}
-      target={isPlay ? "_blank" : undefined}
-      rel={isPlay ? "noopener noreferrer" : undefined}
+      href={isPlay ? BRAND.playStoreUrl : BRAND.appStoreUrl}
+      target="_blank"
+      rel="noopener noreferrer"
       aria-label={isPlay ? "Get it on Google Play" : "Download on the App Store"}
       className={cn(
         "inline-flex h-[42px] min-w-0 flex-1 items-center gap-1.5 rounded-xl px-2.5 text-white shadow-[0_8px_24px_rgba(143,202,74,0.28)] transition-colors sm:h-[46px] sm:min-w-[132px] sm:flex-none sm:gap-2 sm:px-3.5",

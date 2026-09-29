@@ -5,6 +5,7 @@ export const BRAND = {
   mark: "/icons/feezo-mark.png",
   /** Google Play listing — used by marketing store badges. */
   playStoreUrl: "https://play.google.com/store/apps/details?id=com.bzole.feezo",
+  appStoreUrl: "https://apps.apple.com/in/app/feezo/id6811416005",
   legal: {
     termsPath: "/terms",
     privacyPath: "/privacy",
