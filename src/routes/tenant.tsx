@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Bell, ChevronLeft, Home, Settings, UserCog, Users, Wallet } from "lucide-react";
+import { Bell, ChevronLeft, Home, LifeBuoy, Settings, UserCog, Users, Wallet } from "lucide-react";
 import { useEffect } from "react";
 
 import {
@@ -233,6 +233,7 @@ function TenantMobileHeader() {
     "/tenant/students": "STUDENTS",
     "/tenant/staff": "STAFF",
     "/tenant/finance": "FINANCE",
+    "/tenant/support": "SUPPORT",
     "/tenant/billing": "SUBSCRIPTION",
     "/tenant/settings": "SETTINGS",
   };
@@ -306,6 +307,18 @@ function TenantMobileHeader() {
           <AcademicYearSwitcher compact />
           <ThemeModeToggle className="h-9 w-9 shrink-0 rounded-full border border-white/80 bg-white/70 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-200 sm:h-10 sm:w-10" />
           <HardRefreshButton className="h-9 w-9 shrink-0 rounded-full border border-white/80 bg-white/70 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-200 sm:h-10 sm:w-10" />
+          <button
+            type="button"
+            onClick={() => guardedNavigate("/tenant/support")}
+            aria-label="Help & support"
+            aria-current={pathname.startsWith("/tenant/support") ? "page" : undefined}
+            className={cn(
+              "grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/80 bg-white/70 text-slate-600 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-300 sm:h-10 sm:w-10",
+              pathname.startsWith("/tenant/support") && "text-[#0F766E] dark:text-[#2DD4BF]",
+            )}
+          >
+            <LifeBuoy className="h-4 w-4 sm:h-[18px] sm:w-[18px]" />
+          </button>
           <button
             type="button"
             onClick={() => guardedNavigate("/tenant/notifications")}

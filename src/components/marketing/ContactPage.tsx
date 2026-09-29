@@ -428,9 +428,8 @@ function ContactForm() {
     if (form.phone.trim() && !/^\+?[0-9 ()-]{7,20}$/.test(form.phone.trim())) {
       e.phone = "Enter a valid phone number";
     }
-    if (form.message.trim().length < 10) e.message = "Add a little more detail (10+ characters)";
     setErrors(e);
-    const first = (["name", "email", "phone", "message"] as const).find((k) => e[k]);
+    const first = (["name", "email", "phone"] as const).find((k) => e[k]);
     if (first) {
       document.getElementById(`contact-${first}`)?.focus();
       return;
@@ -599,7 +598,7 @@ function ContactForm() {
       </div>
 
       <div className="mt-4">
-        <FormField id="contact-message" label="Message" required error={errors.message}>
+        <FormField id="contact-message" label="Message" error={errors.message}>
           <textarea
             id="contact-message"
             name="message"

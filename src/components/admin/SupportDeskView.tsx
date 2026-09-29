@@ -3,6 +3,7 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { ArrowLeft, LifeBuoy, Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
+import { LeadsView } from "@/components/admin/LeadsView";
 import { mobileChatViewportClass } from "@/components/layout/MobileTabBar";
 import {
   SupportChatBubble,
@@ -42,15 +43,17 @@ import {
   type SupportTicket,
   type SupportTicketStatus,
 } from "@/lib/api/support";
+import { fetchLeadSummary, type LeadSummary } from "@/lib/api/leads";
 import { formatChatStamp } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 
-type Section = "messages" | "help" | "contact";
+type Section = "messages" | "help" | "contact" | "leads";
 
 const SECTIONS: { id: Section; label: string }[] = [
   { id: "messages", label: "Messages" },
   { id: "help", label: "Help answers" },
   { id: "contact", label: "Contact" },
+  { id: "leads", label: "Leads" },
 ];
 
 const STATUS_FILTERS: { id: "all" | SupportTicketStatus; label: string }[] = [
@@ -105,6 +108,7 @@ function keywordsFromQuestion(question: string): string {
 function supportLocation(pathname: string): { section: Section; ticketId?: string } {
   if (pathname.endsWith("/help")) return { section: "help" };
   if (pathname.endsWith("/contact")) return { section: "contact" };
+  if (pathname.endsWith("/leads")) return { section: "leads" };
   const prefix = "/super-admin/support/";
   if (pathname.startsWith(prefix)) {
     const slug = decodeURIComponent(pathname.slice(prefix.length).replace(/\/$/, ""));
@@ -126,6 +130,7 @@ export function SupportDeskView() {
   const [faqs, setFaqs] = useState<SupportFaq[]>([]);
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [leadSummary, setLeadSummary] = useState<LeadSummary | null>(null);
   const [status, setStatus] = useState<"all" | SupportTicketStatus>("all");
   const [loading, setLoading] = useState(true);
   const [savingChannels, setSavingChannels] = useState(false);
@@ -189,6 +194,11 @@ export function SupportDeskView() {
       setFaqs(data.faqs);
       setTickets(data.tickets);
       setUnreadCount(data.unreadCount);
+      void fetchLeadSummary()
+        .then(setLeadSummary)
+        .catch(() => {
+          /* leads badge is optional — older API without leads.php */
+        });
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Could not load support";
       toast.error("Support unavailable", { description: msg });
@@ -455,6 +465,10 @@ export function SupportDeskView() {
                   void navigate({ to: "/super-admin/support/contact" });
                   return;
                 }
+                if (item.id === "leads") {
+                  void navigate({ to: "/super-admin/support/leads" });
+                  return;
+                }
                 if (ticketId) {
                   void navigate({ to: "/super-admin/support/$ticketId", params: { ticketId } });
                   return;
@@ -477,6 +491,21 @@ export function SupportDeskView() {
                   )}
                 >
                   {unreadCount}
+                </span>
+              ) : null}
+              {item.id === "leads" && leadSummary ? (
+                <span
+                  title={`${leadSummary.unreadCount} unread · ${leadSummary.counts.all} total`}
+                  className={cn(
+                    "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 font-mono text-[10px] font-bold",
+                    section === item.id
+                      ? "bg-white/20 text-white"
+                      : leadSummary.unreadCount > 0
+                        ? "bg-sky-600 text-white"
+                        : "bg-black/[0.06] text-black/55",
+                  )}
+                >
+                  {leadSummary.unreadCount > 0 ? leadSummary.unreadCount : leadSummary.counts.all}
                 </span>
               ) : null}
             </button>
@@ -512,7 +541,9 @@ export function SupportDeskView() {
                       onClick={() => setStatus(item.id)}
                       className={cn(
                         "rounded-full px-3 py-1.5 text-[11px] font-semibold whitespace-nowrap",
-                        status === item.id ? "bg-black text-white" : "text-black/55 hover:text-black",
+                        status === item.id
+                          ? "bg-black text-white"
+                          : "text-black/55 hover:text-black",
                       )}
                     >
                       {item.label}
@@ -852,6 +883,8 @@ export function SupportDeskView() {
             </div>
           </OrganicCard>
         ) : null}
+
+        {section === "leads" ? <LeadsView onSummary={setLeadSummary} /> : null}
 
         {section === "contact" ? (
           <OrganicCard tone="white" cornerSide="tr" padded className="col-span-12">

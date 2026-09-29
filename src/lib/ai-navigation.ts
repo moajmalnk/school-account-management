@@ -12,6 +12,7 @@ export const FEEZO_NAV_PATHS = [
   "/tenant/finance",
   "/tenant/settings",
   "/tenant/billing",
+  "/tenant/support",
   "/tenant/notifications",
 ] as const;
 
@@ -60,6 +61,10 @@ const ALIASES: Record<string, { to: FeezoNavPath; search?: Record<string, string
     finance: { to: "/tenant/finance", label: "Finance" },
     settings: { to: "/tenant/settings", label: "Settings" },
     billing: { to: "/tenant/billing", label: "Billing" },
+    support: { to: "/tenant/support", label: "Help & support" },
+    help: { to: "/tenant/support", label: "Help & support" },
+    guide: { to: "/tenant/support", label: "Help & support" },
+    guides: { to: "/tenant/support", label: "Help & support" },
     notifications: { to: "/tenant/notifications", label: "Notifications" },
 
     receive: { to: "/tenant/finance", search: { tab: "receive" }, label: "Receive payment" },
@@ -212,6 +217,12 @@ function sanitizeSearch(path: FeezoNavPath, search: Record<string, string>): Rec
     return out;
   }
 
+  if (path === "/tenant/support") {
+    if (search.guide && /^[a-z0-9-]{2,60}$/.test(search.guide)) out.guide = search.guide;
+    if (search.q) out.q = search.q.slice(0, 120);
+    return out;
+  }
+
   return out;
 }
 
@@ -249,6 +260,7 @@ function defaultLabel(path: FeezoNavPath, search: Record<string, string>): strin
     "/tenant/finance": "Finance",
     "/tenant/settings": "Settings",
     "/tenant/billing": "Billing",
+    "/tenant/support": "Help & support",
     "/tenant/notifications": "Notifications",
   };
   return map[path] ?? "Open";
@@ -338,6 +350,7 @@ export function feezoNavigationCatalogText(): string {
     "  Optional finance search: studentId, staffId, paymentId, amount, month (YYYY-MM), feeKind (tuition|vehicle), periods",
     "- /tenant/settings?tab=school|branches|classes|departments|roles|leave|fees|users|vehicles|transport|system|support",
     "- /tenant/billing | /tenant/notifications",
+    "- /tenant/support?guide=<guide-id>&q=<search> (step-by-step help guides; use for 'how do I…' questions)",
     "Shortcuts also accepted: fees, overdue, receive, make, transfer, transfers, ledger, journals, trial, pl, balance, concession, salary, daybook, recon",
   ].join("\n");
 }

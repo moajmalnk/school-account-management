@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronLeft,
   Crown,
+  LifeBuoy,
   Eye,
   LayoutDashboard,
   Loader2,
@@ -584,6 +585,7 @@ const NAV: NavEntry[] = [
   { to: "/tenant/students", label: "Students", icon: Users },
   { to: "/tenant/staff", label: "Staff", icon: UserCog },
   { to: "/tenant/finance", label: "Finance", icon: Wallet },
+  { to: "/tenant/support", label: "Support", icon: LifeBuoy },
   { to: "/tenant/billing", label: "Subscription", icon: Crown },
   { to: "/tenant/settings", label: "Settings", icon: Settings },
 ];

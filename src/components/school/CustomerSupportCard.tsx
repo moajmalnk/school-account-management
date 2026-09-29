@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { ArrowLeft, Loader2, Mail, Plus } from "lucide-react";
+import { ArrowLeft, BookOpen, Loader2, Mail, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -437,6 +437,14 @@ export function CustomerSupportCard({
                 <div className="text-[16px] font-semibold text-black dark:text-zinc-100">Chats</div>
               </div>
               <div className="flex shrink-0 items-center">
+                <Link
+                  to="/tenant/support"
+                  className="grid h-9 w-9 place-items-center rounded-full text-black/45 hover:bg-black/5 hover:text-[#0F766E] dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-teal-300"
+                  aria-label="Browse guides"
+                  title="Browse guides"
+                >
+                  <BookOpen className="h-4 w-4" />
+                </Link>
                 <button
                   type="button"
                   onClick={openGmail}

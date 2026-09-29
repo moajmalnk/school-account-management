@@ -26,6 +26,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as TenantIndexRouteImport } from './routes/tenant/index'
 import { Route as SuperAdminIndexRouteImport } from './routes/super-admin/index'
 import { Route as SignupIndexRouteImport } from './routes/signup/index'
+import { Route as TenantSupportRouteImport } from './routes/tenant/support'
 import { Route as TenantStudentsRouteImport } from './routes/tenant/students'
 import { Route as TenantStaffRouteImport } from './routes/tenant/staff'
 import { Route as TenantSettingsRouteImport } from './routes/tenant/settings'
@@ -43,6 +44,7 @@ import { Route as SuperAdminSupportIndexRouteImport } from './routes/super-admin
 import { Route as TenantStudentsEditRouteImport } from './routes/tenant/students_.edit'
 import { Route as TenantStudentsAdmitRouteImport } from './routes/tenant/students_.admit'
 import { Route as TenantStaffEditRouteImport } from './routes/tenant/staff_.edit'
+import { Route as SuperAdminSupportLeadsRouteImport } from './routes/super-admin/support/leads'
 import { Route as SuperAdminSupportHelpRouteImport } from './routes/super-admin/support/help'
 import { Route as SuperAdminSupportContactRouteImport } from './routes/super-admin/support/contact'
 import { Route as SuperAdminSupportTicketIdRouteImport } from './routes/super-admin/support/$ticketId'
@@ -133,6 +135,11 @@ const SignupIndexRoute = SignupIndexRouteImport.update({
   path: '/',
   getParentRoute: () => SignupRoute,
 } as any)
+const TenantSupportRoute = TenantSupportRouteImport.update({
+  id: '/support',
+  path: '/support',
+  getParentRoute: () => TenantRoute,
+} as any)
 const TenantStudentsRoute = TenantStudentsRouteImport.update({
   id: '/students',
   path: '/students',
@@ -218,6 +225,11 @@ const TenantStaffEditRoute = TenantStaffEditRouteImport.update({
   path: '/staff/edit',
   getParentRoute: () => TenantRoute,
 } as any)
+const SuperAdminSupportLeadsRoute = SuperAdminSupportLeadsRouteImport.update({
+  id: '/leads',
+  path: '/leads',
+  getParentRoute: () => SuperAdminSupportRoute,
+} as any)
 const SuperAdminSupportHelpRoute = SuperAdminSupportHelpRouteImport.update({
   id: '/help',
   path: '/help',
@@ -269,6 +281,7 @@ export interface FileRoutesByFullPath {
   '/tenant/settings': typeof TenantSettingsRoute
   '/tenant/staff': typeof TenantStaffRoute
   '/tenant/students': typeof TenantStudentsRoute
+  '/tenant/support': typeof TenantSupportRoute
   '/signup/': typeof SignupIndexRoute
   '/super-admin/': typeof SuperAdminIndexRoute
   '/tenant/': typeof TenantIndexRoute
@@ -276,6 +289,7 @@ export interface FileRoutesByFullPath {
   '/super-admin/support/$ticketId': typeof SuperAdminSupportTicketIdRoute
   '/super-admin/support/contact': typeof SuperAdminSupportContactRoute
   '/super-admin/support/help': typeof SuperAdminSupportHelpRoute
+  '/super-admin/support/leads': typeof SuperAdminSupportLeadsRoute
   '/tenant/staff/edit': typeof TenantStaffEditRoute
   '/tenant/students/admit': typeof TenantStudentsAdmitRoute
   '/tenant/students/edit': typeof TenantStudentsEditRoute
@@ -305,6 +319,7 @@ export interface FileRoutesByTo {
   '/tenant/settings': typeof TenantSettingsRoute
   '/tenant/staff': typeof TenantStaffRoute
   '/tenant/students': typeof TenantStudentsRoute
+  '/tenant/support': typeof TenantSupportRoute
   '/signup': typeof SignupIndexRoute
   '/super-admin': typeof SuperAdminIndexRoute
   '/tenant': typeof TenantIndexRoute
@@ -312,6 +327,7 @@ export interface FileRoutesByTo {
   '/super-admin/support/$ticketId': typeof SuperAdminSupportTicketIdRoute
   '/super-admin/support/contact': typeof SuperAdminSupportContactRoute
   '/super-admin/support/help': typeof SuperAdminSupportHelpRoute
+  '/super-admin/support/leads': typeof SuperAdminSupportLeadsRoute
   '/tenant/staff/edit': typeof TenantStaffEditRoute
   '/tenant/students/admit': typeof TenantStudentsAdmitRoute
   '/tenant/students/edit': typeof TenantStudentsEditRoute
@@ -346,6 +362,7 @@ export interface FileRoutesById {
   '/tenant/settings': typeof TenantSettingsRoute
   '/tenant/staff': typeof TenantStaffRoute
   '/tenant/students': typeof TenantStudentsRoute
+  '/tenant/support': typeof TenantSupportRoute
   '/signup/': typeof SignupIndexRoute
   '/super-admin/': typeof SuperAdminIndexRoute
   '/tenant/': typeof TenantIndexRoute
@@ -353,6 +370,7 @@ export interface FileRoutesById {
   '/super-admin/support/$ticketId': typeof SuperAdminSupportTicketIdRoute
   '/super-admin/support/contact': typeof SuperAdminSupportContactRoute
   '/super-admin/support/help': typeof SuperAdminSupportHelpRoute
+  '/super-admin/support/leads': typeof SuperAdminSupportLeadsRoute
   '/tenant/staff_/edit': typeof TenantStaffEditRoute
   '/tenant/students_/admit': typeof TenantStudentsAdmitRoute
   '/tenant/students_/edit': typeof TenantStudentsEditRoute
@@ -388,6 +406,7 @@ export interface FileRouteTypes {
     | '/tenant/settings'
     | '/tenant/staff'
     | '/tenant/students'
+    | '/tenant/support'
     | '/signup/'
     | '/super-admin/'
     | '/tenant/'
@@ -395,6 +414,7 @@ export interface FileRouteTypes {
     | '/super-admin/support/$ticketId'
     | '/super-admin/support/contact'
     | '/super-admin/support/help'
+    | '/super-admin/support/leads'
     | '/tenant/staff/edit'
     | '/tenant/students/admit'
     | '/tenant/students/edit'
@@ -424,6 +444,7 @@ export interface FileRouteTypes {
     | '/tenant/settings'
     | '/tenant/staff'
     | '/tenant/students'
+    | '/tenant/support'
     | '/signup'
     | '/super-admin'
     | '/tenant'
@@ -431,6 +452,7 @@ export interface FileRouteTypes {
     | '/super-admin/support/$ticketId'
     | '/super-admin/support/contact'
     | '/super-admin/support/help'
+    | '/super-admin/support/leads'
     | '/tenant/staff/edit'
     | '/tenant/students/admit'
     | '/tenant/students/edit'
@@ -464,6 +486,7 @@ export interface FileRouteTypes {
     | '/tenant/settings'
     | '/tenant/staff'
     | '/tenant/students'
+    | '/tenant/support'
     | '/signup/'
     | '/super-admin/'
     | '/tenant/'
@@ -471,6 +494,7 @@ export interface FileRouteTypes {
     | '/super-admin/support/$ticketId'
     | '/super-admin/support/contact'
     | '/super-admin/support/help'
+    | '/super-admin/support/leads'
     | '/tenant/staff_/edit'
     | '/tenant/students_/admit'
     | '/tenant/students_/edit'
@@ -616,6 +640,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignupIndexRouteImport
       parentRoute: typeof SignupRoute
     }
+    '/tenant/support': {
+      id: '/tenant/support'
+      path: '/support'
+      fullPath: '/tenant/support'
+      preLoaderRoute: typeof TenantSupportRouteImport
+      parentRoute: typeof TenantRoute
+    }
     '/tenant/students': {
       id: '/tenant/students'
       path: '/students'
@@ -735,6 +766,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TenantStaffEditRouteImport
       parentRoute: typeof TenantRoute
     }
+    '/super-admin/support/leads': {
+      id: '/super-admin/support/leads'
+      path: '/leads'
+      fullPath: '/super-admin/support/leads'
+      preLoaderRoute: typeof SuperAdminSupportLeadsRouteImport
+      parentRoute: typeof SuperAdminSupportRoute
+    }
     '/super-admin/support/help': {
       id: '/super-admin/support/help'
       path: '/help'
@@ -783,6 +821,7 @@ interface SuperAdminSupportRouteChildren {
   SuperAdminSupportTicketIdRoute: typeof SuperAdminSupportTicketIdRoute
   SuperAdminSupportContactRoute: typeof SuperAdminSupportContactRoute
   SuperAdminSupportHelpRoute: typeof SuperAdminSupportHelpRoute
+  SuperAdminSupportLeadsRoute: typeof SuperAdminSupportLeadsRoute
   SuperAdminSupportIndexRoute: typeof SuperAdminSupportIndexRoute
 }
 
@@ -790,6 +829,7 @@ const SuperAdminSupportRouteChildren: SuperAdminSupportRouteChildren = {
   SuperAdminSupportTicketIdRoute: SuperAdminSupportTicketIdRoute,
   SuperAdminSupportContactRoute: SuperAdminSupportContactRoute,
   SuperAdminSupportHelpRoute: SuperAdminSupportHelpRoute,
+  SuperAdminSupportLeadsRoute: SuperAdminSupportLeadsRoute,
   SuperAdminSupportIndexRoute: SuperAdminSupportIndexRoute,
 }
 
@@ -825,6 +865,7 @@ interface TenantRouteChildren {
   TenantSettingsRoute: typeof TenantSettingsRoute
   TenantStaffRoute: typeof TenantStaffRoute
   TenantStudentsRoute: typeof TenantStudentsRoute
+  TenantSupportRoute: typeof TenantSupportRoute
   TenantIndexRoute: typeof TenantIndexRoute
   TenantStaffEditRoute: typeof TenantStaffEditRoute
   TenantStudentsAdmitRoute: typeof TenantStudentsAdmitRoute
@@ -840,6 +881,7 @@ const TenantRouteChildren: TenantRouteChildren = {
   TenantSettingsRoute: TenantSettingsRoute,
   TenantStaffRoute: TenantStaffRoute,
   TenantStudentsRoute: TenantStudentsRoute,
+  TenantSupportRoute: TenantSupportRoute,
   TenantIndexRoute: TenantIndexRoute,
   TenantStaffEditRoute: TenantStaffEditRoute,
   TenantStudentsAdmitRoute: TenantStudentsAdmitRoute,
