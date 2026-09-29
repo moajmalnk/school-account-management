@@ -1,10 +1,7 @@
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import type { StudentSchedulePeriodOption } from "@/lib/student-fees";
-
-function inr(amount: number) {
-  return `₹ ${amount.toLocaleString("en-IN")}`;
-}
+import { formatMoney } from "@/lib/money";
 
 type FeePeriodChecklistProps = {
   options: StudentSchedulePeriodOption[];
@@ -115,7 +112,7 @@ export function FeePeriodChecklist({
                 </span>
                 {opt.amount > 0 ? (
                   <span className="shrink-0 font-mono text-[12px] font-semibold text-slate-600 dark:text-zinc-300">
-                    {inr(opt.amount)}
+                    {formatMoney(opt.amount)}
                   </span>
                 ) : null}
               </label>
@@ -150,7 +147,9 @@ export function FeePeriodChecklist({
               {totalAmount > 0 ? (
                 <>
                   {" · "}
-                  <span className="font-mono font-semibold text-[#0F766E]">{inr(totalAmount)}</span>
+                  <span className="font-mono font-semibold text-[#0F766E]">
+                    {formatMoney(totalAmount)}
+                  </span>
                 </>
               ) : null}
             </>
@@ -164,7 +163,7 @@ export function FeePeriodChecklist({
                 <>
                   {" · "}
                   <span className="font-mono font-semibold text-slate-700 dark:text-zinc-200">
-                    {inr(totalAmount)}
+                    {formatMoney(totalAmount)}
                   </span>{" "}
                   paused
                 </>

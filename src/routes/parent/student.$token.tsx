@@ -33,6 +33,7 @@ import {
 } from "@/lib/tenant-store";
 import { cn, glassCardClass } from "@/lib/utils";
 import type { ReactNode } from "react";
+import { formatMoney, getOrgCurrency, useOrgCurrency } from "@/lib/money";
 
 export const Route = createFileRoute("/parent/student/$token")({
   component: ParentStudentPage,
@@ -77,6 +78,7 @@ const emptyParentFields = (): ParentEditableStudentFields => ({
 function ParentStudentPage() {
   const { token } = Route.useParams();
   const [student, setStudent] = useState<Student | null>(() => getStudentByShareToken(token));
+  const orgCurrency = useOrgCurrency();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
@@ -180,7 +182,7 @@ function ParentStudentPage() {
     const fee = resolveTransportFeeForStudent(updated, getTransportRoutesForParent());
     const transportNote =
       studentNeedsTransport(updated) && fee.amount && fee.amount > 0
-        ? `Vehicle fee ₹${fee.amount.toLocaleString("en-IN")} · school will collect separately`
+        ? `Vehicle fee ${formatMoney(fee.amount, getOrgCurrency())} · school will collect separately`
         : "School records have been synced with your changes";
     toast.success("Profile updated", {
       description: transportNote,
@@ -535,7 +537,7 @@ function ParentStudentPage() {
               <div className="rounded-xl border border-[#CCFBF1] bg-[#F0FDFA]/70 px-3.5 py-3 text-[12px] text-slate-600 dark:border-teal-500/30 dark:bg-teal-950/40 dark:text-zinc-300">
                 Estimated vehicle fee:{" "}
                 <span className="font-mono font-semibold text-slate-900 dark:text-teal-50">
-                  ₹ {formTransportFee.amount.toLocaleString("en-IN")}
+                  {formatMoney(formTransportFee.amount, orgCurrency)}
                 </span>
                 . The school will collect this in Finance after route confirmation.
               </div>

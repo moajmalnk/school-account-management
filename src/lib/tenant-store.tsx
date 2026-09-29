@@ -23,9 +23,14 @@ import {
   apiSyncAcademicYears,
   apiSyncActiveBranch,
   apiSyncThemeSettings,
+  apiUpsertClass,
+  apiUpsertDepartment,
   apiUpsertFeeTerm,
+  apiUpsertPaymentCategory,
+  apiUpsertRole,
+  apiUpsertTransportRoute,
 } from "@/lib/api/settings";
-import { apiSyncStudentYearFields } from "@/lib/api/records";
+import { apiSyncStudentYearFields, apiUpsertStaff } from "@/lib/api/records";
 import {
   applyWorkspaceBrand,
   clearWorkspaceBrand,
@@ -52,6 +57,8 @@ import {
   applyLedgerToStudent,
   buildLedgerFromStudents,
   cloneFeeTermsForYear,
+  cloneTaggedForYear,
+  catalogsNeedYearBackfill,
   ensureYearLedger,
   filterByAcademicYear,
   getYearLedger,
@@ -59,15 +66,21 @@ import {
   normalizeAcademicYearLabel,
   parseAcademicYearBounds,
   reconcileLedgersWithStudents,
+  stampAcademicYear,
+  stampUntaggedAcademicYear,
   studentsForAcademicYear,
   syncLedgerFromActiveStudents,
+  taggedAcademicYear,
   upsertStudentYearFields,
   yearFieldEntriesMissingFrom,
   yearHasBookData,
+  yearScopedId,
   type StudentYearFields,
   type StudentYearLedger,
 } from "@/lib/academic-year";
 import { toDobIso } from "@/lib/dates";
+import type { CurrencyCode } from "@/lib/locale/currencies";
+import { useOrgCurrency, CURRENCY_TOKEN_SRC } from "@/lib/money";
 
 export type { StudentYearFields, StudentYearLedger };
 export {
@@ -77,9 +90,11 @@ export {
   getYearLedger,
   normalizeAcademicYearLabel,
   parseAcademicYearBounds,
+  stampAcademicYear,
   studentsForAcademicYear,
   upsertStudentYearFields,
   yearHasBookData,
+  yearScopedId,
 };
 
 export const STUDENT_RELIGIONS = [
@@ -283,6 +298,8 @@ export type Staff = {
   name: string;
   role: string;
   dept: string;
+  /** Academic year books this roster row belongs to */
+  academicYear?: string;
   active: boolean;
   joinedAt: string;
   phone?: string;
@@ -799,6 +816,14 @@ export function normalizeStudent(
   };
 }
 
+function readAcademicYearTag(raw: unknown): string | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const record = raw as Record<string, unknown>;
+  const value = record.academicYear ?? record.academic_year;
+  if (typeof value === "string" && value.trim()) return value.trim();
+  return undefined;
+}
+
 export function normalizeStaff(raw: Partial<Staff> & Pick<Staff, "id" | "name">): Staff {
   const joinedAt = typeof raw.joinedAt === "string" && raw.joinedAt ? raw.joinedAt : "2025-01-01";
   const attendanceByMonth = Array.isArray(raw.attendanceByMonth)
@@ -836,6 +861,7 @@ export function normalizeStaff(raw: Partial<Staff> & Pick<Staff, "id" | "name">)
     statusHistory: normalizeStatusHistory(raw.statusHistory, joinedAt, String(raw.id ?? "")),
     deletedAt:
       typeof raw.deletedAt === "string" && raw.deletedAt.trim() ? raw.deletedAt.trim() : undefined,
+    academicYear: readAcademicYearTag(raw),
   };
 }
 
@@ -1140,7 +1166,10 @@ export function parsePaymentFeeLinesFromNarration(narration?: string): PaymentFe
     }
     const cleaned = part.replace(/^Fee breakdown:\s*/i, "").trim();
     const withPeriod = cleaned.match(
-      /^(.*?)\s+\(([^)]+)\)\s+(?:₹|Rs\.?)\s*([\d,]+(?:\.\d+)?)\s*$/i,
+      new RegExp(
+        String.raw`^(.*?)\s+\(([^)]+)\)\s+${CURRENCY_TOKEN_SRC}\s*([\d,]+(?:\.\d+)?)\s*$`,
+        "i",
+      ),
     );
     if (withPeriod) {
       const amount = Number(withPeriod[3].replace(/,/g, ""));
@@ -1156,7 +1185,9 @@ export function parsePaymentFeeLinesFromNarration(narration?: string): PaymentFe
       }
       continue;
     }
-    const plain = cleaned.match(/^(.*?)\s+(?:₹|Rs\.?)\s*([\d,]+(?:\.\d+)?)\s*$/i);
+    const plain = cleaned.match(
+      new RegExp(String.raw`^(.*?)\s+${CURRENCY_TOKEN_SRC}\s*([\d,]+(?:\.\d+)?)\s*$`, "i"),
+    );
     if ((inBreakdown || /^Fee breakdown:/i.test(part)) && plain) {
       const amount = Number(plain[2].replace(/,/g, ""));
       if (Number.isFinite(amount) && amount >= 0) {
@@ -1363,6 +1394,7 @@ export function normalizePaymentCategory(
         ? raw.feeCollectionStartMonth.trim()
         : undefined,
     active: raw.active !== false,
+    academicYear: readAcademicYearTag(raw),
   };
 }
 
@@ -1457,6 +1489,7 @@ export type Department = {
   id: string;
   name: string;
   code: string;
+  academicYear?: string;
 };
 
 /** Branch-scoped staff leave catalog entry (Casual / Sick / Personal / custom). */
@@ -1567,8 +1600,7 @@ export function nextCampusSortOrder(branches: CampusBranch[]): number {
 function branchListFingerprint(list: CampusBranch[]): string {
   return list
     .map(
-      (b) =>
-        `${b.id}\0${b.name}\0${b.code}\0${b.sortOrder ?? 0}\0${b.isActive === false ? 0 : 1}`,
+      (b) => `${b.id}\0${b.name}\0${b.code}\0${b.sortOrder ?? 0}\0${b.isActive === false ? 0 : 1}`,
     )
     .join("\n");
 }
@@ -1608,6 +1640,7 @@ export type Role = {
   id: string;
   title: string;
   departmentId: string;
+  academicYear?: string;
 };
 
 export type TenantUser = {
@@ -1631,14 +1664,13 @@ export function normalizeTenantUser(
   raw: Partial<TenantUser> & Pick<TenantUser, "id" | "email">,
 ): TenantUser {
   const email = (raw.email ?? "").trim().toLowerCase();
-  const branchIdsRaw = (raw as { branchIds?: unknown; branch_ids?: unknown }).branchIds
-    ?? (raw as { branch_ids?: unknown }).branch_ids;
+  const branchIdsRaw =
+    (raw as { branchIds?: unknown; branch_ids?: unknown }).branchIds ??
+    (raw as { branch_ids?: unknown }).branch_ids;
   const branchIds = Array.isArray(branchIdsRaw)
     ? Array.from(
         new Set(
-          branchIdsRaw
-            .map((id) => (typeof id === "string" ? id.trim() : ""))
-            .filter(Boolean),
+          branchIdsRaw.map((id) => (typeof id === "string" ? id.trim() : "")).filter(Boolean),
         ),
       )
     : [];
@@ -1712,6 +1744,7 @@ export type ClassConfig = {
   feeCollectionStartMonth?: string;
   /** Optional class teacher from staff roster */
   classTeacherId?: string;
+  academicYear?: string;
 };
 
 export function composeClassName(grade: string, section: string) {
@@ -2010,6 +2043,7 @@ export function normalizeClassConfig(
       typeof raw.classTeacherId === "string" && raw.classTeacherId.trim()
         ? raw.classTeacherId.trim()
         : undefined,
+    academicYear: readAcademicYearTag(raw),
   };
 }
 
@@ -2093,6 +2127,7 @@ export type TransportRoute = {
   bothFeeSchedule: ClassFeeLine[];
   /** First calendar month mapped to installment 1 · Monthly billing */
   feeCollectionStartMonth?: string;
+  academicYear?: string;
 };
 
 export type PaymentCategory = {
@@ -2106,6 +2141,7 @@ export type PaymentCategory = {
   feeSchedule?: ClassFeeLine[];
   feeCollectionStartMonth?: string;
   active?: boolean;
+  academicYear?: string;
 };
 
 export type ThemeSettings = {
@@ -2190,10 +2226,7 @@ function legacyTenantStoreKey(tenantId?: string | null): string {
 }
 
 /** Read campus cache; migrate once from tenant-only v12/v13 keys when needed. */
-function readCampusSnapshot(
-  tenantId?: string | null,
-  branchId?: string | null,
-): Snapshot | null {
+function readCampusSnapshot(tenantId?: string | null, branchId?: string | null): Snapshot | null {
   const bid = typeof branchId === "string" ? branchId.trim() : "";
   const campusKey = storeKeyForCampus(tenantId, bid || null);
   const direct = readSnapshot(campusKey);
@@ -2274,6 +2307,7 @@ function normalizeTransportRoute(raw: unknown): TransportRoute | null {
     ...(typeof r.feeCollectionStartMonth === "string" && r.feeCollectionStartMonth.trim()
       ? { feeCollectionStartMonth: r.feeCollectionStartMonth.trim() }
       : {}),
+    academicYear: readAcademicYearTag(r),
   };
 }
 
@@ -2353,6 +2387,170 @@ function normalizeTransportRoutes(raw: unknown, feeTerms: FeeTerm[] = []): Trans
     .map(normalizeTransportRoute)
     .filter((r): r is TransportRoute => r !== null)
     .map((r) => withRouteFeeSchedule(r, feeTerms));
+}
+
+export type YearCatalogs = {
+  classes: ClassConfig[];
+  departments: Department[];
+  roles: Role[];
+  paymentCategories: PaymentCategory[];
+  transportRoutes: TransportRoute[];
+  staff: Staff[];
+};
+
+function normalizeDepartment(raw: unknown): Department | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Partial<Department>;
+  if (typeof r.id !== "string" || !r.id.trim() || typeof r.name !== "string") return null;
+  return {
+    id: r.id.trim(),
+    name: r.name.trim(),
+    code: typeof r.code === "string" ? r.code.trim() : "",
+    academicYear: readAcademicYearTag(r),
+  };
+}
+
+function normalizeRoleRow(raw: unknown): Role | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Partial<Role>;
+  if (typeof r.id !== "string" || !r.id.trim() || typeof r.title !== "string") return null;
+  return {
+    id: r.id.trim(),
+    title: r.title.trim(),
+    departmentId: typeof r.departmentId === "string" ? r.departmentId : "",
+    academicYear: readAcademicYearTag(r),
+  };
+}
+
+export function cloneYearCatalogs(
+  source: YearCatalogs,
+  fromYear: string,
+  toYear: string,
+  opts?: { includeStaff?: boolean },
+): YearCatalogs {
+  const deptIdMap = new Map<string, string>();
+  const departments = cloneTaggedForYear(
+    source.departments,
+    fromYear,
+    toYear,
+    (clone, original) => {
+      deptIdMap.set(original.id, clone.id);
+      return clone;
+    },
+  );
+  const roles = cloneTaggedForYear(source.roles, fromYear, toYear, (clone) => ({
+    ...clone,
+    departmentId: deptIdMap.get(clone.departmentId) ?? clone.departmentId,
+  }));
+  const classes = cloneTaggedForYear(source.classes, fromYear, toYear, (clone) => ({
+    ...clone,
+    classTeacherId: undefined,
+  }));
+  const paymentCategories = cloneTaggedForYear(source.paymentCategories, fromYear, toYear);
+  const transportRoutes = cloneTaggedForYear(source.transportRoutes, fromYear, toYear);
+  const staff = opts?.includeStaff
+    ? cloneTaggedForYear(
+        source.staff.filter((s) => !s.deletedAt),
+        fromYear,
+        toYear,
+      )
+    : [];
+  return { classes, departments, roles, paymentCategories, transportRoutes, staff };
+}
+
+export function concatYearCatalogs(base: YearCatalogs, extra: YearCatalogs): YearCatalogs {
+  const merge = <T extends { id: string }>(a: T[], b: T[]) => {
+    const seen = new Set(a.map((item) => item.id));
+    return [...a, ...b.filter((item) => !seen.has(item.id))];
+  };
+  return {
+    classes: merge(base.classes, extra.classes),
+    departments: merge(base.departments, extra.departments),
+    roles: merge(base.roles, extra.roles),
+    paymentCategories: merge(base.paymentCategories, extra.paymentCategories),
+    transportRoutes: merge(base.transportRoutes, extra.transportRoutes),
+    staff: merge(base.staff, extra.staff),
+  };
+}
+
+export function backfillYearCatalogs(
+  catalogs: YearCatalogs,
+  years: string[],
+  activeYear: string,
+): YearCatalogs {
+  const yearList = years.length ? years : activeYear ? [activeYear] : [];
+  const current = activeYear || yearList[0] || "";
+  if (!current) return catalogs;
+
+  const needBackfill =
+    catalogsNeedYearBackfill(catalogs.classes) ||
+    catalogsNeedYearBackfill(catalogs.departments) ||
+    catalogsNeedYearBackfill(catalogs.roles) ||
+    catalogsNeedYearBackfill(catalogs.paymentCategories) ||
+    catalogsNeedYearBackfill(catalogs.transportRoutes) ||
+    catalogsNeedYearBackfill(catalogs.staff);
+
+  const stamped: YearCatalogs = {
+    classes: stampUntaggedAcademicYear(catalogs.classes, current),
+    departments: stampUntaggedAcademicYear(catalogs.departments, current),
+    roles: stampUntaggedAcademicYear(catalogs.roles, current),
+    paymentCategories: stampUntaggedAcademicYear(catalogs.paymentCategories, current),
+    transportRoutes: stampUntaggedAcademicYear(catalogs.transportRoutes, current),
+    staff: stampUntaggedAcademicYear(catalogs.staff, current),
+  };
+
+  if (!needBackfill) return stamped;
+
+  const originals: YearCatalogs = {
+    classes: stamped.classes.filter((item) => !item.id.includes("--")),
+    departments: stamped.departments.filter((item) => !item.id.includes("--")),
+    roles: stamped.roles.filter((item) => !item.id.includes("--")),
+    paymentCategories: stamped.paymentCategories.filter((item) => !item.id.includes("--")),
+    transportRoutes: stamped.transportRoutes.filter((item) => !item.id.includes("--")),
+    staff: stamped.staff.filter((item) => !item.id.includes("--")),
+  };
+
+  let next = stamped;
+  for (const year of yearList) {
+    if (year === current) continue;
+    next = concatYearCatalogs(
+      next,
+      cloneYearCatalogs(originals, current, year, { includeStaff: true }),
+    );
+  }
+  return next;
+}
+
+async function persistYearCatalogs(catalogs: YearCatalogs): Promise<void> {
+  if (!getApiToken()) return;
+  for (const dept of catalogs.departments) {
+    await apiUpsertDepartment(dept);
+  }
+  for (const role of catalogs.roles) {
+    await apiUpsertRole(role);
+  }
+  for (const cls of catalogs.classes) {
+    await apiUpsertClass(cls);
+  }
+  for (const cat of catalogs.paymentCategories) {
+    await apiUpsertPaymentCategory(cat);
+  }
+  for (const route of catalogs.transportRoutes) {
+    await apiUpsertTransportRoute(route);
+  }
+  for (const member of catalogs.staff) {
+    await apiUpsertStaff(member);
+  }
+}
+
+function retagCatalogYear<T extends { academicYear?: string }>(
+  items: T[],
+  from: string,
+  to: string,
+): T[] {
+  return items.map((item) =>
+    taggedAcademicYear(item) === from ? { ...item, academicYear: to } : item,
+  );
 }
 
 export function routeScheduleForShift(
@@ -3803,6 +4001,19 @@ export const SEED_ACADEMIC_YEARS = ["AY 2024-25", "AY 2025-26", "AY 2026-27"];
 export const ACADEMIC_YEAR_OPTIONS = SEED_ACADEMIC_YEARS;
 export const SEED_ACADEMIC_YEAR = "AY 2025-26";
 
+const SEED_YEAR_CATALOGS: YearCatalogs = backfillYearCatalogs(
+  {
+    classes: SEED_CLASSES,
+    departments: SEED_DEPARTMENTS,
+    roles: SEED_ROLES,
+    paymentCategories: SEED_PAYMENT_CATEGORIES,
+    transportRoutes: SEED_TRANSPORT,
+    staff: SEED_STAFF,
+  },
+  SEED_ACADEMIC_YEARS,
+  SEED_ACADEMIC_YEAR,
+);
+
 export const SEED_STUDENT_YEAR_LEDGERS: StudentYearLedger[] = [
   {
     academicYear: "AY 2024-25",
@@ -3974,26 +4185,33 @@ type TenantStoreValue = {
   activeStudents: Student[];
   staff: Staff[];
   setStaff: Dispatch<SetStateAction<Staff[]>>;
+  /** Staff roster stamped for the active academic year. */
+  activeStaff: Staff[];
   payments: Payment[];
   setPayments: Dispatch<SetStateAction<Payment[]>>;
   /** Receipts stamped for the active academic year. */
   activePayments: Payment[];
   departments: Department[];
   setDepartments: Dispatch<SetStateAction<Department[]>>;
+  activeDepartments: Department[];
   leaveTypes: LeaveType[];
   setLeaveTypes: Dispatch<SetStateAction<LeaveType[]>>;
   roles: Role[];
   setRoles: Dispatch<SetStateAction<Role[]>>;
+  activeRoles: Role[];
   tenantUsers: TenantUser[];
   setTenantUsers: Dispatch<SetStateAction<TenantUser[]>>;
   classes: ClassConfig[];
   setClasses: Dispatch<SetStateAction<ClassConfig[]>>;
+  activeClasses: ClassConfig[];
   transportRoutes: TransportRoute[];
   setTransportRoutes: Dispatch<SetStateAction<TransportRoute[]>>;
+  activeTransportRoutes: TransportRoute[];
   transportVehicles: TransportVehicle[];
   setTransportVehicles: Dispatch<SetStateAction<TransportVehicle[]>>;
   paymentCategories: PaymentCategory[];
   setPaymentCategories: Dispatch<SetStateAction<PaymentCategory[]>>;
+  activePaymentCategories: PaymentCategory[];
   feeTerms: FeeTerm[];
   setFeeTerms: Dispatch<SetStateAction<FeeTerm[]>>;
   /** Fee periods for the active academic year. */
@@ -4009,9 +4227,11 @@ type TenantStoreValue = {
   setAcademicYear: Dispatch<SetStateAction<string>>;
   /** Open another year’s books (updates active year + syncs student overlays). */
   openAcademicYear: (year: string) => { receipts: number; enrolled: number };
-  /** Add a year, cloning fee terms from the nearest existing year. */
+  /** Add a year, cloning catalogs and fee terms from the nearest existing year. */
   addAcademicYear: (year: string) => boolean;
-  /** Rename a year label across books, fees, receipts, and enrollments. */
+  /** Copy last year's staff roster into the open year as independent rows. */
+  copyStaffFromPreviousYear: (fromYear?: string) => { copied: number; fromYear: string | null };
+  /** Rename a year label across books, fees, receipts, catalogs, staff, and enrollments. */
   renameAcademicYear: (from: string, to: string) => { ok: boolean; reason?: string };
   /** Close (deactivate) or reopen a financial year. Closing the open year switches books. */
   setAcademicYearClosed: (year: string, closed: boolean) => { ok: boolean; reason?: string };
@@ -4026,6 +4246,8 @@ type TenantStoreValue = {
   setThemeSettings: Dispatch<SetStateAction<ThemeSettings>>;
   schoolDetails: SchoolDetails;
   setSchoolDetails: Dispatch<SetStateAction<SchoolDetails>>;
+  /** Organization base currency — every in-app amount is labelled in it (never converted). */
+  currency: CurrencyCode;
   dashboardTodos: string[];
   setDashboardTodos: Dispatch<SetStateAction<string[]>>;
   dashboardNote: string;
@@ -4592,7 +4814,10 @@ export function findTransportRouteForStudent(
 }
 
 export function resolveTransportFeeForStudent(
-  student: Pick<Student, "needsBus" | "busPoint1" | "busPoint2" | "cls" | "hasConcession" | "concessionFees">,
+  student: Pick<
+    Student,
+    "needsBus" | "busPoint1" | "busPoint2" | "cls" | "hasConcession" | "concessionFees"
+  >,
   routes: TransportRoute[],
   classConfig?: Pick<ClassConfig, "vehicleFeeAmount">,
   period?: {
@@ -4846,9 +5071,7 @@ export function TenantStoreProvider({
 }) {
   const liveApi = typeof window !== "undefined" && Boolean(getApiToken());
   const initialBranchId =
-    typeof window !== "undefined"
-      ? readStoredBranchPublicId(tenantId) || ""
-      : "";
+    typeof window !== "undefined" ? readStoredBranchPublicId(tenantId) || "" : "";
   const cachedSnapshot = useMemo(
     () => readCampusSnapshot(tenantId, initialBranchId),
     [tenantId, initialBranchId],
@@ -4872,30 +5095,30 @@ export function TenantStoreProvider({
     liveApi ? (cachedSnapshot?.students ?? []) : SEED_STUDENTS,
   );
   const [staff, setStaff] = useState<Staff[]>(() =>
-    liveApi ? (cachedSnapshot?.staff ?? []) : SEED_STAFF,
+    liveApi ? (cachedSnapshot?.staff ?? []) : SEED_YEAR_CATALOGS.staff,
   );
   const [payments, setPayments] = useState<Payment[]>(() =>
     liveApi ? (cachedSnapshot?.payments ?? []) : SEED_PAYMENTS,
   );
   const [departments, setDepartments] = useState<Department[]>(() =>
-    liveApi ? (cachedSnapshot?.departments ?? []) : SEED_DEPARTMENTS,
+    liveApi ? (cachedSnapshot?.departments ?? []) : SEED_YEAR_CATALOGS.departments,
   );
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>(() =>
     liveApi ? (cachedSnapshot?.leaveTypes ?? []) : [],
   );
   const [roles, setRoles] = useState<Role[]>(() =>
-    liveApi ? (cachedSnapshot?.roles ?? []) : SEED_ROLES,
+    liveApi ? (cachedSnapshot?.roles ?? []) : SEED_YEAR_CATALOGS.roles,
   );
   const [tenantUsers, setTenantUsers] = useState<TenantUser[]>(() =>
     liveApi ? (cachedSnapshot?.tenantUsers ?? []) : SEED_TENANT_USERS,
   );
   const [classes, setClasses] = useState<ClassConfig[]>(() =>
-    liveApi ? (cachedSnapshot?.classes ?? []) : SEED_CLASSES,
+    liveApi ? (cachedSnapshot?.classes ?? []) : SEED_YEAR_CATALOGS.classes,
   );
   const [transportRoutes, setTransportRoutes] = useState<TransportRoute[]>(() =>
     liveApi
       ? normalizeTransportRoutes(cachedSnapshot?.transportRoutes, cachedSnapshot?.feeTerms ?? [])
-      : SEED_TRANSPORT,
+      : SEED_YEAR_CATALOGS.transportRoutes,
   );
   const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>(() =>
     liveApi ? (cachedSnapshot?.transportVehicles ?? []) : SEED_VEHICLES,
@@ -4903,7 +5126,7 @@ export function TenantStoreProvider({
   const [paymentCategories, setPaymentCategories] = useState<PaymentCategory[]>(() =>
     liveApi
       ? normalizePaymentCategories(cachedSnapshot?.paymentCategories)
-      : SEED_PAYMENT_CATEGORIES,
+      : SEED_YEAR_CATALOGS.paymentCategories,
   );
   const [feeTerms, setFeeTerms] = useState<FeeTerm[]>(() =>
     liveApi ? (cachedSnapshot?.feeTerms ?? []) : SEED_FEE_TERMS,
@@ -4931,6 +5154,7 @@ export function TenantStoreProvider({
   const skipThemePersist = useRef(true);
   // Live API: paint cached logo/name immediately so the dock does not flash initials
   // while the remote hydrate is in flight.
+  const currency = useOrgCurrency();
   const [schoolDetails, setSchoolDetails] = useState<SchoolDetails>(() => {
     if (!liveApi) return SEED_SCHOOL_DETAILS;
     const cached = cachedSnapshot?.schoolDetails;
@@ -4964,6 +5188,10 @@ export function TenantStoreProvider({
   const branchSwitchSeq = useRef(0);
   const branchesRef = useRef(branches);
   branchesRef.current = branches;
+  const academicYearRef = useRef(academicYear);
+  academicYearRef.current = academicYear;
+  const academicYearsRef = useRef(academicYears);
+  academicYearsRef.current = academicYears;
 
   const storeKey = storeKeyForCampus(tenantId, activeBranchId || initialBranchId);
   activeStoreKey = storeKey;
@@ -4972,39 +5200,58 @@ export function TenantStoreProvider({
   const applySnapshot = useCallback((snap: Snapshot) => {
     const apiLive = liveApiRef.current;
     setStudents(Array.isArray(snap.students) ? snap.students : []);
-    setStaff(
-      Array.isArray(snap.staff)
-        ? snap.staff
-            .filter((s): s is Staff => Boolean(s && typeof s.id === "string" && s.id))
-            .map((s) => normalizeStaff(s))
-        : [],
-    );
     setPayments(snap.payments);
-    setDepartments(snap.departments);
     setLeaveTypes(
       Array.isArray(snap.leaveTypes)
         ? snap.leaveTypes.map(normalizeLeaveType).filter((t): t is LeaveType => t !== null)
         : [],
     );
-    setRoles(snap.roles);
     setTenantUsers(snap.tenantUsers ?? (apiLive ? [] : SEED_TENANT_USERS));
-    setClasses(
-      Array.isArray(snap.classes)
-        ? snap.classes.map((c) =>
-            withClassFeeSchedule(
-              normalizeClassConfig(
-                c as Partial<ClassConfig> & Pick<ClassConfig, "id" | "tuitionFeeAmount">,
-              ),
-              snap.feeTerms ?? [],
-            ),
-          )
-        : apiLive
-          ? []
-          : SEED_CLASSES,
-    );
-    setTransportRoutes(normalizeTransportRoutes(snap.transportRoutes, snap.feeTerms ?? []));
     setTransportVehicles(snap.transportVehicles);
-    setPaymentCategories(normalizePaymentCategories(snap.paymentCategories));
+    const classesNext = Array.isArray(snap.classes)
+      ? snap.classes.map((c) =>
+          withClassFeeSchedule(
+            normalizeClassConfig(
+              c as Partial<ClassConfig> & Pick<ClassConfig, "id" | "tuitionFeeAmount">,
+            ),
+            snap.feeTerms ?? [],
+          ),
+        )
+      : apiLive
+        ? []
+        : SEED_YEAR_CATALOGS.classes;
+    const filled = backfillYearCatalogs(
+      {
+        classes: classesNext,
+        departments: Array.isArray(snap.departments)
+          ? snap.departments.map(normalizeDepartment).filter((d): d is Department => d !== null)
+          : apiLive
+            ? []
+            : SEED_YEAR_CATALOGS.departments,
+        roles: Array.isArray(snap.roles)
+          ? snap.roles.map(normalizeRoleRow).filter((r): r is Role => r !== null)
+          : apiLive
+            ? []
+            : SEED_YEAR_CATALOGS.roles,
+        paymentCategories: normalizePaymentCategories(snap.paymentCategories),
+        transportRoutes: normalizeTransportRoutes(snap.transportRoutes, snap.feeTerms ?? []),
+        staff: Array.isArray(snap.staff)
+          ? snap.staff
+              .filter((s): s is Staff => Boolean(s && typeof s.id === "string" && s.id))
+              .map((s) => normalizeStaff(s))
+          : apiLive
+            ? []
+            : SEED_YEAR_CATALOGS.staff,
+      },
+      snap.academicYears?.length ? snap.academicYears : [snap.academicYear],
+      snap.academicYear,
+    );
+    setStaff(filled.staff);
+    setDepartments(filled.departments);
+    setRoles(filled.roles);
+    setClasses(filled.classes);
+    setTransportRoutes(filled.transportRoutes);
+    setPaymentCategories(filled.paymentCategories);
     setFeeTerms(
       Array.isArray(snap.feeTerms)
         ? snap.feeTerms
@@ -5059,22 +5306,14 @@ export function TenantStoreProvider({
       setStudents(
         Array.isArray(data.students)
           ? data.students
-              .filter(
-                (s): s is Student =>
-                  Boolean(s && typeof s.id === "string" && typeof s.name === "string"),
+              .filter((s): s is Student =>
+                Boolean(s && typeof s.id === "string" && typeof s.name === "string"),
               )
               .map((s) =>
                 normalizeStudent(
                   s as Partial<Student> & Pick<Student, "id" | "name" | "cls" | "guardian" | "due">,
                 ),
               )
-          : [],
-      );
-      setStaff(
-        Array.isArray(data.staff)
-          ? data.staff
-              .filter((s): s is Staff => Boolean(s && typeof s.id === "string" && s.id))
-              .map((s) => normalizeStaff(s))
           : [],
       );
       setPayments(data.payments);
@@ -5105,13 +5344,11 @@ export function TenantStoreProvider({
           tenantNameRef.current?.trim() ||
           data.schoolDetails.name,
       });
-      setDepartments(Array.isArray(data.departments) ? data.departments : []);
       setLeaveTypes(
         Array.isArray(data.leaveTypes)
           ? data.leaveTypes.map(normalizeLeaveType).filter((t): t is LeaveType => t !== null)
           : [],
       );
-      setRoles(Array.isArray(data.roles) ? data.roles : []);
       const feeTermsNext = Array.isArray(data.feeTerms)
         ? data.feeTerms
             .map((t) => normalizeFeeTerm(t as Partial<FeeTerm> & Pick<FeeTerm, "id" | "label">))
@@ -5120,24 +5357,49 @@ export function TenantStoreProvider({
           ? []
           : SEED_FEE_TERMS;
       setFeeTerms(feeTermsNext);
-      setClasses(
-        Array.isArray(data.classes)
-          ? data.classes.map((c) =>
-              withClassFeeSchedule(
-                normalizeClassConfig(
-                  c as Partial<ClassConfig> & Pick<ClassConfig, "id" | "tuitionFeeAmount">,
+      const filled = backfillYearCatalogs(
+        {
+          classes: Array.isArray(data.classes)
+            ? data.classes.map((c) =>
+                withClassFeeSchedule(
+                  normalizeClassConfig(
+                    c as Partial<ClassConfig> & Pick<ClassConfig, "id" | "tuitionFeeAmount">,
+                  ),
+                  feeTermsNext,
                 ),
-                feeTermsNext,
-              ),
-            )
+              )
+            : apiLive
+              ? []
+              : SEED_YEAR_CATALOGS.classes,
+          departments: Array.isArray(data.departments)
+            ? data.departments.map(normalizeDepartment).filter((d): d is Department => d !== null)
+            : [],
+          roles: Array.isArray(data.roles)
+            ? data.roles.map(normalizeRoleRow).filter((r): r is Role => r !== null)
+            : [],
+          paymentCategories: normalizePaymentCategories(data.paymentCategories),
+          transportRoutes: normalizeTransportRoutes(data.transportRoutes, feeTermsNext),
+          staff: Array.isArray(data.staff)
+            ? data.staff
+                .filter((s): s is Staff => Boolean(s && typeof s.id === "string" && s.id))
+                .map((s) => normalizeStaff(s))
+            : [],
+        },
+        academicYearsRef.current.length ? academicYearsRef.current : [academicYearRef.current],
+        academicYearRef.current || SEED_ACADEMIC_YEAR,
+      );
+      setStaff(filled.staff);
+      setDepartments(filled.departments);
+      setRoles(filled.roles);
+      setClasses(filled.classes);
+      setPaymentCategories(filled.paymentCategories);
+      setTransportRoutes(filled.transportRoutes);
+      setTransportVehicles(
+        Array.isArray(data.transportVehicles)
+          ? data.transportVehicles
           : apiLive
             ? []
-            : SEED_CLASSES,
-      );
-      setPaymentCategories(normalizePaymentCategories(data.paymentCategories));
-      setTransportRoutes(normalizeTransportRoutes(data.transportRoutes, feeTermsNext));
-      setTransportVehicles(
-        Array.isArray(data.transportVehicles) ? data.transportVehicles : apiLive ? [] : SEED_VEHICLES,
+            : SEED_VEHICLES,
       );
       setActiveBranchIdState(data.activeBranchId);
       void data.preserveOrgFields;
@@ -5466,6 +5728,30 @@ export function TenantStoreProvider({
     () => studentsForAcademicYear(students, studentYearLedgers, academicYear),
     [students, studentYearLedgers, academicYear],
   );
+  const activeStaff = useMemo(
+    () => filterByAcademicYear(staff, academicYear),
+    [staff, academicYear],
+  );
+  const activeClasses = useMemo(
+    () => filterByAcademicYear(classes, academicYear),
+    [classes, academicYear],
+  );
+  const activeDepartments = useMemo(
+    () => filterByAcademicYear(departments, academicYear),
+    [departments, academicYear],
+  );
+  const activeRoles = useMemo(
+    () => filterByAcademicYear(roles, academicYear),
+    [roles, academicYear],
+  );
+  const activePaymentCategories = useMemo(
+    () => filterByAcademicYear(paymentCategories, academicYear),
+    [paymentCategories, academicYear],
+  );
+  const activeTransportRoutes = useMemo(
+    () => filterByAcademicYear(transportRoutes, academicYear),
+    [transportRoutes, academicYear],
+  );
 
   const setAcademicYear = useCallback<Dispatch<SetStateAction<string>>>(
     (action) => {
@@ -5526,8 +5812,26 @@ export function TenantStoreProvider({
         year,
         `FT-${year.replace(/\s+/g, "")}`,
       );
+      const clonedCatalogs = cloneYearCatalogs(
+        {
+          classes,
+          departments,
+          roles,
+          paymentCategories,
+          transportRoutes,
+          staff,
+        },
+        sourceYear,
+        year,
+        { includeStaff: false },
+      );
       const nextYears = [...academicYears, year];
       setFeeTerms((prev) => [...prev, ...cloned]);
+      setClasses((prev) => [...prev, ...clonedCatalogs.classes]);
+      setDepartments((prev) => [...prev, ...clonedCatalogs.departments]);
+      setRoles((prev) => [...prev, ...clonedCatalogs.roles]);
+      setPaymentCategories((prev) => [...prev, ...clonedCatalogs.paymentCategories]);
+      setTransportRoutes((prev) => [...prev, ...clonedCatalogs.transportRoutes]);
       setStudentYearLedgers((prev) => ensureYearLedger(prev, year));
       setAcademicYears(nextYears);
       setAcademicYearState(year);
@@ -5542,6 +5846,7 @@ export function TenantStoreProvider({
             for (const term of cloned) {
               await apiUpsertFeeTerm(term);
             }
+            await persistYearCatalogs(clonedCatalogs);
           } catch {
             /* local snapshot kept; user sees toast from Settings UI if needed */
           }
@@ -5549,7 +5854,64 @@ export function TenantStoreProvider({
       }
       return true;
     },
-    [academicYear, academicYears, closedAcademicYears, feeTerms],
+    [
+      academicYear,
+      academicYears,
+      classes,
+      closedAcademicYears,
+      departments,
+      feeTerms,
+      paymentCategories,
+      roles,
+      staff,
+      transportRoutes,
+    ],
+  );
+
+  const copyStaffFromPreviousYear = useCallback(
+    (fromYear?: string) => {
+      const sourceYear =
+        (fromYear && academicYears.includes(fromYear) ? fromYear : null) ??
+        academicYears
+          .filter((y) => y !== academicYear)
+          .find((y) => filterByAcademicYear(staff, y).length > 0) ??
+        academicYears.find((y) => y !== academicYear) ??
+        null;
+      if (!sourceYear || sourceYear === academicYear) {
+        return { copied: 0, fromYear: sourceYear };
+      }
+      const copies = cloneYearCatalogs(
+        {
+          classes: [],
+          departments: [],
+          roles: [],
+          paymentCategories: [],
+          transportRoutes: [],
+          staff,
+        },
+        sourceYear,
+        academicYear,
+        { includeStaff: true },
+      ).staff;
+      const existingIds = new Set(staff.map((s) => s.id));
+      const fresh = copies.filter((s) => !existingIds.has(s.id));
+      if (fresh.length === 0) return { copied: 0, fromYear: sourceYear };
+      setStaff((prev) => [...fresh, ...prev]);
+      if (getApiToken()) {
+        void persistYearCatalogs({
+          classes: [],
+          departments: [],
+          roles: [],
+          paymentCategories: [],
+          transportRoutes: [],
+          staff: fresh,
+        }).catch(() => {
+          /* local copy kept */
+        });
+      }
+      return { copied: fresh.length, fromYear: sourceYear };
+    },
+    [academicYear, academicYears, staff],
   );
 
   const renameAcademicYear = useCallback(
@@ -5576,6 +5938,13 @@ export function TenantStoreProvider({
       setStudentYearLedgers((prev) =>
         prev.map((l) => (l.academicYear === from ? { ...l, academicYear: nextLabel } : l)),
       );
+      setStudentFeeBreaks((prev) => retagCatalogYear(prev, from, nextLabel));
+      setClasses((prev) => retagCatalogYear(prev, from, nextLabel));
+      setDepartments((prev) => retagCatalogYear(prev, from, nextLabel));
+      setRoles((prev) => retagCatalogYear(prev, from, nextLabel));
+      setPaymentCategories((prev) => retagCatalogYear(prev, from, nextLabel));
+      setTransportRoutes((prev) => retagCatalogYear(prev, from, nextLabel));
+      setStaff((prev) => retagCatalogYear(prev, from, nextLabel));
       if (academicYear === from) {
         setAcademicYearState(nextLabel);
       }
@@ -5681,6 +6050,12 @@ export function TenantStoreProvider({
       setStudentFeeBreaks((prev) => prev.filter((b) => b.academicYear !== year));
       setStudentYearLedgers((prev) => prev.filter((l) => l.academicYear !== year));
       setPayments((prev) => prev.filter((p) => p.academicYear !== year));
+      setClasses((prev) => prev.filter((item) => taggedAcademicYear(item) !== year));
+      setDepartments((prev) => prev.filter((item) => taggedAcademicYear(item) !== year));
+      setRoles((prev) => prev.filter((item) => taggedAcademicYear(item) !== year));
+      setPaymentCategories((prev) => prev.filter((item) => taggedAcademicYear(item) !== year));
+      setTransportRoutes((prev) => prev.filter((item) => taggedAcademicYear(item) !== year));
+      setStaff((prev) => prev.filter((item) => taggedAcademicYear(item) !== year));
       if (academicYear === year && nextActive) {
         setAcademicYearState(nextActive);
       }
@@ -5767,16 +6142,16 @@ export function TenantStoreProvider({
 
   const resetTenant = () => {
     setStudents(SEED_STUDENTS);
-    setStaff(SEED_STAFF);
+    setStaff(SEED_YEAR_CATALOGS.staff);
     setPayments(SEED_PAYMENTS);
-    setDepartments(SEED_DEPARTMENTS);
+    setDepartments(SEED_YEAR_CATALOGS.departments);
     setLeaveTypes([]);
-    setRoles(SEED_ROLES);
+    setRoles(SEED_YEAR_CATALOGS.roles);
     setTenantUsers(SEED_TENANT_USERS);
-    setClasses(SEED_CLASSES);
-    setTransportRoutes(SEED_TRANSPORT);
+    setClasses(SEED_YEAR_CATALOGS.classes);
+    setTransportRoutes(SEED_YEAR_CATALOGS.transportRoutes);
     setTransportVehicles(SEED_VEHICLES);
-    setPaymentCategories(SEED_PAYMENT_CATEGORIES);
+    setPaymentCategories(SEED_YEAR_CATALOGS.paymentCategories);
     setFeeTerms(SEED_FEE_TERMS);
     setStudentFeeBreaks([]);
     setStudentYearLedgers(SEED_STUDENT_YEAR_LEDGERS);
@@ -5792,15 +6167,15 @@ export function TenantStoreProvider({
     setActiveBranchIdState(SEED_BRANCHES[0]?.id ?? "");
     writeSnapshot({
       students: SEED_STUDENTS,
-      staff: SEED_STAFF,
+      staff: SEED_YEAR_CATALOGS.staff,
       payments: SEED_PAYMENTS,
-      departments: SEED_DEPARTMENTS,
+      departments: SEED_YEAR_CATALOGS.departments,
       leaveTypes: [],
-      roles: SEED_ROLES,
-      classes: SEED_CLASSES,
-      transportRoutes: SEED_TRANSPORT,
+      roles: SEED_YEAR_CATALOGS.roles,
+      classes: SEED_YEAR_CATALOGS.classes,
+      transportRoutes: SEED_YEAR_CATALOGS.transportRoutes,
       transportVehicles: SEED_VEHICLES,
-      paymentCategories: SEED_PAYMENT_CATEGORIES,
+      paymentCategories: SEED_YEAR_CATALOGS.paymentCategories,
       feeTerms: SEED_FEE_TERMS,
       studentFeeBreaks: [],
       studentYearLedgers: SEED_STUDENT_YEAR_LEDGERS,
@@ -5849,10 +6224,7 @@ export function TenantStoreProvider({
       // Persist outgoing campus so sibling workspaces don't bleed.
       const outgoing = snapshotRef.current;
       if (outgoing && activeBranchId && activeBranchId !== nextId) {
-        writeSnapshot(
-          { ...outgoing, activeBranchId },
-          storeKeyForCampus(tenantId, activeBranchId),
-        );
+        writeSnapshot({ ...outgoing, activeBranchId }, storeKeyForCampus(tenantId, activeBranchId));
       }
 
       setBranchContext(tenantId ?? null, nextId);
@@ -5980,25 +6352,31 @@ export function TenantStoreProvider({
       activeStudents,
       staff,
       setStaff,
+      activeStaff,
       payments,
       setPayments,
       activePayments,
       departments,
       setDepartments,
+      activeDepartments,
       leaveTypes,
       setLeaveTypes,
       roles,
       setRoles,
+      activeRoles,
       tenantUsers,
       setTenantUsers,
       classes,
       setClasses,
+      activeClasses,
       transportRoutes,
       setTransportRoutes,
+      activeTransportRoutes,
       transportVehicles,
       setTransportVehicles,
       paymentCategories,
       setPaymentCategories,
+      activePaymentCategories,
       feeTerms,
       setFeeTerms,
       activeFeeTerms,
@@ -6013,6 +6391,7 @@ export function TenantStoreProvider({
       setAcademicYear,
       openAcademicYear,
       addAcademicYear,
+      copyStaffFromPreviousYear,
       renameAcademicYear,
       setAcademicYearClosed,
       canDeleteAcademicYear,
@@ -6038,21 +6417,28 @@ export function TenantStoreProvider({
       activeBranchId,
       activeBranch,
       openBranch,
+      currency,
     }),
     [
       students,
       activeStudents,
       staff,
+      activeStaff,
       payments,
       activePayments,
       departments,
+      activeDepartments,
       leaveTypes,
       roles,
+      activeRoles,
       tenantUsers,
       classes,
+      activeClasses,
       transportRoutes,
+      activeTransportRoutes,
       transportVehicles,
       paymentCategories,
+      activePaymentCategories,
       feeTerms,
       activeFeeTerms,
       studentFeeBreaks,
@@ -6063,6 +6449,7 @@ export function TenantStoreProvider({
       setAcademicYear,
       openAcademicYear,
       addAcademicYear,
+      copyStaffFromPreviousYear,
       renameAcademicYear,
       setAcademicYearClosed,
       canDeleteAcademicYear,
@@ -6081,6 +6468,7 @@ export function TenantStoreProvider({
       activeBranchId,
       activeBranch,
       openBranch,
+      currency,
     ],
   );
 

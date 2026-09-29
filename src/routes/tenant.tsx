@@ -4,6 +4,7 @@ import { useEffect } from "react";
 
 import {
   AcademicYearBooksFade,
+  AcademicYearSwitcher,
   BranchSwitcher,
   ImpersonationChip,
   TenantDesktopTopBar,
@@ -108,14 +109,8 @@ function TenantLayout() {
 
 function TenantShell() {
   const { session, updateSession } = useAuth();
-  const {
-    themeSettings,
-    hydrated,
-    branchSyncing,
-    activeBranchId,
-    branches,
-    openBranch,
-  } = useTenantStore();
+  const { themeSettings, hydrated, branchSyncing, activeBranchId, branches, openBranch } =
+    useTenantStore();
   const placement = themeSettings.navPlacement ?? "Left";
   const isVertical = placement === "Left" || placement === "Right";
   const isBottom = placement === "Bottom";
@@ -308,6 +303,7 @@ function TenantMobileHeader() {
         <div className="flex shrink-0 flex-nowrap items-center gap-1 sm:gap-1.5">
           <ImpersonationChip compact />
           <BranchSwitcher compact />
+          <AcademicYearSwitcher compact />
           <ThemeModeToggle className="h-9 w-9 shrink-0 rounded-full border border-white/80 bg-white/70 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-200 sm:h-10 sm:w-10" />
           <HardRefreshButton className="h-9 w-9 shrink-0 rounded-full border border-white/80 bg-white/70 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-200 sm:h-10 sm:w-10" />
           <button

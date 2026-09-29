@@ -16,6 +16,7 @@ import {
 } from "@/lib/tenant-store";
 import { getActiveBrandPalette, pdfFontName } from "@/lib/brand-theme";
 import { defaultSealToPng, defaultSignatureSvg, svgMarkupToPng } from "@/lib/school-marks";
+import { amountInWords } from "@/lib/amount-words";
 import { formatDownloadFilename, slugYear, todayStamp } from "@/lib/download-names";
 import {
   feeStatementHeadline,
@@ -25,6 +26,13 @@ import {
   type StudentLedgerRow,
   type StudentReceipt,
 } from "@/lib/student-fees";
+import {
+  asciiCurrencyText,
+  formatAmount,
+  formatMoney,
+  formatMoneyPdf,
+  CURRENCY_TOKEN_SRC,
+} from "@/lib/money";
 
 function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -110,8 +118,7 @@ export function downloadCsv(filename: string, headers: string[], rows: (string |
 }
 
 function pdfSafe(text: string) {
-  return String(text ?? "")
-    .replace(/₹/g, "Rs.")
+  return asciiCurrencyText(String(text ?? ""))
     .replace(/[·•∙]/g, " | ")
     .replace(/[−–—]/g, "-")
     .replace(/[“”]/g, '"')
@@ -235,7 +242,10 @@ function buildDefaultTableColumnStyles(
   const styles: Record<number, TablePdfColumnStyle> = {};
 
   labels.forEach((label, index) => {
-    if (["id", "transaction", "ref", "voucher"].some((key) => label.includes(key)) || label === "receipt") {
+    if (
+      ["id", "transaction", "ref", "voucher"].some((key) => label.includes(key)) ||
+      label === "receipt"
+    ) {
       fixedWidths[index] = 24;
       return;
     }
@@ -422,9 +432,7 @@ function drawPdfSummaryStrip(
       fontSize: 9,
       halign: "center",
     },
-    columnStyles: Object.fromEntries(
-      items.map((_, index) => [index, { cellWidth: columnWidth }]),
-    ),
+    columnStyles: Object.fromEntries(items.map((_, index) => [index, { cellWidth: columnWidth }])),
   });
   return lastPdfTableY(doc);
 }
@@ -488,7 +496,9 @@ function applyAlignedPdfTable(
       fontSize: options.fontSize,
       valign: "middle",
     },
-    ...(options.striped === false ? {} : { alternateRowStyles: { fillColor: options.brand.softRgb } }),
+    ...(options.striped === false
+      ? {}
+      : { alternateRowStyles: { fillColor: options.brand.softRgb } }),
     columnStyles,
     showHead: "everyPage",
     didParseCell: (data) => {
@@ -500,11 +510,7 @@ function applyAlignedPdfTable(
   return lastPdfTableY(doc);
 }
 
-function tablePdfBody(
-  headers: string[],
-  rows: TablePdfRowCell[][],
-  emptyMessage?: string,
-) {
+function tablePdfBody(headers: string[], rows: TablePdfRowCell[][], emptyMessage?: string) {
   if (rows.length > 0) {
     return rows.map((row) => row.map((cell) => normalizePdfTableCell(cell)));
   }
@@ -683,17 +689,18 @@ export function downloadTablePdf({
     cursorY = drawPdfSectionTitle(doc, tableTitle, cursorY, margin);
   }
 
-  cursorY = applyAlignedPdfTable(doc, {
-    startY: cursorY,
-    margin,
-    contentWidth,
-    headers,
-    body: tablePdfBody(headers, rows, emptyMessage),
-    brand,
-    fontSize,
-    striped,
-    columnStyles,
-  }) + 6;
+  cursorY =
+    applyAlignedPdfTable(doc, {
+      startY: cursorY,
+      margin,
+      contentWidth,
+      headers,
+      body: tablePdfBody(headers, rows, emptyMessage),
+      brand,
+      fontSize,
+      striped,
+      columnStyles,
+    }) + 6;
 
   if (summaryItems?.length && summaryPlacement !== "before") {
     cursorY = drawPdfSummaryStrip(doc, cursorY, margin, contentWidth, summaryItems, brand) + 6;
@@ -713,70 +720,6 @@ export function downloadTablePdf({
 
 export function printTablePdf(options: Omit<TablePdfOptions, "action">) {
   downloadTablePdf({ ...options, action: "print" });
-}
-
-function formatInrPdf(amount: number) {
-  return `Rs. ${amount.toLocaleString("en-IN")}`;
-}
-
-const ONES = [
-  "",
-  "One",
-  "Two",
-  "Three",
-  "Four",
-  "Five",
-  "Six",
-  "Seven",
-  "Eight",
-  "Nine",
-  "Ten",
-  "Eleven",
-  "Twelve",
-  "Thirteen",
-  "Fourteen",
-  "Fifteen",
-  "Sixteen",
-  "Seventeen",
-  "Eighteen",
-  "Nineteen",
-];
-const TENS = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
-
-function twoDigitWords(n: number): string {
-  if (n < 20) return ONES[n];
-  const tens = Math.floor(n / 10);
-  const ones = n % 10;
-  return `${TENS[tens]}${ones ? ` ${ONES[ones]}` : ""}`;
-}
-
-function indianNumberWords(n: number): string {
-  if (n === 0) return "Zero";
-  const parts: string[] = [];
-  const crore = Math.floor(n / 1e7);
-  n %= 1e7;
-  const lakh = Math.floor(n / 1e5);
-  n %= 1e5;
-  const thousand = Math.floor(n / 1000);
-  n %= 1000;
-  const hundred = Math.floor(n / 100);
-  const rest = n % 100;
-  if (crore) parts.push(`${twoDigitWords(crore)} Crore`);
-  if (lakh) parts.push(`${twoDigitWords(lakh)} Lakh`);
-  if (thousand) parts.push(`${twoDigitWords(thousand)} Thousand`);
-  if (hundred) parts.push(`${ONES[hundred]} Hundred`);
-  if (rest) parts.push(twoDigitWords(rest));
-  return parts.join(" ");
-}
-
-function inrAmountInWords(amount: number): string {
-  const abs = Math.abs(Number(amount) || 0);
-  const rupees = Math.floor(abs + 1e-9);
-  const paise = Math.round((abs - rupees) * 100);
-  const rupeeLabel = rupees === 1 ? "Rupee" : "Rupees";
-  if (paise <= 0) return `${indianNumberWords(rupees)} ${rupeeLabel} Only`;
-  const paiseLabel = paise === 1 ? "Paisa" : "Paise";
-  return `${indianNumberWords(rupees)} ${rupeeLabel} and ${indianNumberWords(paise)} ${paiseLabel} Only`;
 }
 
 function formatReceiptIssuedAt(raw: string | undefined, fallback: string): string {
@@ -1028,7 +971,7 @@ async function createReceiptPdf(
   const contentWidth = pageWidth - margin * 2;
   const generatedAt = formatNow();
   const issuedAt = formatReceiptIssuedAt(payment.time, generatedAt);
-  const amountFormatted = formatInrPdf(payment.amount);
+  const amountFormatted = formatMoneyPdf(payment.amount);
   const isExternal = payment.payerType === "external";
   const displayName = pdfSafe(schoolName || "School");
 
@@ -1109,7 +1052,7 @@ async function createReceiptPdf(
   const body: (string | number)[][] = items.map((item, index) => [
     String(index + 1),
     item.description,
-    item.amount.toLocaleString("en-IN"),
+    formatAmount(item.amount),
   ]);
 
   autoTable(doc, {
@@ -1150,7 +1093,7 @@ async function createReceiptPdf(
   });
 
   const tableEnd = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
-  const words = inrAmountInWords(payment.amount);
+  const words = amountInWords(payment.amount);
   const boxW = 78;
   const boxH = 11;
   const boxX = pageWidth - margin - boxW;
@@ -1174,7 +1117,10 @@ async function createReceiptPdf(
 
   const note = pdfSafe(payment.narration || "")
     .replace(/Fee breakdown:.*$/i, "")
-    .replace(/(?:^|\s*[·|]\s*)(?:Bank|Cash)\s+(?:Rs\.?|₹)\s*[\d,]+/gi, "")
+    .replace(
+      new RegExp(String.raw`(?:^|\s*[·|]\s*)(?:Bank|Cash)\s+${CURRENCY_TOKEN_SRC}\s*[\d,]+`, "gi"),
+      "",
+    )
     .replace(/^[·|\s]+|[·|\s]+$/g, "")
     .trim();
   let afterY = Math.max(boxY + boxH, boxY + wordLines.length * 4.2) + 10;
@@ -1304,7 +1250,7 @@ function padSlipRows(
   const rows = items.map((item, index) => [
     String(index + 1),
     item.label,
-    item.amount.toLocaleString("en-IN"),
+    formatAmount(item.amount),
   ]);
   if (!rows.length) rows.push(["", "Nil", "0"]);
   while (rows.length < minRows) rows.push(["", "", ""]);
@@ -1959,7 +1905,7 @@ export async function downloadSalarySlipPdf(
     tableWidth: colW,
     head: [["Sl.No", "Earnings", "Amount"]],
     body: padSlipRows(components.earnings, minRows),
-    foot: [["", "Total Earnings", formatInrPdf(components.earningsTotal)]],
+    foot: [["", "Total Earnings", formatMoneyPdf(components.earningsTotal)]],
     theme: "grid",
     styles: {
       fontSize: 9,
@@ -2002,7 +1948,7 @@ export async function downloadSalarySlipPdf(
     tableWidth: colW,
     head: [["Sl.No", "Deductions", "Amount"]],
     body: padSlipRows(components.deductions, minRows),
-    foot: [["", "Total Deductions", formatInrPdf(components.deductionsTotal)]],
+    foot: [["", "Total Deductions", formatMoneyPdf(components.deductionsTotal)]],
     theme: "grid",
     styles: {
       fontSize: 9,
@@ -2040,7 +1986,7 @@ export async function downloadSalarySlipPdf(
   const deductionsEnd = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
   const tablesEnd = Math.max(earningsEnd, deductionsEnd);
 
-  const words = inrAmountInWords(components.net);
+  const words = amountInWords(components.net);
   const boxW = 86;
   const boxH = 16;
   const boxX = pageWidth - margin - boxW;
@@ -2066,7 +2012,7 @@ export async function downloadSalarySlipPdf(
   doc.setFont(pdfFontName(), "bold");
   doc.setFontSize(12);
   doc.setTextColor(...receiptInk().white);
-  doc.text(formatInrPdf(components.net), boxX + boxW - 4, boxY + 13.2, { align: "right" });
+  doc.text(formatMoneyPdf(components.net), boxX + boxW - 4, boxY + 13.2, { align: "right" });
 
   let afterY = Math.max(boxY + boxH, boxY + wordLines.length * 4.2) + 8;
   const note = pdfSafe(payment.desc || "").trim();
@@ -2142,7 +2088,7 @@ export async function downloadPaymentVoucherPdf(
   const generatedAt = formatNow();
   const issuedAt = formatReceiptIssuedAt(payment.time, generatedAt);
   const displayName = pdfSafe(schoolName || "School");
-  const amountFormatted = formatInrPdf(payment.amount);
+  const amountFormatted = formatMoneyPdf(payment.amount);
   const leftMax = contentWidth * 0.52;
   const payeeName = pdfSafe(billTo?.name || payment.payee || "—");
   const payeeAddress = pdfSafe(billTo?.address || "").trim() || "—";
@@ -2203,7 +2149,7 @@ export async function downloadPaymentVoucherPdf(
     tableWidth: contentWidth,
     head: [["Sl.No", "Description", "Amount"]],
     body: [
-      ["1", description, payment.amount.toLocaleString("en-IN")],
+      ["1", description, formatAmount(payment.amount)],
       ["", "", ""],
       ["", "", ""],
       ["", "", ""],
@@ -2239,7 +2185,7 @@ export async function downloadPaymentVoucherPdf(
   });
 
   const tableEnd = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
-  const words = inrAmountInWords(payment.amount);
+  const words = amountInWords(payment.amount);
   const boxW = 88;
   const boxH = 12;
   const boxX = pageWidth - margin - boxW;
@@ -2359,9 +2305,9 @@ function appendFeeLedgerTable(
         pdfSafe(row.date),
         pdfSafe(row.desc),
         pdfSafe(row.due),
-        row.charge.toLocaleString("en-IN"),
-        row.paid.toLocaleString("en-IN"),
-        row.balance.toLocaleString("en-IN"),
+        formatAmount(row.charge),
+        formatAmount(row.paid),
+        formatAmount(row.balance),
         pdfSafe(status),
       ];
     }),
@@ -2463,7 +2409,7 @@ export async function downloadStudentFeeReportPdf(
 
   const headlineLedger = [
     ...(statement.tuition?.ledger ?? statement.ledger),
-    ...(statement.vehicle?.applicable ? statement.vehicle.ledger ?? [] : []),
+    ...(statement.vehicle?.applicable ? (statement.vehicle.ledger ?? []) : []),
   ];
   const headlineReceipts = uniqueStudentReceipts(statement.receipts);
   const headline = feeStatementHeadline(headlineLedger, headlineReceipts);
@@ -2472,9 +2418,9 @@ export async function downloadStudentFeeReportPdf(
   const colGap = 4;
   const colW = (contentWidth - colGap * 2) / 3;
   const summaryItems = [
-    { label: "Total Fee", value: formatInrPdf(headline.totalFee) },
-    { label: "Total Paid", value: formatInrPdf(headline.totalPaid) },
-    { label: "Total Due", value: formatInrPdf(headline.totalDue) },
+    { label: "Total Fee", value: formatMoneyPdf(headline.totalFee) },
+    { label: "Total Paid", value: formatMoneyPdf(headline.totalPaid) },
+    { label: "Total Due", value: formatMoneyPdf(headline.totalDue) },
   ];
   summaryItems.forEach((item, index) => {
     const x = margin + index * (colW + colGap);
@@ -2500,7 +2446,7 @@ export async function downloadStudentFeeReportPdf(
     doc.setFont(pdfFontName(), "normal");
     doc.setFontSize(8);
     doc.setTextColor(...receiptInk().muted);
-    const creditNote = `${formatInrPdf(headline.unallocatedPaid)} received against vehicle or other heads is included in Total Paid and deducted from Total Due. It is not allocated to the academic lines below.`;
+    const creditNote = `${formatMoneyPdf(headline.unallocatedPaid)} received against vehicle or other heads is included in Total Paid and deducted from Total Due. It is not allocated to the academic lines below.`;
     const creditLines = doc.splitTextToSize(creditNote, contentWidth);
     doc.text(creditLines, margin, tableStart);
     tableStart += creditLines.length * 4 + 4;
@@ -2547,7 +2493,7 @@ export async function downloadStudentFeeReportPdf(
         pdfSafe(row.date),
         pdfSafe(row.period ? `${row.cat || "Fee"} · ${row.period}` : row.cat || "Fee"),
         pdfSafe(row.mode),
-        row.amount.toLocaleString("en-IN"),
+        formatAmount(row.amount),
       ]),
       theme: "grid",
       styles: {
@@ -2588,7 +2534,7 @@ export async function downloadStudentFeeReportPdf(
         ["Student", pdfSafe(student.name)],
         ["Student ID", pdfSafe(student.id)],
         ["Class", pdfSafe(student.cls || "—")],
-        ["Total Due", formatInrPdf(headline.totalDue)],
+        ["Total Due", formatMoneyPdf(headline.totalDue)],
       ],
     },
   );
@@ -2697,9 +2643,9 @@ export async function downloadStaffPayrollReportPdf(
   const colGap = 4;
   const colW = (contentWidth - colGap * 2) / 3;
   const summaryItems = [
-    { label: "Total Payable", value: formatInrPdf(statement.totalPayable) },
-    { label: "Total Paid", value: formatInrPdf(statement.totalPaid) },
-    { label: "Total Due", value: formatInrPdf(statement.totalDue) },
+    { label: "Total Payable", value: formatMoneyPdf(statement.totalPayable) },
+    { label: "Total Paid", value: formatMoneyPdf(statement.totalPaid) },
+    { label: "Total Due", value: formatMoneyPdf(statement.totalDue) },
   ];
   summaryItems.forEach((item, index) => {
     const x = margin + index * (colW + colGap);
@@ -2730,9 +2676,9 @@ export async function downloadStaffPayrollReportPdf(
       body: statement.ledger.map((row) => [
         pdfSafe(row.monthLabel),
         pdfSafe(row.attendanceLabel),
-        row.payable.toLocaleString("en-IN"),
-        row.paid.toLocaleString("en-IN"),
-        row.outstanding.toLocaleString("en-IN"),
+        formatAmount(row.payable),
+        formatAmount(row.paid),
+        formatAmount(row.outstanding),
         pdfSafe(row.status),
       ]),
       theme: "grid",
@@ -2777,7 +2723,7 @@ export async function downloadStaffPayrollReportPdf(
         pdfSafe(row.description),
         pdfSafe(row.mode),
         pdfSafe(row.status),
-        row.amount.toLocaleString("en-IN"),
+        formatAmount(row.amount),
       ]),
       theme: "grid",
       styles: {
@@ -2818,7 +2764,7 @@ export async function downloadStaffPayrollReportPdf(
         ["Employee", pdfSafe(staff.name)],
         ["Employee ID", pdfSafe(staff.id)],
         ["Pay Period", pdfSafe(input.payrollMonthLabel)],
-        ["Total Due", formatInrPdf(statement.totalDue)],
+        ["Total Due", formatMoneyPdf(statement.totalDue)],
       ],
     },
   );

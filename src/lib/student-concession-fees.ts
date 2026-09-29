@@ -17,6 +17,7 @@ import {
   type TransportFeeShift,
   type TransportRoute,
 } from "@/lib/tenant-store";
+import { formatMoney } from "@/lib/money";
 
 export type { StudentConcessionFeeTier, StudentConcessionFees, StudentConcessionOtherFee };
 
@@ -156,15 +157,15 @@ export function concessionSummaryLines(student: Student): string[] {
   const fees = student.concessionFees;
   if (isConcessionTierEnabled(fees?.tuition)) {
     const total = sumFeeSchedule(fees!.tuition!.feeSchedule);
-    lines.push(`Custom tuition: ₹${total.toLocaleString("en-IN")}`);
+    lines.push(`Custom tuition: ${formatMoney(total)}`);
   }
   if (isConcessionTierEnabled(fees?.vehicle)) {
     const total = sumFeeSchedule(fees!.vehicle!.feeSchedule);
-    lines.push(`Custom bus fee: ₹${total.toLocaleString("en-IN")}`);
+    lines.push(`Custom bus fee: ${formatMoney(total)}`);
   }
   for (const other of resolveConcessionOtherFees(student)) {
     const total = sumFeeSchedule(other.feeSchedule);
-    lines.push(`${other.label}: ₹${total.toLocaleString("en-IN")}`);
+    lines.push(`${other.label}: ${formatMoney(total)}`);
   }
   return lines;
 }

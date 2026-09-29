@@ -8,6 +8,7 @@ import {
   type TransportRoute,
   type TransportVehicle,
 } from "@/lib/tenant-store";
+import { formatMoney } from "@/lib/money";
 
 export const TRANSPORT_ROUTE_CSV_HEADERS = [
   "From",
@@ -190,11 +191,7 @@ export function completeRouteFees(morning: number, evening: number, both: number
 }
 
 export function normalizeRouteStopKey(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[.,]/g, " ")
-    .replace(/\s+/g, " ");
+  return value.trim().toLowerCase().replace(/[.,]/g, " ").replace(/\s+/g, " ");
 }
 
 export function routePairKey(from: string, to: string): string {
@@ -430,7 +427,9 @@ function withOptionalCoord<K extends string>(
   key: K,
   value: number | undefined,
 ): Partial<Record<K, number>> {
-  return value != null && Number.isFinite(value) ? ({ [key]: value } as Partial<Record<K, number>>) : {};
+  return value != null && Number.isFinite(value)
+    ? ({ [key]: value } as Partial<Record<K, number>>)
+    : {};
 }
 
 export function resolveTransportRouteImport(
@@ -475,13 +474,15 @@ export function resolveTransportRouteImport(
     const route = withRouteFeeSchedule(base, opts.feeTerms);
     const extraParts = [
       existing ? `Update ${existing.id}` : "New route",
-      `Morning ₹${draft.morningFee.toLocaleString("en-IN")}`,
-      `Evening ₹${draft.eveningFee.toLocaleString("en-IN")}`,
+      `Morning ${formatMoney(draft.morningFee)}`,
+      `Evening ${formatMoney(draft.eveningFee)}`,
       draft.billingCycle,
     ];
     if (applyVehicles) {
       extraParts.push(
-        vehicleIds.length ? `${vehicleIds.length} vehicle${vehicleIds.length === 1 ? "" : "s"}` : "No vehicles",
+        vehicleIds.length
+          ? `${vehicleIds.length} vehicle${vehicleIds.length === 1 ? "" : "s"}`
+          : "No vehicles",
       );
     }
     if (unknown.length) {

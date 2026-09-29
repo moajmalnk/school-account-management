@@ -197,8 +197,8 @@ export const MARKETING = {
     plans: [
       {
         name: "Basic",
-        monthly: 899,
-        annuallyOffer: 9499,
+        monthlyInr: 899,
+        annualInr: 9499,
         highlight: false,
         blurb: "Core school ops, fees, and reporting.",
         features: [
@@ -211,8 +211,8 @@ export const MARKETING = {
       },
       {
         name: "Premium",
-        monthly: 1499,
-        annuallyOffer: 16499,
+        monthlyInr: 1499,
+        annualInr: 16499,
         highlight: true,
         badge: "Most adopted",
         blurb: "Fee collection, extra users, and branches.",
@@ -225,8 +225,8 @@ export const MARKETING = {
       },
       {
         name: "Enterprise",
-        monthly: 2299,
-        annuallyOffer: 25499,
+        monthlyInr: 2299,
+        annualInr: 25499,
         highlight: false,
         blurb: "Full platform — payroll, WhatsApp, automation.",
         features: [
@@ -241,8 +241,7 @@ export const MARKETING = {
   testimonials: {
     eyebrow: "Trusted by schools",
     title: "Campuses running on Feezo",
-    subtitle:
-      "Real schools — live student counts, plans, and workspaces from the Feezo platform.",
+    subtitle: "Real schools — live student counts, plans, and workspaces from the Feezo platform.",
     items: [
       {
         id: "iqra-tibyan",
@@ -322,6 +321,6 @@ export const MARKETING = {
   },
 } as const;
 
-export function formatInr(n: number) {
-  return n.toLocaleString("en-IN");
-}
+/** Plan prices above are INR; the pricing page converts them with live FX for display only. */
+export const MARKETING_PRICE_NOTE =
+  "Prices shown in your currency are approximate. Billing is in INR unless agreed otherwise.";

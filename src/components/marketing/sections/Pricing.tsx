@@ -3,7 +3,9 @@ import { motion, useReducedMotion } from "motion/react";
 
 import { SectionReveal, StaggerItem, StaggerReveal } from "@/components/marketing/SectionReveal";
 import { TrialSignupLink } from "@/components/marketing/TrialSignupLink";
-import { formatInr, MARKETING } from "@/lib/marketing-content";
+import { LocaleSelectBar } from "@/components/locale/LocaleSelectBar";
+import { useLocale } from "@/lib/locale/LocaleProvider";
+import { MARKETING, MARKETING_PRICE_NOTE } from "@/lib/marketing-content";
 
 const { pricing } = MARKETING;
 
@@ -27,13 +29,17 @@ export function Pricing() {
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <motion.div
           className="absolute -top-24 -left-24 w-80 h-80 rounded-full"
-          style={{ background: "radial-gradient(circle, rgba(143,202,74,0.16) 0%, transparent 70%)" }}
+          style={{
+            background: "radial-gradient(circle, rgba(143,202,74,0.16) 0%, transparent 70%)",
+          }}
           animate={{ scale: [1, 1.22, 1], opacity: [0.5, 1, 0.5] }}
           transition={{ duration: 9, repeat: Infinity, ease: "easeInOut" }}
         />
         <motion.div
           className="absolute -bottom-24 -right-24 w-96 h-96 rounded-full"
-          style={{ background: "radial-gradient(circle, rgba(107,168,50,0.12) 0%, transparent 70%)" }}
+          style={{
+            background: "radial-gradient(circle, rgba(107,168,50,0.12) 0%, transparent 70%)",
+          }}
           animate={{ scale: [1.1, 1, 1.1] }}
           transition={{ duration: 11, repeat: Infinity, ease: "easeInOut" }}
         />
@@ -86,8 +92,11 @@ export function Pricing() {
             </motion.span>
           </h2>
           <p className="mt-4 text-[13px] leading-relaxed text-[var(--mkt-ink)] font-medium max-w-[280px] mx-auto">
-            Every plan includes a full evaluation period.<br />Sign in when your school is ready.
+            Every plan includes a full evaluation period.
+            <br />
+            Sign in when your school is ready.
           </p>
+          <PricingLocaleBar />
         </SectionReveal>
 
         <StaggerReveal className="mt-10 grid gap-5 sm:mt-12 lg:grid-cols-3">
@@ -100,7 +109,8 @@ export function Pricing() {
                   <motion.div
                     className="absolute -inset-[2px] rounded-[26px] z-0"
                     style={{
-                      background: "linear-gradient(90deg,rgba(143,202,74,0.9),rgba(200,235,160,0.7),rgba(107,168,50,0.9),rgba(143,202,74,0.9))",
+                      background:
+                        "linear-gradient(90deg,rgba(143,202,74,0.9),rgba(200,235,160,0.7),rgba(107,168,50,0.9),rgba(143,202,74,0.9))",
                       backgroundSize: "300% 300%",
                       filter: "blur(4px)",
                     }}
@@ -115,19 +125,28 @@ export function Pricing() {
                       backdropFilter: "blur(24px) saturate(200%)",
                       WebkitBackdropFilter: "blur(24px) saturate(200%)",
                       border: "1.5px solid rgba(143,202,74,0.55)",
-                      boxShadow: "0 20px 60px rgba(143,202,74,0.28), 0 4px 20px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.95)",
+                      boxShadow:
+                        "0 20px 60px rgba(143,202,74,0.28), 0 4px 20px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.95)",
                       padding: "2.5rem 1.5rem 1.5rem",
                     }}
-                    whileHover={reduce ? undefined : {
-                      y: -10,
-                      boxShadow: "0 32px 80px rgba(143,202,74,0.38), 0 8px 24px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.98)",
-                    }}
+                    whileHover={
+                      reduce
+                        ? undefined
+                        : {
+                            y: -10,
+                            boxShadow:
+                              "0 32px 80px rgba(143,202,74,0.38), 0 8px 24px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.98)",
+                          }
+                    }
                     transition={{ type: "spring", stiffness: 260, damping: 22 }}
                   >
                     {/* Top banner */}
                     <div
                       className="absolute top-0 inset-x-0 h-8 text-white flex items-center justify-center text-[11px] font-bold uppercase tracking-wider"
-                      style={{ background: "linear-gradient(90deg,#8FCA4A,#5ec45f)", borderRadius: "21px 21px 0 0" }}
+                      style={{
+                        background: "linear-gradient(90deg,#8FCA4A,#5ec45f)",
+                        borderRadius: "21px 21px 0 0",
+                      }}
                     >
                       Most Popular <Check className="w-3.5 h-3.5 ml-1 inline" />
                     </div>
@@ -141,10 +160,18 @@ export function Pricing() {
                     {/* Shimmer */}
                     <motion.div
                       className="absolute inset-0 rounded-[24px] pointer-events-none"
-                      style={{ background: "linear-gradient(120deg,transparent 20%,rgba(255,255,255,0.5) 50%,transparent 80%)" }}
+                      style={{
+                        background:
+                          "linear-gradient(120deg,transparent 20%,rgba(255,255,255,0.5) 50%,transparent 80%)",
+                      }}
                       initial={{ x: "-100%" }}
                       animate={{ x: "320%" }}
-                      transition={{ duration: 2.5, repeat: Infinity, repeatDelay: 3, ease: "easeInOut" }}
+                      transition={{
+                        duration: 2.5,
+                        repeat: Infinity,
+                        repeatDelay: 3,
+                        ease: "easeInOut",
+                      }}
                     />
 
                     <PlanContent plan={plan} highlighted />
@@ -160,28 +187,45 @@ export function Pricing() {
                     backdropFilter: "blur(20px) saturate(180%)",
                     WebkitBackdropFilter: "blur(20px) saturate(180%)",
                     border: "1px solid rgba(143,202,74,0.22)",
-                    boxShadow: "0 6px 28px rgba(143,202,74,0.10), 0 1px 4px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.88)",
+                    boxShadow:
+                      "0 6px 28px rgba(143,202,74,0.10), 0 1px 4px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.88)",
                     padding: "2.5rem 1.5rem 1.5rem",
                   }}
-                  whileHover={reduce ? undefined : {
-                    y: -8,
-                    boxShadow: "0 24px 60px rgba(143,202,74,0.24), 0 6px 16px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.95)",
-                    border: "1px solid rgba(143,202,74,0.4)",
-                  }}
+                  whileHover={
+                    reduce
+                      ? undefined
+                      : {
+                          y: -8,
+                          boxShadow:
+                            "0 24px 60px rgba(143,202,74,0.24), 0 6px 16px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.95)",
+                          border: "1px solid rgba(143,202,74,0.4)",
+                        }
+                  }
                   transition={{ type: "spring", stiffness: 280, damping: 24 }}
                 >
                   {/* Top shine */}
                   <div
                     className="absolute top-0 left-0 right-0 h-px pointer-events-none"
-                    style={{ background: "linear-gradient(90deg,transparent,rgba(255,255,255,0.95) 40%,rgba(255,255,255,0.95) 60%,transparent)" }}
+                    style={{
+                      background:
+                        "linear-gradient(90deg,transparent,rgba(255,255,255,0.95) 40%,rgba(255,255,255,0.95) 60%,transparent)",
+                    }}
                   />
                   {/* Shimmer */}
                   <motion.div
                     className="absolute inset-0 rounded-[24px] pointer-events-none"
-                    style={{ background: "linear-gradient(120deg,transparent 20%,rgba(255,255,255,0.4) 50%,transparent 80%)" }}
+                    style={{
+                      background:
+                        "linear-gradient(120deg,transparent 20%,rgba(255,255,255,0.4) 50%,transparent 80%)",
+                    }}
                     initial={{ x: "-100%" }}
                     animate={{ x: "320%" }}
-                    transition={{ duration: 2.5, repeat: Infinity, repeatDelay: 5, ease: "easeInOut" }}
+                    transition={{
+                      duration: 2.5,
+                      repeat: Infinity,
+                      repeatDelay: 5,
+                      ease: "easeInOut",
+                    }}
                   />
                   <PlanContent plan={plan} highlighted={false} />
                 </motion.div>
@@ -194,6 +238,18 @@ export function Pricing() {
   );
 }
 
+function PricingLocaleBar() {
+  const { currency } = useLocale();
+  return (
+    <div className="mt-6 flex flex-col items-center gap-2">
+      <LocaleSelectBar density="compact" className="justify-center" />
+      {currency !== "INR" ? (
+        <p className="text-[11px] font-medium text-[var(--mkt-muted)]">{MARKETING_PRICE_NOTE}</p>
+      ) : null}
+    </div>
+  );
+}
+
 function PlanContent({
   plan,
   highlighted,
@@ -201,15 +257,20 @@ function PlanContent({
   plan: (typeof pricing.plans)[number];
   highlighted: boolean;
 }) {
+  const { formatMarketingFromInr } = useLocale();
   return (
     <>
       <h3 className="text-[15px] font-bold text-[var(--mkt-ink)] relative z-10">{plan.name}</h3>
       <p className="mt-3 text-[2.25rem] font-bold tracking-tight text-[var(--mkt-ink)] leading-none relative z-10">
-        ₹{formatInr(plan.monthly)}
-        <span className="text-[12px] font-medium text-[var(--mkt-muted)] ml-1 tracking-normal">/ month</span>
+        {formatMarketingFromInr(plan.monthlyInr)}
+        <span className="text-[12px] font-medium text-[var(--mkt-muted)] ml-1 tracking-normal">
+          / month
+        </span>
       </p>
 
-      <p className="mt-5 text-[12px] leading-relaxed text-[var(--mkt-ink)] font-medium relative z-10">{plan.blurb}</p>
+      <p className="mt-5 text-[12px] leading-relaxed text-[var(--mkt-ink)] font-medium relative z-10">
+        {plan.blurb}
+      </p>
 
       <ul className="mt-6 flex-1 space-y-3 relative z-10">
         {plan.features.map((f) => (

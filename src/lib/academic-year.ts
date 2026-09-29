@@ -302,11 +302,55 @@ export function normalizeAcademicYearLabel(input: string): string | null {
   return `AY ${start}-${String(endYear).slice(-2)}`;
 }
 
+export function taggedAcademicYear(item: { academicYear?: string }): string {
+  return (item.academicYear ?? "").trim();
+}
+
+/** Stable id for a year-cloned catalog/staff row. Original ids stay on the source year. */
+export function yearScopedId(sourceId: string, year: string): string {
+  const slug = year.replace(/[^a-zA-Z0-9]+/g, "").slice(0, 24);
+  const base = sourceId.replace(/--[A-Za-z0-9]+$/, "");
+  return `${base}--${slug}`;
+}
+
 export function filterByAcademicYear<T extends { academicYear?: string }>(
   items: T[],
   year: string,
 ): T[] {
-  return items.filter((item) => (item.academicYear ?? "") === year);
+  return items.filter((item) => taggedAcademicYear(item) === year);
+}
+
+export function stampAcademicYear<T extends { academicYear?: string }>(item: T, year: string): T {
+  const tagged = taggedAcademicYear(item);
+  return tagged === year ? item : { ...item, academicYear: year };
+}
+
+export function stampUntaggedAcademicYear<T extends { academicYear?: string }>(
+  items: T[],
+  year: string,
+): T[] {
+  return items.map((item) => (taggedAcademicYear(item) ? item : { ...item, academicYear: year }));
+}
+
+export function catalogsNeedYearBackfill<T extends { academicYear?: string }>(items: T[]): boolean {
+  return items.length > 0 && items.every((item) => !taggedAcademicYear(item));
+}
+
+export function cloneTaggedForYear<T extends { id: string; academicYear?: string }>(
+  items: T[],
+  fromYear: string,
+  toYear: string,
+  remap?: (clone: T, source: T) => T,
+): T[] {
+  if (!toYear || fromYear === toYear) return [];
+  return filterByAcademicYear(items, fromYear).map((source) => {
+    const clone = {
+      ...source,
+      id: yearScopedId(source.id, toYear),
+      academicYear: toYear,
+    };
+    return remap ? remap(clone, source) : clone;
+  });
 }
 
 export function ensureYearLedger(ledgers: StudentYearLedger[], year: string): StudentYearLedger[] {

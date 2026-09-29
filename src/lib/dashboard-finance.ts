@@ -5,6 +5,7 @@ import {
   type PaymentPeriod,
 } from "@/lib/payment-period";
 import type { Payment } from "@/lib/tenant-store";
+import { CURRENCY_TOKEN_SRC } from "@/lib/money";
 
 /** @deprecated Kept empty — live totals come from disbursements API. */
 export const OPERATING_EXPENSES: readonly { account: string; amount: number }[] = [];
@@ -147,7 +148,9 @@ export function parsePaymentModeSplit(
 
   for (const part of parts) {
     const cleaned = part.replace(/^Fee breakdown:\s*/i, "").trim();
-    const match = cleaned.match(/^(Bank|Cash)\s+(?:₹|Rs\.?)\s*([\d,]+(?:\.\d+)?)\s*$/i);
+    const match = cleaned.match(
+      new RegExp(String.raw`^(Bank|Cash)\s+${CURRENCY_TOKEN_SRC}\s*([\d,]+(?:\.\d+)?)\s*$`, "i"),
+    );
     if (!match) continue;
     const amount = Number(match[2].replace(/,/g, ""));
     if (!Number.isFinite(amount) || amount < 0) continue;
@@ -203,10 +206,7 @@ function clearedOutflow(rows: FinanceDisbursement[]): FinanceDisbursement[] {
  * Cash in hand = cash receipts − cash payments (cleared only).
  * Queued bills do not reduce cash until they are paid.
  */
-export function cashOnHand(
-  payments: Payment[],
-  disbursements: FinanceDisbursement[] = [],
-): number {
+export function cashOnHand(payments: Payment[], disbursements: FinanceDisbursement[] = []): number {
   const inflow = payments.reduce((sum, p) => sum + paymentCashAmount(p), 0);
   const outflow = clearedOutflow(disbursements).reduce(
     (sum, row) => sum + paymentCashAmount(disbursementAsPayment(row)),
@@ -228,10 +228,4 @@ export function bankBalance(
     0,
   );
   return inflow - outflow;
-}
-
-export function formatInr(amount: number): string {
-  const n = Math.round(amount);
-  if (n < 0) return `₹\u00a0-${Math.abs(n).toLocaleString("en-IN")}`;
-  return `₹\u00a0${n.toLocaleString("en-IN")}`;
 }

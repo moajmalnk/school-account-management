@@ -20,6 +20,7 @@ import {
   type ClassFeeAmountMode,
   type ClassFeeLine,
 } from "@/lib/tenant-store";
+import { formatAmount, formatMoney, moneyColumnLabel } from "@/lib/money";
 
 export type FeeScheduleDraft = {
   billingModeChosen: boolean;
@@ -121,7 +122,7 @@ type FeeScheduleEditorProps = {
 export function FeeScheduleEditor({
   value,
   onChange,
-  amountLabel = "Amount each (₹)",
+  amountLabel = moneyColumnLabel("Amount each"),
 }: FeeScheduleEditorProps) {
   const defaultCount = (cycle: FeeScheduleDraft["billingCycle"]) => (cycle === "Term" ? 4 : 10);
 
@@ -326,7 +327,9 @@ export function FeeScheduleEditor({
             {value.feeAmountMode === "fixed" ? (
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                  {value.billingCycle === "Term" ? "Amount per term (₹)" : amountLabel}
+                  {value.billingCycle === "Term"
+                    ? moneyColumnLabel("Amount per term")
+                    : amountLabel}
                 </Label>
                 <Input
                   inputMode="numeric"
@@ -398,7 +401,7 @@ export function FeeScheduleEditor({
                 )}
               >
                 <span>Label</span>
-                <span>Amount (₹)</span>
+                <span>{moneyColumnLabel("Amount")}</span>
                 <span>Due date</span>
                 {value.feeAmountMode === "custom" ? <span className="sr-only">Remove</span> : null}
               </div>
@@ -426,7 +429,7 @@ export function FeeScheduleEditor({
                     )}
                     {value.feeAmountMode === "fixed" ? (
                       <span className="font-mono text-[12.5px] text-black/70 dark:text-zinc-300">
-                        ₹ {(Number(value.fixedAmount) || 0).toLocaleString("en-IN")}
+                        {formatMoney(Number(value.fixedAmount) || 0)}
                       </span>
                     ) : (
                       <Input
@@ -491,17 +494,17 @@ export function FeeScheduleEditor({
                 </SelectContent>
               </Select>
               <p className="text-[11px] text-black/45 dark:text-zinc-500">
-                Total · ₹{" "}
+                Total ·{" "}
                 <span className="font-mono font-semibold text-[#0F766E]">
-                  {scheduleTotal.toLocaleString("en-IN")}
+                  {formatMoney(scheduleTotal)}
                 </span>
               </p>
             </div>
           ) : (
             <p className="text-[11px] text-black/45 dark:text-zinc-500">
-              Total · ₹{" "}
+              Total ·{" "}
               <span className="font-mono font-semibold text-[#0F766E]">
-                {scheduleTotal.toLocaleString("en-IN")}
+                {formatMoney(scheduleTotal)}
               </span>
             </p>
           )}

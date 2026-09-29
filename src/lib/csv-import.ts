@@ -43,7 +43,7 @@ export function isExcelFilename(name: string): boolean {
 
 export function parseCsvMoney(raw: string): number {
   const cleaned = String(raw ?? "")
-    .replace(/₹/g, "")
+    .replace(/\u20B9|C\$|\$|€|£|\b(?:INR|USD|AED|AUD|CAD|EUR|GBP|SAR|CHF|Rs\.?)\b/gi, "")
     .replace(/rs\.?/gi, "")
     .replace(/inr/gi, "")
     .replace(/,/g, "")

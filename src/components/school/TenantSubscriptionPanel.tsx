@@ -31,13 +31,8 @@ import { ApiError } from "@/lib/api/client";
 import { fetchTenantSubscription, type TenantSubscription } from "@/lib/api/subscription";
 import type { PlatformInvoice } from "@/lib/api/super-admin";
 import { PLAN_FEATURE_ITEMS } from "@/lib/permissions";
+import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
-
-const CURRENCY_SYMBOL: Record<string, string> = {
-  INR: "₹",
-  USD: "$",
-  EUR: "€",
-};
 
 const AUTO_RENEW_KEY = "school-accounts/subscription-auto-renew";
 
@@ -86,13 +81,6 @@ function normalizeCycle(value: string | undefined): SubscriptionCycle {
   return "Monthly";
 }
 
-function formatMoney(symbol: string, amount: number): string {
-  return `${symbol} ${amount.toLocaleString("en-IN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
-
 function latestOpenInvoice(invoices: PlatformInvoice[]): PlatformInvoice | undefined {
   return invoices.find((inv) => inv.status !== "Void");
 }
@@ -130,12 +118,12 @@ function invoiceStatusClass(status: string): string {
 
 function InvoiceDocRow({
   invoice,
-  symbol,
+  currency,
   onInvoice,
   onReceipt,
 }: {
   invoice: PlatformInvoice;
-  symbol: string;
+  currency: string;
   onInvoice: () => void;
   onReceipt: () => void;
 }) {
@@ -164,7 +152,7 @@ function InvoiceDocRow({
       </div>
       <div className="mt-2 flex items-center justify-between gap-2">
         <div className="font-mono text-[13px] font-semibold text-black dark:text-zinc-50">
-          {formatMoney(CURRENCY_SYMBOL[invoice.currency] ?? symbol, invoice.total)}
+          {formatMoney(invoice.total, invoice.currency || currency)}
         </div>
         <div className="flex flex-wrap justify-end gap-1.5">
           <Button
@@ -262,7 +250,7 @@ export function TenantSubscriptionPanel({
   const planName = data?.planName || data?.tier || "Basic";
   const cycle = normalizeCycle(data?.billingCycle || latest?.billingCycle);
   const renewalDate = data?.renewalDate || latest?.dueDate || null;
-  const symbol = CURRENCY_SYMBOL[data?.currency ?? "INR"] ?? data?.currency ?? "₹";
+  const currency = data?.currency || "INR";
   const lastTotal = latest ? Number(latest.total) || 0 : 0;
   const catalogMonthly = data?.monthly || 0;
   const catalogAnnual = data?.annually || 0;
@@ -347,7 +335,7 @@ export function TenantSubscriptionPanel({
         planName={planName}
         monthly={monthly || lastTotal}
         annually={annually || lastTotal}
-        currencySymbol={symbol}
+        currency={currency}
         currentCycle={cycle}
         renewalDate={renewalDate}
         autoRenew={autoRenew}
@@ -377,7 +365,7 @@ export function TenantSubscriptionPanel({
                   <InvoiceDocRow
                     key={inv.id}
                     invoice={inv}
-                    symbol={symbol}
+                    currency={currency}
                     onInvoice={() => openInvoice(inv)}
                     onReceipt={() => openReceipt(inv)}
                   />
@@ -470,7 +458,7 @@ export function TenantSubscriptionPanel({
                   Renewal price
                 </span>
                 <span className="text-[13px] font-semibold text-black dark:text-zinc-50">
-                  {rowPrice > 0 ? formatMoney(symbol, rowPrice) : "—"}
+                  {rowPrice > 0 ? formatMoney(rowPrice, currency) : "—"}
                 </span>
               </div>
 
@@ -596,7 +584,7 @@ export function TenantSubscriptionPanel({
               <InvoiceDocRow
                 key={inv.id}
                 invoice={inv}
-                symbol={symbol}
+                currency={currency}
                 onInvoice={() => openInvoice(inv)}
                 onReceipt={() => openReceipt(inv)}
               />

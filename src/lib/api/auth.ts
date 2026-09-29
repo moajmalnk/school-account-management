@@ -126,6 +126,7 @@ export type RegisterTrialPayload = {
   adminEmail: string;
   password: string;
   tier: "Basic" | "Premium" | "Enterprise";
+  currency?: string;
 };
 
 export type RegisterTrialResponse = ApiLoginResponse & {

@@ -64,12 +64,7 @@ import {
 } from "@/lib/api/general-ledger";
 import { useTenantStore } from "@/lib/tenant-store";
 import { cn } from "@/lib/utils";
-
-function inr(n: number) {
-  const abs = Math.abs(n).toLocaleString("en-IN");
-  if (n < 0) return `₹ −${abs}`;
-  return `₹ ${abs}`;
-}
+import { formatAmount, formatMoney, moneyColumnLabel } from "@/lib/money";
 
 /** Prefer Cash/Bank and Receive / Make Payment heads over rarely used system ledgers. */
 function ledgerPaymentPriority(account: GlAccount): number {
@@ -84,11 +79,7 @@ function ledgerPaymentPriority(account: GlAccount): number {
     if (/salary|payroll/.test(name)) return 880;
     return 800;
   }
-  if (
-    account.isPartyStudent ||
-    /receivable|debtor/.test(name) ||
-    /debtor/.test(group)
-  ) {
+  if (account.isPartyStudent || /receivable|debtor/.test(name) || /debtor/.test(group)) {
     return 650;
   }
   if (
@@ -103,10 +94,7 @@ function ledgerPaymentPriority(account: GlAccount): number {
   return 400;
 }
 
-function sortLedgersByUsage(
-  accounts: GlAccount[],
-  activityById: Map<string, number>,
-): GlAccount[] {
+function sortLedgersByUsage(accounts: GlAccount[], activityById: Map<string, number>): GlAccount[] {
   return [...accounts].sort((a, b) => {
     const actA = activityById.get(a.id) ?? 0;
     const actB = activityById.get(b.id) ?? 0;
@@ -216,10 +204,11 @@ function GlProfitLossSkeleton() {
       </div>
       <div className="divide-y divide-[#EFEFEF] dark:divide-white/10">
         {Array.from({ length: 10 }).map((_, i) => (
-          <div key={i} className="grid grid-cols-[1fr_4.5rem_6.5rem] items-center gap-2 px-3 py-2.5">
-            <Bone
-              className={cn("h-3 rounded-md", i % 4 === 0 ? "w-28" : "w-[70%]")}
-            />
+          <div
+            key={i}
+            className="grid grid-cols-[1fr_4.5rem_6.5rem] items-center gap-2 px-3 py-2.5"
+          >
+            <Bone className={cn("h-3 rounded-md", i % 4 === 0 ? "w-28" : "w-[70%]")} />
             <Bone className="ml-auto h-3 w-8 rounded-md" />
             <Bone className="ml-auto h-3 w-14 rounded-md" />
           </div>
@@ -417,8 +406,7 @@ export function GlAccountStatementReport() {
           turnoverDebit?: number;
           turnoverCredit?: number;
         };
-        const turnover =
-          (Number(raw.turnoverDebit) || 0) + (Number(raw.turnoverCredit) || 0);
+        const turnover = (Number(raw.turnoverDebit) || 0) + (Number(raw.turnoverCredit) || 0);
         const closing = (Number(row.debit) || 0) + (Number(row.credit) || 0);
         activity.set(row.accountId, turnover > 0 ? turnover : closing);
       }
@@ -525,9 +513,7 @@ export function GlAccountStatementReport() {
       <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass()}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-[18px] font-semibold text-black dark:text-zinc-50">
-              Ledgers
-            </h2>
+            <h2 className="text-[18px] font-semibold text-black dark:text-zinc-50">Ledgers</h2>
             <p className="mt-0.5 text-[12px] text-black/50 dark:text-zinc-400">
               Most-used payment ledgers first · {academicYear || "this year"}
               {period?.status === "closed" ? " · year closed" : ""}
@@ -590,8 +576,8 @@ export function GlAccountStatementReport() {
                 {filteredAccounts.length === 0 ? (
                   <li className="space-y-3 px-2 py-3 text-[12px] leading-relaxed text-black/45">
                     <p>
-                      No accounts yet. Sync ledgers already used on Receive Payment and Make Payment,
-                      then fill journals from old receipts.
+                      No accounts yet. Sync ledgers already used on Receive Payment and Make
+                      Payment, then fill journals from old receipts.
                     </p>
                     <div className="flex flex-col gap-2">
                       <Button
@@ -661,7 +647,7 @@ export function GlAccountStatementReport() {
                                   : "bg-black/[0.04] text-black/55 dark:bg-white/10 dark:text-zinc-300",
                               )}
                             >
-                              {inr(activity)}
+                              {formatMoney(activity)}
                             </span>
                           ) : null}
                         </button>
@@ -696,25 +682,27 @@ export function GlAccountStatementReport() {
                       Closing
                     </div>
                     <div className="font-mono text-[16px] font-bold">
-                      {inr(statement.closingBalance)}
+                      {formatMoney(statement.closingBalance)}
                     </div>
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-2 border-b border-[#EFEFEF] px-3 py-2 text-[11px] dark:border-white/10">
                   <div>
                     Opening{" "}
-                    <span className="font-mono font-semibold">{inr(statement.openingBalance)}</span>
+                    <span className="font-mono font-semibold">
+                      {formatMoney(statement.openingBalance)}
+                    </span>
                   </div>
                   <div>
                     Debit{" "}
                     <span className="font-mono font-semibold text-emerald-700">
-                      {inr(statement.totalDebit)}
+                      {formatMoney(statement.totalDebit)}
                     </span>
                   </div>
                   <div>
                     Credit{" "}
                     <span className="font-mono font-semibold text-rose-600">
-                      {inr(statement.totalCredit)}
+                      {formatMoney(statement.totalCredit)}
                     </span>
                   </div>
                 </div>
@@ -736,7 +724,7 @@ export function GlAccountStatementReport() {
                           Opening forward balance
                         </td>
                         <td className="px-3 py-2 text-right font-mono">
-                          {inr(statement.openingBalance)}
+                          {formatMoney(statement.openingBalance)}
                         </td>
                       </tr>
                       {statement.lines.map((line, i) => (
@@ -747,12 +735,14 @@ export function GlAccountStatementReport() {
                           </td>
                           <td className="max-w-[220px] truncate px-3 py-2">{line.narration}</td>
                           <td className="px-3 py-2 text-right font-mono text-emerald-700">
-                            {line.debit ? inr(line.debit) : "—"}
+                            {line.debit ? formatMoney(line.debit) : "—"}
                           </td>
                           <td className="px-3 py-2 text-right font-mono text-rose-600">
-                            {line.credit ? inr(line.credit) : "—"}
+                            {line.credit ? formatMoney(line.credit) : "—"}
                           </td>
-                          <td className="px-3 py-2 text-right font-mono">{inr(line.balance)}</td>
+                          <td className="px-3 py-2 text-right font-mono">
+                            {formatMoney(line.balance)}
+                          </td>
                         </tr>
                       ))}
                       {statement.lines.length === 0 ? (
@@ -933,7 +923,8 @@ function ChartOfAccountsDialog({
           ))}
           {bySector.size === 0 ? (
             <p className="py-6 text-center text-[12px] text-black/40">
-              No groups match your search. Sync existing ledgers to pull Receive / Make Payment heads.
+              No groups match your search. Sync existing ledgers to pull Receive / Make Payment
+              heads.
             </p>
           ) : null}
         </div>
@@ -990,7 +981,7 @@ function CreateLedgerDialog({
       });
       toast.success(`${acct.name} is ready`, {
         description: openingAmount
-          ? `Opening balance ₹ ${openingAmount.toLocaleString("en-IN")}`
+          ? `Opening balance ${formatMoney(openingAmount)}`
           : `Code #${acct.code}`,
       });
       onOpenChange(false);
@@ -1076,7 +1067,11 @@ function CreateLedgerDialog({
             disabled={saving || groups.length === 0}
             onClick={() => void submit()}
           >
-            {saving ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1 h-3.5 w-3.5" />}
+            {saving ? (
+              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Save className="mr-1 h-3.5 w-3.5" />
+            )}
             Save ledger
           </Button>
         </DialogFooter>
@@ -1169,17 +1164,18 @@ export function GlTrialBalanceReport() {
                   <td className="px-3 py-2 font-medium">{r.name}</td>
                   <td className="px-3 py-2 text-black/50">{r.groupName}</td>
                   <td className="px-3 py-2 text-right font-mono text-emerald-700">
-                    {r.debit ? inr(r.debit) : "—"}
+                    {r.debit ? formatMoney(r.debit) : "—"}
                   </td>
                   <td className="px-3 py-2 text-right font-mono text-rose-600">
-                    {r.credit ? inr(r.credit) : "—"}
+                    {r.credit ? formatMoney(r.credit) : "—"}
                   </td>
                 </tr>
               ))}
               {rows.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-3 py-8 text-center text-black/40">
-                    No journals yet — tap <span className="font-medium text-[#0F766E]">Update all books</span>
+                    No journals yet — tap{" "}
+                    <span className="font-medium text-[#0F766E]">Update all books</span>
                   </td>
                 </tr>
               ) : null}
@@ -1189,8 +1185,8 @@ export function GlTrialBalanceReport() {
                 <td className="px-3 py-2" colSpan={3}>
                   Total
                 </td>
-                <td className="px-3 py-2 text-right font-mono">{inr(totalDebit)}</td>
-                <td className="px-3 py-2 text-right font-mono">{inr(totalCredit)}</td>
+                <td className="px-3 py-2 text-right font-mono">{formatMoney(totalDebit)}</td>
+                <td className="px-3 py-2 text-right font-mono">{formatMoney(totalCredit)}</td>
               </tr>
             </tfoot>
           </table>
@@ -1306,7 +1302,11 @@ export function GlJournalsReport() {
           </div>
           <div className="flex flex-wrap gap-2">
             <GlUpdateAllBooksButton onDone={() => void reload()} />
-            <PeriodCloseControls period={period} year={academicYear} onChange={() => void reload()} />
+            <PeriodCloseControls
+              period={period}
+              year={academicYear}
+              onChange={() => void reload()}
+            />
             <Button
               type="button"
               size="sm"
@@ -1386,8 +1386,9 @@ export function GlJournalsReport() {
                 {journals.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-3 py-8 text-center text-black/40">
-                      No journals yet — tap <span className="font-medium text-[#0F766E]">Update all books</span> to
-                      post old receipts &amp; payments
+                      No journals yet — tap{" "}
+                      <span className="font-medium text-[#0F766E]">Update all books</span> to post
+                      old receipts &amp; payments
                     </td>
                   </tr>
                 ) : null}
@@ -1422,7 +1423,9 @@ export function GlJournalsReport() {
               />
             </div>
             <div>
-              <Label className="text-[10px] uppercase tracking-wider text-black/45">Narration</Label>
+              <Label className="text-[10px] uppercase tracking-wider text-black/45">
+                Narration
+              </Label>
               <Input
                 value={narration}
                 onChange={(e) => setNarration(e.target.value)}
@@ -1488,9 +1491,7 @@ export function GlJournalsReport() {
                     value={line.description}
                     onChange={(e) =>
                       setLines((prev) =>
-                        prev.map((l, i) =>
-                          i === idx ? { ...l, description: e.target.value } : l,
-                        ),
+                        prev.map((l, i) => (i === idx ? { ...l, description: e.target.value } : l)),
                       )
                     }
                     placeholder="Note"
@@ -1515,10 +1516,10 @@ export function GlJournalsReport() {
             </Button>
             <div className="flex justify-end gap-4 text-[12px] font-semibold">
               <span>
-                Dr <span className="font-mono text-emerald-700">{inr(totalDr)}</span>
+                Dr <span className="font-mono text-emerald-700">{formatMoney(totalDr)}</span>
               </span>
               <span>
-                Cr <span className="font-mono text-rose-600">{inr(totalCr)}</span>
+                Cr <span className="font-mono text-rose-600">{formatMoney(totalCr)}</span>
               </span>
             </div>
           </div>
@@ -1568,7 +1569,9 @@ function PeriodCloseControls({
           : apiGlClosePeriod(year);
         void op
           .then(() => {
-            toast.success(closed ? `${year} reopened` : `${year} closed · P&L rolled to Retained Earnings`);
+            toast.success(
+              closed ? `${year} reopened` : `${year} closed · P&L rolled to Retained Earnings`,
+            );
             onChange();
           })
           .catch((e) => toast.error(e instanceof Error ? e.message : "Period action failed"))
@@ -1639,10 +1642,12 @@ export function GlProfitLossReport() {
             <div
               className={cn(
                 "font-mono text-[14px] font-semibold",
-                isProfit ? "text-emerald-700 dark:text-emerald-300" : "text-rose-700 dark:text-rose-300",
+                isProfit
+                  ? "text-emerald-700 dark:text-emerald-300"
+                  : "text-rose-700 dark:text-rose-300",
               )}
             >
-              {inr(net)}
+              {formatMoney(net)}
             </div>
           </div>
         </div>
@@ -1667,7 +1672,7 @@ export function GlProfitLossReport() {
                   Ledger
                 </th>
                 <th className="w-[8rem] px-3.5 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-black/55">
-                  Amount (₹)
+                  {moneyColumnLabel("Amount")}
                 </th>
               </tr>
             </thead>
@@ -1738,7 +1743,7 @@ function GlStatementGroupRows({ group }: { group: GlStatementGroup }) {
           {group.groupName}
         </td>
         <td className="px-3.5 py-2 text-right font-mono text-[12px] font-semibold text-[#0F766E]">
-          {inr(group.total)}
+          {formatMoney(group.total)}
         </td>
       </tr>
       {group.accounts.map((a) => {
@@ -1760,7 +1765,7 @@ function GlStatementGroupRows({ group }: { group: GlStatementGroup }) {
                 signed < 0 ? "text-[#B91C1C]" : "text-black dark:text-zinc-100",
               )}
             >
-              {inr(signed)}
+              {formatMoney(signed)}
             </td>
           </tr>
         );
@@ -1806,7 +1811,7 @@ function GlStatementTotalRow({
           tone === "section" && "text-black dark:text-zinc-50",
         )}
       >
-        {inr(amount)}
+        {formatMoney(amount)}
       </td>
     </tr>
   );
@@ -1879,8 +1884,7 @@ export function GlBalanceSheetReport() {
         <GlProfitLossSkeleton />
       ) : !data || data.groups.length === 0 ? (
         <div className="mt-4 rounded-xl border border-dashed border-black/15 px-4 py-10 text-center text-[12px] text-black/55">
-          No journals yet — tap{" "}
-          <span className="font-medium text-[#0F766E]">Update all books</span>
+          No journals yet — tap <span className="font-medium text-[#0F766E]">Update all books</span>
         </div>
       ) : (
         <div className="mobile-scrollbar-none relative z-0 mt-4 overflow-x-auto rounded-xl border border-[#E5E5E5] dark:border-white/10">
@@ -1894,7 +1898,7 @@ export function GlBalanceSheetReport() {
                   Ledger
                 </th>
                 <th className="w-[8rem] px-3.5 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-black/55">
-                  Amount (₹)
+                  {moneyColumnLabel("Amount")}
                 </th>
               </tr>
             </thead>
@@ -1903,11 +1907,7 @@ export function GlBalanceSheetReport() {
               {assetGroups.map((g) => (
                 <GlStatementGroupRows key={`as-${g.groupName}`} group={g} />
               ))}
-              <GlStatementTotalRow
-                label="Total Assets"
-                amount={data.totalAssets}
-                tone="section"
-              />
+              <GlStatementTotalRow label="Total Assets" amount={data.totalAssets} tone="section" />
 
               <GlStatementSectionHeader label="Liabilities" />
               {liabilityGroups.length === 0 ? (
@@ -1934,15 +1934,11 @@ export function GlBalanceSheetReport() {
               {data.currentPeriodProfit !== 0 ? (
                 <tr className="border-b border-[#F5F5F5] dark:border-white/5">
                   <td colSpan={3} className="px-3.5 py-2 text-[11px] text-black/45">
-                    Includes current period P&amp;L {inr(data.currentPeriodProfit)}
+                    Includes current period P&amp;L {formatMoney(data.currentPeriodProfit)}
                   </td>
                 </tr>
               ) : null}
-              <GlStatementTotalRow
-                label="Total Equity"
-                amount={data.totalEquity}
-                tone="section"
-              />
+              <GlStatementTotalRow label="Total Equity" amount={data.totalEquity} tone="section" />
               <GlStatementTotalRow
                 label="Total Liabilities + Equity"
                 amount={liabilitiesAndEquity}
@@ -1960,7 +1956,7 @@ function StatPill({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] px-3 py-2 dark:border-white/10 dark:bg-zinc-900/40">
       <div className="text-[9px] font-semibold uppercase tracking-wider text-black/45">{label}</div>
-      <div className="font-mono text-[14px] font-semibold">{inr(value)}</div>
+      <div className="font-mono text-[14px] font-semibold">{formatMoney(value)}</div>
     </div>
   );
 }

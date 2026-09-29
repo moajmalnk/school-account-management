@@ -1,5 +1,15 @@
 import { Inbox } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, Cell, LabelList, Pie, PieChart, XAxis, YAxis } from "recharts";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  LabelList,
+  Pie,
+  PieChart,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 import { OrganicCard } from "@/components/ui/organic-card";
 import {
@@ -9,9 +19,18 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import { cn, type CornerSide } from "@/lib/utils";
+import { formatMoney } from "@/lib/money";
 
 const INCOME_COLORS = ["#0F766E", "#14B8A6", "#0EA5E9", "#6366F1", "#F59E0B", "#8B5CF6", "#64748B"];
-const OUTFLOW_COLORS = ["#E11D48", "#F97316", "#F43F5E", "#FB7185", "#F59E0B", "#94A3B8", "#64748B"];
+const OUTFLOW_COLORS = [
+  "#E11D48",
+  "#F97316",
+  "#F43F5E",
+  "#FB7185",
+  "#F59E0B",
+  "#94A3B8",
+  "#64748B",
+];
 
 type Segment = { label: string; value: number };
 type ChartPalette = "income" | "outflow";
@@ -22,10 +41,6 @@ function withColors(segments: Segment[], palette: ChartPalette = "income") {
     ...segment,
     color: colors[index % colors.length],
   }));
-}
-
-function formatInr(value: number) {
-  return `₹ ${value.toLocaleString("en-IN")}`;
 }
 
 function ChartEmptyState({ message }: { message: string }) {
@@ -55,7 +70,10 @@ export function FinanceDonutCard({
   palette?: ChartPalette;
   emptyHint?: string;
 }) {
-  const colored = withColors(segments.filter((segment) => segment.value > 0), palette);
+  const colored = withColors(
+    segments.filter((segment) => segment.value > 0),
+    palette,
+  );
   const total = colored.reduce((sum, segment) => sum + segment.value, 0);
   const chartConfig = colored.reduce<ChartConfig>((acc, segment) => {
     acc[segment.label] = { label: segment.label, color: segment.color };
@@ -88,7 +106,7 @@ export function FinanceDonutCard({
               : "bg-teal-50 text-teal-800 dark:bg-teal-950/40 dark:text-teal-300",
           )}
         >
-          {formatInr(total)}
+          {formatMoney(total)}
         </div>
       </div>
 
@@ -107,7 +125,7 @@ export function FinanceDonutCard({
                 <ChartTooltip
                   content={
                     <ChartTooltipContent
-                      formatter={(value, name) => [formatInr(Number(value)), String(name)]}
+                      formatter={(value, name) => [formatMoney(Number(value)), String(name)]}
                     />
                   }
                 />
@@ -129,7 +147,7 @@ export function FinanceDonutCard({
             <div className="pointer-events-none absolute inset-0 grid place-items-center">
               <div className="text-center">
                 <div className="font-mono text-[15px] font-semibold tracking-tight text-black dark:text-zinc-50 sm:text-[17px]">
-                  {formatInr(total)}
+                  {formatMoney(total)}
                 </div>
                 <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-black/40">
                   Total
@@ -165,7 +183,7 @@ export function FinanceDonutCard({
                     />
                   </div>
                   <div className="mt-1 font-mono text-[11px] font-semibold text-black dark:text-zinc-100">
-                    {formatInr(segment.value)}
+                    {formatMoney(segment.value)}
                   </div>
                 </li>
               );
@@ -253,16 +271,14 @@ export function FinanceBarCard({
             />
             <ChartTooltip
               content={
-                <ChartTooltipContent
-                  formatter={(value) => [formatInr(Number(value)), title]}
-                />
+                <ChartTooltipContent formatter={(value) => [formatMoney(Number(value)), title]} />
               }
             />
             <Bar dataKey="value" fill={barFill} radius={[0, 8, 8, 0]} maxBarSize={18}>
               <LabelList
                 dataKey="value"
                 position="right"
-                formatter={(value: number) => formatInr(value)}
+                formatter={(value: number) => formatMoney(value)}
                 className="fill-slate-500 text-[10px]"
               />
             </Bar>

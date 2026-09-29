@@ -26,9 +26,9 @@ function TermsOfUsePage() {
     >
       <p>
         Welcome to <strong>{BRAND.name}</strong> (“Feezo”, “we”, “us”, or “our”). By creating an
-        account, starting a trial, or using our website, progressive web app, or mobile
-        applications (together, the “Service”), you agree to these Terms of Use (“Terms”). If you
-        do not agree, do not use the Service.
+        account, starting a trial, or using our website, progressive web app, or mobile applications
+        (together, the “Service”), you agree to these Terms of Use (“Terms”). If you do not agree,
+        do not use the Service.
       </p>
 
       <LegalSection title="1. The Service">
@@ -64,7 +64,9 @@ function TermsOfUsePage() {
           <li>Provide accurate registration information and keep it up to date</li>
           <li>Maintain the confidentiality of login credentials</li>
           <li>Notify us promptly of unauthorised access or suspected compromise</li>
-          <li>Accept responsibility for activity under your account, except where caused by our fault</li>
+          <li>
+            Accept responsibility for activity under your account, except where caused by our fault
+          </li>
         </ul>
         <p>
           We may suspend or restrict access if we reasonably believe an account has been compromised
@@ -79,10 +81,17 @@ function TermsOfUsePage() {
           Schools must:
         </p>
         <ul className="list-disc space-y-1.5 pl-5">
-          <li>Obtain any consents required by applicable law before collecting or processing personal data</li>
+          <li>
+            Obtain any consents required by applicable law before collecting or processing personal
+            data
+          </li>
           <li>Configure roles and permissions appropriately for staff</li>
-          <li>Comply with education, finance, and data-protection laws that apply to their operations</li>
-          <li>Respond to parent, guardian, or student requests relating to School-controlled records</li>
+          <li>
+            Comply with education, finance, and data-protection laws that apply to their operations
+          </li>
+          <li>
+            Respond to parent, guardian, or student requests relating to School-controlled records
+          </li>
         </ul>
         <p>
           Our <LegalLink href={BRAND.legal.privacyPath}>Privacy Policy</LegalLink> explains how we
@@ -97,8 +106,14 @@ function TermsOfUsePage() {
           signup or in your workspace billing settings.
         </p>
         <ul className="list-disc space-y-1.5 pl-5">
-          <li>Trials convert to paid plans unless cancelled before the trial ends, where applicable</li>
-          <li>Fees are quoted in Indian Rupees (INR) unless stated otherwise</li>
+          <li>
+            Trials convert to paid plans unless cancelled before the trial ends, where applicable
+          </li>
+          <li>
+            Fees are billed in Indian Rupees (INR) unless your invoice states another currency (such
+            as USD or AED). Prices shown in other currencies on our website are indicative
+            conversions for convenience only.
+          </li>
           <li>Taxes may apply as required by law</li>
           <li>We may change plan pricing for future billing periods with reasonable notice</li>
         </ul>
@@ -190,17 +205,17 @@ function TermsOfUsePage() {
 
       <LegalSection title="13. Changes to these Terms">
         <p>
-          We may update these Terms from time to time. Material changes will be reflected by updating
-          the “Last updated” date. Continued use after changes become effective constitutes acceptance,
-          except where consent is required by law.
+          We may update these Terms from time to time. Material changes will be reflected by
+          updating the “Last updated” date. Continued use after changes become effective constitutes
+          acceptance, except where consent is required by law.
         </p>
       </LegalSection>
 
       <LegalSection title="14. Governing law">
         <p>
-          These Terms are governed by the laws of India, without regard to conflict-of-law principles.
-          Courts in India shall have exclusive jurisdiction, subject to any mandatory consumer
-          protections in your jurisdiction.
+          These Terms are governed by the laws of India, without regard to conflict-of-law
+          principles. Courts in India shall have exclusive jurisdiction, subject to any mandatory
+          consumer protections in your jurisdiction.
         </p>
       </LegalSection>
 

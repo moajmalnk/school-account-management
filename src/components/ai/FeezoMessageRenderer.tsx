@@ -12,6 +12,7 @@ import {
 
 import type { FeezoNavigation, FeezoUiBlock } from "@/lib/api/ai";
 import { cn, glassInsetClass } from "@/lib/utils";
+import { formatAmount } from "@/lib/money";
 
 const CHART_COLORS = ["#0F766E", "#0D9488", "#F43F5E", "#8B5CF6", "#F59E0B", "#3B82F6"];
 
@@ -23,7 +24,7 @@ type Props = {
 
 function formatCell(value: string | number | null | undefined) {
   if (value == null) return "—";
-  if (typeof value === "number") return value.toLocaleString("en-IN");
+  if (typeof value === "number") return formatAmount(value);
   return String(value);
 }
 
@@ -45,7 +46,10 @@ export function FeezoMessageRenderer({ blocks, navigations, onNavigate }: Props)
           return (
             <div
               key={idx}
-              className={cn(glassInsetClass, "overflow-hidden rounded-xl border border-white/60 dark:border-white/10")}
+              className={cn(
+                glassInsetClass,
+                "overflow-hidden rounded-xl border border-white/60 dark:border-white/10",
+              )}
             >
               {block.title ? (
                 <div className="border-b border-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 dark:border-white/10 dark:text-zinc-200">
@@ -57,7 +61,10 @@ export function FeezoMessageRenderer({ blocks, navigations, onNavigate }: Props)
                   <thead className="sticky top-0 bg-white/90 dark:bg-zinc-900/90">
                     <tr>
                       {block.columns.map((col) => (
-                        <th key={col} className="px-2.5 py-1.5 font-semibold text-slate-500 dark:text-zinc-400">
+                        <th
+                          key={col}
+                          className="px-2.5 py-1.5 font-semibold text-slate-500 dark:text-zinc-400"
+                        >
                           {col}
                         </th>
                       ))}
@@ -67,7 +74,10 @@ export function FeezoMessageRenderer({ blocks, navigations, onNavigate }: Props)
                     {block.rows.map((row, rIdx) => (
                       <tr key={rIdx} className="border-t border-slate-100 dark:border-white/5">
                         {row.map((cell, cIdx) => (
-                          <td key={cIdx} className="px-2.5 py-1.5 text-slate-800 dark:text-zinc-200">
+                          <td
+                            key={cIdx}
+                            className="px-2.5 py-1.5 text-slate-800 dark:text-zinc-200"
+                          >
                             {formatCell(cell)}
                           </td>
                         ))}
@@ -106,7 +116,9 @@ export function FeezoMessageRenderer({ blocks, navigations, onNavigate }: Props)
                     </div>
                   ) : null}
                   {card.subtitle ? (
-                    <div className="mt-0.5 text-xs text-slate-600 dark:text-zinc-400">{card.subtitle}</div>
+                    <div className="mt-0.5 text-xs text-slate-600 dark:text-zinc-400">
+                      {card.subtitle}
+                    </div>
                   ) : null}
                   {single && card.value ? (
                     <div className="mt-1.5 text-sm font-medium text-slate-800 dark:text-zinc-200">
@@ -127,7 +139,10 @@ export function FeezoMessageRenderer({ blocks, navigations, onNavigate }: Props)
           return (
             <div
               key={idx}
-              className={cn(glassInsetClass, "rounded-xl border border-white/60 p-2 dark:border-white/10")}
+              className={cn(
+                glassInsetClass,
+                "rounded-xl border border-white/60 p-2 dark:border-white/10",
+              )}
             >
               {block.title ? (
                 <div className="mb-1 px-1 text-xs font-semibold text-slate-700 dark:text-zinc-200">
@@ -138,7 +153,13 @@ export function FeezoMessageRenderer({ blocks, navigations, onNavigate }: Props)
                 <ResponsiveContainer width="100%" height="100%">
                   {block.chartType === "pie" ? (
                     <PieChart>
-                      <Pie data={data} dataKey="value" nameKey="name" outerRadius={60} innerRadius={28}>
+                      <Pie
+                        data={data}
+                        dataKey="value"
+                        nameKey="name"
+                        outerRadius={60}
+                        innerRadius={28}
+                      >
                         {data.map((_, i) => (
                           <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                         ))}

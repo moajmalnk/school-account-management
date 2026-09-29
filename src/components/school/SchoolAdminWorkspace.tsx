@@ -159,6 +159,7 @@ import {
 } from "@/components/school/FinancialYearFields";
 import { SignaturePadDialog } from "@/components/school/SignaturePadDialog";
 import { BankAccountsManager } from "@/components/school/BankAccountsManager";
+import { OrgCurrencyCard } from "@/components/school/OrgCurrencyCard";
 import { OrganicCard } from "@/components/ui/organic-card";
 import { ImageCropDialog } from "@/components/ui/image-crop-dialog";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
@@ -448,10 +449,7 @@ import {
   planStaffDuplicateMerge,
   staffFromCsvRow,
 } from "@/lib/staff-csv";
-import {
-  salaryMonthFromDisbursementDesc,
-  syncStaffSalaryHistoryStatus,
-} from "@/lib/staff-payroll";
+import { salaryMonthFromDisbursementDesc, syncStaffSalaryHistoryStatus } from "@/lib/staff-payroll";
 import {
   parseTransportRouteCsv,
   resolveTransportRouteImport,
@@ -462,7 +460,12 @@ import {
   TRANSPORT_ROUTE_EXPORT_HEADERS,
   type ResolvedTransportRouteImport,
 } from "@/lib/transport-route-csv";
-import { chunkItems, importRowsSequentially, isExcelFilename, parseIndianDate } from "@/lib/csv-import";
+import {
+  chunkItems,
+  importRowsSequentially,
+  isExcelFilename,
+  parseIndianDate,
+} from "@/lib/csv-import";
 import {
   EXPENSE_CSV_HEADERS,
   expenseCsvDemoRows,
@@ -499,7 +502,6 @@ import {
   cashOnHand,
   expenseSegmentsFromDisbursements,
   filterDisbursementsByPeriod,
-  formatInr,
   isClearedDisbursement,
   operatingExpenseForPeriod,
   queuedPayables,
@@ -509,7 +511,11 @@ import {
   type PayeeType,
 } from "@/lib/dashboard-finance";
 import { useCashPosition, type CashPositionSnapshot } from "@/lib/use-gl-cash-position";
-import { syncDisbursementsCache, upsertDisbursementInCache, useDisbursements } from "@/lib/use-disbursements";
+import {
+  syncDisbursementsCache,
+  upsertDisbursementInCache,
+  useDisbursements,
+} from "@/lib/use-disbursements";
 import {
   useSettingsUnsavedGuard,
   useSettingsUnsavedRegistration,
@@ -521,7 +527,7 @@ import {
   type CustomDateRange,
   type PaymentPeriod,
 } from "@/lib/payment-period";
-import { amountToIndianWords } from "@/lib/amount-words";
+import { numberToWords } from "@/lib/amount-words";
 import {
   formatEventDateTime,
   formatInAppZone,
@@ -547,6 +553,7 @@ import {
   type CornerSide,
   type Tone,
 } from "@/lib/utils";
+import { formatAmount, formatMoney, moneyColumnLabel, CURRENCY_TOKEN_SRC } from "@/lib/money";
 
 type MadePayment = {
   id: string;
@@ -704,10 +711,10 @@ const bulkActionDeleteBtn =
 const bulkActionWhatsAppBtn =
   "inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#10B981] px-3 text-[13px] font-semibold text-white transition-colors hover:bg-[#059669]";
 
-/** Directory toolbar chips — equal 12-col cells on mobile; auto width from sm+ */
+/** Directory toolbar chips — two per row on mobile; auto width from sm+ */
 const directoryToolbarBtn = cn(
   mobileOutlineBtn,
-  "col-span-4 h-9 w-full min-w-0 justify-center gap-1 px-1.5 text-[11px] sm:col-auto sm:h-10 sm:w-auto sm:justify-center sm:gap-1.5 sm:px-3 sm:text-[12.5px]",
+  "col-span-6 h-9 w-full min-w-0 justify-center gap-1 px-1.5 text-[11px] sm:col-auto sm:h-10 sm:w-auto sm:justify-center sm:gap-1.5 sm:px-3 sm:text-[12.5px]",
 );
 
 const mobilePrimaryBtn =
@@ -735,11 +742,9 @@ const directoryFilterStrip =
 const directoryFilterSelectsRow =
   "grid w-full min-w-0 grid-cols-2 gap-2 sm:gap-2.5 lg:flex lg:w-auto lg:shrink-0 lg:gap-3";
 
-const directoryFilterSelectCol =
-  "min-w-0 lg:w-[9.5rem] xl:w-[10.5rem]";
+const directoryFilterSelectCol = "min-w-0 lg:w-[9.5rem] xl:w-[10.5rem]";
 
-const directoryFilterSelectColNarrow =
-  "min-w-0 lg:w-[8.25rem] xl:w-[9rem]";
+const directoryFilterSelectColNarrow = "min-w-0 lg:w-[8.25rem] xl:w-[9rem]";
 
 const directoryFilterSearchCol = "min-w-0 w-full flex-1";
 
@@ -904,7 +909,7 @@ function DashboardAmount({
       <div
         className={cn(
           "min-w-0 max-w-full font-mono font-bold leading-[1.15] tracking-tight",
-          dashboardAmountSize("₹0", compact),
+          dashboardAmountSize(formatMoney(0), compact),
           className,
         )}
         aria-busy="true"
@@ -914,7 +919,7 @@ function DashboardAmount({
       </div>
     );
   }
-  const formatted = formatInr(value);
+  const formatted = formatMoney(value);
   return (
     <div
       className={cn(
@@ -954,11 +959,7 @@ function IncomeExpenseSummaryTiles({
         <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-100">
           Total Income
         </div>
-        <DashboardAmount
-          value={income}
-          compact
-          className="mt-1.5 w-full text-center text-white"
-        />
+        <DashboardAmount value={income} compact className="mt-1.5 w-full text-center text-white" />
         <div className="mt-1 text-[10px] font-medium text-emerald-100/80">
           {receiptCount} receipt{receiptCount === 1 ? "" : "s"}
         </div>
@@ -1551,7 +1552,7 @@ function PremiumDashboard({
                     className="min-w-0 text-[11px] font-semibold leading-snug text-violet-950 sm:text-[12px] dark:text-violet-50"
                     title={
                       bankLines.length > 1
-                        ? bankLines.map((b) => `${b.name}: ₹ ${b.balance.toLocaleString("en-IN")}`).join(" · ")
+                        ? bankLines.map((b) => `${b.name}: ${formatMoney(b.balance)}`).join(" · ")
                         : "Bank ledger balance"
                     }
                   >
@@ -1588,7 +1589,7 @@ function PremiumDashboard({
                             b.balance < 0 && "text-rose-600 dark:text-rose-300",
                           )}
                         >
-                          ₹ {b.balance.toLocaleString("en-IN")}
+                          {formatMoney(b.balance)}
                         </span>
                       </div>
                     ))}
@@ -1612,11 +1613,7 @@ function PremiumDashboard({
                     <Wallet className="h-4 w-4" />
                   </span>
                 </div>
-                <DashboardAmount
-                  value={totalBalance}
-                  pending={!cashReady}
-                  className="text-white"
-                />
+                <DashboardAmount value={totalBalance} pending={!cashReady} className="text-white" />
               </div>
             </div>
           </section>
@@ -1752,7 +1749,7 @@ function PremiumDashboard({
                 content={
                   <ChartTooltipContent
                     formatter={(value, name) => [
-                      formatInr(Number(value)),
+                      formatMoney(Number(value)),
                       String(name) === "income" ? "Income" : "Expense",
                     ]}
                   />
@@ -1814,55 +1811,55 @@ function PremiumDashboard({
             {recentReceipts.map((payment) => {
               const isExpenseRow = /^DISB-/i.test(payment.id);
               return (
-              <div key={payment.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-teal-100 text-teal-700 dark:bg-white/15 dark:text-emerald-300">
-                  {isExpenseRow ? (
-                    <ArrowUpFromLine className="h-4 w-4" />
-                  ) : (
-                    <ArrowUpRight className="h-4 w-4" />
-                  )}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13px] font-semibold text-slate-900 dark:text-white">
-                    {payment.name}
+                <div key={payment.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-teal-100 text-teal-700 dark:bg-white/15 dark:text-emerald-300">
+                    {isExpenseRow ? (
+                      <ArrowUpFromLine className="h-4 w-4" />
+                    ) : (
+                      <ArrowUpRight className="h-4 w-4" />
+                    )}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13px] font-semibold text-slate-900 dark:text-white">
+                      {payment.name}
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-slate-600 dark:text-teal-100/70">
+                      {payment.cat} · {payment.mode}
+                    </div>
                   </div>
-                  <div className="mt-0.5 text-[11px] text-slate-600 dark:text-teal-100/70">
-                    {payment.cat} · {payment.mode}
+                  <div className="shrink-0 text-right">
+                    <div className="font-mono text-[13px] font-semibold text-slate-900 dark:text-white">
+                      {isExpenseRow ? "−" : ""}
+                      {formatMoney(Math.abs(payment.amount))}
+                    </div>
+                    <div className="mt-0.5 text-[10px] text-slate-500 dark:text-teal-100/60">
+                      {formatEventDateTime(payment.time)}
+                    </div>
+                    {!isExpenseRow && (
+                      <div className="mt-1.5 flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          aria-label={`Show receipt ${payment.id}`}
+                          title="Show"
+                          onClick={() => onShowReceipt(payment)}
+                          className="inline-flex h-7 items-center gap-1 rounded-lg border border-teal-200/80 bg-white px-2 text-[10px] font-semibold text-teal-800 shadow-sm transition-colors hover:bg-teal-50 dark:border-white/20 dark:bg-white/10 dark:text-teal-50 dark:shadow-none dark:hover:bg-white/20 dark:hover:text-white"
+                        >
+                          <Eye className="h-3 w-3" />
+                          Show
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Download receipt ${payment.id}`}
+                          title="Download"
+                          onClick={() => onDownloadReceipt(payment)}
+                          className="inline-grid h-7 w-7 place-items-center rounded-lg border border-teal-200/80 bg-white text-teal-800 shadow-sm transition-colors hover:bg-teal-50 dark:border-white/20 dark:bg-white/10 dark:text-teal-50 dark:shadow-none dark:hover:bg-white/20 dark:hover:text-white"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
-                <div className="shrink-0 text-right">
-                  <div className="font-mono text-[13px] font-semibold text-slate-900 dark:text-white">
-                    {isExpenseRow ? "−" : ""}
-                    {formatInr(Math.abs(payment.amount))}
-                  </div>
-                  <div className="mt-0.5 text-[10px] text-slate-500 dark:text-teal-100/60">
-                    {formatEventDateTime(payment.time)}
-                  </div>
-                  {!isExpenseRow && (
-                  <div className="mt-1.5 flex items-center justify-end gap-1">
-                    <button
-                      type="button"
-                      aria-label={`Show receipt ${payment.id}`}
-                      title="Show"
-                      onClick={() => onShowReceipt(payment)}
-                      className="inline-flex h-7 items-center gap-1 rounded-lg border border-teal-200/80 bg-white px-2 text-[10px] font-semibold text-teal-800 shadow-sm transition-colors hover:bg-teal-50 dark:border-white/20 dark:bg-white/10 dark:text-teal-50 dark:shadow-none dark:hover:bg-white/20 dark:hover:text-white"
-                    >
-                      <Eye className="h-3 w-3" />
-                      Show
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Download receipt ${payment.id}`}
-                      title="Download"
-                      onClick={() => onDownloadReceipt(payment)}
-                      className="inline-grid h-7 w-7 place-items-center rounded-lg border border-teal-200/80 bg-white text-teal-800 shadow-sm transition-colors hover:bg-teal-50 dark:border-white/20 dark:bg-white/10 dark:text-teal-50 dark:shadow-none dark:hover:bg-white/20 dark:hover:text-white"
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                  )}
-                </div>
-              </div>
               );
             })}
           </div>
@@ -2050,15 +2047,7 @@ export function SchoolDashboard() {
         academicYear,
         feeBreaks: studentFeeBreaks,
       }),
-    [
-      students,
-      payments,
-      classes,
-      activeFeeTerms,
-      transportRoutes,
-      academicYear,
-      studentFeeBreaks,
-    ],
+    [students, payments, classes, activeFeeTerms, transportRoutes, academicYear, studentFeeBreaks],
   );
   const totalDue = feeRoster.outstanding;
 
@@ -2346,45 +2335,6 @@ const directoryEmptyClass = cn(
   premiumCardClass,
   "border-dashed px-4 py-10 text-center text-[13px] text-slate-500",
 );
-
-function DirectoryFloatingAddButton({
-  label,
-  onClick,
-  hidden = false,
-}: {
-  label: string;
-  onClick: () => void;
-  /** Hide while a dialog/profile overlay is open */
-  hidden?: boolean;
-}) {
-  if (hidden) return null;
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-      className={cn(
-        "fixed z-40 inline-flex items-center justify-center gap-2 rounded-full",
-        "bg-gradient-to-br from-[#0F766E] via-[#0D9488] to-[#115E59] text-white",
-        "shadow-[0_14px_36px_-10px_rgba(15,118,110,0.55)]",
-        "transition-all duration-200 hover:brightness-110 hover:shadow-[0_18px_42px_-10px_rgba(15,118,110,0.65)]",
-        "active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2DD4BF] focus-visible:ring-offset-2",
-        // Mobile: icon FAB above bottom tab dock
-        "bottom-[calc(5rem+env(safe-area-inset-bottom))] right-4 h-14 w-14",
-        // Tablet/desktop: extended pill, clear of page chrome
-        "md:bottom-6 md:right-6 md:h-12 md:w-auto md:gap-2 md:px-5",
-        "lg:bottom-8 lg:right-8",
-      )}
-    >
-      <Plus className="h-6 w-6 shrink-0 md:h-5 md:w-5" strokeWidth={2.5} />
-      <span className="hidden max-w-[10rem] truncate text-[13px] font-semibold tracking-tight md:inline">
-        {label}
-      </span>
-    </button>
-  );
-}
 
 function FinanceFloatingPaymentActions({
   onReceive,
@@ -2820,19 +2770,17 @@ function StudentsDirectoryTable({
                     disabled={students.length === 0}
                   />
                 </th>
-                {["Student", "Class", "Guardian & Contact", "Fees Status"].map(
-                  (header) => (
-                    <th
-                      key={header}
-                      className={cn(
-                        "border-b border-slate-100 px-3 pb-4 pt-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400 sm:px-4 lg:px-6 sm:pt-5",
-                        header === "Fees Status" && "text-right",
-                      )}
-                    >
-                      {header}
-                    </th>
-                  ),
-                )}
+                {["Student", "Class", "Guardian & Contact", "Fees Status"].map((header) => (
+                  <th
+                    key={header}
+                    className={cn(
+                      "border-b border-slate-100 px-3 pb-4 pt-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400 sm:px-4 lg:px-6 sm:pt-5",
+                      header === "Fees Status" && "text-right",
+                    )}
+                  >
+                    {header}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -2982,7 +2930,8 @@ function StudentsDirectoryTable({
 }
 
 export function AdmitStudentPage() {
-  const { students, classes, setClasses, admitStudentToActiveYear, activeFeeTerms } = useTenantStore();
+  const { students, classes, setClasses, admitStudentToActiveYear, activeFeeTerms } =
+    useTenantStore();
   const navigate = useNavigate();
   const defaultClass = classes[0]?.className ?? "";
   const [form, setForm] = useState<AdmitStudentForm>(() => emptyAdmitForm(defaultClass));
@@ -3069,7 +3018,10 @@ export function AdmitStudentPage() {
       toast.error("Name and guardian are required");
       return null;
     }
-    const concessionError = validateConcessionFees(concession.hasConcession, concession.concessionFees);
+    const concessionError = validateConcessionFees(
+      concession.hasConcession,
+      concession.concessionFees,
+    );
     if (concessionError) {
       toast.error(concessionError);
       return null;
@@ -3087,7 +3039,9 @@ export function AdmitStudentPage() {
       shareToken: token,
       active: true,
       hasConcession: concession.hasConcession,
-      concessionReason: concession.hasConcession ? concession.concessionReason.trim() || undefined : undefined,
+      concessionReason: concession.hasConcession
+        ? concession.concessionReason.trim() || undefined
+        : undefined,
       concessionFees: concession.hasConcession ? concession.concessionFees : undefined,
     });
     return admitStudentToActiveYear(draft, {
@@ -3555,13 +3509,7 @@ export function StudentsLedger() {
         return Math.round(s.due) === due ? s : { ...s, due };
       }),
     );
-  }, [
-    hydrated,
-    branchContentReady,
-    liveStudents,
-    feeTotals.dueByStudentId,
-    setStudents,
-  ]);
+  }, [hydrated, branchContentReady, liveStudents, feeTotals.dueByStudentId, setStudents]);
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -3695,9 +3643,7 @@ export function StudentsLedger() {
     if (!ids.length) return;
     const idSet = new Set(ids);
     const names = deletedStudents.filter((s) => idSet.has(s.id)).map((s) => s.name);
-    setStudents((prev) =>
-      prev.map((s) => (idSet.has(s.id) ? { ...s, deletedAt: undefined } : s)),
-    );
+    setStudents((prev) => prev.map((s) => (idSet.has(s.id) ? { ...s, deletedAt: undefined } : s)));
     for (const id of ids) {
       void apiDeleteStudent(id, { restore: true }).catch((err) =>
         toast.error("Could not restore student on server", {
@@ -3705,10 +3651,9 @@ export function StudentsLedger() {
         }),
       );
     }
-    toast.success(
-      `${ids.length} student${ids.length === 1 ? "" : "s"} restored`,
-      { description: names.slice(0, 3).join(", ") + (names.length > 3 ? "…" : "") },
-    );
+    toast.success(`${ids.length} student${ids.length === 1 ? "" : "s"} restored`, {
+      description: names.slice(0, 3).join(", ") + (names.length > 3 ? "…" : ""),
+    });
   };
 
   const confirmBulkPurgeStudents = () => {
@@ -3728,10 +3673,9 @@ export function StudentsLedger() {
         }),
       );
     }
-    toast.error(
-      `${count} student${count === 1 ? "" : "s"} permanently deleted`,
-      { description: "This cannot be undone" },
-    );
+    toast.error(`${count} student${count === 1 ? "" : "s"} permanently deleted`, {
+      description: "This cannot be undone",
+    });
   };
 
   const bulkChangeStatus = (nextActive: boolean) => {
@@ -3992,7 +3936,14 @@ export function StudentsLedger() {
       "students-bulk-upload-template.csv",
       [...STUDENT_CSV_HEADERS],
       [
-        ["Aarav Sharma", sampleGrade || "Grade 1", sampleDivision, "Rajesh Sharma", "9810045221", "0"],
+        [
+          "Aarav Sharma",
+          sampleGrade || "Grade 1",
+          sampleDivision,
+          "Rajesh Sharma",
+          "9810045221",
+          "0",
+        ],
         ["Meera Iyer", "UKG", "B", "Priya Iyer", "9876501234", "4500"],
         ["Rahul Nair", "TLC", "A", "Suresh Nair", "9895012345", "0"],
       ],
@@ -4121,9 +4072,7 @@ export function StudentsLedger() {
           if (orphanTiers.length) {
             setClasses((prev) => {
               const seen = new Set(prev.map((c) => normalizeClassLabelKey(c.className)));
-              const add = orphanTiers.filter(
-                (c) => !seen.has(normalizeClassLabelKey(c.className)),
-              );
+              const add = orphanTiers.filter((c) => !seen.has(normalizeClassLabelKey(c.className)));
               return add.length ? [...prev, ...add] : prev;
             });
           }
@@ -4190,14 +4139,9 @@ export function StudentsLedger() {
               : null;
           const skipNote = skipped > 0 ? `${skipped} skipped` : null;
           const failNote = syncFailed > 0 ? `${syncFailed} sync failed` : null;
-          toast.success(
-            `${totalAdmitted} student${totalAdmitted === 1 ? "" : "s"} admitted`,
-            {
-              description: [classNote, skipNote, failNote, academicYear]
-                .filter(Boolean)
-                .join(" · "),
-            },
-          );
+          toast.success(`${totalAdmitted} student${totalAdmitted === 1 ? "" : "s"} admitted`, {
+            description: [classNote, skipNote, failNote, academicYear].filter(Boolean).join(" · "),
+          });
         } finally {
           setImporting(false);
           if (fileInputRef.current) fileInputRef.current.value = "";
@@ -4236,7 +4180,7 @@ export function StudentsLedger() {
           <td>${s.guardian}</td>
           <td>${s.phone ?? ""}</td>
           <td>${s.due === 0 ? "Paid" : "Overdue"}</td>
-          <td style="text-align:right">${s.due === 0 ? "Cleared" : "₹ " + s.due.toLocaleString("en-IN")}</td>
+          <td style="text-align:right">${s.due === 0 ? "Cleared" : formatMoney(s.due)}</td>
         </tr>`,
       )
       .join("");
@@ -4376,7 +4320,7 @@ export function StudentsLedger() {
                 "max-w-full break-words text-[15px] sm:text-[18px] md:text-[26px] lg:text-[32px]",
               )}
             >
-              {formatInr(feeTotals.totalFee)}
+              {formatMoney(feeTotals.totalFee)}
             </div>
             <div className="mt-0.5 font-mono text-[9px] text-slate-500 md:mt-1.5 md:text-[11px]">
               {analytics.total} students · {analytics.male}M · {analytics.female}F
@@ -4396,7 +4340,7 @@ export function StudentsLedger() {
                 "max-w-full break-words text-[15px] text-[#10B981] sm:text-[18px] md:text-[26px] lg:text-[32px]",
               )}
             >
-              {formatInr(feeTotals.totalPaid)}
+              {formatMoney(feeTotals.totalPaid)}
             </div>
             <div className="mt-0.5 font-mono text-[9px] text-slate-500 md:mt-1.5 md:text-[11px]">
               {analytics.paid} paid students
@@ -4420,7 +4364,7 @@ export function StudentsLedger() {
                 "max-w-full break-words text-[15px] sm:text-[18px] md:text-[26px] lg:text-[32px]",
               )}
             >
-              {formatInr(feeTotals.pendingDue)}
+              {formatMoney(feeTotals.pendingDue)}
             </div>
             <span
               className={cn(
@@ -4465,7 +4409,7 @@ export function StudentsLedger() {
                 feeOverdueActive && "text-white dark:text-white",
               )}
             >
-              {formatInr(feeTotals.overdueDue)}
+              {formatMoney(feeTotals.overdueDue)}
             </div>
             <span
               className={cn(
@@ -4502,6 +4446,20 @@ export function StudentsLedger() {
           )}
         </div>
         <div className={directoryToolbarRow}>
+          {!showRecycleBin && (
+            <button
+              type="button"
+              onClick={openAdmitPage}
+              className={cn(
+                directoryToolbarBtn,
+                "border-[#99F6E4] bg-[#0F766E] text-white hover:bg-[#0D9488] hover:text-white dark:border-teal-500/40 dark:bg-teal-700 dark:hover:bg-teal-600",
+              )}
+              aria-label="Admit student"
+            >
+              <Plus className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
+              <span>Admit</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setShowRecycleBin((v) => !v)}
@@ -4876,7 +4834,9 @@ export function StudentsLedger() {
                       className="inline-flex items-center gap-1.5 rounded-full border border-[#CCFBF1] bg-[#F0FDFA] px-2.5 py-1 text-[12px] font-medium text-[#0F766E]"
                     >
                       {row.cls}
-                      <span className="font-mono text-[10.5px] text-[#0F766E]/70">×{row.count}</span>
+                      <span className="font-mono text-[10.5px] text-[#0F766E]/70">
+                        ×{row.count}
+                      </span>
                     </span>
                   ))}
                 </div>
@@ -5034,12 +4994,6 @@ export function StudentsLedger() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <DirectoryFloatingAddButton
-        label="Admit Student"
-        onClick={openAdmitPage}
-        hidden={showRecycleBin || Boolean(activeStudentViewId)}
-      />
     </div>
   );
 }
@@ -5189,10 +5143,7 @@ export function StaffRoster() {
     });
   }, [liveStaff, deptFilter, statusFilter, searchQuery]);
 
-  const staffDuplicateExtras = useMemo(
-    () => countStaffDuplicateExtras(liveStaff),
-    [liveStaff],
-  );
+  const staffDuplicateExtras = useMemo(() => countStaffDuplicateExtras(liveStaff), [liveStaff]);
 
   const staffFiltersActive = deptFilter !== "all" || statusFilter !== "all";
 
@@ -5514,9 +5465,7 @@ export function StaffRoster() {
     if (!ids.length) return;
     const idSet = new Set(ids);
     const names = deletedStaff.filter((s) => idSet.has(s.id)).map((s) => s.name);
-    setStaff((prev) =>
-      prev.map((s) => (idSet.has(s.id) ? { ...s, deletedAt: undefined } : s)),
-    );
+    setStaff((prev) => prev.map((s) => (idSet.has(s.id) ? { ...s, deletedAt: undefined } : s)));
     for (const id of ids) {
       void apiDeleteStaff(id, { restore: true }).catch((err) =>
         toast.error("Could not restore staff on server", {
@@ -5524,10 +5473,9 @@ export function StaffRoster() {
         }),
       );
     }
-    toast.success(
-      `${ids.length} staff member${ids.length === 1 ? "" : "s"} restored`,
-      { description: names.slice(0, 3).join(", ") + (names.length > 3 ? "…" : "") },
-    );
+    toast.success(`${ids.length} staff member${ids.length === 1 ? "" : "s"} restored`, {
+      description: names.slice(0, 3).join(", ") + (names.length > 3 ? "…" : ""),
+    });
   };
 
   const confirmBulkPurgeStaff = () => {
@@ -5547,10 +5495,9 @@ export function StaffRoster() {
         }),
       );
     }
-    toast.error(
-      `${count} staff member${count === 1 ? "" : "s"} permanently deleted`,
-      { description: "This cannot be undone" },
-    );
+    toast.error(`${count} staff member${count === 1 ? "" : "s"} permanently deleted`, {
+      description: "This cannot be undone",
+    });
   };
 
   const handleRecruitPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -5772,14 +5719,15 @@ export function StaffRoster() {
 
             // Prefer live match, then soft-deleted (delete-all → re-upload same sheet)
             const matchedLive =
-              (existingById && !isRecordDeleted(existingById.deletedAt) ? existingById : undefined) ||
-              findDuplicateStaff(poolForMatch(), row);
+              (existingById && !isRecordDeleted(existingById.deletedAt)
+                ? existingById
+                : undefined) || findDuplicateStaff(poolForMatch(), row);
 
-            const matchedRecycled =
-              matchedLive
-                ? undefined
-                : (existingById && isRecordDeleted(existingById.deletedAt) ? existingById : undefined) ||
-                  findDuplicateStaff(recycled, row, { includeDeleted: true });
+            const matchedRecycled = matchedLive
+              ? undefined
+              : (existingById && isRecordDeleted(existingById.deletedAt)
+                  ? existingById
+                  : undefined) || findDuplicateStaff(recycled, row, { includeDeleted: true });
 
             const matched = matchedLive || matchedRecycled;
             if (matched) {
@@ -5819,13 +5767,19 @@ export function StaffRoster() {
 
           if (!created.length && !updated.length && recycleTwinIds.size === 0) {
             toast.error("No staff rows to import", {
-              description: "Check the CSV has Name, Role, Department columns and at least one data row",
+              description:
+                "Check the CSV has Name, Role, Department columns and at least one data row",
             });
             return;
           }
 
           // Re-upload of the exact same roster with no new people and no field sync needed yet
-          if (!created.length && updated.length > 0 && recycleTwinIds.size === 0 && restoredIds.size === 0) {
+          if (
+            !created.length &&
+            updated.length > 0 &&
+            recycleTwinIds.size === 0 &&
+            restoredIds.size === 0
+          ) {
             // Still sync updates (status/salary may change) — fall through
           }
 
@@ -5838,7 +5792,9 @@ export function StaffRoster() {
                 if (row) map.set(id, { ...row, deletedAt: stamp });
               }
               for (const member of updated) map.set(member.id, { ...member, deletedAt: undefined });
-              const next = Array.from(map.values()).filter((s) => !created.some((c) => c.id === s.id));
+              const next = Array.from(map.values()).filter(
+                (s) => !created.some((c) => c.id === s.id),
+              );
               return [...created, ...next];
             });
           }
@@ -5905,7 +5861,12 @@ export function StaffRoster() {
             toast.error("Staff import could not sync to the server", {
               description: parts.join(" · ") || "Check your connection and try again",
             });
-          } else if (!created.length && restoredIds.size === 0 && updated.length > 0 && syncOk === updated.length) {
+          } else if (
+            !created.length &&
+            restoredIds.size === 0 &&
+            updated.length > 0 &&
+            syncOk === updated.length
+          ) {
             toast.success(
               alreadyOnRoster === updated.length
                 ? `${updated.length} staff already on roster · updated`
@@ -6170,6 +6131,20 @@ export function StaffRoster() {
           )}
         </div>
         <div className={directoryToolbarRow}>
+          {!showRecycleBin && (
+            <button
+              type="button"
+              onClick={() => setOpen(true)}
+              className={cn(
+                directoryToolbarBtn,
+                "border-[#99F6E4] bg-[#0F766E] text-white hover:bg-[#0D9488] hover:text-white dark:border-teal-500/40 dark:bg-teal-700 dark:hover:bg-teal-600",
+              )}
+              aria-label="Recruit staff"
+            >
+              <Plus className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
+              <span>Recruit</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setShowRecycleBin((v) => !v)}
@@ -6281,11 +6256,7 @@ export function StaffRoster() {
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    className={directoryToolbarBtn}
-                    disabled={importingStaff}
-                  >
+                  <button type="button" className={directoryToolbarBtn} disabled={importingStaff}>
                     <ArrowUpFromLine className="h-3.5 w-3.5 shrink-0" />
                     <span className="truncate sm:hidden">Data</span>
                     <span className="hidden truncate sm:inline">Import / Export</span>
@@ -7015,12 +6986,6 @@ export function StaffRoster() {
         onRoleCreated={(role) => setForm((prev) => ({ ...prev, role: role.title }))}
         onDepartmentCreated={(dept) => setForm((prev) => ({ ...prev, dept: dept.name }))}
       />
-
-      <DirectoryFloatingAddButton
-        label="Recruit Staff"
-        onClick={() => setOpen(true)}
-        hidden={showRecycleBin || open || Boolean(activeStaffViewId)}
-      />
     </div>
   );
 }
@@ -7537,7 +7502,7 @@ function FinanceOverview({
       tx.kind === "expense" ? "Expense" : (tx.payment?.cat ?? "Receipt"),
       tx.kind === "receipt" && tx.payment ? (resolvePaymentFeePeriod(tx.payment) ?? "—") : "—",
       tx.kind === "receipt" && tx.payment ? tx.payment.mode : tx.detail,
-      `${tx.kind === "expense" ? "-" : ""}${tx.amount.toLocaleString("en-IN")}`,
+      `${tx.kind === "expense" ? "-" : ""}${formatAmount(tx.amount)}`,
       formatEventDateTime(tx.time),
       tx.status,
       truncatePdfCell(tx.kind === "receipt" ? (tx.payment?.narration ?? "") : tx.detail, 88),
@@ -7554,15 +7519,7 @@ function FinanceOverview({
         year: slugYear(academicYear),
         date: todayStamp(),
       }),
-      [
-        "Transaction ID",
-        "Type",
-        "Account",
-        "Detail",
-        "Amount (INR)",
-        "Time",
-        "Status",
-      ],
+      ["Transaction ID", "Type", "Account", "Detail", "Amount (INR)", "Time", "Status"],
       financeTransactions.map((tx) => [
         tx.id,
         tx.kind === "expense" ? "Expense" : "Receipt",
@@ -7683,13 +7640,13 @@ function FinanceOverview({
     const lines = [
       `${schoolName} · Transactions`,
       `Academic year: ${academicYear}`,
-      `${financeTransactions.length} transaction${financeTransactions.length === 1 ? "" : "s"} · Net ₹ ${total.toLocaleString("en-IN")}`,
+      `${financeTransactions.length} transaction${financeTransactions.length === 1 ? "" : "s"} · Net ${formatMoney(total)}`,
       "",
       ...financeTransactions
         .slice(0, 12)
         .map(
           (tx) =>
-            `• ${tx.id} · ${tx.name} · ${tx.kind === "expense" ? "−" : ""}₹ ${tx.amount.toLocaleString("en-IN")} · ${formatEventDateTime(tx.time)}`,
+            `• ${tx.id} · ${tx.name} · ${tx.kind === "expense" ? "−" : ""}${formatMoney(tx.amount)} · ${formatEventDateTime(tx.time)}`,
         ),
     ];
     if (financeTransactions.length > 12) {
@@ -7704,7 +7661,7 @@ function FinanceOverview({
     const text = [
       `${schoolName} · Fee Receipt ${payment.id}`,
       `Account: ${payment.name}`,
-      `Amount: ₹ ${payment.amount.toLocaleString("en-IN")}`,
+      `Amount: ${formatMoney(payment.amount)}`,
       `AY: ${academicYear}`,
       "Receipt PDF attached.",
     ].join("\n");
@@ -7781,7 +7738,7 @@ function FinanceOverview({
       `Reference: ${bill.id}`,
       `Payee: ${bill.name}`,
       `Type: ${bill.type}`,
-      `Amount: ₹ ${bill.amount.toLocaleString("en-IN")}`,
+      `Amount: ${formatMoney(bill.amount)}`,
       `Due: ${bill.due}`,
       `AY: ${academicYear}`,
       "Status: Open",
@@ -7791,7 +7748,7 @@ function FinanceOverview({
 
   const payOverdueBill = (bill: (typeof overdueBills)[number]) => {
     toast.success("Opening Make Payment", {
-      description: `${bill.name} · ₹ ${bill.amount.toLocaleString("en-IN")}`,
+      description: `${bill.name} · ${formatMoney(bill.amount)}`,
     });
     onOpenView("make");
   };
@@ -8024,7 +7981,7 @@ function FinanceOverview({
                 <ChartTooltip
                   content={
                     <ChartTooltipContent
-                      formatter={(value, name) => [formatInr(Number(value)), String(name)]}
+                      formatter={(value, name) => [formatMoney(Number(value)), String(name)]}
                     />
                   }
                 />
@@ -8064,7 +8021,7 @@ function FinanceOverview({
                     {segment.label}
                   </div>
                   <div className="mt-0.5 truncate font-mono text-[11px] font-semibold text-slate-900 dark:text-zinc-100">
-                    {formatInr(segment.value)}
+                    {formatMoney(segment.value)}
                   </div>
                 </div>
               ))
@@ -8105,7 +8062,7 @@ function FinanceOverview({
                       </div>
                     </div>
                     <div className="shrink-0 font-mono text-[13px] font-semibold text-slate-900 dark:text-zinc-50">
-                      {formatInr(bill.amount)}
+                      {formatMoney(bill.amount)}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -8138,8 +8095,8 @@ function FinanceOverview({
           <div className="min-w-0">
             <h3 className="text-[15px] font-bold text-slate-900">Transactions</h3>
             <p className="mt-0.5 text-[12px] text-slate-500">
-              {financeTransactions.length} transaction{financeTransactions.length === 1 ? "" : "s"} ·
-              receipts and expenses · newest first
+              {financeTransactions.length} transaction{financeTransactions.length === 1 ? "" : "s"}{" "}
+              · receipts and expenses · newest first
             </p>
           </div>
           <div className="relative z-30 flex w-full shrink-0 flex-wrap gap-2 sm:w-auto sm:justify-end">
@@ -8221,7 +8178,8 @@ function FinanceOverview({
                 </div>
                 <div className="shrink-0 text-right">
                   <div className="font-mono text-[14px] font-bold text-slate-900">
-                    {tx.kind === "expense" ? "−" : ""}₹ {tx.amount.toLocaleString("en-IN")}
+                    {tx.kind === "expense" ? "−" : ""}
+                    {formatMoney(tx.amount)}
                   </div>
                   <span
                     className={cn(
@@ -8381,7 +8339,8 @@ function FinanceOverview({
                     {formatEventDateTime(tx.time)}
                   </td>
                   <td className="px-3 py-3 font-mono font-semibold text-black">
-                    {tx.kind === "expense" ? "−" : ""}₹ {tx.amount.toLocaleString("en-IN")}
+                    {tx.kind === "expense" ? "−" : ""}
+                    {formatMoney(tx.amount)}
                   </td>
                   <td className="px-3 py-3">
                     <span
@@ -8479,7 +8438,7 @@ function FinanceOverview({
             title="Delete Transaction"
             description={
               pendingDeletePayment
-                ? `Delete receipt ${pendingDeletePayment.id} for ${pendingDeletePayment.name} (₹ ${pendingDeletePayment.amount.toLocaleString("en-IN")})? This cannot be undone.`
+                ? `Delete receipt ${pendingDeletePayment.id} for ${pendingDeletePayment.name} (${formatMoney(pendingDeletePayment.amount)})? This cannot be undone.`
                 : "Are you sure you want to delete this transaction?"
             }
             onConfirm={confirmDeletePayment}
@@ -9101,7 +9060,10 @@ function prefillScheduledAmountForFeeLine(
       : undefined;
 
   if (effectiveStudent && studentHasConcession(effectiveStudent)) {
-    if (termKind === "tuition" && isConcessionTierEnabled(effectiveStudent.concessionFees?.tuition)) {
+    if (
+      termKind === "tuition" &&
+      isConcessionTierEnabled(effectiveStudent.concessionFees?.tuition)
+    ) {
       const concessionClass = resolveConcessionTuitionClassConfig(
         effectiveStudent,
         matchedClass,
@@ -9270,13 +9232,20 @@ function receiptTimeForForm(raw?: string) {
 function parseMoneyPart(part: string): { label: string; amount: number; period?: string } | null {
   const withPeriod = part
     .trim()
-    .match(/^(.*?)\s+\(([^)]+)\)\s+(?:₹|Rs\.?)\s*([\d,]+(?:\.\d+)?)\s*$/i);
+    .match(
+      new RegExp(
+        String.raw`^(.*?)\s+\(([^)]+)\)\s+${CURRENCY_TOKEN_SRC}\s*([\d,]+(?:\.\d+)?)\s*$`,
+        "i",
+      ),
+    );
   if (withPeriod) {
     const amount = Number(withPeriod[3].replace(/,/g, ""));
     if (!Number.isFinite(amount) || amount < 0) return null;
     return { label: withPeriod[1].trim(), period: withPeriod[2].trim(), amount };
   }
-  const match = part.trim().match(/^(.*?)\s+(?:₹|Rs\.?)\s*([\d,]+(?:\.\d+)?)\s*$/i);
+  const match = part
+    .trim()
+    .match(new RegExp(String.raw`^(.*?)\s+${CURRENCY_TOKEN_SRC}\s*([\d,]+(?:\.\d+)?)\s*$`, "i"));
   if (!match) return null;
   const amount = Number(match[2].replace(/,/g, ""));
   if (!Number.isFinite(amount) || amount < 0) return null;
@@ -9297,8 +9266,8 @@ function formatFeeBreakdownNarration(items: FeeLineItem[]): string {
     .map((item) => {
       const label = feeLineCategoryLabel(item);
       const period = item.feePeriod.trim();
-      const amount = Number(item.amount).toLocaleString("en-IN");
-      return period ? `${label} (${period}) ₹${amount}` : `${label} ₹${amount}`;
+      const amount = formatMoney(Number(item.amount));
+      return period ? `${label} (${period}) ${amount}` : `${label} ${amount}`;
     })
     .join(" · ")}`;
 }
@@ -9439,7 +9408,7 @@ function ReceiptDetailsDialog({
                     </div>
                     <div className="shrink-0 text-right">
                       <div className="font-mono text-[20px] font-bold text-black dark:text-zinc-100">
-                        ₹ {payment.amount.toLocaleString("en-IN")}
+                        {formatMoney(payment.amount)}
                       </div>
                       <div className="mt-1 font-mono text-[10.5px] text-black/45 dark:text-zinc-400">
                         {formatEventDateTime(payment.time)}
@@ -9495,7 +9464,7 @@ function ReceiptDetailsDialog({
                             ) : null}
                           </div>
                           <div className="shrink-0 font-mono text-[12.5px] font-semibold text-[#059669]">
-                            ₹ {line.amount.toLocaleString("en-IN")}
+                            {formatMoney(line.amount)}
                           </div>
                         </li>
                       ))}
@@ -9669,7 +9638,9 @@ function PaymentModeControls({
       {mode === "Both" && (
         <div className="mt-2 grid grid-cols-2 gap-2">
           <div>
-            <div className="mb-1 text-[10px] font-medium text-black/45">Bank (₹)</div>
+            <div className="mb-1 text-[10px] font-medium text-black/45">
+              {moneyColumnLabel("Bank")}
+            </div>
             <input
               value={bankSplitAmount}
               onChange={(e) => onBankChange(e.target.value.replace(/[^0-9]/g, ""))}
@@ -9679,7 +9650,9 @@ function PaymentModeControls({
             />
           </div>
           <div>
-            <div className="mb-1 text-[10px] font-medium text-black/45">Cash (₹)</div>
+            <div className="mb-1 text-[10px] font-medium text-black/45">
+              {moneyColumnLabel("Cash")}
+            </div>
             <input
               value={cashSplitAmount}
               onChange={(e) => onCashChange(e.target.value.replace(/[^0-9]/g, ""))}
@@ -10907,7 +10880,7 @@ function ReceivePayment() {
     const text = [
       `${schoolName} · Fee Receipt ${payment.id}`,
       `Account: ${payment.name}`,
-      `Amount: ₹ ${payment.amount.toLocaleString("en-IN")}`,
+      `Amount: ${formatMoney(payment.amount)}`,
       `AY: ${academicYear}`,
       "Receipt PDF attached.",
     ].join("\n");
@@ -11097,7 +11070,7 @@ function ReceivePayment() {
     }
     if (mode === "Both") {
       extras.push(
-        `Bank ₹${Number(bankSplitAmount).toLocaleString("en-IN")} · Cash ₹${Number(cashSplitAmount).toLocaleString("en-IN")}`,
+        `Bank ${formatMoney(Number(bankSplitAmount))} · Cash ${formatMoney(Number(cashSplitAmount))}`,
       );
     }
     const note = [narration.trim(), ...extras].filter(Boolean).join(" · ");
@@ -11213,7 +11186,7 @@ function ReceivePayment() {
     }
     if (mode === "Both") {
       extras.push(
-        `Bank ₹${Number(bankSplitAmount).toLocaleString("en-IN")} · Cash ₹${Number(cashSplitAmount).toLocaleString("en-IN")}`,
+        `Bank ${formatMoney(Number(bankSplitAmount))} · Cash ${formatMoney(Number(cashSplitAmount))}`,
       );
     }
     const note = [narration.trim(), ...extras].filter(Boolean).join(" · ");
@@ -11249,7 +11222,7 @@ function ReceivePayment() {
       try {
         const saved = await apiCreatePayment(draft);
         setPayments((prev) => [saved, ...prev.filter((p) => p.id !== saved.id)]);
-        toast.success(`Receipt ${saved.id} · ₹ ${value.toLocaleString("en-IN")} captured`, {
+        toast.success(`Receipt ${saved.id} · ${formatMoney(value)} captured`, {
           description: `External · ${payer} · ${primaryCategory} · ${periodLabel}${
             receiptAttachments
               ? ` · ${receiptAttachments.length} file${receiptAttachments.length === 1 ? "" : "s"}`
@@ -11335,14 +11308,12 @@ function ReceivePayment() {
         feeBreaks: studentFeeBreaks,
       }).totalDue;
       setPayments(paymentsAfter);
-      setStudents((prev) =>
-        prev.map((s) => (s.id === selected.id ? { ...s, due: liveDue } : s)),
-      );
-      toast.success(`Receipt ${saved.id} · ₹ ${value.toLocaleString("en-IN")} captured`, {
+      setStudents((prev) => prev.map((s) => (s.id === selected.id ? { ...s, due: liveDue } : s)));
+      toast.success(`Receipt ${saved.id} · ${formatMoney(value)} captured`, {
         description:
           liveDue === 0
             ? `${selected.name}'s balance is now Cleared · ${periodLabel}`
-            : `${selected.name} · ${periodLabel} · balance ₹ ${liveDue.toLocaleString("en-IN")}`,
+            : `${selected.name} · ${periodLabel} · balance ${formatMoney(liveDue)}`,
       });
       const resetPeriod = defaultFeePeriod(
         feeTerms,
@@ -11403,7 +11374,7 @@ function ReceivePayment() {
         p.narration ?? "",
         p.payerType === "external" ? "external donor payer" : "student",
         String(p.amount),
-        p.amount.toLocaleString("en-IN"),
+        formatAmount(p.amount),
         ...(p.attachments?.map((a) => a.name) ?? []),
       ]
         .join(" ")
@@ -11829,7 +11800,7 @@ function ReceivePayment() {
                     />
                     {mode === "Both" && !splitOk && recordTotal > 0 && (
                       <p className="mt-1.5 text-[10.5px] text-red-600">
-                        Bank + Cash must equal ₹ {recordTotal.toLocaleString("en-IN")}
+                        Bank + Cash must equal {formatMoney(recordTotal)}
                       </p>
                     )}
                   </div>
@@ -11941,8 +11912,8 @@ function ReceivePayment() {
                   <div className="col-span-12 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-3 text-[12px] leading-relaxed text-amber-950 dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-100">
                     <span className="font-semibold">Fee concession</span>
                     {" — "}
-                    This student has custom fee schedules. Amounts below use their concession
-                    rates, not the class or route defaults.
+                    This student has custom fee schedules. Amounts below use their concession rates,
+                    not the class or route defaults.
                     {selected.concessionReason ? (
                       <span className="mt-1 block text-amber-800/90 dark:text-amber-200/80">
                         Reason: {selected.concessionReason}
@@ -12005,12 +11976,12 @@ function ReceivePayment() {
                           <div className="flex shrink-0 items-center gap-2">
                             {itemAmount > 0 ? (
                               <span className="rounded-lg bg-white px-2.5 py-1 font-mono text-[13px] font-semibold text-[#0F766E] ring-1 ring-[#99F6E4]/60 dark:bg-zinc-950 dark:text-[#2DD4BF]">
-                                ₹ {itemAmount.toLocaleString("en-IN")}
+                                {formatMoney(itemAmount)}
                               </span>
                             ) : null}
                             {balanceSummary && balanceSummary.paid > 0 ? (
                               <span className="hidden rounded-lg bg-[#FEF3C7] px-2 py-1 text-[10px] font-semibold text-[#92400E] ring-1 ring-[#FDE68A]/80 sm:inline dark:bg-amber-950/40 dark:text-amber-200">
-                                Bal ₹ {balanceSummary.balance.toLocaleString("en-IN")}
+                                Bal {formatMoney(balanceSummary.balance)}
                               </span>
                             ) : null}
                             {feeItems.length > 1 ? (
@@ -12089,22 +12060,22 @@ function ReceivePayment() {
                                 <p className="text-[11px] leading-snug text-black/55 dark:text-zinc-400">
                                   Fee{" "}
                                   <span className="font-mono font-semibold text-black/70 dark:text-zinc-200">
-                                    ₹ {balanceSummary.scheduled.toLocaleString("en-IN")}
+                                    {formatMoney(balanceSummary.scheduled)}
                                   </span>
                                   {" · "}
                                   Paid{" "}
                                   <span className="font-mono font-semibold text-[#0F766E]">
-                                    ₹ {balanceSummary.paid.toLocaleString("en-IN")}
+                                    {formatMoney(balanceSummary.paid)}
                                   </span>
                                   {" · "}
                                   Balance{" "}
                                   <span className="font-mono font-semibold text-[#B45309] dark:text-amber-300">
-                                    ₹ {balanceSummary.balance.toLocaleString("en-IN")}
+                                    {formatMoney(balanceSummary.balance)}
                                   </span>
                                 </p>
                               ) : balanceSummary && balanceSummary.scheduled > 0 ? (
                                 <p className="text-[11px] text-black/45 dark:text-zinc-500">
-                                  Scheduled fee ₹ {balanceSummary.scheduled.toLocaleString("en-IN")}
+                                  Scheduled fee {formatMoney(balanceSummary.scheduled)}
                                 </p>
                               ) : null}
                             </div>
@@ -12142,11 +12113,11 @@ function ReceivePayment() {
                   <div className="min-w-0">
                     <FieldLabel className="mb-0.5">Total Amount</FieldLabel>
                     <div className="text-[13px] text-black/65 dark:text-zinc-300">
-                      {amountToIndianWords(recordTotal)}
+                      {numberToWords(recordTotal)}
                     </div>
                   </div>
                   <div className="shrink-0 rounded-lg border border-[#E5E5E5] bg-white px-3.5 py-2 font-mono text-[16px] font-semibold text-black dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-50">
-                    {recordTotal.toLocaleString("en-IN")}
+                    {formatAmount(recordTotal)}
                   </div>
                 </div>
 
@@ -12172,7 +12143,7 @@ function ReceivePayment() {
                     />
                     {mode === "Both" && !splitOk && recordTotal > 0 && (
                       <p className="mt-1.5 text-[10.5px] text-red-600">
-                        Bank + Cash must equal ₹ {recordTotal.toLocaleString("en-IN")}
+                        Bank + Cash must equal {formatMoney(recordTotal)}
                       </p>
                     )}
                   </div>
@@ -12239,7 +12210,7 @@ function ReceivePayment() {
             </div>
             <div className="flex items-center gap-3 sm:shrink-0">
               <div className="rounded-lg border border-[#E5E5E5] bg-white px-3.5 py-2 font-mono text-[16px] font-semibold text-black dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-50">
-                {recordTotal.toLocaleString("en-IN")}
+                {formatAmount(recordTotal)}
               </div>
               <button
                 type="button"
@@ -12284,7 +12255,7 @@ function ReceivePayment() {
                 Today&apos;s intake
               </div>
               <div className="font-mono text-[16px] font-semibold text-black dark:text-zinc-50">
-                ₹ {todayTotal.toLocaleString("en-IN")}
+                {formatMoney(todayTotal)}
               </div>
             </div>
           </div>
@@ -12344,7 +12315,7 @@ function ReceivePayment() {
                 </div>
                 <div className="shrink-0 text-right">
                   <div className="font-mono text-[14px] font-bold text-[#059669]">
-                    +₹ {p.amount.toLocaleString("en-IN")}
+                    +{formatMoney(p.amount)}
                   </div>
                   <span className="mt-1 inline-flex rounded-full bg-[#D1F2E1] px-2 py-0.5 text-[9.5px] font-semibold text-[#059669]">
                     Complete
@@ -12508,7 +12479,7 @@ function ReceivePayment() {
                   </td>
                   <td className="px-3 py-3 text-black/70 dark:text-zinc-300">{p.mode}</td>
                   <td className="px-3 py-3 font-mono font-semibold text-black">
-                    +₹ {p.amount.toLocaleString("en-IN")}
+                    +{formatMoney(p.amount)}
                   </td>
                   <td className="px-3 py-3 font-mono text-[11px] text-black/55 dark:text-zinc-400">
                     {formatEventDateTime(p.time)}
@@ -12602,7 +12573,9 @@ function ReceivePayment() {
         <DialogContent className="max-w-sm rounded-xl">
           <DialogHeader>
             <DialogTitle>
-              {addCategoryTarget?.type === "ledger" ? "Create income ledger" : "Add fee description"}
+              {addCategoryTarget?.type === "ledger"
+                ? "Create income ledger"
+                : "Add fee description"}
             </DialogTitle>
             <DialogDescription>
               {addCategoryTarget?.type === "ledger"
@@ -12666,7 +12639,7 @@ function ReceivePayment() {
         title="Delete Receipt"
         description={
           pendingDeletePayment
-            ? `Delete receipt ${pendingDeletePayment.id} for ${pendingDeletePayment.name} (₹ ${pendingDeletePayment.amount.toLocaleString("en-IN")})? This cannot be undone.`
+            ? `Delete receipt ${pendingDeletePayment.id} for ${pendingDeletePayment.name} (${formatMoney(pendingDeletePayment.amount)})? This cannot be undone.`
             : "Are you sure you want to delete this receipt?"
         }
         onConfirm={confirmDeleteHistoryPayment}
@@ -12881,8 +12854,7 @@ function MakePayment() {
             for (const row of clearedSalary) {
               const matchesId = row.staffId && member.id === row.staffId;
               const matchesName =
-                !row.staffId &&
-                member.name.trim().toLowerCase() === row.payee.trim().toLowerCase();
+                !row.staffId && member.name.trim().toLowerCase() === row.payee.trim().toLowerCase();
               if (!matchesId && !matchesName) continue;
               const synced = syncStaffSalaryHistoryStatus(updated, {
                 amount: row.amount,
@@ -13050,9 +13022,15 @@ function MakePayment() {
         `Salary · ${member.role}${member.dept ? ` · ${member.dept}` : ""}${attendanceNote}`,
       );
     }
-    if (!opts?.skipToast && opts?.amount === undefined && working > 0 && attendance && computed !== gross) {
+    if (
+      !opts?.skipToast &&
+      opts?.amount === undefined &&
+      working > 0 &&
+      attendance &&
+      computed !== gross
+    ) {
       toast.message("Payroll adjusted for attendance", {
-        description: `Gross ₹ ${gross.toLocaleString("en-IN")} → payable ₹ ${computed.toLocaleString("en-IN")} (${payDays || payableDays}/${working})`,
+        description: `Gross ${formatMoney(gross)} → payable ${formatMoney(computed)} (${payDays || payableDays}/${working})`,
       });
     }
   };
@@ -13296,8 +13274,8 @@ function MakePayment() {
     if (mode === "Both") {
       desc = [
         desc,
-        `Bank ₹${Number(bankSplitAmount).toLocaleString("en-IN")}`,
-        `Cash ₹${Number(cashSplitAmount).toLocaleString("en-IN")}`,
+        `Bank ${formatMoney(Number(bankSplitAmount))}`,
+        `Cash ${formatMoney(Number(cashSplitAmount))}`,
       ]
         .filter(Boolean)
         .join(" · ");
@@ -13414,8 +13392,8 @@ function MakePayment() {
 
     toast.success(isHold ? "Salary held" : "Payment confirmed", {
       description: isHold
-        ? `${beneficiary.trim()} · ₹ ${value.toLocaleString("en-IN")} · Queued obligation`
-        : `${beneficiary.trim()} · ₹ ${value.toLocaleString("en-IN")} via ${mode}${
+        ? `${beneficiary.trim()} · ${formatMoney(value)} · Queued obligation`
+        : `${beneficiary.trim()} · ${formatMoney(value)} via ${mode}${
             attachments.length
               ? ` · ${attachments.length} attachment${attachments.length === 1 ? "" : "s"}`
               : ""
@@ -13594,7 +13572,8 @@ function MakePayment() {
           ledgerByName.get((row.category || row.payee).trim().toLowerCase())?.id ??
           null,
         time: saved?.time || toSqlDateTime(row.time),
-        status: saved?.status === "Queued" || saved?.status === "Cleared" ? saved.status : row.status,
+        status:
+          saved?.status === "Queued" || saved?.status === "Cleared" ? saved.status : row.status,
       };
       setMadePayments((prev) => [resolved, ...prev.filter((item) => item.id !== resolved.id)]);
       upsertDisbursementInCache(activeBranchId, {
@@ -13872,7 +13851,7 @@ function MakePayment() {
       `Type: ${payment.payeeType}`,
       `Description: ${payment.desc}`,
       `Mode: ${payment.mode}`,
-      `Amount: ₹ ${payment.amount.toLocaleString("en-IN")}`,
+      `Amount: ${formatMoney(payment.amount)}`,
       `Status: ${payment.status}`,
       `Time: ${formatEventDateTime(payment.time)}`,
     ].join("\n");
@@ -13959,8 +13938,8 @@ function MakePayment() {
     if (modeValue === "Both") {
       nextDesc = [
         desc,
-        `Bank ₹${Number(bankSplitAmount).toLocaleString("en-IN")}`,
-        `Cash ₹${Number(cashSplitAmount).toLocaleString("en-IN")}`,
+        `Bank ${formatMoney(Number(bankSplitAmount))}`,
+        `Cash ${formatMoney(Number(cashSplitAmount))}`,
       ]
         .filter(Boolean)
         .join(" · ");
@@ -14260,7 +14239,7 @@ function MakePayment() {
           </div>
           <div className="grid grid-cols-1 gap-4 sm:col-span-2 sm:grid-cols-[minmax(0,0.45fr)_minmax(0,0.55fr)] sm:items-start">
             <div>
-              <FieldLabel>Amount (₹)</FieldLabel>
+              <FieldLabel>{moneyColumnLabel("Amount")}</FieldLabel>
               <Input
                 inputMode="numeric"
                 value={amount}
@@ -14280,7 +14259,7 @@ function MakePayment() {
               />
               {mode === "Both" && !splitOk && paymentTotal > 0 && (
                 <p className="mt-1.5 text-[10.5px] text-red-600">
-                  Bank + Cash must equal ₹ {paymentTotal.toLocaleString("en-IN")}
+                  Bank + Cash must equal {formatMoney(paymentTotal)}
                 </p>
               )}
             </div>
@@ -14408,14 +14387,11 @@ function MakePayment() {
               </div>
             )}
             {topExpenses.map((payment) => (
-              <div
-                key={payment.id}
-                className="rounded-lg bg-[#FFF1F2] p-3 text-[#0F172A]"
-              >
+              <div key={payment.id} className="rounded-lg bg-[#FFF1F2] p-3 text-[#0F172A]">
                 <div className="flex items-start justify-between gap-2 text-[12.5px]">
                   <span className="min-w-0 break-words font-semibold">{payment.payee}</span>
                   <span className="shrink-0 font-mono text-[#BE123C]">
-                    − ₹ {payment.amount.toLocaleString("en-IN")}
+                    − {formatMoney(payment.amount)}
                   </span>
                 </div>
                 <div className="mt-1 flex flex-col gap-1.5 text-[10.5px] text-black/55 dark:text-zinc-400 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
@@ -14511,9 +14487,7 @@ function MakePayment() {
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1.5">
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-black">
-                      −₹ {payment.amount.toLocaleString("en-IN")}
-                    </span>
+                    <span className="font-mono text-black">−{formatMoney(payment.amount)}</span>
                     <span
                       className={cn(
                         "rounded-full px-2 py-0.5 text-[10px] font-semibold",
@@ -14701,7 +14675,7 @@ function MakePayment() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                  Amount (₹)
+                  {moneyColumnLabel("Amount")}
                 </Label>
                 <Input
                   type="number"
@@ -14737,8 +14711,7 @@ function MakePayment() {
                   ) &&
                   Number(disbursalEditForm.amount) > 0 && (
                     <p className="text-[10.5px] text-red-600">
-                      Bank + Cash must equal ₹{" "}
-                      {Number(disbursalEditForm.amount).toLocaleString("en-IN")}
+                      Bank + Cash must equal {formatMoney(Number(disbursalEditForm.amount))}
                     </p>
                   )}
               </div>
@@ -14815,7 +14788,7 @@ function MakePayment() {
         title="Delete Payment"
         description={
           pendingDeleteDisbursal
-            ? `Delete payment ${pendingDeleteDisbursal.id} to ${pendingDeleteDisbursal.payee} (₹ ${pendingDeleteDisbursal.amount.toLocaleString("en-IN")})? This cannot be undone.`
+            ? `Delete payment ${pendingDeleteDisbursal.id} to ${pendingDeleteDisbursal.payee} (${formatMoney(pendingDeleteDisbursal.amount)})? This cannot be undone.`
             : "Are you sure you want to delete this payment?"
         }
         onConfirm={confirmDeleteDisbursal}
@@ -14835,7 +14808,7 @@ function MakePayment() {
             <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60 dark:text-zinc-400">
               {pendingPayAction === "hold" ? (
                 <>
-                  Hold ₹ {Number(amount || 0).toLocaleString("en-IN")} for {beneficiary.trim()}
+                  Hold {formatMoney(Number(amount || 0))} for {beneficiary.trim()}
                   {payeeType === "Salary" && salaryMonth
                     ? ` · ${formatPayrollMonthLabel(salaryMonth)}`
                     : ""}{" "}
@@ -14843,8 +14816,7 @@ function MakePayment() {
                 </>
               ) : (
                 <>
-                  Pay ₹ {Number(amount || 0).toLocaleString("en-IN")} to {beneficiary.trim()} via{" "}
-                  {mode}
+                  Pay {formatMoney(Number(amount || 0))} to {beneficiary.trim()} via {mode}
                   {attachments.length
                     ? ` with ${attachments.length} attachment${attachments.length === 1 ? "" : "s"}`
                     : ""}
@@ -14932,7 +14904,7 @@ function LedgerAnalytics() {
               Total income
             </div>
             <div className="mt-1 truncate font-mono text-[18px] font-semibold tracking-tight text-teal-950 dark:text-teal-100 sm:text-[20px]">
-              ₹ {incomeTotal.toLocaleString("en-IN")}
+              {formatMoney(incomeTotal)}
             </div>
             <div className="mt-1 text-[11px] text-teal-800/60 dark:text-teal-300/70">
               {incomeSegments.length} categor{incomeSegments.length === 1 ? "y" : "ies"}
@@ -14943,7 +14915,7 @@ function LedgerAnalytics() {
               Total outflow
             </div>
             <div className="mt-1 truncate font-mono text-[18px] font-semibold tracking-tight text-rose-950 dark:text-rose-100 sm:text-[20px]">
-              ₹ {outflowTotal.toLocaleString("en-IN")}
+              {formatMoney(outflowTotal)}
             </div>
             <div className="mt-1 text-[11px] text-rose-800/60 dark:text-rose-300/70">
               {outflowSegments.length} categor{outflowSegments.length === 1 ? "y" : "ies"}
@@ -14961,7 +14933,7 @@ function LedgerAnalytics() {
                   : "text-rose-700 dark:text-rose-300",
               )}
             >
-              {net >= 0 ? "+" : "−"} ₹ {Math.abs(net).toLocaleString("en-IN")}
+              {net >= 0 ? "+" : "−"} {formatMoney(Math.abs(net))}
             </div>
             <div className="mt-1 text-[11px] text-black/45 dark:text-zinc-500">
               {net >= 0 ? "Surplus for this year" : "Outflow exceeds income"}
@@ -16702,7 +16674,7 @@ function ClassesCard({
         toast.error(err instanceof Error ? err.message : "Could not sync class"),
       );
       toast.success(`${className} updated`, {
-        description: `₹ ${next.tuitionFeeAmount.toLocaleString("en-IN")} · ${scheduleSummary({ ...next, id: editingId })}`,
+        description: `${formatMoney(next.tuitionFeeAmount)} · ${scheduleSummary({ ...next, id: editingId })}`,
       });
     } else {
       const nextId = nextPrefixedId(
@@ -16716,25 +16688,20 @@ function ClassesCard({
         .then((saved) => {
           if (!saved?.id) return;
           setClasses((prev) =>
-            prev.map((c) =>
-              c.id === created.id || c.id === saved.id ? { ...c, ...saved } : c,
-            ),
+            prev.map((c) => (c.id === created.id || c.id === saved.id ? { ...c, ...saved } : c)),
           );
         })
-        .catch((err) =>
-          toast.error(err instanceof Error ? err.message : "Could not sync class"),
-        );
+        .catch((err) => toast.error(err instanceof Error ? err.message : "Could not sync class"));
       toast.success(`${className} added`, {
-        description: `₹ ${next.tuitionFeeAmount.toLocaleString("en-IN")} · ${scheduleSummary(created)}`,
+        description: `${formatMoney(next.tuitionFeeAmount)} · ${scheduleSummary(created)}`,
       });
     }
     setOpen(false);
   };
 
   const enrolledCount = (className: string) =>
-    students.filter(
-      (s) => !isRecordDeleted(s.deletedAt) && studentBelongsToClass(s.cls, className),
-    ).length;
+    students.filter((s) => !isRecordDeleted(s.deletedAt) && studentBelongsToClass(s.cls, className))
+      .length;
 
   const blockingCount = (classConfig: ClassConfig) =>
     classBlockingEnrollmentCount(classConfig, allStudents, studentYearLedgers);
@@ -16923,7 +16890,7 @@ function ClassesCard({
                         Total fee
                       </dt>
                       <dd className="mt-0.5 font-mono text-[13px] font-semibold text-slate-900 dark:text-zinc-100">
-                        ₹ {meta.normalized.tuitionFeeAmount.toLocaleString("en-IN")}
+                        {formatMoney(meta.normalized.tuitionFeeAmount)}
                       </dd>
                     </div>
                     <div className="px-2 py-2.5 text-center">
@@ -16999,7 +16966,7 @@ function ClassesCard({
                         {meta.count}
                       </td>
                       <td className="px-2 py-2.5 align-middle font-mono font-medium text-black dark:text-zinc-100">
-                        ₹ {meta.normalized.tuitionFeeAmount.toLocaleString("en-IN")}
+                        {formatMoney(meta.normalized.tuitionFeeAmount)}
                       </td>
                       <td className="px-2 py-2.5 align-middle text-black/75 dark:text-zinc-300">
                         {termMonthLabel(c)}
@@ -17064,573 +17031,579 @@ function ClassesCard({
           </DialogHeader>
           <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
-            <div className="space-y-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
-                Class identity
-              </p>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                    Class
-                  </Label>
-                  <Input
-                    value={form.grade}
-                    onChange={(e) => setForm({ ...form, grade: e.target.value })}
-                    placeholder="e.g. Grade 8"
-                    autoFocus
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                    Division
-                  </Label>
-                  <Input
-                    value={form.section}
-                    onChange={(e) => setForm({ ...form, section: e.target.value })}
-                    placeholder="e.g. B"
-                  />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                  Class Teacher{" "}
-                  <span className="normal-case tracking-normal text-black/40">(optional)</span>
-                </Label>
-                <StaffSearchSelect
-                  staff={teacherOptions}
-                  value={form.classTeacherId}
-                  onChange={(id) => setForm({ ...form, classTeacherId: id })}
-                  placeholder="Choose staff member"
-                  allowNone
-                  noneLabel="No class teacher"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-3 rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] p-3.5 dark:border-white/10 dark:bg-zinc-900/60">
-              <div>
+              <div className="space-y-3">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
-                  Fee structure
+                  Class identity
                 </p>
-                <p className="mt-1 text-[12px] leading-snug text-black/50">
-                  {form.billingModeChosen
-                    ? form.billingCycle === "Term"
-                      ? "Term billing is selected — only term periods will appear in Fee Collection."
-                      : "Monthly billing is selected — only month periods will appear in Fee Collection."
-                    : "After class identity, choose monthly or term fee mode. Only that schedule will be shown."}
-                </p>
-              </div>
-
-              {!form.billingModeChosen ? (
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                    Fee billing mode
-                  </Label>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    {(
-                      [
-                        {
-                          cycle: "Monthly" as const,
-                          title: "Monthly",
-                          hint: "Bill by calendar month · Fee Collection shows months only",
-                        },
-                        {
-                          cycle: "Term" as const,
-                          title: "Term",
-                          hint: "Bill by terms · Fee Collection shows terms only",
-                        },
-                      ] as const
-                    ).map((option) => (
-                      <button
-                        key={option.cycle}
-                        type="button"
-                        onClick={() => applyBillingCycle(option.cycle)}
-                        className="rounded-xl border border-[#E5E5E5] bg-white px-3.5 py-3 text-left transition-colors hover:border-[#0F766E]/50 hover:bg-[#F0FDFA] dark:border-white/10 dark:bg-zinc-900 dark:hover:border-[#0F766E]/50 dark:hover:bg-teal-950/40"
-                      >
-                        <div className="text-[14px] font-semibold text-black">{option.title}</div>
-                        <p className="mt-1 text-[11px] leading-snug text-black/50">{option.hint}</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#CCFBF1] bg-[#F0FDFA] px-3 py-2.5">
-                    <div className="min-w-0">
-                      <div className="text-[10px] font-semibold uppercase tracking-wider text-[#0F766E]/70">
-                        Billing mode
-                      </div>
-                      <div className="text-[14px] font-semibold text-[#0F766E]">
-                        {form.billingCycle === "Term" ? "Term" : "Monthly"}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setForm((prev) => ({
-                          ...prev,
-                          billingModeChosen: false,
-                        }))
-                      }
-                      className="shrink-0 text-[12px] font-semibold text-[#0F766E] hover:underline"
-                    >
-                      Change billing mode
-                    </button>
-                  </div>
-
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                      Amounts
+                      Class
                     </Label>
-                    <div className="flex flex-col gap-1 rounded-2xl border border-[#E5E5E5] bg-white p-1 dark:border-white/10 dark:bg-zinc-900 sm:flex-row sm:rounded-full">
+                    <Input
+                      value={form.grade}
+                      onChange={(e) => setForm({ ...form, grade: e.target.value })}
+                      placeholder="e.g. Grade 8"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                      Division
+                    </Label>
+                    <Input
+                      value={form.section}
+                      onChange={(e) => setForm({ ...form, section: e.target.value })}
+                      placeholder="e.g. B"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                    Class Teacher{" "}
+                    <span className="normal-case tracking-normal text-black/40">(optional)</span>
+                  </Label>
+                  <StaffSearchSelect
+                    staff={teacherOptions}
+                    value={form.classTeacherId}
+                    onChange={(id) => setForm({ ...form, classTeacherId: id })}
+                    placeholder="Choose staff member"
+                    allowNone
+                    noneLabel="No class teacher"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3 rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] p-3.5 dark:border-white/10 dark:bg-zinc-900/60">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                    Fee structure
+                  </p>
+                  <p className="mt-1 text-[12px] leading-snug text-black/50">
+                    {form.billingModeChosen
+                      ? form.billingCycle === "Term"
+                        ? "Term billing is selected — only term periods will appear in Fee Collection."
+                        : "Monthly billing is selected — only month periods will appear in Fee Collection."
+                      : "After class identity, choose monthly or term fee mode. Only that schedule will be shown."}
+                  </p>
+                </div>
+
+                {!form.billingModeChosen ? (
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                      Fee billing mode
+                    </Label>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       {(
                         [
                           {
-                            key: "fixed" as const,
-                            label:
-                              form.billingCycle === "Term"
-                                ? "Same for every term"
-                                : "Same each month",
+                            cycle: "Monthly" as const,
+                            title: "Monthly",
+                            hint: "Bill by calendar month · Fee Collection shows months only",
                           },
                           {
-                            key: "custom" as const,
-                            label:
-                              form.billingCycle === "Term"
-                                ? "Different per term"
-                                : "Different per month",
+                            cycle: "Term" as const,
+                            title: "Term",
+                            hint: "Bill by terms · Fee Collection shows terms only",
                           },
                         ] as const
-                      ).map((option) => {
-                        const active = form.feeAmountMode === option.key;
-                        return (
-                          <button
-                            key={option.key}
-                            type="button"
-                            onClick={() => {
+                      ).map((option) => (
+                        <button
+                          key={option.cycle}
+                          type="button"
+                          onClick={() => applyBillingCycle(option.cycle)}
+                          className="rounded-xl border border-[#E5E5E5] bg-white px-3.5 py-3 text-left transition-colors hover:border-[#0F766E]/50 hover:bg-[#F0FDFA] dark:border-white/10 dark:bg-zinc-900 dark:hover:border-[#0F766E]/50 dark:hover:bg-teal-950/40"
+                        >
+                          <div className="text-[14px] font-semibold text-black">{option.title}</div>
+                          <p className="mt-1 text-[11px] leading-snug text-black/50">
+                            {option.hint}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#CCFBF1] bg-[#F0FDFA] px-3 py-2.5">
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-[#0F766E]/70">
+                          Billing mode
+                        </div>
+                        <div className="text-[14px] font-semibold text-[#0F766E]">
+                          {form.billingCycle === "Term" ? "Term" : "Monthly"}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setForm((prev) => ({
+                            ...prev,
+                            billingModeChosen: false,
+                          }))
+                        }
+                        className="shrink-0 text-[12px] font-semibold text-[#0F766E] hover:underline"
+                      >
+                        Change billing mode
+                      </button>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                        Amounts
+                      </Label>
+                      <div className="flex flex-col gap-1 rounded-2xl border border-[#E5E5E5] bg-white p-1 dark:border-white/10 dark:bg-zinc-900 sm:flex-row sm:rounded-full">
+                        {(
+                          [
+                            {
+                              key: "fixed" as const,
+                              label:
+                                form.billingCycle === "Term"
+                                  ? "Same for every term"
+                                  : "Same each month",
+                            },
+                            {
+                              key: "custom" as const,
+                              label:
+                                form.billingCycle === "Term"
+                                  ? "Different per term"
+                                  : "Different per month",
+                            },
+                          ] as const
+                        ).map((option) => {
+                          const active = form.feeAmountMode === option.key;
+                          return (
+                            <button
+                              key={option.key}
+                              type="button"
+                              onClick={() => {
+                                setForm((prev) => {
+                                  const count = Math.max(
+                                    1,
+                                    Math.floor(Number(prev.installmentCount) || 0) ||
+                                      Number(defaultInstallmentCount(prev.billingCycle)),
+                                  );
+                                  const rows = Array.from({ length: count }, (_, index) => {
+                                    const existing = prev.installments[index];
+                                    return {
+                                      id: existing?.id || `fl-i-${index + 1}`,
+                                      label:
+                                        existing?.label ||
+                                        installmentLabel(index, prev.billingCycle),
+                                      amount:
+                                        option.key === "fixed"
+                                          ? prev.fixedAmount || existing?.amount || ""
+                                          : existing?.amount || prev.fixedAmount || "",
+                                      dueDate: existing?.dueDate || "",
+                                    };
+                                  });
+                                  return {
+                                    ...prev,
+                                    feeAmountMode: option.key,
+                                    installmentCount: String(count),
+                                    fixedAmount: prev.fixedAmount || rows[0]?.amount || "",
+                                    installments: rows,
+                                  };
+                                });
+                              }}
+                              className={cn(
+                                "rounded-full px-3 py-2 text-[12px] font-medium transition-colors sm:flex-1 sm:py-1.5",
+                                active
+                                  ? "bg-[#0F766E] text-white"
+                                  : "text-black/65 hover:text-black dark:text-zinc-400 dark:hover:text-zinc-100",
+                              )}
+                            >
+                              {option.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="text-[11px] text-black/45">
+                        {form.feeAmountMode === "fixed"
+                          ? form.billingCycle === "Term"
+                            ? "One amount applies to every term. Set a due date for each term below."
+                            : "One amount applies to every installment."
+                          : form.billingCycle === "Term"
+                            ? "Enter a separate amount and due date for each term."
+                            : "Enter a separate amount for each installment."}
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                          {form.billingCycle === "Term"
+                            ? "Number of terms"
+                            : "Number of installments"}
+                        </Label>
+                        <Input
+                          inputMode="numeric"
+                          value={form.installmentCount}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/[^0-9]/g, "");
+                            const count = Math.max(1, Math.floor(Number(raw) || 0));
+                            setForm((prev) => ({
+                              ...prev,
+                              installmentCount: raw,
+                              installments: ensureInstallmentRows(prev, count),
+                            }));
+                          }}
+                          placeholder={form.billingCycle === "Term" ? "4" : "12"}
+                          className="font-mono bg-white dark:bg-zinc-900 dark:text-zinc-100"
+                        />
+                      </div>
+                      {form.feeAmountMode === "fixed" ? (
+                        <div className="space-y-1.5">
+                          <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                            {form.billingCycle === "Term"
+                              ? moneyColumnLabel("Amount per term")
+                              : moneyColumnLabel("Amount each")}
+                          </Label>
+                          <Input
+                            inputMode="numeric"
+                            value={form.fixedAmount}
+                            onChange={(e) => {
+                              const amount = e.target.value.replace(/[^0-9]/g, "");
                               setForm((prev) => {
                                 const count = Math.max(
                                   1,
-                                  Math.floor(Number(prev.installmentCount) || 0) ||
-                                    Number(defaultInstallmentCount(prev.billingCycle)),
+                                  Math.floor(Number(prev.installmentCount) || 0),
                                 );
-                                const rows = Array.from({ length: count }, (_, index) => {
-                                  const existing = prev.installments[index];
-                                  return {
-                                    id: existing?.id || `fl-i-${index + 1}`,
-                                    label:
-                                      existing?.label || installmentLabel(index, prev.billingCycle),
-                                    amount:
-                                      option.key === "fixed"
-                                        ? prev.fixedAmount || existing?.amount || ""
-                                        : existing?.amount || prev.fixedAmount || "",
-                                    dueDate: existing?.dueDate || "",
-                                  };
-                                });
+                                const rows = ensureInstallmentRows(
+                                  { ...prev, fixedAmount: amount },
+                                  count,
+                                  "fixed",
+                                );
                                 return {
                                   ...prev,
-                                  feeAmountMode: option.key,
-                                  installmentCount: String(count),
-                                  fixedAmount: prev.fixedAmount || rows[0]?.amount || "",
+                                  fixedAmount: amount,
                                   installments: rows,
                                 };
                               });
                             }}
-                            className={cn(
-                              "rounded-full px-3 py-2 text-[12px] font-medium transition-colors sm:flex-1 sm:py-1.5",
-                              active
-                                ? "bg-[#0F766E] text-white"
-                                : "text-black/65 hover:text-black dark:text-zinc-400 dark:hover:text-zinc-100",
-                            )}
-                          >
-                            {option.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <p className="text-[11px] text-black/45">
-                      {form.feeAmountMode === "fixed"
-                        ? form.billingCycle === "Term"
-                          ? "One amount applies to every term. Set a due date for each term below."
-                          : "One amount applies to every installment."
-                        : form.billingCycle === "Term"
-                          ? "Enter a separate amount and due date for each term."
-                          : "Enter a separate amount for each installment."}
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                        {form.billingCycle === "Term"
-                          ? "Number of terms"
-                          : "Number of installments"}
-                      </Label>
-                      <Input
-                        inputMode="numeric"
-                        value={form.installmentCount}
-                        onChange={(e) => {
-                          const raw = e.target.value.replace(/[^0-9]/g, "");
-                          const count = Math.max(1, Math.floor(Number(raw) || 0));
-                          setForm((prev) => ({
-                            ...prev,
-                            installmentCount: raw,
-                            installments: ensureInstallmentRows(prev, count),
-                          }));
-                        }}
-                        placeholder={form.billingCycle === "Term" ? "4" : "12"}
-                        className="font-mono bg-white dark:bg-zinc-900 dark:text-zinc-100"
-                      />
-                    </div>
-                    {form.feeAmountMode === "fixed" ? (
-                      <div className="space-y-1.5">
-                        <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                          {form.billingCycle === "Term" ? "Amount per term (₹)" : "Amount each (₹)"}
-                        </Label>
-                        <Input
-                          inputMode="numeric"
-                          value={form.fixedAmount}
-                          onChange={(e) => {
-                            const amount = e.target.value.replace(/[^0-9]/g, "");
-                            setForm((prev) => {
-                              const count = Math.max(
-                                1,
-                                Math.floor(Number(prev.installmentCount) || 0),
-                              );
-                              const rows = ensureInstallmentRows(
-                                { ...prev, fixedAmount: amount },
-                                count,
-                                "fixed",
-                              );
-                              return {
-                                ...prev,
-                                fixedAmount: amount,
-                                installments: rows,
-                              };
-                            });
-                          }}
-                          placeholder="0"
-                          className="font-mono bg-white dark:bg-zinc-900 dark:text-zinc-100"
-                        />
-                      </div>
-                    ) : (
-                      <div className="flex items-end">
-                        <p className="pb-2 text-[12px] text-black/45">
-                          Set each {form.billingCycle === "Term" ? "term" : "installment"} amount in
-                          the schedule below.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="space-y-2 rounded-xl border border-[#E8E8EA] bg-white p-3 dark:border-white/10 dark:bg-zinc-900">
-                    <div className="flex items-center justify-between gap-2">
-                      <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                        {form.billingCycle === "Term" ? "Term schedule" : "Installment schedule"}
-                      </Label>
-                      {form.feeAmountMode === "custom" ? (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setForm((prev) => {
-                              const rows = [
-                                ...ensureInstallmentRows(
-                                  prev,
-                                  Math.max(1, Math.floor(Number(prev.installmentCount) || 0)),
-                                ),
-                                {
-                                  id: `fl-i-${prev.installments.length + 1}-${Date.now()}`,
-                                  label: installmentLabel(
-                                    Math.max(1, Math.floor(Number(prev.installmentCount) || 0)),
-                                    prev.billingCycle,
-                                  ),
-                                  amount: prev.fixedAmount,
-                                  dueDate: "",
-                                },
-                              ];
-                              return {
-                                ...prev,
-                                installments: rows,
-                                installmentCount: String(rows.length),
-                              };
-                            })
-                          }
-                          className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#0F766E] hover:underline"
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                          Add {form.billingCycle === "Term" ? "term" : "installment"}
-                        </button>
-                      ) : null}
-                    </div>
-
-                    <div
-                      className="hidden items-end gap-2 px-0.5 text-[10px] font-semibold uppercase tracking-wider text-black/40 sm:grid sm:grid-cols-[minmax(0,1.1fr)_5.75rem_minmax(0,1fr)_auto]"
-                    >
-                      <span>Label</span>
-                      <span>Amount</span>
-                      <span>Due date</span>
-                      {form.feeAmountMode === "custom" ? (
-                        <span className="sr-only">Remove</span>
+                            placeholder="0"
+                            className="font-mono bg-white dark:bg-zinc-900 dark:text-zinc-100"
+                          />
+                        </div>
                       ) : (
-                        <span />
+                        <div className="flex items-end">
+                          <p className="pb-2 text-[12px] text-black/45">
+                            Set each {form.billingCycle === "Term" ? "term" : "installment"} amount
+                            in the schedule below.
+                          </p>
+                        </div>
                       )}
                     </div>
 
-                    {termScheduleRows.map((row, index) => (
-                      <div
-                        key={row.id}
-                        className="grid grid-cols-1 gap-2 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3 dark:border-white/10 dark:bg-zinc-800 sm:grid-cols-[minmax(0,1.1fr)_5.75rem_minmax(0,1fr)_auto] sm:items-center sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0 sm:dark:bg-transparent"
-                      >
-                        <div className="space-y-1 sm:space-y-0">
-                          <span className="text-[10px] font-semibold uppercase tracking-wider text-black/40 sm:hidden">
-                            Label
-                          </span>
-                          <Input
-                            value={row.label}
-                            onChange={(e) => patchInstallmentRow(index, { label: e.target.value })}
-                            className="h-10 bg-white text-[13px] dark:bg-zinc-900 dark:text-zinc-100 sm:h-9 sm:bg-[#FAFAFA] sm:dark:bg-zinc-800"
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 sm:contents">
-                          <div className="min-w-0 space-y-1 sm:space-y-0">
-                            <span className="text-[10px] font-semibold uppercase tracking-wider text-black/40 sm:hidden">
-                              Amount
-                            </span>
-                            {form.feeAmountMode === "fixed" ? (
-                              <div className="flex h-10 items-center rounded-md border border-[#EFEFEF] bg-[#FAFAFA] px-2.5 font-mono text-[13px] text-black/70 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-100 sm:h-9">
-                                {row.amount ? `₹ ${Number(row.amount).toLocaleString("en-IN")}` : "—"}
-                              </div>
-                            ) : (
-                              <Input
-                                inputMode="numeric"
-                                value={row.amount}
-                                onChange={(e) =>
-                                  patchInstallmentRow(index, {
-                                    amount: e.target.value.replace(/[^0-9]/g, ""),
-                                  })
-                                }
-                                placeholder="0"
-                                className="h-10 font-mono bg-white dark:bg-zinc-900 dark:text-zinc-100 sm:h-9"
-                              />
-                            )}
-                          </div>
-                          <div className="min-w-0 space-y-1 sm:space-y-0">
-                            <span className="text-[10px] font-semibold uppercase tracking-wider text-black/40 sm:hidden">
-                              Due date
-                            </span>
-                            <DatePicker
-                              value={row.dueDate}
-                              onChange={(dueDate) => patchInstallmentRow(index, { dueDate })}
-                              placeholder="dd/mm/yyyy"
-                              valueFormat="iso"
-                              className="h-10 w-full min-w-0 text-[12px] sm:h-9"
-                              quickPicks={[
-                                { label: "Today", getDate: (t) => t },
-                                {
-                                  label: "+30d",
-                                  getDate: (t) =>
-                                    new Date(t.getFullYear(), t.getMonth(), t.getDate() + 30),
-                                },
-                              ]}
-                            />
-                          </div>
-                        </div>
+                    <div className="space-y-2 rounded-xl border border-[#E8E8EA] bg-white p-3 dark:border-white/10 dark:bg-zinc-900">
+                      <div className="flex items-center justify-between gap-2">
+                        <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                          {form.billingCycle === "Term" ? "Term schedule" : "Installment schedule"}
+                        </Label>
                         {form.feeAmountMode === "custom" ? (
-                          <div className="flex justify-end sm:block">
-                            <button
-                              type="button"
-                              aria-label={`Remove ${row.label}`}
-                              onClick={() =>
-                                setForm((prev) => {
-                                  const rows = ensureInstallmentRows(
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setForm((prev) => {
+                                const rows = [
+                                  ...ensureInstallmentRows(
                                     prev,
                                     Math.max(1, Math.floor(Number(prev.installmentCount) || 0)),
-                                  ).filter((_, i) => i !== index);
-                                  const nextRows =
-                                    rows.length > 0
-                                      ? rows
-                                      : [
-                                          {
-                                            id: `fl-i-1`,
-                                            label: installmentLabel(0, prev.billingCycle),
-                                            amount: prev.fixedAmount,
-                                            dueDate: "",
-                                          },
-                                        ];
-                                  return {
-                                    ...prev,
-                                    installments: nextRows,
-                                    installmentCount: String(nextRows.length),
-                                  };
-                                })
-                              }
-                              className="grid h-10 w-10 place-items-center rounded-full text-black/40 hover:bg-[#FEE2E2] hover:text-[#EF4444] dark:text-zinc-500 dark:hover:bg-red-950/50 sm:h-9 sm:w-9"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
+                                  ),
+                                  {
+                                    id: `fl-i-${prev.installments.length + 1}-${Date.now()}`,
+                                    label: installmentLabel(
+                                      Math.max(1, Math.floor(Number(prev.installmentCount) || 0)),
+                                      prev.billingCycle,
+                                    ),
+                                    amount: prev.fixedAmount,
+                                    dueDate: "",
+                                  },
+                                ];
+                                return {
+                                  ...prev,
+                                  installments: rows,
+                                  installmentCount: String(rows.length),
+                                };
+                              })
+                            }
+                            className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#0F766E] hover:underline"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            Add {form.billingCycle === "Term" ? "term" : "installment"}
+                          </button>
+                        ) : null}
+                      </div>
+
+                      <div className="hidden items-end gap-2 px-0.5 text-[10px] font-semibold uppercase tracking-wider text-black/40 sm:grid sm:grid-cols-[minmax(0,1.1fr)_5.75rem_minmax(0,1fr)_auto]">
+                        <span>Label</span>
+                        <span>Amount</span>
+                        <span>Due date</span>
+                        {form.feeAmountMode === "custom" ? (
+                          <span className="sr-only">Remove</span>
                         ) : (
-                          <span className="hidden sm:block" />
+                          <span />
                         )}
                       </div>
-                    ))}
+
+                      {termScheduleRows.map((row, index) => (
+                        <div
+                          key={row.id}
+                          className="grid grid-cols-1 gap-2 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3 dark:border-white/10 dark:bg-zinc-800 sm:grid-cols-[minmax(0,1.1fr)_5.75rem_minmax(0,1fr)_auto] sm:items-center sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0 sm:dark:bg-transparent"
+                        >
+                          <div className="space-y-1 sm:space-y-0">
+                            <span className="text-[10px] font-semibold uppercase tracking-wider text-black/40 sm:hidden">
+                              Label
+                            </span>
+                            <Input
+                              value={row.label}
+                              onChange={(e) =>
+                                patchInstallmentRow(index, { label: e.target.value })
+                              }
+                              className="h-10 bg-white text-[13px] dark:bg-zinc-900 dark:text-zinc-100 sm:h-9 sm:bg-[#FAFAFA] sm:dark:bg-zinc-800"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 sm:contents">
+                            <div className="min-w-0 space-y-1 sm:space-y-0">
+                              <span className="text-[10px] font-semibold uppercase tracking-wider text-black/40 sm:hidden">
+                                Amount
+                              </span>
+                              {form.feeAmountMode === "fixed" ? (
+                                <div className="flex h-10 items-center rounded-md border border-[#EFEFEF] bg-[#FAFAFA] px-2.5 font-mono text-[13px] text-black/70 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-100 sm:h-9">
+                                  {row.amount ? `${formatMoney(Number(row.amount))}` : "—"}
+                                </div>
+                              ) : (
+                                <Input
+                                  inputMode="numeric"
+                                  value={row.amount}
+                                  onChange={(e) =>
+                                    patchInstallmentRow(index, {
+                                      amount: e.target.value.replace(/[^0-9]/g, ""),
+                                    })
+                                  }
+                                  placeholder="0"
+                                  className="h-10 font-mono bg-white dark:bg-zinc-900 dark:text-zinc-100 sm:h-9"
+                                />
+                              )}
+                            </div>
+                            <div className="min-w-0 space-y-1 sm:space-y-0">
+                              <span className="text-[10px] font-semibold uppercase tracking-wider text-black/40 sm:hidden">
+                                Due date
+                              </span>
+                              <DatePicker
+                                value={row.dueDate}
+                                onChange={(dueDate) => patchInstallmentRow(index, { dueDate })}
+                                placeholder="dd/mm/yyyy"
+                                valueFormat="iso"
+                                className="h-10 w-full min-w-0 text-[12px] sm:h-9"
+                                quickPicks={[
+                                  { label: "Today", getDate: (t) => t },
+                                  {
+                                    label: "+30d",
+                                    getDate: (t) =>
+                                      new Date(t.getFullYear(), t.getMonth(), t.getDate() + 30),
+                                  },
+                                ]}
+                              />
+                            </div>
+                          </div>
+                          {form.feeAmountMode === "custom" ? (
+                            <div className="flex justify-end sm:block">
+                              <button
+                                type="button"
+                                aria-label={`Remove ${row.label}`}
+                                onClick={() =>
+                                  setForm((prev) => {
+                                    const rows = ensureInstallmentRows(
+                                      prev,
+                                      Math.max(1, Math.floor(Number(prev.installmentCount) || 0)),
+                                    ).filter((_, i) => i !== index);
+                                    const nextRows =
+                                      rows.length > 0
+                                        ? rows
+                                        : [
+                                            {
+                                              id: `fl-i-1`,
+                                              label: installmentLabel(0, prev.billingCycle),
+                                              amount: prev.fixedAmount,
+                                              dueDate: "",
+                                            },
+                                          ];
+                                    return {
+                                      ...prev,
+                                      installments: nextRows,
+                                      installmentCount: String(nextRows.length),
+                                    };
+                                  })
+                                }
+                                className="grid h-10 w-10 place-items-center rounded-full text-black/40 hover:bg-[#FEE2E2] hover:text-[#EF4444] dark:text-zinc-500 dark:hover:bg-red-950/50 sm:h-9 sm:w-9"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="hidden sm:block" />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {form.billingCycle === "Monthly" ? (
+                      <div className="space-y-1.5">
+                        <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                          Fee collection starts from
+                        </Label>
+                        <FieldSelect
+                          value={form.feeCollectionStartMonth}
+                          onValueChange={(month) =>
+                            setForm({ ...form, feeCollectionStartMonth: month })
+                          }
+                          options={FEE_MONTHS.map((month) => ({ value: month, label: month }))}
+                          placeholder="Select month"
+                          triggerClassName="h-10"
+                        />
+                        <p className="text-[11px] text-black/45 dark:text-zinc-500">
+                          Installment 1 maps to this month when recording fee receipts.
+                        </p>
+                      </div>
+                    ) : null}
+                  </>
+                )}
+
+                <div className="space-y-2 border-t border-[#E8E8EA] pt-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+                      One-time fees
+                    </Label>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm({
+                          ...form,
+                          oneTimeFees: [
+                            ...form.oneTimeFees,
+                            {
+                              id: `ot-${Date.now()}`,
+                              label: "",
+                              amount: "",
+                              dueDate: "",
+                            },
+                          ],
+                        })
+                      }
+                      className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#0F766E] hover:underline"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Add fee
+                    </button>
                   </div>
-
-                  {form.billingCycle === "Monthly" ? (
-                    <div className="space-y-1.5">
-                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                        Fee collection starts from
-                      </Label>
-                      <FieldSelect
-                        value={form.feeCollectionStartMonth}
-                        onValueChange={(month) =>
-                          setForm({ ...form, feeCollectionStartMonth: month })
-                        }
-                        options={FEE_MONTHS.map((month) => ({ value: month, label: month }))}
-                        placeholder="Select month"
-                        triggerClassName="h-10"
-                      />
-                      <p className="text-[11px] text-black/45 dark:text-zinc-500">
-                        Installment 1 maps to this month when recording fee receipts.
-                      </p>
-                    </div>
-                  ) : null}
-                </>
-              )}
-
-              <div className="space-y-2 border-t border-[#E8E8EA] pt-3">
-                <div className="flex items-center justify-between gap-2">
-                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
-                    One-time fees
-                  </Label>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setForm({
-                        ...form,
-                        oneTimeFees: [
-                          ...form.oneTimeFees,
-                          {
-                            id: `ot-${Date.now()}`,
-                            label: "",
-                            amount: "",
-                            dueDate: "",
-                          },
-                        ],
-                      })
-                    }
-                    className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#0F766E] hover:underline"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Add fee
-                  </button>
-                </div>
-                <div className="hidden grid-cols-[minmax(0,1.1fr)_5.75rem_minmax(0,1fr)_auto] items-end gap-2 px-0.5 text-[10px] font-semibold uppercase tracking-wider text-black/40 sm:grid">
-                  <span>Fee</span>
-                  <span>Amount</span>
-                  <span>Due date</span>
-                  <span className="sr-only">Remove</span>
-                </div>
-                {form.oneTimeFees.map((row) => (
-                  <div
-                    key={row.id}
-                    className="grid grid-cols-1 gap-2 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3 dark:border-white/10 dark:bg-zinc-800 sm:grid-cols-[minmax(0,1.1fr)_5.75rem_minmax(0,1fr)_auto] sm:items-center sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0 sm:dark:bg-transparent"
-                  >
-                    <div className="space-y-1 sm:space-y-0">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-black/40 sm:hidden">
-                        Fee
-                      </span>
-                      <Input
-                        value={row.label}
-                        onChange={(e) =>
-                          setForm({
-                            ...form,
-                            oneTimeFees: form.oneTimeFees.map((item) =>
-                              item.id === row.id ? { ...item, label: e.target.value } : item,
-                            ),
-                          })
-                        }
-                        placeholder="Admission Fee"
-                        className="h-10 bg-white text-[13px] dark:bg-zinc-900 dark:text-zinc-100 sm:h-9"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 sm:contents">
-                      <div className="min-w-0 space-y-1 sm:space-y-0">
+                  <div className="hidden grid-cols-[minmax(0,1.1fr)_5.75rem_minmax(0,1fr)_auto] items-end gap-2 px-0.5 text-[10px] font-semibold uppercase tracking-wider text-black/40 sm:grid">
+                    <span>Fee</span>
+                    <span>Amount</span>
+                    <span>Due date</span>
+                    <span className="sr-only">Remove</span>
+                  </div>
+                  {form.oneTimeFees.map((row) => (
+                    <div
+                      key={row.id}
+                      className="grid grid-cols-1 gap-2 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3 dark:border-white/10 dark:bg-zinc-800 sm:grid-cols-[minmax(0,1.1fr)_5.75rem_minmax(0,1fr)_auto] sm:items-center sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0 sm:dark:bg-transparent"
+                    >
+                      <div className="space-y-1 sm:space-y-0">
                         <span className="text-[10px] font-semibold uppercase tracking-wider text-black/40 sm:hidden">
-                          Amount
+                          Fee
                         </span>
                         <Input
-                          inputMode="numeric"
-                          value={row.amount}
+                          value={row.label}
                           onChange={(e) =>
                             setForm({
                               ...form,
                               oneTimeFees: form.oneTimeFees.map((item) =>
-                                item.id === row.id
-                                  ? { ...item, amount: e.target.value.replace(/[^0-9]/g, "") }
-                                  : item,
+                                item.id === row.id ? { ...item, label: e.target.value } : item,
                               ),
                             })
                           }
-                          placeholder="0"
-                          className="h-10 font-mono bg-white dark:bg-zinc-900 dark:text-zinc-100 sm:h-9"
+                          placeholder="Admission Fee"
+                          className="h-10 bg-white text-[13px] dark:bg-zinc-900 dark:text-zinc-100 sm:h-9"
                         />
                       </div>
-                      <div className="min-w-0 space-y-1 sm:space-y-0">
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-black/40 sm:hidden">
-                          Due date
-                        </span>
-                        <DatePicker
-                          value={row.dueDate}
-                          onChange={(dueDate) =>
+                      <div className="grid grid-cols-2 gap-2 sm:contents">
+                        <div className="min-w-0 space-y-1 sm:space-y-0">
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-black/40 sm:hidden">
+                            Amount
+                          </span>
+                          <Input
+                            inputMode="numeric"
+                            value={row.amount}
+                            onChange={(e) =>
+                              setForm({
+                                ...form,
+                                oneTimeFees: form.oneTimeFees.map((item) =>
+                                  item.id === row.id
+                                    ? { ...item, amount: e.target.value.replace(/[^0-9]/g, "") }
+                                    : item,
+                                ),
+                              })
+                            }
+                            placeholder="0"
+                            className="h-10 font-mono bg-white dark:bg-zinc-900 dark:text-zinc-100 sm:h-9"
+                          />
+                        </div>
+                        <div className="min-w-0 space-y-1 sm:space-y-0">
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-black/40 sm:hidden">
+                            Due date
+                          </span>
+                          <DatePicker
+                            value={row.dueDate}
+                            onChange={(dueDate) =>
+                              setForm({
+                                ...form,
+                                oneTimeFees: form.oneTimeFees.map((item) =>
+                                  item.id === row.id ? { ...item, dueDate } : item,
+                                ),
+                              })
+                            }
+                            placeholder="dd/mm/yyyy"
+                            valueFormat="iso"
+                            className="h-10 w-full min-w-0 text-[12px] sm:h-9"
+                            quickPicks={[
+                              { label: "Today", getDate: (t) => t },
+                              {
+                                label: "+30d",
+                                getDate: (t) =>
+                                  new Date(t.getFullYear(), t.getMonth(), t.getDate() + 30),
+                              },
+                            ]}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-end sm:block">
+                        <button
+                          type="button"
+                          aria-label={`Remove ${row.label || "fee"}`}
+                          onClick={() =>
                             setForm({
                               ...form,
-                              oneTimeFees: form.oneTimeFees.map((item) =>
-                                item.id === row.id ? { ...item, dueDate } : item,
-                              ),
+                              oneTimeFees: form.oneTimeFees.filter((item) => item.id !== row.id),
                             })
                           }
-                          placeholder="dd/mm/yyyy"
-                          valueFormat="iso"
-                          className="h-10 w-full min-w-0 text-[12px] sm:h-9"
-                          quickPicks={[
-                            { label: "Today", getDate: (t) => t },
-                            {
-                              label: "+30d",
-                              getDate: (t) => new Date(t.getFullYear(), t.getMonth(), t.getDate() + 30),
-                            },
-                          ]}
-                        />
+                          className="grid h-10 w-10 place-items-center rounded-full text-black/40 hover:bg-[#FEE2E2] hover:text-[#EF4444] dark:text-zinc-500 dark:hover:bg-red-950/50 sm:h-9 sm:w-9"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     </div>
-                    <div className="flex justify-end sm:block">
-                      <button
-                        type="button"
-                        aria-label={`Remove ${row.label || "fee"}`}
-                        onClick={() =>
-                          setForm({
-                            ...form,
-                            oneTimeFees: form.oneTimeFees.filter((item) => item.id !== row.id),
-                          })
-                        }
-                        className="grid h-10 w-10 place-items-center rounded-full text-black/40 hover:bg-[#FEE2E2] hover:text-[#EF4444] dark:text-zinc-500 dark:hover:bg-red-950/50 sm:h-9 sm:w-9"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                <p className="text-[10.5px] text-black/40">
-                  Leave amount blank to skip a row. Due date is optional.
-                </p>
+                  ))}
+                  <p className="text-[10.5px] text-black/40">
+                    Leave amount blank to skip a row. Due date is optional.
+                  </p>
+                </div>
               </div>
-            </div>
             </div>
 
             <div className="shrink-0 space-y-3 border-t border-[#F0F0F0] bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:border-white/10 dark:bg-zinc-950 sm:px-6">
               <div className="flex items-center justify-between rounded-lg border border-[#D1FAE5] bg-[#F0FDFA] px-3 py-2.5">
                 <span className="text-[12px] text-black/55">Class total</span>
                 <span className="font-mono text-[15px] font-semibold text-[#0F766E]">
-                  ₹ {schedulePreview.total.toLocaleString("en-IN")}
+                  {formatMoney(schedulePreview.total)}
                 </span>
               </div>
               <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end sm:space-x-0 sm:gap-2">
@@ -18055,9 +18028,8 @@ function VehicleCard({
                     >
                       {r.mapFrom} → {r.mapTo}
                       <div className="mt-1 font-mono text-[10.5px] font-normal text-black/45">
-                        Morning ₹{r.morningFee.toLocaleString("en-IN")} · Evening ₹
-                        {r.eveningFee.toLocaleString("en-IN")} · Both ₹
-                        {r.bothFee.toLocaleString("en-IN")}
+                        Morning {formatMoney(r.morningFee)} · Evening {formatMoney(r.eveningFee)} ·
+                        Both {formatMoney(r.bothFee)}
                       </div>
                     </li>
                   ))}
@@ -19244,25 +19216,20 @@ function TransportCard({
         setRouteImportOpen(false);
         setRouteImportReady([]);
         setRouteImportIssues([]);
-        toast.success(
-          `${applied.length} route${applied.length === 1 ? "" : "s"} imported`,
-          {
-            description: [
-              created ? `${created} new` : "",
-              updated ? `${updated} updated` : "",
-              synced.failed ? `${synced.failed} failed to sync` : "",
-            ]
-              .filter(Boolean)
-              .join(" · "),
-          },
-        );
+        toast.success(`${applied.length} route${applied.length === 1 ? "" : "s"} imported`, {
+          description: [
+            created ? `${created} new` : "",
+            updated ? `${updated} updated` : "",
+            synced.failed ? `${synced.failed} failed to sync` : "",
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        });
       } finally {
         setRouteImporting(false);
       }
     })();
   };
-
-  const inr = (n: number) => `₹ ${n.toLocaleString("en-IN")}`;
 
   return (
     <OrganicCard tone="white" cornerSide="bl" padded className={workspacePanelClass}>
@@ -19406,7 +19373,7 @@ function TransportCard({
                       Morning
                     </div>
                     <div className="mt-0.5 font-mono text-[12px] font-semibold text-black">
-                      {inr(r.morningFee)}
+                      {formatMoney(r.morningFee)}
                     </div>
                   </div>
                   <div className="rounded-lg bg-white px-2.5 py-2">
@@ -19414,7 +19381,7 @@ function TransportCard({
                       Evening
                     </div>
                     <div className="mt-0.5 font-mono text-[12px] font-semibold text-black">
-                      {inr(r.eveningFee)}
+                      {formatMoney(r.eveningFee)}
                     </div>
                   </div>
                   <div className="rounded-lg bg-white px-2.5 py-2">
@@ -19422,7 +19389,7 @@ function TransportCard({
                       Both
                     </div>
                     <div className="mt-0.5 font-mono text-[12px] font-semibold text-black">
-                      {inr(r.bothFee)}
+                      {formatMoney(r.bothFee)}
                     </div>
                   </div>
                 </div>
@@ -19541,13 +19508,13 @@ function TransportCard({
                         </div>
                       </td>
                       <td className="px-3.5 py-2.5 text-right align-middle font-mono text-[11.5px] text-black">
-                        {inr(r.morningFee)}
+                        {formatMoney(r.morningFee)}
                       </td>
                       <td className="px-3.5 py-2.5 text-right align-middle font-mono text-[11.5px] text-black">
-                        {inr(r.eveningFee)}
+                        {formatMoney(r.eveningFee)}
                       </td>
                       <td className="px-3.5 py-2.5 text-right align-middle font-mono text-[11.5px] font-semibold text-black">
-                        {inr(r.bothFee)}
+                        {formatMoney(r.bothFee)}
                       </td>
                       <td className="px-3.5 py-2.5 align-middle">
                         <span
@@ -19697,7 +19664,7 @@ function TransportCard({
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="space-y-1.5">
                   <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                    Morning Fee (₹)
+                    {moneyColumnLabel("Morning Fee")}
                   </Label>
                   <Input
                     inputMode="numeric"
@@ -19711,7 +19678,7 @@ function TransportCard({
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                    Evening Fee (₹)
+                    {moneyColumnLabel("Evening Fee")}
                   </Label>
                   <Input
                     inputMode="numeric"
@@ -19725,7 +19692,7 @@ function TransportCard({
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                    Both Shifts (₹)
+                    {moneyColumnLabel("Both Shifts")}
                   </Label>
                   <Input
                     inputMode="numeric"
@@ -19977,7 +19944,7 @@ function TransportCard({
                   {form.feeAmountMode === "fixed" ? (
                     <div className="space-y-1.5">
                       <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                        Both shifts · amount each (₹)
+                        {moneyColumnLabel("Both shifts · amount each")}
                       </Label>
                       <Input
                         inputMode="numeric"
@@ -20063,7 +20030,7 @@ function TransportCard({
                     )}
                   >
                     <span>Label</span>
-                    <span>Both (₹)</span>
+                    <span>{moneyColumnLabel("Both")}</span>
                     <span>Due date</span>
                     {form.feeAmountMode === "custom" ? (
                       <span className="sr-only">Remove</span>
@@ -20087,7 +20054,7 @@ function TransportCard({
                       />
                       {form.feeAmountMode === "fixed" ? (
                         <div className="flex h-9 items-center rounded-md border border-[#EFEFEF] bg-[#FAFAFA] px-2.5 font-mono text-[13px] text-black/70 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-100">
-                          {row.amount ? `₹ ${Number(row.amount).toLocaleString("en-IN")}` : "—"}
+                          {row.amount ? `${formatMoney(Number(row.amount))}` : "—"}
                         </div>
                       ) : (
                         <Input
@@ -20166,7 +20133,7 @@ function TransportCard({
                       }
                       options={FEE_MONTHS.map((month) => ({ value: month, label: month }))}
                       placeholder="Select month"
-                        triggerClassName="h-10"
+                      triggerClassName="h-10"
                     />
                   </div>
                 ) : null}
@@ -20174,7 +20141,7 @@ function TransportCard({
                 <div className="flex items-center justify-between rounded-lg border border-[#D1FAE5] bg-white px-3 py-2.5">
                   <span className="text-[12px] text-black/55">Both-shift total</span>
                   <span className="font-mono text-[15px] font-semibold text-[#0F766E]">
-                    ₹ {schedulePreview.total.toLocaleString("en-IN")}
+                    {formatMoney(schedulePreview.total)}
                   </span>
                 </div>
               </div>
@@ -21004,6 +20971,10 @@ function SchoolDetailsCard({
           </div>
 
           <div className="border-t border-[#E5E5E5] pt-5 dark:border-white/10">
+            <OrgCurrencyCard />
+          </div>
+
+          <div className="border-t border-[#E5E5E5] pt-5 dark:border-white/10">
             <BankAccountsManager />
           </div>
         </div>
@@ -21507,10 +21478,7 @@ function CategoriesCard({
           </ThemeSection>
         </div>
 
-        <DocumentNumbersPanel
-          branchId={activeBranchId}
-          branchName={activeBranch?.name}
-        />
+        <DocumentNumbersPanel branchId={activeBranchId} branchName={activeBranch?.name} />
 
         <div className="col-span-12 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 dark:border-white/10 dark:bg-zinc-900/40">
           <div className="text-[10px] font-semibold uppercase tracking-wider text-black/35 dark:text-zinc-500">
@@ -21910,10 +21878,7 @@ export function FeePeriodMultiSelect({
                     "bg-[#ECFDF5] font-medium text-[#0F766E] dark:bg-teal-950/40 dark:text-[#2DD4BF]",
                 )}
               >
-                <Checkbox
-                  checked={checked}
-                  onCheckedChange={() => toggle(choice.value)}
-                />
+                <Checkbox checked={checked} onCheckedChange={() => toggle(choice.value)} />
                 <span className="min-w-0 flex-1 truncate">{choice.label}</span>
               </label>
             );

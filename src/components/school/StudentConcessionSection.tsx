@@ -30,6 +30,7 @@ import {
   type TransportRoute,
 } from "@/lib/tenant-store";
 import { cn } from "@/lib/utils";
+import { formatMoney } from "@/lib/money";
 
 export type StudentConcessionState = {
   hasConcession: boolean;
@@ -174,7 +175,13 @@ function TierBlock({
       {enabled ? (
         <div className="mt-3 space-y-3 border-t border-slate-100 pt-3 dark:border-zinc-800">
           {onSeedFromDefault ? (
-            <Button type="button" variant="outline" size="sm" className="h-8 rounded-full text-[12px]" onClick={onSeedFromDefault}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-full text-[12px]"
+              onClick={onSeedFromDefault}
+            >
               Reset from default schedule
             </Button>
           ) : null}
@@ -214,12 +221,12 @@ export function StudentConcessionSection({
     const fromRoute = defaultConcessionTierFromRoute(route, shift, feeTerms);
     if (fromRoute) {
       const total = fromRoute.feeSchedule.reduce((s, l) => s + l.amount, 0);
-      return `₹${total.toLocaleString("en-IN")} · ${fromRoute.feeSchedule.length} installments`;
+      return `${formatMoney(total)} · ${fromRoute.feeSchedule.length} installments`;
     }
     const fromClass = defaultConcessionTierFromClass(matchedClass, feeTerms, "vehicle");
     if (fromClass) {
       const total = fromClass.feeSchedule.reduce((s, l) => s + l.amount, 0);
-      return `₹${total.toLocaleString("en-IN")} · class fallback`;
+      return `${formatMoney(total)} · class fallback`;
     }
     return "Not configured — set a custom schedule below";
   }, [needsBus, busPoint1, busPoint2, matchedClass, transportRoutes, feeTerms]);

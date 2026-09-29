@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { fetchSuperAdminOverview, type SuperAdminOverview } from "@/lib/api/super-admin";
 import { ApiError, getApiToken } from "@/lib/api/client";
 import { cn, type Tone, type CornerSide } from "@/lib/utils";
+import { formatMoney } from "@/lib/money";
 
 const PLAN_COLORS: Record<string, string> = {
   Basic: "#000000",
@@ -37,7 +38,7 @@ const EMPTY_OVERVIEW: SuperAdminOverview = {
 };
 
 function formatInr(n: number) {
-  return `₹ ${Math.round(n).toLocaleString("en-IN")}`;
+  return formatMoney(Math.round(n), "INR");
 }
 
 function formatRelativeTime(raw: string) {

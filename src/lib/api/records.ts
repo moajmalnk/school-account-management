@@ -143,6 +143,7 @@ export async function apiUpsertStaff(
     basicSalary: withPhoto.basicSalary ?? 0,
     additionalAllowances: withPhoto.additionalAllowances ?? 0,
     documents: withPhoto.documents ?? [],
+    academicYear: withPhoto.academicYear ?? null,
   };
 
   if (opts?.createOnly) {

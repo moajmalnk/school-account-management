@@ -1,4 +1,6 @@
 import { ApiError, apiRequest, getApiToken } from "@/lib/api/client";
+import { type CurrencyCode, normalizeCurrency } from "@/lib/locale/currencies";
+import { setOrgCurrency } from "@/lib/money";
 import type {
   ClassConfig,
   Department,
@@ -42,6 +44,7 @@ export async function apiSaveSchoolDetails(
     themeSettings?: ThemeSettings;
     academicYear?: string;
     academicYears?: string[];
+    currency?: CurrencyCode;
   },
 ): Promise<SchoolDetails> {
   if (!hasToken()) return schoolDetails;
@@ -66,6 +69,7 @@ export async function apiSaveSchoolDetails(
 
   const data = await apiRequest<{
     schoolDetails: SchoolDetails;
+    currency?: string;
   }>("/api/settings/school.php", {
     method: "PUT",
     body: {
@@ -79,9 +83,26 @@ export async function apiSaveSchoolDetails(
       themeSettings: extras?.themeSettings,
       academicYear: extras?.academicYear,
       academicYears: extras?.academicYears,
+      currency: extras?.currency,
     },
   });
+  if (data.currency) setOrgCurrency(data.currency);
   return data.schoolDetails;
+}
+
+/** Persist the organization base currency (labels only — stored amounts are never converted). */
+export async function apiSaveOrgCurrency(currency: CurrencyCode): Promise<CurrencyCode> {
+  if (!hasToken()) {
+    setOrgCurrency(currency);
+    return currency;
+  }
+  const data = await apiRequest<{ currency?: string }>("/api/settings/school.php", {
+    method: "PUT",
+    body: { currency },
+  });
+  const saved = normalizeCurrency(data.currency, currency);
+  setOrgCurrency(saved);
+  return saved;
 }
 
 /** Persist workspace theme (mode, dock, brand colors) without rewriting school identity. */

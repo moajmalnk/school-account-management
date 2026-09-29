@@ -15,13 +15,8 @@ import {
   markSuperAdminTenantInvoicePaid,
   type PlatformInvoice,
 } from "@/lib/api/super-admin";
+import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
-
-const CURRENCY_SYMBOL: Record<string, string> = {
-  INR: "₹",
-  USD: "$",
-  EUR: "€",
-};
 
 type IssueDraft = {
   billingCycle: string;
@@ -211,7 +206,6 @@ export function PlatformInvoicesPanel({
         ) : (
           <ul className="divide-y divide-[#F0F0F0]">
             {rows.map((inv) => {
-              const sym = CURRENCY_SYMBOL[inv.currency] ?? inv.currency;
               const paid = inv.status === "Paid";
               return (
                 <li key={inv.id} className="grid grid-cols-12 items-center gap-2 px-3 py-3 sm:px-4">
@@ -241,8 +235,7 @@ export function PlatformInvoicesPanel({
                     </span>
                   </div>
                   <div className="col-span-8 text-right font-mono text-[13px] font-semibold text-black sm:col-span-2 sm:text-left">
-                    {sym}
-                    {Math.round(inv.total).toLocaleString("en-IN")}
+                    {formatMoney(Math.round(inv.total), inv.currency)}
                   </div>
                   <div className="col-span-12 flex flex-wrap justify-end gap-1.5 sm:col-span-3">
                     <Button

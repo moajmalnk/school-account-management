@@ -141,7 +141,7 @@ export function summarizeStudentDueBuckets(
 }
 
 /**
- * Paid amount drives status — never mark a ₹0 paid line as Partially Paid.
+ * Paid amount drives status — never mark a zero-amount paid line as Partially Paid.
  * Due = unpaid, not yet past due date · Overdue = unpaid past due ·
  * Partially Paid = some payment received, balance remains.
  */
@@ -466,10 +466,7 @@ function earliestUnpaidIndex(charges: ChargeDraft[]): number {
   return best;
 }
 
-function findChargeIndex(
-  charges: ChargeDraft[],
-  match: (charge: ChargeDraft) => boolean,
-): number {
+function findChargeIndex(charges: ChargeDraft[], match: (charge: ChargeDraft) => boolean): number {
   let best = -1;
   let bestTime = Number.POSITIVE_INFINITY;
   for (let i = 0; i < charges.length; i += 1) {
@@ -853,7 +850,8 @@ export function buildStudentFeeStatement(input: {
 
   if (
     student.due > combined.totalDue &&
-    combined.ledger.filter((r) => r.status !== "On Break" && isScheduledFeeLedgerRow(r)).length === 0
+    combined.ledger.filter((r) => r.status !== "On Break" && isScheduledFeeLedgerRow(r)).length ===
+      0
   ) {
     combined.ledger.push({
       date: "—",

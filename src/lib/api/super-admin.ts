@@ -185,6 +185,8 @@ export type TenantWorkspaceSnapshot = {
   students: TenantStudentSnapshot[];
   staff: TenantStaffSnapshot[];
   payments: TenantPaymentSnapshot[];
+  /** Tenant base currency (ISO 4217). */
+  currency?: string;
   totals: {
     branches: number;
     students: number;

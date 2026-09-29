@@ -14,6 +14,8 @@ import { ApiError, getApiToken } from "@/lib/api/client";
 import { PLAN_FEATURE_ITEMS } from "@/lib/permissions";
 import type { Tone, CornerSide } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { currencySymbol } from "@/lib/locale/currencies";
+import { formatMoney } from "@/lib/money";
 
 type Interval = "Monthly" | "Annually";
 
@@ -117,7 +119,7 @@ function normalizePlan(p: SuperAdminPlan): SuperAdminPlan {
 }
 
 function formatInr(n: number) {
-  return n.toLocaleString("en-IN");
+  return formatMoney(n, "INR");
 }
 
 export function PlansView() {
@@ -275,7 +277,9 @@ export function PlansView() {
                 <div
                   className={`mt-3 flex w-full min-w-0 items-baseline gap-1.5 border-b pb-2 font-mono sm:mt-4 sm:gap-2 ${rule}`}
                 >
-                  <span className={`shrink-0 text-[16px] font-bold sm:text-[20px] ${ink}`}>₹</span>
+                  <span className={`shrink-0 text-[16px] font-bold sm:text-[20px] ${ink}`}>
+                    {currencySymbol("INR")}
+                  </span>
                   <input
                     type="number"
                     inputMode="numeric"
@@ -294,19 +298,21 @@ export function PlansView() {
                     / {interval === "Monthly" ? "mo" : "yr"}
                   </span>
                 </div>
-                <div className={`mt-1 space-y-0.5 font-mono text-[10.5px] sm:text-[11px] ${subText}`}>
+                <div
+                  className={`mt-1 space-y-0.5 font-mono text-[10.5px] sm:text-[11px] ${subText}`}
+                >
                   {interval === "Monthly" ? (
                     <>
-                      <div>₹ {formatInr(fullContract)} annual contract</div>
+                      <div>{formatInr(fullContract)} annual contract</div>
                       <div>
-                        Offer <span className={ink}>₹ {formatInr(t.annually)}</span> / year
+                        Offer <span className={ink}>{formatInr(t.annually)}</span> / year
                       </div>
                     </>
                   ) : (
                     <>
-                      <div>₹ {formatInr(fullContract)} full annual contract</div>
+                      <div>{formatInr(fullContract)} full annual contract</div>
                       {annualSavings > 0 && (
-                        <div>Save ₹ {formatInr(annualSavings)} vs monthly billing</div>
+                        <div>Save {formatInr(annualSavings)} vs monthly billing</div>
                       )}
                     </>
                   )}

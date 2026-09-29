@@ -77,6 +77,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { CornerSide } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { currencySymbol } from "@/lib/locale/currencies";
+import { formatMoney } from "@/lib/money";
 
 const TIER_STYLE: Record<Tier, { bg: string; fg: string }> = {
   Basic: { bg: "#F4F4F5", fg: "#3F3F46" },
@@ -99,7 +101,7 @@ const STATUS_TOOLTIP: Record<Status, string> = {
 };
 
 type BillingCycle = "Monthly" | "Quarterly" | "Annual";
-type Currency = "INR" | "USD" | "EUR";
+type Currency = "INR" | "USD" | "AED" | "EUR";
 type PaymentMethod = "Razorpay" | "Stripe" | "Bank Transfer" | "Manual Invoice";
 /** Per student = seats × rate. Flat cycle = fixed fee for the billing period. */
 type PricingModel = "per_student" | "flat_cycle";
@@ -118,7 +120,14 @@ type BillingRule = {
   graceDays: number;
 };
 
-const CURRENCY_SYMBOL: Record<Currency, string> = { INR: "₹", USD: "$", EUR: "€" };
+const CURRENCY_SYMBOL: Record<Currency, string> = {
+  INR: currencySymbol("INR"),
+  USD: currencySymbol("USD"),
+  AED: currencySymbol("AED"),
+  EUR: currencySymbol("EUR"),
+};
+
+const BILLING_CURRENCIES: Currency[] = ["INR", "USD", "AED", "EUR"];
 
 const PRICING_MODEL_LABEL: Record<PricingModel, string> = {
   per_student: "Per student",
@@ -201,7 +210,11 @@ const AUDIT_TEMPLATES: { action: string; severity: AuditEvent["severity"]; detai
   },
   { action: "Role escalation", severity: "warning", detail: "support@platform → tenant.owner" },
   { action: "DNS cutover", severity: "info", detail: "CNAME apex → edge.schoolaccounts.in" },
-  { action: "Invoice generated", severity: "success", detail: "INV-92831 · ₹ 4,28,000" },
+  {
+    action: "Invoice generated",
+    severity: "success",
+    detail: `INV-92831 · ${formatMoney(428000, "INR")}`,
+  },
   { action: "Storage threshold", severity: "warning", detail: "82% of 50 GB used" },
   { action: "Failed login burst", severity: "error", detail: "12 attempts · 49.207.x.x" },
   { action: "Backup snapshot", severity: "success", detail: "pg-dump 248 MB · 2.4s" },
@@ -1013,8 +1026,8 @@ function TenantDetailTabSheet({
   );
 }
 
-function formatSnapshotInr(amount: number) {
-  return `₹ ${amount.toLocaleString("en-IN")}`;
+function formatSnapshotMoney(amount: number, currency?: string) {
+  return formatMoney(amount, currency || "INR");
 }
 
 function WorkspaceSnapshotState({
@@ -1407,7 +1420,7 @@ function TenantDetailDrawer({
                               Due
                             </div>
                             <div className="font-mono text-[12px] text-black/70">
-                              {formatSnapshotInr(student.due)}
+                              {formatSnapshotMoney(student.due, snapshot?.currency)}
                             </div>
                           </div>
                           <div className="col-span-6 sm:col-span-1 sm:text-right">
@@ -1512,7 +1525,10 @@ function TenantDetailDrawer({
                         Total payment volume
                       </div>
                       <div className="mt-2 font-mono text-[22px] font-semibold text-black">
-                        {formatSnapshotInr(snapshot?.totals.paymentVolume ?? 0)}
+                        {formatSnapshotMoney(
+                          snapshot?.totals.paymentVolume ?? 0,
+                          snapshot?.currency,
+                        )}
                       </div>
                       <div className="mt-1 text-[12px] text-black/55">
                         {snapshot?.totals.payments.toLocaleString() ?? 0} payment
@@ -1569,7 +1585,7 @@ function TenantDetailDrawer({
                               Amount
                             </div>
                             <div className="font-mono text-[12px] font-semibold text-black">
-                              {formatSnapshotInr(payment.amount)}
+                              {formatSnapshotMoney(payment.amount, snapshot?.currency)}
                             </div>
                             <div className="mt-0.5 font-mono text-[10px] text-black/45">
                               {payment.time}
@@ -1677,9 +1693,11 @@ function TenantDetailDrawer({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="INR">INR · ₹</SelectItem>
-                        <SelectItem value="USD">USD · $</SelectItem>
-                        <SelectItem value="EUR">EUR · €</SelectItem>
+                        {BILLING_CURRENCIES.map((c) => (
+                          <SelectItem key={c} value={c}>
+                            {c} · {CURRENCY_SYMBOL[c]}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </Field>
@@ -1756,8 +1774,7 @@ function TenantDetailDrawer({
                     Projected next invoice
                   </div>
                   <div className="mt-2 font-mono text-[22px] font-semibold text-black">
-                    {sym}
-                    {Math.round(total).toLocaleString("en-IN")}
+                    {formatMoney(Math.round(total), draft.currency)}
                   </div>
                   <div className="mt-1 text-[12px] text-black/55">
                     {PRICING_MODEL_LABEL[draft.pricingModel]} ·{" "}
@@ -2321,9 +2338,11 @@ function BillingRulesDrawer({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="INR">INR · ₹</SelectItem>
-                  <SelectItem value="USD">USD · $</SelectItem>
-                  <SelectItem value="EUR">EUR · €</SelectItem>
+                  {BILLING_CURRENCIES.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c} · {CURRENCY_SYMBOL[c]}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </Field>
@@ -2411,20 +2430,20 @@ function BillingRulesDrawer({
                     ? `Subtotal · flat / ${cycleUnitLabel(draft.cycle)}`
                     : `Subtotal · ${seats.toLocaleString()} × ${sym}${draft.ratePerStudent}`
                 }
-                value={`${sym}${grossPerCycle.toLocaleString()}`}
+                value={formatMoney(grossPerCycle, draft.currency)}
               />
               <SummaryRow
                 label={`Discount · ${draft.discountPercent}%`}
-                value={`− ${sym}${Math.round(discount).toLocaleString()}`}
+                value={`− ${formatMoney(Math.round(discount), draft.currency)}`}
               />
               <SummaryRow
                 label={`Tax · ${draft.taxPercent}%`}
-                value={`+ ${sym}${Math.round(tax).toLocaleString()}`}
+                value={`+ ${formatMoney(Math.round(tax), draft.currency)}`}
               />
               <div className="my-2 border-t border-black/10" />
               <SummaryRow
                 label="Total billed"
-                value={`${sym}${Math.round(total).toLocaleString()}`}
+                value={formatMoney(Math.round(total), draft.currency)}
                 emphasised
               />
             </div>

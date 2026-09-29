@@ -23,7 +23,6 @@ import { apiRegisterTrial } from "@/lib/api/auth";
 import { homePathForSession, useAuth } from "@/lib/auth";
 import { BRAND } from "@/lib/brand";
 import { INDIA_STATES, districtsForState } from "@/lib/geo/india-states-districts";
-import { formatInr } from "@/lib/marketing-content";
 import {
   EMPTY_SIGNUP,
   SCHOOL_TYPES,
@@ -38,6 +37,8 @@ import {
   type SignupFormState,
   type SignupStepSlug,
 } from "@/lib/signup-content";
+import { CURRENCIES, normalizeCurrency } from "@/lib/locale/currencies";
+import { useLocale } from "@/lib/locale/LocaleProvider";
 import { cn } from "@/lib/utils";
 
 function goToSignupStep(
@@ -58,6 +59,8 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
   const step = stepNumberFromSlug(stepSlug);
   const isSuccess = stepSlug === "success";
   const [form, setForm] = useState<SignupFormState>(() => loadSignupDraft());
+  const { formatMarketingFromInr, detected, countryLabel } = useLocale();
+  const orgCurrency = normalizeCurrency(form.currency || detected?.currency, "INR");
   const [errors, setErrors] = useState<Partial<Record<keyof SignupFormState, string>>>({});
   const [showPw, setShowPw] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -192,7 +195,8 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
         address: form.address.trim(),
         district: form.district,
         state: form.state,
-        country: "India",
+        country: detected?.localeLabel || countryLabel || "India",
+        currency: orgCurrency,
         affiliationNo: form.schoolCode.trim(),
         website: form.website.trim() || undefined,
         schoolEmail: form.schoolEmail.trim().toLowerCase(),
@@ -411,6 +415,24 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
               />
             </Field>
           </div>
+          <Field id="currency" label="Base Currency">
+            <Select value={orgCurrency} onValueChange={(v) => patch("currency", v)}>
+              <SelectTrigger id="currency" className={signupSelectTriggerClass}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className={signupSelectContentClass}>
+                {CURRENCIES.map((c) => (
+                  <SelectItem key={c.code} value={c.code} className={signupSelectItemClass}>
+                    {c.code} · {c.symbol} — {c.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-[11px] text-black/45">
+              Fees, receipts and reports are shown in this currency. You can change it later in
+              Settings.
+            </p>
+          </Field>
           <Field id="subdomain" label="Workspace URL" required error={errors.subdomain}>
             <div className="flex items-center gap-2">
               <input
@@ -548,7 +570,7 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
                     {plan.name}
                   </span>
                   <span className="mt-2 text-[1.35rem] font-bold text-[#6BA832]">
-                    ₹{formatInr(plan.monthly)}
+                    {formatMarketingFromInr(plan.monthlyInr)}
                     <span className="text-[12px] font-medium text-black/45"> / mo</span>
                   </span>
                   <ul className="mt-3 space-y-1.5">

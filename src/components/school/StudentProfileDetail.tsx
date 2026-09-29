@@ -70,7 +70,11 @@ import {
   downloadStudentFeeReportPdf,
   receiptBrandingFromSchool,
 } from "@/lib/finance-export";
-import { sendWhatsAppNotify, sharePdfViaWhatsApp, toNotifyWhatsAppNumber } from "@/lib/whatsapp-notify";
+import {
+  sendWhatsAppNotify,
+  sharePdfViaWhatsApp,
+  toNotifyWhatsAppNumber,
+} from "@/lib/whatsapp-notify";
 import {
   apiCreateFeeBreak,
   apiDeleteFeeBreak,
@@ -109,6 +113,7 @@ import {
 } from "@/components/school/ProfileDetailTabs";
 import { cn, glassCardClass } from "@/lib/utils";
 import { formatDobDisplay } from "@/lib/dates";
+import { formatMoney } from "@/lib/money";
 
 function emptyToUndefined(value: string): string | undefined {
   const trimmed = value.trim();
@@ -250,8 +255,6 @@ function ensureStudentDocuments(student: Student): StaffDocument[] {
     attachments: [],
   }));
 }
-
-const inr = (n: number) => `₹ ${n.toLocaleString("en-IN")}`;
 
 function formatPhone(raw?: string) {
   const digits = (raw ?? "").replace(/\D/g, "");
@@ -601,7 +604,7 @@ export function StudentProfileDetail({
     const canCollect = studentNeedsTransport(updated) && Boolean(fee.amount && fee.amount > 0);
     toast.success("Transport route updated", {
       description: canCollect
-        ? `Vehicle fee ₹${fee.amount!.toLocaleString("en-IN")}${points ? ` · ${points}` : ""}`
+        ? `Vehicle fee ${formatMoney(fee.amount!)}${points ? ` · ${points}` : ""}`
         : patch.needsBus
           ? points || "School bus required · pick points below"
           : "School bus not required",
@@ -1002,7 +1005,7 @@ export function StudentProfileDetail({
                             Vehicle fee
                           </div>
                           <div className="mt-0.5 font-mono text-[15px] font-bold text-black dark:text-teal-50">
-                            ₹ {studentTransportFee.amount.toLocaleString("en-IN")}
+                            {formatMoney(studentTransportFee.amount)}
                           </div>
                           <div className="mt-0.5 text-[12px] text-black/50 dark:text-zinc-400">
                             Based on assigned pickup / drop route
@@ -1118,13 +1121,13 @@ export function StudentProfileDetail({
             <div className="mt-4 grid w-full min-w-0 grid-cols-2 gap-2 sm:mt-5 sm:gap-3 xl:grid-cols-4">
               <FeeStatBox
                 label="Total Fee"
-                value={inr(fees.totalFee)}
+                value={formatMoney(fees.totalFee)}
                 icon={Wallet}
                 iconClass="text-[#0F766E]"
               />
               <FeeStatBox
                 label="Total Paid"
-                value={inr(fees.totalPaid)}
+                value={formatMoney(fees.totalPaid)}
                 valueClassName="text-[#10B981]"
                 icon={CheckCircle2}
                 iconClass="text-[#10B981]"
@@ -1161,7 +1164,7 @@ export function StudentProfileDetail({
                         Payable
                       </div>
                       <div className="mt-0.5 font-mono text-[13px] font-semibold text-black">
-                        {inr(vehicleFees.totalFee)}
+                        {formatMoney(vehicleFees.totalFee)}
                       </div>
                     </div>
                     <div className="rounded-lg bg-white/80 px-3 py-2 text-center dark:bg-zinc-900/50">
@@ -1169,7 +1172,7 @@ export function StudentProfileDetail({
                         Paid
                       </div>
                       <div className="mt-0.5 font-mono text-[13px] font-semibold text-[#10B981]">
-                        {inr(vehicleFees.totalPaid)}
+                        {formatMoney(vehicleFees.totalPaid)}
                       </div>
                     </div>
                     <div className="rounded-lg bg-white/80 px-3 py-2 text-center dark:bg-zinc-900/50">
@@ -1177,7 +1180,7 @@ export function StudentProfileDetail({
                         Due
                       </div>
                       <div className="mt-0.5 font-mono text-[13px] font-semibold text-black">
-                        {inr(vehicleFees.totalDue)}
+                        {formatMoney(vehicleFees.totalDue)}
                       </div>
                     </div>
                   </div>
@@ -1598,7 +1601,7 @@ function FeeDueBox({ totalDue, overdue }: { totalDue: number; overdue: boolean }
         )}
       </div>
       <div>
-        <div className={feeStatValueClass}>{inr(totalDue)}</div>
+        <div className={feeStatValueClass}>{formatMoney(totalDue)}</div>
         <span
           className={cn(
             feeStatBadgeClass,
@@ -1640,7 +1643,7 @@ function FeeOverdueBox({ overdueDue }: { overdueDue: number }) {
       </div>
       <div>
         <div className={cn(feeStatValueClass, active && "text-white dark:text-white")}>
-          {inr(overdueDue)}
+          {formatMoney(overdueDue)}
         </div>
         <span
           className={cn(
@@ -1824,9 +1827,9 @@ function buildOverdueWhatsAppHref({
     "",
     `Fee: ${row.desc}`,
     `Due Date: ${row.due}`,
-    `Charge: ${inr(row.charge)}`,
-    `Paid: ${inr(row.paid)}`,
-    `Balance Due: ${inr(row.balance)}`,
+    `Charge: ${formatMoney(row.charge)}`,
+    `Paid: ${formatMoney(row.paid)}`,
+    `Balance Due: ${formatMoney(row.balance)}`,
     `Academic Year: ${academicYear}`,
     "",
     "Please clear the outstanding amount at your earliest convenience.",
@@ -1967,14 +1970,16 @@ function FeesTable({
                       <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
                         Charge
                       </div>
-                      <div className="mt-0.5 font-mono text-[12px] text-black">{inr(r.charge)}</div>
+                      <div className="mt-0.5 font-mono text-[12px] text-black">
+                        {formatMoney(r.charge)}
+                      </div>
                     </div>
                     <div>
                       <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
                         Paid
                       </div>
                       <div className="mt-0.5 font-mono text-[12px] font-medium text-black">
-                        {inr(r.paid)}
+                        {formatMoney(r.paid)}
                       </div>
                     </div>
                     <div className="text-right">
@@ -1986,7 +1991,7 @@ function FeesTable({
                           r.balance === 0 ? "text-black/40" : "font-semibold text-black"
                         }`}
                       >
-                        {inr(r.balance)}
+                        {formatMoney(r.balance)}
                       </div>
                     </div>
                   </div>
@@ -2043,17 +2048,17 @@ function FeesTable({
                       <td className="px-4 py-4 text-[13px] font-medium text-black">{r.desc}</td>
                       <td className="px-4 py-4 font-mono text-[13px] text-black/55">{r.due}</td>
                       <td className="px-4 py-4 text-right font-mono text-[13px] text-black/75">
-                        {inr(r.charge)}
+                        {formatMoney(r.charge)}
                       </td>
                       <td className="px-4 py-4 text-right font-mono text-[13px] font-medium text-black">
-                        {inr(r.paid)}
+                        {formatMoney(r.paid)}
                       </td>
                       <td
                         className={`px-4 py-4 text-right font-mono text-[13px] ${
                           r.balance === 0 ? "text-black/40" : "text-black"
                         }`}
                       >
-                        {inr(r.balance)}
+                        {formatMoney(r.balance)}
                       </td>
                       <td className="py-4 pl-4 pr-1">
                         <div className="flex flex-col items-start gap-1.5">
@@ -2101,9 +2106,9 @@ function FeesTable({
               <div className="grid grid-cols-2 gap-3">
                 <DetailField label="Posted Date" value={selectedRow.date} mono />
                 <DetailField label="Due Date" value={selectedRow.due} mono />
-                <DetailField label="Charge Amount" value={inr(selectedRow.charge)} mono />
-                <DetailField label="Paid Amount" value={inr(selectedRow.paid)} mono />
-                <DetailField label="Balance Due" value={inr(selectedRow.balance)} mono />
+                <DetailField label="Charge Amount" value={formatMoney(selectedRow.charge)} mono />
+                <DetailField label="Paid Amount" value={formatMoney(selectedRow.paid)} mono />
+                <DetailField label="Balance Due" value={formatMoney(selectedRow.balance)} mono />
                 <DetailField label="Collection" value={`${paidPct}% collected`} />
               </div>
 
@@ -2175,7 +2180,7 @@ function ReceiptsList({
         receiptBrandingFromSchool(schoolDetails, student),
       );
       toast.success(`Receipt ${r.id} downloaded`, {
-        description: `PDF saved · ${inr(r.amount)}`,
+        description: `PDF saved · ${formatMoney(r.amount)}`,
       });
     } catch {
       toast.error(`Could not download receipt ${r.id}`, {
@@ -2219,7 +2224,7 @@ function ReceiptsList({
       "",
       `Fee receipt for ${student.name} (${student.id}).`,
       `Receipt: ${r.id}`,
-      `Amount: ${inr(r.amount)}`,
+      `Amount: ${formatMoney(r.amount)}`,
       `AY: ${academicYear}`,
       "Receipt PDF attached.",
     ].join("\n");
@@ -2339,7 +2344,7 @@ function ReceiptsList({
                   </div>
                 </div>
                 <div className="shrink-0 font-mono text-base font-semibold text-black">
-                  {inr(r.amount)}
+                  {formatMoney(r.amount)}
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
                   <button

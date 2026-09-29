@@ -71,6 +71,7 @@ import {
 } from "@/lib/payment-period";
 import { useTenantStore } from "@/lib/tenant-store";
 import { cn } from "@/lib/utils";
+import { formatAmount, formatMoney, formatMoneyPdf, moneyColumnLabel } from "@/lib/money";
 
 type TransferKind = "cash_to_bank" | "bank_to_cash" | "bank_to_bank" | "other";
 
@@ -116,12 +117,6 @@ type TransferReportRow = {
 };
 
 type TransferPreset = "cash_to_bank" | "bank_to_cash" | "bank_to_bank";
-
-function inr(n: number) {
-  const abs = Math.abs(n).toLocaleString("en-IN");
-  if (n < 0) return `₹ −${abs}`;
-  return `₹ ${abs}`;
-}
 
 function isCashOrBank(a: GlAccount) {
   return a.isCash || a.isBank;
@@ -174,11 +169,7 @@ function resolveTransferRow(
   };
 }
 
-function transferReportDownloadName(
-  ext: "pdf" | "csv",
-  schoolName: string,
-  academicYear: string,
-) {
+function transferReportDownloadName(ext: "pdf" | "csv", schoolName: string, academicYear: string) {
   return formatDownloadFilename("reports", ext, {
     report: "transfer-reports",
     school: schoolName,
@@ -187,11 +178,7 @@ function transferReportDownloadName(
   });
 }
 
-function transferVoucherDownloadName(
-  voucherNo: string,
-  schoolName: string,
-  academicYear: string,
-) {
+function transferVoucherDownloadName(voucherNo: string, schoolName: string, academicYear: string) {
   return formatDownloadFilename("voucher", "pdf", {
     report: "fund-transfer",
     school: schoolName,
@@ -218,18 +205,17 @@ function emitTransferVoucherPdf(
       ["From", row.fromName],
       ["To", row.toName],
       ["Type", kindLabel(row.kind)],
-      ["Amount (Rs.)", row.amount > 0 ? row.amount.toLocaleString("en-IN") : "-"],
+      [moneyColumnLabel("Amount", { pdf: true }), row.amount > 0 ? formatAmount(row.amount) : "-"],
       ["Narration", truncatePdfCell(row.narration || "—", 120)],
     ],
-    summaryItems: [{ label: "Amount", value: `Rs. ${row.amount.toLocaleString("en-IN")}` }],
+    summaryItems: [{ label: "Amount", value: formatMoneyPdf(row.amount) }],
     emptyMessage: "No transfer",
     landscape: false,
     action,
   });
-  toast.success(
-    action === "print" ? "Print dialog opened" : "Voucher PDF downloaded",
-    { description: row.voucherNo },
-  );
+  toast.success(action === "print" ? "Print dialog opened" : "Voucher PDF downloaded", {
+    description: row.voucherNo,
+  });
 }
 
 function emitTransfersListPdf(opts: {
@@ -244,7 +230,15 @@ function emitTransfersListPdf(opts: {
     filename: transferReportDownloadName("pdf", opts.schoolName, opts.academicYear),
     title: "Transfer Reports",
     subtitle: opts.subtitle,
-    headers: ["Date", "Voucher", "From", "To", "Type", "Narration", "Amount (Rs.)"],
+    headers: [
+      "Date",
+      "Voucher",
+      "From",
+      "To",
+      "Type",
+      "Narration",
+      moneyColumnLabel("Amount", { pdf: true }),
+    ],
     rows: opts.rows.map((row) => [
       row.date,
       row.voucherNo,
@@ -252,26 +246,20 @@ function emitTransfersListPdf(opts: {
       truncatePdfCell(row.toName, 36),
       kindLabel(row.kind),
       truncatePdfCell(row.narration, 48),
-      row.amount > 0 ? row.amount.toLocaleString("en-IN") : "-",
+      row.amount > 0 ? formatAmount(row.amount) : "-",
     ]),
     summaryItems: [
       { label: "Transfers", value: String(opts.rows.length) },
-      { label: "Total moved", value: `Rs. ${total.toLocaleString("en-IN")}` },
+      { label: "Total moved", value: formatMoneyPdf(total) },
     ],
     emptyMessage: "No fund transfers",
     landscape: true,
     action: opts.action ?? "download",
   });
-  toast.success(
-    opts.action === "print" ? "Print dialog opened" : "Transfer report PDF downloaded",
-  );
+  toast.success(opts.action === "print" ? "Print dialog opened" : "Transfer report PDF downloaded");
 }
 
-function emitTransfersListCsv(
-  rows: TransferReportRow[],
-  schoolName: string,
-  academicYear: string,
-) {
+function emitTransfersListCsv(rows: TransferReportRow[], schoolName: string, academicYear: string) {
   downloadCsv(
     transferReportDownloadName("csv", schoolName, academicYear),
     ["Date", "Voucher", "From", "To", "Type", "Narration", "Amount"],
@@ -333,10 +321,7 @@ function TransferActionButtons({
         {onDelete ? (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="text-rose-600 focus:text-rose-700"
-              onClick={onDelete}
-            >
+            <DropdownMenuItem className="text-rose-600 focus:text-rose-700" onClick={onDelete}>
               <Trash2 className="mr-2 h-3.5 w-3.5" />
               Delete
             </DropdownMenuItem>
@@ -459,10 +444,7 @@ export function FundTransferPanel() {
 
   const cashAccounts = useMemo(() => accounts.filter((a) => a.isCash), [accounts]);
   const bankAccounts = useMemo(() => accounts.filter((a) => a.isBank), [accounts]);
-  const accountsById = useMemo(
-    () => new Map(accounts.map((a) => [a.id, a])),
-    [accounts],
-  );
+  const accountsById = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts]);
 
   const fromOptions = useMemo(() => {
     if (preset === "cash_to_bank") return cashAccounts;
@@ -587,8 +569,7 @@ export function FundTransferPanel() {
 
     setSaving(true);
     try {
-      const narration =
-        note.trim() || `Transfer · ${fromAcct.name} → ${toAcct.name}`;
+      const narration = note.trim() || `Transfer · ${fromAcct.name} → ${toAcct.name}`;
       await apiGlCreateJournal({
         voucherType: "contra",
         date,
@@ -600,7 +581,7 @@ export function FundTransferPanel() {
         ],
       });
       toast.success("Transfer posted", {
-        description: `${inr(value)} · ${fromAcct.name} → ${toAcct.name}`,
+        description: `${formatMoney(value)} · ${fromAcct.name} → ${toAcct.name}`,
       });
       setAmount("");
       setNote("");
@@ -743,7 +724,7 @@ export function FundTransferPanel() {
         ? ` · …${a.bankAccountNo.slice(-4)}`
         : "";
     if (bal == null) return `${a.name} · ${kind}${mask}`;
-    return `${a.name} · ${kind}${mask} · ${inr(bal)}`;
+    return `${a.name} · ${kind}${mask} · ${formatMoney(bal)}`;
   };
 
   const historyRows = useMemo(
@@ -762,7 +743,9 @@ export function FundTransferPanel() {
     setEditingJournal(journal);
     setEditFromId(credit?.accountId || "");
     setEditToId(debit?.accountId || "");
-    setEditAmount(String(journal.totalDebit || journal.totalCredit || credit?.credit || debit?.debit || ""));
+    setEditAmount(
+      String(journal.totalDebit || journal.totalCredit || credit?.credit || debit?.debit || ""),
+    );
     setEditDate(journal.date);
     setEditNote(journal.narration || "");
     setEditOpen(true);
@@ -791,8 +774,7 @@ export function FundTransferPanel() {
     }
     setEditSaving(true);
     try {
-      const narration =
-        editNote.trim() || `Transfer · ${fromAcct.name} → ${toAcct.name}`;
+      const narration = editNote.trim() || `Transfer · ${fromAcct.name} → ${toAcct.name}`;
       await apiGlUpdateJournal({
         id: editingJournal.id,
         date: editDate,
@@ -804,7 +786,7 @@ export function FundTransferPanel() {
         ],
       });
       toast.success("Transfer updated", {
-        description: `${editingJournal.voucherNo} · ${inr(value)}`,
+        description: `${editingJournal.voucherNo} · ${formatMoney(value)}`,
       });
       setEditOpen(false);
       setEditingJournal(null);
@@ -914,7 +896,7 @@ export function FundTransferPanel() {
                 </SelectContent>
               </Select>
               {fromAcct ? (
-                <p className="text-[11px] text-black/45">Balance {inr(fromBal)}</p>
+                <p className="text-[11px] text-black/45">Balance {formatMoney(fromBal)}</p>
               ) : null}
             </div>
 
@@ -948,13 +930,13 @@ export function FundTransferPanel() {
                 </SelectContent>
               </Select>
               {toAcct ? (
-                <p className="text-[11px] text-black/45">Balance {inr(toBal)}</p>
+                <p className="text-[11px] text-black/45">Balance {formatMoney(toBal)}</p>
               ) : null}
             </div>
 
             <div className="space-y-1.5">
               <Label className="text-[10px] font-semibold uppercase tracking-wider text-black/55">
-                Amount (₹)
+                {moneyColumnLabel("Amount")}
               </Label>
               <Input
                 inputMode="numeric"
@@ -1028,9 +1010,7 @@ export function FundTransferPanel() {
                 size="sm"
                 variant="outline"
                 className="h-8 rounded-full text-[11px]"
-                onClick={() =>
-                  emitTransfersListCsv(historyRows, schoolName, academicYear || "")
-                }
+                onClick={() => emitTransfersListCsv(historyRows, schoolName, academicYear || "")}
               >
                 <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
                 CSV
@@ -1137,7 +1117,7 @@ export function FundTransferPanel() {
                         ) : null}
                       </td>
                       <td className="px-3 py-2.5 text-right font-mono font-semibold">
-                        {row.amount ? inr(row.amount) : "—"}
+                        {row.amount ? formatMoney(row.amount) : "—"}
                       </td>
                       <td className="sticky right-0 bg-white px-2 py-2 text-right dark:bg-zinc-950">
                         <TransferActionButtons
@@ -1420,7 +1400,7 @@ export function FundTransferPanel() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>Amount (₹)</Label>
+                <Label>{moneyColumnLabel("Amount")}</Label>
                 <Input
                   inputMode="numeric"
                   value={editAmount}
@@ -1517,11 +1497,7 @@ function TransferReportTableSkeleton() {
 
 export function TransferReports() {
   const navigate = useNavigate();
-  const {
-    academicYear,
-    schoolDetails,
-    activeBranchId: branchId,
-  } = useTenantStore();
+  const { academicYear, schoolDetails, activeBranchId: branchId } = useTenantStore();
   const schoolName = schoolDetails.name || "School";
 
   const [loading, setLoading] = useState(true);
@@ -1543,10 +1519,7 @@ export function TransferReports() {
   const [pendingDelete, setPendingDelete] = useState<GlJournal | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const accountsById = useMemo(
-    () => new Map(accounts.map((a) => [a.id, a])),
-    [accounts],
-  );
+  const accountsById = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts]);
 
   const load = useCallback(async () => {
     if (!getApiToken()) {
@@ -1598,7 +1571,7 @@ export function TransferReports() {
         row.narration,
         kindLabel(row.kind),
         String(row.amount),
-        row.amount.toLocaleString("en-IN"),
+        formatAmount(row.amount),
       ]
         .join(" ")
         .toLowerCase();
@@ -1627,10 +1600,7 @@ export function TransferReports() {
     setKindFilter("all");
   };
 
-  const journalsById = useMemo(
-    () => new Map(journals.map((j) => [j.id, j])),
-    [journals],
-  );
+  const journalsById = useMemo(() => new Map(journals.map((j) => [j.id, j])), [journals]);
 
   const handleCsv = () => {
     emitTransfersListCsv(filtered, schoolName, academicYear || "");
@@ -1684,8 +1654,7 @@ export function TransferReports() {
     }
     setEditSaving(true);
     try {
-      const narration =
-        editNote.trim() || `Transfer · ${fromAcct.name} → ${toAcct.name}`;
+      const narration = editNote.trim() || `Transfer · ${fromAcct.name} → ${toAcct.name}`;
       await apiGlUpdateJournal({
         id: editingJournal.id,
         date: editDate,
@@ -1697,7 +1666,7 @@ export function TransferReports() {
         ],
       });
       toast.success("Transfer updated", {
-        description: `${editingJournal.voucherNo} · ${inr(value)}`,
+        description: `${editingJournal.voucherNo} · ${formatMoney(value)}`,
       });
       setEditOpen(false);
       setEditingJournal(null);
@@ -1764,9 +1733,7 @@ export function TransferReports() {
               type="button"
               size="sm"
               className="h-9 rounded-full bg-[#0F766E] text-[12px] text-white hover:bg-[#0D9488]"
-              onClick={() =>
-                navigate({ to: "/tenant/finance", search: { tab: "transfer" } })
-              }
+              onClick={() => navigate({ to: "/tenant/finance", search: { tab: "transfer" } })}
             >
               <Plus className="mr-1.5 h-3.5 w-3.5" />
               New transfer
@@ -1813,9 +1780,9 @@ export function TransferReports() {
             <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3">
               {[
                 { label: "Transfers", value: String(filtered.length), accent: false },
-                { label: "Total moved", value: inr(totalAmount), accent: true },
-                { label: "Cash → Bank", value: inr(cashToBank), accent: false },
-                { label: "Bank → Cash", value: inr(bankToCash), accent: false },
+                { label: "Total moved", value: formatMoney(totalAmount), accent: true },
+                { label: "Cash → Bank", value: formatMoney(cashToBank), accent: false },
+                { label: "Bank → Cash", value: formatMoney(bankToCash), accent: false },
               ].map((item) => (
                 <div
                   key={item.label}
@@ -1844,7 +1811,7 @@ export function TransferReports() {
               <p className="mt-2 text-[11px] text-slate-500 dark:text-zinc-400">
                 Bank → Bank in this period:{" "}
                 <span className="font-mono font-semibold text-slate-700 dark:text-zinc-200">
-                  {inr(bankToBank)}
+                  {formatMoney(bankToBank)}
                 </span>
               </p>
             ) : null}
@@ -1854,10 +1821,7 @@ export function TransferReports() {
 
       <OrganicCard tone="white" cornerSide="bl" padded>
         <div className="flex flex-wrap items-center gap-2">
-          <Select
-            value={period}
-            onValueChange={(v) => setPeriod(v as PaymentPeriod)}
-          >
+          <Select value={period} onValueChange={(v) => setPeriod(v as PaymentPeriod)}>
             <SelectTrigger className={cn(filterSelectClass, "w-[9.5rem] shrink-0")}>
               <SelectValue placeholder="Period" />
             </SelectTrigger>
@@ -1870,10 +1834,7 @@ export function TransferReports() {
             </SelectContent>
           </Select>
 
-          <Select
-            value={kindFilter}
-            onValueChange={(v) => setKindFilter(v as typeof kindFilter)}
-          >
+          <Select value={kindFilter} onValueChange={(v) => setKindFilter(v as typeof kindFilter)}>
             <SelectTrigger className={cn(filterSelectClass, "w-[10.5rem] shrink-0")}>
               <SelectValue placeholder="All types" />
             </SelectTrigger>
@@ -1945,9 +1906,7 @@ export function TransferReports() {
               type="button"
               size="sm"
               className="mt-4 h-9 rounded-full bg-[#0F766E] text-[12px] text-white hover:bg-[#0D9488]"
-              onClick={() =>
-                navigate({ to: "/tenant/finance", search: { tab: "transfer" } })
-              }
+              onClick={() => navigate({ to: "/tenant/finance", search: { tab: "transfer" } })}
             >
               <Plus className="mr-1.5 h-3.5 w-3.5" />
               Record a transfer
@@ -1999,13 +1958,11 @@ export function TransferReports() {
                         {row.narration}
                       </td>
                       <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono font-semibold text-slate-900 dark:text-zinc-50">
-                        {inr(row.amount)}
+                        {formatMoney(row.amount)}
                       </td>
                       <td className="sticky right-0 bg-white px-2 py-2 text-right dark:bg-zinc-950">
                         <TransferActionButtons
-                          onEdit={
-                            mutable && journal ? () => openEditTransfer(journal) : undefined
-                          }
+                          onEdit={mutable && journal ? () => openEditTransfer(journal) : undefined}
                           onDelete={
                             mutable && journal ? () => setPendingDelete(journal) : undefined
                           }
@@ -2013,12 +1970,7 @@ export function TransferReports() {
                             emitTransferVoucherPdf(row, schoolName, academicYear || "", "print")
                           }
                           onDownload={() =>
-                            emitTransferVoucherPdf(
-                              row,
-                              schoolName,
-                              academicYear || "",
-                              "download",
-                            )
+                            emitTransferVoucherPdf(row, schoolName, academicYear || "", "download")
                           }
                         />
                       </td>
@@ -2035,7 +1987,7 @@ export function TransferReports() {
                     Total
                   </td>
                   <td className="px-3 py-2.5 text-right font-mono text-[13px] font-bold text-slate-900 dark:text-zinc-50">
-                    {inr(totalAmount)}
+                    {formatMoney(totalAmount)}
                   </td>
                   <td className="sticky right-0 bg-slate-50/80 dark:bg-zinc-900/60" />
                 </tr>
@@ -2045,12 +1997,13 @@ export function TransferReports() {
         )}
       </OrganicCard>
 
-      <Dialog open={pendingExport !== null} onOpenChange={(open) => !open && setPendingExport(null)}>
+      <Dialog
+        open={pendingExport !== null}
+        onOpenChange={(open) => !open && setPendingExport(null)}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>
-              {pendingExport === "csv" ? "Export CSV" : "Export PDF"}
-            </DialogTitle>
+            <DialogTitle>{pendingExport === "csv" ? "Export CSV" : "Export PDF"}</DialogTitle>
             <DialogDescription>
               Export Transfer Reports as a {pendingExport === "csv" ? "CSV" : "PDF"} file? The
               download will start immediately after confirmation.
@@ -2119,7 +2072,7 @@ export function TransferReports() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>Amount (₹)</Label>
+                <Label>{moneyColumnLabel("Amount")}</Label>
                 <Input
                   inputMode="numeric"
                   value={editAmount}

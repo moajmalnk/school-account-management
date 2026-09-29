@@ -23,11 +23,12 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { fetchSuperAdminTenants } from "@/lib/api/super-admin";
 import { getApiToken } from "@/lib/api/client";
+import { formatMoney } from "@/lib/money";
 
 const PLAN_ITEMS = [
-  { name: "Basic", hint: "₹899/mo · core school ops & reporting" },
-  { name: "Premium", hint: "₹1,499/mo · fee collection & extra users" },
-  { name: "Enterprise", hint: "₹2,299/mo · payroll & WhatsApp" },
+  { name: "Basic", hint: `${formatMoney(899, "INR")}/mo · core school ops & reporting` },
+  { name: "Premium", hint: `${formatMoney(1499, "INR")}/mo · fee collection & extra users` },
+  { name: "Enterprise", hint: `${formatMoney(2299, "INR")}/mo · payroll & WhatsApp` },
 ] as const;
 
 const NAV_ICONS: Record<string, LucideIcon> = {

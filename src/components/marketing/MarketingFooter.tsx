@@ -4,6 +4,7 @@ import { motion, useReducedMotion } from "motion/react";
 import type { MouseEvent, ReactNode } from "react";
 
 import { FeezoMark } from "@/components/brand/FeezoBrand";
+import { LocaleSelectBar } from "@/components/locale/LocaleSelectBar";
 import { StoreBadge } from "@/components/marketing/StoreBadge";
 import { TrialSignupLink } from "@/components/marketing/TrialSignupLink";
 import { easeOutExpo, staggerContainer } from "@/components/marketing/motion";
@@ -71,8 +72,7 @@ export function MarketingFooter() {
     <footer
       className="relative overflow-hidden text-[var(--mkt-ink)]"
       style={{
-        background:
-          "linear-gradient(180deg, #f8fff4 0%, #ffffff 38%, #f4fbf0 100%)",
+        background: "linear-gradient(180deg, #f8fff4 0%, #ffffff 38%, #f4fbf0 100%)",
       }}
     >
       <motion.div
@@ -173,7 +173,10 @@ export function MarketingFooter() {
           </motion.div>
 
           {/* App downloads */}
-          <motion.div className="lg:col-span-3 lg:col-start-10 sm:col-span-2" variants={columnReveal}>
+          <motion.div
+            className="lg:col-span-3 lg:col-start-10 sm:col-span-2"
+            variants={columnReveal}
+          >
             <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--mkt-muted)]">
               Get the app
             </p>
@@ -195,9 +198,12 @@ export function MarketingFooter() {
           viewport={{ once: true, margin: "-5% 0px" }}
           transition={{ duration: 0.55, ease: easeOutExpo, delay: 0.12 }}
         >
-          <p className="text-center text-[12px] font-medium text-[var(--mkt-muted)] sm:text-left">
-            © {new Date().getFullYear()} {BRAND.name}. All rights reserved.
-          </p>
+          <div className="flex flex-col items-center gap-3 sm:flex-row sm:gap-4">
+            <p className="text-center text-[12px] font-medium text-[var(--mkt-muted)] sm:text-left">
+              © {new Date().getFullYear()} {BRAND.name}. All rights reserved.
+            </p>
+            <LocaleSelectBar placement="top" density="compact" />
+          </div>
 
           <div className="flex items-center gap-2">
             {SOCIAL_LINKS.map((social, index) => {

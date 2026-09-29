@@ -98,6 +98,13 @@ import {
   type CustomDateRange,
   type PaymentPeriod,
 } from "@/lib/payment-period";
+import {
+  formatAmount,
+  formatMoney,
+  formatMoneyPdf,
+  moneyColumnLabel,
+  moneySymbol,
+} from "@/lib/money";
 
 export type LedgerRow = {
   date: string;
@@ -108,14 +115,6 @@ export type LedgerRow = {
   credit: number;
   balance: number;
 };
-
-function inr(n: number) {
-  return `₹ ${n.toLocaleString("en-IN")}`;
-}
-
-function pdfInr(n: number) {
-  return `Rs. ${n.toLocaleString("en-IN")}`;
-}
 
 function pdfEventDateTime(value?: string | Date | null) {
   const parsed = value instanceof Date ? value : parseEventDate(value);
@@ -130,10 +129,7 @@ function pdfEventDateTime(value?: string | Date | null) {
   }).replace(/,/g, "");
 }
 
-function pdfStatementCell(
-  content: string,
-  extra?: TablePdfRichCell["styles"],
-): TablePdfRichCell {
+function pdfStatementCell(content: string, extra?: TablePdfRichCell["styles"]): TablePdfRichCell {
   return { content, styles: extra };
 }
 
@@ -240,12 +236,7 @@ function ExportActions({
 
   return (
     <>
-      <div
-        className={cn(
-          "grid grid-cols-1 gap-2 min-[420px]:grid-cols-3",
-          className,
-        )}
-      >
+      <div className={cn("grid grid-cols-1 gap-2 min-[420px]:grid-cols-3", className)}>
         <button
           type="button"
           onClick={() => setPendingExport("csv")}
@@ -525,17 +516,17 @@ function LedgerPostingCards({ rows }: { rows: LedgerRow[] }) {
             <div className="shrink-0 text-right">
               {row.credit > 0 ? (
                 <div className="font-mono text-[13px] font-semibold text-[#0F766E]">
-                  +{inr(row.credit)}
+                  +{formatMoney(row.credit)}
                 </div>
               ) : row.debit > 0 ? (
                 <div className="font-mono text-[13px] font-semibold text-[#B45309]">
-                  −{inr(row.debit)}
+                  −{formatMoney(row.debit)}
                 </div>
               ) : (
                 <div className="font-mono text-[13px] text-black/40">—</div>
               )}
               <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-black/40 dark:text-zinc-500">
-                Bal {inr(row.balance)}
+                Bal {formatMoney(row.balance)}
               </div>
             </div>
           </div>
@@ -546,7 +537,7 @@ function LedgerPostingCards({ rows }: { rows: LedgerRow[] }) {
                 Debit
               </div>
               <div className="mt-0.5 font-mono text-[12.5px] font-semibold text-black dark:text-zinc-100">
-                {row.debit ? inr(row.debit) : "—"}
+                {row.debit ? formatMoney(row.debit) : "—"}
               </div>
             </div>
             <div className="rounded-xl bg-white px-2.5 py-2 ring-1 ring-black/5 dark:bg-zinc-800 dark:ring-white/10">
@@ -554,7 +545,7 @@ function LedgerPostingCards({ rows }: { rows: LedgerRow[] }) {
                 Credit
               </div>
               <div className="mt-0.5 font-mono text-[12.5px] font-semibold text-black dark:text-zinc-100">
-                {row.credit ? inr(row.credit) : "—"}
+                {row.credit ? formatMoney(row.credit) : "—"}
               </div>
             </div>
           </div>
@@ -613,8 +604,12 @@ function mapExpenseLedgerRows(
 }
 
 export function GeneralLedgerReport() {
-  const { activePayments: payments, academicYear, schoolDetails, activeBranchId } =
-    useTenantStore();
+  const {
+    activePayments: payments,
+    academicYear,
+    schoolDetails,
+    activeBranchId,
+  } = useTenantStore();
   const { disbursements } = useDisbursements();
   const navigate = useNavigate();
   const schoolName = schoolDetails.name || "School";
@@ -673,8 +668,8 @@ export function GeneralLedgerReport() {
         row.account,
         String(row.debit),
         String(row.credit),
-        row.debit ? row.debit.toLocaleString("en-IN") : "",
-        row.credit ? row.credit.toLocaleString("en-IN") : "",
+        row.debit ? formatAmount(row.debit) : "",
+        row.credit ? formatAmount(row.credit) : "",
       ]
         .join(" ")
         .toLowerCase();
@@ -694,9 +689,9 @@ export function GeneralLedgerReport() {
     r.voucher,
     r.particulars,
     r.account,
-    r.debit ? inr(r.debit) : "—",
-    r.credit ? inr(r.credit) : "—",
-    inr(r.balance),
+    r.debit ? formatMoney(r.debit) : "—",
+    r.credit ? formatMoney(r.credit) : "—",
+    formatMoney(r.balance),
   ]);
 
   const headers = ["Date", "Voucher", "Particulars", "Account", "Debit", "Credit", "Balance"];
@@ -706,13 +701,12 @@ export function GeneralLedgerReport() {
     "Voucher",
     "Particulars",
     "Account",
-    "Debit (Rs.)",
-    "Credit (Rs.)",
-    "Balance (Rs.)",
+    moneyColumnLabel("Debit", { pdf: true }),
+    moneyColumnLabel("Credit", { pdf: true }),
+    moneyColumnLabel("Balance", { pdf: true }),
   ] as const;
 
-  const formatLedgerPdfAmount = (value: number) =>
-    value > 0 ? value.toLocaleString("en-IN") : "-";
+  const formatLedgerPdfAmount = (value: number) => (value > 0 ? formatAmount(value) : "-");
 
   const buildGeneralLedgerPdfRows = () =>
     filteredRows.map((row) => [
@@ -722,13 +716,13 @@ export function GeneralLedgerReport() {
       row.account,
       formatLedgerPdfAmount(row.debit),
       formatLedgerPdfAmount(row.credit),
-      row.balance.toLocaleString("en-IN"),
+      formatAmount(row.balance),
     ]);
 
   const generalLedgerPdfSummary = () => [
-    { label: "Total Debit", value: pdfInr(totalDebit) },
-    { label: "Total Credit", value: pdfInr(totalCredit) },
-    { label: "Closing Balance", value: pdfInr(closing) },
+    { label: "Total Debit", value: formatMoneyPdf(totalDebit) },
+    { label: "Total Credit", value: formatMoneyPdf(totalCredit) },
+    { label: "Closing Balance", value: formatMoneyPdf(closing) },
   ];
 
   const exportMeta = `${schoolName} · ${academicYear}`;
@@ -942,9 +936,9 @@ export function GeneralLedgerReport() {
         </div>
         <SummaryStrip
           items={[
-            { label: "Total Debit", value: inr(totalDebit) },
-            { label: "Total Credit", value: inr(totalCredit) },
-            { label: "Closing Balance", value: inr(closing), accent: true },
+            { label: "Total Debit", value: formatMoney(totalDebit) },
+            { label: "Total Credit", value: formatMoney(totalCredit) },
+            { label: "Closing Balance", value: formatMoney(closing), accent: true },
           ]}
         />
       </OrganicCard>
@@ -1067,8 +1061,8 @@ export function GeneralLedgerReport() {
               className="hidden md:block"
               footer={
                 <div className="border-t border-[#E5E5E5] bg-[#FAFAFA] px-3 py-3 text-[12px] font-semibold text-black">
-                  Totals · Debit {inr(totalDebit)} · Credit {inr(totalCredit)} · Closing{" "}
-                  {inr(closing)}
+                  Totals · Debit {formatMoney(totalDebit)} · Credit {formatMoney(totalCredit)} ·
+                  Closing {formatMoney(closing)}
                 </div>
               }
             />
@@ -1099,40 +1093,36 @@ export function ProfitLossReport() {
   const totalExpense = totalOperatingExpense(disbursements);
   const netProfit = totalIncome - totalExpense;
 
-  const headers = ["Line Item", "Type", "Amount (₹)"];
+  const headers = ["Line Item", "Type", moneyColumnLabel("Amount")];
   const tableRows = [
-    ...incomeByCategory.map((i) => [i.label, "Income", inr(i.amount)]),
-    ...expenseSegments.map((e) => [e.label, "Expense", inr(e.value)]),
-    ["Net Surplus / (Deficit)", "Result", inr(netProfit)],
+    ...incomeByCategory.map((i) => [i.label, "Income", formatMoney(i.amount)]),
+    ...expenseSegments.map((e) => [e.label, "Expense", formatMoney(e.value)]),
+    ["Net Surplus / (Deficit)", "Result", formatMoney(netProfit)],
   ];
 
-  const profitLossPdfHeaders = ["Line Item", "Type", "Amount (Rs.)"] as const;
+  const profitLossPdfHeaders = [
+    "Line Item",
+    "Type",
+    moneyColumnLabel("Amount", { pdf: true }),
+  ] as const;
 
   const buildProfitLossPdfRows = () => [
-    ...incomeByCategory.map((item) => [
-      item.label,
-      "Income",
-      item.amount.toLocaleString("en-IN"),
-    ]),
-    ...expenseSegments.map((item) => [
-      item.label,
-      "Expense",
-      item.value.toLocaleString("en-IN"),
-    ]),
+    ...incomeByCategory.map((item) => [item.label, "Income", formatAmount(item.amount)]),
+    ...expenseSegments.map((item) => [item.label, "Expense", formatAmount(item.value)]),
     [
       { content: "Net Surplus / (Deficit)", styles: { fontStyle: "bold" as const } },
       { content: "Result", styles: { fontStyle: "bold" as const } },
       {
-        content: netProfit.toLocaleString("en-IN"),
+        content: formatAmount(netProfit),
         styles: { fontStyle: "bold" as const, halign: "right" as const },
       },
     ],
   ];
 
   const profitLossPdfSummary = () => [
-    { label: "Total Income", value: pdfInr(totalIncome) },
-    { label: "Total Expense", value: pdfInr(totalExpense) },
-    { label: "Net Surplus", value: pdfInr(netProfit) },
+    { label: "Total Income", value: formatMoneyPdf(totalIncome) },
+    { label: "Total Expense", value: formatMoneyPdf(totalExpense) },
+    { label: "Net Surplus", value: formatMoneyPdf(netProfit) },
   ];
 
   const exportMeta = `${schoolName} · ${academicYear}`;
@@ -1180,7 +1170,9 @@ export function ProfitLossReport() {
       <OrganicCard tone="white" cornerSide="tr" padded className="shrink-0">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 flex-1">
-            <div className="text-title text-slate-900 dark:text-zinc-50">Profit &amp; Loss Account</div>
+            <div className="text-title text-slate-900 dark:text-zinc-50">
+              Profit &amp; Loss Account
+            </div>
             <p className="mt-1 text-[12px] text-black/55">
               Income from fee receipts vs operating expenditure · {academicYear}
             </p>
@@ -1196,16 +1188,18 @@ export function ProfitLossReport() {
         </div>
         <SummaryStrip
           items={[
-            { label: "Gross Income", value: inr(totalIncome) },
-            { label: "Operating Expense", value: inr(totalExpense) },
-            { label: "Net Surplus", value: inr(netProfit), accent: true },
+            { label: "Gross Income", value: formatMoney(totalIncome) },
+            { label: "Operating Expense", value: formatMoney(totalExpense) },
+            { label: "Net Surplus", value: formatMoney(netProfit), accent: true },
           ]}
         />
       </OrganicCard>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-5">
         <OrganicCard tone="white" cornerSide="tl" padded className="lg:col-span-2">
-          <div className="text-title text-slate-900 dark:text-zinc-50">Income &amp; Expense Lines</div>
+          <div className="text-title text-slate-900 dark:text-zinc-50">
+            Income &amp; Expense Lines
+          </div>
           <p className="mt-1 text-[12px] text-black/55">
             Receipts grouped by category with operating expenditure
           </p>
@@ -1222,7 +1216,7 @@ export function ProfitLossReport() {
                 Gross Income
               </div>
               <div className="mt-1 truncate font-mono text-[18px] font-semibold text-white sm:text-[20px]">
-                {inr(totalIncome)}
+                {formatMoney(totalIncome)}
               </div>
             </div>
             <div className="min-w-0 rounded-xl bg-white/15 px-3 py-2.5 ring-1 ring-white/20 sm:rounded-2xl sm:p-3">
@@ -1230,7 +1224,7 @@ export function ProfitLossReport() {
                 Operating Expense
               </div>
               <div className="mt-1 truncate font-mono text-[18px] font-semibold text-white sm:text-[20px]">
-                {inr(totalExpense)}
+                {formatMoney(totalExpense)}
               </div>
             </div>
             <div className="min-w-0 rounded-xl bg-slate-950/45 px-3 py-2.5 text-white ring-1 ring-white/10 sm:rounded-2xl sm:p-3">
@@ -1238,7 +1232,7 @@ export function ProfitLossReport() {
                 Net Surplus
               </div>
               <div className="mt-1 truncate font-mono text-[18px] font-semibold sm:text-[22px]">
-                {inr(netProfit)}
+                {formatMoney(netProfit)}
               </div>
             </div>
           </div>
@@ -1333,20 +1327,20 @@ export function BalanceSheetReport() {
   const equity = totalAssets - payables;
 
   const assetRows = [
-    ["Cash in Hand", inr(cashOnHandTotal)],
-    ["Bank & UPI", inr(bankBalanceTotal)],
-    ["Accounts Receivable (Fees Due)", inr(receivables)],
-    ["Total Assets", inr(totalAssets)],
+    ["Cash in Hand", formatMoney(cashOnHandTotal)],
+    ["Bank & UPI", formatMoney(bankBalanceTotal)],
+    ["Accounts Receivable (Fees Due)", formatMoney(receivables)],
+    ["Total Assets", formatMoney(totalAssets)],
   ];
   const liabilityRows = [
-    ["Salary Payable (Queued)", inr(salaryPayableTotal)],
-    ["Other Accounts Payable", inr(otherPayableTotal)],
-    ["Accounts Payable (Total)", inr(payables)],
-    ["Retained Surplus / Equity", inr(equity)],
-    ["Total Liabilities & Equity", inr(payables + equity)],
+    ["Salary Payable (Queued)", formatMoney(salaryPayableTotal)],
+    ["Other Accounts Payable", formatMoney(otherPayableTotal)],
+    ["Accounts Payable (Total)", formatMoney(payables)],
+    ["Retained Surplus / Equity", formatMoney(equity)],
+    ["Total Liabilities & Equity", formatMoney(payables + equity)],
   ];
 
-  const headers = ["Account Head", "Amount (₹)"];
+  const headers = ["Account Head", moneyColumnLabel("Amount")];
   const tableRows = [
     ["— ASSETS —", ""],
     ...assetRows,
@@ -1354,7 +1348,10 @@ export function BalanceSheetReport() {
     ...liabilityRows,
   ];
 
-  const balanceSheetPdfHeaders = ["Account Head", "Amount (Rs.)"] as const;
+  const balanceSheetPdfHeaders = [
+    "Account Head",
+    moneyColumnLabel("Amount", { pdf: true }),
+  ] as const;
 
   const balanceSheetSectionRow = (label: string) => [
     {
@@ -1370,15 +1367,13 @@ export function BalanceSheetReport() {
   ];
 
   const balanceSheetAmountRow = (label: string, amount: number, emphasize = false) => [
-    emphasize
-      ? { content: label, styles: { fontStyle: "bold" as const } }
-      : label,
+    emphasize ? { content: label, styles: { fontStyle: "bold" as const } } : label,
     emphasize
       ? {
-          content: amount.toLocaleString("en-IN"),
+          content: formatAmount(amount),
           styles: { fontStyle: "bold" as const, halign: "right" as const },
         }
-      : amount.toLocaleString("en-IN"),
+      : formatAmount(amount),
   ];
 
   const buildBalanceSheetPdfRows = () => [
@@ -1396,9 +1391,9 @@ export function BalanceSheetReport() {
   ];
 
   const balanceSheetPdfSummary = () => [
-    { label: "Total Assets", value: pdfInr(totalAssets) },
-    { label: "Payables", value: pdfInr(payables) },
-    { label: "Net Equity", value: pdfInr(equity) },
+    { label: "Total Assets", value: formatMoneyPdf(totalAssets) },
+    { label: "Payables", value: formatMoneyPdf(payables) },
+    { label: "Net Equity", value: formatMoneyPdf(equity) },
   ];
 
   const exportMeta = `${schoolName} · ${academicYear}`;
@@ -1466,9 +1461,9 @@ export function BalanceSheetReport() {
         </div>
         <SummaryStrip
           items={[
-            { label: "Total Assets", value: inr(totalAssets) },
-            { label: "Payables", value: inr(payables) },
-            { label: "Net Equity", value: inr(equity), accent: true },
+            { label: "Total Assets", value: formatMoney(totalAssets) },
+            { label: "Payables", value: formatMoney(payables) },
+            { label: "Net Equity", value: formatMoney(equity), accent: true },
           ]}
         />
       </OrganicCard>
@@ -1476,50 +1471,53 @@ export function BalanceSheetReport() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-5">
         <OrganicCard tone="white" cornerSide="tl" padded>
           <div className="text-title text-slate-900 dark:text-zinc-50">Statement of Position</div>
-          <p className="mt-1 text-[12px] text-black/55">Assets, liabilities, and equity as at today</p>
+          <p className="mt-1 text-[12px] text-black/55">
+            Assets, liabilities, and equity as at today
+          </p>
           <ReportTable headers={headers} rows={tableRows} compact className="mt-4" />
         </OrganicCard>
 
         <OrganicCard tone="white" cornerSide="bl" padded>
-        <div className="text-title text-slate-900 dark:text-zinc-50">Outstanding Payables</div>
-        <p className="mt-1 text-[12px] text-black/55">
-          {openPayables.length} open obligation{openPayables.length === 1 ? "" : "s"}
-        </p>
-        <div className="mt-4 space-y-2">
-          {openPayables.length === 0 ? (
-            <div className="rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-4 text-center text-[12px] text-black/55">
-              No open payables
-            </div>
-          ) : (
-            openPayables.map((p) => (
-              <div
-                key={p.id || p.payee}
-                className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5 text-[12.5px]"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium text-black">{p.payee}</div>
-                  <div className="mt-0.5 text-[11px] text-black/45">
-                    {isSalaryDisbursement(p) ? "Salary Payable" : "Accounts Payable"}
-                    {p.mode ? ` · ${p.mode}` : ""}
-                    {" · Queued"}
-                  </div>
-                </div>
-                <span className="shrink-0 font-mono text-black">{inr(p.amount)}</span>
-              </div>
-            ))
-          )}
-        </div>
-        <div className="mt-4 rounded-lg bg-[#F4F4F5] p-4">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-black/55">
-            Fee Receivables
-          </div>
-          <div className="mt-1 font-mono text-[18px] font-semibold">{inr(receivables)}</div>
-          <p className="mt-1 text-[11px] text-black/55">
-            Aggregated from {feeRoster.outstandingCount} students
-            with open balances
+          <div className="text-title text-slate-900 dark:text-zinc-50">Outstanding Payables</div>
+          <p className="mt-1 text-[12px] text-black/55">
+            {openPayables.length} open obligation{openPayables.length === 1 ? "" : "s"}
           </p>
-        </div>
-      </OrganicCard>
+          <div className="mt-4 space-y-2">
+            {openPayables.length === 0 ? (
+              <div className="rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-4 text-center text-[12px] text-black/55">
+                No open payables
+              </div>
+            ) : (
+              openPayables.map((p) => (
+                <div
+                  key={p.id || p.payee}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] px-3.5 py-2.5 text-[12.5px]"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium text-black">{p.payee}</div>
+                    <div className="mt-0.5 text-[11px] text-black/45">
+                      {isSalaryDisbursement(p) ? "Salary Payable" : "Accounts Payable"}
+                      {p.mode ? ` · ${p.mode}` : ""}
+                      {" · Queued"}
+                    </div>
+                  </div>
+                  <span className="shrink-0 font-mono text-black">{formatMoney(p.amount)}</span>
+                </div>
+              ))
+            )}
+          </div>
+          <div className="mt-4 rounded-lg bg-[#F4F4F5] p-4">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-black/55">
+              Fee Receivables
+            </div>
+            <div className="mt-1 font-mono text-[18px] font-semibold">
+              {formatMoney(receivables)}
+            </div>
+            <p className="mt-1 text-[11px] text-black/55">
+              Aggregated from {feeRoster.outstandingCount} students with open balances
+            </p>
+          </div>
+        </OrganicCard>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5">
@@ -1741,7 +1739,7 @@ export function FeesReport() {
         formatEventDateTime(p.time),
         p.narration ?? "",
         String(p.amount),
-        p.amount.toLocaleString("en-IN"),
+        formatAmount(p.amount),
       ]
         .join(" ")
         .toLowerCase();
@@ -1774,9 +1772,9 @@ export function FeesReport() {
           String(row.pending),
           String(row.overdue),
           String(row.total),
-          row.pending.toLocaleString("en-IN"),
-          row.overdue.toLocaleString("en-IN"),
-          row.total.toLocaleString("en-IN"),
+          formatAmount(row.pending),
+          formatAmount(row.overdue),
+          formatAmount(row.total),
           row.overdue > 0 ? "overdue" : "due",
         ]
           .join(" ")
@@ -1784,7 +1782,13 @@ export function FeesReport() {
         return haystack.includes(q);
       })
       .sort((a, b) => b.overdue - a.overdue || b.total - a.total);
-  }, [overdueStudents, duesQuery, duesClass, feeRoster.pendingByStudentId, feeRoster.overdueByStudentId]);
+  }, [
+    overdueStudents,
+    duesQuery,
+    duesClass,
+    feeRoster.pendingByStudentId,
+    feeRoster.overdueByStudentId,
+  ]);
 
   const collected = useMemo(
     () => filteredCollections.reduce((sum, p) => sum + p.amount, 0),
@@ -1820,7 +1824,7 @@ export function FeesReport() {
     p.cat,
     resolvePaymentFeePeriod(p) ?? "—",
     p.mode,
-    inr(p.amount),
+    formatMoney(p.amount),
     formatEventDateTime(p.time),
   ]);
 
@@ -1829,9 +1833,9 @@ export function FeesReport() {
     row.student.name,
     row.student.cls,
     row.student.guardian,
-    inr(row.pending),
-    inr(row.overdue),
-    inr(row.total),
+    formatMoney(row.pending),
+    formatMoney(row.overdue),
+    formatMoney(row.total),
   ]);
 
   const feesReportPdfHeaders = [
@@ -1841,7 +1845,7 @@ export function FeesReport() {
     "Category",
     "Period",
     "Mode",
-    "Amount (Rs.)",
+    moneyColumnLabel("Amount", { pdf: true }),
     "Time",
   ] as const;
 
@@ -1853,7 +1857,7 @@ export function FeesReport() {
       payment.cat,
       resolvePaymentFeePeriod(payment) ?? "-",
       payment.mode,
-      payment.amount.toLocaleString("en-IN"),
+      formatAmount(payment.amount),
       formatEventDateTime(payment.time),
     ]);
 
@@ -1863,15 +1867,15 @@ export function FeesReport() {
       truncatePdfCell(row.student.name, 48),
       row.student.cls,
       truncatePdfCell(row.student.guardian, 40),
-      row.pending.toLocaleString("en-IN"),
-      row.overdue.toLocaleString("en-IN"),
-      row.total.toLocaleString("en-IN"),
+      formatAmount(row.pending),
+      formatAmount(row.overdue),
+      formatAmount(row.total),
     ]);
 
   const feesReportPdfSummary = () => [
-    { label: "Fees Collected", value: pdfInr(collected) },
-    { label: "Due", value: pdfInr(outstandingPending) },
-    { label: "Overdue", value: pdfInr(outstandingOverdue) },
+    { label: "Fees Collected", value: formatMoneyPdf(collected) },
+    { label: "Due", value: formatMoneyPdf(outstandingPending) },
+    { label: "Overdue", value: formatMoneyPdf(outstandingOverdue) },
     { label: "Students Overdue", value: String(studentsWithOverdue) },
   ];
 
@@ -1916,7 +1920,15 @@ export function FeesReport() {
       appendTables: [
         {
           title: "Outstanding Dues",
-          headers: ["ID", "Student", "Class", "Guardian", "Due (Rs.)", "Overdue (Rs.)", "Total (Rs.)"],
+          headers: [
+            "ID",
+            "Student",
+            "Class",
+            "Guardian",
+            moneyColumnLabel("Due", { pdf: true }),
+            moneyColumnLabel("Overdue", { pdf: true }),
+            moneyColumnLabel("Total", { pdf: true }),
+          ],
           rows: buildFeesOutstandingPdfRows(),
         },
       ],
@@ -1937,7 +1949,15 @@ export function FeesReport() {
       appendTables: [
         {
           title: "Outstanding Dues",
-          headers: ["ID", "Student", "Class", "Guardian", "Due (Rs.)", "Overdue (Rs.)", "Total (Rs.)"],
+          headers: [
+            "ID",
+            "Student",
+            "Class",
+            "Guardian",
+            moneyColumnLabel("Due", { pdf: true }),
+            moneyColumnLabel("Overdue", { pdf: true }),
+            moneyColumnLabel("Total", { pdf: true }),
+          ],
           rows: buildFeesOutstandingPdfRows(),
         },
       ],
@@ -1969,9 +1989,9 @@ export function FeesReport() {
         </div>
         <SummaryStrip
           items={[
-            { label: "Fees Collected", value: inr(collected) },
-            { label: "Due", value: inr(outstandingPending) },
-            { label: "Overdue", value: inr(outstandingOverdue) },
+            { label: "Fees Collected", value: formatMoney(collected) },
+            { label: "Due", value: formatMoney(outstandingPending) },
+            { label: "Overdue", value: formatMoney(outstandingOverdue) },
             {
               label: "Students Overdue",
               value: String(studentsWithOverdue),
@@ -1989,9 +2009,9 @@ export function FeesReport() {
               {filteredDues.length} of {overdueStudents.length} student
               {overdueStudents.length === 1 ? "" : "s"} with open balance
               {outstandingOverdue > 0
-                ? ` · ${inr(outstandingPending)} due · ${inr(outstandingOverdue)} overdue`
+                ? ` · ${formatMoney(outstandingPending)} due · ${formatMoney(outstandingOverdue)} overdue`
                 : outstandingPending > 0
-                  ? ` · ${inr(outstandingPending)} due`
+                  ? ` · ${formatMoney(outstandingPending)} due`
                   : ""}
             </p>
           </div>
@@ -2030,14 +2050,14 @@ export function FeesReport() {
               : "No dues match your search or filters"}
           </div>
         ) : (
-            <ReportTable
-              headers={["ID", "Student", "Class", "Guardian", "Due", "Overdue", "Total"]}
-              rows={outstandingRows}
-              compact
-              className="[&_table]:min-w-[640px]"
-            />
-          )}
-        </OrganicCard>
+          <ReportTable
+            headers={["ID", "Student", "Class", "Guardian", "Due", "Overdue", "Total"]}
+            rows={outstandingRows}
+            compact
+            className="[&_table]:min-w-[640px]"
+          />
+        )}
+      </OrganicCard>
 
       <OrganicCard tone="white" cornerSide="bl" padded className="w-full">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -2115,11 +2135,7 @@ export function FeesReport() {
       </OrganicCard>
 
       {byCategory.length > 0 && (
-        <FinanceDonutCard
-          title="Collection by Category"
-          cornerSide="bl"
-          segments={byCategory}
-        />
+        <FinanceDonutCard title="Collection by Category" cornerSide="bl" segments={byCategory} />
       )}
     </div>
   );
@@ -2218,9 +2234,9 @@ export function ConcessionReport() {
     row.cls,
     row.covers,
     row.reason,
-    inr(row.standardTotal),
-    inr(row.concessionTotal),
-    inr(row.relief),
+    formatMoney(row.standardTotal),
+    formatMoney(row.concessionTotal),
+    formatMoney(row.relief),
   ]);
 
   const clearFilters = () => {
@@ -2275,16 +2291,16 @@ export function ConcessionReport() {
       row.cls,
       truncatePdfCell(row.covers, 28),
       truncatePdfCell(row.reason, 32),
-      row.standardTotal.toLocaleString("en-IN"),
-      row.concessionTotal.toLocaleString("en-IN"),
-      row.relief.toLocaleString("en-IN"),
+      formatAmount(row.standardTotal),
+      formatAmount(row.concessionTotal),
+      formatAmount(row.relief),
     ]);
 
   const pdfSummary = () => [
     { label: "Students", value: String(totals.students) },
-    { label: "Standard Fee", value: pdfInr(totals.standardTotal) },
-    { label: "Concession Fee", value: pdfInr(totals.concessionTotal) },
-    { label: "Total Relief", value: pdfInr(totals.relief) },
+    { label: "Standard Fee", value: formatMoneyPdf(totals.standardTotal) },
+    { label: "Concession Fee", value: formatMoneyPdf(totals.concessionTotal) },
+    { label: "Total Relief", value: formatMoneyPdf(totals.relief) },
   ];
 
   const pdfHeaders = [
@@ -2293,9 +2309,9 @@ export function ConcessionReport() {
     "Class",
     "Covers",
     "Reason",
-    "Standard (Rs.)",
-    "Concession (Rs.)",
-    "Relief (Rs.)",
+    moneyColumnLabel("Standard", { pdf: true }),
+    moneyColumnLabel("Concession", { pdf: true }),
+    moneyColumnLabel("Relief", { pdf: true }),
   ] as const;
 
   const handlePdf = () => {
@@ -2349,11 +2365,11 @@ export function ConcessionReport() {
         <SummaryStrip
           items={[
             { label: "Students on Concession", value: String(totals.students) },
-            { label: "Standard Fee", value: inr(totals.standardTotal) },
-            { label: "Concession Fee", value: inr(totals.concessionTotal) },
+            { label: "Standard Fee", value: formatMoney(totals.standardTotal) },
+            { label: "Concession Fee", value: formatMoney(totals.concessionTotal) },
             {
               label: "Total Relief",
-              value: inr(totals.relief),
+              value: formatMoney(totals.relief),
               accent: true,
             },
           ]}
@@ -2580,7 +2596,7 @@ export function SalaryReport() {
     const q = payableQuery.trim().toLowerCase();
     if (!q) return salaryPayables;
     return salaryPayables.filter((item) => {
-      const haystack = [item.payee, String(item.amount), item.amount.toLocaleString("en-IN")]
+      const haystack = [item.payee, String(item.amount), formatAmount(item.amount)]
         .join(" ")
         .toLowerCase();
       return haystack.includes(q);
@@ -2639,21 +2655,21 @@ export function SalaryReport() {
       s.role,
       s.dept,
       attendanceLabel,
-      inr(s.basicSalary),
-      inr(s.additionalAllowances),
-      inr(gross),
-      inr(payable),
+      formatMoney(s.basicSalary),
+      formatMoney(s.additionalAllowances),
+      formatMoney(gross),
+      formatMoney(payable),
       monthStatus === "No due" ? "—" : monthStatus,
     ];
   });
 
-  const payableRows = filteredPayables.map((item) => [item.payee, inr(item.amount)]);
+  const payableRows = filteredPayables.map((item) => [item.payee, formatMoney(item.amount)]);
   const historyRows = recentSalaryHistory.map((row) => [
     formatEventDateTime(row.paidAt),
     row.staffName,
     row.month ? formatPayrollMonthLabel(row.month) : "—",
     row.mode,
-    inr(row.amount),
+    formatMoney(row.amount),
     row.status,
   ]);
 
@@ -2684,13 +2700,13 @@ export function SalaryReport() {
       `Month: ${payrollMonthLabel} (${payrollMonth})`,
       `AY: ${academicYear}`,
       `Staff shown: ${filteredStaff.length}`,
-      `Gross: ${inr(totalGross)}`,
-      `Payable: ${inr(totalPayable)}`,
+      `Gross: ${formatMoney(totalGross)}`,
+      `Payable: ${formatMoney(totalPayable)}`,
       `Settled: ${paidThisMonthCount}/${filteredStaff.length}`,
       "",
       ...payrollRows.slice(0, 12).map(({ staff: s, payable }) => {
         const monthStatus = staffPayrollMonthStatus(s, payrollMonth);
-        return `• ${s.name} · ${s.role} · ${inr(payable)} · ${
+        return `• ${s.name} · ${s.role} · ${formatMoney(payable)} · ${
           monthStatus === "No due" ? "—" : monthStatus
         }`;
       }),
@@ -2772,19 +2788,19 @@ export function SalaryReport() {
         s.role,
         s.dept,
         attendanceLabel,
-        s.basicSalary.toLocaleString("en-IN"),
-        s.additionalAllowances.toLocaleString("en-IN"),
-        gross.toLocaleString("en-IN"),
-        payable.toLocaleString("en-IN"),
+        formatAmount(s.basicSalary),
+        formatAmount(s.additionalAllowances),
+        formatAmount(gross),
+        formatAmount(payable),
         monthStatus === "No due" ? "—" : monthStatus,
       ];
     });
 
   const salaryReportPdfSummary = () => [
     { label: "Staff Shown", value: String(filteredStaff.length) },
-    { label: "Gross Payroll", value: pdfInr(totalGross) },
-    { label: "Attendance Payable", value: pdfInr(totalPayable) },
-    { label: "Ledger Payable", value: pdfInr(salaryPayableAmount) },
+    { label: "Gross Payroll", value: formatMoneyPdf(totalGross) },
+    { label: "Attendance Payable", value: formatMoneyPdf(totalPayable) },
+    { label: "Ledger Payable", value: formatMoneyPdf(salaryPayableAmount) },
   ];
 
   const handleCsv = () => {
@@ -2910,10 +2926,10 @@ export function SalaryReport() {
         <SummaryStrip
           items={[
             { label: "Staff Shown", value: String(filteredStaff.length) },
-            { label: "Gross Payroll", value: inr(totalGross) },
+            { label: "Gross Payroll", value: formatMoney(totalGross) },
             {
               label: "Attendance Payable",
-              value: inr(totalPayable),
+              value: formatMoney(totalPayable),
               accent: true,
             },
             {
@@ -2925,12 +2941,7 @@ export function SalaryReport() {
       </OrganicCard>
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 sm:gap-5">
-        <OrganicCard
-          tone="white"
-          cornerSide="tl"
-          padded
-          className="flex w-full min-h-0 flex-col"
-        >
+        <OrganicCard tone="white" cornerSide="tl" padded className="flex w-full min-h-0 flex-col">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
@@ -3065,9 +3076,10 @@ export function SalaryReport() {
                 className="mt-0 min-h-0 flex-1"
                 footer={
                   <div className="border-t border-[#E5E5E5] bg-[#FAFAFA] px-3 py-3 text-[12px] font-semibold text-black">
-                    Totals · {payrollMonthLabel} · Basic {inr(totalBasic)} · Allowances{" "}
-                    {inr(totalAllowances)} · Gross {inr(totalGross)} · Payable {inr(totalPayable)} ·
-                    Settled {paidThisMonthCount}/{filteredStaff.length}
+                    Totals · {payrollMonthLabel} · Basic {formatMoney(totalBasic)} · Allowances{" "}
+                    {formatMoney(totalAllowances)} · Gross {formatMoney(totalGross)} · Payable{" "}
+                    {formatMoney(totalPayable)} · Settled {paidThisMonthCount}/
+                    {filteredStaff.length}
                   </div>
                 }
               />
@@ -3082,9 +3094,8 @@ export function SalaryReport() {
                 Open Salary Obligations
               </div>
               <p className="mt-1 text-[12px] text-black/55">
-                {filteredPayables.length} of {salaryPayables.length} unpaid for{" "}
-                {payrollMonthLabel}
-                {salaryPayableAmount > 0 ? ` · ${inr(salaryPayableAmount)}` : ""}
+                {filteredPayables.length} of {salaryPayables.length} unpaid for {payrollMonthLabel}
+                {salaryPayableAmount > 0 ? ` · ${formatMoney(salaryPayableAmount)}` : ""}
               </p>
             </div>
             {payableQuery && (
@@ -3136,7 +3147,7 @@ export function SalaryReport() {
             </div>
             <p className="mt-1 text-[12px] text-black/55">
               Recent disbursements across staff · {recentSalaryHistory.length} shown
-              {historyPaidTotal > 0 ? ` · ${inr(historyPaidTotal)} total` : ""}
+              {historyPaidTotal > 0 ? ` · ${formatMoney(historyPaidTotal)} total` : ""}
             </p>
           </div>
         </div>
@@ -3217,7 +3228,7 @@ function DayBookEntryCards({ entries, footer }: { entries: DayBookEntry[]; foote
                 )}
               >
                 {isReceipt ? "+" : "−"}
-                {inr(entry.amount)}
+                {formatMoney(entry.amount)}
               </div>
             </div>
           </article>
@@ -3270,7 +3281,9 @@ export function DayBookReport() {
         narration: e.desc,
       }));
 
-    return [...receipts, ...outflows].sort((a, b) => (b.paidAt || "").localeCompare(a.paidAt || ""));
+    return [...receipts, ...outflows].sort((a, b) =>
+      (b.paidAt || "").localeCompare(a.paidAt || ""),
+    );
   }, [payments, disbursements]);
 
   const modeOptions = useMemo(
@@ -3294,7 +3307,7 @@ export function DayBookReport() {
         e.type,
         e.narration ?? "",
         String(e.amount),
-        e.amount.toLocaleString("en-IN"),
+        formatAmount(e.amount),
       ]
         .join(" ")
         .toLowerCase();
@@ -3317,8 +3330,8 @@ export function DayBookReport() {
     e.account,
     e.mode,
     e.type,
-    e.type === "Receipt" ? inr(e.amount) : "—",
-    e.type === "Payment" ? inr(e.amount) : "—",
+    e.type === "Receipt" ? formatMoney(e.amount) : "—",
+    e.type === "Payment" ? formatMoney(e.amount) : "—",
   ]);
 
   const dayBookPdfHeaders = [
@@ -3328,12 +3341,11 @@ export function DayBookReport() {
     "Account",
     "Mode",
     "Type",
-    "Receipt (Rs.)",
-    "Payment (Rs.)",
+    moneyColumnLabel("Receipt", { pdf: true }),
+    moneyColumnLabel("Payment", { pdf: true }),
   ] as const;
 
-  const formatDayBookPdfAmount = (value: number) =>
-    value > 0 ? value.toLocaleString("en-IN") : "-";
+  const formatDayBookPdfAmount = (value: number) => (value > 0 ? formatAmount(value) : "-");
 
   const buildDayBookPdfRows = () =>
     filtered.map((entry) => [
@@ -3348,9 +3360,9 @@ export function DayBookReport() {
     ]);
 
   const dayBookPdfSummary = () => [
-    { label: "Total Receipts", value: pdfInr(totalReceipts) },
-    { label: "Total Payments", value: pdfInr(totalPayments) },
-    { label: "Net Movement", value: pdfInr(net) },
+    { label: "Total Receipts", value: formatMoneyPdf(totalReceipts) },
+    { label: "Total Payments", value: formatMoneyPdf(totalPayments) },
+    { label: "Net Movement", value: formatMoneyPdf(net) },
   ];
 
   const periodLabel =
@@ -3443,9 +3455,9 @@ export function DayBookReport() {
         </div>
         <SummaryStrip
           items={[
-            { label: "Total Receipts", value: inr(totalReceipts) },
-            { label: "Total Payments", value: inr(totalPayments) },
-            { label: "Net Movement", value: inr(net), accent: true },
+            { label: "Total Receipts", value: formatMoney(totalReceipts) },
+            { label: "Total Payments", value: formatMoney(totalPayments) },
+            { label: "Net Movement", value: formatMoney(net), accent: true },
           ]}
         />
       </OrganicCard>
@@ -3566,8 +3578,8 @@ export function DayBookReport() {
               entries={filtered}
               footer={
                 <>
-                  Totals · Receipts {inr(totalReceipts)} · Payments {inr(totalPayments)} · Net{" "}
-                  {inr(net)}
+                  Totals · Receipts {formatMoney(totalReceipts)} · Payments{" "}
+                  {formatMoney(totalPayments)} · Net {formatMoney(net)}
                 </>
               }
             />
@@ -3587,8 +3599,8 @@ export function DayBookReport() {
               rows={tableRows}
               footer={
                 <div className="border-t border-[#E5E5E5] bg-[#FAFAFA] px-3 py-3 text-[12px] font-semibold text-black">
-                  Totals · Receipts {inr(totalReceipts)} · Payments {inr(totalPayments)} · Net{" "}
-                  {inr(net)}
+                  Totals · Receipts {formatMoney(totalReceipts)} · Payments{" "}
+                  {formatMoney(totalPayments)} · Net {formatMoney(net)}
                 </div>
               }
             />
@@ -3714,9 +3726,7 @@ export function BankReconciliationReport() {
   );
   const outstandingPayments = useMemo(
     () =>
-      unclearedTxns
-        .filter((t) => t.kind === "Payment")
-        .reduce((s, t) => s + Math.abs(t.amount), 0),
+      unclearedTxns.filter((t) => t.kind === "Payment").reduce((s, t) => s + Math.abs(t.amount), 0),
     [unclearedTxns],
   );
   const unclearedNet = depositsInTransit - outstandingPayments;
@@ -3737,18 +3747,25 @@ export function BankReconciliationReport() {
   };
 
   const formatSignedInr = (amount: number) =>
-    amount < 0 ? `−${inr(Math.abs(amount))}` : inr(amount);
+    amount < 0 ? `−${formatMoney(Math.abs(amount))}` : formatMoney(amount);
 
   const reconStatementRows: (string | number)[][] = [
-    ["Balance as per Bank Statement", inr(statementBalance)],
-    [`Add: Deposits in transit (${depositCount})`, inr(depositsInTransit)],
-    [`Less: Outstanding payments (${outstandingCount})`, inr(outstandingPayments)],
-    ["Adjusted Balance (per Books)", inr(adjustedBalance)],
-    ["Balance as per Books", inr(bookBalance)],
-    ["Unreconciled Difference", inr(difference)],
+    ["Balance as per Bank Statement", formatMoney(statementBalance)],
+    [`Add: Deposits in transit (${depositCount})`, formatMoney(depositsInTransit)],
+    [`Less: Outstanding payments (${outstandingCount})`, formatMoney(outstandingPayments)],
+    ["Adjusted Balance (per Books)", formatMoney(adjustedBalance)],
+    ["Balance as per Books", formatMoney(bookBalance)],
+    ["Unreconciled Difference", formatMoney(difference)],
   ];
 
-  const txnPdfHeaders = ["Voucher", "Date / Time", "Account", "Type", "Mode", "Amount (Rs.)"] as const;
+  const txnPdfHeaders = [
+    "Voucher",
+    "Date / Time",
+    "Account",
+    "Type",
+    "Mode",
+    moneyColumnLabel("Amount", { pdf: true }),
+  ] as const;
 
   const mapTxnPdfRow = (txn: BankReconTxn) => [
     txn.id,
@@ -3756,7 +3773,7 @@ export function BankReconciliationReport() {
     truncatePdfCell(txn.name, 64),
     txn.kind,
     txn.mode,
-    txn.amount.toLocaleString("en-IN"),
+    formatAmount(txn.amount),
   ];
 
   const txnPdfTotalRow = (items: BankReconTxn[]): TablePdfRichCell[] => {
@@ -3768,18 +3785,18 @@ export function BankReconciliationReport() {
         styles: { fontStyle: "bold" },
       },
       {
-        content: total.toLocaleString("en-IN"),
+        content: formatAmount(total),
         styles: { fontStyle: "bold", halign: "right" },
       },
     ];
   };
 
   const bankReconPdfSummary = () => [
-    { label: "Statement Balance", value: pdfInr(statementBalance) },
-    { label: "Cleared", value: pdfInr(clearedTotal) },
-    { label: "Deposits in transit", value: pdfInr(depositsInTransit) },
-    { label: "Outstanding payments", value: pdfInr(outstandingPayments) },
-    { label: "Difference", value: pdfInr(difference) },
+    { label: "Statement Balance", value: formatMoneyPdf(statementBalance) },
+    { label: "Cleared", value: formatMoneyPdf(clearedTotal) },
+    { label: "Deposits in transit", value: formatMoneyPdf(depositsInTransit) },
+    { label: "Outstanding payments", value: formatMoneyPdf(outstandingPayments) },
+    { label: "Difference", value: formatMoneyPdf(difference) },
   ];
 
   const buildBankReconStatementPdfRows = () => {
@@ -3787,28 +3804,28 @@ export function BankReconciliationReport() {
     const diffFill: [number, number, number] = reconciled ? [240, 253, 244] : [255, 247, 237];
     const diffText: [number, number, number] = reconciled ? [5, 150, 105] : [194, 65, 12];
     return [
-      ["Balance as per Bank Statement", pdfInr(statementBalance)],
-      [`Add: Deposits in transit (${depositCount})`, pdfInr(depositsInTransit)],
-      [`Less: Outstanding payments (${outstandingCount})`, pdfInr(outstandingPayments)],
+      ["Balance as per Bank Statement", formatMoneyPdf(statementBalance)],
+      [`Add: Deposits in transit (${depositCount})`, formatMoneyPdf(depositsInTransit)],
+      [`Less: Outstanding payments (${outstandingCount})`, formatMoneyPdf(outstandingPayments)],
       [
         pdfStatementCell("Adjusted Balance (per Books)", {
           fontStyle: "bold",
           fillColor: totalFill,
         }),
-        pdfStatementCell(pdfInr(adjustedBalance), {
+        pdfStatementCell(formatMoneyPdf(adjustedBalance), {
           fontStyle: "bold",
           fillColor: totalFill,
           halign: "right",
         }),
       ],
-      ["Balance as per Books", pdfInr(bookBalance)],
+      ["Balance as per Books", formatMoneyPdf(bookBalance)],
       [
         pdfStatementCell("Unreconciled Difference", {
           fontStyle: "bold",
           fillColor: diffFill,
           textColor: diffText,
         }),
-        pdfStatementCell(pdfInr(difference), {
+        pdfStatementCell(formatMoneyPdf(difference), {
           fontStyle: "bold",
           fillColor: diffFill,
           textColor: diffText,
@@ -3835,7 +3852,7 @@ export function BankReconciliationReport() {
       subtitle: `${schoolName} | ${academicYear} | ${reconciled ? "Reconciled" : "Out of balance"}`,
       meta: `Generated ${formatNow({ dateStyle: "medium", timeStyle: "short" })}`,
       tableTitle: "Reconciliation",
-      headers: ["Particulars", "Amount (Rs.)"],
+      headers: ["Particulars", moneyColumnLabel("Amount", { pdf: true })],
       rows: buildBankReconStatementPdfRows(),
       summaryItems: bankReconPdfSummary(),
       summaryPlacement: "before",
@@ -3857,7 +3874,7 @@ export function BankReconciliationReport() {
       ],
       footer: reconciled
         ? "Books agree with the bank statement. Difference is nil."
-        : `Out of balance by ${pdfInr(Math.abs(difference))}. Review uncleared items and the statement closing balance.`,
+        : `Out of balance by ${formatMoneyPdf(Math.abs(difference))}. Review uncleared items and the statement closing balance.`,
       footerPlacement: "after-main",
       action,
     });
@@ -3913,8 +3930,8 @@ export function BankReconciliationReport() {
         </div>
         <SummaryStrip
           items={[
-            { label: "Balance per Books", value: inr(bookBalance) },
-            { label: "Cleared on Statement", value: inr(clearedTotal) },
+            { label: "Balance per Books", value: formatMoney(bookBalance) },
+            { label: "Cleared on Statement", value: formatMoney(clearedTotal) },
             {
               label: "Net Uncleared",
               value: formatSignedInr(unclearedNet),
@@ -3937,7 +3954,7 @@ export function BankReconciliationReport() {
               </label>
               <div className="relative">
                 <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-[13px] text-black/45">
-                  ₹
+                  {moneySymbol()}
                 </span>
                 <Input
                   inputMode="numeric"
@@ -3980,7 +3997,7 @@ export function BankReconciliationReport() {
                 <div className="truncate text-[11.5px] text-black/60 dark:text-zinc-400">
                   {reconciled
                     ? "Statement matches cleared items"
-                    : `Difference of ${inr(Math.abs(difference))}`}
+                    : `Difference of ${formatMoney(Math.abs(difference))}`}
                 </div>
               </div>
             </div>
@@ -3988,55 +4005,55 @@ export function BankReconciliationReport() {
         </OrganicCard>
 
         <OrganicCard tone="white" cornerSide="bl" padded>
-        <div className="flex items-center gap-2">
-          <Landmark className="h-4 w-4 text-black/45" />
-          <div className="text-title text-slate-900 dark:text-zinc-50">
-            Reconciliation Statement
+          <div className="flex items-center gap-2">
+            <Landmark className="h-4 w-4 text-black/45" />
+            <div className="text-title text-slate-900 dark:text-zinc-50">
+              Reconciliation Statement
+            </div>
           </div>
-        </div>
-        <p className="mt-1 text-[12px] text-black/55">Bank statement to book balance</p>
-        <div className="mt-4 overflow-hidden rounded-lg border border-[#E5E5E5]">
-          {reconStatementRows.map(([label, value], i) => {
-            const isTotal = label === "Balance as per Books";
-            const isDiff = label === "Unreconciled Difference";
-            return (
-              <div
-                key={i}
-                className={cn(
-                  "flex items-center justify-between gap-3 px-3.5 py-2.5 text-[12.5px]",
-                  i !== reconStatementRows.length - 1 &&
-                    "border-b border-[#F0F0F0] dark:border-white/10",
-                  isTotal && "bg-[#F4F4F5] font-semibold dark:bg-white/10",
-                  isDiff &&
-                    (reconciled
-                      ? "bg-[#F0FDF4] dark:bg-emerald-950/45"
-                      : "bg-[#FFF7ED] dark:bg-amber-950/40"),
-                )}
-              >
-                <span
+          <p className="mt-1 text-[12px] text-black/55">Bank statement to book balance</p>
+          <div className="mt-4 overflow-hidden rounded-lg border border-[#E5E5E5]">
+            {reconStatementRows.map(([label, value], i) => {
+              const isTotal = label === "Balance as per Books";
+              const isDiff = label === "Unreconciled Difference";
+              return (
+                <div
+                  key={i}
                   className={cn(
-                    "min-w-0 flex-1 text-black/70 dark:text-zinc-300",
-                    (isTotal || isDiff) && "text-black dark:text-zinc-50",
-                  )}
-                >
-                  {label}
-                </span>
-                <span
-                  className={cn(
-                    "shrink-0 font-mono text-black dark:text-zinc-100",
+                    "flex items-center justify-between gap-3 px-3.5 py-2.5 text-[12.5px]",
+                    i !== reconStatementRows.length - 1 &&
+                      "border-b border-[#F0F0F0] dark:border-white/10",
+                    isTotal && "bg-[#F4F4F5] font-semibold dark:bg-white/10",
                     isDiff &&
                       (reconciled
-                        ? "text-[#059669] dark:text-emerald-300"
-                        : "text-[#C2410C] dark:text-amber-300"),
+                        ? "bg-[#F0FDF4] dark:bg-emerald-950/45"
+                        : "bg-[#FFF7ED] dark:bg-amber-950/40"),
                   )}
                 >
-                  {value}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </OrganicCard>
+                  <span
+                    className={cn(
+                      "min-w-0 flex-1 text-black/70 dark:text-zinc-300",
+                      (isTotal || isDiff) && "text-black dark:text-zinc-50",
+                    )}
+                  >
+                    {label}
+                  </span>
+                  <span
+                    className={cn(
+                      "shrink-0 font-mono text-black dark:text-zinc-100",
+                      isDiff &&
+                        (reconciled
+                          ? "text-[#059669] dark:text-emerald-300"
+                          : "text-[#C2410C] dark:text-amber-300"),
+                    )}
+                  >
+                    {value}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </OrganicCard>
       </div>
 
       <OrganicCard tone="white" cornerSide="tr" padded>
@@ -4156,8 +4173,8 @@ export function BankReconciliationReport() {
                 );
               })}
               <div className="rounded-2xl border border-[#E5E5E5] bg-white px-3.5 py-3 text-[12px] font-semibold text-black dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100">
-                Cleared {inr(clearedTotal)} · Uncleared {formatSignedInr(unclearedNet)} · Book{" "}
-                {inr(bookBalance)}
+                Cleared {formatMoney(clearedTotal)} · Uncleared {formatSignedInr(unclearedNet)} ·
+                Book {formatMoney(bookBalance)}
               </div>
             </div>
 
@@ -4223,9 +4240,10 @@ export function BankReconciliationReport() {
                 <tfoot>
                   <tr className="border-t border-[#E5E5E5] bg-[#FAFAFA] text-[12px] font-semibold text-black">
                     <td className="px-3 py-3" colSpan={6}>
-                      Cleared {inr(clearedTotal)} · Uncleared {formatSignedInr(unclearedNet)}
+                      Cleared {formatMoney(clearedTotal)} · Uncleared{" "}
+                      {formatSignedInr(unclearedNet)}
                     </td>
-                    <td className="px-3 py-3 text-right font-mono">{inr(bookBalance)}</td>
+                    <td className="px-3 py-3 text-right font-mono">{formatMoney(bookBalance)}</td>
                   </tr>
                 </tfoot>
               </table>

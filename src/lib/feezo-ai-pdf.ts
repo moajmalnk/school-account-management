@@ -3,6 +3,7 @@ import autoTable from "jspdf-autotable";
 
 import type { FeezoLocale, FeezoUiBlock } from "@/lib/api/ai";
 import { todayStamp } from "@/lib/download-names";
+import { asciiCurrencyText } from "@/lib/money";
 
 const TEAL: [number, number, number] = [15, 118, 110];
 const TEAL_DARK: [number, number, number] = [17, 94, 89];
@@ -22,9 +23,7 @@ export type FeezoAiPdfInput = {
 
 /** Helvetica cannot draw ₹ or Malayalam — normalize for a clean PDF. */
 export function pdfSafeText(input: string): string {
-  return input
-    .replace(/\u20B9/g, "Rs.")
-    .replace(/₹/g, "Rs.")
+  return asciiCurrencyText(input)
     .replace(/[‐‑‒–—―]/g, "-")
     .replace(/\u00A0/g, " ")
     .replace(/[^\t\n\r\x20-\x7E\u00A0-\u024F]/g, "")
@@ -87,10 +86,7 @@ function drawFooter(doc: jsPDF, school: string) {
   }
 }
 
-function drawHeader(
-  doc: jsPDF,
-  opts: { school: string; branch?: string; when: string },
-): number {
+function drawHeader(doc: jsPDF, opts: { school: string; branch?: string; when: string }): number {
   const pageW = doc.internal.pageSize.getWidth();
   const margin = 40;
 

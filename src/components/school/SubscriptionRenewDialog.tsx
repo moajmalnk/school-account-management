@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { formatMoney } from "@/lib/money";
 
 export type SubscriptionCycle = "Monthly" | "Annual";
 
@@ -20,7 +21,7 @@ type SubscriptionRenewDialogProps = {
   planName: string;
   monthly: number;
   annually: number;
-  currencySymbol: string;
+  currency: string;
   currentCycle: SubscriptionCycle;
   renewalDate: string | null;
   autoRenew: boolean;
@@ -56,20 +57,13 @@ export function addBillingPeriod(fromIso: string | null, cycle: SubscriptionCycl
   return toIsoDate(next);
 }
 
-function formatMoney(symbol: string, amount: number): string {
-  return `${symbol} ${amount.toLocaleString("en-IN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
-
 export function SubscriptionRenewDialog({
   open,
   onOpenChange,
   planName,
   monthly,
   annually,
-  currencySymbol,
+  currency,
   currentCycle,
   renewalDate,
   autoRenew,
@@ -154,7 +148,7 @@ export function SubscriptionRenewDialog({
                     </span>
                   </span>
                   <span className="text-[14px] font-semibold text-black dark:text-zinc-50">
-                    {formatMoney(currencySymbol, option.price)}
+                    {formatMoney(option.price, currency)}
                     <span className="font-normal text-black/45 dark:text-zinc-500">
                       {option.unit}
                     </span>
@@ -172,13 +166,13 @@ export function SubscriptionRenewDialog({
             <div className="mt-2 flex items-center justify-between text-[13px]">
               <span className="text-black/55 dark:text-zinc-400">{lineLabel}</span>
               <span className="font-medium text-black dark:text-zinc-100">
-                {formatMoney(currencySymbol, selected.price)}
+                {formatMoney(selected.price, currency)}
               </span>
             </div>
             <div className="mt-3 flex items-center justify-between border-t border-black/8 pt-3 dark:border-white/10">
               <span className="text-[13px] font-medium text-black dark:text-zinc-200">Total</span>
               <span className="text-[18px] font-bold tracking-tight text-black dark:text-zinc-50">
-                {formatMoney(currencySymbol, selected.price)}
+                {formatMoney(selected.price, currency)}
               </span>
             </div>
           </div>

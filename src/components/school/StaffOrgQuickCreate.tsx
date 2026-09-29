@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { apiUpsertDepartment, apiUpsertRole } from "@/lib/api/settings";
-import { useTenantStore, type Department, type Role } from "@/lib/tenant-store";
+import { useTenantStore, yearScopedId, type Department, type Role } from "@/lib/tenant-store";
 
 function nextPrefixedId(prefix: string, existingIds: string[]): string {
   let n = existingIds.length + 1;
@@ -40,7 +40,7 @@ export function CreateDepartmentDialog({
   onOpenChange: (open: boolean) => void;
   onCreated?: (dept: Department) => void;
 }) {
-  const { departments, setDepartments } = useTenantStore();
+  const { activeDepartments: departments, setDepartments, academicYear } = useTenantStore();
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [saving, setSaving] = useState(false);
@@ -66,12 +66,16 @@ export function CreateDepartmentDialog({
     }
 
     const created: Department = {
-      id: nextPrefixedId(
-        "DEP",
-        departments.map((d) => d.id),
+      id: yearScopedId(
+        nextPrefixedId(
+          "DEP",
+          departments.map((d) => d.id),
+        ),
+        academicYear,
       ),
       name: trimmedName,
       code: trimmedCode,
+      academicYear,
     };
 
     setSaving(true);
@@ -150,7 +154,12 @@ export function CreateRoleDialog({
   onCreated?: (role: Role) => void;
   onNeedDepartment?: () => void;
 }) {
-  const { roles, setRoles, departments } = useTenantStore();
+  const {
+    activeRoles: roles,
+    setRoles,
+    activeDepartments: departments,
+    academicYear,
+  } = useTenantStore();
   const [title, setTitle] = useState("");
   const [departmentId, setDepartmentId] = useState("");
   const [saving, setSaving] = useState(false);
@@ -182,12 +191,16 @@ export function CreateRoleDialog({
     }
 
     const created: Role = {
-      id: nextPrefixedId(
-        "ROL",
-        roles.map((r) => r.id),
+      id: yearScopedId(
+        nextPrefixedId(
+          "ROL",
+          roles.map((r) => r.id),
+        ),
+        academicYear,
       ),
       title: trimmed,
       departmentId,
+      academicYear,
     };
 
     setSaving(true);

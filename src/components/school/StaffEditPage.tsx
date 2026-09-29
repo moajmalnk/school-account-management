@@ -69,7 +69,7 @@ function applyDraftToStaff(staff: Staff, draft: StaffDraft): Staff {
 export function StaffEditPage() {
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/staff_/edit" }) as { id?: string };
-  const { staff, setStaff, departments, roles } = useTenantStore();
+  const { staff, setStaff, activeDepartments: departments, activeRoles: roles } = useTenantStore();
 
   const member = useMemo(
     () => (search.id ? (staff.find((s) => s.id === search.id) ?? null) : null),

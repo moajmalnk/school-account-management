@@ -23,7 +23,15 @@ import {
   Wallet,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { toast } from "sonner";
 
 import { FeezoBrand } from "@/components/brand/FeezoBrand";
@@ -220,8 +228,7 @@ export function ImpersonationChip({ compact = false }: { compact?: boolean }) {
 
 export function BranchSwitcher({ compact = false }: { compact?: boolean }) {
   const { session } = useAuth();
-  const { branches, activeBranchId, openBranch, hydrated, branchSyncing } =
-    useTenantStore();
+  const { branches, activeBranchId, openBranch, hydrated, branchSyncing } = useTenantStore();
   const unsavedGuard = useOptionalSettingsUnsavedGuard();
   const [addOpen, setAddOpen] = useState(false);
   const allowedBranchIds = sessionAllowedBranchIds(session);
@@ -234,9 +241,7 @@ export function BranchSwitcher({ compact = false }: { compact?: boolean }) {
   const effectiveBranchId =
     selectable.find((b) => b.id === activeBranchId)?.id ?? selectable[0]?.id ?? "";
   const label =
-    selectable.find((b) => b.id === effectiveBranchId)?.name ??
-    selectable[0]?.name ??
-    "No campus";
+    selectable.find((b) => b.id === effectiveBranchId)?.name ?? selectable[0]?.name ?? "No campus";
   const canManage = sessionCanAccessSettings(session);
   const canAdd = canManage && planAllowsMultipleBranches(session?.planFlags);
 
@@ -354,6 +359,84 @@ export function BranchSwitcher({ compact = false }: { compact?: boolean }) {
       </DropdownMenu>
       <AddBranchDialog open={addOpen} onOpenChange={setAddOpen} />
     </>
+  );
+}
+
+export function AcademicYearSwitcher({ compact = false }: { compact?: boolean }) {
+  const { academicYear, academicYears, closedAcademicYears, openAcademicYear, hydrated } =
+    useTenantStore();
+  const selectableYears = useMemo(
+    () => academicYears.filter((y) => !closedAcademicYears.includes(y) || y === academicYear),
+    [academicYear, academicYears, closedAcademicYears],
+  );
+  const closedOthers = closedAcademicYears.filter((y) => y !== academicYear);
+
+  const openYear = (y: string, verb: "Opened" | "Reopened") => {
+    const stats = openAcademicYear(y);
+    toast.success(`${verb} books for ${y}`, {
+      description: `${stats.receipts} receipt${stats.receipts === 1 ? "" : "s"} · ${stats.enrolled} student${stats.enrolled === 1 ? "" : "s"} enrolled`,
+    });
+  };
+
+  if (!hydrated || !academicYear) {
+    return (
+      <Skeleton
+        aria-label="Loading academic year"
+        className={cn(
+          "h-9 w-[7rem] shrink-0 rounded-full bg-emerald-500/25 sm:w-[9rem]",
+          compact && "h-8 w-[5.75rem] sm:w-[7rem]",
+        )}
+      />
+    );
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          title={academicYear}
+          aria-label={`Academic year: ${academicYear}`}
+          className={cn(
+            "inline-flex h-9 max-w-[11rem] shrink-0 items-center gap-1 rounded-full bg-[#10B981] px-2.5 text-[11px] font-semibold text-white shadow-sm shadow-emerald-500/25 transition-opacity hover:opacity-90",
+            compact &&
+              "h-8 max-w-[5.75rem] px-2 text-[10px] sm:max-w-[7.5rem] sm:px-2.5 sm:text-[11px]",
+          )}
+        >
+          <span className="min-w-0 truncate">{academicYear}</span>
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-80" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        className="min-w-[11rem] rounded-lg border-white/60 bg-white/90 backdrop-blur-xl dark:border-white/10 dark:bg-zinc-900"
+      >
+        <DropdownMenuRadioGroup value={academicYear} onValueChange={(y) => openYear(y, "Opened")}>
+          {selectableYears.map((y) => (
+            <DropdownMenuRadioItem key={y} value={y} className="rounded-md text-[13px]">
+              {y}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+        {closedOthers.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400">
+              Closed years
+            </DropdownMenuLabel>
+            {closedOthers.map((y) => (
+              <DropdownMenuItem
+                key={`closed-${y}`}
+                className="rounded-md text-[13px] text-slate-500"
+                onSelect={() => openYear(y, "Reopened")}
+              >
+                {y} · reopen
+              </DropdownMenuItem>
+            ))}
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -600,7 +683,9 @@ export function TenantMacDock({
   return (
     <aside
       className={cn(
-        "relative z-40 hidden shrink-0 self-stretch overflow-visible transition-[width] duration-200 md:flex",
+        "relative z-40 hidden shrink-0 self-stretch transition-[width] duration-200 md:flex",
+        // Allow hover tooltips to escape when collapsed; expanded clips to enable nav scroll.
+        expanded ? "overflow-hidden" : "overflow-visible",
         "sticky top-4 max-h-[calc(100dvh-2rem)] flex-col",
         expanded
           ? "w-[220px] min-w-0 max-w-[220px] xl:w-[240px] xl:max-w-[240px]"
@@ -612,21 +697,23 @@ export function TenantMacDock({
       <div
         className={cn(
           glassPanelClass,
-          "relative z-40 flex h-full min-h-[calc(100dvh-2rem)] w-full min-w-0 flex-col overflow-visible rounded-xl border border-white/70 bg-white/55 py-3 shadow-[0_12px_40px_-16px_rgba(15,23,42,0.35)] backdrop-blur-2xl",
-          expanded ? "items-stretch px-2.5 sm:px-3" : "items-center px-1.5",
+          "relative z-40 flex h-full max-h-[calc(100dvh-2rem)] min-h-0 w-full min-w-0 flex-col rounded-xl border border-white/70 bg-white/55 py-2.5 shadow-[0_12px_40px_-16px_rgba(15,23,42,0.35)] backdrop-blur-2xl max-[820px]:py-2 xl:py-3",
+          expanded
+            ? "items-stretch overflow-hidden px-2.5 sm:px-3"
+            : "items-center overflow-visible px-1.5",
         )}
       >
         <div
           className={cn(
-            "mb-3 flex w-full min-w-0 shrink-0 flex-col items-center border-b border-slate-200/60 pb-3 dark:border-white/10",
-            expanded ? "gap-1.5 px-0.5" : "",
+            "mb-2 flex w-full min-w-0 shrink-0 flex-col items-center border-b border-slate-200/60 pb-2 dark:border-white/10 max-[820px]:mb-1.5 max-[820px]:pb-1.5 xl:mb-3 xl:pb-3",
+            expanded ? "gap-1 px-0.5 xl:gap-1.5" : "",
           )}
         >
           <div
             className={cn(
               "grid shrink-0 place-items-center overflow-hidden rounded-xl font-bold text-white shadow-md shadow-teal-900/20",
               expanded
-                ? "h-12 w-12 text-[12px] xl:h-14 xl:w-14"
+                ? "h-11 w-11 text-[11px] max-[820px]:h-10 max-[820px]:w-10 xl:h-14 xl:w-14 xl:text-[12px]"
                 : "h-11 w-11 text-[11px] xl:h-12 xl:w-12",
               !logoUrl && "bg-gradient-to-br from-[#0F766E] to-[#115E59]",
             )}
@@ -656,8 +743,11 @@ export function TenantMacDock({
 
         <nav
           className={cn(
-            "flex min-h-0 w-full flex-1 flex-col overflow-visible",
-            expanded ? "gap-1.5 xl:gap-2" : "items-center gap-1",
+            // Scroll nav when viewport is short; footer (brand + collapse) stays pinned.
+            // Keep scrollable but hide the scrollbar chrome.
+            "flex min-h-0 w-full flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain",
+            "[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
+            expanded ? "gap-1 max-[820px]:gap-0.5 xl:gap-2" : "items-center gap-1",
           )}
           aria-label="Primary navigation"
         >
@@ -680,22 +770,27 @@ export function TenantMacDock({
                   aria-current={active ? "page" : undefined}
                   onClick={(event) => onGuardedLinkClick(item.to, event, active)}
                   className={cn(
-                    "flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 transition-colors xl:gap-3.5 xl:px-3 xl:py-3",
+                    "flex w-full shrink-0 items-center gap-2.5 rounded-xl border px-2 py-2 transition-colors max-[820px]:gap-2 max-[820px]:py-1.5 xl:gap-3.5 xl:px-3 xl:py-3",
                     active
-                      ? "bg-[#0F766E]/12 text-[#0F172A] ring-1 ring-[#0F766E]/25 dark:bg-[#0F766E]/30 dark:text-[#99F6E4] dark:ring-[#2DD4BF]/35"
-                      : "text-slate-600 hover:bg-white/70 hover:text-slate-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-zinc-100",
+                      ? "border-[#0F766E]/35 bg-[#0F766E]/12 text-[#0F172A] dark:border-[#2DD4BF]/45 dark:bg-[#0F766E]/25 dark:text-[#CCFBF1]"
+                      : "border-transparent text-slate-600 hover:border-slate-200/80 hover:bg-white/70 hover:text-slate-900 dark:text-zinc-300 dark:hover:border-white/15 dark:hover:bg-white/10 dark:hover:text-zinc-50",
                   )}
                 >
                   <span
                     className={cn(
-                      "grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/70 dark:border-white/10 xl:h-11 xl:w-11",
+                      "grid h-9 w-9 shrink-0 place-items-center rounded-xl border max-[820px]:h-8 max-[820px]:w-8 xl:h-11 xl:w-11",
                       active
-                        ? "bg-white text-[#0F766E] shadow-sm ring-1 ring-[#0F766E]/15 dark:bg-white/12 dark:text-[#5EEAD4] dark:ring-[#2DD4BF]/25"
-                        : "bg-white/70 text-slate-700 dark:bg-white/5 dark:text-zinc-300",
+                        ? "border-[#99F6E4]/80 bg-white text-[#0F766E] shadow-sm dark:border-[#2DD4BF]/50 dark:bg-[#0F766E]/35 dark:text-[#5EEAD4]"
+                        : "border-slate-200/90 bg-white/80 text-slate-700 dark:border-white/25 dark:bg-zinc-800/80 dark:text-zinc-100",
                     )}
                   >
                     <Icon
-                      className={cn("h-5 w-5 xl:h-6 xl:w-6", active && "dark:text-[#5EEAD4]")}
+                      className={cn(
+                        "h-5 w-5 max-[820px]:h-4 max-[820px]:w-4 xl:h-6 xl:w-6",
+                        active
+                          ? "text-[#0F766E] dark:text-[#5EEAD4]"
+                          : "text-slate-700 dark:text-zinc-100",
+                      )}
                       strokeWidth={active ? 2.35 : 2}
                     />
                   </span>
@@ -715,13 +810,13 @@ export function TenantMacDock({
                 onClick={(event) => onGuardedLinkClick(item.to, event, active)}
                 onMouseEnter={() => setHovered(index)}
                 className={cn(
-                  "group relative z-10 flex h-14 w-14 shrink-0 items-center justify-center xl:h-16 xl:w-16",
+                  "group relative z-10 flex h-12 w-12 shrink-0 items-center justify-center max-[820px]:h-11 max-[820px]:w-11 xl:h-16 xl:w-16",
                   distance === 0 && "z-50",
                 )}
               >
                 <span
                   className={cn(
-                    "pointer-events-none absolute z-[60] whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[11px] font-semibold text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100",
+                    "pointer-events-none absolute z-[60] whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[11px] font-semibold text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 dark:bg-zinc-100 dark:text-zinc-900",
                     tooltipSide,
                   )}
                 >
@@ -737,23 +832,25 @@ export function TenantMacDock({
                 >
                   <span
                     className={cn(
-                      "grid h-12 w-12 place-items-center rounded-xl border border-white/70 bg-gradient-to-br from-white/95 to-white/70 shadow-[0_6px_18px_-10px_rgba(15,23,42,0.45)] xl:h-14 xl:w-14",
-                      active && "ring-2 ring-[#0F766E]/40",
+                      "grid h-11 w-11 place-items-center rounded-xl border shadow-[0_6px_18px_-10px_rgba(15,23,42,0.45)] max-[820px]:h-10 max-[820px]:w-10 xl:h-14 xl:w-14",
+                      active
+                        ? "border-[#99F6E4]/90 bg-white ring-2 ring-[#0F766E]/40 dark:border-[#2DD4BF]/55 dark:bg-[#0F766E]/40 dark:ring-[#2DD4BF]/45"
+                        : "border-slate-200/90 bg-gradient-to-br from-white/95 to-white/70 dark:border-white/25 dark:bg-gradient-to-br dark:from-zinc-800 dark:to-zinc-900 dark:shadow-black/40",
                     )}
                   >
                     <Icon
                       className={cn(
-                        "h-6 w-6 xl:h-7 xl:w-7",
+                        "h-5 w-5 max-[820px]:h-4 max-[820px]:w-4 xl:h-7 xl:w-7",
                         active
                           ? "text-[#0F766E] dark:text-[#5EEAD4]"
-                          : "text-slate-700 dark:text-zinc-300",
+                          : "text-slate-700 dark:text-zinc-100",
                       )}
                       strokeWidth={active ? 2.35 : 2}
                     />
                   </span>
                   <span
                     className={cn(
-                      "mt-1 h-1 w-1 rounded-full bg-slate-800 transition-opacity",
+                      "mt-1 h-1 w-1 rounded-full bg-slate-800 transition-opacity dark:bg-zinc-200",
                       active ? "opacity-100" : "opacity-0",
                     )}
                   />
@@ -765,12 +862,20 @@ export function TenantMacDock({
 
         <div
           className={cn(
-            "mt-auto flex shrink-0 flex-col gap-1.5 border-t border-slate-200/60 pt-2 dark:border-white/10",
+            "mt-auto flex shrink-0 flex-col gap-1 border-t border-slate-200/60 pt-1.5 dark:border-white/10 max-[820px]:gap-0.5 max-[820px]:pt-1 xl:gap-1.5 xl:pt-2",
             expanded ? "items-stretch" : "items-center",
           )}
         >
-          <div className={cn(expanded ? "mx-0.5 px-1.5 py-1.5" : "")}>
-            <FeezoBrand compact={!expanded} />
+          <div className={cn(expanded ? "mx-0.5 px-1 py-1 xl:px-1.5 xl:py-1.5" : "py-0.5")}>
+            <FeezoBrand
+              compact={!expanded}
+              markClassName={
+                expanded
+                  ? "h-7 w-7 max-[820px]:h-6 max-[820px]:w-6"
+                  : "h-9 w-9 max-[820px]:h-8 max-[820px]:w-8 xl:h-11 xl:w-11"
+              }
+              className={expanded ? "gap-2" : undefined}
+            />
           </div>
 
           {showCollapse && (
@@ -786,7 +891,9 @@ export function TenantMacDock({
               title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
               className={cn(
                 "flex shrink-0 items-center justify-center gap-2 rounded-xl text-slate-500 transition-colors hover:bg-white/70 hover:text-[#0F766E] dark:hover:bg-white/5",
-                expanded ? "mx-1 h-10 w-auto px-3" : "h-10 w-10",
+                expanded
+                  ? "mx-1 h-9 w-auto px-3 max-[820px]:h-8 xl:h-10"
+                  : "h-9 w-9 max-[820px]:h-8 max-[820px]:w-8 xl:h-10 xl:w-10",
               )}
             >
               {collapsed ? (

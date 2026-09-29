@@ -28,9 +28,12 @@ import {
   defaultFeeCollectionStartMonth,
   installmentLabel,
   sumFeeSchedule,
+  useTenantStore,
+  yearScopedId,
   type FeeTerm,
   type PaymentCategory,
 } from "@/lib/tenant-store";
+import { formatMoney } from "@/lib/money";
 
 function slugFromLabel(label: string): string {
   return label
@@ -57,7 +60,7 @@ function categorySummary(cat: PaymentCategory): string {
   const total = sumFeeSchedule(cat.feeSchedule);
   const n = cat.feeSchedule.length;
   const cycle = cat.billingCycle ?? "Monthly";
-  return `${cycle} · ${n} × avg ₹ ${Math.round(total / Math.max(1, n)).toLocaleString("en-IN")} · total ₹ ${total.toLocaleString("en-IN")}`;
+  return `${cycle} · ${n} × avg ${formatMoney(Math.round(total / Math.max(1, n)))} · total ${formatMoney(total)}`;
 }
 
 type FeeCategoriesCardProps = {
@@ -71,6 +74,7 @@ export function FeeCategoriesCard({
   setPaymentCategories,
   feeTerms,
 }: FeeCategoriesCardProps) {
+  const { academicYear } = useTenantStore();
   const startMonthFallback = defaultFeeCollectionStartMonth(feeTerms);
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -160,6 +164,7 @@ export function FeeCategoriesCard({
     const slug = slugFromLabel(label.replace(/\s*fee\s*$/i, "") || label);
 
     if (editingId) {
+      const existing = paymentCategories.find((c) => c.id === editingId);
       const updated: PaymentCategory = {
         id: editingId,
         label,
@@ -172,15 +177,19 @@ export function FeeCategoriesCard({
         feeCollectionStartMonth:
           schedule.billingCycle === "Monthly" ? schedule.feeCollectionStartMonth : undefined,
         active,
+        academicYear: existing?.academicYear ?? academicYear,
       };
       setPaymentCategories((prev) => prev.map((c) => (c.id === editingId ? updated : c)));
       persist(updated);
       toast.success(`Fee category updated · ${label}`);
     } else {
-      const id = nextPrefixedId(
-        "CAT",
-        paymentCategories.map((c) => c.id),
-        3,
+      const id = yearScopedId(
+        nextPrefixedId(
+          "CAT",
+          paymentCategories.map((c) => c.id),
+          3,
+        ),
+        academicYear,
       );
       const created: PaymentCategory = {
         id,
@@ -194,6 +203,7 @@ export function FeeCategoriesCard({
         feeCollectionStartMonth:
           schedule.billingCycle === "Monthly" ? schedule.feeCollectionStartMonth : undefined,
         active,
+        academicYear,
       };
       setPaymentCategories((prev) => [...prev, created]);
       persist(created);
@@ -232,10 +242,13 @@ export function FeeCategoriesCard({
       startMonthFallback,
     });
     const feeSchedule = feeScheduleFromDraft(draft);
-    const id = nextPrefixedId(
-      "CAT",
-      paymentCategories.map((c) => c.id),
-      3,
+    const id = yearScopedId(
+      nextPrefixedId(
+        "CAT",
+        paymentCategories.map((c) => c.id),
+        3,
+      ),
+      academicYear,
     );
     const created: PaymentCategory = {
       id,
@@ -248,6 +261,7 @@ export function FeeCategoriesCard({
       feeSchedule,
       feeCollectionStartMonth: draft.feeCollectionStartMonth,
       active: true,
+      academicYear,
     };
     setPaymentCategories((prev) => [...prev, created]);
     persist(created);

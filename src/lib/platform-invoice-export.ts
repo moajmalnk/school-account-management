@@ -3,6 +3,7 @@ import autoTable from "jspdf-autotable";
 
 import { formatDownloadFilename, todayStamp } from "@/lib/download-names";
 import { emitPdf } from "@/lib/finance-export";
+import { asciiCurrencyText, formatMoneyPdf } from "@/lib/money";
 
 export type PlatformInvoiceDoc = {
   id: string;
@@ -42,10 +43,9 @@ const INK = {
   white: [255, 255, 255] as [number, number, number],
 };
 
-/** Strip glyphs Helvetica cannot draw (₹, ·, fancy dashes) that break PDF alignment. */
+/** Strip glyphs Helvetica cannot draw (currency symbols, ·, fancy dashes) that break PDF alignment. */
 export function pdfSafe(text: string): string {
-  return String(text ?? "")
-    .replace(/₹/g, "Rs.")
+  return asciiCurrencyText(String(text ?? ""))
     .replace(/[·•∙]/g, " | ")
     .replace(/[−–—]/g, "-")
     .replace(/[“”]/g, '"')
@@ -53,18 +53,13 @@ export function pdfSafe(text: string): string {
     .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "");
 }
 
-function formatAmount(amount: number): string {
-  const n = Math.round(Math.abs(amount));
-  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+function formatCount(n: number): string {
+  return String(Math.round(Math.abs(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
-/** ASCII-safe money for PDF (never use ₹ in Helvetica). */
+/** ASCII-safe money for PDF — Helvetica cannot draw most currency glyphs. */
 export function platformMoney(currency: string, amount: number): string {
-  const n = formatAmount(amount);
-  if (currency === "INR") return `Rs. ${n}`;
-  if (currency === "USD") return `USD ${n}`;
-  if (currency === "EUR") return `EUR ${n}`;
-  return `${pdfSafe(currency)} ${n}`;
+  return formatMoneyPdf(Math.abs(amount), currency);
 }
 
 export function isFlatPricing(invoice: PlatformInvoiceDoc): boolean {
@@ -79,7 +74,7 @@ export function platformLineDescription(invoice: PlatformInvoiceDoc): string {
     return `Flat period licence (${pdfSafe(invoice.billingCycle)})`;
   }
   const seats = invoice.studentsBilled;
-  const seatLabel = seats === 1 ? "1 student" : `${formatAmount(seats)} students`;
+  const seatLabel = seats === 1 ? "1 student" : `${formatCount(seats)} students`;
   return `Seat licence - ${seatLabel} x ${platformMoney(invoice.currency, invoice.ratePerStudent)}`;
 }
 
@@ -88,7 +83,7 @@ export function platformCoverLine(invoice: PlatformInvoiceDoc): string {
     return `Covers flat ${pdfSafe(invoice.billingCycle).toLowerCase()} platform licence.`;
   }
   const seats = invoice.studentsBilled;
-  const seatLabel = seats === 1 ? "1 seat" : `${formatAmount(seats)} seats`;
+  const seatLabel = seats === 1 ? "1 seat" : `${formatCount(seats)} seats`;
   return `Covers ${seatLabel} - ${pdfSafe(invoice.billingCycle)} licence.`;
 }
 

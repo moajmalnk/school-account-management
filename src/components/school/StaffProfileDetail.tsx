@@ -73,6 +73,7 @@ import { formatEventDateTime, formatInAppZone } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { buildStaffPayrollStatement } from "@/lib/staff-payroll";
 import { downloadStaffPayrollReportPdf, receiptBrandingFromSchool } from "@/lib/finance-export";
+import { formatAmount, formatMoney, moneyColumnLabel, moneySymbol } from "@/lib/money";
 
 const CARD_FRAME =
   "rounded-xl border border-slate-100 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#171717] dark:text-zinc-100 dark:shadow-black/40";
@@ -289,8 +290,15 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
   const navigate = useNavigate();
   const search = useSearch({ from: "/tenant/staff" });
   const { session } = useAuth();
-  const { setStaff, departments, roles, tenantUsers, setTenantUsers, schoolDetails, activeBranchId } =
-    useTenantStore();
+  const {
+    setStaff,
+    activeDepartments: departments,
+    activeRoles: roles,
+    tenantUsers,
+    setTenantUsers,
+    schoolDetails,
+    activeBranchId,
+  } = useTenantStore();
   const schoolName = schoolDetails.name || session?.tenantName || "School";
 
   const syncStaff = async (updated: Staff) => {
@@ -573,13 +581,7 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
           monthSettled: isSalaryMonthSettled(salaryHistory, row.month, pay.payable),
         };
       }),
-    [
-      attendanceHistory,
-      staff.basicSalary,
-      staff.additionalAllowances,
-      payrollMonth,
-      salaryHistory,
-    ],
+    [attendanceHistory, staff.basicSalary, staff.additionalAllowances, payrollMonth, salaryHistory],
   );
 
   const lastSalaryPayment = salaryHistory[0] ?? null;
@@ -968,7 +970,7 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
               <div className="mt-5 space-y-4">
                 <div>
                   <label className={META_LABEL} htmlFor="basic-salary">
-                    Basic Salary (₹)
+                    {moneyColumnLabel("Basic Salary")}
                   </label>
                   <Input
                     id="basic-salary"
@@ -983,7 +985,7 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                 </div>
                 <div>
                   <label className={META_LABEL} htmlFor="additional-allowances">
-                    Bonus / Additional Allowances (₹)
+                    {moneyColumnLabel("Bonus / Additional Allowances")}
                   </label>
                   <Input
                     id="additional-allowances"
@@ -1003,15 +1005,15 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                   </div>
                   <div className="mt-2 flex min-w-0 items-baseline gap-1.5">
                     <span className="shrink-0 font-mono text-base font-bold text-black sm:text-lg">
-                      ₹
+                      {moneySymbol()}
                     </span>
                     <span
                       className={cn(
                         "min-w-0 flex-1 break-all font-mono font-bold tracking-tight text-black",
-                        totalSalarySizeClass(totalSalary.toLocaleString("en-IN")),
+                        totalSalarySizeClass(formatAmount(totalSalary)),
                       )}
                     >
-                      {totalSalary.toLocaleString("en-IN")}
+                      {formatAmount(totalSalary)}
                     </span>
                   </div>
                   <p className="mt-2 text-[11px] text-black/45">
@@ -1028,7 +1030,9 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
             <section className={cn(CARD_FRAME, "xl:col-span-4")}>
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-base font-semibold text-black dark:text-zinc-100">This Month</h2>
+                  <h2 className="text-base font-semibold text-black dark:text-zinc-100">
+                    This Month
+                  </h2>
                   <p className="mt-1 text-[12.5px] text-black/50 dark:text-zinc-400">
                     {formatPayrollMonthLabel(payrollMonth)} · used for salary payable
                   </p>
@@ -1079,12 +1083,12 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                       Payable Salary
                     </div>
                     <div className="mt-1 font-mono text-[20px] font-bold text-[#0F766E] dark:text-[#5EEAD4]">
-                      ₹ {attendancePay.payable.toLocaleString("en-IN")}
+                      {formatMoney(attendancePay.payable)}
                     </div>
                     <p className="mt-1 text-[11px] text-black/50 dark:text-zinc-400">
-                      Gross ₹ {staffGrossSalary(staff).toLocaleString("en-IN")} ×{" "}
-                      {attendancePay.payableDays}/{attendancePay.attendance.workingDays} payable
-                      days ({Math.round(attendancePay.ratio * 100)}%)
+                      Gross {formatMoney(staffGrossSalary(staff))} × {attendancePay.payableDays}/
+                      {attendancePay.attendance.workingDays} payable days (
+                      {Math.round(attendancePay.ratio * 100)}%)
                     </p>
                     {currentMonthSettled ? (
                       <div className="mt-3 space-y-2">
@@ -1118,8 +1122,7 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                         }
                       >
                         <Wallet className="mr-1.5 h-3.5 w-3.5" />
-                        Pay ₹{" "}
-                        {(currentMonthOutstanding || attendancePay.payable).toLocaleString("en-IN")}
+                        Pay {formatMoney(currentMonthOutstanding || attendancePay.payable)}
                       </Button>
                     )}
                   </div>
@@ -1133,7 +1136,7 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                     Add a month below, or upload a CSV from Staff Directory → Attendance.
                   </p>
                   <p className="mt-3 font-mono text-[12px] text-black/55 dark:text-zinc-400">
-                    Full gross ₹ {staffGrossSalary(staff).toLocaleString("en-IN")} applies
+                    Full gross {formatMoney(staffGrossSalary(staff))} applies
                   </p>
                 </div>
               )}
@@ -1142,7 +1145,9 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
             <section className={cn(CARD_FRAME, "min-w-0 p-4 sm:p-6 xl:col-span-8")}>
               <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <h2 className="text-base font-semibold text-black dark:text-zinc-100">Record Attendance</h2>
+                  <h2 className="text-base font-semibold text-black dark:text-zinc-100">
+                    Record Attendance
+                  </h2>
                   <p className="mt-1 text-[12.5px] text-black/50 dark:text-zinc-400">
                     Payable days = present + paid leave. Unpaid leave is loss of pay.
                   </p>
@@ -1299,7 +1304,7 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                               </div>
                               <div className="shrink-0 text-right">
                                 <div className="font-mono text-[13px] font-semibold text-[#0F766E] dark:text-[#5EEAD4]">
-                                  ₹ {pay.payable.toLocaleString("en-IN")}
+                                  {formatMoney(pay.payable)}
                                 </div>
                                 <div className="mt-1">
                                   {monthSettled ? (
@@ -1371,115 +1376,115 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                       )}
                     </div>
                     <div className="mt-3 hidden overflow-x-auto rounded-lg border border-slate-100 dark:border-white/10 md:block">
-                    <table className="w-full min-w-[620px] text-left text-[12.5px]">
-                      <thead>
-                        <tr className="border-b border-slate-100 bg-slate-50 dark:border-white/10 dark:bg-zinc-900/70">
-                          {[
-                            "Month",
-                            "Present",
-                            "Paid",
-                            "Unpaid",
-                            "Working",
-                            "Rate",
-                            "Payable",
-                            "",
-                          ].map((header) => (
-                            <th
-                              key={header || "actions"}
-                              className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/50 dark:text-zinc-400"
-                            >
-                              {header}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {attendanceHistoryRows.map(
-                          ({ row, pay, isCurrent, monthPaid, monthSettled }) => (
-                            <tr
-                              key={row.month}
-                              className={cn(
-                                "border-b border-slate-50 last:border-0 dark:border-white/5",
-                                isCurrent && "bg-teal-50 dark:bg-teal-950/40",
-                              )}
-                            >
-                              <td className="px-3 py-3">
-                                <div className="font-medium text-black dark:text-zinc-100">
-                                  {formatPayrollMonthLabel(row.month)}
-                                </div>
-                                <div className="font-mono text-[10.5px] text-black/40 dark:text-zinc-500">
-                                  {row.month}
-                                  {isCurrent ? " · current" : ""}
-                                </div>
-                              </td>
-                              <td className="px-3 py-3 font-mono font-semibold text-black dark:text-zinc-100">
-                                {row.daysPresent}
-                              </td>
-                              <td className="px-3 py-3 font-mono text-black/70 dark:text-zinc-300">
-                                {row.paidLeaveDays || 0}
-                              </td>
-                              <td className="px-3 py-3 font-mono text-black/70 dark:text-zinc-300">
-                                {row.unpaidLeaveDays || 0}
-                              </td>
-                              <td className="px-3 py-3 font-mono text-black/70 dark:text-zinc-300">
-                                {row.workingDays}
-                              </td>
-                              <td className="px-3 py-3 font-mono text-black/70 dark:text-zinc-300">
-                                {Math.round(pay.ratio * 100)}%
-                              </td>
-                              <td className="px-3 py-3">
-                                <div className="font-mono font-semibold text-[#0F766E] dark:text-[#5EEAD4]">
-                                  ₹ {pay.payable.toLocaleString("en-IN")}
-                                </div>
-                                <div className="mt-1">
-                                  {monthSettled ? (
-                                    <span className="inline-flex rounded-full bg-[#D1F2E1] px-2 py-0.5 text-[10px] font-semibold text-[#059669] dark:bg-emerald-950/80 dark:text-emerald-300">
-                                      Paid
-                                    </span>
-                                  ) : monthPaid > 0 ? (
-                                    <span className="inline-flex rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[10px] font-semibold text-[#B45309] dark:bg-amber-950/80 dark:text-amber-300">
-                                      Partial
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-semibold text-black/55 dark:bg-zinc-800 dark:text-zinc-400">
-                                      Unpaid
-                                    </span>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="px-3 py-3 text-right">
-                                <div className="inline-flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setAttendanceForm({
-                                        month: row.month,
-                                        daysPresent: String(row.daysPresent),
-                                        workingDays: String(row.workingDays),
-                                        paidLeaveDays: String(row.paidLeaveDays || 0),
-                                        unpaidLeaveDays: String(row.unpaidLeaveDays || 0),
-                                      })
-                                    }
-                                    className="grid h-8 w-8 place-items-center rounded-full text-black/45 transition-colors hover:bg-[#0F766E] hover:text-white dark:text-zinc-400"
-                                    aria-label={`Edit ${row.month}`}
-                                  >
-                                    <Pencil className="h-3.5 w-3.5" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setPendingDeleteMonth(row.month)}
-                                    className="grid h-8 w-8 place-items-center rounded-full text-black/45 transition-colors hover:bg-[#EF4444] hover:text-white dark:text-zinc-400"
-                                    aria-label={`Remove ${row.month}`}
-                                  >
-                                    <X className="h-3.5 w-3.5" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ),
-                        )}
-                      </tbody>
-                    </table>
+                      <table className="w-full min-w-[620px] text-left text-[12.5px]">
+                        <thead>
+                          <tr className="border-b border-slate-100 bg-slate-50 dark:border-white/10 dark:bg-zinc-900/70">
+                            {[
+                              "Month",
+                              "Present",
+                              "Paid",
+                              "Unpaid",
+                              "Working",
+                              "Rate",
+                              "Payable",
+                              "",
+                            ].map((header) => (
+                              <th
+                                key={header || "actions"}
+                                className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-black/50 dark:text-zinc-400"
+                              >
+                                {header}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {attendanceHistoryRows.map(
+                            ({ row, pay, isCurrent, monthPaid, monthSettled }) => (
+                              <tr
+                                key={row.month}
+                                className={cn(
+                                  "border-b border-slate-50 last:border-0 dark:border-white/5",
+                                  isCurrent && "bg-teal-50 dark:bg-teal-950/40",
+                                )}
+                              >
+                                <td className="px-3 py-3">
+                                  <div className="font-medium text-black dark:text-zinc-100">
+                                    {formatPayrollMonthLabel(row.month)}
+                                  </div>
+                                  <div className="font-mono text-[10.5px] text-black/40 dark:text-zinc-500">
+                                    {row.month}
+                                    {isCurrent ? " · current" : ""}
+                                  </div>
+                                </td>
+                                <td className="px-3 py-3 font-mono font-semibold text-black dark:text-zinc-100">
+                                  {row.daysPresent}
+                                </td>
+                                <td className="px-3 py-3 font-mono text-black/70 dark:text-zinc-300">
+                                  {row.paidLeaveDays || 0}
+                                </td>
+                                <td className="px-3 py-3 font-mono text-black/70 dark:text-zinc-300">
+                                  {row.unpaidLeaveDays || 0}
+                                </td>
+                                <td className="px-3 py-3 font-mono text-black/70 dark:text-zinc-300">
+                                  {row.workingDays}
+                                </td>
+                                <td className="px-3 py-3 font-mono text-black/70 dark:text-zinc-300">
+                                  {Math.round(pay.ratio * 100)}%
+                                </td>
+                                <td className="px-3 py-3">
+                                  <div className="font-mono font-semibold text-[#0F766E] dark:text-[#5EEAD4]">
+                                    {formatMoney(pay.payable)}
+                                  </div>
+                                  <div className="mt-1">
+                                    {monthSettled ? (
+                                      <span className="inline-flex rounded-full bg-[#D1F2E1] px-2 py-0.5 text-[10px] font-semibold text-[#059669] dark:bg-emerald-950/80 dark:text-emerald-300">
+                                        Paid
+                                      </span>
+                                    ) : monthPaid > 0 ? (
+                                      <span className="inline-flex rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[10px] font-semibold text-[#B45309] dark:bg-amber-950/80 dark:text-amber-300">
+                                        Partial
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-semibold text-black/55 dark:bg-zinc-800 dark:text-zinc-400">
+                                        Unpaid
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-3 py-3 text-right">
+                                  <div className="inline-flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setAttendanceForm({
+                                          month: row.month,
+                                          daysPresent: String(row.daysPresent),
+                                          workingDays: String(row.workingDays),
+                                          paidLeaveDays: String(row.paidLeaveDays || 0),
+                                          unpaidLeaveDays: String(row.unpaidLeaveDays || 0),
+                                        })
+                                      }
+                                      className="grid h-8 w-8 place-items-center rounded-full text-black/45 transition-colors hover:bg-[#0F766E] hover:text-white dark:text-zinc-400"
+                                      aria-label={`Edit ${row.month}`}
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setPendingDeleteMonth(row.month)}
+                                      className="grid h-8 w-8 place-items-center rounded-full text-black/45 transition-colors hover:bg-[#EF4444] hover:text-white dark:text-zinc-400"
+                                      aria-label={`Remove ${row.month}`}
+                                    >
+                                      <X className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ),
+                          )}
+                        </tbody>
+                      </table>
                     </div>
                   </>
                 )}
@@ -1574,12 +1579,12 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
               <PayrollStatBox
                 label="Total Payable"
-                value={`₹ ${payrollStatement.totalPayable.toLocaleString("en-IN")}`}
+                value={`${formatMoney(payrollStatement.totalPayable)}`}
                 hint={`${monthlyPayrollLedger.length} payroll month${monthlyPayrollLedger.length === 1 ? "" : "s"} on record`}
               />
               <PayrollStatBox
                 label="Total Paid"
-                value={`₹ ${payrollStatement.totalPaid.toLocaleString("en-IN")}`}
+                value={`${formatMoney(payrollStatement.totalPaid)}`}
                 valueClassName="text-[#059669]"
                 hint={`${salaryHistory.length} payment${salaryHistory.length === 1 ? "" : "s"} recorded`}
               />
@@ -1590,7 +1595,7 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                   currentMonthSettled
                     ? "Settled for this payroll month"
                     : currentMonthOutstanding > 0
-                      ? `₹ ${currentMonthOutstanding.toLocaleString("en-IN")} due this month`
+                      ? `${formatMoney(currentMonthOutstanding)} due this month`
                       : "No outstanding balance"
                 }
               />
@@ -1609,7 +1614,7 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                   </div>
                   <div className="text-right">
                     <div className="font-mono text-[14px] font-semibold text-[#0F766E] dark:text-[#5EEAD4]">
-                      ₹ {lastSalaryPayment.amount.toLocaleString("en-IN")}
+                      {formatMoney(lastSalaryPayment.amount)}
                     </div>
                     <div className="font-mono text-[11px] text-black/45 dark:text-zinc-500">
                       {formatEventDateTime(lastSalaryPayment.paidAt)} · {lastSalaryPayment.mode}
@@ -1623,7 +1628,9 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
           <section className={CARD_FRAME}>
             <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <h2 className="text-base font-semibold text-black dark:text-zinc-100">Monthly Payroll Ledger</h2>
+                <h2 className="text-base font-semibold text-black dark:text-zinc-100">
+                  Monthly Payroll Ledger
+                </h2>
                 <p className="mt-1 text-[12.5px] text-black/50 dark:text-zinc-400">
                   Month-by-month payable vs paid · attendance drives the amount due.
                 </p>
@@ -1665,7 +1672,7 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                             Payable
                           </div>
                           <div className="mt-0.5 font-mono text-[12.5px] font-semibold text-black dark:text-zinc-100">
-                            ₹ {row.payable.toLocaleString("en-IN")}
+                            {formatMoney(row.payable)}
                           </div>
                         </div>
                         <div>
@@ -1673,7 +1680,7 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                             Paid
                           </div>
                           <div className="mt-0.5 font-mono text-[12.5px] font-semibold text-[#059669] dark:text-emerald-400">
-                            ₹ {row.paid.toLocaleString("en-IN")}
+                            {formatMoney(row.paid)}
                           </div>
                         </div>
                         <div>
@@ -1681,7 +1688,7 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                             Due
                           </div>
                           <div className="mt-0.5 font-mono text-[12.5px] font-semibold text-black dark:text-zinc-100">
-                            ₹ {row.outstanding.toLocaleString("en-IN")}
+                            {formatMoney(row.outstanding)}
                           </div>
                         </div>
                       </div>
@@ -1702,7 +1709,7 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                             })
                           }
                         >
-                          Pay ₹ {row.outstanding.toLocaleString("en-IN")}
+                          Pay {formatMoney(row.outstanding)}
                         </Button>
                       )}
                     </article>
@@ -1737,12 +1744,13 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                           key={row.month}
                           className={cn(
                             "border-b border-slate-50 last:border-0 dark:border-white/5",
-                            row.month === payrollMonth &&
-                              "bg-[#F0FDFA]/70 dark:bg-teal-950/45",
+                            row.month === payrollMonth && "bg-[#F0FDFA]/70 dark:bg-teal-950/45",
                           )}
                         >
                           <td className="px-3 py-3">
-                            <div className="font-medium text-black dark:text-zinc-100">{row.monthLabel}</div>
+                            <div className="font-medium text-black dark:text-zinc-100">
+                              {row.monthLabel}
+                            </div>
                             <div className="font-mono text-[10.5px] text-black/40 dark:text-zinc-500">
                               {row.month}
                               {row.month === payrollMonth ? " · current" : ""}
@@ -1752,13 +1760,13 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                             {row.attendanceLabel}
                           </td>
                           <td className="px-3 py-3 font-mono font-semibold text-black dark:text-zinc-100">
-                            ₹ {row.payable.toLocaleString("en-IN")}
+                            {formatMoney(row.payable)}
                           </td>
                           <td className="px-3 py-3 font-mono font-semibold text-[#059669] dark:text-emerald-400">
-                            ₹ {row.paid.toLocaleString("en-IN")}
+                            {formatMoney(row.paid)}
                           </td>
                           <td className="px-3 py-3 font-mono font-semibold text-black dark:text-zinc-100">
-                            ₹ {row.outstanding.toLocaleString("en-IN")}
+                            {formatMoney(row.outstanding)}
                           </td>
                           <td className="px-3 py-3">
                             <SalaryStatusBadge status={row.status} />
@@ -1797,7 +1805,9 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
           <section className={CARD_FRAME}>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <h2 className="text-base font-semibold text-black dark:text-zinc-100">Payment History</h2>
+                <h2 className="text-base font-semibold text-black dark:text-zinc-100">
+                  Payment History
+                </h2>
                 <p className="mt-1 text-[12.5px] text-black/50 dark:text-zinc-400">
                   Individual salary disbursements for {staff.name}.
                 </p>
@@ -1848,17 +1858,24 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                       {salaryHistory.map((row) => {
                         const month = salaryHistoryPayrollMonth(row);
                         return (
-                          <tr key={row.id} className="border-b border-slate-50 last:border-0 dark:border-white/5">
+                          <tr
+                            key={row.id}
+                            className="border-b border-slate-50 last:border-0 dark:border-white/5"
+                          >
                             <td className="px-3 py-3 font-mono text-[11px] text-black/60 dark:text-zinc-400">
                               {formatEventDateTime(row.paidAt)}
                             </td>
                             <td className="px-3 py-3 text-black/70 dark:text-zinc-300">
                               {month ? formatPayrollMonthLabel(month) : "—"}
                             </td>
-                            <td className="px-3 py-3 font-medium text-black dark:text-zinc-100">{row.description}</td>
-                            <td className="px-3 py-3 text-black/65 dark:text-zinc-300">{row.mode}</td>
+                            <td className="px-3 py-3 font-medium text-black dark:text-zinc-100">
+                              {row.description}
+                            </td>
+                            <td className="px-3 py-3 text-black/65 dark:text-zinc-300">
+                              {row.mode}
+                            </td>
                             <td className="px-3 py-3 font-mono font-semibold text-black dark:text-zinc-100">
-                              ₹ {row.amount.toLocaleString("en-IN")}
+                              {formatMoney(row.amount)}
                             </td>
                             <td className="px-3 py-3">
                               <span
@@ -1888,20 +1905,26 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
         <section className={CARD_FRAME}>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h2 className="text-base font-semibold text-black dark:text-zinc-100">Workspace Login</h2>
+              <h2 className="text-base font-semibold text-black dark:text-zinc-100">
+                Workspace Login
+              </h2>
               <p className="mt-1 text-[12.5px] leading-relaxed text-black/55 dark:text-zinc-400">
                 Allow this staff member to sign in with limited module permissions.
               </p>
               {linkedUser ? (
                 <div className="mt-2 text-[12px] text-black/60 dark:text-zinc-400">
-                  <div className="font-medium text-black dark:text-zinc-100">{linkedUser.email}</div>
+                  <div className="font-medium text-black dark:text-zinc-100">
+                    {linkedUser.email}
+                  </div>
                   <div className="mt-0.5">
                     {linkedUser.active ? "Active" : "Inactive"} ·{" "}
                     {summarizePermissions(linkedUser.permissions)}
                   </div>
                 </div>
               ) : (
-                <p className="mt-2 text-[12px] text-black/45 dark:text-zinc-500">No login enabled yet</p>
+                <p className="mt-2 text-[12px] text-black/45 dark:text-zinc-500">
+                  No login enabled yet
+                </p>
               )}
             </div>
             <div className="flex flex-wrap gap-2">
@@ -2418,7 +2441,7 @@ function PayrollDueBox({
           !cleared && overdue ? "text-white" : "text-black dark:text-zinc-100",
         )}
       >
-        ₹ {totalDue.toLocaleString("en-IN")}
+        {formatMoney(totalDue)}
       </div>
       <span
         className={cn(
@@ -2455,9 +2478,12 @@ function SalaryStatusBadge({
     <span
       className={cn(
         "inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold",
-        status === "Paid" && "bg-[#D1F2E1] text-[#059669] dark:bg-emerald-950/80 dark:text-emerald-300",
-        status === "Queued" && "bg-[#FEF3C7] text-[#B45309] dark:bg-amber-950/80 dark:text-amber-300",
-        status === "Partial" && "bg-[#FEF3C7] text-[#B45309] dark:bg-amber-950/80 dark:text-amber-300",
+        status === "Paid" &&
+          "bg-[#D1F2E1] text-[#059669] dark:bg-emerald-950/80 dark:text-emerald-300",
+        status === "Queued" &&
+          "bg-[#FEF3C7] text-[#B45309] dark:bg-amber-950/80 dark:text-amber-300",
+        status === "Partial" &&
+          "bg-[#FEF3C7] text-[#B45309] dark:bg-amber-950/80 dark:text-amber-300",
         status === "Due" && "bg-[#FEE2E2] text-[#EF4444] dark:bg-red-950/80 dark:text-red-300",
         status === "No due" && "bg-[#F4F4F5] text-black/55 dark:bg-zinc-800 dark:text-zinc-400",
       )}
@@ -2495,7 +2521,7 @@ function SalaryPaymentCard({ row }: { row: StaffSalaryHistoryEntry }) {
       <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-200/70 pt-3 dark:border-white/10">
         <span className="text-[12px] text-black/55 dark:text-zinc-400">{row.mode}</span>
         <span className="font-mono text-[14px] font-semibold text-[#0F766E] dark:text-[#5EEAD4]">
-          ₹ {row.amount.toLocaleString("en-IN")}
+          {formatMoney(row.amount)}
         </span>
       </div>
     </article>

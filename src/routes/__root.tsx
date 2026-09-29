@@ -6,6 +6,8 @@ import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
 import { PwaUpdateToast } from "@/components/pwa/PwaUpdateToast";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/lib/auth";
+import { LocaleProvider } from "@/lib/locale/LocaleProvider";
+import { OrgCurrencyBridge } from "@/lib/locale/OrgCurrencyBridge";
 import { PwaProvider } from "@/lib/pwa";
 import { applyWorkspaceThemeMode, peekStoredThemeMode } from "@/lib/tenant-store";
 
@@ -21,7 +23,9 @@ function NotFoundComponent() {
     <div className="flex min-h-screen items-center justify-center bg-zinc-100 px-4 dark:bg-zinc-950">
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold text-zinc-950 dark:text-zinc-50">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-zinc-950 dark:text-zinc-50">Page not found</h2>
+        <h2 className="mt-4 text-xl font-semibold text-zinc-950 dark:text-zinc-50">
+          Page not found
+        </h2>
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
           The page you're looking for doesn't exist or has been moved.
         </p>
@@ -91,12 +95,15 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <PwaProvider>
-          <Outlet />
-          <PwaInstallBanner />
-          <PwaUpdateToast />
-          <Toaster />
-        </PwaProvider>
+        <LocaleProvider>
+          <OrgCurrencyBridge />
+          <PwaProvider>
+            <Outlet />
+            <PwaInstallBanner />
+            <PwaUpdateToast />
+            <Toaster />
+          </PwaProvider>
+        </LocaleProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

@@ -1,6 +1,7 @@
 /** BugRicer Notify API — WhatsApp bulk/single send + Jinja-style templates */
 
 import type { ClassConfig, Student } from "@/lib/tenant-store";
+import { formatMoney } from "@/lib/money";
 
 const DEFAULT_API_KEY = "0fd1dd43b6c3ff5bb3770dfdd9c5346a";
 const DIRECT_ENDPOINT = "https://notifyapi.bugricer.com/wapp/api/send";
@@ -139,7 +140,12 @@ export function renderWhatsAppTemplate(
   template: string,
   vars: Record<string, string | number | undefined | null>,
 ) {
-  return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, key: string) => {
+  // Amount vars now include the currency; drop a legacy literal "₹ " saved before {{amount}}.
+  const normalized = template.replace(
+    /(?:\u20B9|Rs\.?)\s*(\{\{\s*(?:amount|overdue_amount|due)\s*\}\})/gi,
+    "$1",
+  );
+  return normalized.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, key: string) => {
     const value = vars[key];
     if (value === undefined || value === null) return "";
     return String(value);
@@ -161,7 +167,7 @@ export const DEFAULT_OVERDUE_WHATSAPP_TEMPLATE = `Dear {{guardian}},
 
 This is a fee reminder from {{school}} for {{student_name}} ({{class}}).
 
-Outstanding balance: ₹ {{amount}}
+Outstanding balance: {{amount}}
 Due by: {{due_date}}
 
 Kindly clear the dues at the earliest.
@@ -200,10 +206,6 @@ export function resolveStudentDueDate(student: Student, classes?: ClassConfig[])
   return endOfMonthLabel();
 }
 
-export function formatInrAmount(amount: number) {
-  return amount.toLocaleString("en-IN");
-}
-
 export function buildStudentWhatsAppVars(
   student: Student,
   options?: {
@@ -225,9 +227,9 @@ export function buildStudentWhatsAppVars(
     cls: student.cls,
     student_id: student.id,
     id: student.id,
-    amount: formatInrAmount(amount),
-    overdue_amount: formatInrAmount(amount),
-    due: formatInrAmount(amount),
+    amount: formatMoney(amount),
+    overdue_amount: formatMoney(amount),
+    due: formatMoney(amount),
     amount_raw: String(amount),
     due_date: dueDate,
     fees_status: feesStatus,

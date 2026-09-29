@@ -47,6 +47,7 @@ import {
   withCurrentBusPointOption,
   upsertStudentInSnapshot,
   useTenantStore,
+  yearScopedId,
   type GuardianRelation,
   type Student,
   type StudentFeeBreak,
@@ -64,6 +65,7 @@ import {
   studentSchedulePeriodOptions,
   unpaidAmountCoveredByBreak,
 } from "@/lib/student-fees";
+import { formatMoney } from "@/lib/money";
 
 type StudentDraft = {
   name: string;
@@ -197,9 +199,9 @@ export function StudentEditPage() {
   const {
     activeStudents: students,
     setStudents,
-    classes,
+    activeClasses: classes,
     setClasses,
-    transportRoutes,
+    activeTransportRoutes: transportRoutes,
     academicYear,
     activeFeeTerms,
     activePayments,
@@ -455,14 +457,20 @@ export function StudentEditPage() {
       toast.message(`Using existing class ${existing.className}`);
       return;
     }
-    const created = buildClassFromLabel(
-      nextPrefixedId(
-        "CLS",
-        classes.map((c) => c.id),
-        3,
+    const created = {
+      ...buildClassFromLabel(
+        yearScopedId(
+          nextPrefixedId(
+            "CLS",
+            classes.map((c) => c.id),
+            3,
+          ),
+          academicYear,
+        ),
+        className,
       ),
-      className,
-    );
+      academicYear,
+    };
     setSavingClass(true);
     try {
       setClasses((prev) => [...prev, created]);
@@ -513,7 +521,10 @@ export function StudentEditPage() {
       toast.error("Class is required");
       return;
     }
-    const concessionError = validateConcessionFees(concession.hasConcession, concession.concessionFees);
+    const concessionError = validateConcessionFees(
+      concession.hasConcession,
+      concession.concessionFees,
+    );
     if (concessionError) {
       toast.error(concessionError);
       return;
@@ -562,7 +573,10 @@ export function StudentEditPage() {
       toast.error("Fill required fields before collecting fee");
       return;
     }
-    const concessionError = validateConcessionFees(concession.hasConcession, concession.concessionFees);
+    const concessionError = validateConcessionFees(
+      concession.hasConcession,
+      concession.concessionFees,
+    );
     if (concessionError) {
       toast.error(concessionError);
       return;
@@ -980,7 +994,7 @@ export function StudentEditPage() {
               <div className="text-[12px] text-slate-600 dark:text-zinc-300">
                 Vehicle fee for selected route:{" "}
                 <span className="font-mono font-semibold text-slate-900 dark:text-teal-50">
-                  ₹ {draftTransportFee.amount.toLocaleString("en-IN")}
+                  {formatMoney(draftTransportFee.amount)}
                 </span>
                 <span className="text-slate-500 dark:text-zinc-400">
                   {" "}

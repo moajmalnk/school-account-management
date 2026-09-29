@@ -41,7 +41,7 @@ export function slugFromStepNumber(step: number): Exclude<SignupStepSlug, "succe
 
 export const SIGNUP_PLANS = MARKETING.pricing.plans.map((p) => ({
   name: p.name as "Basic" | "Premium" | "Enterprise",
-  monthly: p.monthly,
+  monthlyInr: p.monthlyInr,
   blurb: p.blurb,
   features: [...p.features],
   highlight: p.highlight,
@@ -88,6 +88,8 @@ export type SignupFormState = {
   password: string;
   passwordConfirm: string;
   tier: "Basic" | "Premium" | "Enterprise";
+  /** Organization base currency; empty until the visitor's detected currency is applied. */
+  currency: string;
   agreeTerms: boolean;
 };
 
@@ -108,6 +110,7 @@ export const EMPTY_SIGNUP: SignupFormState = {
   password: "",
   passwordConfirm: "",
   tier: "Premium",
+  currency: "",
   agreeTerms: false,
 };
 

@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { formatMoney } from "@/lib/money";
 
 export type CsvImportIssue = {
   line: number;
@@ -168,7 +169,7 @@ export function CsvBulkImportDialog({
           <>
             <div className="grid grid-cols-2 gap-2 px-5 py-4 sm:grid-cols-4 sm:px-6">
               <ImportStat label="Ready" value={String(validCount)} />
-              <ImportStat label="Amount" value={`₹ ${totalAmount.toLocaleString("en-IN")}`} />
+              <ImportStat label="Amount" value={`${formatMoney(totalAmount)}`} />
               <ImportStat label={duplicateStatLabel} value={String(duplicateCount)} muted />
               <ImportStat label="Errors" value={String(invalidCount)} muted={invalidCount === 0} />
             </div>
@@ -203,7 +204,7 @@ export function CsvBulkImportDialog({
                             : "text-black",
                         )}
                       >
-                        ₹ {row.amount.toLocaleString("en-IN")}
+                        {formatMoney(row.amount)}
                       </div>
                     </div>
                   ))}
