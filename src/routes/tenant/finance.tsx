@@ -12,6 +12,8 @@ type FinanceSearch = {
   studentId?: string;
   /** Receive Payment · open receipt in edit mode */
   paymentId?: string;
+  /** Make Payment · open voucher in edit mode */
+  disbursementId?: string;
   amount?: string;
   /** Payroll month · YYYY-MM */
   month?: string;
@@ -34,6 +36,7 @@ export const Route = createFileRoute("/tenant/finance")({
       staffId: optionalString(search.staffId),
       studentId: optionalString(search.studentId),
       paymentId: optionalString(search.paymentId),
+      disbursementId: optionalString(search.disbursementId),
       amount: optionalString(search.amount),
       month:
         typeof search.month === "string" && /^\d{4}-\d{2}$/.test(search.month.trim())

@@ -373,6 +373,7 @@ import {
 } from "@/components/school/FinanceReports";
 import {
   GlAccountStatementReport,
+  type GlStatementVoucher,
   GlBalanceSheetReport,
   GlJournalsReport,
   GlProfitLossReport,
@@ -7109,7 +7110,7 @@ export function FinanceModule() {
   if (view === "ledger") {
     return (
       <div className="w-full space-y-4 sm:space-y-5">
-        {getApiToken() ? <GlAccountStatementReport /> : <GeneralLedgerReport />}
+        {getApiToken() ? <LedgerStatementWithVouchers /> : <GeneralLedgerReport />}
       </div>
     );
   }
@@ -9357,6 +9358,8 @@ function ReceiptDetailsDialog({
   onPrint,
   onDownload,
   onPreviewAttachment,
+  onEdit,
+  onShare,
 }: {
   payment: Payment | null;
   academicYear: string;
@@ -9364,6 +9367,8 @@ function ReceiptDetailsDialog({
   onPrint: (payment: Payment) => void;
   onDownload: (payment: Payment) => void;
   onPreviewAttachment: (file: PaymentAttachment) => void;
+  onEdit?: (payment: Payment) => void;
+  onShare?: (payment: Payment) => void;
 }) {
   return (
     <Dialog
@@ -9534,14 +9539,41 @@ function ReceiptDetailsDialog({
             </div>
 
             <DialogFooter className="flex-row flex-nowrap gap-2 border-t border-[#E5E5E5] p-4 sm:p-6 dark:border-white/10">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onClose}
-                className="min-w-0 flex-1 rounded-full px-2 text-[12px] sm:px-4 sm:text-sm"
-              >
-                Cancel
-              </Button>
+              {onEdit || onShare ? (
+                <>
+                  {onEdit ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => onEdit(payment)}
+                      className="min-w-0 flex-1 rounded-full px-2 text-[12px] sm:px-4 sm:text-sm"
+                    >
+                      <Pencil className="h-3.5 w-3.5 shrink-0 sm:mr-1.5" />
+                      Edit
+                    </Button>
+                  ) : null}
+                  {onShare ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => onShare(payment)}
+                      className="min-w-0 flex-1 rounded-full px-2 text-[12px] sm:px-4 sm:text-sm"
+                    >
+                      <MessageCircle className="h-3.5 w-3.5 shrink-0 sm:mr-1.5" />
+                      Share
+                    </Button>
+                  ) : null}
+                </>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={onClose}
+                  className="min-w-0 flex-1 rounded-full px-2 text-[12px] sm:px-4 sm:text-sm"
+                >
+                  Cancel
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="outline"
@@ -12767,6 +12799,434 @@ function StaffSearchSelect({
   );
 }
 
+type DisbursalPdfContext = {
+  staff: Staff[];
+  schoolName: string;
+  schoolDetails: SchoolDetails;
+  academicYear: string;
+};
+
+function findDisbursalStaff(staff: Staff[], payment: MadePayment): Staff | undefined {
+  return (
+    staff.find((s) => s.id === (payment.staffId || payment.payee)) ||
+    staff.find((s) => s.name.trim().toLowerCase() === payment.payee.trim().toLowerCase())
+  );
+}
+
+function disbursalShareText(payment: MadePayment): string {
+  return [
+    `Payment Voucher · ${payment.id}`,
+    `Payee: ${payment.payee}`,
+    `Type: ${payment.payeeType}`,
+    `Description: ${payment.desc}`,
+    `Mode: ${payment.mode}`,
+    `Amount: ${formatMoney(payment.amount)}`,
+    `Status: ${payment.status}`,
+    `Time: ${formatEventDateTime(payment.time)}`,
+  ].join("\n");
+}
+
+/** Salary slip for payroll rows, payment voucher for everything else. */
+async function runDisbursalPdf(
+  payment: MadePayment,
+  ctx: DisbursalPdfContext,
+  action: "download" | "print",
+): Promise<void> {
+  const member = findDisbursalStaff(ctx.staff, payment);
+  const branding = receiptBrandingFromSchool(ctx.schoolDetails);
+  const pdfAction = action === "print" ? "print" : undefined;
+  try {
+    if (payment.payeeType === "Salary") {
+      await downloadSalarySlipPdf(
+        payment,
+        ctx.schoolName,
+        branding,
+        member
+          ? {
+              id: member.id,
+              name: member.name,
+              role: member.role,
+              dept: member.dept,
+              basicSalary: member.basicSalary,
+              additionalAllowances: member.additionalAllowances,
+            }
+          : null,
+        ctx.academicYear,
+        pdfAction,
+      );
+    } else {
+      await downloadPaymentVoucherPdf(
+        payment,
+        ctx.schoolName,
+        branding,
+        {
+          name: member?.name || payment.payee,
+          phone: member?.phone,
+          extra: [member?.role, member?.dept].filter(Boolean).join(" · ") || undefined,
+        },
+        ctx.academicYear,
+        pdfAction,
+      );
+    }
+    if (action === "print") toast.success("Print dialog opened");
+    else
+      toast.success(
+        `${payment.payeeType === "Salary" ? "Salary slip" : "Voucher"} ${payment.id} downloaded`,
+      );
+  } catch {
+    toast.error(`Could not ${action} ${payment.id}`);
+  }
+}
+
+function DisbursalDetailsDialog({
+  payment,
+  academicYear,
+  onClose,
+  onEdit,
+  onShare,
+  onPrint,
+  onDownload,
+  onPreviewAttachment,
+}: {
+  payment: MadePayment | null;
+  academicYear: string;
+  onClose: () => void;
+  onEdit?: (payment: MadePayment) => void;
+  onShare: (payment: MadePayment) => void;
+  onPrint: (payment: MadePayment) => void;
+  onDownload: (payment: MadePayment) => void;
+  onPreviewAttachment: (file: PaymentAttachment) => void;
+}) {
+  const note = payment ? parseStoredReceiptNarration(payment.desc).note || payment.desc : "";
+  const btn = "min-w-0 flex-1 rounded-full px-2 text-[12px] sm:px-4 sm:text-sm";
+  return (
+    <Dialog
+      open={Boolean(payment)}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+        {payment && (
+          <>
+            <div className="mobile-scrollbar-none min-h-0 flex-1 overflow-y-auto overscroll-contain p-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <DialogHeader>
+                <div className="flex items-start justify-between gap-3 pr-7">
+                  <div>
+                    <DialogTitle>
+                      {payment.payeeType === "Salary" ? "Salary Payment" : "Payment Voucher"}
+                    </DialogTitle>
+                    <DialogDescription className="mt-1">
+                      Money paid out · voucher and supporting documents.
+                    </DialogDescription>
+                  </div>
+                  <span
+                    className={cn(
+                      "inline-flex shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold",
+                      payment.status === "Cleared"
+                        ? "bg-[#D1F2E1] text-[#059669]"
+                        : "bg-[#FEF3C7] text-[#B45309]",
+                    )}
+                  >
+                    {payment.status}
+                  </span>
+                </div>
+              </DialogHeader>
+
+              <div className="mt-4 space-y-4">
+                <div className="rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-4 dark:border-white/10 dark:bg-zinc-900/50">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="font-mono text-[11px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
+                        {payment.id}
+                      </div>
+                      <div className="mt-1 truncate text-[17px] font-bold text-black dark:text-zinc-100">
+                        {payment.payee}
+                      </div>
+                      <div className="mt-0.5 text-[12px] text-black/50 dark:text-zinc-400">
+                        {payment.payeeType}
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className="font-mono text-[20px] font-bold text-rose-600">
+                        {formatMoney(payment.amount)}
+                      </div>
+                      <div className="mt-1 font-mono text-[10.5px] text-black/45 dark:text-zinc-400">
+                        {formatEventDateTime(payment.time)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    ["Payment mode", payment.mode],
+                    ["Type", payment.payeeType],
+                    ["Status", payment.status],
+                    ["Academic year", academicYear],
+                  ].map(([label, value]) => (
+                    <div
+                      key={label}
+                      className="rounded-xl border border-slate-100 bg-white p-3 dark:border-white/10 dark:bg-zinc-900/40"
+                    >
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
+                        {label}
+                      </div>
+                      <div className="mt-1 text-[13px] font-semibold text-black dark:text-zinc-100">
+                        {value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {note ? (
+                  <div className="rounded-xl border border-slate-100 bg-white p-3.5 dark:border-white/10 dark:bg-zinc-900/40">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400">
+                      Description
+                    </div>
+                    <p className="mt-1.5 text-[12.5px] leading-relaxed text-black/65 dark:text-zinc-300">
+                      {note}
+                    </p>
+                  </div>
+                ) : null}
+
+                {(payment.attachments?.length ?? 0) > 0 ? (
+                  <div>
+                    <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+                      <Paperclip className="h-3.5 w-3.5" />
+                      Attachments
+                    </div>
+                    <ul className="mt-2 space-y-2">
+                      {payment.attachments!.map((file) => (
+                        <li
+                          key={file.id}
+                          className="flex min-w-0 items-center gap-2.5 rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-3 dark:border-white/10 dark:bg-zinc-900/40"
+                        >
+                          <FileText className="h-4 w-4 shrink-0 text-black/45" />
+                          <span className="min-w-0 flex-1 truncate text-[12px] font-semibold">
+                            {file.name}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => onPreviewAttachment(file)}
+                            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 text-[11px] font-semibold text-black/65 hover:text-black dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-300"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            Open
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <DialogFooter className="flex-row flex-nowrap gap-2 border-t border-[#E5E5E5] p-4 sm:p-6 dark:border-white/10">
+              {onEdit ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => onEdit(payment)}
+                  className={btn}
+                >
+                  <Pencil className="h-3.5 w-3.5 shrink-0 sm:mr-1.5" />
+                  Edit
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onShare(payment)}
+                className={btn}
+              >
+                <MessageCircle className="h-3.5 w-3.5 shrink-0 sm:mr-1.5" />
+                Share
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onPrint(payment)}
+                className={btn}
+              >
+                <Printer className="h-3.5 w-3.5 shrink-0 sm:mr-1.5" />
+                Print
+              </Button>
+              <Button
+                type="button"
+                onClick={() => onDownload(payment)}
+                className={cn(btn, "bg-[#0F766E] text-white hover:bg-[#0D9488]")}
+              >
+                <Download className="h-3.5 w-3.5 shrink-0 sm:mr-1.5" />
+                Download
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Ledger statement where each voucher number opens its receipt / payment voucher / journal. */
+function LedgerStatementWithVouchers() {
+  const navigate = useNavigate();
+  const { session } = useAuth();
+  const { payments, students, staff, schoolDetails, academicYear, hydrated, branchContentReady } =
+    useTenantStore();
+  const schoolName = schoolDetails.name || "School";
+  const isAdmin = session?.role === "school_admin" || session?.role === "super_admin";
+  const tenantScope = `${session?.tenantId ?? session?.tenantName ?? "tenant"}|${academicYear}`;
+  const { disbursements } = useDisbursements(tenantScope, hydrated && branchContentReady);
+  const madePayments = useMemo(
+    () => disbursements.map((row, index) => mapApiDisbursementToMadePayment(row, index)),
+    [disbursements],
+  );
+  const paymentById = useMemo(() => new Map(payments.map((p) => [p.id, p])), [payments]);
+  const disbursalById = useMemo(() => new Map(madePayments.map((p) => [p.id, p])), [madePayments]);
+
+  const [viewingPayment, setViewingPayment] = useState<Payment | null>(null);
+  const [viewingDisbursal, setViewingDisbursal] = useState<MadePayment | null>(null);
+  const [previewAttachment, setPreviewAttachment] = useState<PaymentAttachment | null>(null);
+
+  const isJournal = (type: string) => ["journal", "opening", "contra"].includes(type);
+
+  const isVoucherLinked = (v: GlStatementVoucher) =>
+    paymentById.has(v.voucherNo) || disbursalById.has(v.voucherNo) || isJournal(v.voucherType);
+
+  const openVoucher = (v: GlStatementVoucher) => {
+    const receipt = paymentById.get(v.voucherNo);
+    if (receipt) {
+      setViewingPayment(receipt);
+      return;
+    }
+    const disbursal = disbursalById.get(v.voucherNo);
+    if (disbursal) {
+      setViewingDisbursal(disbursal);
+      return;
+    }
+    if (isJournal(v.voucherType)) {
+      navigate({ to: "/tenant/finance", search: { tab: "journals" } });
+      return;
+    }
+    toast.info(`No source document found for ${v.voucherNo}`);
+  };
+
+  const receiptPdf = async (payment: Payment, action: "download" | "print") => {
+    try {
+      await downloadReceiptPdf(
+        payment,
+        schoolName,
+        academicYear,
+        receiptBrandingFromSchool(schoolDetails, findReceiptStudent(students, payment)),
+        action === "print" ? "print" : undefined,
+      );
+      toast.success(
+        action === "print" ? "Print dialog opened" : `Receipt ${payment.id} downloaded`,
+      );
+    } catch {
+      toast.error(`Could not ${action} receipt ${payment.id}`);
+    }
+  };
+
+  const shareReceipt = async (payment: Payment) => {
+    const student = findReceiptStudent(students, payment);
+    const text = [
+      `${schoolName} · Fee Receipt ${payment.id}`,
+      `Account: ${payment.name}`,
+      `Amount: ${formatMoney(payment.amount)}`,
+      `AY: ${academicYear}`,
+      "Receipt PDF attached.",
+    ].join("\n");
+    try {
+      const { blob, filename } = await buildReceiptPdfBlob(
+        payment,
+        schoolName,
+        academicYear,
+        receiptBrandingFromSchool(schoolDetails, student),
+      );
+      const result = await sharePdfViaWhatsApp({
+        blob,
+        filename,
+        message: text,
+        phone: student?.phone,
+        downloadFallback: downloadBlobFile,
+      });
+      if (result === "shared") toast.success("Shared receipt PDF");
+      else if (result === "whatsapp")
+        toast.success("Opening WhatsApp", {
+          description: "Receipt PDF downloaded — attach it in the chat",
+        });
+      else if (result === "copied") toast.success("PDF downloaded · message copied");
+      else if (result !== "aborted") toast.error("Could not share receipt PDF");
+    } catch {
+      toast.error(`Could not prepare receipt ${payment.id}`);
+    }
+  };
+
+  const shareDisbursal = (payment: MadePayment) => {
+    const text = disbursalShareText(payment);
+    const phone = findDisbursalStaff(staff, payment)?.phone;
+    if (openWhatsAppShare(text, phone)) {
+      toast.success("Opening WhatsApp");
+      return;
+    }
+    void navigator.clipboard.writeText(text).then(
+      () => toast.success("Copied for WhatsApp"),
+      () => toast.error("Could not copy · WhatsApp did not open"),
+    );
+  };
+
+  const disbursalCtx = { staff, schoolName, schoolDetails, academicYear };
+
+  return (
+    <>
+      <GlAccountStatementReport onVoucherClick={openVoucher} isVoucherLinked={isVoucherLinked} />
+      <ReceiptDetailsDialog
+        payment={viewingPayment}
+        academicYear={academicYear}
+        onClose={() => setViewingPayment(null)}
+        onPrint={(p) => void receiptPdf(p, "print")}
+        onDownload={(p) => void receiptPdf(p, "download")}
+        onShare={(p) => void shareReceipt(p)}
+        onEdit={
+          isAdmin
+            ? (p) => {
+                setViewingPayment(null);
+                navigate({ to: "/tenant/finance", search: { tab: "receive", paymentId: p.id } });
+              }
+            : undefined
+        }
+        onPreviewAttachment={setPreviewAttachment}
+      />
+      <DisbursalDetailsDialog
+        payment={viewingDisbursal}
+        academicYear={academicYear}
+        onClose={() => setViewingDisbursal(null)}
+        onPrint={(p) => void runDisbursalPdf(p, disbursalCtx, "print")}
+        onDownload={(p) => void runDisbursalPdf(p, disbursalCtx, "download")}
+        onShare={shareDisbursal}
+        onEdit={
+          isAdmin
+            ? (p) => {
+                setViewingDisbursal(null);
+                navigate({ to: "/tenant/finance", search: { tab: "make", disbursementId: p.id } });
+              }
+            : undefined
+        }
+        onPreviewAttachment={setPreviewAttachment}
+      />
+      <AttachmentPreviewDialog
+        file={previewAttachment}
+        open={Boolean(previewAttachment)}
+        onOpenChange={(open) => {
+          if (!open) setPreviewAttachment(null);
+        }}
+      />
+    </>
+  );
+}
+
 function MakePayment() {
   const { staff, setStaff, schoolDetails, academicYear, activeBranchId } = useTenantStore();
   const schoolName = schoolDetails.name || "School";
@@ -13755,107 +14215,15 @@ function MakePayment() {
     }
   };
 
-  const downloadDisbursal = async (payment: MadePayment) => {
-    const member =
-      staff.find((s) => s.id === payment.payee) ||
-      staff.find((s) => s.name.trim().toLowerCase() === payment.payee.trim().toLowerCase());
-    try {
-      if (payment.payeeType === "Salary") {
-        await downloadSalarySlipPdf(
-          payment,
-          schoolName,
-          receiptBrandingFromSchool(schoolDetails),
-          member
-            ? {
-                id: member.id,
-                name: member.name,
-                role: member.role,
-                dept: member.dept,
-                basicSalary: member.basicSalary,
-                additionalAllowances: member.additionalAllowances,
-              }
-            : null,
-          academicYear,
-        );
-        toast.success(`Salary slip ${payment.id} downloaded`);
-        return;
-      }
-      await downloadPaymentVoucherPdf(
-        payment,
-        schoolName,
-        receiptBrandingFromSchool(schoolDetails),
-        {
-          name: member?.name || payment.payee,
-          phone: member?.phone,
-          extra: [member?.role, member?.dept].filter(Boolean).join(" · ") || undefined,
-        },
-        academicYear,
-      );
-      toast.success(`Voucher ${payment.id} downloaded`);
-    } catch {
-      toast.error(`Could not download ${payment.id}`);
-    }
-  };
+  const downloadDisbursal = (payment: MadePayment) =>
+    runDisbursalPdf(payment, { staff, schoolName, schoolDetails, academicYear }, "download");
 
-  const printDisbursal = async (payment: MadePayment) => {
-    const member =
-      staff.find((s) => s.id === payment.payee) ||
-      staff.find((s) => s.name.trim().toLowerCase() === payment.payee.trim().toLowerCase());
-    try {
-      if (payment.payeeType === "Salary") {
-        await downloadSalarySlipPdf(
-          payment,
-          schoolName,
-          receiptBrandingFromSchool(schoolDetails),
-          member
-            ? {
-                id: member.id,
-                name: member.name,
-                role: member.role,
-                dept: member.dept,
-                basicSalary: member.basicSalary,
-                additionalAllowances: member.additionalAllowances,
-              }
-            : null,
-          academicYear,
-          "print",
-        );
-        toast.success("Print dialog opened");
-        return;
-      }
-      await downloadPaymentVoucherPdf(
-        payment,
-        schoolName,
-        receiptBrandingFromSchool(schoolDetails),
-        {
-          name: member?.name || payment.payee,
-          phone: member?.phone,
-          extra: [member?.role, member?.dept].filter(Boolean).join(" · ") || undefined,
-        },
-        academicYear,
-        "print",
-      );
-      toast.success("Print dialog opened");
-    } catch {
-      toast.error(`Could not print ${payment.id}`);
-    }
-  };
+  const printDisbursal = (payment: MadePayment) =>
+    runDisbursalPdf(payment, { staff, schoolName, schoolDetails, academicYear }, "print");
 
   const shareDisbursal = (payment: MadePayment) => {
-    const member =
-      staff.find((s) => s.id === payment.payee) ||
-      staff.find((s) => s.name.trim().toLowerCase() === payment.payee.trim().toLowerCase());
-    const text = [
-      `Payment Voucher · ${payment.id}`,
-      `Payee: ${payment.payee}`,
-      `Type: ${payment.payeeType}`,
-      `Description: ${payment.desc}`,
-      `Mode: ${payment.mode}`,
-      `Amount: ${formatMoney(payment.amount)}`,
-      `Status: ${payment.status}`,
-      `Time: ${formatEventDateTime(payment.time)}`,
-    ].join("\n");
-    sharePayload(`Payment ${payment.id}`, text, member?.phone);
+    const member = findDisbursalStaff(staff, payment);
+    sharePayload(`Payment ${payment.id}`, disbursalShareText(payment), member?.phone);
   };
 
   const openEditDisbursal = (payment: MadePayment) => {
@@ -13887,6 +14255,24 @@ function MakePayment() {
       setCashSplitAmount("");
     }
   };
+
+  const openEditDisbursalRef = useRef(openEditDisbursal);
+  openEditDisbursalRef.current = openEditDisbursal;
+  const disbursalDeepLinkRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const targetId = search.disbursementId;
+    if (!targetId || !expensesReady) return;
+    if (disbursalDeepLinkRef.current === targetId) return;
+    disbursalDeepLinkRef.current = targetId;
+    navigate({ to: "/tenant/finance", search: { tab: "make" }, replace: true });
+    const row = madePayments.find((p) => p.id === targetId);
+    if (!row) {
+      toast.error(`Voucher ${targetId} not found`);
+      return;
+    }
+    openEditDisbursalRef.current(row);
+  }, [search.disbursementId, expensesReady, madePayments, navigate]);
 
   const saveEditedDisbursal = (e: React.FormEvent) => {
     e.preventDefault();

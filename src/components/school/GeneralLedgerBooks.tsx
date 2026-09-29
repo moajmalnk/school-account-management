@@ -340,7 +340,16 @@ function useBranchKey() {
 /* Chart of Accounts + Account Statement (Ledger tab)                         */
 /* -------------------------------------------------------------------------- */
 
-export function GlAccountStatementReport() {
+export type GlStatementVoucher = { voucherNo: string; voucherType: string; entryId: string };
+
+export function GlAccountStatementReport({
+  onVoucherClick,
+  isVoucherLinked,
+}: {
+  /** Open the source document (receipt, payment voucher, journal) for a statement line. */
+  onVoucherClick?: (voucher: GlStatementVoucher) => void;
+  isVoucherLinked?: (voucher: GlStatementVoucher) => boolean;
+} = {}) {
   const academicYear = useAcademicYear();
   const branchId = useBranchKey();
   const [tree, setTree] = useState<GlAccountGroup[]>([]);
@@ -731,7 +740,18 @@ export function GlAccountStatementReport() {
                         <tr key={`${line.entryId}-${i}`}>
                           <td className="whitespace-nowrap px-3 py-2">{line.date}</td>
                           <td className="px-3 py-2 font-mono text-[11px] text-[#0F766E]">
-                            {line.voucherNo}
+                            {onVoucherClick && (isVoucherLinked?.(line) ?? true) ? (
+                              <button
+                                type="button"
+                                onClick={() => onVoucherClick(line)}
+                                title={`Open ${line.voucherNo}`}
+                                className="rounded font-mono underline decoration-dotted underline-offset-2 transition-colors hover:text-[#0D9488] hover:decoration-solid focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]/40"
+                              >
+                                {line.voucherNo}
+                              </button>
+                            ) : (
+                              line.voucherNo
+                            )}
                           </td>
                           <td className="max-w-[220px] truncate px-3 py-2">{line.narration}</td>
                           <td className="px-3 py-2 text-right font-mono text-emerald-700">

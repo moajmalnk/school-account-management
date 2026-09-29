@@ -35,7 +35,7 @@ function OptionList({
   variant: Variant;
 }) {
   return (
-    <ul role="listbox" className="max-h-72 overflow-y-auto py-1">
+    <ul role="listbox" className="max-h-72 overflow-y-auto overscroll-contain py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {options.map((o) => {
         const active = o.value === selected;
         return (
