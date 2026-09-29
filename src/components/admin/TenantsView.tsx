@@ -522,7 +522,9 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (tenant: Tenant
         }}
         onAudit={() => {
           if (!detailTarget) return;
-          setAuditTarget(detailTarget);
+          const target = detailTarget;
+          setDetailTarget(null);
+          setAuditTarget(target);
         }}
         onImpersonate={() => {
           if (!detailTarget) return;
@@ -2392,7 +2394,7 @@ function AuditLogsDrawer({ tenant, onClose }: { tenant: Tenant | null; onClose: 
 
   return (
     <Sheet open={!!tenant} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[860px]">
+      <SheetContent className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(1100px,96vw)]">
         <SheetHeader className="border-b border-[#E5E5E5] bg-[#F4F4F5] px-6 py-5">
           <SheetTitle className="text-[18px] font-semibold text-black">
             Login &amp; usage audit
