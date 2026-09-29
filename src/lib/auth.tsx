@@ -8,7 +8,13 @@ import {
   type ReactNode,
 } from "react";
 
-import { apiLogin, apiLogoutCurrentDevice, apiMe, type ApiLoginResponse } from "@/lib/api/auth";
+import {
+  apiLogin,
+  apiLogoutCurrentDevice,
+  apiMe,
+  apiPing,
+  type ApiLoginResponse,
+} from "@/lib/api/auth";
 import {
   ACCESS_TOKEN_KEY,
   ApiError,
@@ -101,6 +107,7 @@ type AuthState = {
   ) => void;
 };
 
+const SESSION_HEARTBEAT_MS = 60_000;
 const STORAGE_KEY = "school-accounts/session/v1";
 const IMPERSONATION_KEY = "school-accounts/impersonation/v1";
 
@@ -172,7 +179,9 @@ function sessionFromApiLogin(
     staffId: data.session.staffId || undefined,
     permissions,
     branchIds: Array.isArray(data.session.branchIds)
-      ? data.session.branchIds.filter((id): id is string => typeof id === "string" && id.trim() !== "")
+      ? data.session.branchIds.filter(
+          (id): id is string => typeof id === "string" && id.trim() !== "",
+        )
       : [],
     tier: data.session.tier,
     planName: data.session.planName,
@@ -511,7 +520,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (typeof window === "undefined") return;
       const path = window.location.pathname;
       if (path.startsWith("/login")) return;
-      const why = reason === "inactive" ? "inactive" : "session_expired";
+      const why =
+        reason === "deactivated"
+          ? "deactivated"
+          : reason === "inactive"
+            ? "inactive"
+            : "session_expired";
       const next = `/login?reason=${why}&from=${encodeURIComponent(path)}`;
       window.location.replace(next);
     });
@@ -553,6 +567,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
       window.clearInterval(interval);
+    };
+  }, [session]);
+
+  // School workspaces: notice a Super Admin deactivation (or remote sign-out) within a minute.
+  useEffect(() => {
+    if (!session || session.role === "super_admin") return;
+    const beat = () => {
+      if (document.visibilityState !== "visible") return;
+      void apiPing().catch(() => undefined);
+    };
+    const interval = window.setInterval(beat, SESSION_HEARTBEAT_MS);
+    document.addEventListener("visibilitychange", beat);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", beat);
     };
   }, [session]);
 

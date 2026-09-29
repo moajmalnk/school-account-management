@@ -87,7 +87,10 @@ export function setApiToken(token: string | null) {
   }
 }
 
-export type UnauthorizedReason = "session" | "inactive" | "impersonation";
+export type UnauthorizedReason = "session" | "inactive" | "impersonation" | "deactivated";
+
+export const TENANT_DEACTIVATED_CODE = "tenant_deactivated";
+let tenantDeactivatedSignal = false;
 type UnauthorizedListener = (reason: UnauthorizedReason) => void;
 const unauthorizedListeners = new Set<UnauthorizedListener>();
 let unauthorizedNotified = false;
@@ -101,6 +104,7 @@ export function onUnauthorized(listener: UnauthorizedListener): () => void {
 
 export function resetUnauthorizedGate() {
   unauthorizedNotified = false;
+  tenantDeactivatedSignal = false;
 }
 
 export function isUnauthorizedNotified(): boolean {
@@ -126,7 +130,8 @@ function emitUnauthorized(reason: UnauthorizedReason) {
 
   if (unauthorizedNotified) return;
   unauthorizedNotified = true;
-  const idle = reason === "inactive" || isLocalIdleExpired();
+  const deactivated = reason === "deactivated" || tenantDeactivatedSignal;
+  const idle = !deactivated && (reason === "inactive" || isLocalIdleExpired());
   try {
     clearPersistentAuthSecrets();
     window.sessionStorage.removeItem(IMPERSONATION_TOKEN_KEY);
@@ -135,7 +140,7 @@ function emitUnauthorized(reason: UnauthorizedReason) {
   }
   for (const listener of unauthorizedListeners) {
     try {
-      listener(idle ? "inactive" : reason);
+      listener(deactivated ? "deactivated" : idle ? "inactive" : reason);
     } catch {
       // ignore listener errors
     }
@@ -209,11 +214,22 @@ export type ApiEnvelope<T> = {
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  code?: string;
+  constructor(message: string, status: number, code?: string) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.code = code;
   }
+}
+
+function envelopeCode(payload: unknown): string | undefined {
+  const errors = (payload as { errors?: { code?: unknown } } | null)?.errors;
+  return typeof errors?.code === "string" ? errors.code : undefined;
+}
+
+export function isTenantDeactivatedError(err: unknown): boolean {
+  return err instanceof ApiError && err.code === TENANT_DEACTIVATED_CODE;
 }
 
 export function isAuthExpiredError(err: unknown): boolean {
@@ -258,6 +274,7 @@ async function postRefresh(refreshToken: string): Promise<{
   } catch {
     payload = null;
   }
+  if (envelopeCode(payload) === TENANT_DEACTIVATED_CODE) tenantDeactivatedSignal = true;
   return {
     status: res.status,
     data: payload?.success && payload.data?.token ? payload.data : null,
@@ -399,9 +416,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const url = `${apiRequestOrigin()}${path.startsWith("/") ? path : `/${path}`}`;
   const timeoutController = new AbortController();
   const timeoutId =
-    timeoutMs > 0
-      ? window.setTimeout(() => timeoutController.abort(), timeoutMs)
-      : undefined;
+    timeoutMs > 0 ? window.setTimeout(() => timeoutController.abort(), timeoutMs) : undefined;
   const requestSignal = signal
     ? linkAbortSignals(signal, timeoutController.signal)
     : timeoutController.signal;
@@ -436,6 +451,14 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       payload?.error ||
       (snippet ? `Request failed (${res.status}): ${snippet}` : `Request failed (${res.status})`);
 
+    const code = envelopeCode(payload);
+
+    if (auth && code === TENANT_DEACTIVATED_CODE && !skipUnauthorized) {
+      tenantDeactivatedSignal = true;
+      emitUnauthorized(isImpersonating() ? "impersonation" : "deactivated");
+      throw new ApiError(message, res.status, code);
+    }
+
     if (auth && res.status === 401 && !skipUnauthorized) {
       if (isImpersonating()) {
         emitUnauthorized("impersonation");
@@ -453,7 +476,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       }
     }
 
-    throw new ApiError(message, res.status);
+    throw new ApiError(message, res.status, code);
   }
 
   if (auth) touchLastActive();

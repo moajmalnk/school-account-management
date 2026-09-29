@@ -187,11 +187,17 @@ export async function apiDeleteStaff(
   if (!hasToken()) {
     throw new Error("Not signed in to API — log in again to delete staff");
   }
-  await mutate("/api/staff/delete.php", {
-    id,
-    hard: opts?.hard,
-    restore: opts?.restore,
-  });
+  try {
+    await mutate("/api/staff/delete.php", {
+      id,
+      hard: opts?.hard,
+      restore: opts?.restore,
+    });
+  } catch (err) {
+    // Local-only / already-removed staff: nothing to delete on the server.
+    if (!opts?.restore && err instanceof ApiError && err.status === 404) return;
+    throw err;
+  }
 }
 
 export async function apiCreatePayment(

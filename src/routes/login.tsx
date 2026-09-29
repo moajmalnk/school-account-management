@@ -7,6 +7,9 @@ import { AuthShell } from "@/components/auth/AuthShell";
 import { Label } from "@/components/ui/label";
 import { homePathForSession, API_UNREACHABLE_MESSAGE, useAuth } from "@/lib/auth";
 
+const SCHOOL_DEACTIVATED_MESSAGE =
+  "You were signed out because this school workspace has been deactivated. Please contact Feezo support to restore access.";
+
 export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
@@ -36,8 +39,10 @@ function LoginPage() {
       });
     } else if (reason === "session_expired") {
       toast.error("Please sign in again to continue");
+    } else if (reason === "deactivated") {
+      setBannerError(SCHOOL_DEACTIVATED_MESSAGE);
     }
-    if (reason === "inactive" || reason === "session_expired") {
+    if (reason === "inactive" || reason === "session_expired" || reason === "deactivated") {
       const url = new URL(window.location.href);
       url.searchParams.delete("reason");
       url.searchParams.delete("from");

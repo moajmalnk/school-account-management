@@ -59,6 +59,7 @@ import {
   cloneFeeTermsForYear,
   cloneTaggedForYear,
   catalogsNeedYearBackfill,
+  collapseYearScopedClones,
   ensureYearLedger,
   filterByAcademicYear,
   getYearLedger,
@@ -2482,13 +2483,14 @@ export function backfillYearCatalogs(
   const current = activeYear || yearList[0] || "";
   if (!current) return catalogs;
 
+  // Staff are campus-wide people (the API stores no academic year for them), so they are
+  // never cloned per year — cloning made every refresh resurrect "merged" duplicates.
   const needBackfill =
     catalogsNeedYearBackfill(catalogs.classes) ||
     catalogsNeedYearBackfill(catalogs.departments) ||
     catalogsNeedYearBackfill(catalogs.roles) ||
     catalogsNeedYearBackfill(catalogs.paymentCategories) ||
-    catalogsNeedYearBackfill(catalogs.transportRoutes) ||
-    catalogsNeedYearBackfill(catalogs.staff);
+    catalogsNeedYearBackfill(catalogs.transportRoutes);
 
   const stamped: YearCatalogs = {
     classes: stampUntaggedAcademicYear(catalogs.classes, current),
@@ -2496,7 +2498,7 @@ export function backfillYearCatalogs(
     roles: stampUntaggedAcademicYear(catalogs.roles, current),
     paymentCategories: stampUntaggedAcademicYear(catalogs.paymentCategories, current),
     transportRoutes: stampUntaggedAcademicYear(catalogs.transportRoutes, current),
-    staff: stampUntaggedAcademicYear(catalogs.staff, current),
+    staff: collapseYearScopedClones(stampUntaggedAcademicYear(catalogs.staff, current)),
   };
 
   if (!needBackfill) return stamped;
@@ -2507,7 +2509,7 @@ export function backfillYearCatalogs(
     roles: stamped.roles.filter((item) => !item.id.includes("--")),
     paymentCategories: stamped.paymentCategories.filter((item) => !item.id.includes("--")),
     transportRoutes: stamped.transportRoutes.filter((item) => !item.id.includes("--")),
-    staff: stamped.staff.filter((item) => !item.id.includes("--")),
+    staff: [],
   };
 
   let next = stamped;
@@ -2515,7 +2517,7 @@ export function backfillYearCatalogs(
     if (year === current) continue;
     next = concatYearCatalogs(
       next,
-      cloneYearCatalogs(originals, current, year, { includeStaff: true }),
+      cloneYearCatalogs(originals, current, year, { includeStaff: false }),
     );
   }
   return next;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Plus,
   Search,
@@ -9,12 +9,6 @@ import {
   Trash2,
   X,
   Save,
-  RotateCw,
-  Download,
-  Filter as FilterIcon,
-  AlertTriangle,
-  CheckCircle2,
-  CircleAlert,
   Info,
   Loader2,
   Eye,
@@ -45,6 +39,8 @@ import { ApiError, getApiToken } from "@/lib/api/client";
 import { TenantsViewSkeleton } from "@/components/admin/TenantsViewSkeleton";
 import { mobileFabClass } from "@/components/layout/MobileTabBar";
 import { PlatformInvoicesPanel } from "@/components/admin/PlatformInvoicesPanel";
+import { TenantActivityPanel } from "@/components/admin/TenantActivityPanel";
+import { TenantAccessControl } from "@/components/admin/TenantAccessControl";
 import { OrganicCard } from "@/components/ui/organic-card";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
@@ -79,6 +75,7 @@ import type { CornerSide } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { currencySymbol } from "@/lib/locale/currencies";
 import { formatMoney } from "@/lib/money";
+import { saveFile } from "@/lib/native-download";
 
 const TIER_STYLE: Record<Tier, { bg: string; fg: string }> = {
   Basic: { bg: "#F4F4F5", fg: "#3F3F46" },
@@ -176,80 +173,6 @@ function defaultBilling(t: Tenant): BillingRule {
     paymentMethod: t.tier === "Basic" ? "Razorpay" : "Stripe",
     graceDays: 7,
   };
-}
-
-type AuditEvent = {
-  ts: string;
-  severity: "info" | "success" | "warning" | "error";
-  actor: string;
-  action: string;
-  ip: string;
-  detail: string;
-};
-
-function pseudoRandom(seed: string) {
-  let h = 2166136261;
-  for (let i = 0; i < seed.length; i++) {
-    h ^= seed.charCodeAt(i);
-    h = (h * 16777619) >>> 0;
-  }
-  return () => {
-    h = (h * 1664525 + 1013904223) >>> 0;
-    return h / 0xffffffff;
-  };
-}
-
-const AUDIT_TEMPLATES: { action: string; severity: AuditEvent["severity"]; detail: string }[] = [
-  { action: "Admin login (SSO)", severity: "success", detail: "okta.org" },
-  { action: "Bulk fee import", severity: "info", detail: "1,243 rows · 0 errors" },
-  { action: "Webhook delivery", severity: "success", detail: "razorpay → payment.captured 200" },
-  {
-    action: "Webhook delivery failure",
-    severity: "error",
-    detail: "stripe 5xx · auto-retry queued",
-  },
-  { action: "Role escalation", severity: "warning", detail: "support@platform → tenant.owner" },
-  { action: "DNS cutover", severity: "info", detail: "CNAME apex → edge.schoolaccounts.in" },
-  {
-    action: "Invoice generated",
-    severity: "success",
-    detail: `INV-92831 · ${formatMoney(428000, "INR")}`,
-  },
-  { action: "Storage threshold", severity: "warning", detail: "82% of 50 GB used" },
-  { action: "Failed login burst", severity: "error", detail: "12 attempts · 49.207.x.x" },
-  { action: "Backup snapshot", severity: "success", detail: "pg-dump 248 MB · 2.4s" },
-  { action: "API key rotated", severity: "info", detail: "sk_live_***47 → sk_live_***ab" },
-  { action: "Schema migration", severity: "info", detail: "v202604.02 · 19 tables touched" },
-];
-
-function buildAuditLog(t: Tenant, count = 18): AuditEvent[] {
-  const rand = pseudoRandom(t.uuid);
-  const events: AuditEvent[] = [];
-  const now = new Date();
-  for (let i = 0; i < count; i++) {
-    const tpl = AUDIT_TEMPLATES[Math.floor(rand() * AUDIT_TEMPLATES.length)];
-    const minutesAgo = Math.floor(rand() * 60 * 24 * 6) + i * 13;
-    const ts = new Date(now.getTime() - minutesAgo * 60_000);
-    const actorPool = [
-      "Rohan Mehta",
-      "Anika Roy",
-      "Priya Subramanian",
-      "Devanand Iyer",
-      "system.scheduler",
-      "webhook.gateway",
-    ];
-    const actor = actorPool[Math.floor(rand() * actorPool.length)];
-    const ip = `${49 + Math.floor(rand() * 50)}.${Math.floor(rand() * 256)}.${Math.floor(rand() * 256)}.${Math.floor(rand() * 256)}`;
-    events.push({
-      ts: ts.toISOString().replace("T", " ").slice(0, 19),
-      severity: tpl.severity,
-      actor,
-      action: tpl.action,
-      ip,
-      detail: tpl.detail,
-    });
-  }
-  return events.sort((a, b) => (a.ts < b.ts ? 1 : -1));
 }
 
 export function TenantsView({ onImpersonate }: { onImpersonate?: (tenant: Tenant) => void } = {}) {
@@ -604,6 +527,10 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (tenant: Tenant
         onImpersonate={() => {
           if (!detailTarget) return;
           onImpersonate?.(detailTarget);
+        }}
+        onTenantUpdated={(updated) => {
+          updateTenant(updated.id, updated);
+          setDetailTarget((prev) => (prev?.id === updated.id ? { ...prev, ...updated } : prev));
         }}
         onSaveBilling={(rule) => {
           if (!detailTarget) return;
@@ -1068,6 +995,7 @@ function TenantDetailDrawer({
   onAudit,
   onImpersonate,
   onSaveBilling,
+  onTenantUpdated,
 }: {
   tenant: Tenant | null;
   tab: string;
@@ -1079,10 +1007,10 @@ function TenantDetailDrawer({
   onAudit: () => void;
   onImpersonate: () => void;
   onSaveBilling: (rule: BillingRule) => void;
+  onTenantUpdated: (tenant: Tenant) => void;
 }) {
   const [tabSheetOpen, setTabSheetOpen] = useState(false);
   const [billingDraft, setBillingDraft] = useState<BillingRule | null>(null);
-  const [activity, setActivity] = useState<AuditEvent[]>([]);
   const [snapshot, setSnapshot] = useState<TenantWorkspaceSnapshot | null>(null);
   const [snapshotLoading, setSnapshotLoading] = useState(false);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
@@ -1090,11 +1018,9 @@ function TenantDetailDrawer({
   useEffect(() => {
     if (!tenant || !billing) {
       setBillingDraft(null);
-      setActivity([]);
       return;
     }
     setBillingDraft(billing);
-    setActivity(buildAuditLog(tenant, 8));
   }, [tenant, billing]);
 
   useEffect(() => {
@@ -1829,51 +1755,22 @@ function TenantDetailDrawer({
             </TabsContent>
 
             <TabsContent value="activity" className="mt-0">
-              <div className="grid grid-cols-12 gap-3">
-                <div className="col-span-12 flex flex-col gap-3 sm:col-span-8 sm:flex-row sm:items-center">
-                  <p className="text-[13px] leading-snug text-black/55">
-                    Recent connection and admin events for this tenant.
-                  </p>
-                </div>
-                <div className="col-span-12 sm:col-span-4 sm:flex sm:justify-end">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full rounded-full sm:w-auto"
-                    onClick={onAudit}
-                  >
-                    <ScrollText className="h-3.5 w-3.5" /> Full audit
-                  </Button>
-                </div>
-                <div className="col-span-12 divide-y divide-[#F0F0F0] rounded-2xl border border-[#E5E5E5] bg-white">
-                  {activity.length === 0 ? (
-                    <div className="px-4 py-10 text-center text-[13px] text-black/45">
-                      No activity recorded yet.
-                    </div>
-                  ) : (
-                    activity.map((e, i) => (
-                      <div key={`${e.ts}-${i}`} className="grid grid-cols-12 gap-2 px-4 py-3">
-                        <div className="col-span-12 sm:col-span-8">
-                          <div className="text-[13px] font-semibold text-black">{e.action}</div>
-                          <div className="mt-0.5 text-[12px] text-black/55">
-                            {e.actor} · {e.detail}
-                          </div>
-                          <div className="mt-1 font-mono text-[10px] uppercase tracking-wider text-black/40">
-                            {e.severity} · {e.ip}
-                          </div>
-                        </div>
-                        <div className="col-span-12 font-mono text-[10px] text-black/45 sm:col-span-4 sm:text-right">
-                          {e.ts}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
+              {tab === "activity" && (
+                <TenantActivityPanel
+                  tenantId={tenant.id}
+                  tenantSlug={tenant.subdomain}
+                  defaultDays={30}
+                  onOpenFull={onAudit}
+                />
+              )}
             </TabsContent>
 
             <TabsContent value="access" className="mt-0">
               <div className="grid grid-cols-12 gap-3">
+                <div className="col-span-12">
+                  <TenantAccessControl tenant={tenant} onUpdated={onTenantUpdated} />
+                </div>
+
                 <div className="col-span-12 rounded-2xl border border-[#E5E5E5] bg-[#F4F4F5] p-4">
                   <div className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
                     School admin login
@@ -2491,172 +2388,30 @@ function SummaryRow({
 }
 
 function AuditLogsDrawer({ tenant, onClose }: { tenant: Tenant | null; onClose: () => void }) {
-  const [events, setEvents] = useState<AuditEvent[]>([]);
-  const [severityFilter, setSeverityFilter] = useState<"all" | AuditEvent["severity"]>("all");
-  const [searchValue, setSearchValue] = useState("");
-  const [refreshTick, setRefreshTick] = useState(0);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!tenant) return;
-    setEvents(buildAuditLog(tenant));
-    setSeverityFilter("all");
-    setSearchValue("");
-    scrollRef.current?.scrollTo({ top: 0 });
-  }, [tenant, refreshTick]);
-
   if (!tenant) return null;
-
-  const visible = events.filter((e) => {
-    if (severityFilter !== "all" && e.severity !== severityFilter) return false;
-    if (
-      searchValue &&
-      !`${e.actor} ${e.action} ${e.detail} ${e.ip}`
-        .toLowerCase()
-        .includes(searchValue.toLowerCase())
-    )
-      return false;
-    return true;
-  });
-
-  const counts: Record<AuditEvent["severity"], number> = {
-    info: events.filter((e) => e.severity === "info").length,
-    success: events.filter((e) => e.severity === "success").length,
-    warning: events.filter((e) => e.severity === "warning").length,
-    error: events.filter((e) => e.severity === "error").length,
-  };
-
-  const exportCsv = () => {
-    const header = ["timestamp", "severity", "actor", "action", "ip", "detail"];
-    const rows = visible.map((e) =>
-      [e.ts, e.severity, e.actor, e.action, e.ip, e.detail]
-        .map((c) => `"${String(c).replace(/"/g, '""')}"`)
-        .join(","),
-    );
-    const blob = new Blob([[header.join(","), ...rows].join("\n")], {
-      type: "text/csv;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `audit-${tenant.subdomain}-${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    toast.success("Audit log exported", {
-      description: `${visible.length} events · CSV downloaded`,
-    });
-  };
 
   return (
     <Sheet open={!!tenant} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[680px]">
+      <SheetContent className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[860px]">
         <SheetHeader className="border-b border-[#E5E5E5] bg-[#F4F4F5] px-6 py-5">
           <SheetTitle className="text-[18px] font-semibold text-black">
-            Audit Connection Logs
+            Login &amp; usage audit
           </SheetTitle>
           <SheetDescription className="text-[12px] text-black/55">
-            {tenant.name} · {tenant.subdomain}.schoolaccounts.in
+            {tenant.name} · every sign-in, sign-out, session and support access
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex items-center gap-2 border-b border-[#E5E5E5] bg-white px-6 py-3">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-black/40" />
-            <Input
-              value={searchValue}
-              onChange={(e) => setSearchValue(e.target.value)}
-              placeholder="Search actor, action, IP, payload…"
-              className="h-9 rounded-full border-[#E5E5E5] bg-[#F4F4F5] pl-8 text-[12px]"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={() => setRefreshTick((n) => n + 1)}
-            className="inline-flex items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 py-2 text-[11.5px] font-semibold text-black/75 transition hover:border-black/30"
-            title="Reload latest events"
-          >
-            <RotateCw className="h-3.5 w-3.5" /> Refresh
-          </button>
-          <button
-            type="button"
-            onClick={exportCsv}
-            className="inline-flex items-center gap-1.5 rounded-full bg-black px-3 py-2 text-[11.5px] font-semibold text-white transition hover:bg-black/85"
-          >
-            <Download className="h-3.5 w-3.5" /> Export CSV
-          </button>
+        <div className="flex-1 overflow-y-auto bg-[#FAFAFA] px-4 py-4 sm:px-6">
+          <TenantActivityPanel
+            tenantId={tenant.id}
+            tenantSlug={tenant.subdomain}
+            defaultDays={90}
+            variant="full"
+          />
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5 border-b border-[#E5E5E5] bg-white px-6 py-2.5">
-          <span className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wider text-black/45">
-            <FilterIcon className="h-3 w-3" /> Severity
-          </span>
-          {(["all", "info", "success", "warning", "error"] as const).map((s) => {
-            const sel = severityFilter === s;
-            const count =
-              s === "all" ? events.length : (counts[s as Exclude<typeof s, "all">] ?? 0);
-            return (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setSeverityFilter(s)}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold capitalize transition ${
-                  sel
-                    ? "border-transparent bg-black text-white"
-                    : "border-[#E5E5E5] bg-white text-black/65 hover:border-black/30"
-                }`}
-              >
-                {s}
-                <span
-                  className={`rounded-full px-1.5 text-[10px] font-mono ${sel ? "bg-white/15" : "bg-[#F4F4F5] text-black/60"}`}
-                >
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        <div ref={scrollRef} className="flex-1 overflow-y-auto bg-[#FAFAFA] px-6 py-4">
-          {visible.length === 0 ? (
-            <div className="grid place-items-center py-16 text-center text-[12.5px] text-black/55">
-              No events match the current filters.
-            </div>
-          ) : (
-            <ul className="space-y-2">
-              {visible.map((e, i) => (
-                <li
-                  key={`${e.ts}-${i}`}
-                  className="rounded-2xl border border-[#E5E5E5] bg-white px-3.5 py-3"
-                >
-                  <div className="flex items-start gap-3">
-                    <SeverityBadge severity={e.severity} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-baseline justify-between gap-2">
-                        <div className="text-[13px] font-semibold leading-tight text-black">
-                          {e.action}
-                        </div>
-                        <div className="font-mono text-[10.5px] text-black/45">{e.ts}</div>
-                      </div>
-                      <div className="mt-1 text-[12px] text-black/65">{e.detail}</div>
-                      <div className="mt-1.5 flex flex-wrap items-center gap-2 font-mono text-[10.5px] text-black/55">
-                        <span className="rounded-full bg-[#F4F4F5] px-2 py-0.5">{e.actor}</span>
-                        <span className="rounded-full bg-[#F4F4F5] px-2 py-0.5">{e.ip}</span>
-                      </div>
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="flex items-center justify-between gap-3 border-t border-[#E5E5E5] bg-[#F4F4F5] px-6 py-3 text-[11.5px] text-black/60">
-          <span>
-            Showing <strong className="text-black">{visible.length}</strong> of {events.length}{" "}
-            events
-          </span>
+        <div className="flex items-center justify-end gap-3 border-t border-[#E5E5E5] bg-[#F4F4F5] px-6 py-3">
           <button
             type="button"
             onClick={onClose}
@@ -2667,37 +2422,6 @@ function AuditLogsDrawer({ tenant, onClose }: { tenant: Tenant | null; onClose: 
         </div>
       </SheetContent>
     </Sheet>
-  );
-}
-
-function SeverityBadge({ severity }: { severity: AuditEvent["severity"] }) {
-  const style: Record<
-    AuditEvent["severity"],
-    { bg: string; fg: string; Icon: typeof Info; label: string }
-  > = {
-    info: { bg: "bg-sky-100", fg: "text-sky-700", Icon: Info, label: "Info" },
-    success: {
-      bg: "bg-[#CCFBF1]",
-      fg: "text-[#10B981]",
-      Icon: CheckCircle2,
-      label: "OK",
-    },
-    warning: {
-      bg: "bg-amber-100",
-      fg: "text-amber-700",
-      Icon: AlertTriangle,
-      label: "Warn",
-    },
-    error: { bg: "bg-rose-100", fg: "text-rose-700", Icon: CircleAlert, label: "Error" },
-  };
-  const s = style[severity];
-  return (
-    <span
-      className={`mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${s.bg} ${s.fg}`}
-      title={s.label}
-    >
-      <s.Icon className="h-3.5 w-3.5" />
-    </span>
   );
 }
 

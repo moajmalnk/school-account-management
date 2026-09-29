@@ -13,4 +13,9 @@ export type Tenant = {
   createdAt: string;
   /** Primary school admin login email (username). */
   adminEmail?: string;
+  /** Set while a Super Admin has deactivated the workspace (status Suspended). */
+  accessDisabledAt?: string | null;
+  accessDisabledReason?: string | null;
+  /** Lifecycle status to restore on reactivation. */
+  statusBeforeDisable?: Status | null;
 };

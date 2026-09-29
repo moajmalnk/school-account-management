@@ -17,6 +17,7 @@ import {
 import { getActiveBrandPalette, pdfFontName } from "@/lib/brand-theme";
 import { defaultSealToPng, defaultSignatureSvg, svgMarkupToPng } from "@/lib/school-marks";
 import { amountInWords } from "@/lib/amount-words";
+import { isEmbeddedWebView, saveFile } from "@/lib/native-download";
 import { formatDownloadFilename, slugYear, todayStamp } from "@/lib/download-names";
 import {
   feeStatementHeadline,
@@ -35,12 +36,7 @@ import {
 } from "@/lib/money";
 
 function triggerDownload(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  void saveFile(blob, filename);
 }
 
 export function downloadBlobFile(blob: Blob, filename: string) {
@@ -49,8 +45,12 @@ export function downloadBlobFile(blob: Blob, filename: string) {
 
 export type PdfEmitAction = "download" | "print" | "preview";
 
-export function printJsPdf(doc: jsPDF) {
+export function printJsPdf(doc: jsPDF, filename = "document.pdf") {
   const blob = doc.output("blob");
+  if (isEmbeddedWebView()) {
+    void saveFile(blob, filename, "print");
+    return;
+  }
   const url = URL.createObjectURL(blob);
   const iframe = document.createElement("iframe");
   iframe.style.position = "fixed";
@@ -78,8 +78,12 @@ export function printJsPdf(doc: jsPDF) {
   setTimeout(cleanup, 60_000);
 }
 
-export function previewJsPdf(doc: jsPDF) {
+export function previewJsPdf(doc: jsPDF, filename = "document.pdf") {
   const blob = doc.output("blob");
+  if (isEmbeddedWebView()) {
+    void saveFile(blob, filename, "preview");
+    return;
+  }
   const url = URL.createObjectURL(blob);
   const tab = window.open(url, "_blank", "noopener,noreferrer");
   if (!tab) {
@@ -92,11 +96,11 @@ export function previewJsPdf(doc: jsPDF) {
 
 export function emitPdf(doc: jsPDF, filename: string, action: PdfEmitAction = "download") {
   if (action === "print") {
-    printJsPdf(doc);
+    printJsPdf(doc, filename);
   } else if (action === "preview") {
-    previewJsPdf(doc);
+    previewJsPdf(doc, filename);
   } else {
-    doc.save(filename);
+    void saveFile(doc.output("blob"), filename);
   }
 }
 
@@ -1384,25 +1388,30 @@ function drawReceiptLetterheadHeader(
   schoolName: string,
   branding: ReceiptBranding | undefined,
   logo: PdfLogo | null,
+  compact = false,
 ): number {
   const margin = 16;
   const contentWidth = pageWidth - margin * 2;
   const displayName = pdfSafe(schoolName || "School");
   const initials = schoolInitials(displayName) || "SC";
-  const { maxW, maxH } = pickLogoBounds(logo);
+  const bounds = pickLogoBounds(logo);
+  const logoScale = compact ? 0.72 : 1;
+  const maxW = bounds.maxW * logoScale;
+  const maxH = bounds.maxH * logoScale;
   const logoW = Math.min(maxW, contentWidth * 0.78);
   const logoX = (pageWidth - logoW) / 2;
-  let cursorY = 10;
+  let cursorY = compact ? 8 : 10;
 
   drawLogoPlate(doc, logoX, cursorY, logo, initials, logoW, maxH);
-  cursorY += maxH + 5.5;
+  cursorY += maxH + (compact ? 4.5 : 5.5);
 
   doc.setFont(pdfFontName(), "bold");
-  doc.setFontSize(displayName.length > 34 ? 14 : 18);
+  const nameSize = displayName.length > 34 ? 14 : 18;
+  doc.setFontSize(compact ? nameSize - 2.5 : nameSize);
   doc.setTextColor(...receiptInk().tealDeep);
   const nameLines = doc.splitTextToSize(displayName, contentWidth * 0.92) as string[];
   doc.text(nameLines, pageWidth / 2, cursorY, { align: "center" });
-  cursorY += nameLines.length * 6.6 + 2.2;
+  cursorY += nameLines.length * (compact ? 5.6 : 6.6) + 2.2;
 
   const address = pdfSafe(branding?.address || "").toUpperCase();
   if (address) {
@@ -1426,11 +1435,11 @@ function drawReceiptLetterheadHeader(
     cursorY += 5.5;
   }
 
-  cursorY += 2.5;
+  cursorY += compact ? 1.5 : 2.5;
   doc.setDrawColor(...receiptInk().line);
   doc.setLineWidth(0.25);
   doc.line(margin, cursorY, pageWidth - margin, cursorY);
-  return cursorY + 5;
+  return cursorY + (compact ? 3.5 : 5);
 }
 
 function drawOfficialDocHeader(
@@ -2275,6 +2284,65 @@ export type StudentFeeReportInput = {
   branding?: ReceiptBranding;
 };
 
+type FeeStatementLayout = {
+  tableFont: number;
+  headFont: number;
+  cellPad: number;
+  cardH: number;
+  cardValueFont: number;
+  sectionGap: number;
+  metaColumns: 1 | 2;
+  compactHeader: boolean;
+};
+
+/** Ordered from most spacious to densest; the first one that fits on a single page wins. */
+const FEE_STATEMENT_LAYOUTS: FeeStatementLayout[] = [
+  {
+    tableFont: 8.5,
+    headFont: 8,
+    cellPad: 2.8,
+    cardH: 22,
+    cardValueFont: 12,
+    sectionGap: 8,
+    metaColumns: 1,
+    compactHeader: false,
+  },
+  {
+    tableFont: 8,
+    headFont: 7.8,
+    cellPad: 2,
+    cardH: 18,
+    cardValueFont: 11,
+    sectionGap: 6,
+    metaColumns: 2,
+    compactHeader: false,
+  },
+  {
+    tableFont: 7.6,
+    headFont: 7.4,
+    cellPad: 1.5,
+    cardH: 16,
+    cardValueFont: 10.5,
+    sectionGap: 5,
+    metaColumns: 2,
+    compactHeader: true,
+  },
+];
+
+/** Layout used when even the densest variant needs more than one page. */
+const FEE_STATEMENT_MULTIPAGE_LAYOUT = FEE_STATEMENT_LAYOUTS[1];
+
+/** Space reserved at the top of continuation pages for the running header. */
+const FEE_STATEMENT_CONTINUATION_TOP = 20;
+
+function feeStatementSectionStart(doc: jsPDF, startY: number, margin: number, need: number) {
+  const pageHeight = doc.internal.pageSize.getHeight();
+  if (startY + need <= pageHeight - margin - 6) return startY;
+  doc.addPage();
+  paintPdfPageBackground(doc, doc.internal.pageSize.getWidth(), pageHeight);
+  return FEE_STATEMENT_CONTINUATION_TOP + 4;
+}
+
 function appendFeeLedgerTable(
   doc: jsPDF,
   margin: number,
@@ -2282,18 +2350,25 @@ function appendFeeLedgerTable(
   title: string,
   rows: StudentLedgerRow[],
   startY: number,
+  layout: FeeStatementLayout,
 ): number {
   if (rows.length === 0) return startY;
+  const y = feeStatementSectionStart(doc, startY, margin, 24);
   doc.setFont(pdfFontName(), "bold");
   doc.setFontSize(10);
   doc.setTextColor(...receiptInk().tealDeep);
-  doc.text(title, margin, startY);
-  const tableStart = startY + 5;
+  doc.text(title, margin, y);
   autoTable(doc, {
-    startY: tableStart,
-    margin: { left: margin, right: margin, bottom: margin + 6 },
+    startY: y + 4,
+    margin: {
+      top: FEE_STATEMENT_CONTINUATION_TOP,
+      left: margin,
+      right: margin,
+      bottom: margin + 6,
+    },
     tableWidth: contentWidth,
     showHead: "everyPage",
+    rowPageBreak: "avoid",
     head: [["Date", "Description", "Due Date", "Charge", "Paid", "Balance", "Status"]],
     body: rows.map((row) => {
       // Recompute from amounts so PDF never shows Partially Paid when Paid is 0.
@@ -2313,8 +2388,13 @@ function appendFeeLedgerTable(
     }),
     theme: "grid",
     styles: {
-      fontSize: 8.5,
-      cellPadding: { top: 2.8, right: 3, bottom: 2.8, left: 3 },
+      fontSize: layout.tableFont,
+      cellPadding: {
+        top: layout.cellPad,
+        right: 3,
+        bottom: layout.cellPad,
+        left: 3,
+      },
       lineColor: receiptInk().line,
       lineWidth: 0.18,
       textColor: receiptInk().ink,
@@ -2324,7 +2404,7 @@ function appendFeeLedgerTable(
       fillColor: receiptInk().teal,
       textColor: receiptInk().white,
       fontStyle: "bold",
-      fontSize: 8,
+      fontSize: layout.headFont,
     },
     alternateRowStyles: { fillColor: receiptInk().zebra },
     columnStyles: {
@@ -2333,52 +2413,69 @@ function appendFeeLedgerTable(
       5: { halign: "right" },
     },
   });
-  return (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
+  const finalY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+  return finalY + layout.sectionGap;
 }
 
-export async function downloadStudentFeeReportPdf(
-  input: StudentFeeReportInput,
-  action: PdfEmitAction = "download",
-) {
-  const { student, schoolName, academicYear, statement, branding } = input;
-  const guardian = input.guardian?.trim() || student.guardian?.trim() || "—";
-  const [logo, letterhead] = await Promise.all([
-    loadLogoForPdf(branding?.logoUrl),
-    loadLetterheadForPdf(branding?.letterheadUrl),
-  ]);
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
+type FeeStatementRenderContext = {
+  input: StudentFeeReportInput;
+  guardian: string;
+  displayName: string;
+  generatedAt: string;
+  logo: PdfLogo | null;
+  letterhead: PdfLogo | null;
+};
+
+/** Draws everything above the seal/signature block. Returns the Y where the body ends. */
+function renderFeeStatementBody(
+  doc: jsPDF,
+  ctx: FeeStatementRenderContext,
+  layout: FeeStatementLayout,
+): number {
+  const { student, academicYear, statement, branding } = ctx.input;
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 16;
   const contentWidth = pageWidth - margin * 2;
-  const generatedAt = formatNow();
-  const displayName = pdfSafe(schoolName || "School");
 
-  doc.setFillColor(...receiptInk().white);
-  doc.rect(0, 0, pageWidth, pageHeight, "F");
+  paintPdfPageBackground(doc, pageWidth, pageHeight);
 
-  const headerBottom = letterhead
-    ? drawUploadedLetterheadBanner(doc, pageWidth, letterhead, margin)
-    : drawReceiptLetterheadHeader(doc, pageWidth, displayName, branding, logo);
+  const headerBottom = ctx.letterhead
+    ? drawUploadedLetterheadBanner(doc, pageWidth, ctx.letterhead, margin)
+    : drawReceiptLetterheadHeader(
+        doc,
+        pageWidth,
+        ctx.displayName,
+        branding,
+        ctx.logo,
+        layout.compactHeader,
+      );
 
   const barY =
     drawDocumentTitleBar(doc, pageWidth, contentWidth, "Student Fee Statement", headerBottom + 2) +
-    6;
+    5.5;
   doc.setFont(pdfFontName(), "normal");
   doc.setFontSize(8.5);
   doc.setTextColor(...receiptInk().muted);
-  doc.text(`Academic Year: ${pdfSafe(academicYear)}`, pageWidth / 2, barY, { align: "center" });
+  const subtitle =
+    layout.metaColumns === 2
+      ? `Academic Year: ${pdfSafe(academicYear)}   |   Generated ${ctx.generatedAt}`
+      : `Academic Year: ${pdfSafe(academicYear)}`;
+  doc.text(subtitle, pageWidth / 2, barY, { align: "center" });
 
-  const metaTop = barY + 8;
-  const leftRows: [string, string][] = [
+  const metaTop = barY + (layout.metaColumns === 2 ? 7 : 8);
+  const contact = pdfSafe(student.phone?.trim() || branding?.studentContact || "—");
+  const identityRows: [string, string][] = [
     ["Student Name", pdfSafe(student.name)],
     ["Student ID", pdfSafe(student.id)],
     ["Class", pdfSafe(student.cls || "—")],
-    ["Guardian", pdfSafe(guardian)],
-    ["Contact", pdfSafe(student.phone?.trim() || branding?.studentContact || "—")],
+  ];
+  const familyRows: [string, string][] = [
+    ["Guardian", pdfSafe(ctx.guardian)],
+    ["Contact", contact],
   ];
   if (statement.vehicle?.applicable) {
-    leftRows.push([
+    identityRows.push([
       "Transport Route",
       pdfSafe(
         statement.vehicle.routeLabel ||
@@ -2387,7 +2484,7 @@ export async function downloadStudentFeeReportPdf(
       ),
     ]);
     if (statement.vehicle.shift) {
-      leftRows.push([
+      familyRows.push([
         "Transport Shift",
         pdfSafe(
           statement.vehicle.shift === "morning"
@@ -2399,13 +2496,26 @@ export async function downloadStudentFeeReportPdf(
       ]);
     }
   }
-  const leftEnd = drawMetaPairs(doc, leftRows, metaTop, margin, contentWidth * 0.52);
 
-  const rightX = pageWidth - margin;
-  doc.setFont(pdfFontName(), "normal");
-  doc.setFontSize(8.5);
-  doc.setTextColor(...receiptInk().muted);
-  doc.text(`Generated ${generatedAt}`, rightX, metaTop, { align: "right" });
+  let metaEnd: number;
+  if (layout.metaColumns === 2) {
+    const colW = contentWidth / 2;
+    const leftEnd = drawMetaPairs(doc, identityRows, metaTop, margin, colW - 34);
+    const rightEnd = drawMetaPairs(doc, familyRows, metaTop, margin + colW + 4, colW - 38);
+    metaEnd = Math.max(leftEnd, rightEnd);
+  } else {
+    metaEnd = drawMetaPairs(
+      doc,
+      [...identityRows, ...familyRows],
+      metaTop,
+      margin,
+      contentWidth * 0.52,
+    );
+    doc.setFont(pdfFontName(), "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(...receiptInk().muted);
+    doc.text(`Generated ${ctx.generatedAt}`, pageWidth - margin, metaTop, { align: "right" });
+  }
 
   const headlineLedger = [
     ...(statement.tuition?.ledger ?? statement.ledger),
@@ -2414,79 +2524,79 @@ export async function downloadStudentFeeReportPdf(
   const headlineReceipts = uniqueStudentReceipts(statement.receipts);
   const headline = feeStatementHeadline(headlineLedger, headlineReceipts);
 
-  const summaryTop = leftEnd + 6;
+  const summaryTop = metaEnd + (layout.metaColumns === 2 ? 3 : 6);
   const colGap = 4;
-  const colW = (contentWidth - colGap * 2) / 3;
+  const cardW = (contentWidth - colGap * 2) / 3;
   const summaryItems = [
     { label: "Total Fee", value: formatMoneyPdf(headline.totalFee) },
     { label: "Total Paid", value: formatMoneyPdf(headline.totalPaid) },
     { label: "Total Due", value: formatMoneyPdf(headline.totalDue) },
   ];
   summaryItems.forEach((item, index) => {
-    const x = margin + index * (colW + colGap);
+    const x = margin + index * (cardW + colGap);
     doc.setDrawColor(...receiptInk().line);
     doc.setLineWidth(0.22);
-    doc.roundedRect(x, summaryTop, colW, 22, 2, 2, "S");
+    doc.roundedRect(x, summaryTop, cardW, layout.cardH, 2, 2, "S");
     doc.setFont(pdfFontName(), "normal");
     doc.setFontSize(8);
     doc.setTextColor(...receiptInk().muted);
-    doc.text(item.label.toUpperCase(), x + 4, summaryTop + 6);
+    doc.text(item.label.toUpperCase(), x + 4, summaryTop + layout.cardH * 0.28);
     doc.setFont(pdfFontName(), "bold");
-    doc.setFontSize(12);
+    doc.setFontSize(layout.cardValueFont);
     if (index === 2 && headline.totalDue > 0) {
       doc.setTextColor(185, 28, 28);
     } else {
       doc.setTextColor(...receiptInk().ink);
     }
-    doc.text(item.value, x + 4, summaryTop + 14.5);
+    doc.text(item.value, x + 4, summaryTop + layout.cardH * 0.68);
   });
 
-  let tableStart = summaryTop + 28;
+  let y = summaryTop + layout.cardH + layout.sectionGap - 1;
   if (headline.unallocatedPaid > 0) {
     doc.setFont(pdfFontName(), "normal");
     doc.setFontSize(8);
     doc.setTextColor(...receiptInk().muted);
     const creditNote = `${formatMoneyPdf(headline.unallocatedPaid)} received against vehicle or other heads is included in Total Paid and deducted from Total Due. It is not allocated to the academic lines below.`;
     const creditLines = doc.splitTextToSize(creditNote, contentWidth);
-    doc.text(creditLines, margin, tableStart);
-    tableStart += creditLines.length * 4 + 4;
+    doc.text(creditLines, margin, y);
+    y += creditLines.length * 4 + 3;
   }
 
   const tuitionLedger = (statement.tuition?.ledger ?? statement.ledger).filter(
     isScheduledFeeLedgerRow,
   );
-  tableStart = appendFeeLedgerTable(
-    doc,
-    margin,
-    contentWidth,
-    "Academic Fees",
-    tuitionLedger,
-    tableStart,
-  );
+  y = appendFeeLedgerTable(doc, margin, contentWidth, "Academic Fees", tuitionLedger, y, layout);
 
   const vehicleLedger = (statement.vehicle?.ledger ?? []).filter(isScheduledFeeLedgerRow);
   if (statement.vehicle?.applicable && vehicleLedger.length > 0) {
-    tableStart = appendFeeLedgerTable(
+    y = appendFeeLedgerTable(
       doc,
       margin,
       contentWidth,
       "Vehicle / Transport Fees",
       vehicleLedger,
-      tableStart,
+      y,
+      layout,
     );
   }
 
   if (headlineReceipts.length > 0) {
+    y = feeStatementSectionStart(doc, y, margin, 22);
     doc.setFont(pdfFontName(), "bold");
     doc.setFontSize(10);
     doc.setTextColor(...receiptInk().tealDeep);
-    doc.text("Payment History", margin, tableStart);
-    tableStart += 5;
+    doc.text("Payment History", margin, y);
     autoTable(doc, {
-      startY: tableStart,
-      margin: { left: margin, right: margin, bottom: margin + 6 },
+      startY: y + 4,
+      margin: {
+        top: FEE_STATEMENT_CONTINUATION_TOP,
+        left: margin,
+        right: margin,
+        bottom: margin + 6,
+      },
       tableWidth: contentWidth,
       showHead: "everyPage",
+      rowPageBreak: "avoid",
       head: [["Receipt", "Date", "Category", "Mode", "Amount"]],
       body: headlineReceipts.map((row) => [
         pdfSafe(row.id),
@@ -2497,8 +2607,13 @@ export async function downloadStudentFeeReportPdf(
       ]),
       theme: "grid",
       styles: {
-        fontSize: 8.5,
-        cellPadding: { top: 2.8, right: 3, bottom: 2.8, left: 3 },
+        fontSize: layout.tableFont,
+        cellPadding: {
+          top: layout.cellPad,
+          right: 3,
+          bottom: layout.cellPad,
+          left: 3,
+        },
         lineColor: receiptInk().line,
         textColor: receiptInk().ink,
       },
@@ -2506,38 +2621,111 @@ export async function downloadStudentFeeReportPdf(
         fillColor: receiptInk().headerTint,
         textColor: receiptInk().tealDeep,
         fontStyle: "bold",
-        fontSize: 8,
+        fontSize: layout.headFont,
       },
       alternateRowStyles: { fillColor: receiptInk().zebra },
       columnStyles: {
         4: { halign: "right", fontStyle: "bold" },
       },
     });
-    tableStart = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
+    y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 4;
   }
+
+  return y;
+}
+
+/** Running header on continuation pages, page numbers and brand strip on every page. */
+function stampFeeStatementPages(
+  doc: jsPDF,
+  margin: number,
+  student: Pick<Student, "id" | "name">,
+  schoolName: string,
+) {
+  const pageCount = doc.getNumberOfPages();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  for (let page = 1; page <= pageCount; page += 1) {
+    doc.setPage(page);
+    if (page > 1) {
+      doc.setFont(pdfFontName(), "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(...receiptInk().tealDeep);
+      doc.text("Student Fee Statement", margin, 11);
+      doc.setFont(pdfFontName(), "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(...receiptInk().muted);
+      doc.text(
+        `${pdfSafe(student.name)}  ·  ${pdfSafe(student.id)}  ·  ${schoolName}`,
+        pageWidth - margin,
+        11,
+        { align: "right" },
+      );
+      doc.setDrawColor(...receiptInk().line);
+      doc.setLineWidth(0.25);
+      doc.line(margin, 14, pageWidth - margin, 14);
+    }
+    if (pageCount > 1) {
+      doc.setFont(pdfFontName(), "normal");
+      doc.setFontSize(7.5);
+      doc.setTextColor(...receiptInk().muted);
+      doc.text(`Page ${page} of ${pageCount}`, pageWidth - margin, pageHeight - 6.5, {
+        align: "right",
+      });
+    }
+    doc.setFillColor(...receiptInk().teal);
+    doc.rect(0, pageHeight - 3.2, pageWidth, 3.2, "F");
+  }
+}
+
+export async function downloadStudentFeeReportPdf(
+  input: StudentFeeReportInput,
+  action: PdfEmitAction = "download",
+) {
+  const { student, schoolName, academicYear, branding } = input;
+  const [logo, letterhead] = await Promise.all([
+    loadLogoForPdf(branding?.logoUrl),
+    loadLetterheadForPdf(branding?.letterheadUrl),
+  ]);
+  const margin = 16;
+  const displayName = pdfSafe(schoolName || "School");
+  const ctx: FeeStatementRenderContext = {
+    input,
+    guardian: input.guardian?.trim() || student.guardian?.trim() || "—",
+    displayName,
+    generatedAt: formatNow(),
+    logo,
+    letterhead,
+  };
+
+  const fitsOnePage = (layout: FeeStatementLayout) => {
+    const probe = new jsPDF({ unit: "mm", format: "a4" });
+    const endY = renderFeeStatementBody(probe, ctx, layout);
+    if (probe.getNumberOfPages() > 1) return false;
+    const bottomLimit = probe.internal.pageSize.getHeight() - margin - 4;
+    return pickFooterLayout(endY, bottomLimit) !== null;
+  };
+  const layout =
+    FEE_STATEMENT_LAYOUTS.find((candidate) => fitsOnePage(candidate)) ??
+    FEE_STATEMENT_MULTIPAGE_LAYOUT;
+
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const bodyEnd = renderFeeStatementBody(doc, ctx, layout);
 
   await drawSealFooter(
     doc,
     pageWidth,
     pageHeight,
     margin,
-    tableStart,
-    generatedAt,
+    bodyEnd,
+    ctx.generatedAt,
     displayName,
     `This statement is issued for parent reference. For fee queries, contact ${displayName}.`,
-    tableStart > pageHeight - margin - 95,
+    layout !== FEE_STATEMENT_LAYOUTS[0],
     branding,
-    {
-      title: "Official Verification",
-      subtitle: "Parent copy — student fee statement",
-      summaryLines: [
-        ["Student", pdfSafe(student.name)],
-        ["Student ID", pdfSafe(student.id)],
-        ["Class", pdfSafe(student.cls || "—")],
-        ["Total Due", formatMoneyPdf(headline.totalDue)],
-      ],
-    },
   );
+  stampFeeStatementPages(doc, margin, student, displayName);
 
   emitPdf(
     doc,

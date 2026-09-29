@@ -312,7 +312,8 @@ export function planStaffDuplicateMerge(existing: Staff[]): {
       if (member.id !== keep.id) recycleIds.push(member.id);
     }
   }
-  return { keepIds, recycleIds };
+  const keep = new Set(keepIds);
+  return { keepIds, recycleIds: [...new Set(recycleIds)].filter((id) => !keep.has(id)) };
 }
 
 export function staffFromCsvRow(

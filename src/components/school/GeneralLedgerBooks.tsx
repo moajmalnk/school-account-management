@@ -1,13 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  AlertTriangle,
   BookOpen,
   CheckCircle2,
+  ExternalLink,
+  Eye,
+  Info,
   Loader2,
+  Lock,
+  Pencil,
   Plus,
   RotateCcw,
   Save,
   Search,
   Trash2,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -32,6 +39,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { OrganicCard } from "@/components/ui/organic-card";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DatePicker } from "@/components/ui/date-picker";
 import { getApiToken } from "@/lib/api/client";
@@ -40,6 +48,7 @@ import {
   apiGlClosePeriod,
   apiGlCreateAccount,
   apiGlCreateJournal,
+  apiGlGetJournal,
   apiGlGetPeriod,
   apiGlListAccounts,
   apiGlListJournals,
@@ -50,6 +59,7 @@ import {
   apiGlReportTrialBalance,
   apiGlSyncCatalogs,
   apiGlUpdateAllBooks,
+  apiGlUpdateJournal,
   apiGlVoidJournal,
   defaultGlAccountGroups,
   glInstallHint,
@@ -754,10 +764,10 @@ export function GlAccountStatementReport({
                             )}
                           </td>
                           <td className="max-w-[220px] truncate px-3 py-2">{line.narration}</td>
-                          <td className="px-3 py-2 text-right font-mono text-emerald-700">
+                          <td className="whitespace-nowrap px-3 py-2 text-right font-mono text-emerald-700">
                             {line.debit ? formatMoney(line.debit) : "—"}
                           </td>
-                          <td className="px-3 py-2 text-right font-mono text-rose-600">
+                          <td className="whitespace-nowrap px-3 py-2 text-right font-mono text-rose-600">
                             {line.credit ? formatMoney(line.credit) : "—"}
                           </td>
                           <td className="px-3 py-2 text-right font-mono">
@@ -1221,23 +1231,230 @@ export function GlTrialBalanceReport() {
 /* -------------------------------------------------------------------------- */
 
 type DraftLine = { accountId: string; debit: string; credit: string; description: string };
+type ManualVoucherType = "journal" | "opening" | "contra";
 
-export function GlJournalsReport() {
+const MANUAL_VOUCHER_TYPES: ManualVoucherType[] = ["journal", "opening", "contra"];
+
+const emptyDraftLine = (): DraftLine => ({ accountId: "", debit: "", credit: "", description: "" });
+
+const VOUCHER_TITLE: Record<ManualVoucherType, string> = {
+  journal: "Journal voucher",
+  opening: "Opening balances",
+  contra: "Fund transfer",
+};
+
+function isManualJournal(j: GlJournal): boolean {
+  return !j.sourceType && MANUAL_VOUCHER_TYPES.includes(j.voucherType as ManualVoucherType);
+}
+
+function journalSourceLabel(j: GlJournal): string {
+  if (!j.sourceType) return "Manual";
+  if (j.sourceType === "payment") return `Receipt ${j.sourceId ?? ""}`.trim();
+  if (j.sourceType === "disbursement") return `Payment ${j.sourceId ?? ""}`.trim();
+  if (j.sourceType === "period_close") return "Year-end close";
+  return `${j.sourceType}:${j.sourceId ?? ""}`;
+}
+
+function academicYearLabel(year?: string | null): string {
+  const y = (year ?? "").trim();
+  if (!y) return "the year";
+  return /^AY\b/i.test(y) ? y : `AY ${y}`;
+}
+
+const ACCOUNT_HINTS: Array<[RegExp, string]> = [
+  [
+    /retained/i,
+    "Retained Earnings · the school's accumulated surplus or deficit from closed years. Debit = a deficit (loss) was absorbed. Credit = a surplus was added.",
+  ],
+  [
+    /suspense/i,
+    "Suspense · a temporary holding account for amounts Feezo could not match to a proper head (e.g. a receipt without an income category, or an older year-end close). It should normally be zero. To clear it: for an older year-end close, Reopen year → Close year again; otherwise post a journal moving the amount to the correct account.",
+  ],
+  [/cash/i, "Cash-in-Hand · money physically received or paid out."],
+  [/bank/i, "Bank · money received into or paid from a bank account."],
+  [/receivable|debtor/i, "Receivable · fees billed to students but not yet collected."],
+  [/payable|creditor/i, "Payable · amounts the school owes but has not yet paid."],
+];
+
+function accountHint(name?: string | null): string | null {
+  if (!name) return null;
+  return ACCOUNT_HINTS.find(([re]) => re.test(name))?.[1] ?? null;
+}
+
+type JournalExplainer = {
+  title: string;
+  summary: string;
+  example: string[];
+  note: string;
+  /** Present when the entry needs correcting, with the exact steps. */
+  fix?: string;
+};
+
+const LEGACY_CLOSE_FIX =
+  "How to fix: go to Journals → Reopen year, then tap Close year again. Feezo removes this entry and re-posts it the correct way: each income and expense account is cleared into Retained Earnings, and Suspense goes back to zero. Your receipts and payments are not changed.";
+
+function isLegacyYearClose(j: GlJournal): boolean {
+  return (
+    j.sourceType === "period_close" &&
+    (j.lines ?? []).some((l) => /suspense/i.test(l.accountName ?? ""))
+  );
+}
+
+/** Plain-language "why is this here?" for entries Feezo posted automatically. */
+function explainJournal(j: GlJournal): JournalExplainer | null {
+  const amount = j.totalDebit ?? 0;
+  const amt = formatMoney(amount);
+  const lines = j.lines ?? [];
+  if (j.sourceType === "period_close") {
+    const year = academicYearLabel(j.academicYear);
+    const retained = lines.find((l) => /retained/i.test(l.accountName ?? ""));
+    const result = retained ? retained.credit - retained.debit : 0;
+    const deficit = result < 0;
+    const resultAmt = formatMoney(Math.abs(result));
+    const summary = `Nobody typed this in. Feezo posted it on ${j.date} when someone tapped Close year for ${year}. Closing a year sets every income and expense account for that year back to zero and moves the net result (income − expenses) into Retained Earnings, so the next year's P&L starts fresh.`;
+
+    if (isLegacyYearClose(j)) {
+      return {
+        title: "Created automatically when the year was closed (older method)",
+        summary,
+        example: [
+          `In ${year}, ${deficit ? `expenses were ${resultAmt} more than income (a deficit)` : `income was ${resultAmt} more than expenses (a surplus)`}.`,
+          `This older entry only moved the net ${resultAmt} to Retained Earnings and parked the other side in Suspense, so Suspense now shows ${resultAmt} on the Balance Sheet.`,
+          "Your income and expense accounts were not cleared, which is why this needs correcting.",
+        ],
+        note: `Open Profit & Loss for ${year} to see the real income and expense totals.`,
+        fix: LEGACY_CLOSE_FIX,
+      };
+    }
+
+    const incomeLines = lines.filter((l) => l.debit > 0 && !/retained/i.test(l.accountName ?? ""));
+    const expenseLines = lines.filter(
+      (l) => l.credit > 0 && !/retained/i.test(l.accountName ?? ""),
+    );
+    const example: string[] = [];
+    const firstIncome = incomeLines[0];
+    const firstExpense = expenseLines[0];
+    if (firstIncome) {
+      example.push(
+        `${firstIncome.accountName} earned ${formatMoney(firstIncome.debit)} this year, so it is debited ${formatMoney(firstIncome.debit)} to bring it to zero.`,
+      );
+    }
+    if (firstExpense) {
+      example.push(
+        `${firstExpense.accountName} spent ${formatMoney(firstExpense.credit)}, so it is credited ${formatMoney(firstExpense.credit)} to bring it to zero.`,
+      );
+    }
+    if (result !== 0) {
+      example.push(
+        deficit
+          ? `Expenses were ${resultAmt} more than income, so Retained Earnings is debited ${resultAmt} (the deficit).`
+          : `Income was ${resultAmt} more than expenses, so Retained Earnings is credited ${resultAmt} (the surplus).`,
+      );
+    }
+    example.push(
+      `${incomeLines.length} income and ${expenseLines.length} expense account${expenseLines.length === 1 ? "" : "s"} closed · both sides total ${amt}.`,
+    );
+    return {
+      title: "Created automatically when the year was closed",
+      summary,
+      example,
+      note: `Profit & Loss for ${year} still shows the real totals. Reopening the year removes this entry; closing it again re-posts it with the latest figures.`,
+    };
+  }
+  if (j.sourceType === "payment") {
+    const ref = j.sourceId ?? j.voucherNo;
+    return {
+      title: "Created automatically from a fee receipt",
+      summary: `Posted when receipt ${ref} was saved in Receive Payment. Every receipt books both sides for you.`,
+      example: [
+        `Money came in (${amt}), so Cash or Bank is debited ${amt}.`,
+        `The fee head (e.g. Tuition Fee) is credited ${amt} as income.`,
+      ],
+      note: `Edit or delete receipt ${ref} and this entry updates itself.`,
+    };
+  }
+  if (j.sourceType === "disbursement") {
+    const ref = j.sourceId ?? j.voucherNo;
+    return {
+      title: "Created automatically from a payment",
+      summary: `Posted when payment ${ref} was saved in Make Payment.`,
+      example: [
+        `The expense head (e.g. Salary, Electricity) is debited ${amt}.`,
+        `Money went out, so Cash or Bank is credited ${amt}.`,
+      ],
+      note: `Edit or delete payment ${ref} and this entry updates itself.`,
+    };
+  }
+  return null;
+}
+
+function AccountHint({ name }: { name?: string | null }) {
+  const [open, setOpen] = useState(false);
+  const hint = accountHint(name);
+  if (!hint) return null;
+  return (
+    <Tooltip open={open} onOpenChange={setOpen}>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full text-black/35 hover:text-[#0F766E]"
+          aria-label={`What is ${name}?`}
+          onClick={(e) => {
+            e.preventDefault();
+            setOpen((v) => !v);
+          }}
+        >
+          <Info className="h-3 w-3" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-[280px] text-[11.5px] leading-relaxed">
+        {hint}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function journalLockReason(j: GlJournal, periodClosed: boolean): string {
+  if (j.sourceType === "period_close")
+    return "Year-end closing entry · reopen the year to reverse it";
+  if (j.sourceType) return `Posted from ${journalSourceLabel(j)} · edit or delete it there`;
+  if (j.isLocked) return "Locked voucher";
+  if (periodClosed) return "Financial year is closed · reopen to change";
+  return "";
+}
+
+const parseAmount = (v: string) => Number.parseInt(v.replace(/[^\d]/g, ""), 10) || 0;
+
+export function GlJournalsReport({
+  onOpenSource,
+  isSourceLinked,
+}: {
+  /** Open the receipt / payment voucher a system-posted journal came from. */
+  onOpenSource?: (journal: GlJournal) => void;
+  isSourceLinked?: (journal: GlJournal) => boolean;
+} = {}) {
   const academicYear = useAcademicYear();
   const branchId = useBranchKey();
   const [journals, setJournals] = useState<GlJournal[]>([]);
   const [accounts, setAccounts] = useState<GlAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [composeOpen, setComposeOpen] = useState(false);
-  const [voucherType, setVoucherType] = useState<"journal" | "opening">("journal");
+  const [voucherType, setVoucherType] = useState<ManualVoucherType>("journal");
+  const [editing, setEditing] = useState<GlJournal | null>(null);
   const [narration, setNarration] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [lines, setLines] = useState<DraftLine[]>([
-    { accountId: "", debit: "", credit: "", description: "" },
-    { accountId: "", debit: "", credit: "", description: "" },
-  ]);
+  const [lines, setLines] = useState<DraftLine[]>([emptyDraftLine(), emptyDraftLine()]);
   const [saving, setSaving] = useState(false);
   const [period, setPeriod] = useState<GlPeriod | null>(null);
+  const [viewing, setViewing] = useState<GlJournal | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<GlJournal | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const periodClosed = period?.status === "closed";
+  const canModify = (j: GlJournal) =>
+    isManualJournal(j) && !j.isVoid && !j.isLocked && !periodClosed;
+  const sourceLinked = (j: GlJournal) => Boolean(j.sourceType && isSourceLinked?.(j));
 
   const reload = useCallback(async () => {
     if (!getApiToken()) {
@@ -1265,301 +1482,770 @@ export function GlJournalsReport() {
     void reload();
   }, [reload]);
 
-  const totalDr = lines.reduce((s, l) => s + (Number.parseInt(l.debit, 10) || 0), 0);
-  const totalCr = lines.reduce((s, l) => s + (Number.parseInt(l.credit, 10) || 0), 0);
+  const composeAccounts = useMemo(() => {
+    if (voucherType === "contra") return accounts.filter((a) => a.isCash || a.isBank);
+    if (voucherType === "opening") {
+      return accounts.filter((a) => a.nature !== "income" && a.nature !== "expense");
+    }
+    return accounts;
+  }, [accounts, voucherType]);
+
+  const accountName = useCallback(
+    (id: string) => accounts.find((a) => a.id === id)?.name ?? "This account",
+    [accounts],
+  );
+
+  const totalDr = lines.reduce((s, l) => s + parseAmount(l.debit), 0);
+  const totalCr = lines.reduce((s, l) => s + parseAmount(l.credit), 0);
+  const difference = totalDr - totalCr;
+
+  // Double-entry: one account may not appear on both the debit and the credit side.
+  const conflictIds = useMemo(() => {
+    const dr = new Set<string>();
+    const cr = new Set<string>();
+    for (const l of lines) {
+      if (!l.accountId) continue;
+      if (parseAmount(l.debit) > 0) dr.add(l.accountId);
+      if (parseAmount(l.credit) > 0) cr.add(l.accountId);
+    }
+    return new Set([...dr].filter((id) => cr.has(id)));
+  }, [lines]);
+
+  const filledLines = lines.filter(
+    (l) => l.accountId && (parseAmount(l.debit) > 0 || parseAmount(l.credit) > 0),
+  );
+  const hasDebit = filledLines.some((l) => parseAmount(l.debit) > 0);
+  const hasCredit = filledLines.some((l) => parseAmount(l.credit) > 0);
+  const composeProblem = (() => {
+    if (filledLines.length < 2) return "Add at least two lines with an account and amount";
+    if (!hasDebit || !hasCredit) return "Needs at least one debit and one credit account";
+    if (conflictIds.size > 0) {
+      const first = [...conflictIds][0];
+      return `${accountName(first)} is on both sides · pick a different opposite account`;
+    }
+    if (voucherType === "contra" && filledLines.length !== 2) {
+      return "Fund transfer needs exactly one From and one To account";
+    }
+    if (difference !== 0) {
+      return `Out of balance by ${formatMoney(Math.abs(difference))} (${difference > 0 ? "more debit" : "more credit"})`;
+    }
+    return null;
+  })();
+
+  const resetCompose = () => {
+    setEditing(null);
+    setNarration("");
+    setDate(new Date().toISOString().slice(0, 10));
+    setLines([emptyDraftLine(), emptyDraftLine()]);
+  };
+
+  const openNew = (type: ManualVoucherType) => {
+    resetCompose();
+    setVoucherType(type);
+    setComposeOpen(true);
+  };
+
+  const loadFull = async (j: GlJournal): Promise<GlJournal | null> => {
+    if (j.lines?.length) return j;
+    setBusyId(j.id);
+    try {
+      const full = await apiGlGetJournal(j.id);
+      if (!full) toast.error(`Could not load ${j.voucherNo}`);
+      return full;
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const openView = async (j: GlJournal) => {
+    const full = await loadFull(j);
+    if (full) setViewing(full);
+  };
+
+  const openEdit = async (j: GlJournal) => {
+    if (!canModify(j)) {
+      toast.error(journalLockReason(j, periodClosed) || "This voucher cannot be edited");
+      return;
+    }
+    const full = await loadFull(j);
+    if (!full) return;
+    const draft = (full.lines ?? []).map((l) => ({
+      accountId: l.accountId,
+      debit: l.debit > 0 ? String(l.debit) : "",
+      credit: l.credit > 0 ? String(l.credit) : "",
+      description: l.description ?? "",
+    }));
+    while (draft.length < 2) draft.push(emptyDraftLine());
+    setEditing(full);
+    setVoucherType(full.voucherType as ManualVoucherType);
+    setDate(String(full.date).slice(0, 10));
+    setNarration(full.narration ?? "");
+    setLines(draft);
+    setViewing(null);
+    setComposeOpen(true);
+  };
+
+  const openSource = (j: GlJournal) => {
+    setViewing(null);
+    onOpenSource?.(j);
+  };
+
+  const onVoucherClick = (j: GlJournal) => {
+    if (sourceLinked(j)) openSource(j);
+    else void openView(j);
+  };
 
   const save = async () => {
-    const payload = lines
-      .map((l) => ({
-        accountId: l.accountId,
-        debit: Number.parseInt(l.debit, 10) || 0,
-        credit: Number.parseInt(l.credit, 10) || 0,
-        description: l.description || undefined,
-      }))
-      .filter((l) => l.accountId && (l.debit > 0 || l.credit > 0));
-    if (payload.length < 2) {
-      toast.error("Add at least two balanced lines");
+    if (composeProblem) {
+      toast.error(composeProblem);
       return;
     }
-    if (totalDr !== totalCr || totalDr < 1) {
-      toast.error("Debits must equal credits");
-      return;
-    }
+    const payload = filledLines.map((l) => ({
+      accountId: l.accountId,
+      debit: parseAmount(l.debit),
+      credit: parseAmount(l.credit),
+      description: l.description.trim() || undefined,
+    }));
     setSaving(true);
     try {
-      const je = await apiGlCreateJournal({
-        voucherType,
-        date,
-        academicYear: academicYear || undefined,
-        narration,
-        lines: payload,
-      });
-      toast.success(`${voucherType === "opening" ? "Opening" : "Journal"} ${je.voucherNo} posted`);
+      if (editing) {
+        const je = await apiGlUpdateJournal({
+          id: editing.id,
+          date,
+          academicYear: editing.academicYear ?? (academicYear || undefined),
+          narration,
+          lines: payload,
+        });
+        toast.success(`${je.voucherNo} updated`, {
+          description: `${formatMoney(totalDr)} · debits equal credits`,
+        });
+      } else {
+        const je = await apiGlCreateJournal({
+          voucherType,
+          date,
+          academicYear: academicYear || undefined,
+          narration,
+          lines: payload,
+        });
+        toast.success(`${VOUCHER_TITLE[voucherType]} ${je.voucherNo} posted`);
+      }
       setComposeOpen(false);
-      setNarration("");
-      setLines([
-        { accountId: "", debit: "", credit: "", description: "" },
-        { accountId: "", debit: "", credit: "", description: "" },
-      ]);
+      resetCompose();
       void reload();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not post journal");
+      toast.error(e instanceof Error ? e.message : "Could not save voucher");
     } finally {
       setSaving(false);
     }
   };
 
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await apiGlVoidJournal(deleteTarget.id);
+      toast.success(`${deleteTarget.voucherNo} deleted`, {
+        description: "Removed from ledgers, trial balance and reports",
+      });
+      setDeleteTarget(null);
+      setViewing(null);
+      void reload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not delete voucher");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const updateLine = (idx: number, patch: Partial<DraftLine>) =>
+    setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
+
   return (
-    <div className="space-y-4">
-      <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass()}>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-[18px] font-semibold">Journal vouchers</h2>
-            <p className="text-[12px] text-black/50">
-              Manual journals and opening balances · {academicYear || "all"}
-              {period?.status === "closed" ? " · closed" : ""}
-            </p>
+    <TooltipProvider delayDuration={150}>
+      <div className="space-y-4">
+        <OrganicCard tone="white" cornerSide="tr" padded className={workspacePanelClass()}>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-[18px] font-semibold">Journal vouchers</h2>
+              <p className="text-[12px] text-black/50">
+                Manual journals and opening balances · {academicYear || "all"}
+                {periodClosed ? " · closed" : ""}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <GlUpdateAllBooksButton onDone={() => void reload()} />
+              <PeriodCloseControls
+                period={period}
+                year={academicYear}
+                onChange={() => void reload()}
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 rounded-full text-[11px]"
+                disabled={periodClosed}
+                onClick={() => openNew("opening")}
+              >
+                Opening balances
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 rounded-full bg-[#0F766E] text-[11px] text-white hover:bg-[#0D9488]"
+                disabled={periodClosed}
+                onClick={() => openNew("journal")}
+              >
+                <Plus className="mr-1 h-3.5 w-3.5" />
+                New journal
+              </Button>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <GlUpdateAllBooksButton onDone={() => void reload()} />
-            <PeriodCloseControls
-              period={period}
-              year={academicYear}
-              onChange={() => void reload()}
-            />
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-8 rounded-full text-[11px]"
-              onClick={() => {
-                setVoucherType("opening");
-                setComposeOpen(true);
-              }}
-            >
-              Opening balances
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              className="h-8 rounded-full bg-[#0F766E] text-[11px] text-white hover:bg-[#0D9488]"
-              onClick={() => {
-                setVoucherType("journal");
-                setComposeOpen(true);
-              }}
-            >
-              <Plus className="mr-1 h-3.5 w-3.5" />
-              New journal
-            </Button>
-          </div>
-        </div>
 
-        {loading ? (
-          <GlJournalsTableSkeleton />
-        ) : (
-          <div className="mt-4 overflow-auto rounded-xl border border-[#EFEFEF] dark:border-white/10">
-            <table className="w-full text-left text-[12px]">
-              <thead className="bg-[#F8FAFC] text-[10px] uppercase tracking-wider text-black/45 dark:bg-zinc-900">
-                <tr>
-                  <th className="px-3 py-2">Date</th>
-                  <th className="px-3 py-2">Voucher</th>
-                  <th className="px-3 py-2">Type</th>
-                  <th className="px-3 py-2">Narration</th>
-                  <th className="px-3 py-2">Source</th>
-                  <th className="px-3 py-2 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#EFEFEF] dark:divide-white/10">
-                {journals.map((j) => (
-                  <tr key={j.id} className={j.isVoid ? "opacity-40" : undefined}>
-                    <td className="whitespace-nowrap px-3 py-2">{j.date}</td>
-                    <td className="px-3 py-2 font-mono text-[#0F766E]">{j.voucherNo}</td>
-                    <td className="px-3 py-2 uppercase">{j.voucherType}</td>
-                    <td className="max-w-[240px] truncate px-3 py-2">{j.narration || "—"}</td>
-                    <td className="px-3 py-2 text-[11px] text-black/45">
-                      {j.sourceType ? `${j.sourceType}:${j.sourceId}` : "manual"}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      {!j.isVoid && !j.isLocked && !j.sourceType ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 text-rose-600"
-                          onClick={() => {
-                            void apiGlVoidJournal(j.id)
-                              .then(() => {
-                                toast.success(`Voided ${j.voucherNo}`);
-                                void reload();
-                              })
-                              .catch((e) =>
-                                toast.error(e instanceof Error ? e.message : "Void failed"),
-                              );
-                          }}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
-                {journals.length === 0 ? (
+          {loading ? (
+            <GlJournalsTableSkeleton />
+          ) : (
+            <div className="mt-4 overflow-auto rounded-xl border border-[#EFEFEF] dark:border-white/10">
+              <table className="w-full text-left text-[12px]">
+                <thead className="bg-[#F8FAFC] text-[10px] uppercase tracking-wider text-black/45 dark:bg-zinc-900">
                   <tr>
-                    <td colSpan={6} className="px-3 py-8 text-center text-black/40">
-                      No journals yet — tap{" "}
-                      <span className="font-medium text-[#0F766E]">Update all books</span> to post
-                      old receipts &amp; payments
-                    </td>
+                    <th className="px-3 py-2">Date</th>
+                    <th className="px-3 py-2">Voucher</th>
+                    <th className="px-3 py-2">Type</th>
+                    <th className="px-3 py-2">Narration</th>
+                    <th className="px-3 py-2 text-right">Amount</th>
+                    <th className="px-3 py-2">Source</th>
+                    <th className="px-3 py-2 text-right">Actions</th>
                   </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </OrganicCard>
+                </thead>
+                <tbody className="divide-y divide-[#EFEFEF] dark:divide-white/10">
+                  {journals.map((j) => {
+                    const editable = canModify(j);
+                    const lockReason = journalLockReason(j, periodClosed);
+                    return (
+                      <tr key={j.id} className={j.isVoid ? "opacity-40" : undefined}>
+                        <td className="whitespace-nowrap px-3 py-2">{j.date}</td>
+                        <td className="px-3 py-2">
+                          <button
+                            type="button"
+                            onClick={() => onVoucherClick(j)}
+                            className="font-mono text-[#0F766E] underline-offset-2 hover:underline"
+                            title={
+                              sourceLinked(j) ? `Open ${journalSourceLabel(j)}` : "View voucher"
+                            }
+                          >
+                            {j.voucherNo}
+                          </button>
+                        </td>
+                        <td className="px-3 py-2 uppercase">{j.voucherType}</td>
+                        <td className="max-w-[260px] truncate px-3 py-2">{j.narration || "—"}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-right font-mono">
+                          {j.totalDebit ? formatMoney(j.totalDebit) : "—"}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2 text-[11px] text-black/45">
+                          {j.sourceType ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex cursor-help items-center gap-1 underline decoration-dotted underline-offset-2">
+                                  {journalSourceLabel(j)}
+                                  <Info className="h-3 w-3" />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-[280px] text-[11.5px] leading-relaxed">
+                                <span className="block">
+                                  {explainJournal(j)?.summary ??
+                                    "Posted automatically by Feezo · not entered manually"}
+                                </span>
+                                {j.sourceType === "period_close" ? (
+                                  <span className="mt-1.5 block font-medium">
+                                    Balancing side sitting in Suspense? Reopen year → Close year
+                                    again to re-post it correctly. Click the voucher for details.
+                                  </span>
+                                ) : null}
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            journalSourceLabel(j)
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center justify-end gap-0.5">
+                            {busyId === j.id ? (
+                              <Loader2 className="mx-2 h-3.5 w-3.5 animate-spin text-black/40" />
+                            ) : (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 w-7 p-0"
+                                title="View debit / credit lines"
+                                onClick={() => void openView(j)}
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                            {editable ? (
+                              <>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 w-7 p-0"
+                                  title="Edit voucher"
+                                  onClick={() => void openEdit(j)}
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 w-7 p-0 text-rose-600 hover:text-rose-700"
+                                  title="Delete voucher"
+                                  onClick={() => setDeleteTarget(j)}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </>
+                            ) : sourceLinked(j) ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 w-7 p-0 text-[#0F766E]"
+                                title={`${lockReason} · open to edit or delete`}
+                                onClick={() => openSource(j)}
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </Button>
+                            ) : lockReason ? (
+                              <span
+                                className="inline-flex h-7 w-7 items-center justify-center text-black/30"
+                                title={lockReason}
+                              >
+                                <Lock className="h-3.5 w-3.5" />
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {journals.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-3 py-8 text-center text-black/40">
+                        No journals yet — tap{" "}
+                        <span className="font-medium text-[#0F766E]">Update all books</span> to post
+                        old receipts &amp; payments
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </OrganicCard>
 
-      <Dialog open={composeOpen} onOpenChange={setComposeOpen}>
-        <DialogContent className="max-w-2xl rounded-2xl">
-          <DialogHeader>
-            <DialogTitle>
-              {voucherType === "opening" ? "Opening balances" : "Journal voucher"}
-            </DialogTitle>
-            <DialogDescription>
-              Debits must equal credits
-              {voucherType === "opening" ? " · use balance-sheet accounts only" : ""}.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label className="text-[10px] uppercase tracking-wider text-black/45">Date</Label>
-              <DatePicker
-                value={date}
-                onChange={setDate}
-                valueFormat="iso"
-                variant="pill"
-                placeholder="Pick a date"
-                quickPicks={[{ label: "Today", getDate: (t) => t }]}
-                className="mt-1 h-9 w-full"
-              />
-            </div>
-            <div>
-              <Label className="text-[10px] uppercase tracking-wider text-black/45">
-                Narration
-              </Label>
-              <Input
-                value={narration}
-                onChange={(e) => setNarration(e.target.value)}
-                className="mt-1 h-9 rounded-xl"
-                placeholder="Optional"
-              />
-            </div>
-          </div>
-          <div className="mt-2 space-y-2">
-            {lines.map((line, idx) => (
-              <div key={idx} className="grid grid-cols-12 gap-2">
-                <div className="col-span-5">
-                  <Select
-                    value={line.accountId || undefined}
-                    onValueChange={(v) =>
-                      setLines((prev) =>
-                        prev.map((l, i) => (i === idx ? { ...l, accountId: v } : l)),
-                      )
-                    }
-                  >
-                    <SelectTrigger className="h-9 rounded-xl text-[11px]">
-                      <SelectValue placeholder="Account" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {accounts.map((a) => (
-                        <SelectItem key={a.id} value={a.id}>
-                          {a.name} (#{a.code})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+        {/* Voucher detail */}
+        <Dialog open={Boolean(viewing)} onOpenChange={(open) => !open && setViewing(null)}>
+          <DialogContent className="flex max-h-[90dvh] w-[calc(100%-1.5rem)] max-w-2xl flex-col gap-0 overflow-hidden rounded-2xl p-0">
+            {viewing ? (
+              <>
+                <DialogHeader className="shrink-0 border-b border-[#F0F0F0] px-4 pb-3 pt-5 pr-12 text-left sm:px-6">
+                  <DialogTitle className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono">{viewing.voucherNo}</span>
+                    <span className="rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-black/60">
+                      {viewing.voucherType}
+                    </span>
+                    {(viewing.totalDebit ?? 0) === (viewing.totalCredit ?? 0) ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                        <CheckCircle2 className="h-3 w-3" /> Balanced
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-semibold text-rose-700">
+                        <AlertTriangle className="h-3 w-3" /> Unbalanced
+                      </span>
+                    )}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {viewing.date}
+                    {viewing.academicYear
+                      ? ` · ${academicYearLabel(viewing.academicYear)}`
+                      : ""} · {journalSourceLabel(viewing)}
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="mobile-scrollbar-none min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-4 [scrollbar-width:none] sm:px-6 [&::-webkit-scrollbar]:hidden">
+                  {viewing.narration ? (
+                    <p className="rounded-xl bg-[#F8FAFC] px-3 py-2 text-[12.5px] text-black/70">
+                      {viewing.narration}
+                    </p>
+                  ) : null}
+
+                  <div className="overflow-x-auto rounded-xl border border-[#EFEFEF]">
+                    <table className="w-full min-w-[320px] text-left text-[12px]">
+                      <thead className="bg-[#F8FAFC] text-[10px] uppercase tracking-wider text-black/45">
+                        <tr>
+                          <th className="px-3 py-2">Account</th>
+                          <th className="hidden px-3 py-2 sm:table-cell">Note</th>
+                          <th className="px-3 py-2 text-right">Debit</th>
+                          <th className="px-3 py-2 text-right">Credit</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#EFEFEF]">
+                        {(viewing.lines ?? []).map((l, i) => (
+                          <tr key={`${l.accountId}-${i}`}>
+                            <td className="px-3 py-2">
+                              <div className="font-medium text-black">
+                                {l.credit > 0 ? <span className="pl-4">To </span> : null}
+                                {l.accountName ?? l.accountId}
+                                <AccountHint name={l.accountName} />
+                              </div>
+                              {l.accountCode ? (
+                                <div className="font-mono text-[10px] text-black/40">
+                                  #{l.accountCode}
+                                </div>
+                              ) : null}
+                              {l.description ? (
+                                <div className="mt-0.5 text-[11px] text-black/50 sm:hidden">
+                                  {l.description}
+                                </div>
+                              ) : null}
+                            </td>
+                            <td className="hidden px-3 py-2 text-black/55 sm:table-cell">
+                              {l.description || "—"}
+                            </td>
+                            <td className="px-3 py-2 text-right font-mono text-emerald-700">
+                              {l.debit > 0 ? formatMoney(l.debit) : ""}
+                            </td>
+                            <td className="px-3 py-2 text-right font-mono text-rose-600">
+                              {l.credit > 0 ? formatMoney(l.credit) : ""}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="bg-[#F8FAFC] text-[12px] font-semibold">
+                        <tr>
+                          <td className="px-3 py-2">Total</td>
+                          <td className="hidden sm:table-cell" />
+                          <td className="whitespace-nowrap px-3 py-2 text-right font-mono">
+                            {formatMoney(viewing.totalDebit ?? 0)}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-2 text-right font-mono">
+                            {formatMoney(viewing.totalCredit ?? 0)}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+
+                  {(() => {
+                    const why = explainJournal(viewing);
+                    if (!why) return null;
+                    return (
+                      <div className="rounded-xl border border-sky-200 bg-sky-50/70 px-3.5 py-3 text-[12px] leading-relaxed text-sky-950">
+                        <div className="flex items-center gap-1.5 font-semibold">
+                          <Info className="h-3.5 w-3.5" /> {why.title}
+                        </div>
+                        <p className="mt-1 text-sky-900/85">{why.summary}</p>
+                        <ul className="mt-2 space-y-1 rounded-lg bg-white/70 px-3 py-2 text-[11.5px] text-sky-950">
+                          {why.example.map((line) => (
+                            <li key={line} className="flex gap-1.5">
+                              <span className="text-sky-500">•</span>
+                              <span>{line}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="mt-2 text-[11.5px] text-sky-900/75">{why.note}</p>
+                        {why.fix ? (
+                          <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11.5px] text-amber-950">
+                            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+                            <span>{why.fix}</span>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })()}
+
+                  {!canModify(viewing) && journalLockReason(viewing, periodClosed) ? (
+                    <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900">
+                      <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      {journalLockReason(viewing, periodClosed)}
+                    </p>
+                  ) : null}
                 </div>
-                <div className="col-span-2">
-                  <Input
-                    value={line.debit}
-                    onChange={(e) =>
-                      setLines((prev) =>
-                        prev.map((l, i) =>
-                          i === idx ? { ...l, debit: e.target.value, credit: "" } : l,
-                        ),
-                      )
-                    }
-                    placeholder="Debit"
-                    className="h-9 rounded-xl font-mono text-[11px]"
+
+                <DialogFooter className="shrink-0 gap-2 border-t border-[#F0F0F0] bg-[#FAFAFA] px-4 py-3 sm:gap-2 sm:px-6">
+                  {canModify(viewing) ? (
+                    <>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full rounded-full border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700 sm:w-auto"
+                        onClick={() => setDeleteTarget(viewing)}
+                      >
+                        <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete
+                      </Button>
+                      <Button
+                        type="button"
+                        className="w-full rounded-full bg-[#0F172A] text-white sm:w-auto"
+                        onClick={() => void openEdit(viewing)}
+                      >
+                        <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
+                      </Button>
+                    </>
+                  ) : sourceLinked(viewing) ? (
+                    <Button
+                      type="button"
+                      className="w-full rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488] sm:w-auto"
+                      onClick={() => openSource(viewing)}
+                    >
+                      <ExternalLink className="mr-1 h-3.5 w-3.5" /> Open{" "}
+                      {journalSourceLabel(viewing)}
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full rounded-full sm:w-auto"
+                      onClick={() => setViewing(null)}
+                    >
+                      Close
+                    </Button>
+                  )}
+                </DialogFooter>
+              </>
+            ) : null}
+          </DialogContent>
+        </Dialog>
+
+        {/* Compose / edit */}
+        <Dialog
+          open={composeOpen}
+          onOpenChange={(open) => {
+            if (saving) return;
+            setComposeOpen(open);
+            if (!open) resetCompose();
+          }}
+        >
+          <DialogContent className="flex max-h-[90dvh] w-[calc(100%-1.5rem)] max-w-2xl flex-col gap-0 overflow-hidden rounded-2xl p-0">
+            <DialogHeader className="shrink-0 border-b border-[#F0F0F0] px-4 pb-3 pt-5 pr-12 text-left sm:px-6">
+              <DialogTitle>
+                {editing ? `Edit ${editing.voucherNo}` : VOUCHER_TITLE[voucherType]}
+              </DialogTitle>
+              <DialogDescription>
+                Debits must equal credits, and an account can't be on both sides
+                {voucherType === "opening" ? " · balance-sheet accounts only" : ""}
+                {voucherType === "contra" ? " · Cash and Bank ledgers only" : ""}.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="mobile-scrollbar-none min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-4 [scrollbar-width:none] sm:px-6 [&::-webkit-scrollbar]:hidden">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <Label className="text-[10px] uppercase tracking-wider text-black/45">Date</Label>
+                  <DatePicker
+                    value={date}
+                    onChange={setDate}
+                    valueFormat="iso"
+                    variant="pill"
+                    placeholder="Pick a date"
+                    quickPicks={[{ label: "Today", getDate: (t) => t }]}
+                    className="mt-1 h-9 w-full"
                   />
                 </div>
-                <div className="col-span-2">
+                <div>
+                  <Label className="text-[10px] uppercase tracking-wider text-black/45">
+                    Narration
+                  </Label>
                   <Input
-                    value={line.credit}
-                    onChange={(e) =>
-                      setLines((prev) =>
-                        prev.map((l, i) =>
-                          i === idx ? { ...l, credit: e.target.value, debit: "" } : l,
-                        ),
-                      )
-                    }
-                    placeholder="Credit"
-                    className="h-9 rounded-xl font-mono text-[11px]"
-                  />
-                </div>
-                <div className="col-span-3">
-                  <Input
-                    value={line.description}
-                    onChange={(e) =>
-                      setLines((prev) =>
-                        prev.map((l, i) => (i === idx ? { ...l, description: e.target.value } : l)),
-                      )
-                    }
-                    placeholder="Note"
-                    className="h-9 rounded-xl text-[11px]"
+                    value={narration}
+                    onChange={(e) => setNarration(e.target.value)}
+                    className="mt-1 h-9 rounded-xl"
+                    placeholder="Optional"
                   />
                 </div>
               </div>
-            ))}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 rounded-full text-[11px]"
-              onClick={() =>
-                setLines((prev) => [
-                  ...prev,
-                  { accountId: "", debit: "", credit: "", description: "" },
-                ])
-              }
-            >
-              <Plus className="mr-1 h-3.5 w-3.5" /> Add line
-            </Button>
-            <div className="flex justify-end gap-4 text-[12px] font-semibold">
-              <span>
-                Dr <span className="font-mono text-emerald-700">{formatMoney(totalDr)}</span>
-              </span>
-              <span>
-                Cr <span className="font-mono text-rose-600">{formatMoney(totalCr)}</span>
-              </span>
+              <div className="mt-2 space-y-2">
+                {lines.map((line, idx) => {
+                  const conflict = Boolean(line.accountId && conflictIds.has(line.accountId));
+                  return (
+                    <div
+                      key={idx}
+                      className="grid grid-cols-12 gap-2 rounded-xl border border-[#EFEFEF] p-2 sm:rounded-none sm:border-0 sm:p-0"
+                    >
+                      <div className="col-span-12 sm:col-span-5">
+                        <Select
+                          value={line.accountId || undefined}
+                          onValueChange={(v) => updateLine(idx, { accountId: v })}
+                        >
+                          <SelectTrigger
+                            className={cn(
+                              "h-9 rounded-xl text-[13px] sm:text-[11px]",
+                              conflict && "border-rose-400 ring-1 ring-rose-200",
+                            )}
+                          >
+                            <SelectValue placeholder="Account" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {composeAccounts.map((a) => (
+                              <SelectItem key={a.id} value={a.id}>
+                                {a.name} (#{a.code})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="col-span-6 sm:col-span-2">
+                        <Input
+                          value={line.debit}
+                          inputMode="numeric"
+                          onChange={(e) => updateLine(idx, { debit: e.target.value, credit: "" })}
+                          placeholder="Debit"
+                          className="h-9 rounded-xl font-mono text-base sm:text-[11px]"
+                        />
+                      </div>
+                      <div className="col-span-6 sm:col-span-2">
+                        <Input
+                          value={line.credit}
+                          inputMode="numeric"
+                          onChange={(e) => updateLine(idx, { credit: e.target.value, debit: "" })}
+                          placeholder="Credit"
+                          className="h-9 rounded-xl font-mono text-base sm:text-[11px]"
+                        />
+                      </div>
+                      <div
+                        className={
+                          lines.length > 2
+                            ? "col-span-10 sm:col-span-2"
+                            : "col-span-12 sm:col-span-3"
+                        }
+                      >
+                        <Input
+                          value={line.description}
+                          onChange={(e) => updateLine(idx, { description: e.target.value })}
+                          placeholder="Note"
+                          className="h-9 rounded-xl text-base sm:text-[11px]"
+                        />
+                      </div>
+                      {lines.length > 2 ? (
+                        <div className="col-span-2 flex items-center justify-center sm:col-span-1">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0 text-black/40 hover:text-rose-600"
+                            title="Remove line"
+                            onClick={() => setLines((prev) => prev.filter((_, i) => i !== idx))}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+                {voucherType !== "contra" ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-full text-[11px]"
+                    onClick={() => setLines((prev) => [...prev, emptyDraftLine()])}
+                  >
+                    <Plus className="mr-1 h-3.5 w-3.5" /> Add line
+                  </Button>
+                ) : null}
+                <div className="flex flex-wrap items-center justify-between gap-3 text-[12px]">
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1.5 font-medium",
+                      composeProblem ? "text-rose-600" : "text-emerald-700",
+                    )}
+                  >
+                    {composeProblem ? (
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                    ) : (
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                    )}
+                    {composeProblem ?? "Balanced · ready to post"}
+                  </span>
+                  <span className="flex gap-4 font-semibold">
+                    <span>
+                      Dr <span className="font-mono text-emerald-700">{formatMoney(totalDr)}</span>
+                    </span>
+                    <span>
+                      Cr <span className="font-mono text-rose-600">{formatMoney(totalCr)}</span>
+                    </span>
+                  </span>
+                </div>
+              </div>
             </div>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setComposeOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              className="rounded-full bg-[#0F172A] text-white"
-              disabled={saving}
-              onClick={() => void save()}
-            >
-              {saving ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
-              Post voucher
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+            <DialogFooter className="shrink-0 gap-2 border-t border-[#F0F0F0] bg-[#FAFAFA] px-4 py-3 sm:gap-2 sm:px-6">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full rounded-full sm:w-auto"
+                disabled={saving}
+                onClick={() => {
+                  setComposeOpen(false);
+                  resetCompose();
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="w-full rounded-full bg-[#0F172A] text-white sm:w-auto"
+                disabled={saving || Boolean(composeProblem)}
+                onClick={() => void save()}
+              >
+                {saving ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                {editing ? "Save changes" : "Post voucher"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete confirm */}
+        <Dialog
+          open={Boolean(deleteTarget)}
+          onOpenChange={(open) => !open && !deleting && setDeleteTarget(null)}
+        >
+          <DialogContent className="w-[calc(100%-1.5rem)] max-w-md rounded-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-rose-700">
+                <Trash2 className="h-4 w-4" /> Delete {deleteTarget?.voucherNo}?
+              </DialogTitle>
+              <DialogDescription>
+                Both sides of this voucher
+                {deleteTarget?.totalDebit ? ` (${formatMoney(deleteTarget.totalDebit)})` : ""} are
+                removed together from ledgers, trial balance, P&amp;L and balance sheet. The voucher
+                number stays in the audit trail as voided.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2 sm:gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={deleting}
+                onClick={() => setDeleteTarget(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="rounded-full bg-rose-600 text-white hover:bg-rose-700"
+                disabled={deleting}
+                onClick={() => void confirmDelete()}
+              >
+                {deleting ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                Delete voucher
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </TooltipProvider>
   );
 }
 

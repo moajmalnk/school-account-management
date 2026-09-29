@@ -61,6 +61,11 @@ export async function apiMe(): Promise<ApiLoginSession> {
   return apiRequest<ApiLoginSession>("/api/auth/me.php");
 }
 
+/** Cheap access check; the API client signs out on revoked / deactivated responses. */
+export async function apiPing(): Promise<{ ok: boolean }> {
+  return apiRequest<{ ok: boolean }>("/api/auth/ping.php", { timeoutMs: 15_000 });
+}
+
 /** Revoke this browser's server session. Best-effort — local logout still proceeds. */
 export async function apiLogoutCurrentDevice(): Promise<void> {
   if (typeof window === "undefined") return;

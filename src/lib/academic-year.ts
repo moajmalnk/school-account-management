@@ -313,6 +313,20 @@ export function yearScopedId(sourceId: string, year: string): string {
   return `${base}--${slug}`;
 }
 
+const YEAR_SCOPED_SUFFIX = /--[A-Za-z0-9]+$/;
+
+export function isYearScopedId(id: string): boolean {
+  return YEAR_SCOPED_SUFFIX.test(id);
+}
+
+/** Drop `ID--2025June2026June` copies whose original `ID` is present in the same list. */
+export function collapseYearScopedClones<T extends { id: string }>(items: T[]): T[] {
+  const ids = new Set(items.map((item) => item.id));
+  return items.filter(
+    (item) => !isYearScopedId(item.id) || !ids.has(item.id.replace(YEAR_SCOPED_SUFFIX, "")),
+  );
+}
+
 export function filterByAcademicYear<T extends { academicYear?: string }>(
   items: T[],
   year: string,

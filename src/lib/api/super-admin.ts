@@ -204,6 +204,117 @@ export async function fetchSuperAdminTenantSnapshot(
   );
 }
 
+export type TenantSessionStatus =
+  | "active"
+  | "idle"
+  | "logged_out"
+  | "expired"
+  | "replaced"
+  | "revoked";
+
+export type TenantActivityEventType =
+  | "login_success"
+  | "login_failed"
+  | "logout"
+  | "logout_all_devices"
+  | "session_expired"
+  | "password_reset"
+  | "impersonation_start"
+  | "impersonation_end"
+  | (string & {});
+
+export type TenantActivityEventFilter =
+  | "all"
+  | "logins"
+  | "logouts"
+  | "failed"
+  | "expired"
+  | "support"
+  | "security";
+
+export type TenantActivitySession = {
+  id: string;
+  userId: string | null;
+  user: string;
+  email: string;
+  role: string;
+  device: string;
+  deviceId: string;
+  browser: string;
+  os: string;
+  deviceType: string;
+  client: "app" | "web";
+  ip: string;
+  loginAt: string | null;
+  lastActiveAt: string | null;
+  logoutAt: string | null;
+  durationMinutes: number;
+  status: TenantSessionStatus;
+};
+
+export type TenantActivityUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  active: boolean;
+  online: boolean;
+  logins: number;
+  totalLogins: number;
+  lastLoginAt: string | null;
+  lastSeenAt: string | null;
+  usageMinutes: number;
+  devices: number;
+  failed: number;
+};
+
+export type TenantActivityEvent = {
+  id: string;
+  event: TenantActivityEventType;
+  at: string | null;
+  user: string;
+  userId: string | null;
+  email: string;
+  ip: string;
+  device: string;
+  browser: string;
+  os: string;
+  client: "app" | "web";
+  sessionId: string | null;
+  meta: Record<string, unknown> | null;
+};
+
+export type TenantActivity = {
+  range: { days: number; from: string; to: string };
+  tracking: { events: boolean; idleDays: number };
+  summary: {
+    totalLogins: number;
+    uniqueUsers: number;
+    activeDays: number;
+    activeNow: number;
+    avgSessionMinutes: number;
+    totalUsageMinutes: number;
+    failedLogins: number;
+    lastSeenAt: string | null;
+  };
+  daily: { date: string; logins: number; activeUsers: number; minutes: number }[];
+  users: TenantActivityUser[];
+  sessions: TenantActivitySession[];
+  events: TenantActivityEvent[];
+  totalEvents: number;
+};
+
+export async function fetchSuperAdminTenantActivity(
+  tenantId: string,
+  opts: { days?: number; user?: string; event?: TenantActivityEventFilter; limit?: number } = {},
+): Promise<TenantActivity> {
+  const params = new URLSearchParams({ id: tenantId, days: String(opts.days ?? 30) });
+  if (opts.user) params.set("user", opts.user);
+  if (opts.event && opts.event !== "all") params.set("event", opts.event);
+  if (opts.limit) params.set("limit", String(opts.limit));
+  return apiRequest<TenantActivity>(`/api/super-admin/tenants/activity.php?${params.toString()}`);
+}
+
 export async function provisionSuperAdminTenant(input: ProvisionInput): Promise<ProvisionResult> {
   return apiRequest<ProvisionResult>("/api/super-admin/tenants/provision.php", {
     method: "POST",
@@ -226,6 +337,20 @@ export type UpdateTenantInput = {
 
 export async function updateSuperAdminTenant(input: UpdateTenantInput): Promise<Tenant> {
   return apiRequest<Tenant>("/api/super-admin/tenants/update.php", {
+    method: "POST",
+    body: input,
+  });
+}
+
+export type TenantAccessResult = { tenant: Tenant; revokedSessions: number };
+
+/** Deactivate signs every device out and blocks login; activate restores a lifecycle status. */
+export async function setSuperAdminTenantAccess(
+  input:
+    | { id: string; action: "deactivate"; reason?: string }
+    | { id: string; action: "activate"; status?: Exclude<Status, "Suspended">; note?: string },
+): Promise<TenantAccessResult> {
+  return apiRequest<TenantAccessResult>("/api/super-admin/tenants/access.php", {
     method: "POST",
     body: input,
   });

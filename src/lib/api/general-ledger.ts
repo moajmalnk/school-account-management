@@ -1,12 +1,6 @@
 import { ApiError, apiRequest, getApiToken } from "@/lib/api/client";
 
-export type GlSector =
-  | "assets"
-  | "liabilities"
-  | "equity"
-  | "income"
-  | "expenses"
-  | "other";
+export type GlSector = "assets" | "liabilities" | "equity" | "income" | "expenses" | "other";
 
 export type GlAccountGroup = {
   id: string;
@@ -37,13 +31,43 @@ const GL_DEFAULT_GROUP_SEED: Array<{
   { sector: "assets", name: "Loans & Advances (Asset)", uid: "Loans &", nature: "asset", sort: 80 },
   { sector: "assets", name: "Misc. Expenses (Asset)", uid: "Misc. Ex", nature: "asset", sort: 90 },
   { sector: "assets", name: "Sundry Debtors", uid: "Sundry D", nature: "asset", sort: 100 },
-  { sector: "liabilities", name: "Current Liabilities", uid: "Current L", nature: "liability", sort: 110 },
-  { sector: "liabilities", name: "Duties & Taxes", uid: "Duties &", nature: "liability", sort: 120 },
-  { sector: "liabilities", name: "Loans (Liability)", uid: "Loans (L", nature: "liability", sort: 130 },
+  {
+    sector: "liabilities",
+    name: "Current Liabilities",
+    uid: "Current L",
+    nature: "liability",
+    sort: 110,
+  },
+  {
+    sector: "liabilities",
+    name: "Duties & Taxes",
+    uid: "Duties &",
+    nature: "liability",
+    sort: 120,
+  },
+  {
+    sector: "liabilities",
+    name: "Loans (Liability)",
+    uid: "Loans (L",
+    nature: "liability",
+    sort: 130,
+  },
   { sector: "liabilities", name: "Provisions", uid: "Provisio", nature: "liability", sort: 140 },
   { sector: "liabilities", name: "Secured Loans", uid: "Secured", nature: "liability", sort: 150 },
-  { sector: "liabilities", name: "Sundry Creditors", uid: "Sundry C", nature: "liability", sort: 160 },
-  { sector: "liabilities", name: "Unsecured Loans", uid: "Unsecure", nature: "liability", sort: 170 },
+  {
+    sector: "liabilities",
+    name: "Sundry Creditors",
+    uid: "Sundry C",
+    nature: "liability",
+    sort: 160,
+  },
+  {
+    sector: "liabilities",
+    name: "Unsecured Loans",
+    uid: "Unsecure",
+    nature: "liability",
+    sort: 170,
+  },
   { sector: "equity", name: "Capital Account", uid: "Capital", nature: "equity", sort: 180 },
   { sector: "equity", name: "Drawings", uid: "Drawings", nature: "equity", sort: 190 },
   { sector: "equity", name: "Reserves & Surplus", uid: "Reserves", nature: "equity", sort: 200 },
@@ -52,7 +76,13 @@ const GL_DEFAULT_GROUP_SEED: Array<{
   { sector: "income", name: "Indirect Incomes", uid: "Indirect I", nature: "income", sort: 230 },
   { sector: "income", name: "Sales Accounts", uid: "Sales Ac", nature: "income", sort: 240 },
   { sector: "expenses", name: "Direct Expenses", uid: "Direct E", nature: "expense", sort: 250 },
-  { sector: "expenses", name: "Indirect Expenses", uid: "Indirect E", nature: "expense", sort: 260 },
+  {
+    sector: "expenses",
+    name: "Indirect Expenses",
+    uid: "Indirect E",
+    nature: "expense",
+    sort: 260,
+  },
   { sector: "expenses", name: "Purchase Accounts", uid: "Purchase", nature: "expense", sort: 270 },
   { sector: "other", name: "Suspense A/c", uid: "Suspense", nature: "other", sort: 280 },
 ];
@@ -483,6 +513,12 @@ export async function apiGlListJournals(params?: {
   return Array.isArray(data) ? (data as GlJournal[]) : [];
 }
 
+/** One voucher with its debit / credit lines. */
+export async function apiGlGetJournal(id: string): Promise<GlJournal | null> {
+  const data = await glGet<unknown>("journals", { id }, null);
+  return data && typeof data === "object" && !Array.isArray(data) ? (data as GlJournal) : null;
+}
+
 export async function apiGlCreateJournal(body: {
   voucherType: string;
   date: string;
@@ -587,7 +623,13 @@ export async function apiGlReportProfitLoss(params?: {
     groupName: string;
     sector: string;
     nature: string;
-    accounts: Array<{ accountId: string; code: string; name: string; amount: number; signed: number }>;
+    accounts: Array<{
+      accountId: string;
+      code: string;
+      name: string;
+      amount: number;
+      signed: number;
+    }>;
     total: number;
   }>;
   totalIncome: number;
@@ -613,7 +655,13 @@ export async function apiGlReportProfitLoss(params?: {
       groupName: string;
       sector: string;
       nature: string;
-      accounts: Array<{ accountId: string; code: string; name: string; amount: number; signed: number }>;
+      accounts: Array<{
+        accountId: string;
+        code: string;
+        name: string;
+        amount: number;
+        signed: number;
+      }>;
       total: number;
     }>,
     totalIncome: Number(data.totalIncome) || 0,
@@ -630,7 +678,13 @@ export async function apiGlReportBalanceSheet(params?: {
     groupName: string;
     sector: string;
     nature: string;
-    accounts: Array<{ accountId: string; code: string; name: string; amount: number; signed: number }>;
+    accounts: Array<{
+      accountId: string;
+      code: string;
+      name: string;
+      amount: number;
+      signed: number;
+    }>;
     total: number;
   }>;
   totalAssets: number;
@@ -663,7 +717,13 @@ export async function apiGlReportBalanceSheet(params?: {
       groupName: string;
       sector: string;
       nature: string;
-      accounts: Array<{ accountId: string; code: string; name: string; amount: number; signed: number }>;
+      accounts: Array<{
+        accountId: string;
+        code: string;
+        name: string;
+        amount: number;
+        signed: number;
+      }>;
       total: number;
     }>,
     totalAssets: Number(data.totalAssets) || 0,

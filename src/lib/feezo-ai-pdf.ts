@@ -4,6 +4,7 @@ import autoTable from "jspdf-autotable";
 import type { FeezoLocale, FeezoUiBlock } from "@/lib/api/ai";
 import { todayStamp } from "@/lib/download-names";
 import { asciiCurrencyText } from "@/lib/money";
+import { saveFile } from "@/lib/native-download";
 
 const TEAL: [number, number, number] = [15, 118, 110];
 const TEAL_DARK: [number, number, number] = [17, 94, 89];
@@ -337,5 +338,5 @@ export function downloadFeezoAiPdf(input: FeezoAiPdfInput): void {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 32);
-  doc.save(`feezo-ai-${safeSchool || "report"}-${stamp}.pdf`);
+  void saveFile(doc.output("blob"), `feezo-ai-${safeSchool || "report"}-${stamp}.pdf`);
 }

@@ -13,11 +13,7 @@ import {
   normalizePlanFlags,
   type PermissionKey,
 } from "@/lib/permissions";
-import {
-  findTenantUserById,
-  normalizeTenantUser,
-  type TenantUser,
-} from "@/lib/tenant-store";
+import { findTenantUserById, normalizeTenantUser, type TenantUser } from "@/lib/tenant-store";
 import { cn } from "@/lib/utils";
 
 type ImpersonateSearch = {
@@ -90,7 +86,7 @@ export const Route = createFileRoute("/impersonate")({
 
 function interpretError(message: string): ImpersonateErrorInfo {
   const msg = message.trim();
-  if (/suspended/i.test(msg)) {
+  if (/suspended|deactivated/i.test(msg)) {
     return {
       title: "This school is suspended",
       summary:
@@ -100,9 +96,9 @@ function interpretError(message: string): ImpersonateErrorInfo {
         "This usually means billing issues, policy action, or a manual lock.",
       ],
       nextSteps: [
-        "Go to Tenants and open Edit Tenant Meta for this school.",
-        "Change Lifecycle Status from Suspended to Active or Trial.",
-        "Save changes, then click Impersonate again.",
+        "Go to Tenants and open Tenant Details for this school.",
+        "On the Access tab, click Activate workspace.",
+        "Then click Impersonate again.",
       ],
       tone: "danger",
     };
@@ -262,8 +258,7 @@ function ImpersonatePage() {
           return;
         }
         // URL branches win (explicit ACL from Settings); fall back to API/stored campuses.
-        const branchIds =
-          branchesFromQuery.length > 0 ? branchesFromQuery : (user.branchIds ?? []);
+        const branchIds = branchesFromQuery.length > 0 ? branchesFromQuery : (user.branchIds ?? []);
         writeImpersonationSession({
           role: "tenant_user",
           email: user.email,

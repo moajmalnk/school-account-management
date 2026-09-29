@@ -1,5 +1,6 @@
 import { motion, useReducedMotion } from "motion/react";
 
+import { HeroShowcase } from "@/components/marketing/HeroShowcase";
 import { StoreBadge } from "@/components/marketing/StoreBadge";
 import { easeOutExpo } from "@/components/marketing/motion";
 import { MARKETING } from "@/lib/marketing-content";
@@ -29,15 +30,7 @@ export function Hero({ noDelay = false }: { noDelay?: boolean }) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1, ease: easeOutExpo, delay: baseDelay + 0.1 }}
         >
-          <img
-            src="/home/home.png"
-            alt={MARKETING.hero.productImageAlt}
-            width={1600}
-            height={900}
-            decoding="async"
-            fetchPriority="high"
-            className="mx-auto block w-full max-w-[920px] h-auto bg-white object-contain"
-          />
+          <HeroShowcase alt={MARKETING.hero.productImageAlt} startDelayMs={noDelay ? 0 : 900} />
         </motion.div>
 
         <motion.div

@@ -427,7 +427,7 @@ import {
   FINANCE_BULK_CHUNK,
   isFinanceBulkUnsupported,
 } from "@/lib/api/records";
-import { apiGlSyncCatalogs } from "@/lib/api/general-ledger";
+import { apiGlSyncCatalogs, type GlJournal } from "@/lib/api/general-ledger";
 import { apiSaveDashboardTodos } from "@/lib/api/dashboard";
 import { apiUploadDataUrl } from "@/lib/api/settings";
 import { getApiToken } from "@/lib/api/client";
@@ -446,6 +446,7 @@ import {
   countStaffDuplicateExtras,
   findDuplicateStaff,
   findStaffNameTwins,
+  normalizeStaffName,
   parseStaffCsv,
   planStaffDuplicateMerge,
   staffFromCsvRow,
@@ -3912,17 +3913,14 @@ export function StudentsLedger() {
         ].join(",");
       }),
     ].join("\n");
-    const uri = encodeURI("data:text/csv;charset=utf-8," + rows);
-    const a = document.createElement("a");
-    a.href = uri;
-    a.download = formatDownloadFilename("students", "csv", {
-      school: schoolName,
-      year: slugYear(academicYear),
-      date: todayStamp(),
-    });
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    downloadBlobFile(
+      new Blob([rows], { type: "text/csv;charset=utf-8" }),
+      formatDownloadFilename("students", "csv", {
+        school: schoolName,
+        year: slugYear(academicYear),
+        date: todayStamp(),
+      }),
+    );
     toast.success(`${filtered.length} students exported`, {
       description: "CSV ready in your downloads folder",
     });
@@ -5069,6 +5067,8 @@ export function StaffRoster() {
   const [pendingPurgeId, setPendingPurgeId] = useState<string | null>(null);
   const [pendingBulkPurgeIds, setPendingBulkPurgeIds] = useState<string[] | null>(null);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
+  const [pendingStaffMerge, setPendingStaffMerge] = useState(false);
+  const [mergingStaff, setMergingStaff] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [bulkWhatsAppOpen, setBulkWhatsAppOpen] = useState(false);
   const [bulkWhatsAppMsg, setBulkWhatsAppMsg] = useState("");
@@ -5339,29 +5339,67 @@ export function StaffRoster() {
     });
   };
 
+  const staffMergePlan = useMemo(() => {
+    if (!pendingStaffMerge) return null;
+    const { keepIds, recycleIds } = planStaffDuplicateMerge(liveStaff);
+    const byId = new Map(liveStaff.map((s) => [s.id, s]));
+    const groups = keepIds
+      .map((keepId) => {
+        const keep = byId.get(keepId);
+        if (!keep) return null;
+        const key = normalizeStaffName(keep.name);
+        const extras = recycleIds
+          .map((id) => byId.get(id))
+          .filter((s): s is Staff => Boolean(s && normalizeStaffName(s.name) === key));
+        return extras.length ? { keep, extras } : null;
+      })
+      .filter((g): g is { keep: Staff; extras: Staff[] } => g !== null);
+    return { groups, recycleIds };
+  }, [liveStaff, pendingStaffMerge]);
+
   const mergeDuplicateStaff = () => {
-    const { recycleIds } = planStaffDuplicateMerge(liveStaff);
-    if (!recycleIds.length) {
+    if (!planStaffDuplicateMerge(liveStaff).recycleIds.length) {
       toast.success("No duplicate staff to merge");
       return;
     }
-    const ids = new Set(recycleIds);
-    const stamp = new Date().toISOString();
-    setStaff((prev) => prev.map((s) => (ids.has(s.id) ? { ...s, deletedAt: stamp } : s)));
-    for (const id of recycleIds) {
-      void apiDeleteStaff(id).catch((err) =>
-        toast.error("Could not move duplicate to Recycle", {
-          description: err instanceof Error ? err.message : "Delete failed",
-        }),
+    setPendingStaffMerge(true);
+  };
+
+  const confirmMergeDuplicateStaff = async () => {
+    const recycleIds = staffMergePlan?.recycleIds ?? [];
+    if (!recycleIds.length) {
+      setPendingStaffMerge(false);
+      return;
+    }
+    setMergingStaff(true);
+    const results = await Promise.allSettled(recycleIds.map((id) => apiDeleteStaff(id)));
+    const moved = new Set<string>();
+    const failed: string[] = [];
+    results.forEach((result, index) => {
+      const id = recycleIds[index]!;
+      if (result.status === "fulfilled") moved.add(id);
+      else failed.push(id);
+    });
+    if (moved.size) {
+      const stamp = new Date().toISOString();
+      setStaff((prev) => prev.map((s) => (moved.has(s.id) ? { ...s, deletedAt: stamp } : s)));
+    }
+    setMergingStaff(false);
+    setPendingStaffMerge(false);
+    clearStaffSelection();
+    if (moved.size) {
+      toast.success(`${moved.size} duplicate${moved.size === 1 ? "" : "s"} moved to Recycle`, {
+        description: "One record kept per person · restore anytime from Recycle",
+      });
+    }
+    if (failed.length) {
+      toast.error(
+        `${failed.length} duplicate${failed.length === 1 ? "" : "s"} could not be moved`,
+        {
+          description: "Nothing changed for those records — check your connection and try again",
+        },
       );
     }
-    clearStaffSelection();
-    toast.success(
-      `${recycleIds.length} duplicate${recycleIds.length === 1 ? "" : "s"} moved to Recycle`,
-      {
-        description: "Kept one record per name · restore from Recycle if needed",
-      },
-    );
   };
 
   const openStaffBulkWhatsApp = () => {
@@ -6750,6 +6788,76 @@ export function StaffRoster() {
         onConfirm={confirmBulkDeleteStaff}
       />
 
+      <Dialog
+        open={pendingStaffMerge}
+        onOpenChange={(next) => {
+          if (!next && !mergingStaff) setPendingStaffMerge(false);
+        }}
+      >
+        <DialogContent className="flex max-h-[min(90dvh,620px)] w-[calc(100%-1.5rem)] max-w-lg flex-col gap-0 overflow-hidden rounded-xl border border-[#E5E5E5] bg-white p-0 sm:max-w-lg">
+          <DialogHeader className="shrink-0 space-y-1.5 border-b border-[#F0F0F0] px-5 pb-4 pt-5 pr-12 text-left sm:px-6 sm:pt-6">
+            <DialogTitle className="text-[20px] font-semibold text-black">
+              Merge duplicate staff
+            </DialogTitle>
+            <DialogDescription className="text-[13px] leading-relaxed text-black/60 dark:text-zinc-400">
+              One record is kept per person (active first). The{" "}
+              {staffMergePlan?.recycleIds.length ?? 0} extra cop
+              {(staffMergePlan?.recycleIds.length ?? 0) === 1 ? "y" : "ies"} move to Recycle and can
+              be restored anytime.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-5 py-4 sm:px-6">
+            {(staffMergePlan?.groups ?? []).map(({ keep, extras }) => (
+              <div
+                key={keep.id}
+                className="rounded-lg border border-[#EDEDED] bg-[#FAFAFA] px-3 py-2.5 dark:border-white/10 dark:bg-zinc-900/60"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate text-[13px] font-semibold text-black dark:text-zinc-100">
+                    {keep.name}
+                  </span>
+                  <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
+                    Keep {keep.id}
+                  </span>
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {extras.map((extra) => (
+                    <span
+                      key={extra.id}
+                      className="rounded-full bg-amber-50 px-2 py-0.5 font-mono text-[10px] text-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+                    >
+                      Recycle {extra.id}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <DialogFooter className="shrink-0 flex-row justify-end gap-2 border-t border-[#F0F0F0] px-5 py-4 sm:px-6">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={mergingStaff}
+              onClick={() => setPendingStaffMerge(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={mergingStaff || !staffMergePlan?.recycleIds.length}
+              onClick={() => void confirmMergeDuplicateStaff()}
+            >
+              {mergingStaff ? (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : (
+                <Combine className="mr-1.5 h-4 w-4" />
+              )}
+              {mergingStaff ? "Merging…" : "Merge duplicates"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={bulkWhatsAppOpen} onOpenChange={setBulkWhatsAppOpen}>
         <DialogContent className="flex max-h-[min(90dvh,640px)] w-[calc(100%-1.5rem)] max-w-xl flex-col gap-0 overflow-hidden rounded-xl border border-[#E5E5E5] bg-white p-0 sm:max-w-xl">
           <DialogHeader className="shrink-0 space-y-1.5 border-b border-[#F0F0F0] px-5 pb-4 pt-5 pr-12 text-left sm:px-6 sm:pt-6">
@@ -7118,7 +7226,7 @@ export function FinanceModule() {
   if (view === "journals") {
     return (
       <div className="w-full space-y-4 sm:space-y-5">
-        <GlJournalsReport />
+        {getApiToken() ? <LedgerStatementWithVouchers view="journals" /> : <GlJournalsReport />}
       </div>
     );
   }
@@ -9377,7 +9485,7 @@ function ReceiptDetailsDialog({
         if (!open) onClose();
       }}
     >
-      <DialogContent className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+      <DialogContent className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
         {payment && (
           <>
             <div className="mobile-scrollbar-none min-h-0 flex-1 overflow-y-auto overscroll-contain p-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -12906,7 +13014,7 @@ function DisbursalDetailsDialog({
         if (!open) onClose();
       }}
     >
-      <DialogContent className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+      <DialogContent className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
         {payment && (
           <>
             <div className="mobile-scrollbar-none min-h-0 flex-1 overflow-y-auto overscroll-contain p-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -13068,8 +13176,8 @@ function DisbursalDetailsDialog({
   );
 }
 
-/** Ledger statement where each voucher number opens its receipt / payment voucher / journal. */
-function LedgerStatementWithVouchers() {
+/** Ledger statement / journal list where each voucher opens its receipt, payment voucher or journal. */
+function LedgerStatementWithVouchers({ view = "ledger" }: { view?: "ledger" | "journals" }) {
   const navigate = useNavigate();
   const { session } = useAuth();
   const { payments, students, staff, schoolDetails, academicYear, hydrated, branchContentReady } =
@@ -13090,6 +13198,25 @@ function LedgerStatementWithVouchers() {
   const [previewAttachment, setPreviewAttachment] = useState<PaymentAttachment | null>(null);
 
   const isJournal = (type: string) => ["journal", "opening", "contra"].includes(type);
+
+  const findSourceDoc = (
+    j: GlJournal,
+  ): { kind: "receipt"; payment: Payment } | { kind: "disbursal"; payment: MadePayment } | null => {
+    const keys = [j.sourceId, j.voucherNo].filter((k): k is string => Boolean(k));
+    if (j.sourceType === "payment") {
+      for (const k of keys) {
+        const p = paymentById.get(k);
+        if (p) return { kind: "receipt", payment: p };
+      }
+    }
+    if (j.sourceType === "disbursement") {
+      for (const k of keys) {
+        const p = disbursalById.get(k);
+        if (p) return { kind: "disbursal", payment: p };
+      }
+    }
+    return null;
+  };
 
   const isVoucherLinked = (v: GlStatementVoucher) =>
     paymentById.has(v.voucherNo) || disbursalById.has(v.voucherNo) || isJournal(v.voucherType);
@@ -13181,7 +13308,19 @@ function LedgerStatementWithVouchers() {
 
   return (
     <>
-      <GlAccountStatementReport onVoucherClick={openVoucher} isVoucherLinked={isVoucherLinked} />
+      {view === "journals" ? (
+        <GlJournalsReport
+          isSourceLinked={(j) => Boolean(findSourceDoc(j))}
+          onOpenSource={(j) => {
+            const doc = findSourceDoc(j);
+            if (doc?.kind === "receipt") setViewingPayment(doc.payment);
+            else if (doc?.kind === "disbursal") setViewingDisbursal(doc.payment);
+            else toast.info(`No source document found for ${j.voucherNo}`);
+          }}
+        />
+      ) : (
+        <GlAccountStatementReport onVoucherClick={openVoucher} isVoucherLinked={isVoucherLinked} />
+      )}
       <ReceiptDetailsDialog
         payment={viewingPayment}
         academicYear={academicYear}
