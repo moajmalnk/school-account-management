@@ -2,6 +2,7 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 
 import { SignupWizard } from "@/components/signup/SignupWizard";
 import {
+  isLegacySignupSlug,
   isSignupStepSlug,
   loadSignupDraft,
   maxAllowedSignupStep,
@@ -25,10 +26,10 @@ export const Route = createFileRoute("/signup/$step")({
     const draft = loadSignupDraft();
     const requested = stepNumberFromSlug(slug);
     const allowed = maxAllowedSignupStep(draft);
-    if (requested > allowed) {
+    if (requested > allowed || isLegacySignupSlug(slug)) {
       throw redirect({
         to: "/signup/$step",
-        params: { step: slugFromStepNumber(allowed) },
+        params: { step: slugFromStepNumber(Math.min(requested, allowed)) },
         replace: true,
       } as never);
     }

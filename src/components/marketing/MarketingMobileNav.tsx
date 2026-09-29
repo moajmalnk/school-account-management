@@ -3,6 +3,7 @@ import {
   ArrowRight,
   Grid3x3,
   LayoutDashboard,
+  MessageCircle,
   Settings2,
   Sparkles,
   Tag,
@@ -12,7 +13,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { TrialSignupLink } from "@/components/marketing/TrialSignupLink";
+import { MarketingAuthActions } from "@/components/marketing/MarketingAuthActions";
 import { MARKETING_THEME_VARS } from "@/components/marketing/marketing-theme";
 import { useMarketingActiveSection } from "@/hooks/useMarketingActiveSection";
 import { MARKETING } from "@/lib/marketing-content";
@@ -30,13 +31,7 @@ const NAV_META: Record<
   pricing: { icon: Tag, hint: "14-day free trial included" },
 };
 
-function MenuToggle({
-  open,
-  onClick,
-}: {
-  open: boolean;
-  onClick: () => void;
-}) {
+function MenuToggle({ open, onClick }: { open: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
@@ -139,120 +134,145 @@ export function MarketingMobileNav() {
                     transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
                     style={{
                       ...MARKETING_THEME_VARS,
-                      background:
-                        "linear-gradient(165deg, #ffffff 0%, #f8fff4 42%, #f4fbf0 100%)",
+                      background: "linear-gradient(165deg, #ffffff 0%, #f8fff4 42%, #f4fbf0 100%)",
                     }}
                   >
-              <div
-                className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full opacity-70"
-                style={{
-                  background:
-                    "radial-gradient(circle, rgba(143,202,74,0.35) 0%, transparent 68%)",
-                }}
-              />
-              <div
-                className="pointer-events-none absolute -bottom-24 -left-10 h-48 w-48 rounded-full opacity-50"
-                style={{
-                  background:
-                    "radial-gradient(circle, rgba(107,168,50,0.22) 0%, transparent 70%)",
-                }}
-              />
+                    <div
+                      className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full opacity-70"
+                      style={{
+                        background:
+                          "radial-gradient(circle, rgba(143,202,74,0.35) 0%, transparent 68%)",
+                      }}
+                    />
+                    <div
+                      className="pointer-events-none absolute -bottom-24 -left-10 h-48 w-48 rounded-full opacity-50"
+                      style={{
+                        background:
+                          "radial-gradient(circle, rgba(107,168,50,0.22) 0%, transparent 70%)",
+                      }}
+                    />
 
-              <div className="relative flex items-center justify-between border-b border-[var(--mkt-line)] px-5 py-4">
-                <div>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--mkt-muted)]">
-                    Navigate
-                  </p>
-                  <p className="text-[15px] font-semibold text-[var(--mkt-ink)]">
-                    Explore Feezo
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={close}
-                  aria-label="Close menu"
-                  className="grid h-10 w-10 place-items-center rounded-full border border-[var(--mkt-line)] bg-white text-[var(--mkt-ink)] shadow-sm transition hover:border-[var(--mkt-green)]/40 hover:text-[var(--mkt-green)]"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              <nav className="relative flex-1 overflow-y-auto px-3 py-4" aria-label="Page sections">
-                <ul className="space-y-2">
-                  {MARKETING.nav.map((item, index) => {
-                    const meta = NAV_META[item.id];
-                    const Icon = meta.icon;
-                    return (
-                      <motion.li
-                        key={item.id}
-                        initial={{ opacity: 0, x: 24 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{
-                          delay: 0.06 + index * 0.05,
-                          duration: 0.35,
-                          ease: [0.22, 1, 0.36, 1],
-                        }}
+                    <div className="relative flex items-center justify-between border-b border-[var(--mkt-line)] px-5 py-4">
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--mkt-muted)]">
+                          Navigate
+                        </p>
+                        <p className="text-[15px] font-semibold text-[var(--mkt-ink)]">
+                          Explore Feezo
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={close}
+                        aria-label="Close menu"
+                        className="grid h-10 w-10 place-items-center rounded-full border border-[var(--mkt-line)] bg-white text-[var(--mkt-ink)] shadow-sm transition hover:border-[var(--mkt-green)]/40 hover:text-[var(--mkt-green)]"
                       >
-                        <a
-                          href={`#${item.id}`}
-                          onClick={(event) => handleMarketingSectionClick(event, item.id, close)}
-                          className={cn(
-                            "group flex items-center gap-3 rounded-2xl border px-4 py-3.5 transition-all duration-200",
-                            "border-transparent bg-white/55 hover:border-[var(--mkt-green)]/30 hover:bg-white hover:shadow-[0_8px_24px_rgba(143,202,74,0.14)]",
-                            item.id === activeSection &&
-                              "border-[var(--mkt-green)]/25 bg-[var(--mkt-soft)]/80",
-                          )}
-                        >
-                          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--mkt-soft)] text-[var(--mkt-green-deep)] transition group-hover:scale-105 group-hover:bg-[var(--mkt-green)] group-hover:text-white">
-                            <Icon className="h-[18px] w-[18px]" strokeWidth={2.2} />
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block text-[15px] font-semibold text-[var(--mkt-ink)]">
-                              {item.label}
-                            </span>
-                            <span className="block truncate text-[12px] text-[var(--mkt-muted)]">
-                              {meta.hint}
-                            </span>
-                          </span>
-                          <ArrowRight className="h-4 w-4 shrink-0 text-[var(--mkt-muted)] transition group-hover:translate-x-0.5 group-hover:text-[var(--mkt-green)]" />
-                        </a>
-                      </motion.li>
-                    );
-                  })}
-                </ul>
-              </nav>
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
 
-              <motion.div
-                className="relative border-t border-[var(--mkt-line)] bg-white/70 px-5 py-5 backdrop-blur-sm"
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.28, duration: 0.35 }}
-              >
-                <TrialSignupLink
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--mkt-green)] text-[15px] font-semibold text-white shadow-[0_8px_24px_rgba(143,202,74,0.35)] transition hover:bg-[var(--mkt-green-deep)] active:scale-[0.98]"
-                  onClick={() => {
-                    document.body.style.overflow = "";
-                    close();
-                  }}
-                >
-                  Start 14-day trial
-                  <ArrowRight className="h-4 w-4" />
-                </TrialSignupLink>
-                <Link
-                  to="/login"
-                  onClick={() => {
-                    document.body.style.overflow = "";
-                    close();
-                  }}
-                  className="mt-3 flex h-11 w-full items-center justify-center rounded-xl border border-[var(--mkt-line)] bg-white text-[14px] font-semibold text-[var(--mkt-ink)] transition hover:border-[var(--mkt-green)]/40 hover:text-[var(--mkt-green-deep)]"
-                >
-                  Sign in
-                </Link>
-              </motion.div>
-            </motion.div>
-          </>
-        ) : null}
-      </AnimatePresence>,
+                    <nav
+                      className="relative flex-1 overflow-y-auto px-3 py-4"
+                      aria-label="Page sections"
+                    >
+                      <ul className="space-y-2">
+                        {MARKETING.nav.map((item, index) => {
+                          const meta = NAV_META[item.id];
+                          const Icon = meta.icon;
+                          return (
+                            <motion.li
+                              key={item.id}
+                              initial={{ opacity: 0, x: 24 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{
+                                delay: 0.06 + index * 0.05,
+                                duration: 0.35,
+                                ease: [0.22, 1, 0.36, 1],
+                              }}
+                            >
+                              <a
+                                href={`#${item.id}`}
+                                onClick={(event) =>
+                                  handleMarketingSectionClick(event, item.id, close)
+                                }
+                                className={cn(
+                                  "group flex items-center gap-3 rounded-2xl border px-4 py-3.5 transition-all duration-200",
+                                  "border-transparent bg-white/55 hover:border-[var(--mkt-green)]/30 hover:bg-white hover:shadow-[0_8px_24px_rgba(143,202,74,0.14)]",
+                                  item.id === activeSection &&
+                                    "border-[var(--mkt-green)]/25 bg-[var(--mkt-soft)]/80",
+                                )}
+                              >
+                                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--mkt-soft)] text-[var(--mkt-green-deep)] transition group-hover:scale-105 group-hover:bg-[var(--mkt-green)] group-hover:text-white">
+                                  <Icon className="h-[18px] w-[18px]" strokeWidth={2.2} />
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="block text-[15px] font-semibold text-[var(--mkt-ink)]">
+                                    {item.label}
+                                  </span>
+                                  <span className="block truncate text-[12px] text-[var(--mkt-muted)]">
+                                    {meta.hint}
+                                  </span>
+                                </span>
+                                <ArrowRight className="h-4 w-4 shrink-0 text-[var(--mkt-muted)] transition group-hover:translate-x-0.5 group-hover:text-[var(--mkt-green)]" />
+                              </a>
+                            </motion.li>
+                          );
+                        })}
+                        <motion.li
+                          initial={{ opacity: 0, x: 24 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{
+                            delay: 0.06 + MARKETING.nav.length * 0.05,
+                            duration: 0.35,
+                            ease: [0.22, 1, 0.36, 1],
+                          }}
+                        >
+                          <Link
+                            to="/contact"
+                            onClick={() => {
+                              document.body.style.overflow = "";
+                              close();
+                            }}
+                            className="group flex items-center gap-3 rounded-2xl border border-transparent bg-white/55 px-4 py-3.5 transition-all duration-200 hover:border-[var(--mkt-green)]/30 hover:bg-white hover:shadow-[0_8px_24px_rgba(143,202,74,0.14)]"
+                            activeProps={{
+                              className: "!border-[var(--mkt-green)]/25 !bg-[var(--mkt-soft)]/80",
+                            }}
+                          >
+                            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--mkt-soft)] text-[var(--mkt-green-deep)] transition group-hover:scale-105 group-hover:bg-[var(--mkt-green)] group-hover:text-white">
+                              <MessageCircle className="h-[18px] w-[18px]" strokeWidth={2.2} />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-[15px] font-semibold text-[var(--mkt-ink)]">
+                                Contact
+                              </span>
+                              <span className="block truncate text-[12px] text-[var(--mkt-muted)]">
+                                Email, call or WhatsApp the team
+                              </span>
+                            </span>
+                            <ArrowRight className="h-4 w-4 shrink-0 text-[var(--mkt-muted)] transition group-hover:translate-x-0.5 group-hover:text-[var(--mkt-green)]" />
+                          </Link>
+                        </motion.li>
+                      </ul>
+                    </nav>
+
+                    <motion.div
+                      className="relative border-t border-[var(--mkt-line)] bg-white/70 px-5 py-5 backdrop-blur-sm"
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.28, duration: 0.35 }}
+                    >
+                      <MarketingAuthActions
+                        variant="sheet"
+                        onNavigate={() => {
+                          document.body.style.overflow = "";
+                          close();
+                        }}
+                      />
+                    </motion.div>
+                  </motion.div>
+                </>
+              ) : null}
+            </AnimatePresence>,
             document.body,
           )
         : null}

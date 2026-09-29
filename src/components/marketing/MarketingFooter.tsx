@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Facebook, Github, Instagram, Linkedin, Twitter } from "lucide-react";
+import { Facebook, Github, Instagram, Linkedin, Mail, MapPin, Phone, Twitter } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import type { MouseEvent, ReactNode } from "react";
 
@@ -114,6 +114,41 @@ export function MarketingFooter() {
             <p className="mt-5 max-w-xs text-[14px] leading-relaxed text-[var(--mkt-muted)]">
               School accounts simplified — fees, receipts, and reports in one clear platform.
             </p>
+            <ul className="mt-5 space-y-2 text-[13.5px] text-[var(--mkt-ink)]/80">
+              <li className="flex items-center gap-2">
+                <Mail className="h-4 w-4 shrink-0 text-[var(--mkt-green-deep)]" aria-hidden />
+                <a
+                  href={`mailto:${BRAND.contact.email}`}
+                  className="hover:text-[var(--mkt-green-deep)]"
+                >
+                  {BRAND.contact.email}
+                </a>
+              </li>
+              <li className="flex items-center gap-2">
+                <Phone className="h-4 w-4 shrink-0 text-[var(--mkt-green-deep)]" aria-hidden />
+                <a
+                  href={`tel:${BRAND.contact.phoneE164}`}
+                  className="hover:text-[var(--mkt-green-deep)]"
+                >
+                  {BRAND.contact.phoneDisplay}
+                </a>
+                <span aria-hidden className="text-[var(--mkt-muted)]">
+                  ·
+                </span>
+                <a
+                  href={`https://wa.me/${BRAND.contact.whatsappNumber}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-emerald-700 hover:underline"
+                >
+                  WhatsApp
+                </a>
+              </li>
+              <li className="flex items-center gap-2">
+                <MapPin className="h-4 w-4 shrink-0 text-[var(--mkt-green-deep)]" aria-hidden />
+                {BRAND.contact.location}
+              </li>
+            </ul>
             <TrialSignupLink className="mt-6 inline-flex h-10 items-center justify-center rounded-lg bg-[var(--mkt-ink)] px-5 text-[13px] font-semibold text-white transition hover:bg-[var(--mkt-ink)]/90">
               Start free trial
             </TrialSignupLink>
@@ -143,6 +178,7 @@ export function MarketingFooter() {
                     {item.label}
                   </FooterNavLink>
                 ))}
+                <FooterNavLink href={BRAND.contactPath}>Contact</FooterNavLink>
               </nav>
             </div>
 

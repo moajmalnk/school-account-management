@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 
 import { FeezoMark } from "@/components/brand/FeezoBrand";
+import { MarketingAuthActions } from "@/components/marketing/MarketingAuthActions";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { MarketingMobileNav } from "@/components/marketing/MarketingMobileNav";
 import { MARKETING_THEME_VARS } from "@/components/marketing/marketing-theme";
@@ -53,8 +54,12 @@ export function MarketingShell({ children }: { children: ReactNode }) {
           >
             <FeezoMark className="h-9 w-9 sm:h-10 sm:w-10" />
             <div className="flex flex-col -gap-1">
-              <span className="font-bold text-[22px] sm:text-[26px] leading-none tracking-tight text-[var(--mkt-ink)]">Feezo</span>
-              <span className="text-[9px] sm:text-[10px] font-semibold text-[var(--mkt-ink)] self-end tracking-wider">Edu Books</span>
+              <span className="font-bold text-[22px] sm:text-[26px] leading-none tracking-tight text-[var(--mkt-ink)]">
+                Feezo
+              </span>
+              <span className="text-[9px] sm:text-[10px] font-semibold text-[var(--mkt-ink)] self-end tracking-wider">
+                Edu Books
+              </span>
             </div>
           </Link>
 
@@ -73,15 +78,17 @@ export function MarketingShell({ children }: { children: ReactNode }) {
                 {item.label}
               </a>
             ))}
+            <Link
+              to="/contact"
+              className="text-[15px] font-medium text-[var(--mkt-ink)] transition-colors hover:text-[var(--mkt-green)]"
+              activeProps={{ className: "!text-[var(--mkt-green)]" }}
+            >
+              Contact
+            </Link>
           </nav>
 
           <div className="flex items-center gap-2 sm:gap-3">
-            <Link
-              to="/login"
-              className="hidden sm:inline-flex h-10 shrink-0 items-center justify-center rounded-lg bg-[var(--mkt-green)] px-6 text-[14px] font-medium text-white transition-all duration-200 hover:bg-[var(--mkt-green-deep)] hover:shadow-lg hover:shadow-[var(--mkt-green)]/20 hover:-translate-y-0.5 active:translate-y-0 lg:px-7 lg:text-[15px]"
-            >
-              Sign in
-            </Link>
+            <MarketingAuthActions variant="header" />
             <MarketingMobileNav />
           </div>
         </div>

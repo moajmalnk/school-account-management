@@ -10,17 +10,17 @@ export const SCHOOL_TYPES = [
   "Other",
 ] as const;
 
-/** URL segment → wizard step */
+/** URL segment → wizard step. `package` / `review` are legacy links folded into `admin`. */
 export const SIGNUP_STEP_SLUGS = ["school", "admin", "package", "review", "success"] as const;
 
 export type SignupStepSlug = (typeof SIGNUP_STEP_SLUGS)[number];
 
 export const SIGNUP_STEPS = [
-  { id: 1, slug: "school" as const, label: "School Info", path: "/signup/school" },
-  { id: 2, slug: "admin" as const, label: "Administrator", path: "/signup/admin" },
-  { id: 3, slug: "package" as const, label: "Choose Package", path: "/signup/package" },
-  { id: 4, slug: "review" as const, label: "Create Tenant", path: "/signup/review" },
+  { id: 1, slug: "school" as const, label: "Your school", path: "/signup/school" },
+  { id: 2, slug: "admin" as const, label: "Your account", path: "/signup/admin" },
 ] as const;
+
+export const SIGNUP_LAST_STEP = SIGNUP_STEPS.length;
 
 export const SIGNUP_SUCCESS_PATH = "/signup/success";
 
@@ -28,8 +28,12 @@ export function isSignupStepSlug(value: string): value is SignupStepSlug {
   return (SIGNUP_STEP_SLUGS as readonly string[]).includes(value);
 }
 
+export function isLegacySignupSlug(slug: string): boolean {
+  return slug === "package" || slug === "review";
+}
+
 export function stepNumberFromSlug(slug: string): number {
-  if (slug === "success") return 4;
+  if (slug === "success" || isLegacySignupSlug(slug)) return SIGNUP_LAST_STEP;
   const found = SIGNUP_STEPS.find((s) => s.slug === slug);
   return found?.id ?? 1;
 }
@@ -73,48 +77,71 @@ export function passwordStrength(pw: string): {
 
 export type SignupFormState = {
   schoolName: string;
-  schoolCode: string;
   schoolType: string;
-  phone: string;
-  address: string;
-  district: string;
+  pincode: string;
   state: string;
+  district: string;
+  phone: string;
+  subdomain: string;
+  /** Optional extras (collapsed by default). */
+  address: string;
+  schoolCode: string;
   schoolEmail: string;
   website: string;
-  subdomain: string;
-  adminName: string;
-  adminMobile: string;
-  adminEmail: string;
-  password: string;
-  passwordConfirm: string;
-  tier: "Basic" | "Premium" | "Enterprise";
   /** Organization base currency; empty until the visitor's detected currency is applied. */
   currency: string;
-  agreeTerms: boolean;
+  adminName: string;
+  adminEmail: string;
+  adminMobile: string;
+  /** Held in memory only — never written to storage. */
+  password: string;
+  tier: "Basic" | "Premium" | "Enterprise";
 };
 
 export const EMPTY_SIGNUP: SignupFormState = {
   schoolName: "",
-  schoolCode: "",
   schoolType: "",
-  phone: "",
-  address: "",
-  district: "",
+  pincode: "",
   state: "",
+  district: "",
+  phone: "",
+  subdomain: "",
+  address: "",
+  schoolCode: "",
   schoolEmail: "",
   website: "",
-  subdomain: "",
-  adminName: "",
-  adminMobile: "",
-  adminEmail: "",
-  password: "",
-  passwordConfirm: "",
-  tier: "Premium",
   currency: "",
-  agreeTerms: false,
+  adminName: "",
+  adminEmail: "",
+  adminMobile: "",
+  password: "",
+  tier: "Premium",
 };
 
-const DRAFT_KEY = "feezo-signup-draft-v1";
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Digits only, keeping a leading +. */
+export function normalizePhone(raw: string): string {
+  const trimmed = raw.trim();
+  const plus = trimmed.startsWith("+") ? "+" : "";
+  return plus + trimmed.replace(/\D/g, "");
+}
+
+export function isValidPhone(raw: string): boolean {
+  const digits = raw.replace(/\D/g, "");
+  return digits.length >= 10 && digits.length <= 15;
+}
+
+/** Bare 10-digit Indian numbers get the +91 prefix. */
+export function withIndiaDialCode(raw: string): string {
+  const n = normalizePhone(raw);
+  if (/^[6-9]\d{9}$/.test(n)) return `+91${n}`;
+  if (/^0[6-9]\d{9}$/.test(n)) return `+91${n.slice(1)}`;
+  return n;
+}
+
+const DRAFT_KEY = "feezo-signup-draft-v2";
+const LEGACY_DRAFT_KEY = "feezo-signup-draft-v1";
 
 /** In-memory copy so step navigation works even if sessionStorage is blocked. */
 let memoryDraft: SignupFormState | null = null;
@@ -123,10 +150,11 @@ export function loadSignupDraft(): SignupFormState {
   if (memoryDraft) return memoryDraft;
   if (typeof window === "undefined") return EMPTY_SIGNUP;
   try {
+    window.sessionStorage.removeItem(LEGACY_DRAFT_KEY);
     const raw = window.sessionStorage.getItem(DRAFT_KEY);
     if (!raw) return EMPTY_SIGNUP;
     const parsed = JSON.parse(raw) as Partial<SignupFormState>;
-    const merged = { ...EMPTY_SIGNUP, ...parsed, agreeTerms: Boolean(parsed.agreeTerms) };
+    const merged: SignupFormState = { ...EMPTY_SIGNUP, ...parsed, password: "" };
     memoryDraft = merged;
     return merged;
   } catch {
@@ -138,7 +166,8 @@ export function saveSignupDraft(form: SignupFormState) {
   memoryDraft = form;
   if (typeof window === "undefined") return;
   try {
-    window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify(form));
+    const { password: _password, ...persistable } = form;
+    window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify(persistable));
   } catch {
     // ignore quota / private mode — memory draft still advances the wizard
   }
@@ -149,6 +178,7 @@ export function clearSignupDraft() {
   if (typeof window === "undefined") return;
   try {
     window.sessionStorage.removeItem(DRAFT_KEY);
+    window.sessionStorage.removeItem(LEGACY_DRAFT_KEY);
   } catch {
     // ignore
   }
@@ -156,34 +186,17 @@ export function clearSignupDraft() {
 
 /** Highest step the user may open based on saved draft completeness. */
 export function maxAllowedSignupStep(form: SignupFormState): number {
-  if (!isSignupStep1Complete(form)) return 1;
-  if (!isSignupStep2Complete(form)) return 2;
-  if (!form.tier) return 3;
-  return 4;
+  return isSignupStep1Complete(form) ? 2 : 1;
 }
 
 export function isSignupStep1Complete(form: SignupFormState): boolean {
   return Boolean(
     form.schoolName.trim() &&
-    form.schoolCode.trim() &&
     form.schoolType &&
-    form.phone.trim() &&
-    form.address.trim() &&
     form.state &&
     form.district &&
-    form.schoolEmail.trim() &&
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.schoolEmail) &&
-    form.subdomain.trim().length >= 2,
-  );
-}
-
-export function isSignupStep2Complete(form: SignupFormState): boolean {
-  return Boolean(
-    form.adminName.trim() &&
-    form.adminMobile.trim() &&
-    form.adminEmail.trim() &&
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.adminEmail) &&
-    form.password.length >= 8 &&
-    form.passwordConfirm === form.password,
+    isValidPhone(form.phone) &&
+    form.subdomain.trim().length >= 2 &&
+    (!form.schoolEmail.trim() || EMAIL_RE.test(form.schoolEmail.trim())),
   );
 }
