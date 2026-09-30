@@ -13,7 +13,7 @@ import {
 } from "@/lib/api/ai";
 import { normalizeFeezoNavigation } from "@/lib/ai-navigation";
 import { useAuth } from "@/lib/auth";
-import { FEEZO_ASK_EVENT, type FeezoAskDetail } from "@/lib/feezo-ai-bridge";
+import { FEEZO_ASK_EVENT, FEEZO_OPEN_PARAM, type FeezoAskDetail } from "@/lib/feezo-ai-bridge";
 import { canUseHelpAccess } from "@/lib/help/access";
 import { buildOfflineHelpReply } from "@/lib/help/ai-fallback";
 import { HELP_GUIDES } from "@/lib/help/guides";
@@ -132,29 +132,6 @@ function persistThread(locale: FeezoLocale, messages: FeezoThreadMessage[]) {
   }
 }
 
-function isSafeTenantReturn(path: string | undefined): path is string {
-  if (!path || !path.startsWith("/tenant")) return false;
-  if (path === "/tenant/ai" || path.startsWith("/tenant/ai?")) return false;
-  return true;
-}
-
-/** Navigate to a stored return URL like `/tenant/finance?tab=fees`. */
-function navigateReturn(navigate: ReturnType<typeof useNavigate>, from: string | undefined) {
-  if (!isSafeTenantReturn(from)) {
-    void navigate({ to: "/tenant/dashboard" });
-    return;
-  }
-  const q = from.indexOf("?");
-  const path = q < 0 ? from : from.slice(0, q);
-  const search: Record<string, string> = {};
-  if (q >= 0) {
-    new URLSearchParams(from.slice(q + 1)).forEach((value, key) => {
-      if (key && value) search[key] = value;
-    });
-  }
-  void navigate({ to: path as "/tenant/dashboard", search } as never);
-}
-
 function pageContextFrom(path: string | undefined): FeezoPageContext | undefined {
   if (!path || !path.startsWith("/tenant")) return undefined;
   const q = path.indexOf("?");
@@ -174,10 +151,10 @@ export function useFeezoAssistant() {
   );
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const searchStr = useRouterState({ select: (s) => s.location.searchStr });
-  const fromParam = useRouterState({
+  const open = useRouterState({
     select: (s) => {
-      const search = s.location.search as { from?: string };
-      return typeof search?.from === "string" ? search.from : undefined;
+      const flag = (s.location.search as Record<string, unknown>)?.[FEEZO_OPEN_PARAM];
+      return flag === 1 || flag === "1" || flag === true;
     },
   });
 
@@ -193,8 +170,6 @@ export function useFeezoAssistant() {
     transportRoutes,
     studentFeeBreaks,
   } = useTenantStore();
-
-  const open = pathname === "/tenant/ai";
 
   const [locale, setLocaleState] = useState<FeezoLocale>(() => loadPersisted().locale);
   const [messages, setMessages] = useState<FeezoThreadMessage[]>(() => loadPersisted().messages);
@@ -214,23 +189,17 @@ export function useFeezoAssistant() {
       const want = typeof next === "function" ? next(open) : next;
       if (want === open) return;
 
-      if (want) {
-        const here =
-          pathname !== "/tenant/ai"
-            ? `${pathname}${searchStr || ""}`
-            : isSafeTenantReturn(fromParam)
-              ? fromParam
-              : undefined;
-        void navigate({
-          to: "/tenant/ai",
-          search: here ? { from: here } : {},
-        } as never);
-        return;
-      }
-
-      navigateReturn(navigate, fromParam);
+      // The panel overlays the current page via `?ai=1`, so the page behind stays mounted.
+      void navigate({
+        to: pathname,
+        search: (prev: Record<string, unknown>) => {
+          const rest = { ...prev };
+          delete rest[FEEZO_OPEN_PARAM];
+          return want ? { ...rest, [FEEZO_OPEN_PARAM]: 1 } : rest;
+        },
+      } as never);
     },
-    [fromParam, navigate, open, pathname, searchStr],
+    [navigate, open, pathname],
   );
 
   const applyNavigation = useCallback(
@@ -242,14 +211,19 @@ export function useFeezoAssistant() {
         );
         return;
       }
+      if (normalized.to === "/tenant/ai") {
+        setOpen(true);
+        return;
+      }
 
-      // Leave /tenant/ai so the destination page is visible; chat stays in sessionStorage.
+      // Navigating without `?ai=1` closes the panel so the destination is visible;
+      // chat stays in sessionStorage.
       void navigate({
         to: normalized.to,
         search: normalized.search,
       } as never);
     },
-    [locale, navigate],
+    [locale, navigate, setOpen],
   );
 
   const send = useCallback(
@@ -271,7 +245,7 @@ export function useFeezoAssistant() {
         const res = await apiAiChat({
           messages: toHistory(next),
           locale,
-          context: pageContextFrom(open ? fromParam : `${pathname}${searchStr || ""}`),
+          context: pageContextFrom(`${pathname}${searchStr || ""}`),
         });
 
         const guideIds = new Set(helpGuides.map((g) => g.id));
@@ -324,7 +298,7 @@ export function useFeezoAssistant() {
         setBusy(false);
       }
     },
-    [busy, fromParam, helpGuides, locale, messages, open, pathname, searchStr],
+    [busy, helpGuides, locale, messages, pathname, searchStr],
   );
 
   const [pendingAsk, setPendingAsk] = useState<string | null>(null);

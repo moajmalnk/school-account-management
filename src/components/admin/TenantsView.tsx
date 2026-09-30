@@ -97,6 +97,54 @@ const STATUS_TOOLTIP: Record<Status, string> = {
     "Account is locked. School login and Impersonate are blocked until you set Active or Trial.",
 };
 
+/** Self-signup trials run 14 days from workspace creation (see backend/api/auth/register-trial.php). */
+const TRIAL_DAYS = 14;
+const TRIAL_ENDING_SOON_DAYS = 3;
+const DAY_MS = 86_400_000;
+
+type TrialWindow = "trial-running" | "trial-ending" | "trial-expired";
+
+const TRIAL_WINDOW_LABEL: Record<TrialWindow, string> = {
+  "trial-running": "14-day trial · running",
+  "trial-ending": `Trial · ends in ${TRIAL_ENDING_SOON_DAYS} days`,
+  "trial-expired": "Trial · expired",
+};
+
+type TrialInfo = { day: number; daysLeft: number; endsAt: Date };
+
+function parseServerDate(raw: string | undefined): Date | null {
+  if (!raw) return null;
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+  if (dateOnly) {
+    return new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]));
+  }
+  const d = new Date(raw.includes("T") ? raw : raw.replace(" ", "T"));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function trialInfo(t: Tenant, now = Date.now()): TrialInfo | null {
+  if (t.status !== "Trial") return null;
+  const created = parseServerDate(t.createdAt);
+  if (!created) return null;
+  const endsAt = new Date(created.getTime() + TRIAL_DAYS * DAY_MS);
+  const daysLeft = Math.ceil((endsAt.getTime() - now) / DAY_MS);
+  const day = Math.min(TRIAL_DAYS, Math.max(1, Math.floor((now - created.getTime()) / DAY_MS) + 1));
+  return { day, daysLeft, endsAt };
+}
+
+function trialWindowOf(info: TrialInfo | null): TrialWindow | null {
+  if (!info) return null;
+  if (info.daysLeft <= 0) return "trial-expired";
+  if (info.daysLeft <= TRIAL_ENDING_SOON_DAYS) return "trial-ending";
+  return "trial-running";
+}
+
+function matchesTrialWindow(info: TrialInfo | null, window: TrialWindow): boolean {
+  if (!info) return false;
+  if (window === "trial-running") return info.daysLeft > 0;
+  return trialWindowOf(info) === window;
+}
+
 type BillingCycle = "Monthly" | "Quarterly" | "Annual";
 type Currency = "INR" | "USD" | "AED" | "EUR";
 type PaymentMethod = "Razorpay" | "Stripe" | "Bank Transfer" | "Manual Invoice";
@@ -218,15 +266,44 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (tenant: Tenant
     };
   }, []);
 
+  const trialById = useMemo(() => {
+    const now = Date.now();
+    return new Map(tenants.map((t) => [t.id, trialInfo(t, now)]));
+  }, [tenants]);
+
+  const trialCounts = useMemo(() => {
+    const counts: Record<TrialWindow, number> = {
+      "trial-running": 0,
+      "trial-ending": 0,
+      "trial-expired": 0,
+    };
+    for (const info of trialById.values()) {
+      for (const w of Object.keys(counts) as TrialWindow[]) {
+        if (matchesTrialWindow(info, w)) counts[w] += 1;
+      }
+    }
+    return counts;
+  }, [trialById]);
+
   const filtered = useMemo(() => {
-    return tenants.filter((t) => {
+    const list = tenants.filter((t) => {
       if (tier !== "all" && t.tier !== tier) return false;
-      if (status !== "all" && t.status !== status) return false;
+      if (status.startsWith("trial-")) {
+        if (!matchesTrialWindow(trialById.get(t.id) ?? null, status as TrialWindow)) return false;
+      } else if (status !== "all" && t.status !== status) {
+        return false;
+      }
       if (query && !`${t.name} ${t.subdomain} ${t.id}`.toLowerCase().includes(query.toLowerCase()))
         return false;
       return true;
     });
-  }, [tenants, tier, status, query]);
+    if (status.startsWith("trial-")) {
+      list.sort(
+        (a, b) => (trialById.get(a.id)?.daysLeft ?? 0) - (trialById.get(b.id)?.daysLeft ?? 0),
+      );
+    }
+    return list;
+  }, [tenants, tier, status, query, trialById]);
 
   const updateTenant = (id: string, patch: Partial<Tenant>) => {
     setTenants((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
@@ -332,17 +409,61 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (tenant: Tenant
           </SelectContent>
         </Select>
         <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="h-11 w-full rounded-lg border-[#E5E5E5] bg-[#F4F4F5] text-[12px] sm:h-10 sm:w-[170px]">
+          <SelectTrigger className="h-11 w-full rounded-lg border-[#E5E5E5] bg-[#F4F4F5] text-[12px] sm:h-10 sm:w-[200px]">
             <SelectValue placeholder="All statuses" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All statuses</SelectItem>
             <SelectItem value="Active">Active</SelectItem>
-            <SelectItem value="Trial">Trial</SelectItem>
+            <SelectItem value="Trial">Trial (all)</SelectItem>
+            {(Object.keys(TRIAL_WINDOW_LABEL) as TrialWindow[]).map((w) => (
+              <SelectItem key={w} value={w}>
+                {TRIAL_WINDOW_LABEL[w]} ({trialCounts[w]})
+              </SelectItem>
+            ))}
             <SelectItem value="Overdue">Overdue</SelectItem>
             <SelectItem value="Suspended">Suspended</SelectItem>
           </SelectContent>
         </Select>
+
+        <div className="flex w-full flex-wrap items-center gap-1.5 sm:basis-full">
+          <span className="mr-0.5 text-[11px] font-semibold uppercase tracking-wider text-black/40">
+            {TRIAL_DAYS}-day trials
+          </span>
+          {(Object.keys(TRIAL_WINDOW_LABEL) as TrialWindow[]).map((w) => {
+            const active = status === w;
+            const label =
+              w === "trial-running"
+                ? "Running"
+                : w === "trial-ending"
+                  ? `Ending ≤ ${TRIAL_ENDING_SOON_DAYS} days`
+                  : "Expired";
+            return (
+              <button
+                key={w}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setStatus(active ? "all" : w)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11.5px] font-semibold transition-colors",
+                  active
+                    ? "border-[#4338CA] bg-[#4338CA] text-white"
+                    : "border-[#E5E5E5] bg-white text-black/65 hover:border-[#6366F1]/50 hover:text-[#4338CA]",
+                )}
+              >
+                {label}
+                <span
+                  className={cn(
+                    "rounded-full px-1.5 font-mono text-[10.5px] tabular-nums",
+                    active ? "bg-white/20" : "bg-[#EEF2FF] text-[#4338CA]",
+                  )}
+                >
+                  {trialCounts[w]}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </OrganicCard>
 
       {/* Cards */}
@@ -354,6 +475,7 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (tenant: Tenant
           const tStyle = TIER_STYLE[t.tier];
           const cornerSide: CornerSide = i % 2 === 0 ? "tr" : "bl";
           const initials = tenantInitials(t.name);
+          const trial = trialById.get(t.id) ?? null;
           return (
             <OrganicCard
               key={t.id}
@@ -436,6 +558,8 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (tenant: Tenant
                   />
                 </div>
               </div>
+
+              {trial ? <TrialStatusPanel trial={trial} /> : null}
 
               <div
                 className="flex flex-wrap items-center justify-between gap-2 border-t border-[#EFEFEF] pt-3"
@@ -603,6 +727,61 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (tenant: Tenant
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function TrialStatusPanel({ trial }: { trial: TrialInfo }) {
+  const expired = trial.daysLeft <= 0;
+  const endingSoon = !expired && trial.daysLeft <= TRIAL_ENDING_SOON_DAYS;
+  const tone = expired
+    ? { box: "border-[#FECACA] bg-[#FEF2F2]", text: "text-[#B91C1C]", bar: "bg-[#EF4444]" }
+    : endingSoon
+      ? { box: "border-[#FDE68A] bg-[#FFFBEB]", text: "text-[#B45309]", bar: "bg-[#F59E0B]" }
+      : { box: "border-[#E0E7FF] bg-[#EEF2FF]/60", text: "text-[#4338CA]", bar: "bg-[#6366F1]" };
+  const progress = expired ? 100 : Math.round((trial.day / TRIAL_DAYS) * 100);
+  const endLabel = trial.endsAt.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  const agoDays = -trial.daysLeft;
+
+  return (
+    <div className={cn("rounded-2xl border px-3 py-2.5", tone.box)}>
+      <div className="flex items-center justify-between text-[11px]">
+        <span className="font-semibold uppercase tracking-wider text-black/40">
+          {TRIAL_DAYS}-day trial
+        </span>
+        <span className={cn("font-semibold tabular-nums", tone.text)}>
+          {expired
+            ? agoDays === 0
+              ? "Expired today"
+              : `Expired ${agoDays} ${agoDays === 1 ? "day" : "days"} ago`
+            : `${trial.daysLeft} ${trial.daysLeft === 1 ? "day" : "days"} left`}
+        </span>
+      </div>
+      <div className="mt-1.5 flex items-baseline justify-between text-[12px] text-black/65">
+        <span>
+          {expired ? (
+            "Trial period over"
+          ) : (
+            <>
+              Day <span className="font-semibold tabular-nums text-black">{trial.day}</span> of{" "}
+              {TRIAL_DAYS}
+            </>
+          )}
+        </span>
+        <span className="tabular-nums text-black/45">
+          {expired ? "Ended" : "Ends"} {endLabel}
+        </span>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white ring-1 ring-black/5">
+        <div
+          className={cn("h-full rounded-full transition-[width]", tone.bar)}
+          style={{ width: `${progress}%` }}
+        />
+      </div>
     </div>
   );
 }

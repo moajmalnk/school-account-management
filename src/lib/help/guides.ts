@@ -244,12 +244,12 @@ export const HELP_GUIDES: HelpGuide[] = [
       },
       {
         title: "Fill one student per row",
-        body: "Keep the column headings unchanged. Class names should match the classes in Settings → Class Tier.",
+        body: "Keep the column headings unchanged. Put the class (e.g. 1, UKG) and division (A, B) in separate columns. Optional columns: Mother Name, Date of Birth, Gender, Address, Pin code, Email, Admission No.",
       },
       {
         title: "Upload",
-        body: "Students → Import → Upload CSV. Feezo shows a preview with any problem rows before anything is saved.",
-        tip: "Duplicates and invalid lines are skipped, so you can safely upload the same file again after fixing it.",
+        body: "Students → Import / Export → Upload Excel / CSV. You can upload the .xlsx file directly (first sheet is used) or a CSV.",
+        tip: "Duplicates and unreadable rows are skipped, so you can safely upload the same file again after fixing it. If a broken upload ever created strange class names, Settings → Class Tier shows a one-click cleanup.",
       },
     ],
     related: ["admit-student", "classes-fees"],

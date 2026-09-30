@@ -1,5 +1,8 @@
 export const FEEZO_ASK_EVENT = "feezo:ask";
 
+/** Search param that opens the Feezo panel over any tenant page (`?ai=1`). */
+export const FEEZO_OPEN_PARAM = "ai";
+
 export type FeezoAskDetail = { prompt: string };
 
 /** Opens the Feezo AI panel and sends `prompt` as a new user message. */

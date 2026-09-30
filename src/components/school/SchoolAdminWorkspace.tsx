@@ -465,11 +465,18 @@ import {
   isDuplicateStudent,
   matchExistingClass,
   nextPrefixedId,
+  isPlausibleClassLabel,
+  isPlausibleDivision,
   normalizeClassLabelKey,
-  parseStudentCsv,
+  parseStudentTable,
   splitStudentClassForCsv,
   STUDENT_CSV_HEADERS,
 } from "@/lib/student-csv";
+import {
+  readSpreadsheetTable,
+  SPREADSHEET_ACCEPT,
+  SpreadsheetReadError,
+} from "@/lib/spreadsheet-file";
 import {
   countStaffDuplicateExtras,
   findDuplicateStaff,
@@ -3984,18 +3991,60 @@ export function StudentsLedger() {
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      void (async () => {
-        const rows = parseStudentCsv(String(reader.result ?? ""));
-        if (!rows.length) {
-          toast.error("CSV had no student rows", {
-            description: "Use the template: Name, Class, Division, Guardian, Phone, Balance",
-          });
-          if (fileInputRef.current) fileInputRef.current.value = "";
-          return;
+    const resetInput = () => {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    };
+    void (async () => {
+      let parsed: ReturnType<typeof parseStudentTable>;
+      try {
+        parsed = parseStudentTable(await readSpreadsheetTable(file));
+      } catch (err) {
+        if (err instanceof SpreadsheetReadError) {
+          toast.error(err.message, { description: err.description });
+        } else {
+          toast.error("Could not read the selected file");
         }
+        resetInput();
+        return;
+      }
 
+      const { rows, issues } = parsed;
+      const issueSummary = issues
+        .slice(0, 3)
+        .map((issue) => `Row ${issue.line}: ${issue.message}`)
+        .join(" · ");
+      if (!rows.length) {
+        toast.error(issues.length ? "No readable student rows" : "The file had no student rows", {
+          description: issues.length
+            ? `${issueSummary}${issues.length > 3 ? ` · +${issues.length - 3} more` : ""}`
+            : "Use the template: Name, Class, Division, Guardian, Phone, Balance",
+        });
+        resetInput();
+        return;
+      }
+      if (issues.length > rows.length) {
+        toast.error("This file doesn't look like a student list", {
+          description: `${issues.length} of ${issues.length + rows.length} rows are unreadable. Nothing was imported · check the file and try again.`,
+        });
+        resetInput();
+        return;
+      }
+
+      const newClassLabels = new Set(
+        rows
+          .map((row) => row.classLabel)
+          .filter((label) => label && !matchExistingClass(classes, label))
+          .map((label) => normalizeClassLabelKey(label)),
+      );
+      if (newClassLabels.size > 30) {
+        toast.error("Too many new classes in this file", {
+          description: `${newClassLabels.size} classes would be created. Check the Class and Division columns, or create classes in Settings → Class Tier first.`,
+        });
+        resetInput();
+        return;
+      }
+
+      {
         setImporting(true);
         try {
           let classPool = [...classes];
@@ -4067,12 +4116,17 @@ export function StudentsLedger() {
             usedIds = [...usedIds, id];
             const draft = normalizeStudent({
               id,
-              admissionNumber: `ADM-${id.replace(/^STU-/i, "")}`,
+              admissionNumber: row.admissionNumber || `ADM-${id.replace(/^STU-/i, "")}`,
               name: row.name,
               cls: cls.className,
               guardian: row.guardian || "—",
               phone: row.phone || undefined,
               due: row.due,
+              motherName: row.motherName,
+              dob: row.dob,
+              gender: row.gender,
+              address: row.address,
+              email: row.email,
               shareToken: createStudentShareToken(),
               active: true,
             });
@@ -4083,6 +4137,17 @@ export function StudentsLedger() {
                 active: true,
               }),
             );
+          }
+
+          const totalAdmitted = admitted.length + reenrolled.length;
+          if (!totalAdmitted) {
+            toast.error("No new students to admit", {
+              description:
+                skipped > 0
+                  ? `${skipped} row${skipped === 1 ? "" : "s"} skipped · already enrolled or missing class`
+                  : "Check the Name and Class columns and try again",
+            });
+            return;
           }
 
           if (createdClasses.length) {
@@ -4115,17 +4180,6 @@ export function StudentsLedger() {
                 ),
             ),
           ];
-
-          const totalAdmitted = admitted.length + reenrolled.length;
-          if (!totalAdmitted) {
-            toast.error("No new students to admit", {
-              description:
-                skipped > 0
-                  ? `${skipped} row${skipped === 1 ? "" : "s"} skipped · already enrolled or missing class`
-                  : "Check the CSV columns and try again",
-            });
-            return;
-          }
 
           for (const cls of tiersToSync) {
             await apiUpsertClass(cls).catch(() => {
@@ -4164,19 +4218,28 @@ export function StudentsLedger() {
             tiersToSync.length > 0
               ? `${tiersToSync.length} class tier${tiersToSync.length === 1 ? "" : "s"} synced`
               : null;
-          const skipNote = skipped > 0 ? `${skipped} skipped` : null;
+          const skipNote = skipped > 0 ? `${skipped} duplicate${skipped === 1 ? "" : "s"}` : null;
+          const invalidNote =
+            issues.length > 0
+              ? `${issues.length} unreadable row${issues.length === 1 ? "" : "s"} skipped`
+              : null;
           const failNote = syncFailed > 0 ? `${syncFailed} sync failed` : null;
           toast.success(`${totalAdmitted} student${totalAdmitted === 1 ? "" : "s"} admitted`, {
-            description: [classNote, skipNote, failNote, academicYear].filter(Boolean).join(" · "),
+            description: [classNote, skipNote, invalidNote, failNote, academicYear]
+              .filter(Boolean)
+              .join(" · "),
           });
+          if (issues.length) {
+            toast.warning("Some rows were not imported", {
+              description: `${issueSummary}${issues.length > 3 ? ` · +${issues.length - 3} more` : ""}`,
+            });
+          }
         } finally {
           setImporting(false);
-          if (fileInputRef.current) fileInputRef.current.value = "";
+          resetInput();
         }
-      })();
-    };
-    reader.onerror = () => toast.error("Could not read the selected file");
-    reader.readAsText(file);
+      }
+    })();
   };
 
   const downloadPdf = () => {
@@ -4615,7 +4678,7 @@ export function StudentsLedger() {
                     className="cursor-pointer gap-2 rounded-xl text-[13px]"
                   >
                     <Upload className="h-3.5 w-3.5" />
-                    Upload CSV
+                    Upload Excel / CSV
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -4755,7 +4818,7 @@ export function StudentsLedger() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv,text/csv"
+            accept={SPREADSHEET_ACCEPT}
             className="hidden"
             onChange={handleImport}
           />
@@ -16937,6 +17000,8 @@ function ClassesCard({
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ClassConfig | null>(null);
+  const [cleaningInvalid, setCleaningInvalid] = useState(false);
+  const [confirmCleanInvalid, setConfirmCleanInvalid] = useState(false);
   type FeeDraftRow = { id: string; label: string; amount: string; dueDate: string };
 
   const emptyOneTimeRows = (): FeeDraftRow[] =>
@@ -17304,6 +17369,54 @@ function ClassesCard({
     setPendingDelete(null);
   };
 
+  /** Tiers whose name is unreadable (e.g. created from a binary file uploaded as CSV). */
+  const invalidClasses = useMemo(
+    () =>
+      classes.filter(
+        (c) =>
+          !isPlausibleClassLabel(c.className) ||
+          !isPlausibleClassLabel(c.grade || c.className) ||
+          !isPlausibleDivision(c.section ?? ""),
+      ),
+    [classes],
+  );
+  const removableInvalid = invalidClasses.filter(
+    (c) => classBlockingEnrollmentCount(c, allStudents, studentYearLedgers) === 0,
+  );
+  const lockedInvalidCount = invalidClasses.length - removableInvalid.length;
+
+  const removeInvalidClasses = async () => {
+    if (!removableInvalid.length || cleaningInvalid) return;
+    setCleaningInvalid(true);
+    const targets = [...removableInvalid];
+    const removedIds = new Set<string>();
+    for (const c of targets) {
+      try {
+        await apiDeleteClass(c.id);
+        removedIds.add(c.id);
+      } catch {
+        /* reported in summary */
+      }
+    }
+    if (removedIds.size) {
+      setClasses((prev) => prev.filter((c) => !removedIds.has(c.id)));
+    }
+    const failed = targets.length - removedIds.size;
+    if (failed === 0) {
+      toast.success(
+        `${removedIds.size} invalid class tier${removedIds.size === 1 ? "" : "s"} removed`,
+      );
+    } else {
+      toast.error(`${failed} class tier${failed === 1 ? "" : "s"} could not be removed`, {
+        description: removedIds.size
+          ? `${removedIds.size} removed · try again for the rest`
+          : "Try again",
+      });
+    }
+    setCleaningInvalid(false);
+    setConfirmCleanInvalid(false);
+  };
+
   const termMonthLabel = (c: ClassConfig) => {
     const normalized = withClassFeeSchedule(normalizeClassConfig(c), feeTerms);
     const installments = normalized.feeSchedule.filter(
@@ -17397,6 +17510,64 @@ function ClassesCard({
         actionLabel="Add Class"
         onAction={startCreate}
       />
+
+      {invalidClasses.length > 0 && (
+        <div
+          role="alert"
+          className="mt-4 flex flex-col gap-3 rounded-xl border border-[#FDE68A] bg-[#FFFBEB] px-4 py-3 sm:flex-row sm:items-center sm:justify-between dark:border-amber-500/30 dark:bg-amber-500/10"
+        >
+          <div className="flex min-w-0 items-start gap-2.5">
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-[#B45309] dark:text-amber-300" />
+            <div className="min-w-0">
+              <p className="text-[13px] font-semibold text-[#78350F] dark:text-amber-100">
+                {invalidClasses.length} class tier{invalidClasses.length === 1 ? " has" : "s have"}{" "}
+                an unreadable name
+              </p>
+              <p className="mt-0.5 text-[12px] leading-relaxed text-[#92400E]/85 dark:text-amber-200/80">
+                Usually created by uploading an Excel file that wasn't read correctly.
+                {removableInvalid.length > 0
+                  ? ` ${removableInvalid.length} ha${removableInvalid.length === 1 ? "s" : "ve"} no students and can be removed safely.`
+                  : ""}
+                {lockedInvalidCount > 0
+                  ? ` ${lockedInvalidCount} still ha${lockedInvalidCount === 1 ? "s" : "ve"} students · edit or move them first.`
+                  : ""}
+              </p>
+            </div>
+          </div>
+          {removableInvalid.length > 0 && (
+            <div className="flex shrink-0 items-center gap-2">
+              {confirmCleanInvalid && !cleaningInvalid && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmCleanInvalid(false)}
+                  className="inline-flex h-9 items-center rounded-full border border-[#E5E5E5] bg-white px-3.5 text-[12px] font-semibold text-black/65 hover:bg-[#F4F4F5] dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-300"
+                >
+                  Cancel
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={cleaningInvalid}
+                onClick={() =>
+                  confirmCleanInvalid ? void removeInvalidClasses() : setConfirmCleanInvalid(true)
+                }
+                className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#B45309] px-4 text-[12px] font-semibold text-white shadow-sm transition-colors hover:bg-[#92400E] disabled:cursor-wait disabled:opacity-70"
+              >
+                {cleaningInvalid ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5" />
+                )}
+                {cleaningInvalid
+                  ? "Removing…"
+                  : confirmCleanInvalid
+                    ? `Confirm remove ${removableInvalid.length}`
+                    : `Remove ${removableInvalid.length} invalid`}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {sortedClasses.length === 0 ? (
         <div className="mt-4">

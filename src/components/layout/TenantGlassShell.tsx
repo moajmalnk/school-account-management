@@ -603,9 +603,9 @@ function navAllowed(to: string, session: ReturnType<typeof useAuth>["session"]):
 const SIDEBAR_COLLAPSED_KEY = "tenant-sidebar-collapsed";
 
 function dockScale(distance: number) {
-  if (distance === 0) return 1.18;
-  if (distance === 1) return 1.08;
-  if (distance === 2) return 1.03;
+  if (distance === 0) return 1.12;
+  if (distance === 1) return 1.05;
+  if (distance === 2) return 1.02;
   return 1;
 }
 
@@ -702,7 +702,7 @@ export function TenantMacDock({
           "relative z-40 flex h-full max-h-[calc(100dvh-2rem)] min-h-0 w-full min-w-0 flex-col rounded-xl border border-white/70 bg-white/55 py-2.5 shadow-[0_12px_40px_-16px_rgba(15,23,42,0.35)] backdrop-blur-2xl max-[820px]:py-2 xl:py-3",
           expanded
             ? "items-stretch overflow-hidden px-2.5 sm:px-3"
-            : "items-center overflow-visible px-1.5",
+            : "items-center overflow-visible px-0",
         )}
       >
         <div
@@ -749,7 +749,11 @@ export function TenantMacDock({
             // Keep scrollable but hide the scrollbar chrome.
             "flex min-h-0 w-full flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain",
             "[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
-            expanded ? "gap-1 max-[820px]:gap-0.5 xl:gap-2" : "items-center gap-1",
+            // Collapsed: padding lives inside the scroller so the active ring and hover
+            // magnification (up to 1.18×) aren't clipped by overflow.
+            expanded
+              ? "gap-1 max-[820px]:gap-0.5 xl:gap-2"
+              : "items-center gap-1.5 px-1.5 py-2 max-[820px]:gap-1 max-[820px]:py-1.5",
           )}
           aria-label="Primary navigation"
         >
@@ -758,11 +762,6 @@ export function TenantMacDock({
             const active = pathname.startsWith(item.to);
             const distance = hovered === null ? 99 : Math.abs(hovered - index);
             const scale = expanded ? 1 : dockScale(distance);
-            const tooltipSide =
-              placement === "Left"
-                ? "left-full top-1/2 ml-3 -translate-y-1/2"
-                : "right-full top-1/2 mr-3 -translate-y-1/2";
-
             if (expanded) {
               return (
                 <Link
@@ -812,20 +811,20 @@ export function TenantMacDock({
                 onClick={(event) => onGuardedLinkClick(item.to, event, active)}
                 onMouseEnter={() => setHovered(index)}
                 className={cn(
-                  "group relative z-10 flex h-12 w-12 shrink-0 items-center justify-center max-[820px]:h-11 max-[820px]:w-11 xl:h-16 xl:w-16",
+                  "group relative z-10 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl outline-none max-[820px]:h-11 max-[820px]:w-11 xl:h-16 xl:w-16",
                   distance === 0 && "z-50",
                 )}
               >
                 <span
+                  aria-hidden
                   className={cn(
-                    "pointer-events-none absolute z-[60] whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[11px] font-semibold text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 dark:bg-zinc-100 dark:text-zinc-900",
-                    tooltipSide,
+                    "pointer-events-none absolute top-1/2 h-6 w-1 -translate-y-1/2 rounded-full bg-[#0F766E] shadow-[0_0_10px_rgba(15,118,110,0.55)] transition-all duration-200 dark:bg-[#2DD4BF] xl:h-8",
+                    placement === "Left" ? "-left-1.5" : "-right-1.5",
+                    active ? "opacity-100" : "scale-y-0 opacity-0",
                   )}
-                >
-                  {item.label}
-                </span>
+                />
                 <span
-                  className="relative flex flex-col items-center justify-center transition-transform duration-150 ease-out"
+                  className="relative flex items-center justify-center transition-transform duration-200 ease-out"
                   style={{
                     transform: `scale(${scale})`,
                     transformOrigin: "center center",
@@ -834,10 +833,11 @@ export function TenantMacDock({
                 >
                   <span
                     className={cn(
-                      "grid h-11 w-11 place-items-center rounded-xl border shadow-[0_6px_18px_-10px_rgba(15,23,42,0.45)] max-[820px]:h-10 max-[820px]:w-10 xl:h-14 xl:w-14",
+                      "grid h-11 w-11 place-items-center rounded-xl border transition-[background-color,border-color,box-shadow] duration-200 max-[820px]:h-10 max-[820px]:w-10 xl:h-14 xl:w-14",
+                      "group-focus-visible:ring-2 group-focus-visible:ring-[#0F766E]/60 group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-white dark:group-focus-visible:ring-[#2DD4BF]/70 dark:group-focus-visible:ring-offset-zinc-900",
                       active
-                        ? "border-[#99F6E4]/90 bg-white ring-2 ring-[#0F766E]/40 dark:border-[#2DD4BF]/55 dark:bg-[#0F766E]/40 dark:ring-[#2DD4BF]/45"
-                        : "border-slate-200/90 bg-gradient-to-br from-white/95 to-white/70 dark:border-white/25 dark:bg-gradient-to-br dark:from-zinc-800 dark:to-zinc-900 dark:shadow-black/40",
+                        ? "border-[#5EEAD4]/70 bg-gradient-to-br from-[#F0FDFA] to-[#CCFBF1] shadow-[0_8px_20px_-10px_rgba(15,118,110,0.65),inset_0_1px_0_rgba(255,255,255,0.9)] dark:border-[#2DD4BF]/45 dark:from-[#0F766E]/55 dark:to-[#115E59]/60 dark:shadow-[0_8px_20px_-10px_rgba(45,212,191,0.5)]"
+                        : "border-slate-200/90 bg-gradient-to-br from-white/95 to-white/70 shadow-[0_6px_18px_-10px_rgba(15,23,42,0.45)] group-hover:border-slate-300/90 group-hover:bg-white dark:border-white/25 dark:bg-gradient-to-br dark:from-zinc-800 dark:to-zinc-900 dark:shadow-black/40 dark:group-hover:border-white/35",
                     )}
                   >
                     <Icon
@@ -850,12 +850,6 @@ export function TenantMacDock({
                       strokeWidth={active ? 2.35 : 2}
                     />
                   </span>
-                  <span
-                    className={cn(
-                      "mt-1 h-1 w-1 rounded-full bg-slate-800 transition-opacity dark:bg-zinc-200",
-                      active ? "opacity-100" : "opacity-0",
-                    )}
-                  />
                 </span>
               </Link>
             );
