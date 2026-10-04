@@ -3,6 +3,10 @@ import { Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
+  AddFeeCategoryDialog,
+  type AddFeeCategoryFormValue,
+} from "@/components/school/AddFeeCategoryDialog";
+import {
   draftFromFeeSchedule,
   emptyFeeScheduleDraft,
   feeScheduleFromDraft,
@@ -24,7 +28,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OrganicCard } from "@/components/ui/organic-card";
 import { Switch } from "@/components/ui/switch";
+import { getApiToken } from "@/lib/api/client";
+import { apiGlSyncCatalogs } from "@/lib/api/general-ledger";
 import { apiDeletePaymentCategory, apiUpsertPaymentCategory } from "@/lib/api/settings";
+import {
+  createPaymentCategoryDraft,
+  findDuplicatePaymentCategory,
+  slugFromFeeCategoryLabel,
+  validateFeeCategorySchedule,
+} from "@/lib/payment-category-create";
 import { nextPrefixedId } from "@/lib/student-csv";
 import {
   defaultFeeCollectionStartMonth,
@@ -36,15 +48,6 @@ import {
   type PaymentCategory,
 } from "@/lib/tenant-store";
 import { formatMoney } from "@/lib/money";
-
-function slugFromLabel(label: string): string {
-  return label
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 64);
-}
 
 function categorySummary(cat: PaymentCategory): string {
   if (cat.isSystem) {
@@ -69,8 +72,10 @@ const HOW_IT_WORKS_TIP = (year: string): InfoTipContent => ({
   title: "How Fee Category works",
   points: [
     "A fee category is a named fee such as Hostel, Lab, Exam or Donation.",
-    "It appears as a Fee description option in Finance → Receive Payment, for students and external payers.",
-    "It does not add dues to any student. New and existing students keep the same Total Due; money is recorded only when you collect it.",
+    "Create it here or from Finance → Receive Payment → Add fee category — same popup and catalog.",
+    "It appears as a Fee description option for students and external payers.",
+    "It does not add dues to any student. Money is recorded only when you collect it.",
+    "Set an optional monthly or term structure when you create, or edit later.",
     `Saved for ${year || "the open academic year"}. Adding a new year copies it over as a separate copy you can edit on its own.`,
   ],
   note: "Fees that show as dues on student profiles come from Tuition Fee (Class Tier) and Vehicle Fee (Bus Point).",
@@ -86,25 +91,16 @@ const SYSTEM_TIP: InfoTipContent = {
   ],
 };
 
-const SAVE_TIP = (editing: boolean, year: string): InfoTipContent =>
-  editing
-    ? {
-        title: "What happens when you save changes",
-        points: [
-          "Changes apply from the next receipt you record.",
-          "Receipts already issued keep their original name and amount. Nothing in the past is recalculated.",
-          "Existing and newly admitted students are treated the same: no dues are added or removed.",
-          `Only ${year || "this year"} changes. Other academic years keep their own copy.`,
-        ],
-      }
-    : {
-        title: "What happens when you add this",
-        points: [
-          "It is available immediately in Receive Payment → Fee description for every student, existing or newly admitted, and for external payers.",
-          "No student's balance changes. Nothing is charged until you record a receipt.",
-          `It is saved for ${year || "the open academic year"} and copied into new years you add later.`,
-        ],
-      };
+const EDIT_TIP = (year: string): InfoTipContent => ({
+  title: "What happens when you save changes",
+  points: [
+    "Changes apply from the next receipt you record.",
+    "Receipts already issued keep their original name and amount. Nothing in the past is recalculated.",
+    "Existing and newly admitted students are treated the same: no dues are added or removed.",
+    "Fee structure is optional — leave billing mode unset to keep a label-only category for Receive Payment.",
+    `Only ${year || "this year"} changes. Other academic years keep their own copy.`,
+  ],
+});
 
 const NAME_TIP: InfoTipContent = {
   title: "Category name",
@@ -183,11 +179,13 @@ export function FeeCategoriesCard({
 }: FeeCategoriesCardProps) {
   const { academicYear } = useTenantStore();
   const startMonthFallback = defaultFeeCollectionStartMonth(feeTerms);
-  const [open, setOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PaymentCategory | null>(null);
   const [name, setName] = useState("");
   const [active, setActive] = useState(true);
+  const [savingCreate, setSavingCreate] = useState(false);
   const [schedule, setSchedule] = useState<FeeScheduleDraft>(() =>
     emptyFeeScheduleDraft(startMonthFallback),
   );
@@ -203,11 +201,7 @@ export function FeeCategoriesCard({
   );
 
   const startCreate = () => {
-    setEditingId(null);
-    setName("");
-    setActive(true);
-    setSchedule(emptyFeeScheduleDraft(startMonthFallback));
-    setOpen(true);
+    setCreateOpen(true);
   };
 
   const startEdit = (cat: PaymentCategory) => {
@@ -221,15 +215,17 @@ export function FeeCategoriesCard({
     setName(cat.label);
     setActive(cat.active !== false);
     setSchedule(
-      draftFromFeeSchedule({
-        billingCycle: cat.billingCycle,
-        feeAmountMode: cat.feeAmountMode,
-        feeSchedule: cat.feeSchedule,
-        feeCollectionStartMonth: cat.feeCollectionStartMonth,
-        startMonthFallback,
-      }),
+      cat.hasSchedule && cat.feeSchedule?.length
+        ? draftFromFeeSchedule({
+            billingCycle: cat.billingCycle,
+            feeAmountMode: cat.feeAmountMode,
+            feeSchedule: cat.feeSchedule,
+            feeCollectionStartMonth: cat.feeCollectionStartMonth,
+            startMonthFallback,
+          })
+        : emptyFeeScheduleDraft(startMonthFallback),
     );
-    setOpen(true);
+    setEditOpen(true);
   };
 
   const persist = (cat: PaymentCategory) => {
@@ -244,8 +240,51 @@ export function FeeCategoriesCard({
       );
   };
 
-  const submit = (e: React.FormEvent) => {
+  const submitCreate = async (value: AddFeeCategoryFormValue) => {
+    const label = value.label.trim();
+    if (!label) {
+      toast.error("Fee category name is required");
+      return;
+    }
+    if (findDuplicatePaymentCategory(paymentCategories, label)) {
+      toast.error("A fee category with this name already exists");
+      return;
+    }
+    const scheduleError = validateFeeCategorySchedule(value.schedule);
+    if (scheduleError) {
+      toast.error(scheduleError);
+      return;
+    }
+    const created = createPaymentCategoryDraft({
+      label,
+      active: value.active,
+      schedule: value.schedule,
+      paymentCategories,
+      academicYear,
+    });
+    setSavingCreate(true);
+    try {
+      const saved = getApiToken() ? await apiUpsertPaymentCategory(created) : created;
+      setPaymentCategories((prev) => [...prev, { ...created, ...saved }]);
+      if (getApiToken()) {
+        void apiGlSyncCatalogs();
+      }
+      setCreateOpen(false);
+      toast.success(`Added “${saved.label ?? label}”`, {
+        description: created.hasSchedule
+          ? "Available in Finance → Receive Payment with fee structure"
+          : "Available in Finance → Receive Payment · edit anytime to refine structure",
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not add fee category");
+    } finally {
+      setSavingCreate(false);
+    }
+  };
+
+  const submitEdit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!editingId) return;
     const label = name.trim();
     if (!label) {
       toast.error("Fee category name is required");
@@ -259,64 +298,37 @@ export function FeeCategoriesCard({
       toast.error("A fee category with this name already exists");
       return;
     }
-    if (!schedule.billingModeChosen) {
-      toast.error("Choose monthly or term fee billing");
-      return;
-    }
-    const feeSchedule = feeScheduleFromDraft(schedule);
-    if (!feeSchedule.length || feeSchedule.every((l) => l.amount <= 0)) {
-      toast.error("Add at least one installment with an amount");
-      return;
-    }
-    const slug = slugFromLabel(label.replace(/\s*fee\s*$/i, "") || label);
 
-    if (editingId) {
-      const existing = paymentCategories.find((c) => c.id === editingId);
-      const updated: PaymentCategory = {
-        id: editingId,
-        label,
-        slug,
-        isSystem: false,
-        hasSchedule: true,
-        billingCycle: schedule.billingCycle,
-        feeAmountMode: schedule.feeAmountMode,
-        feeSchedule,
-        feeCollectionStartMonth:
-          schedule.billingCycle === "Monthly" ? schedule.feeCollectionStartMonth : undefined,
-        active,
-        academicYear: existing?.academicYear ?? academicYear,
-      };
-      setPaymentCategories((prev) => prev.map((c) => (c.id === editingId ? updated : c)));
-      persist(updated);
-      toast.success(`Fee category updated · ${label}`);
-    } else {
-      const id = yearScopedId(
-        nextPrefixedId(
-          "CAT",
-          paymentCategories.map((c) => c.id),
-          3,
-        ),
-        academicYear,
-      );
-      const created: PaymentCategory = {
-        id,
-        label,
-        slug,
-        isSystem: false,
-        hasSchedule: true,
-        billingCycle: schedule.billingCycle,
-        feeAmountMode: schedule.feeAmountMode,
-        feeSchedule,
-        feeCollectionStartMonth:
-          schedule.billingCycle === "Monthly" ? schedule.feeCollectionStartMonth : undefined,
-        active,
-        academicYear,
-      };
-      setPaymentCategories((prev) => [...prev, created]);
-      persist(created);
-      toast.success(`Fee category added · ${label}`);
+    const slug = slugFromFeeCategoryLabel(label.replace(/\s*fee\s*$/i, "") || label);
+    const existing = paymentCategories.find((c) => c.id === editingId);
+    const withStructure = schedule.billingModeChosen;
+    const feeSchedule = withStructure ? feeScheduleFromDraft(schedule) : [];
+    if (withStructure && (!feeSchedule.length || feeSchedule.every((l) => l.amount <= 0))) {
+      toast.error("Add at least one installment with an amount, or clear billing mode");
+      return;
     }
-    setOpen(false);
+
+    const updated: PaymentCategory = {
+      id: editingId,
+      label,
+      slug,
+      isSystem: false,
+      hasSchedule: withStructure && feeSchedule.length > 0,
+      billingCycle: withStructure ? schedule.billingCycle : undefined,
+      feeAmountMode: withStructure ? schedule.feeAmountMode : undefined,
+      feeSchedule: withStructure ? feeSchedule : [],
+      feeCollectionStartMonth:
+        withStructure && schedule.billingCycle === "Monthly"
+          ? schedule.feeCollectionStartMonth
+          : undefined,
+      active,
+      academicYear: existing?.academicYear ?? academicYear,
+    };
+    setPaymentCategories((prev) => prev.map((c) => (c.id === editingId ? updated : c)));
+    persist(updated);
+    toast.success(`Fee category updated · ${label}`);
+    setEditOpen(false);
+    setEditingId(null);
   };
 
   const remove = (cat: PaymentCategory) => {
@@ -384,8 +396,9 @@ export function FeeCategoriesCard({
             <InfoTip content={HOW_IT_WORKS_TIP(academicYear)} side="bottom" />
           </h2>
           <p className="mt-1 text-[12.5px] text-black/50 dark:text-zinc-400">
-            Create campus fees like Hostel with the same monthly or term structure as Class Tier.
-            Tuition and Vehicle stay on Class Tier / Transport.
+            Same Add Fee Category popup as Finance → Receive Payment. Name the fee, optionally set
+            monthly or term installments, and choose Active. Tuition and Vehicle stay on Class Tier /
+            Transport.
           </p>
         </div>
         <Button
@@ -404,16 +417,21 @@ export function FeeCategoriesCard({
               No custom fee categories yet
             </p>
             <p className="mt-1 text-[12px] text-black/45 dark:text-zinc-500">
-              Add Hostel, Lab, or any recurring fee with installments and due dates.
+              Add Library, Lab, Hostel, or any fee name — it shows up immediately in Receive Payment.
             </p>
-            <Button
-              type="button"
-              variant="outline"
-              className="mt-3 rounded-full"
-              onClick={addHostelStarter}
-            >
-              Add Hostel Fee starter
-            </Button>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button type="button" className="rounded-full" onClick={startCreate}>
+                Add fee category
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full"
+                onClick={addHostelStarter}
+              >
+                Add Hostel Fee starter
+              </Button>
+            </div>
           </div>
         ) : null}
 
@@ -514,18 +532,33 @@ export function FeeCategoriesCard({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <AddFeeCategoryDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        variant="feeCategory"
+        startMonthFallback={startMonthFallback}
+        saving={savingCreate}
+        onSubmit={submitCreate}
+      />
+
+      <Dialog
+        open={editOpen}
+        onOpenChange={(next) => {
+          setEditOpen(next);
+          if (!next) setEditingId(null);
+        }}
+      >
         <DialogContent className="flex max-h-[min(90vh,760px)] w-[calc(100vw-1.5rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
           <DialogHeader className="shrink-0 space-y-1.5 border-b border-[#EFEFEF] px-4 py-3 pr-12 sm:px-6 sm:py-4 dark:border-white/10">
             <DialogTitle className="flex items-center gap-1">
-              {editingId ? "Edit Fee Category" : "Add Fee Category"}
-              <InfoTip content={SAVE_TIP(Boolean(editingId), academicYear)} side="bottom" />
+              Edit Fee Category
+              <InfoTip content={EDIT_TIP(academicYear)} side="bottom" />
             </DialogTitle>
             <DialogDescription>
-              Name the fee and set installments. Student assignment and dues come in a later update.
+              Update the name, optional installments, and whether it appears on new receipts.
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+          <form onSubmit={submitEdit} className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-3 sm:px-6 sm:py-4">
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
@@ -554,14 +587,22 @@ export function FeeCategoriesCard({
               </div>
             </div>
             <DialogFooter className="shrink-0 border-t border-[#EFEFEF] px-4 py-3 sm:px-6 dark:border-white/10">
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full"
+                onClick={() => {
+                  setEditOpen(false);
+                  setEditingId(null);
+                }}
+              >
                 Cancel
               </Button>
               <Button
                 type="submit"
                 className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
               >
-                {editingId ? "Save" : "Add Category"}
+                Save
               </Button>
             </DialogFooter>
           </form>

@@ -113,7 +113,9 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -181,6 +183,8 @@ import {
   sumFeeSchedule,
   scheduleSummary,
   classFeePrefillAmount,
+  classOneTimeFeeLines,
+  matchClassOneTimeFeeLine,
   DEFAULT_STAFF_DOCUMENTS,
   THEME_NAV_PLACEMENT_OPTIONS,
   useTenantStore,
@@ -295,6 +299,15 @@ import {
   isRecordDeleted,
 } from "@/components/school/ProfileAccountActions";
 import { SettingsUsersCard } from "@/components/school/SettingsUsersCard";
+import {
+  AddFeeCategoryDialog,
+  type AddFeeCategoryFormValue,
+} from "@/components/school/AddFeeCategoryDialog";
+import {
+  createPaymentCategoryDraft,
+  findDuplicatePaymentCategory,
+  validateFeeCategorySchedule,
+} from "@/lib/payment-category-create";
 import { FeeCategoriesCard } from "@/components/school/FeeCategoriesCard";
 import { DocumentNumbersPanel } from "@/components/school/DocumentNumbersPanel";
 import {
@@ -8718,8 +8731,10 @@ function blurActiveElement() {
   }
 }
 
+type FeeDescriptionOption = { value: string; label: string; group?: string };
+
 function feeDescriptionSelectOptions(
-  descriptionOptions: { value: string; label: string }[],
+  descriptionOptions: FeeDescriptionOption[],
   currentDescription: string,
 ) {
   const options = [...descriptionOptions];
@@ -8732,24 +8747,69 @@ function feeDescriptionSelectOptions(
   return options;
 }
 
+function formatOneTimeDueHint(dueDate?: string): string {
+  if (!dueDate || !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) return "";
+  const parsed = new Date(`${dueDate}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return ` · due ${parsed.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  })}`;
+}
+
+/** Catalog fees + Class Tier one-time rows for the selected student's class. */
 function orderedFeeDescriptionOptions(
   categories: PaymentCategory[],
-): { value: string; label: string }[] {
+  matchedClass?: ClassConfig,
+  feeTerms: FeeTerm[] = [],
+): FeeDescriptionOption[] {
   const tuition: PaymentCategory[] = [];
   const vehicle: PaymentCategory[] = [];
   const other: PaymentCategory[] = [];
   const rest: PaymentCategory[] = [];
   for (const category of categories) {
+    if (category.active === false) continue;
     const kind = categoryFeeTermKind(category.label);
     if (kind === "tuition") tuition.push(category);
     else if (kind === "vehicle") vehicle.push(category);
     else if (isOtherFeeDescription(category.label)) other.push(category);
     else rest.push(category);
   }
-  return [...tuition, ...vehicle, ...other, ...rest].map((category) => ({
-    value: category.label,
-    label: category.label,
-  }));
+  const catalogKeys = new Set(
+    [...tuition, ...vehicle, ...other, ...rest].map((c) => c.label.trim().toLowerCase()),
+  );
+  const oneTime = classOneTimeFeeLines(matchedClass, feeTerms)
+    .filter((line) => !catalogKeys.has(line.label.trim().toLowerCase()))
+    .map((line) => ({
+      value: line.label,
+      label: line.label,
+      group: "Class one-time",
+    }));
+
+  return [
+    ...tuition.map((category) => ({
+      value: category.label,
+      label: category.label,
+      group: "Recurring",
+    })),
+    ...vehicle.map((category) => ({
+      value: category.label,
+      label: category.label,
+      group: "Recurring",
+    })),
+    ...oneTime,
+    ...other.map((category) => ({
+      value: category.label,
+      label: category.label,
+      group: "Other",
+    })),
+    ...rest.map((category) => ({
+      value: category.label,
+      label: category.label,
+      group: "Fee categories",
+    })),
+  ];
 }
 
 function isOtherFeeDescription(label: string) {
@@ -8809,6 +8869,17 @@ function feePeriodChoices(
   breakCtx?: FeeBreakPeriodContext,
 ): { value: string; label: string; kind: FeePeriodKind; period: string }[] {
   const termKind = categoryFeeTermKind(description);
+  const oneTimeLine = matchClassOneTimeFeeLine(matchedClass, description, feeTerms);
+  if (oneTimeLine) {
+    return [
+      {
+        value: `month:${oneTimeLine.label}`,
+        label: `One-time${formatOneTimeDueHint(oneTimeLine.dueDate)}`,
+        kind: "month" as const,
+        period: oneTimeLine.label,
+      },
+    ];
+  }
   const scheduled = matchedClass ? withClassFeeSchedule(matchedClass, feeTerms) : undefined;
   const classInstallments =
     scheduled?.feeSchedule.filter((line) => line.kind === "installment" && line.amount > 0) ?? [];
@@ -9358,6 +9429,8 @@ function prefillScheduledAmountForFeeLine(
     return vehicleFee;
   }
   if (isOtherFeeDescription(category) || categorySuggestsExternal(category)) return undefined;
+  // Class one-time fees must never fall back to the full class/tuition total.
+  if (matchClassOneTimeFeeLine(matchedClass, category, feeTerms)) return undefined;
   return tuitionFee && tuitionFee > 0 ? tuitionFee : undefined;
 }
 
@@ -10003,9 +10076,23 @@ function ReceivePayment() {
       receivePaymentStudentCtx = undefined;
     };
   }, []);
+  const matchedClass = useMemo(() => {
+    const className = selected?.cls || (!isExternal ? cls : "");
+    if (!className) return undefined;
+    return classConfigs.find((c) => c.className === className);
+  }, [classConfigs, selected, cls, isExternal]);
   const descriptionOptions = useMemo(
-    () => orderedFeeDescriptionOptions(paymentCategories),
-    [paymentCategories],
+    () =>
+      orderedFeeDescriptionOptions(
+        paymentCategories,
+        isExternal ? undefined : matchedClass,
+        feeTerms,
+      ),
+    [paymentCategories, matchedClass, feeTerms, isExternal],
+  );
+  const validDescriptionLabels = useMemo(
+    () => new Set(descriptionOptions.map((option) => option.value)),
+    [descriptionOptions],
   );
   const filledFeeItems = useMemo(
     () => feeItems.filter((item) => Number(item.amount) > 0),
@@ -10046,26 +10133,32 @@ function ReceivePayment() {
 
   useEffect(() => {
     if (editingPayment) return;
-    if (!paymentCategories.length) return;
-    const labels = new Set(paymentCategories.map((c) => c.label));
+    if (!paymentCategories.length && !validDescriptionLabels.size) return;
+    const fallback =
+      paymentCategories.find((c) => categoryFeeTermKind(c.label) === "tuition")?.label ??
+      paymentCategories[0]?.label ??
+      defaultCategory;
     setFeeItems((prev) => {
       let changed = false;
       const next = prev.map((item) => {
-        if (labels.has(item.description)) return item;
+        if (validDescriptionLabels.has(item.description)) return item;
         changed = true;
-        return { ...item, description: paymentCategories[0].label, customDescription: "" };
+        return { ...item, description: fallback, customDescription: "" };
       });
       return changed ? next : prev;
     });
-    if (!labels.has(ledgerCategory)) {
+    const catalogLabels = new Set(paymentCategories.map((c) => c.label));
+    if (!catalogLabels.has(ledgerCategory)) {
       setLedgerCategory(ledgerDefault);
     }
-  }, [paymentCategories, ledgerCategory, ledgerDefault, editingPayment]);
-
-  const matchedClass = useMemo(
-    () => classConfigs.find((c) => c.className === selected?.cls),
-    [classConfigs, selected],
-  );
+  }, [
+    paymentCategories,
+    validDescriptionLabels,
+    ledgerCategory,
+    ledgerDefault,
+    editingPayment,
+    defaultCategory,
+  ]);
 
   const transportFeeResolved = useMemo(() => {
     if (!selected) return undefined;
@@ -10888,7 +10981,7 @@ function ReceivePayment() {
 
   const addFeeItem = () => {
     const used = new Set(feeItems.map((item) => item.description));
-    const ordered = orderedFeeDescriptionOptions(paymentCategories);
+    const ordered = descriptionOptions;
     const nextCat = ordered.find((option) => !used.has(option.value)) ??
       ordered[0] ?? { value: defaultCategory, label: defaultCategory };
     const linePeriodOpts = periodOptsForDescription(nextCat.label);
@@ -10937,33 +11030,54 @@ function ReceivePayment() {
     setAddCategoryOpen(true);
   };
 
-  const submitNewCategory = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const label = newCategoryLabel.trim();
-    if (!label) {
-      toast.error(
-        addCategoryTarget?.type === "ledger" ? "Enter a ledger name" : "Enter a fee description",
-      );
-      return;
-    }
-    if (paymentCategories.some((c) => c.label.trim().toLowerCase() === label.toLowerCase())) {
-      toast.error(
-        addCategoryTarget?.type === "ledger"
-          ? "This ledger already exists"
-          : "This fee description already exists",
-      );
-      return;
-    }
-    const draft: PaymentCategory = { id: newPaymentCategoryId(), label };
+  const submitNewCategory = async (value: AddFeeCategoryFormValue) => {
+    const label = value.label.trim();
     const targetType = addCategoryTarget?.type;
+    if (!label) {
+      toast.error(targetType === "ledger" ? "Enter a ledger name" : "Fee category name is required");
+      return;
+    }
+    if (findDuplicatePaymentCategory(paymentCategories, label)) {
+      toast.error(
+        targetType === "ledger"
+          ? "This ledger already exists"
+          : "A fee category with this name already exists",
+      );
+      return;
+    }
+    if (targetType !== "ledger") {
+      const scheduleError = validateFeeCategorySchedule(value.schedule);
+      if (scheduleError) {
+        toast.error(scheduleError);
+        return;
+      }
+    }
+    const draft =
+      targetType === "ledger"
+        ? ({
+            id: newPaymentCategoryId(),
+            label,
+            hasSchedule: false,
+            active: true,
+          } satisfies PaymentCategory)
+        : createPaymentCategoryDraft({
+            label,
+            active: value.active,
+            schedule: value.schedule,
+            paymentCategories,
+            academicYear,
+          });
     setSavingCategory(true);
     try {
       const saved = getApiToken() ? await apiUpsertPaymentCategory(draft) : draft;
-      setPaymentCategories((prev) => [...prev, saved]);
+      setPaymentCategories((prev) => [...prev, { ...draft, ...saved }]);
       if (addCategoryTarget?.type === "feeLine") {
-        updateFeeLine(addCategoryTarget.id, { description: saved.label, customDescription: "" });
+        updateFeeLine(addCategoryTarget.id, {
+          description: saved.label ?? label,
+          customDescription: "",
+        });
       } else if (addCategoryTarget?.type === "ledger") {
-        setLedgerCategory(saved.label);
+        setLedgerCategory(saved.label ?? label);
       }
       if (getApiToken()) {
         void apiGlSyncCatalogs();
@@ -10972,13 +11086,13 @@ function ReceivePayment() {
       setAddCategoryTarget(null);
       setNewCategoryLabel("");
       toast.success(
-        targetType === "ledger" ? `Ledger “${saved.label}” ready` : `Added “${saved.label}”`,
+        targetType === "ledger" ? `Ledger “${saved.label ?? label}” ready` : `Added “${saved.label ?? label}”`,
         {
           description:
             targetType === "ledger"
               ? "Linked for receipts · also appears under Ledgers when chart is installed"
               : getApiToken()
-                ? "Saved to fee categories"
+                ? "Saved to fee categories · also in Settings → Fee Category"
                 : "Available for this session",
         },
       );
@@ -12162,6 +12276,9 @@ function ReceivePayment() {
                     matchedClass,
                     isVehicleFeeCategory(item.description) ? matchedRoute : undefined,
                   );
+                  const isClassOneTime = Boolean(
+                    matchClassOneTimeFeeLine(matchedClass, item.description, feeTerms),
+                  );
                   const periodSelectOptions = periodChoices.map((c) => ({
                     value: c.value,
                     label: c.label,
@@ -12185,6 +12302,10 @@ function ReceivePayment() {
                   const isPrimaryLine = isPrimaryFeeLineForDescription(feeItems, item.id);
                   const selectedPeriodValues = selectedPeriodValuesForDescription(
                     feeItems,
+                    item.description,
+                  );
+                  const lineDescriptionOptions = feeDescriptionSelectOptions(
+                    descriptionOptions,
                     item.description,
                   );
                   return (
@@ -12236,20 +12357,24 @@ function ReceivePayment() {
                               onValueChange={(next) =>
                                 updateFeeLine(item.id, { description: next })
                               }
-                              options={descriptionOptions}
+                              options={lineDescriptionOptions}
                               placeholder="Select fee"
                               triggerClassName="h-11 sm:h-10"
                               onAddNew={() =>
                                 openAddCategoryDialog({ type: "feeLine", id: item.id })
                               }
-                              addNewLabel="Add new description"
+                              addNewLabel="Add fee category"
                             />
                           </div>
                           <div className="col-span-12 min-w-0 sm:col-span-4">
                             <FieldLabel>
-                              {isPrimaryLine ? "Fee period(s)" : "Fee period"}
+                              {isClassOneTime
+                                ? "Fee period"
+                                : isPrimaryLine
+                                  ? "Fee period(s)"
+                                  : "Fee period"}
                             </FieldLabel>
-                            {isPrimaryLine ? (
+                            {isPrimaryLine && !isClassOneTime ? (
                               <>
                                 <FeePeriodMultiSelect
                                   choices={periodSelectOptions}
@@ -12265,6 +12390,15 @@ function ReceivePayment() {
                                       ? "All periods for this fee are on break — manage breaks on the student Payments tab"
                                       : "No fee periods available"
                                     : "Select one or more · creates a line for each"}
+                                </p>
+                              </>
+                            ) : isClassOneTime ? (
+                              <>
+                                <div className="flex h-11 items-center rounded-lg border border-[#E5E5E5] bg-[#F4F4F5] px-3 text-[13px] text-black/70 dark:border-white/10 dark:bg-zinc-800/60 dark:text-zinc-300 sm:h-10">
+                                  {selectedPeriodLabel || "One-time"}
+                                </div>
+                                <p className="mt-1 min-h-[1rem] text-[10.5px] text-black/45 dark:text-zinc-500">
+                                  From Class Tier · charged once
                                 </p>
                               </>
                             ) : (
@@ -12791,7 +12925,7 @@ function ReceivePayment() {
         onPreviewAttachment={setPreviewAttachment}
       />
 
-      <Dialog
+      <AddFeeCategoryDialog
         open={addCategoryOpen}
         onOpenChange={(open) => {
           setAddCategoryOpen(open);
@@ -12800,67 +12934,12 @@ function ReceivePayment() {
             setNewCategoryLabel("");
           }
         }}
-      >
-        <DialogContent className="max-w-sm rounded-xl">
-          <DialogHeader>
-            <DialogTitle>
-              {addCategoryTarget?.type === "ledger"
-                ? "Create income ledger"
-                : "Add fee description"}
-            </DialogTitle>
-            <DialogDescription>
-              {addCategoryTarget?.type === "ledger"
-                ? "Used on receipts and mirrored into Ledgers under Direct Incomes when the chart is installed."
-                : "Creates a reusable category for fee line items on student receipts."}
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={(e) => void submitNewCategory(e)} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-                {addCategoryTarget?.type === "ledger" ? "Ledger name" : "Description"}
-              </Label>
-              <Input
-                value={newCategoryLabel}
-                onChange={(e) => setNewCategoryLabel(e.target.value)}
-                placeholder={
-                  addCategoryTarget?.type === "ledger"
-                    ? "e.g. Donation, Grant, Alumni Fund"
-                    : "e.g. Library Fee, Lab Fee"
-                }
-                autoFocus
-                className="h-11"
-              />
-            </div>
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button
-                type="button"
-                variant="outline"
-                className="rounded-full"
-                disabled={savingCategory}
-                onClick={() => setAddCategoryOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={savingCategory || !newCategoryLabel.trim()}
-                className="rounded-full bg-[#0F766E] hover:bg-[#0D9488]"
-              >
-                {savingCategory ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {addCategoryTarget?.type === "ledger" ? "Creating…" : "Adding…"}
-                  </>
-                ) : addCategoryTarget?.type === "ledger" ? (
-                  "Create ledger"
-                ) : (
-                  "Add description"
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+        variant={addCategoryTarget?.type === "ledger" ? "ledger" : "feeCategory"}
+        initialValue={newCategoryLabel}
+        startMonthFallback={defaultFeeCollectionStartMonth(feeTerms)}
+        saving={savingCategory}
+        onSubmit={submitNewCategory}
+      />
 
       <DeleteConfirmDialog
         open={Boolean(pendingDeletePayment)}
@@ -22686,7 +22765,7 @@ export function FieldSelect({
 }: {
   value: string;
   onValueChange: (value: string) => void;
-  options: { value: string; label: string }[];
+  options: { value: string; label: string; group?: string }[];
   placeholder?: string;
   disabled?: boolean;
   className?: string;
@@ -22712,7 +22791,7 @@ export function FieldSelect({
   const [open, setOpen] = useState(false);
   // Fingerprint options by content so parent re-creates of the same list
   // do not remount Select items (that flash looks like "blinking").
-  const optionsKey = options.map((o) => `${o.value}\0${o.label}`).join("\n");
+  const optionsKey = options.map((o) => `${o.value}\0${o.label}\0${o.group ?? ""}`).join("\n");
   const uniqueOptions = useMemo(() => {
     const seen = new Set<string>();
     return options.filter((opt) => {
@@ -22728,6 +22807,25 @@ export function FieldSelect({
     }
     return [{ value, label: value }, ...uniqueOptions];
   }, [uniqueOptions, value]);
+  const optionGroups = useMemo(() => {
+    const hasGroups = displayOptions.some((opt) => opt.group);
+    if (!hasGroups) {
+      return [{ key: "", label: "", items: displayOptions }];
+    }
+    const groups: { key: string; label: string; items: typeof displayOptions }[] = [];
+    const indexByKey = new Map<string, number>();
+    for (const opt of displayOptions) {
+      const key = opt.group?.trim() || "Other";
+      const existing = indexByKey.get(key);
+      if (existing == null) {
+        indexByKey.set(key, groups.length);
+        groups.push({ key, label: key, items: [opt] });
+      } else {
+        groups[existing]!.items.push(opt);
+      }
+    }
+    return groups;
+  }, [displayOptions]);
   const selectedLabel = displayOptions.find((o) => o.value === value)?.label;
   const triggerOverflowClass =
     "min-w-0 gap-2 overflow-hidden [&>span:first-child]:min-w-0 [&>span:first-child]:flex-1 [&>span:first-child]:truncate";
@@ -22798,25 +22896,34 @@ export function FieldSelect({
                 {addNewRow}
               </div>
             ) : null}
-            {displayOptions.map((opt) => {
-              const chosen = opt.value === value;
-              return (
-                <SelectItem
-                  key={opt.value}
-                  value={opt.value}
-                  className={cn(
-                    fieldSelectItemClass(chosen),
-                    "pr-9",
-                    chosen &&
-                      "data-[state=checked]:bg-transparent data-[state=checked]:text-[#0F766E] data-[state=checked]:font-medium dark:data-[state=checked]:text-[#2DD4BF]",
-                  )}
-                >
-                  <span className="block min-w-0 flex-1 whitespace-normal break-words">
-                    {opt.label}
-                  </span>
-                </SelectItem>
-              );
-            })}
+            {optionGroups.map((group) => (
+              <SelectGroup key={group.key || "all"}>
+                {group.label ? (
+                  <SelectLabel className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/40 dark:text-zinc-500">
+                    {group.label}
+                  </SelectLabel>
+                ) : null}
+                {group.items.map((opt) => {
+                  const chosen = opt.value === value;
+                  return (
+                    <SelectItem
+                      key={opt.value}
+                      value={opt.value}
+                      className={cn(
+                        fieldSelectItemClass(chosen),
+                        "pr-9",
+                        chosen &&
+                          "data-[state=checked]:bg-transparent data-[state=checked]:text-[#0F766E] data-[state=checked]:font-medium dark:data-[state=checked]:text-[#2DD4BF]",
+                      )}
+                    >
+                      <span className="block min-w-0 flex-1 whitespace-normal break-words">
+                        {opt.label}
+                      </span>
+                    </SelectItem>
+                  );
+                })}
+              </SelectGroup>
+            ))}
           </SelectContent>
         </Select>
       </div>

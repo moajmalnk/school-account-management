@@ -447,7 +447,7 @@ export const HELP_GUIDES: HelpGuide[] = [
       },
       {
         title: "Choose what is being paid",
-        body: "Each fee line has a Fee description, Fee period(s) and Amount. Tap Add fee item to collect several fees in one receipt.",
+        body: "Each fee line has a Fee description, Fee period(s) and Amount. Class Tier one-time fees (Admission, Exam, …) appear under Fee description for that class and prefill once. Tap Add fee item to collect several fees in one receipt.",
       },
       {
         title: "Mode, date and proof",
@@ -557,7 +557,7 @@ export const HELP_GUIDES: HelpGuide[] = [
       },
       {
         title: "Extra fee categories",
-        body: "Settings → Fee Category → Add Fee Category for fees outside tuition, such as Hostel or Exam fee.",
+        body: "Add from Finance → Receive Payment → Add fee category, or Settings → Fee Category. Same Add Fee Category popup either way — name, optional installments, and Active.",
         image: IMG.setup,
       },
     ],

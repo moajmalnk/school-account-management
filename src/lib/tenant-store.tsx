@@ -1919,6 +1919,43 @@ export function withClassFeeSchedule(cls: ClassConfig, feeTerms: FeeTerm[] = [])
   };
 }
 
+/** Vehicle/transport rows on a class schedule — collected via Vehicle Fee, not as one-time descriptions. */
+export function isVehicleFeeLineLabel(label: string): boolean {
+  return /vehicle|transport|bus/i.test(label);
+}
+
+/** Class Tier one-time fee lines available as Receive Payment fee descriptions. */
+export function classOneTimeFeeLines(
+  cls: ClassConfig | undefined,
+  feeTerms: FeeTerm[] = [],
+): ClassFeeLine[] {
+  if (!cls) return [];
+  const scheduled = withClassFeeSchedule(cls, feeTerms);
+  const seen = new Set<string>();
+  const out: ClassFeeLine[] = [];
+  for (const line of scheduled.feeSchedule) {
+    if (line.kind !== "one_time" || line.amount <= 0) continue;
+    if (isVehicleFeeLineLabel(line.label)) continue;
+    const key = line.label.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(line);
+  }
+  return out;
+}
+
+export function matchClassOneTimeFeeLine(
+  cls: ClassConfig | undefined,
+  description: string,
+  feeTerms: FeeTerm[] = [],
+): ClassFeeLine | undefined {
+  const needle = description.trim().toLowerCase();
+  if (!needle || !cls) return undefined;
+  return classOneTimeFeeLines(cls, feeTerms).find(
+    (line) => line.label.trim().toLowerCase() === needle,
+  );
+}
+
 export function classFeePrefillAmount(
   cls: ClassConfig,
   opts: {
@@ -1929,16 +1966,38 @@ export function classFeePrefillAmount(
   },
 ): number | undefined {
   const lines = cls.feeSchedule.filter((line) => line.amount > 0);
-  const cat = opts.category.toLowerCase();
+  const cat = opts.category.trim().toLowerCase();
   if (cat.includes("vehicle") || cat.includes("transport") || cat.includes("bus")) {
     const vehicle = lines.find(
-      (line) => line.kind === "one_time" && /vehicle|transport|bus/i.test(line.label),
+      (line) => line.kind === "one_time" && isVehicleFeeLineLabel(line.label),
     );
     if (vehicle) return vehicle.amount;
     return cls.vehicleFeeAmount > 0 ? cls.vehicleFeeAmount : undefined;
   }
-  const oneTime = lines.find((line) => {
-    if (line.kind !== "one_time") return false;
+
+  // Exact Class Tier one-time match (Admission, Hostel, custom labels, …)
+  const oneTimeExact = lines.find(
+    (line) =>
+      line.kind === "one_time" &&
+      !isVehicleFeeLineLabel(line.label) &&
+      line.label.trim().toLowerCase() === cat,
+  );
+  if (oneTimeExact) return oneTimeExact.amount;
+
+  if (opts.periodLabel) {
+    const periodNeedle = opts.periodLabel.trim().toLowerCase();
+    const oneTimeByPeriod = lines.find(
+      (line) =>
+        line.kind === "one_time" &&
+        !isVehicleFeeLineLabel(line.label) &&
+        line.label.trim().toLowerCase() === periodNeedle,
+    );
+    if (oneTimeByPeriod) return oneTimeByPeriod.amount;
+  }
+
+  // Legacy keyword match for older receipts / aliases
+  const oneTimeKeyword = lines.find((line) => {
+    if (line.kind !== "one_time" || isVehicleFeeLineLabel(line.label)) return false;
     const label = line.label.toLowerCase();
     return (
       (cat.includes("admission") && label.includes("admission")) ||
@@ -1946,7 +2005,7 @@ export function classFeePrefillAmount(
       (cat.includes("exam") && label.includes("exam"))
     );
   });
-  if (oneTime) return oneTime.amount;
+  if (oneTimeKeyword) return oneTimeKeyword.amount;
 
   const installments = lines.filter((line) => line.kind === "installment");
   if (opts.periodLabel && opts.collectionStartMonth && cls.billingCycle === "Monthly") {

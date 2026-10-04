@@ -184,6 +184,7 @@ export const CLASS_ONE_TIME_TIP: InfoTipContent = {
     "Fees charged once a year, like Admission, Registration or Exam fee.",
     "Leave an amount blank to skip that fee.",
     "They are added to the class total and each student's dues.",
+    "In Finance → Receive Payment they appear under Fee description for students in this class, with the Class Tier amount prefilled.",
   ],
 };
 
