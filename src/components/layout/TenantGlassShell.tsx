@@ -74,7 +74,8 @@ import {
   useAuth,
 } from "@/lib/auth";
 import { defaultClosingMonthKey, suggestNextBooksMonthKey } from "@/lib/academic-year";
-import { hardRefreshApp } from "@/lib/app-version";
+import { getLastHardRefreshAt, hardRefreshApp } from "@/lib/app-version";
+import { formatChatStamp } from "@/lib/dates";
 import {
   isMainCampusBranch,
   schoolInitials,
@@ -469,7 +470,12 @@ export function ThemeModeToggle({ className }: { className?: string }) {
 
 export function HardRefreshButton({ className }: { className?: string }) {
   const [busy, setBusy] = useState(false);
+  const [lastRefreshAt, setLastRefreshAt] = useState<string | null>(() => getLastHardRefreshAt());
   const unsaved = useOptionalSettingsUnsavedGuard();
+
+  useEffect(() => {
+    setLastRefreshAt(getLastHardRefreshAt());
+  }, []);
 
   const run = useCallback(async () => {
     if (busy) return;
@@ -483,6 +489,11 @@ export function HardRefreshButton({ className }: { className?: string }) {
     }
   }, [busy]);
 
+  const lastLabel = lastRefreshAt ? formatChatStamp(lastRefreshAt, "list") : null;
+  const title = lastLabel
+    ? `Hard refresh · last ${lastLabel}`
+    : "Hard refresh — reload latest data";
+
   return (
     <button
       type="button"
@@ -493,8 +504,8 @@ export function HardRefreshButton({ className }: { className?: string }) {
         else start();
       }}
       disabled={busy}
-      aria-label="Hard refresh — reload latest data"
-      title="Hard refresh"
+      aria-label={title}
+      title={title}
       className={cn(
         glassInsetClass,
         "grid h-10 w-10 shrink-0 place-items-center text-slate-600 transition-colors hover:text-[#0F766E] disabled:opacity-60 dark:text-zinc-300 dark:hover:text-[#2DD4BF]",

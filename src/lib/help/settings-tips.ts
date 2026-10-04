@@ -322,6 +322,7 @@ export const USERS_TIP: InfoTipContent = {
     "Each user signs in with their own email and password under School Admin.",
     "You choose which campuses they can open and which modules they can use.",
     "Your own administrator login is not listed and always has full access.",
+    "Send reset link emails a one-time password link — no Feezo or super admin needed.",
     "Use Login as to check exactly what a user sees, without their password.",
   ],
   note: "Extra team logins need a Premium plan.",
@@ -366,8 +367,9 @@ export const USER_STAFF_TIP: InfoTipContent = {
 export const USER_PASSWORD_TIP: InfoTipContent = {
   title: "Password",
   points: [
-    "At least 4 characters. Share it with the user privately.",
-    "When editing, typing a password here sets a new password for this user.",
+    "New users need at least 8 characters. Share it privately.",
+    "When editing, leave blank to keep the current password, or type a new one (min 8).",
+    "Prefer Send reset link — the user sets their own password by email, without Feezo or a super admin.",
   ],
 };
 
@@ -387,10 +389,10 @@ export const USER_ACTIVE_TIP: InfoTipContent = {
 export const SUPPORT_CHAT_TIP: InfoTipContent = {
   title: "Chat with the Feezo team",
   points: [
-    "Start a chat to reach real people at Feezo. Each chat is kept here with its full history.",
-    "Replies from the team appear in the same chat.",
-    "The book icon opens step-by-step help guides.",
-    "For instant how-to answers, ask Feezo AI (bottom-right button).",
+    "Ask how-to questions first — the Feezo assistant answers from the help list.",
+    "Password reset is handled here for your school: send a link to yourself or a teammate. No Feezo ticket or super admin.",
+    "Questions the assistant cannot answer can be sent to Feezo as a ticket.",
+    "The book icon opens step-by-step help guides. For more how-to answers, ask Feezo AI (bottom-right).",
   ],
 };
 

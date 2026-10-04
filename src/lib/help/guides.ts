@@ -946,16 +946,31 @@ export const HELP_GUIDES: HelpGuide[] = [
     summary: "Give your accountant or office staff their own login.",
     minutes: 3,
     access: { kind: "settings", tab: "users" },
-    keywords: ["users", "login", "permission", "access", "accountant", "team", "role", "password"],
+    keywords: [
+      "users",
+      "login",
+      "permission",
+      "access",
+      "accountant",
+      "team",
+      "role",
+      "password",
+      "reset",
+      "forgot",
+    ],
     openTo: { href: "/tenant/settings?tab=users", label: "Open Users" },
     steps: [
       {
         title: "Add a user",
-        body: "Settings → Users → Add User. Enter their name, email and a password.",
+        body: "Settings → Users → Add User. Enter their name, email and a password (at least 8 characters).",
       },
       {
         title: "Choose Module access",
         body: "Tick only what they need, for example Receive payment but not Settings. Under Campuses, limit which branches they can open.",
+      },
+      {
+        title: "Reset a password",
+        body: "On the user row, tap Send reset link — they get an email and choose a new password. Or open Settings → Support and ask about password reset. Locked-out users can also use Forgot password on the sign-in page. No Feezo or super admin needed.",
       },
       {
         title: "Test before saving",

@@ -60,6 +60,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: unknown;
       parentRoute: unknown;
     };
+    "/super-admin/support/auto-reply": {
+      id: "/super-admin/support/auto-reply";
+      path: "/auto-reply";
+      fullPath: "/super-admin/support/auto-reply";
+      preLoaderRoute: unknown;
+      parentRoute: unknown;
+    };
   }
 }
 

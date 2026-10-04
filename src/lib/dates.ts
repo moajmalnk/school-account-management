@@ -163,7 +163,10 @@ export function formatNow(options: Intl.DateTimeFormatOptions = {}): string {
 /** Chat list / bubble stamps in Asia/Kolkata. */
 export function formatChatStamp(raw: string, variant: "list" | "bubble" = "list"): string {
   const date = parseAppInstant(raw);
-  if (!date) return raw;
+  if (!date) {
+    const trimmed = String(raw ?? "").trim();
+    return trimmed || "—";
+  }
   if (variant === "bubble" && calendarDayKey(date) === calendarDayKey(new Date())) {
     return formatInAppZone(date, { hour: "numeric", minute: "2-digit", hour12: true });
   }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { ArrowLeft, BookOpen, Loader2, Mail, Plus } from "lucide-react";
+import { ArrowLeft, BookOpen, KeyRound, Loader2, Mail, Plus, Users } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -23,7 +23,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { InfoTip } from "@/components/ui/info-tip";
 import { OrganicCard } from "@/components/ui/organic-card";
-import { useAuth } from "@/lib/auth";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { sessionCanAccessSettingsTab, useAuth } from "@/lib/auth";
 import { SUPPORT_CHAT_TIP } from "@/lib/help/settings-tips";
 import { ApiError, getApiToken } from "@/lib/api/client";
 import {
@@ -38,9 +45,11 @@ import {
   matchSupportFaq,
   reopenSupportTicket,
   replySupportTicket,
+  requestSupportPasswordReset,
   SUPPORT_MESSAGE_EDIT_WINDOW_MS,
   whatsappDigits,
   type SupportAttachment,
+  type SupportAutoReplyEvent,
   type SupportFaq,
   type SupportMessage,
   type SupportSettings,
@@ -48,7 +57,13 @@ import {
   type SupportTicketStatus,
 } from "@/lib/api/support";
 import { formatChatStamp } from "@/lib/dates";
-import { useTenantStore } from "@/lib/tenant-store";
+import {
+  isSupportFaqIntent,
+  supportFaqNavForIntent,
+  type SupportFaqIntent,
+  type SupportFaqNavLink,
+} from "@/lib/support-faq-actions";
+import { useTenantStore, type TenantUser } from "@/lib/tenant-store";
 import { cn, glassCardClass } from "@/lib/utils";
 
 const workspacePanelClass = cn(glassCardClass, "rounded-2xl");
@@ -57,8 +72,53 @@ type ChatLine = {
   id: string;
   role: "bot" | "you";
   body: string;
+  /** ISO / SQL datetime — must be stable across re-renders */
+  createdAt: string;
   pendingTicket?: string;
+  intent?: SupportFaqIntent;
 };
+
+function chatNow(): string {
+  return new Date().toISOString();
+}
+
+function chatLinesFromAutoReplies(
+  greeting: string,
+  events: SupportAutoReplyEvent[],
+): ChatLine[] {
+  const lines: ChatLine[] = [
+    {
+      id: "greet",
+      role: "bot",
+      body: greeting,
+      createdAt: events[0]?.createdAt || chatNow(),
+    },
+  ];
+  for (const event of events) {
+    const question = (event.queryText || event.faqQuestion || "").trim();
+    if (question) {
+      lines.push({
+        id: `you-${event.id}`,
+        role: "you",
+        body: question,
+        createdAt: event.createdAt,
+      });
+    }
+    const answer = (event.answerText || "").trim();
+    if (answer) {
+      const intent = isSupportFaqIntent(event.intent) ? event.intent : undefined;
+      lines.push({
+        id: `bot-${event.id}`,
+        role: "bot",
+        body: answer,
+        createdAt: event.createdAt,
+        intent,
+        pendingTicket: event.matched ? undefined : question || undefined,
+      });
+    }
+  }
+  return lines;
+}
 
 function WhatsAppMark({ className }: { className?: string }) {
   return (
@@ -81,6 +141,189 @@ function formatStamp(raw: string): string {
   return formatChatStamp(raw, "list");
 }
 
+function supportActionShellClass(className?: string) {
+  return cn(
+    "mt-1.5 max-w-[min(100%,22rem)] rounded-xl border border-[#99F6E4]/70 bg-[#F0FDFA] p-3 dark:border-teal-800/50 dark:bg-teal-950/30",
+    className,
+  );
+}
+
+function SupportFaqNavCard({ title, links }: { title: string; links: SupportFaqNavLink[] }) {
+  return (
+    <div className={supportActionShellClass()}>
+      <p className="text-[12px] font-semibold text-[#0F766E] dark:text-teal-300">{title}</p>
+      <div className="mt-2.5 flex flex-col gap-1.5">
+        {links.map((link) => (
+          <Link
+            key={`${link.to}-${link.label}`}
+            to={link.to}
+            search={link.search}
+            className={cn(
+              "inline-flex h-9 items-center justify-center rounded-full px-3 text-[12px] font-semibold transition-colors",
+              link.primary
+                ? "bg-[#0F766E] text-white hover:bg-[#0D9488]"
+                : "border border-[#E5E5E5] bg-white text-black/70 hover:border-[#0F766E]/35 hover:text-[#0F766E] dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-300",
+            )}
+          >
+            {link.label}
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ContactHumanCard({
+  onEmail,
+  onWhatsApp,
+  onTicket,
+}: {
+  onEmail: () => void;
+  onWhatsApp: () => void;
+  onTicket: () => void;
+}) {
+  return (
+    <div className={supportActionShellClass()}>
+      <p className="text-[12px] font-semibold text-[#0F766E] dark:text-teal-300">
+        Reach the Feezo team
+      </p>
+      <div className="mt-2.5 flex flex-col gap-1.5">
+        <Button
+          type="button"
+          size="sm"
+          className="h-9 justify-center rounded-full bg-[#0F766E] px-3 text-[12px] text-white hover:bg-[#0D9488]"
+          onClick={onTicket}
+        >
+          Send to Feezo (ticket)
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-9 justify-center rounded-full text-[12px]"
+          onClick={onEmail}
+        >
+          <Mail className="mr-1.5 h-3.5 w-3.5" />
+          Email support
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-9 justify-center rounded-full text-[12px]"
+          onClick={onWhatsApp}
+        >
+          <WhatsAppMark className="mr-1.5 h-3.5 w-3.5" />
+          WhatsApp
+        </Button>
+        <Link
+          to="/tenant/support"
+          className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 text-[12px] font-medium text-black/70 transition-colors hover:border-[#0F766E]/35 hover:text-[#0F766E] dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-300"
+        >
+          <BookOpen className="h-3.5 w-3.5" />
+          Browse guides
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function PasswordResetBotCard({
+  canResetTeam,
+  teamUsers,
+  busy,
+  onResetSelf,
+  onResetUser,
+}: {
+  canResetTeam: boolean;
+  teamUsers: TenantUser[];
+  busy: boolean;
+  onResetSelf: () => void;
+  onResetUser: (userId: string) => void;
+}) {
+  const [pickedUserId, setPickedUserId] = useState("");
+  const activeUsers = useMemo(
+    () =>
+      teamUsers
+        .filter((u) => u.active !== false)
+        .sort((a, b) => a.displayName.localeCompare(b.displayName)),
+    [teamUsers],
+  );
+
+  return (
+    <div className={supportActionShellClass()}>
+      <p className="flex items-center gap-1.5 text-[12px] font-semibold text-[#0F766E] dark:text-teal-300">
+        <KeyRound className="h-3.5 w-3.5 shrink-0" />
+        Reset password — no Feezo ticket needed
+      </p>
+      <div className="mt-2.5 flex flex-col gap-2">
+        <Button
+          type="button"
+          size="sm"
+          disabled={busy}
+          className="h-9 justify-start rounded-full bg-[#0F766E] px-3 text-[12px] text-white hover:bg-[#0D9488]"
+          onClick={onResetSelf}
+        >
+          {busy ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+          Send reset link to my email
+        </Button>
+        {canResetTeam ? (
+          <div className="space-y-1.5 rounded-lg border border-[#99F6E4]/50 bg-white/80 p-2 dark:border-teal-800/40 dark:bg-zinc-950/50">
+            <p className="text-[11px] font-medium text-black/55 dark:text-zinc-400">
+              Reset a team member
+            </p>
+            <Select value={pickedUserId || undefined} onValueChange={setPickedUserId}>
+              <SelectTrigger className="h-9 rounded-lg border-[#E5E5E5] bg-white text-[12px] dark:border-white/10 dark:bg-zinc-900">
+                <SelectValue placeholder="Choose user…" />
+              </SelectTrigger>
+              <SelectContent className="z-[120]">
+                {activeUsers.map((user) => (
+                  <SelectItem key={user.id} value={user.id} className="text-[12px]">
+                    {user.displayName} · {user.email}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={busy || !pickedUserId}
+              className="h-8 w-full rounded-full text-[12px]"
+              onClick={() => pickedUserId && onResetUser(pickedUserId)}
+            >
+              Send reset link
+            </Button>
+          </div>
+        ) : null}
+        <Link
+          to="/tenant/settings"
+          search={(prev) => ({ ...prev, tab: "users", chat: undefined })}
+          className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 text-[12px] font-medium text-black/70 transition-colors hover:border-[#0F766E]/35 hover:text-[#0F766E] dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-300"
+        >
+          <Users className="h-3.5 w-3.5" />
+          Open Users
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function botLineFromMatch(result: {
+  faq?: { answer?: string } | null;
+  intent?: string | null;
+  event?: SupportAutoReplyEvent | null;
+}): ChatLine {
+  const intent = isSupportFaqIntent(result.intent) ? result.intent : undefined;
+  return {
+    id: result.event?.id ? `bot-${result.event.id}` : `bot-${Date.now()}`,
+    role: "bot",
+    body: (result.faq?.answer as string) || "",
+    createdAt: result.event?.createdAt || chatNow(),
+    intent,
+  };
+}
+
 export function CustomerSupportCard({
   onBackToSettings,
   pinToViewport = false,
@@ -92,9 +335,11 @@ export function CustomerSupportCard({
   const search = useSearch({ from: "/tenant/settings" });
   const chatId = search.chat;
   const { session } = useAuth();
-  const { schoolDetails } = useTenantStore();
+  const { schoolDetails, tenantUsers } = useTenantStore();
   const schoolName = schoolDetails.name || session?.tenantName || "School";
   const userName = session?.displayName || session?.email || "School admin";
+  const canResetTeam = sessionCanAccessSettingsTab(session, "users");
+  const [resetBusy, setResetBusy] = useState(false);
 
   const [settings, setSettings] = useState<SupportSettings | null>(null);
   const [faqs, setFaqs] = useState<SupportFaq[]>([]);
@@ -132,9 +377,22 @@ export function CustomerSupportCard({
       setSettings(desk.settings);
       setFaqs(desk.faqs);
       setTickets(nextTickets);
-      setChat((prev) =>
-        prev.length ? prev : [{ id: "greet", role: "bot", body: desk.settings.greeting }],
-      );
+      const history = Array.isArray(desk.autoReplies) ? desk.autoReplies : [];
+      setChat((prev) => {
+        if (prev.length > 1) return prev;
+        if (history.length > 0) {
+          return chatLinesFromAutoReplies(desk.settings.greeting, history);
+        }
+        if (prev.length) return prev;
+        return [
+          {
+            id: "greet",
+            role: "bot",
+            body: desk.settings.greeting,
+            createdAt: chatNow(),
+          },
+        ];
+      });
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Could not load support";
       toast.error("Support unavailable", { description: msg });
@@ -174,21 +432,35 @@ export function CustomerSupportCard({
     if (!question || sending) return;
     setSending(true);
     const youId = `you-${Date.now()}`;
-    setChat((prev) => [...prev, { id: youId, role: "you", body: question }]);
+    const askedAt = chatNow();
+    setChat((prev) => [
+      ...prev,
+      { id: youId, role: "you", body: question, createdAt: askedAt },
+    ]);
     try {
       const result = await matchSupportFaq({ text: question, faqId });
+      const stamp = result.event?.createdAt || askedAt;
+      setChat((prev) =>
+        prev.map((line) =>
+          line.id === youId
+            ? {
+                ...line,
+                id: result.event?.id ? `you-${result.event.id}` : line.id,
+                createdAt: stamp,
+              }
+            : line,
+        ),
+      );
       if (result.matched && result.faq?.answer) {
-        setChat((prev) => [
-          ...prev,
-          { id: `bot-${Date.now()}`, role: "bot", body: result.faq!.answer as string },
-        ]);
+        setChat((prev) => [...prev, botLineFromMatch(result)]);
       } else {
         setChat((prev) => [
           ...prev,
           {
-            id: `bot-${Date.now()}`,
+            id: result.event?.id ? `bot-${result.event.id}` : `bot-${Date.now()}`,
             role: "bot",
             body: result.fallback,
+            createdAt: stamp,
             pendingTicket: question,
           },
         ]);
@@ -198,6 +470,42 @@ export function CustomerSupportCard({
       toast.error("Assistant failed", { description: msg });
     } finally {
       setSending(false);
+    }
+  };
+
+  const handlePasswordReset = async (target: "self" | "user", userId?: string) => {
+    if (resetBusy) return;
+    setResetBusy(true);
+    try {
+      const result = await requestSupportPasswordReset({ target, userId });
+      const emailLabel = result.targetEmail || (target === "self" ? "your email" : "that user");
+      setChat((prev) => [
+        ...prev,
+        {
+          id: `bot-reset-${Date.now()}`,
+          role: "bot",
+          createdAt: chatNow(),
+          body: result.emailed
+            ? `Reset link sent to ${emailLabel}. It expires in about an hour.`
+            : `Reset requested for ${emailLabel}. ${result.message}${
+                result.resetUrl
+                  ? `\n\nEmail delivery may be delayed — open the reset link directly:\n${result.resetUrl}`
+                  : ""
+              }`,
+        },
+      ]);
+      toast.success(result.emailed ? "Reset email sent" : "Reset requested", {
+        description: result.emailed
+          ? `Check ${emailLabel}`
+          : result.resetUrl
+            ? "Use the link in chat if mail is delayed"
+            : result.message,
+      });
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Could not send reset link";
+      toast.error("Password reset failed", { description: msg });
+    } finally {
+      setResetBusy(false);
     }
   };
 
@@ -317,11 +625,39 @@ export function CustomerSupportCard({
 
   const startTicket = async (input: { body: string; attachments: SupportAttachment[] }) => {
     if (!input.body.trim() && input.attachments.length === 0) return;
+    const text = input.body.trim();
+
+    // Text-only messages: try FAQ / password intent before opening a Feezo ticket.
+    if (text && input.attachments.length === 0) {
+      setTicketBusy(true);
+      try {
+        const result = await matchSupportFaq({ text });
+        if (result.matched && result.faq?.answer) {
+          const stamp = result.event?.createdAt || chatNow();
+          setChat((prev) => [
+            ...prev,
+            {
+              id: result.event?.id ? `you-${result.event.id}` : `you-${Date.now()}`,
+              role: "you",
+              body: text,
+              createdAt: stamp,
+            },
+            botLineFromMatch(result),
+          ]);
+          return;
+        }
+      } catch {
+        // Fall through to ticket create
+      } finally {
+        setTicketBusy(false);
+      }
+    }
+
     setTicketBusy(true);
     try {
       const ticket = await createSupportTicket({
-        subject: input.body.trim() || undefined,
-        body: input.body.trim(),
+        subject: text || undefined,
+        body: text,
         attachments: input.attachments,
       });
       setTickets((prev) => [ticket, ...prev.filter((item) => item.id !== ticket.id)]);
@@ -481,7 +817,8 @@ export function CustomerSupportCard({
             <ul className="mobile-scrollbar-none min-h-0 flex-1 overflow-y-auto">
               {tickets.length === 0 ? (
                 <li className="px-4 py-10 text-center text-[13px] text-black/40 dark:text-zinc-500">
-                  No chats yet. Type a message to start.
+                  No tickets yet. Pick a suggested topic in the assistant, or message Feezo when you
+                  need a human.
                 </li>
               ) : (
                 tickets.map((ticket) => {
@@ -687,10 +1024,47 @@ export function CustomerSupportCard({
                       <div key={line.id}>
                         <SupportChatBubble
                           fromYou={line.role === "you"}
-                          createdAt={new Date().toISOString()}
+                          createdAt={line.createdAt}
                           body={line.body}
                         />
-                        {line.pendingTicket ? (
+                        {line.intent === "password_reset" ? (
+                          <div className="px-1">
+                            <PasswordResetBotCard
+                              canResetTeam={canResetTeam}
+                              teamUsers={tenantUsers}
+                              busy={resetBusy || sending}
+                              onResetSelf={() => void handlePasswordReset("self")}
+                              onResetUser={(userId) => void handlePasswordReset("user", userId)}
+                            />
+                          </div>
+                        ) : null}
+                        {line.intent === "contact_human" ? (
+                          <div className="px-1">
+                            <ContactHumanCard
+                              onEmail={openGmail}
+                              onWhatsApp={openWhatsApp}
+                              onTicket={() =>
+                                void sendToFeezo(
+                                  lastUserLine || "I need help from the Feezo team.",
+                                  line.id,
+                                )
+                              }
+                            />
+                          </div>
+                        ) : null}
+                        {line.intent &&
+                        line.intent !== "password_reset" &&
+                        line.intent !== "contact_human"
+                          ? (() => {
+                              const nav = supportFaqNavForIntent(line.intent);
+                              return nav ? (
+                                <div className="px-1">
+                                  <SupportFaqNavCard title={nav.title} links={nav.links} />
+                                </div>
+                              ) : null;
+                            })()
+                          : null}
+                        {line.pendingTicket && !line.intent ? (
                           <div className="mt-1 flex justify-start px-1">
                             <Button
                               type="button"
@@ -706,18 +1080,23 @@ export function CustomerSupportCard({
                       </div>
                     ))}
                     {faqs.length ? (
-                      <div className="mt-2 flex flex-wrap gap-1.5 px-1">
-                        {faqs.slice(0, 6).map((faq) => (
-                          <button
-                            key={faq.id}
-                            type="button"
-                            disabled={sending}
-                            onClick={() => void ask(faq.question, faq.id)}
-                            className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[12px] text-black/70 hover:border-[#0F766E]/40 hover:text-[#0F766E] dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-teal-500/40 dark:hover:text-teal-300"
-                          >
-                            {faq.question}
-                          </button>
-                        ))}
+                      <div className="mt-2 space-y-1.5 px-1">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-black/40 dark:text-zinc-500">
+                          Suggested topics
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {faqs.map((faq) => (
+                            <button
+                              key={faq.id}
+                              type="button"
+                              disabled={sending}
+                              onClick={() => void ask(faq.question, faq.id)}
+                              className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[12px] text-black/70 hover:border-[#0F766E]/40 hover:text-[#0F766E] dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-teal-500/40 dark:hover:text-teal-300"
+                            >
+                              {faq.question}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     ) : null}
                   </div>

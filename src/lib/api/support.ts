@@ -76,13 +76,78 @@ export type SupportTicket = {
 export type SupportDesk = {
   settings: SupportSettings;
   faqs: SupportFaq[];
+  autoReplies?: SupportAutoReplyEvent[];
+};
+
+export type SupportPasswordResetAction = "reset_self" | "reset_team" | "open_users";
+
+export type SupportAutoReplySource = "faq_click" | "text_match" | "fallback";
+
+export type SupportAutoReplyEvent = {
+  id: string;
+  tenantId?: string;
+  tenantName?: string;
+  userName: string;
+  userEmail?: string;
+  faqId?: string | null;
+  faqQuestion: string;
+  queryText: string;
+  answerText: string;
+  intent?: string | null;
+  matched: boolean;
+  source: SupportAutoReplySource | string;
+  createdAt: string;
+};
+
+export type SupportAutoReplyTenantSummary = {
+  tenantId: string;
+  tenantName: string;
+  replyCount: number;
+  matchedCount: number;
+  fallbackCount: number;
+  lastAt: string;
+  lastPreview: string;
 };
 
 export type SupportMatchResult = {
   matched: boolean;
   faq: SupportFaq | null;
   fallback: string;
+  /** Stable key from backend `support_faq_intent_meta` */
+  intent?: string | null;
+  actions?: string[];
+  /** Persisted history row with stable createdAt */
+  event?: SupportAutoReplyEvent | null;
 };
+
+export type SupportPasswordResetResult = {
+  message: string;
+  emailed: boolean;
+  targetEmail: string;
+  resetUrl?: string;
+};
+
+function mapAutoReplyEvent(raw: Partial<SupportAutoReplyEvent> | null | undefined): SupportAutoReplyEvent | null {
+  if (!raw || typeof raw !== "object") return null;
+  const id = typeof raw.id === "string" ? raw.id.trim() : "";
+  const createdAt = typeof raw.createdAt === "string" ? raw.createdAt.trim() : "";
+  if (!id || !createdAt) return null;
+  return {
+    id,
+    tenantId: typeof raw.tenantId === "string" ? raw.tenantId : "",
+    tenantName: typeof raw.tenantName === "string" ? raw.tenantName : "",
+    userName: typeof raw.userName === "string" && raw.userName.trim() ? raw.userName : "School admin",
+    userEmail: typeof raw.userEmail === "string" ? raw.userEmail : "",
+    faqId: typeof raw.faqId === "string" && raw.faqId ? raw.faqId : null,
+    faqQuestion: typeof raw.faqQuestion === "string" ? raw.faqQuestion : "",
+    queryText: typeof raw.queryText === "string" ? raw.queryText : "",
+    answerText: typeof raw.answerText === "string" ? raw.answerText : "",
+    intent: typeof raw.intent === "string" && raw.intent.trim() ? raw.intent.trim() : null,
+    matched: Boolean(raw.matched),
+    source: typeof raw.source === "string" && raw.source ? raw.source : "text_match",
+    createdAt,
+  };
+}
 
 export async function fetchSupportDesk(): Promise<SupportDesk> {
   const data = await apiRequest<SupportDesk>("/api/support/desk.php");
@@ -95,6 +160,11 @@ export async function fetchSupportDesk(): Promise<SupportDesk> {
         "Hi — I am the Feezo assistant. Pick a question below, or type your own.",
     },
     faqs: Array.isArray(data.faqs) ? data.faqs : [],
+    autoReplies: Array.isArray(data.autoReplies)
+      ? data.autoReplies
+          .map((row) => mapAutoReplyEvent(row))
+          .filter((row): row is SupportAutoReplyEvent => Boolean(row))
+      : [],
   };
 }
 
@@ -112,6 +182,32 @@ export async function matchSupportFaq(input: {
     fallback:
       data.fallback ||
       "I do not have that on the help list. Send it to Feezo or use Gmail / WhatsApp.",
+    intent: typeof data.intent === "string" && data.intent.trim() ? data.intent.trim() : null,
+    actions: Array.isArray(data.actions) ? data.actions.map(String) : [],
+    event: mapAutoReplyEvent(data.event ?? null),
+  };
+}
+
+/** Tenant-scoped password reset (self or team member). No super admin. */
+export async function requestSupportPasswordReset(input: {
+  target: "self" | "user";
+  userId?: string;
+}): Promise<SupportPasswordResetResult> {
+  const data = await apiRequest<SupportPasswordResetResult>("/api/support/desk.php", {
+    method: "POST",
+    body: {
+      action: "requestPasswordReset",
+      target: input.target,
+      userId: input.userId,
+    },
+  });
+  return {
+    message:
+      data.message ||
+      "If that account can receive mail, password reset instructions have been sent.",
+    emailed: Boolean(data.emailed),
+    targetEmail: data.targetEmail || "",
+    resetUrl: data.resetUrl,
   };
 }
 
@@ -218,11 +314,50 @@ export type SuperAdminSupportDesk = {
   faqs: SupportFaq[];
   tickets: SupportTicket[];
   unreadCount: number;
+  autoReplyCount: number;
+  autoReplyTenants: SupportAutoReplyTenantSummary[];
+  autoReplyEvents: SupportAutoReplyEvent[];
 };
+
+export type SuperAdminAutoReplyDesk = {
+  tenants: SupportAutoReplyTenantSummary[];
+  events: SupportAutoReplyEvent[];
+  totalCount: number;
+};
+
+function mapAutoReplyTenant(
+  row: Partial<SupportAutoReplyTenantSummary> | null | undefined,
+): SupportAutoReplyTenantSummary | null {
+  if (!row || typeof row !== "object") return null;
+  const tenantId = String(row.tenantId || "").trim();
+  if (!tenantId) return null;
+  return {
+    tenantId,
+    tenantName: String(row.tenantName || "School"),
+    replyCount: Number(row.replyCount) || 0,
+    matchedCount: Number(row.matchedCount) || 0,
+    fallbackCount: Number(row.fallbackCount) || 0,
+    lastAt: String(row.lastAt || ""),
+    lastPreview: String(row.lastPreview || ""),
+  };
+}
 
 export async function fetchSuperAdminSupport(status?: string): Promise<SuperAdminSupportDesk> {
   const qs = status && status !== "all" ? `?status=${encodeURIComponent(status)}` : "";
-  const data = await apiRequest<SuperAdminSupportDesk>(`/api/super-admin/support.php${qs}`);
+  const data = await apiRequest<SuperAdminSupportDesk & {
+    autoReplyTenants?: SupportAutoReplyTenantSummary[];
+    autoReplyEvents?: SupportAutoReplyEvent[];
+  }>(`/api/super-admin/support.php${qs}`);
+  const autoReplyEvents = Array.isArray(data.autoReplyEvents)
+    ? data.autoReplyEvents
+        .map((row) => mapAutoReplyEvent(row))
+        .filter((row): row is SupportAutoReplyEvent => Boolean(row))
+    : [];
+  const autoReplyTenants = Array.isArray(data.autoReplyTenants)
+    ? data.autoReplyTenants
+        .map((row) => mapAutoReplyTenant(row))
+        .filter((row): row is SupportAutoReplyTenantSummary => Boolean(row))
+    : [];
   return {
     settings: data.settings ?? {
       supportEmail: "support@feezo.app",
@@ -232,6 +367,30 @@ export async function fetchSuperAdminSupport(status?: string): Promise<SuperAdmi
     faqs: Array.isArray(data.faqs) ? data.faqs : [],
     tickets: Array.isArray(data.tickets) ? data.tickets : [],
     unreadCount: Number(data.unreadCount) || 0,
+    autoReplyCount: Number(data.autoReplyCount) || autoReplyEvents.length || 0,
+    autoReplyTenants,
+    autoReplyEvents,
+  };
+}
+
+export async function fetchSuperAdminAutoReplies(tenantId?: string): Promise<SuperAdminAutoReplyDesk> {
+  const params = new URLSearchParams({ view: "autoReplies" });
+  if (tenantId) params.set("tenantId", tenantId);
+  const data = await apiRequest<SuperAdminAutoReplyDesk>(
+    `/api/super-admin/support.php?${params.toString()}`,
+  );
+  return {
+    tenants: Array.isArray(data.tenants)
+      ? data.tenants
+          .map((row) => mapAutoReplyTenant(row))
+          .filter((row): row is SupportAutoReplyTenantSummary => Boolean(row))
+      : [],
+    events: Array.isArray(data.events)
+      ? data.events
+          .map((row) => mapAutoReplyEvent(row))
+          .filter((row): row is SupportAutoReplyEvent => Boolean(row))
+      : [],
+    totalCount: Number(data.totalCount) || 0,
   };
 }
 

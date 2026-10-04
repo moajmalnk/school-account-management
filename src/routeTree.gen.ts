@@ -47,6 +47,7 @@ import { Route as TenantStaffEditRouteImport } from './routes/tenant/staff_.edit
 import { Route as SuperAdminSupportLeadsRouteImport } from './routes/super-admin/support/leads'
 import { Route as SuperAdminSupportHelpRouteImport } from './routes/super-admin/support/help'
 import { Route as SuperAdminSupportContactRouteImport } from './routes/super-admin/support/contact'
+import { Route as SuperAdminSupportAutoReplyRouteImport } from './routes/super-admin/support/auto-reply'
 import { Route as SuperAdminSupportTicketIdRouteImport } from './routes/super-admin/support/$ticketId'
 import { Route as ParentStudentTokenRouteImport } from './routes/parent/student.$token'
 
@@ -241,6 +242,12 @@ const SuperAdminSupportContactRoute =
     path: '/contact',
     getParentRoute: () => SuperAdminSupportRoute,
   } as any)
+const SuperAdminSupportAutoReplyRoute =
+  SuperAdminSupportAutoReplyRouteImport.update({
+    id: '/auto-reply',
+    path: '/auto-reply',
+    getParentRoute: () => SuperAdminSupportRoute,
+  } as any)
 const SuperAdminSupportTicketIdRoute =
   SuperAdminSupportTicketIdRouteImport.update({
     id: '/$ticketId',
@@ -287,6 +294,7 @@ export interface FileRoutesByFullPath {
   '/tenant/': typeof TenantIndexRoute
   '/parent/student/$token': typeof ParentStudentTokenRoute
   '/super-admin/support/$ticketId': typeof SuperAdminSupportTicketIdRoute
+  '/super-admin/support/auto-reply': typeof SuperAdminSupportAutoReplyRoute
   '/super-admin/support/contact': typeof SuperAdminSupportContactRoute
   '/super-admin/support/help': typeof SuperAdminSupportHelpRoute
   '/super-admin/support/leads': typeof SuperAdminSupportLeadsRoute
@@ -325,6 +333,7 @@ export interface FileRoutesByTo {
   '/tenant': typeof TenantIndexRoute
   '/parent/student/$token': typeof ParentStudentTokenRoute
   '/super-admin/support/$ticketId': typeof SuperAdminSupportTicketIdRoute
+  '/super-admin/support/auto-reply': typeof SuperAdminSupportAutoReplyRoute
   '/super-admin/support/contact': typeof SuperAdminSupportContactRoute
   '/super-admin/support/help': typeof SuperAdminSupportHelpRoute
   '/super-admin/support/leads': typeof SuperAdminSupportLeadsRoute
@@ -368,6 +377,7 @@ export interface FileRoutesById {
   '/tenant/': typeof TenantIndexRoute
   '/parent/student/$token': typeof ParentStudentTokenRoute
   '/super-admin/support/$ticketId': typeof SuperAdminSupportTicketIdRoute
+  '/super-admin/support/auto-reply': typeof SuperAdminSupportAutoReplyRoute
   '/super-admin/support/contact': typeof SuperAdminSupportContactRoute
   '/super-admin/support/help': typeof SuperAdminSupportHelpRoute
   '/super-admin/support/leads': typeof SuperAdminSupportLeadsRoute
@@ -412,6 +422,7 @@ export interface FileRouteTypes {
     | '/tenant/'
     | '/parent/student/$token'
     | '/super-admin/support/$ticketId'
+    | '/super-admin/support/auto-reply'
     | '/super-admin/support/contact'
     | '/super-admin/support/help'
     | '/super-admin/support/leads'
@@ -450,6 +461,7 @@ export interface FileRouteTypes {
     | '/tenant'
     | '/parent/student/$token'
     | '/super-admin/support/$ticketId'
+    | '/super-admin/support/auto-reply'
     | '/super-admin/support/contact'
     | '/super-admin/support/help'
     | '/super-admin/support/leads'
@@ -492,6 +504,7 @@ export interface FileRouteTypes {
     | '/tenant/'
     | '/parent/student/$token'
     | '/super-admin/support/$ticketId'
+    | '/super-admin/support/auto-reply'
     | '/super-admin/support/contact'
     | '/super-admin/support/help'
     | '/super-admin/support/leads'
@@ -787,6 +800,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SuperAdminSupportContactRouteImport
       parentRoute: typeof SuperAdminSupportRoute
     }
+    '/super-admin/support/auto-reply': {
+      id: '/super-admin/support/auto-reply'
+      path: '/auto-reply'
+      fullPath: '/super-admin/support/auto-reply'
+      preLoaderRoute: typeof SuperAdminSupportAutoReplyRouteImport
+      parentRoute: typeof SuperAdminSupportRoute
+    }
     '/super-admin/support/$ticketId': {
       id: '/super-admin/support/$ticketId'
       path: '/$ticketId'
@@ -819,6 +839,7 @@ const SignupRouteWithChildren =
 
 interface SuperAdminSupportRouteChildren {
   SuperAdminSupportTicketIdRoute: typeof SuperAdminSupportTicketIdRoute
+  SuperAdminSupportAutoReplyRoute: typeof SuperAdminSupportAutoReplyRoute
   SuperAdminSupportContactRoute: typeof SuperAdminSupportContactRoute
   SuperAdminSupportHelpRoute: typeof SuperAdminSupportHelpRoute
   SuperAdminSupportLeadsRoute: typeof SuperAdminSupportLeadsRoute
@@ -827,6 +848,7 @@ interface SuperAdminSupportRouteChildren {
 
 const SuperAdminSupportRouteChildren: SuperAdminSupportRouteChildren = {
   SuperAdminSupportTicketIdRoute: SuperAdminSupportTicketIdRoute,
+  SuperAdminSupportAutoReplyRoute: SuperAdminSupportAutoReplyRoute,
   SuperAdminSupportContactRoute: SuperAdminSupportContactRoute,
   SuperAdminSupportHelpRoute: SuperAdminSupportHelpRoute,
   SuperAdminSupportLeadsRoute: SuperAdminSupportLeadsRoute,

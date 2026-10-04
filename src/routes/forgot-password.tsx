@@ -17,6 +17,7 @@ function ForgotPasswordPage() {
   const [fieldError, setFieldError] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
+  const [emailed, setEmailed] = useState(false);
   const [resetUrl, setResetUrl] = useState<string | undefined>();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -35,8 +36,18 @@ function ForgotPasswordPage() {
     try {
       const result = await apiForgotPassword(email.trim());
       setSent(true);
+      setEmailed(Boolean(result.emailed));
       setResetUrl(result.resetUrl);
-      toast.success("Check your email for reset instructions");
+      toast.success(
+        result.emailed ? "Check your email for reset instructions" : "Reset requested",
+        {
+          description: result.emailed
+            ? "The link expires in about an hour"
+            : result.resetUrl
+              ? "Use the direct link below if mail is delayed"
+              : "If an account exists, instructions were prepared",
+        },
+      );
     } catch (err) {
       const message =
         err instanceof ApiError ? err.message : "Unable to send reset email. Try again.";
@@ -49,7 +60,7 @@ function ForgotPasswordPage() {
   return (
     <AuthShell
       title="Forgot password"
-      subtitle="Enter your account email and we’ll send a reset link."
+      subtitle="Enter your school login email. We’ll send a one-time reset link — no Feezo admin needed."
     >
       {sent ? (
         <div className="mt-6 space-y-4">
@@ -60,9 +71,14 @@ function ForgotPasswordPage() {
                 If an account exists for <span className="font-medium">{email.trim()}</span>,
                 password reset instructions have been sent.
               </p>
+              <p className="mt-2 text-[12px] text-black/55">
+                {emailed
+                  ? "Check your inbox (and spam). The link expires in about one hour."
+                  : "Mail delivery may be delayed on this server."}
+              </p>
               {resetUrl && (
                 <p className="mt-2 text-[12px] text-black/55">
-                  Email delivery may be delayed. You can also{" "}
+                  You can also{" "}
                   <a
                     href={resetUrl}
                     className="font-medium text-[#0F766E] underline-offset-2 hover:underline"

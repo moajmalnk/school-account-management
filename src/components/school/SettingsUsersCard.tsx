@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ExternalLink, Pencil, Trash2 } from "lucide-react";
+import { ExternalLink, KeyRound, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OrganicCard } from "@/components/ui/organic-card";
+import { ApiError } from "@/lib/api/client";
 import { apiDeleteTenantUser, apiUpsertTenantUser } from "@/lib/api/settings";
+import { requestSupportPasswordReset } from "@/lib/api/support";
 import {
   USER_ACTIVE_TIP,
   USER_CAMPUSES_TIP,
@@ -132,6 +134,7 @@ export function SettingsUsersCard({
 }) {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [resettingUserId, setResettingUserId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<TenantUser | null>(null);
   const [form, setForm] = useState(() => emptyForm());
 
@@ -195,7 +198,7 @@ export function SettingsUsersCard({
     setForm({
       displayName: user.displayName,
       email: user.email,
-      password: user.password,
+      password: "", // leave blank to keep current password
       roleId: user.roleId ?? "",
       staffId: user.staffId ?? "",
       active: user.active,
@@ -290,8 +293,12 @@ export function SettingsUsersCard({
       toast.error("Valid email is required");
       return;
     }
-    if (!password || password.length < 4) {
-      toast.error("Password must be at least 4 characters");
+    if (!editingId && (!password || password.length < 8)) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+    if (editingId && password && password.length < 8) {
+      toast.error("New password must be at least 8 characters");
       return;
     }
     const permissions: PermissionSet = form.allFunctions ? ALL_PERMISSIONS : form.permissions;
@@ -323,24 +330,31 @@ export function SettingsUsersCard({
     const branchIds = [...form.branchIds];
 
     if (editingId) {
+      const existing = tenantUsers.find((u) => u.id === editingId);
       const updated = normalizeTenantUser({
         id: editingId,
         displayName,
         email,
-        password,
+        password: password || existing?.password || "",
         roleId: form.roleId || undefined,
         staffId: form.staffId || undefined,
         permissions,
         active: form.active,
         branchIds,
-        createdAt:
-          tenantUsers.find((u) => u.id === editingId)?.createdAt ?? new Date().toISOString(),
+        createdAt: existing?.createdAt ?? new Date().toISOString(),
       });
       setTenantUsers((prev) => prev.map((u) => (u.id === editingId ? updated : u)));
-      void apiUpsertTenantUser(updated).catch((err) =>
+      void apiUpsertTenantUser({
+        ...updated,
+        password, // empty string keeps existing password on the API
+      }).catch((err) =>
         toast.error(err instanceof Error ? err.message : "Could not sync user"),
       );
-      toast.success(`User updated · ${displayName}`);
+      toast.success(`User updated · ${displayName}`, {
+        description: password
+          ? "Password updated"
+          : "Password unchanged · use Send reset link to email a new one",
+      });
     } else {
       const nextId = `USR-${Date.now().toString().slice(-6)}`;
       const created = normalizeTenantUser({
@@ -364,6 +378,33 @@ export function SettingsUsersCard({
       });
     }
     setOpen(false);
+  };
+
+  const sendResetLink = async (user: TenantUser) => {
+    if (resettingUserId) return;
+    setResettingUserId(user.id);
+    try {
+      const result = await requestSupportPasswordReset({ target: "user", userId: user.id });
+      toast.success(result.emailed ? "Reset email sent" : "Reset requested", {
+        description: result.emailed
+          ? `Sent to ${result.targetEmail || user.email}`
+          : result.resetUrl
+            ? "Mail may be delayed — open the link from the toast action if shown"
+            : result.message,
+        action: result.resetUrl
+          ? {
+              label: "Open link",
+              onClick: () => window.open(result.resetUrl, "_blank", "noopener,noreferrer"),
+            }
+          : undefined,
+      });
+    } catch (err) {
+      toast.error("Could not send reset link", {
+        description: err instanceof ApiError ? err.message : "Try again shortly",
+      });
+    } finally {
+      setResettingUserId(null);
+    }
   };
 
   const openImpersonate = (href: string, label: string) => {
@@ -501,6 +542,19 @@ export function SettingsUsersCard({
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
+                  {user.active ? (
+                    <button
+                      type="button"
+                      onClick={() => void sendResetLink(user)}
+                      disabled={resettingUserId === user.id}
+                      aria-label={`Send password reset to ${user.displayName}`}
+                      title="Email a password reset link (no super admin)"
+                      className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-2.5 text-[11px] font-semibold text-black/70 transition-colors hover:border-[#0F766E]/35 hover:bg-[#F0FDFA] hover:text-[#0F766E] disabled:opacity-60 dark:border-white/15 dark:bg-zinc-950 dark:text-zinc-300"
+                    >
+                      <KeyRound className="h-3 w-3" />
+                      {resettingUserId === user.id ? "Sending…" : "Send reset link"}
+                    </button>
+                  ) : null}
                   {user.active && (
                     <button
                       type="button"
@@ -577,14 +631,18 @@ export function SettingsUsersCard({
                 </div>
                 <div className="space-y-1.5">
                   <Label className="flex items-center gap-1">
-                    Password
+                    {editingId ? "New password (optional)" : "Password"}
                     <InfoTip content={USER_PASSWORD_TIP} className="-my-1" />
                   </Label>
                   <Input
                     type="text"
                     value={form.password}
                     onChange={(e) => setForm({ ...form, password: e.target.value })}
-                    placeholder="Min 4 characters"
+                    placeholder={
+                      editingId
+                        ? "Leave blank to keep current · or min 8 chars"
+                        : "Min 8 characters"
+                    }
                   />
                 </div>
                 <div className="space-y-1.5">

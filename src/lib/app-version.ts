@@ -11,10 +11,31 @@ export type RemoteAppVersion = {
 
 const VERSION_URL = "/version.json";
 const LAST_BUILD_KEY = "school-accounts/app-build-id/v1";
+const LAST_HARD_REFRESH_KEY = "school-accounts/last-hard-refresh/v1";
 const UPDATE_COOLDOWN_KEY = "school-accounts/app-update-cooldown/v1";
 const TENANT_STORE_PREFIX = "school-accounts/tenant-store/";
 /** After an Update now, ignore version prompts briefly to avoid blink loops. */
 const UPDATE_COOLDOWN_MS = 3 * 60_000;
+
+/** ISO stamp of the last hard refresh (survives reload). */
+export function getLastHardRefreshAt(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(LAST_HARD_REFRESH_KEY);
+    return raw?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+function markHardRefreshNow(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(LAST_HARD_REFRESH_KEY, new Date().toISOString());
+  } catch {
+    /* ignore */
+  }
+}
 
 /** Fetch the deployed build id (never from HTTP cache). */
 export async function fetchRemoteAppVersion(
@@ -122,6 +143,7 @@ export async function hardRefreshApp(opts?: {
   updateServiceWorker?: (reloadPage?: boolean) => Promise<void>;
 }): Promise<void> {
   markUpdateCooldown();
+  markHardRefreshNow();
 
   try {
     if ("caches" in window) {
