@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -761,11 +762,9 @@ export function StudentEditPage() {
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <FormField label="Guardian Mobile">
-              <Input
+              <PhoneInput
                 value={draft.phone}
-                onChange={(e) => patchDraft("phone", e.target.value)}
-                placeholder="9810045221"
-                className="font-mono"
+                onChange={(phone) => patchDraft("phone", phone)}
               />
             </FormField>
             <FormField label="Aadhaar">

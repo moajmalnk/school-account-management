@@ -114,6 +114,7 @@ import {
 import { cn, glassCardClass } from "@/lib/utils";
 import { formatDobDisplay } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
+import { formatPhoneDisplay, toWhatsAppDigits } from "@/lib/phone";
 
 function emptyToUndefined(value: string): string | undefined {
   const trimmed = value.trim();
@@ -257,14 +258,7 @@ function ensureStudentDocuments(student: Student): StaffDocument[] {
 }
 
 function formatPhone(raw?: string) {
-  const digits = (raw ?? "").replace(/\D/g, "");
-  if (digits.length === 10) {
-    return `+91 ${digits.slice(0, 5)} ${digits.slice(5)}`;
-  }
-  if (digits.length === 12 && digits.startsWith("91")) {
-    return `+${digits.slice(0, 2)} ${digits.slice(2, 7)} ${digits.slice(7)}`;
-  }
-  return raw?.trim() || "";
+  return formatPhoneDisplay(raw);
 }
 
 function initials(name: string) {
@@ -701,9 +695,8 @@ export function StudentProfileDetail({
   const docsTotal = documents.length;
 
   const phoneDigits = (student.phone || "").replace(/[^0-9]/g, "");
-  const waHref = phoneDigits
-    ? `https://wa.me/${phoneDigits.length === 10 ? "91" : ""}${phoneDigits}`
-    : undefined;
+  const waDigits = toWhatsAppDigits(student.phone);
+  const waHref = waDigits ? `https://wa.me/${waDigits}` : undefined;
 
   const openShare = () => {
     let token = student.shareToken ?? shareToken;
@@ -1816,9 +1809,8 @@ function buildOverdueWhatsAppHref({
   academicYear: string;
   row: LedgerRow;
 }) {
-  const digits = phone.replace(/[^0-9]/g, "");
+  const digits = toWhatsAppDigits(phone);
   if (!digits) return null;
-  const to = `${digits.length === 10 ? "91" : ""}${digits}`;
   const greetingName = guardian.trim() || "Parent/Guardian";
   const message = [
     `Dear ${greetingName},`,
@@ -1836,7 +1828,7 @@ function buildOverdueWhatsAppHref({
     "",
     "Thank you.",
   ].join("\n");
-  return `https://wa.me/${to}?text=${encodeURIComponent(message)}`;
+  return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
 }
 
 function OverdueWhatsAppButton({ href, compact }: { href: string | null; compact?: boolean }) {

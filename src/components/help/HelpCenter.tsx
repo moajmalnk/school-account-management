@@ -3,24 +3,30 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   ArrowRight,
   BookOpenText,
+  CalendarRange,
   Clock,
   CreditCard,
   GraduationCap,
   HelpCircle,
+  IndianRupee,
   LifeBuoy,
   Mail,
   MessageCircle,
   Phone,
+  ReceiptText,
   Rocket,
   Search,
   Settings,
   Sparkles,
   UserCog,
+  UserPlus,
+  Users,
   Wallet,
   X,
   BarChart3,
   type LucideIcon,
 } from "lucide-react";
+import { motion, useReducedMotion } from "motion/react";
 
 import { GuideView } from "@/components/help/GuideView";
 import { SetupChecklist } from "@/components/help/SetupChecklist";
@@ -57,6 +63,15 @@ const CATEGORY_ICONS: Record<HelpCategoryId, LucideIcon> = {
   reports: BarChart3,
   settings: Settings,
   subscription: CreditCard,
+};
+
+const QUICK_TASK_ICONS: Record<string, LucideIcon> = {
+  "receive-payment": IndianRupee,
+  "admit-student": UserPlus,
+  "classes-fees": ReceiptText,
+  "salary-setup": Wallet,
+  "team-users": Users,
+  "year-close": CalendarRange,
 };
 
 export function HelpCenter() {
@@ -148,88 +163,148 @@ export function HelpCenter() {
     [category, guides],
   );
   const quickTasks = HELP_QUICK_TASKS.filter((t) => guideById.has(t.guideId));
+  const reduceMotion = useReducedMotion();
+  const fadeUp = reduceMotion
+    ? undefined
+    : {
+        initial: { opacity: 0, y: 14 },
+        animate: { opacity: 1, y: 0 },
+      };
 
   return (
     <div className="w-full space-y-4 sm:space-y-5">
       <section
         className={cn(
           glassCardClass,
-          "relative w-full overflow-hidden p-5 sm:p-7",
-          "bg-gradient-to-br from-[#F0FDFA] via-white to-white dark:from-teal-950/40 dark:via-zinc-900 dark:to-zinc-950",
+          "relative w-full overflow-hidden",
+          "bg-[linear-gradient(160deg,#ECFDF8_0%,#FFFFFF_42%,#F8FAFC_100%)]",
+          "dark:bg-[linear-gradient(160deg,rgba(19,78,74,0.45)_0%,#18181b_48%,#09090b_100%)]",
         )}
       >
-        <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-[#2DD4BF]/20 blur-3xl" />
-        <div className="relative max-w-2xl">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-[#0F766E]/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-[#0F766E] dark:bg-teal-400/10 dark:text-[#2DD4BF]">
-            <LifeBuoy className="h-3.5 w-3.5" />
-            Help & support
-          </div>
-          <h1 className="mt-3 text-[24px] font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50 sm:text-[30px]">
-            What do you want to do today?
-          </h1>
-          <p className="mt-1.5 text-[13.5px] leading-relaxed text-slate-500 dark:text-zinc-400">
-            Simple step-by-step guides for everything in Feezo. Search, or follow the setup steps
-            below. No training needed.
-          </p>
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-[0.35] dark:opacity-[0.2]"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 1px 1px, rgba(15,118,110,0.18) 1px, transparent 0)",
+            backgroundSize: "22px 22px",
+          }}
+        />
+        <div className="pointer-events-none absolute -right-24 -top-28 h-72 w-72 rounded-full bg-[#2DD4BF]/25 blur-3xl dark:bg-teal-400/15" />
+        <div className="pointer-events-none absolute -bottom-32 -left-16 h-64 w-64 rounded-full bg-[#0F766E]/15 blur-3xl" />
 
-          <form onSubmit={onSubmit} role="search" className="relative mt-5">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              ref={inputRef}
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Try “collect fee”, “salary” or “close year”"
-              aria-label="Search help guides"
-              maxLength={120}
-              className="h-12 w-full rounded-full border border-slate-200 bg-white pl-11 pr-11 text-[14px] text-slate-900 shadow-sm outline-none transition-shadow placeholder:text-slate-400 focus:border-[#0F766E]/50 focus:ring-4 focus:ring-[#0F766E]/10 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-50 [&::-webkit-search-cancel-button]:hidden"
-            />
-            {query && (
-              <button
-                type="button"
-                onClick={clearSearch}
-                aria-label="Clear search"
-                className="absolute right-3 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </form>
-
-          {quickTasks.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {quickTasks.map((task) => (
-                <button
-                  key={task.guideId}
-                  type="button"
-                  onClick={() => openGuide(task.guideId)}
-                  className="rounded-full border border-slate-200 bg-white/80 px-3 py-1.5 text-[12px] font-medium text-slate-700 backdrop-blur transition-colors hover:border-[#0F766E]/40 hover:text-[#0F766E] dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-200 dark:hover:text-[#2DD4BF]"
-                >
-                  {task.label}
-                </button>
-              ))}
+        <div className="relative px-4 py-5 sm:px-6 sm:py-7 lg:px-8 lg:py-9">
+          <motion.div
+            {...fadeUp}
+            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+            className="mx-auto flex w-full max-w-5xl flex-col items-stretch text-center sm:items-center"
+          >
+            <div className="inline-flex items-center justify-center gap-1.5 self-center rounded-full bg-[#0F766E]/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#0F766E] dark:bg-teal-400/10 dark:text-[#2DD4BF]">
+              <LifeBuoy className="h-3.5 w-3.5" />
+              Help & support
             </div>
-          )}
+            <h1 className="mt-3 max-w-[18ch] self-center text-balance text-[26px] font-bold leading-[1.12] tracking-tight text-slate-900 dark:text-zinc-50 sm:max-w-none sm:text-[34px] lg:text-[40px]">
+              What do you want to do today?
+            </h1>
+            <p className="mt-2 max-w-2xl self-center text-pretty text-[13px] leading-relaxed text-slate-500 dark:text-zinc-400 sm:text-[14.5px]">
+              Simple step-by-step guides for everything in Feezo. Search a task, tap a shortcut, or
+              ask Feezo AI — no training needed.
+            </p>
+          </motion.div>
 
-          <button
+          <motion.form
+            {...fadeUp}
+            transition={{ duration: 0.45, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
+            onSubmit={onSubmit}
+            role="search"
+            className="relative mx-auto mt-5 w-full max-w-5xl sm:mt-7"
+          >
+            <div className="relative flex items-center gap-2 rounded-2xl border border-slate-200/90 bg-white/95 p-1.5 shadow-[0_18px_40px_-28px_rgba(15,118,110,0.55)] backdrop-blur dark:border-white/10 dark:bg-zinc-900/90 sm:rounded-full sm:p-1.5">
+              <div className="relative min-w-0 flex-1">
+                <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 sm:left-4" />
+                <input
+                  ref={inputRef}
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder='Try "collect fee", "salary" or "close year"'
+                  aria-label="Search help guides"
+                  maxLength={120}
+                  className="h-11 w-full rounded-xl border-0 bg-transparent pl-10 pr-10 text-[14px] text-slate-900 outline-none placeholder:text-slate-400 dark:text-zinc-50 sm:h-12 sm:rounded-full sm:pl-11 sm:pr-11 sm:text-[15px] [&::-webkit-search-cancel-button]:hidden"
+                />
+                {query ? (
+                  <button
+                    type="button"
+                    onClick={clearSearch}
+                    aria-label="Clear search"
+                    className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                ) : null}
+              </div>
+              <button
+                type="submit"
+                className="hidden h-11 shrink-0 items-center gap-1.5 rounded-full bg-[#0F766E] px-5 text-[13px] font-semibold text-white transition-colors hover:bg-[#0D9488] sm:inline-flex"
+              >
+                Search
+                <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </motion.form>
+
+          {quickTasks.length > 0 ? (
+            <motion.div
+              {...fadeUp}
+              transition={{ duration: 0.45, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+              className="mx-auto mt-4 w-full max-w-5xl sm:mt-5"
+            >
+              <p className="mb-2 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-zinc-500">
+                Popular tasks
+              </p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                {quickTasks.map((task) => {
+                  const Icon = QUICK_TASK_ICONS[task.guideId] ?? BookOpenText;
+                  return (
+                    <button
+                      key={task.guideId}
+                      type="button"
+                      onClick={() => openGuide(task.guideId)}
+                      className="group flex min-h-[4.5rem] flex-col items-start justify-between gap-2 rounded-2xl border border-slate-200/80 bg-white/85 p-3 text-left shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:border-[#0F766E]/35 hover:shadow-[0_14px_28px_-18px_rgba(15,118,110,0.55)] dark:border-white/10 dark:bg-zinc-900/75 dark:hover:border-teal-400/30 sm:min-h-[5.25rem]"
+                    >
+                      <span className="grid h-8 w-8 place-items-center rounded-xl bg-[#0F766E]/10 text-[#0F766E] transition-colors group-hover:bg-[#0F766E] group-hover:text-white dark:bg-teal-400/10 dark:text-[#2DD4BF] dark:group-hover:bg-teal-500 dark:group-hover:text-zinc-950">
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <span className="text-[12.5px] font-semibold leading-snug text-slate-800 dark:text-zinc-100">
+                        {task.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </motion.div>
+          ) : null}
+
+          <motion.button
+            {...fadeUp}
+            transition={{ duration: 0.45, delay: 0.14, ease: [0.22, 1, 0.36, 1] }}
             type="button"
             onClick={() => askAi()}
-            className="group mt-5 flex w-full items-center gap-3 rounded-2xl border border-[#0F766E]/15 bg-white/90 p-3 text-left shadow-sm backdrop-blur transition-all hover:border-[#0F766E]/40 hover:shadow-[0_12px_30px_-16px_rgba(15,118,110,0.45)] dark:border-teal-400/15 dark:bg-zinc-900/80 dark:hover:border-teal-400/35 sm:max-w-xl"
+            className="group mx-auto mt-4 flex w-full max-w-5xl items-center gap-3 rounded-2xl border border-[#0F766E]/20 bg-[#0F766E] p-3.5 text-left text-white shadow-[0_18px_36px_-22px_rgba(15,118,110,0.8)] transition-transform hover:-translate-y-0.5 dark:border-teal-400/20 dark:bg-teal-700 sm:mt-5 sm:gap-4 sm:p-4"
           >
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#0F766E] to-[#0D5C56] text-white shadow-sm ring-1 ring-white/25">
-              <Sparkles className="h-4 w-4" strokeWidth={2.35} />
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/15 ring-1 ring-white/25">
+              <Sparkles className="h-5 w-5" strokeWidth={2.2} />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-[13.5px] font-semibold text-slate-900 dark:text-zinc-50">
+              <span className="block text-[14px] font-semibold tracking-tight sm:text-[15px]">
                 Ask Feezo AI instead
               </span>
-              <span className="block text-[12px] leading-snug text-slate-500 dark:text-zinc-400">
-                Ask in your own words, in English or Malayalam. It answers from these guides and can
-                open the right screen for you.
+              <span className="mt-0.5 block text-[12px] leading-snug text-white/80 sm:text-[12.5px]">
+                English or Malayalam — answers from these guides and can open the right screen.
               </span>
             </span>
-            <ArrowRight className="h-4 w-4 shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-[#0F766E] dark:text-zinc-600 dark:group-hover:text-[#2DD4BF]" />
-          </button>
+            <ArrowRight className="h-5 w-5 shrink-0 text-white/70 transition-transform group-hover:translate-x-0.5 group-hover:text-white" />
+          </motion.button>
         </div>
       </section>
 
@@ -635,7 +710,7 @@ function HelpContactBlock() {
           </p>
         </div>
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+      <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
         {channels.map((c) => {
           const Icon = c.icon;
           const inner = (

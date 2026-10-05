@@ -716,12 +716,13 @@ export function CustomerSupportCard({
       });
   }, [chatId, tickets]);
 
-  const shellClass =
-    "flex h-full min-h-0 flex-col overflow-hidden md:h-[min(calc(100dvh-8rem),760px)] lg:h-[min(calc(100dvh-11rem),760px)] lg:flex-row";
+  // Fill the parent viewport slot — only the chat list / thread scroll internally.
+  const shellClass = "flex h-full min-h-0 w-full flex-col overflow-hidden lg:flex-row";
   const frameClass = cn(
-    "h-full min-h-0",
-    pinToViewport &&
-      "max-md:fixed max-md:inset-x-0 max-md:top-[calc(4rem+env(safe-area-inset-top,0px))] max-md:bottom-[calc(60px+0.75rem+env(safe-area-inset-bottom,0px))] max-md:z-20 max-md:overflow-hidden",
+    "flex h-full min-h-0 w-full flex-col overflow-hidden",
+    // Desktop fallback when parent height is not locked
+    !pinToViewport && "lg:h-[calc(100dvh-9.25rem)] xl:h-[calc(100dvh-9.75rem)]",
+    pinToViewport && "lg:h-full",
   );
 
   return (
@@ -732,7 +733,10 @@ export function CustomerSupportCard({
             tone="white"
             cornerSide="tr"
             padded={false}
-            className={cn(workspacePanelClass, "h-full overflow-hidden p-0 max-md:rounded-none")}
+            className={cn(
+              workspacePanelClass,
+              "flex h-full min-h-0 flex-col overflow-hidden p-0 max-lg:rounded-none",
+            )}
           >
             <div
               className={cn(
@@ -750,7 +754,7 @@ export function CustomerSupportCard({
             padded={false}
             className={cn(
               workspacePanelClass,
-              "col-span-12 h-full overflow-hidden p-0 max-md:rounded-none",
+              "col-span-12 flex h-full min-h-0 flex-col overflow-hidden p-0 max-lg:rounded-none",
             )}
           >
             <div className={shellClass}>
@@ -882,7 +886,9 @@ export function CustomerSupportCard({
             </ul>
           </div>
 
-          <SupportChatShell className={cn(onMobileThread ? "flex" : "hidden lg:flex")}>
+          <SupportChatShell
+            className={cn("min-h-0", onMobileThread ? "flex" : "hidden lg:flex")}
+          >
             {activeTicket ? (
               <>
                 <div className="flex shrink-0 items-center gap-2 border-b border-black/5 bg-white/90 px-1.5 py-1.5 backdrop-blur-sm dark:border-white/10 dark:bg-zinc-950/90">
@@ -953,7 +959,7 @@ export function CustomerSupportCard({
                     ))}
                   </div>
                 </div>
-                <div className="shrink-0 bg-[#E8EEE9] px-1.5 pb-2 pt-1 sm:px-2 md:pb-[max(0.5rem,env(safe-area-inset-bottom))] dark:bg-zinc-950">
+                <div className="shrink-0 border-t border-black/5 bg-[#E8EEE9] px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 dark:border-white/10 dark:bg-zinc-950 sm:px-3">
                   {activeTicket.status === "closed" ? (
                     <p className="rounded-2xl bg-white/80 px-3 py-2 text-center text-[12px] text-black/50 dark:bg-zinc-900/80 dark:text-zinc-400">
                       Chat closed. Reopen it from the header, or start a new one from the list.
@@ -1101,7 +1107,7 @@ export function CustomerSupportCard({
                     ) : null}
                   </div>
                 </div>
-                <div className="shrink-0 bg-[#E8EEE9] px-1.5 pb-2 pt-1 sm:px-2 md:pb-[max(0.5rem,env(safe-area-inset-bottom))] dark:bg-zinc-950">
+                <div className="shrink-0 border-t border-black/5 bg-[#E8EEE9] px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 dark:border-white/10 dark:bg-zinc-950 sm:px-3">
                   <SupportComposer
                     placeholder="Message"
                     autoFocus={composing}

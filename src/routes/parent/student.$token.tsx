@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PhoneInput } from "@/components/ui/phone-input";
 import {
   Select,
   SelectContent,
@@ -374,11 +375,9 @@ function ParentStudentPage() {
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <FormField label="Guardian Mobile">
-                <Input
+                <PhoneInput
                   value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  placeholder="9810045221"
-                  className="font-mono"
+                  onChange={(phone) => setForm({ ...form, phone })}
                 />
               </FormField>
               <FormField label="Aadhaar">

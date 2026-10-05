@@ -63,6 +63,7 @@ import {
   type LeadSummary,
 } from "@/lib/api/leads";
 import { formatChatStamp } from "@/lib/dates";
+import { toWhatsAppDigits } from "@/lib/phone";
 import { cn } from "@/lib/utils";
 
 const FILTERS: { id: LeadFilter; label: string }[] = [
@@ -192,9 +193,7 @@ function isFollowUpDue(lead: Pick<Lead, "followUpAt" | "status">): boolean {
 }
 
 function digitsForWhatsApp(phone: string | null): string {
-  const digits = (phone ?? "").replace(/\D/g, "");
-  if (digits.length === 10) return `91${digits}`;
-  return digits;
+  return toWhatsAppDigits(phone) ?? "";
 }
 
 function csvCell(value: string | null | undefined): string {

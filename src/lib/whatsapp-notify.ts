@@ -2,6 +2,7 @@
 
 import type { ClassConfig, Student } from "@/lib/tenant-store";
 import { formatMoney } from "@/lib/money";
+import { toWhatsAppDigits } from "@/lib/phone";
 
 const DEFAULT_API_KEY = "0fd1dd43b6c3ff5bb3770dfdd9c5346a";
 const DIRECT_ENDPOINT = "https://notifyapi.bugricer.com/wapp/api/send";
@@ -13,12 +14,7 @@ function sendEndpoint() {
 }
 
 export function toNotifyWhatsAppNumber(raw?: string): string | null {
-  const digits = (raw ?? "").replace(/\D/g, "");
-  if (!digits) return null;
-  if (digits.length === 10) return `91${digits}`;
-  if (digits.length === 12 && digits.startsWith("91")) return digits;
-  if (digits.length >= 10) return digits;
-  return null;
+  return toWhatsAppDigits(raw);
 }
 
 /** Build a wa.me URL — with phone when known, otherwise open chat picker with text filled. */

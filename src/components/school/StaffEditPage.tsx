@@ -6,6 +6,7 @@ import { Camera, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
 import { ImageCropDialog } from "@/components/ui/image-crop-dialog";
 import { FieldSelect } from "@/components/school/SchoolAdminWorkspace";
@@ -272,29 +273,23 @@ export function StaffEditPage() {
           </div>
 
           <FormField label="Phone">
-            <Input
+            <PhoneInput
               value={draft.phone}
-              onChange={(e) => patchDraft("phone", e.target.value)}
-              placeholder="Primary mobile"
-              className="font-mono"
+              onChange={(phone) => patchDraft("phone", phone)}
             />
           </FormField>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <FormField label="Alternative Number (optional)">
-              <Input
+              <PhoneInput
                 value={draft.altPhone}
-                onChange={(e) => patchDraft("altPhone", e.target.value)}
-                placeholder="Optional"
-                className="font-mono"
+                onChange={(altPhone) => patchDraft("altPhone", altPhone)}
               />
             </FormField>
             <FormField label="Guardian Number">
-              <Input
+              <PhoneInput
                 value={draft.guardianPhone}
-                onChange={(e) => patchDraft("guardianPhone", e.target.value)}
-                placeholder="Emergency / guardian"
-                className="font-mono"
+                onChange={(guardianPhone) => patchDraft("guardianPhone", guardianPhone)}
               />
             </FormField>
           </div>

@@ -34,8 +34,9 @@ import { homePathForSession, useAuth } from "@/lib/auth";
 import { BRAND } from "@/lib/brand";
 import { INDIA_STATES, districtsForState } from "@/lib/geo/india-states-districts";
 import { isIndianPincode, lookupIndianPincode, type PincodeMatch } from "@/lib/geo/pincode";
-import { CURRENCIES, normalizeCurrency } from "@/lib/locale/currencies";
+import { CURRENCIES, currencyDefaultCountry, normalizeCurrency } from "@/lib/locale/currencies";
 import { useLocale } from "@/lib/locale/LocaleProvider";
+import { PhoneInput } from "@/components/ui/phone-input";
 import {
   EMAIL_RE,
   SCHOOL_TYPES,
@@ -123,6 +124,7 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
   const [form, setForm] = useState<SignupFormState>(() => loadSignupDraft());
   const { formatMarketingFromInr, detected, countryLabel } = useLocale();
   const orgCurrency = normalizeCurrency(form.currency || detected?.currency, "INR");
+  const phoneCountry = currencyDefaultCountry(orgCurrency);
   const [errors, setErrors] = useState<Errors>({});
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState<{
@@ -165,8 +167,8 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
     }
     const normalized = {
       ...form,
-      phone: withIndiaDialCode(form.phone),
-      adminMobile: form.adminMobile || withIndiaDialCode(form.phone),
+      phone: withIndiaDialCode(form.phone, phoneCountry),
+      adminMobile: form.adminMobile || withIndiaDialCode(form.phone, phoneCountry),
     };
     setForm(normalized);
     saveSignupDraft(normalized);
@@ -192,7 +194,7 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
         name: form.schoolName.trim(),
         subdomain: form.subdomain.trim(),
         schoolType: form.schoolType,
-        phone: withIndiaDialCode(form.phone),
+        phone: withIndiaDialCode(form.phone, phoneCountry),
         address: addressLine,
         district: form.district,
         state: form.state,
@@ -202,7 +204,7 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
         website: form.website.trim() || undefined,
         schoolEmail: (form.schoolEmail.trim() || adminEmail).toLowerCase(),
         adminName: form.adminName.trim(),
-        adminMobile: withIndiaDialCode(form.adminMobile),
+        adminMobile: withIndiaDialCode(form.adminMobile, phoneCountry),
         adminEmail,
         password: form.password,
         tier: form.tier,
@@ -253,6 +255,7 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
           errors={errors}
           patch={patch}
           orgCurrency={orgCurrency}
+          phoneCountry={phoneCountry}
           onSubmit={goAccount}
         />
       ) : (
@@ -260,6 +263,7 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
           form={form}
           errors={errors}
           patch={patch}
+          phoneCountry={phoneCountry}
           submitting={submitting}
           formatPrice={formatMarketingFromInr}
           onBack={() => goToSignupStep(navigate, "school")}
@@ -281,8 +285,9 @@ function SchoolStep({
   errors,
   patch,
   orgCurrency,
+  phoneCountry,
   onSubmit,
-}: StepProps & { orgCurrency: string; onSubmit: (e?: FormEvent) => void }) {
+}: StepProps & { orgCurrency: string; phoneCountry: string; onSubmit: (e?: FormEvent) => void }) {
   const districts = useMemo(() => districtsForState(form.state), [form.state]);
   const [editSlug, setEditSlug] = useState(false);
   const [showMore, setShowMore] = useState(
@@ -486,18 +491,13 @@ function SchoolStep({
       </div>
 
       <Field id="phone" label="School phone" required error={errors.phone}>
-        <input
+        <PhoneInput
           id="phone"
-          name="tel"
-          type="tel"
-          autoComplete="tel"
-          inputMode="tel"
-          enterKeyHint="next"
-          className={fieldClass}
-          placeholder="98765 43210"
           value={form.phone}
-          onChange={(e) => patch("phone", e.target.value)}
-          onBlur={() => form.phone && patch("phone", withIndiaDialCode(form.phone))}
+          onChange={(phone) => patch("phone", phone)}
+          defaultCountry={phoneCountry}
+          inputClassName="h-11 rounded-xl border-black/10 px-3.5 text-[14px] shadow-none focus-visible:border-[#0F766E]/50 focus-visible:ring-[#0F766E]/15"
+          triggerClassName="h-11 rounded-xl border-black/10"
         />
       </Field>
 
@@ -602,11 +602,13 @@ function AccountStep({
   form,
   errors,
   patch,
+  phoneCountry,
   submitting,
   formatPrice,
   onBack,
   onSubmit,
 }: StepProps & {
+  phoneCountry: string;
   submitting: boolean;
   formatPrice: (inr: number) => string;
   onBack: () => void;
@@ -633,20 +635,13 @@ function AccountStep({
           />
         </Field>
         <Field id="adminMobile" label="Mobile number" required error={errors.adminMobile}>
-          <input
+          <PhoneInput
             id="adminMobile"
-            name="mobile"
-            type="tel"
-            autoComplete="tel"
-            inputMode="tel"
-            enterKeyHint="next"
-            className={fieldClass}
-            placeholder="98450 12345"
             value={form.adminMobile}
-            onChange={(e) => patch("adminMobile", e.target.value)}
-            onBlur={() =>
-              form.adminMobile && patch("adminMobile", withIndiaDialCode(form.adminMobile))
-            }
+            onChange={(adminMobile) => patch("adminMobile", adminMobile)}
+            defaultCountry={phoneCountry}
+            inputClassName="h-11 rounded-xl border-black/10 px-3.5 text-[14px] shadow-none focus-visible:border-[#0F766E]/50 focus-visible:ring-[#0F766E]/15"
+            triggerClassName="h-11 rounded-xl border-black/10"
           />
         </Field>
       </div>

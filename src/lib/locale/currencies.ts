@@ -67,6 +67,45 @@ export const COUNTRY_CURRENCY: Record<string, CurrencyCode> = {
   CH: "CHF",
 };
 
+/** ITU dial codes for countries in COUNTRY_LABELS (digits only, no +). */
+export const COUNTRY_DIAL: Record<string, string> = {
+  IN: "91",
+  AE: "971",
+  SA: "966",
+  US: "1",
+  GB: "44",
+  AU: "61",
+  CA: "1",
+  DE: "49",
+  FR: "33",
+  NL: "31",
+  IE: "353",
+  CH: "41",
+  QA: "974",
+  KW: "965",
+  BH: "973",
+  OM: "968",
+  EG: "20",
+  PK: "92",
+  BD: "880",
+  SG: "65",
+  MY: "60",
+  NZ: "64",
+};
+
+/** Primary country for each org base currency (phone default). */
+export const CURRENCY_DEFAULT_COUNTRY: Record<CurrencyCode, string> = {
+  INR: "IN",
+  AED: "AE",
+  SAR: "SA",
+  USD: "US",
+  GBP: "GB",
+  AUD: "AU",
+  CAD: "CA",
+  EUR: "DE",
+  CHF: "CH",
+};
+
 export const DEFAULT_LOCALE = { country: "IN", currency: "INR" as CurrencyCode, language: "en" };
 
 export const STORAGE_KEYS = {
@@ -95,6 +134,23 @@ export function currencyForCountry(country: string): CurrencyCode {
   return (
     COUNTRY_CURRENCY[country.toUpperCase()] ?? (country.toUpperCase() === "IN" ? "INR" : "USD")
   );
+}
+
+export function currencyDefaultCountry(currency: unknown): string {
+  const code = normalizeCurrency(currency);
+  return CURRENCY_DEFAULT_COUNTRY[code] ?? DEFAULT_LOCALE.country;
+}
+
+export function countryDial(country: string): string {
+  const key = country.trim().toUpperCase();
+  return COUNTRY_DIAL[key] ?? COUNTRY_DIAL[DEFAULT_LOCALE.country] ?? "91";
+}
+
+/** Regional-indicator flag emoji from ISO 3166-1 alpha-2 (e.g. IN → 🇮🇳). */
+export function countryFlag(country: string): string {
+  const key = country.trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(key)) return "";
+  return String.fromCodePoint(...[...key].map((c) => 0x1f1e6 - 65 + c.charCodeAt(0)));
 }
 
 export function intlLocaleFor(language: string, currency: string): string {

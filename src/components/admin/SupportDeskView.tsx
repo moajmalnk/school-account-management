@@ -25,6 +25,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OrganicCard } from "@/components/ui/organic-card";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, getApiToken } from "@/lib/api/client";
@@ -48,6 +49,7 @@ import {
 } from "@/lib/api/support";
 import { fetchLeadSummary, type LeadSummary } from "@/lib/api/leads";
 import { formatChatStamp } from "@/lib/dates";
+import { phoneDigits } from "@/lib/phone";
 import { cn } from "@/lib/utils";
 
 type Section = "messages" | "autoReply" | "help" | "contact" | "leads";
@@ -877,7 +879,7 @@ export function SupportDeskView() {
                           ))}
                         </div>
                       </div>
-                      <div className="shrink-0 px-1.5 pb-1.5 pt-1 sm:px-2 lg:pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+                      <div className="shrink-0 border-t border-black/5 px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 dark:border-white/10 sm:px-3">
                         {thread.status === "closed" ? (
                           <p className="rounded-2xl bg-white/80 px-3 py-2 text-center text-[12px] text-black/50 dark:bg-zinc-900/80 dark:text-zinc-400">
                             Closed. Reopen from the header, or the school can write again.
@@ -1229,16 +1231,26 @@ export function SupportDeskView() {
                 <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
                   WhatsApp number
                 </Label>
-                <Input
-                  value={settings.whatsappE164}
-                  onChange={(e) =>
-                    setSettings((prev) => ({ ...prev, whatsappE164: e.target.value }))
+                <PhoneInput
+                  value={
+                    settings.whatsappE164
+                      ? settings.whatsappE164.startsWith("+")
+                        ? settings.whatsappE164
+                        : `+${settings.whatsappE164}`
+                      : ""
                   }
-                  placeholder="919744009048"
-                  className="h-9 rounded-lg"
+                  onChange={(e164) =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      whatsappE164: phoneDigits(e164) || SUPPORT_DEFAULT_WHATSAPP_E164,
+                    }))
+                  }
+                  defaultCountry="IN"
+                  className="h-9"
+                  inputClassName="h-9 rounded-lg"
                 />
                 <p className="text-[11px] text-black/40">
-                  Country code + number, no spaces. Example: 919744009048.
+                  Country code is selected automatically; change it anytime.
                 </p>
               </label>
               <label className="col-span-12 space-y-1.5">

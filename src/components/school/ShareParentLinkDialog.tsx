@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { WhatsAppIcon } from "@/components/ui/whatsapp-icon";
 import { parentStudentAbsoluteUrl } from "@/lib/tenant-store";
 import { openWhatsAppShare, toNotifyWhatsAppNumber } from "@/lib/whatsapp-notify";
@@ -71,7 +72,7 @@ export function ShareParentLinkDialog({
     if (!url) return;
     if (!whatsappNumber) {
       toast.error("Add guardian WhatsApp number", {
-        description: "Enter a 10-digit mobile number to open WhatsApp",
+        description: "Enter a mobile number with country code to open WhatsApp",
       });
       return;
     }
@@ -117,13 +118,7 @@ export function ShareParentLinkDialog({
             <label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
               Guardian WhatsApp number
             </label>
-            <Input
-              value={phone}
-              onChange={(e) => setPhone(e.target.value.replace(/[^\d+\s-]/g, ""))}
-              placeholder="e.g. 9810045221"
-              className="font-mono text-[13px]"
-              inputMode="tel"
-            />
+            <PhoneInput value={phone} onChange={setPhone} />
             <p className="text-[11px] text-black/45">
               Opens WhatsApp with the collection link ready to send
               {guardianName?.trim() ? ` to ${guardianName.trim()}` : ""}.

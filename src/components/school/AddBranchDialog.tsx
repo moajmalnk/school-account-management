@@ -14,6 +14,7 @@ import {
 import { InfoTip } from "@/components/ui/info-tip";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { BRANCH_CODE_TIP, BRANCH_COPY_TIP, BRANCH_ORDER_TIP } from "@/lib/help/settings-tips";
 import {
   Select,
@@ -273,11 +274,10 @@ export function AddBranchDialog({
           </div>
           <div className="col-span-12 space-y-1.5 sm:col-span-6">
             <Label htmlFor="branch-phone">Phone</Label>
-            <Input
+            <PhoneInput
               id="branch-phone"
               value={form.phone}
-              onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-              placeholder="+91 …"
+              onChange={(phone) => setForm((f) => ({ ...f, phone }))}
             />
           </div>
           <div className="col-span-12 space-y-1.5 sm:col-span-6">

@@ -1,20 +1,17 @@
 import { apiRequest } from "@/lib/api/client";
+import { formatPhoneDisplay, toWhatsAppDigits } from "@/lib/phone";
 
-/** Digits only for wa.me — +91 97440 09048 */
+/** Digits only for wa.me — platform default support line */
 export const SUPPORT_DEFAULT_WHATSAPP_E164 = "919744009048";
 
 export function whatsappDigits(raw?: string | null): string {
-  const digits = String(raw || "").replace(/\D/g, "");
-  if (digits.length >= 10 && digits.length <= 15) return digits;
-  return SUPPORT_DEFAULT_WHATSAPP_E164;
+  return toWhatsAppDigits(raw) ?? SUPPORT_DEFAULT_WHATSAPP_E164;
 }
 
 export function formatWhatsAppDisplay(raw?: string | null): string {
   const digits = whatsappDigits(raw);
-  if (digits.startsWith("91") && digits.length === 12) {
-    return `+91 ${digits.slice(2, 7)} ${digits.slice(7)}`;
-  }
-  return digits ? `+${digits}` : "";
+  if (!digits) return "";
+  return formatPhoneDisplay(`+${digits}`) || `+${digits}`;
 }
 
 export type SupportSettings = {

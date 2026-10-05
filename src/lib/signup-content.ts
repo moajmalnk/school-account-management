@@ -1,4 +1,5 @@
 import { MARKETING } from "@/lib/marketing-content";
+import { composeE164, parsePhone } from "@/lib/phone";
 
 export const SCHOOL_TYPES = [
   "CBSE",
@@ -132,12 +133,10 @@ export function isValidPhone(raw: string): boolean {
   return digits.length >= 10 && digits.length <= 15;
 }
 
-/** Bare 10-digit Indian numbers get the +91 prefix. */
-export function withIndiaDialCode(raw: string): string {
-  const n = normalizePhone(raw);
-  if (/^[6-9]\d{9}$/.test(n)) return `+91${n}`;
-  if (/^0[6-9]\d{9}$/.test(n)) return `+91${n.slice(1)}`;
-  return n;
+/** Ensure E.164 using the given country (defaults to India for legacy callers). */
+export function withIndiaDialCode(raw: string, country = "IN"): string {
+  const parsed = parsePhone(raw, country);
+  return composeE164(parsed.country, parsed.national) || normalizePhone(raw);
 }
 
 const DRAFT_KEY = "feezo-signup-draft-v2";

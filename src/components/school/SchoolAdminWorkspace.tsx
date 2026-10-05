@@ -147,6 +147,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -395,6 +396,7 @@ import {
   DEFAULT_OVERDUE_WHATSAPP_TEMPLATE,
   DEFAULT_GENERAL_WHATSAPP_TEMPLATE,
 } from "@/lib/whatsapp-notify";
+import { formatPhoneDisplay, toWhatsAppDigits } from "@/lib/phone";
 import {
   WhatsAppIcon,
   whatsappIconBtnClass,
@@ -2311,13 +2313,7 @@ function buildClassDivisionIndex(classNames: string[]) {
 
 const phoneDigits = (raw?: string) => (raw ?? "").replace(/[^0-9]/g, "");
 
-const formatPhone = (raw?: string) => {
-  const d = phoneDigits(raw);
-  if (!d) return "";
-  if (d.length === 10) return `+91 ${d.slice(0, 5)} ${d.slice(5)}`;
-  if (d.length === 12 && d.startsWith("91")) return `+91 ${d.slice(2, 7)} ${d.slice(7)}`;
-  return d;
-};
+const formatPhone = (raw?: string) => formatPhoneDisplay(raw);
 
 type AdmitStudentForm = {
   name: string;
@@ -2708,8 +2704,9 @@ function StudentsDirectoryTable({
           )}
           {students.map((student) => {
             const digits = phoneDigits(student.phone);
-            const hasPhone = digits.length > 0;
-            const waHref = `https://wa.me/${digits.length === 10 ? "91" : ""}${digits}`;
+            const waDigits = toWhatsAppDigits(student.phone);
+            const hasPhone = Boolean(waDigits) || digits.length > 0;
+            const waHref = waDigits ? `https://wa.me/${waDigits}` : undefined;
             const isSelected = selectedIds.has(student.id);
             return (
               <div
@@ -2846,8 +2843,9 @@ function StudentsDirectoryTable({
               )}
               {students.map((student) => {
                 const digits = phoneDigits(student.phone);
-                const hasPhone = digits.length > 0;
-                const waHref = `https://wa.me/${digits.length === 10 ? "91" : ""}${digits}`;
+                const waDigits = toWhatsAppDigits(student.phone);
+                const hasPhone = Boolean(waDigits) || digits.length > 0;
+                const waHref = waDigits ? `https://wa.me/${waDigits}` : undefined;
                 const isSelected = selectedIds.has(student.id);
                 return (
                   <tr
@@ -3207,11 +3205,11 @@ export function AdmitStudentPage() {
               <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                 Contact Phone
               </Label>
-              <Input
+              <PhoneInput
                 value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                placeholder="9810045221"
-                className={cn(admitFormInputClass, "font-mono")}
+                onChange={(phone) => setForm({ ...form, phone })}
+                inputClassName={admitFormInputClass}
+                triggerClassName={admitFormInputClass}
               />
             </div>
           </div>
@@ -7125,11 +7123,9 @@ export function StaffRoster() {
               <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                 Phone
               </Label>
-              <Input
+              <PhoneInput
                 value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                placeholder="Primary mobile"
-                className="font-mono"
+                onChange={(phone) => setForm({ ...form, phone })}
               />
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -7140,22 +7136,18 @@ export function StaffRoster() {
                     (optional)
                   </span>
                 </Label>
-                <Input
+                <PhoneInput
                   value={form.altPhone}
-                  onChange={(e) => setForm({ ...form, altPhone: e.target.value })}
-                  placeholder="Optional"
-                  className="font-mono"
+                  onChange={(altPhone) => setForm({ ...form, altPhone })}
                 />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                   Guardian Number
                 </Label>
-                <Input
+                <PhoneInput
                   value={form.guardianPhone}
-                  onChange={(e) => setForm({ ...form, guardianPhone: e.target.value })}
-                  placeholder="Emergency / guardian"
-                  className="font-mono"
+                  onChange={(guardianPhone) => setForm({ ...form, guardianPhone })}
                 />
               </div>
             </div>
@@ -15800,6 +15792,21 @@ export function SchoolSettings() {
     }
   }, [session, activeTab, navigate, tabParam, canViewClasses, canViewDepartments, classTierOpen]);
 
+  // Support chat owns the viewport — prevent the settings page from scrolling behind it.
+  useEffect(() => {
+    if (activeTab !== "support") return;
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtml = html.style.overflow;
+    const prevBody = body.style.overflow;
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    return () => {
+      html.style.overflow = prevHtml;
+      body.style.overflow = prevBody;
+    };
+  }, [activeTab]);
+
   const [schoolDirty, setSchoolDirty] = useState(false);
   const { tryNavigate } = useSettingsUnsavedGuard();
   const schoolActionsRef = useRef<{
@@ -16095,8 +16102,16 @@ export function SchoolSettings() {
     </>
   );
 
+  const supportViewport = activeTab === "support";
+
   return (
-    <div className="grid w-full grid-cols-12 gap-3 sm:gap-4 lg:gap-5">
+    <div
+      className={cn(
+        "grid w-full grid-cols-12 gap-3 sm:gap-4 lg:gap-5",
+        supportViewport &&
+          "lg:h-[calc(100dvh-7.75rem)] lg:max-h-[calc(100dvh-7.75rem)] lg:grid-rows-[auto_minmax(0,1fr)] lg:gap-3 lg:overflow-hidden xl:h-[calc(100dvh-8.5rem)] xl:max-h-[calc(100dvh-8.5rem)]",
+      )}
+    >
       {/* Mobile: settings index — one card with list rows → section pages */}
       <div className={cn("col-span-12 min-w-0 lg:hidden", !showMobileMenu && "hidden")}>
         <div
@@ -16171,7 +16186,8 @@ export function SchoolSettings() {
           "col-span-12 min-w-0 lg:hidden",
           showMobileMenu && "hidden",
           !showMobileMenu && "-mt-1",
-          activeTab === "support" && "max-md:h-0 max-md:overflow-visible",
+          supportViewport &&
+            "max-md:h-0 max-md:overflow-visible md:h-[calc(100dvh-5.5rem)] md:min-h-0 md:overflow-hidden lg:h-auto",
         )}
       >
         <SettingsMobileNavProvider onBack={backToMenu}>
@@ -16180,7 +16196,12 @@ export function SchoolSettings() {
       </div>
 
       {/* Desktop: horizontal tabs + content */}
-      <div className="col-span-12 hidden min-w-0 lg:block">
+      <div
+        className={cn(
+          "col-span-12 hidden min-w-0 lg:block",
+          supportViewport && "lg:min-h-0 lg:shrink-0",
+        )}
+      >
         <div className="mobile-scrollbar-none overflow-x-auto rounded-full border border-[#E5E5E5] bg-white/80 p-1 shadow-sm dark:border-white/10 dark:bg-zinc-900/80">
           <div className="flex min-w-max gap-1 lg:min-w-0 lg:w-full">
             {settingsTabs.map((tab) => {
@@ -16205,7 +16226,14 @@ export function SchoolSettings() {
         </div>
       </div>
 
-      <div className="col-span-12 hidden min-w-0 lg:block">{renderSettingsContent("table")}</div>
+      <div
+        className={cn(
+          "col-span-12 hidden min-w-0 lg:block",
+          supportViewport && "min-h-0 overflow-hidden",
+        )}
+      >
+        {renderSettingsContent("table", supportViewport)}
+      </div>
     </div>
   );
 }
@@ -19370,11 +19398,9 @@ function VehicleCard({
               <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                 Driver Phone
               </Label>
-              <Input
+              <PhoneInput
                 value={form.driverPhone}
-                onChange={(e) => setForm({ ...form, driverPhone: e.target.value })}
-                placeholder="Optional"
-                className="font-mono"
+                onChange={(driverPhone) => setForm({ ...form, driverPhone })}
               />
             </div>
 
@@ -21746,10 +21772,9 @@ function SchoolDetailsCard({
               <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
                 Phone
               </Label>
-              <Input
+              <PhoneInput
                 value={draft.phone}
-                onChange={(e) => patch("phone", e.target.value)}
-                placeholder="+91 …"
+                onChange={(phone) => patch("phone", phone)}
                 className="mt-1.5"
               />
             </div>
