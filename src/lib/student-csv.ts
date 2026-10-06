@@ -78,8 +78,40 @@ function isPlausiblePersonName(name: string): boolean {
 }
 const CLASS_GRADE_ALIASES = ["class", "grade", "class/grade", "class name", "cls"];
 const DIVISION_ALIASES = ["division", "div", "section", "sec"];
-const GUARDIAN_ALIASES = ["guardian", "parent", "father", "mother", "guardian name"];
-const PHONE_ALIASES = ["phone", "mobile", "contact", "whatsapp", "phone number"];
+const GUARDIAN_ALIASES = [
+  "guardian",
+  "guardian name",
+  "parent",
+  "parent name",
+  "father name",
+  "father's name",
+  "fathers name",
+  "father",
+  "mother name",
+  "mother's name",
+  "mothers name",
+  "mother",
+];
+const PHONE_ALIASES = [
+  "phone",
+  "mobile",
+  "contact",
+  "whatsapp",
+  "phone number",
+  "mobile number",
+  "contact number",
+  "phone no",
+  "phone no.",
+  "mobile no",
+  "father number",
+  "father phone",
+  "father mobile",
+  "father's number",
+  "parent number",
+  "parent phone",
+  "guardian phone",
+  "guardian number",
+];
 const DUE_ALIASES = ["balance", "due", "fees", "outstanding", "fee due"];
 
 export const STUDENT_CSV_HEADERS = [
@@ -193,7 +225,8 @@ function parseGender(raw: string): "M" | "F" | undefined {
 
 /** DD-MM-YYYY / DD/MM/YY / YYYY-MM-DD → YYYY-MM-DD (Indian day-first order). */
 function parseDobIso(raw: string): string | undefined {
-  const t = raw.trim();
+  // Excel cells sometimes wrap as "31-\n10-\n2019".
+  const t = raw.replace(/\s+/g, "").trim();
   if (!t) return undefined;
   let y: number, m: number, d: number;
   const iso = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
@@ -217,8 +250,47 @@ function parseDobIso(raw: string): string | undefined {
 }
 
 function looksLikeHeader(cells: string[]): boolean {
-  const joined = cells.map(headerKey).join(" ");
-  return /name|student|class|grade|division|div|guardian|phone|balance|due/.test(joined);
+  // Require real Name + Class columns — a title like "Students List" must not win.
+  return (
+    columnIndex(cells, NAME_ALIASES) >= 0 && columnIndex(cells, CLASS_GRADE_ALIASES) >= 0
+  );
+}
+
+/** Score how many recognised student columns a candidate header row has. */
+function headerRowScore(cells: string[]): number {
+  if (!looksLikeHeader(cells)) return 0;
+  let score = 2;
+  for (const aliases of [
+    DIVISION_ALIASES,
+    GUARDIAN_ALIASES,
+    PHONE_ALIASES,
+    DUE_ALIASES,
+    DOB_ALIASES,
+    GENDER_ALIASES,
+    ADMISSION_ALIASES,
+    MOTHER_ALIASES,
+  ]) {
+    if (columnIndex(cells, aliases) >= 0) score += 1;
+  }
+  return score;
+}
+
+/**
+ * Find the header row in the first few lines (school exports often put a title above it).
+ * Returns -1 when no Name+Class header is found (positional template fallback).
+ */
+function findHeaderRowIndex(table: string[][]): number {
+  const scan = Math.min(table.length, 15);
+  let bestIdx = -1;
+  let bestScore = 0;
+  for (let i = 0; i < scan; i++) {
+    const score = headerRowScore(table[i] ?? []);
+    if (score > bestScore) {
+      bestScore = score;
+      bestIdx = i;
+    }
+  }
+  return bestIdx;
 }
 
 function parseDue(raw: string): number {
@@ -253,8 +325,9 @@ export function parseStudentTable(table: string[][]): StudentImportParse {
   let phoneIdx = 3;
   let dueIdx = 4;
 
-  if (looksLikeHeader(table[0] ?? [])) {
-    const headers = table[0] ?? [];
+  const headerRowIdx = findHeaderRowIndex(table);
+  if (headerRowIdx >= 0) {
+    const headers = table[headerRowIdx] ?? [];
     nameIdx = columnIndex(headers, NAME_ALIASES);
     classIdx = columnIndex(headers, CLASS_GRADE_ALIASES);
     divisionIdx = columnIndex(headers, DIVISION_ALIASES);
@@ -274,7 +347,7 @@ export function parseStudentTable(table: string[][]): StudentImportParse {
     emailIdx = columnIndex(headers, EMAIL_ALIASES);
     admissionIdx = columnIndex(headers, ADMISSION_ALIASES);
     if (guardianIdx === motherIdx) motherIdx = -1;
-    start = 1;
+    start = headerRowIdx + 1;
     hasHeader = true;
   }
 
