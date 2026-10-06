@@ -4300,9 +4300,17 @@ type TenantStoreValue = {
   canDeleteAcademicYear: (year: string) => { ok: boolean; reason?: string };
   /** Hard-delete a year and cascade local receipts, enrollments, and fee periods. */
   deleteAcademicYear: (year: string) => boolean;
-  enrollStudentInActiveYear: (studentId: string, fields: StudentYearFields) => void;
+  enrollStudentInActiveYear: (
+    studentId: string,
+    fields: StudentYearFields,
+    opts?: { syncRemote?: boolean },
+  ) => void;
   /** Atomically add a new student and enroll them in the active academic year. */
-  admitStudentToActiveYear: (student: Student, fields: StudentYearFields) => Student;
+  admitStudentToActiveYear: (
+    student: Student,
+    fields: StudentYearFields,
+    opts?: { syncRemote?: boolean },
+  ) => Student;
   themeSettings: ThemeSettings;
   setThemeSettings: Dispatch<SetStateAction<ThemeSettings>>;
   schoolDetails: SchoolDetails;
@@ -6143,7 +6151,7 @@ export function TenantStoreProvider({
   );
 
   const enrollStudentInActiveYear = useCallback(
-    (studentId: string, fields: StudentYearFields) => {
+    (studentId: string, fields: StudentYearFields, opts?: { syncRemote?: boolean }) => {
       setStudentYearLedgers((prev) =>
         upsertStudentYearFields(prev, academicYear, studentId, fields),
       );
@@ -6158,7 +6166,7 @@ export function TenantStoreProvider({
             : s,
         ),
       );
-      if (getApiToken()) {
+      if (opts?.syncRemote !== false && getApiToken()) {
         void apiSyncStudentYearFields([
           {
             studentId,
@@ -6176,14 +6184,14 @@ export function TenantStoreProvider({
   );
 
   const admitStudentToActiveYear = useCallback(
-    (student: Student, fields: StudentYearFields) => {
+    (student: Student, fields: StudentYearFields, opts?: { syncRemote?: boolean }) => {
       const enrolled = applyLedgerToStudent(normalizeStudent(student), fields);
       setStudentYearLedgers((prev) =>
         upsertStudentYearFields(prev, academicYear, enrolled.id, fields),
       );
       setStudents((prev) => [enrolled, ...prev.filter((s) => s.id !== enrolled.id)]);
       upsertStudentInSnapshot(enrolled, { academicYear, fields });
-      if (getApiToken()) {
+      if (opts?.syncRemote !== false && getApiToken()) {
         void apiSyncStudentYearFields([
           {
             studentId: enrolled.id,

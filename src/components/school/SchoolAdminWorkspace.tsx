@@ -467,6 +467,7 @@ import {
   apiUpdatePayment,
   apiUpsertStaff,
   apiUpsertStudent,
+  apiSyncStudentYearFields,
   FINANCE_BULK_CHUNK,
   isFinanceBulkUnsupported,
 } from "@/lib/api/records";
@@ -4109,11 +4110,16 @@ export function StudentsLedger() {
               return phoneDigits ? (student.phone ?? "").replace(/\D/g, "") === phoneDigits : false;
             });
             if (prior) {
-              enrollStudentInActiveYear(prior.id, {
-                cls: cls.className,
-                due: row.due,
-                active: true,
-              });
+              // Local only during bulk import — year-fields sync is batched after API creates.
+              enrollStudentInActiveYear(
+                prior.id,
+                {
+                  cls: cls.className,
+                  due: row.due,
+                  active: true,
+                },
+                { syncRemote: false },
+              );
               reenrolled.push({
                 ...prior,
                 cls: cls.className,
@@ -4142,11 +4148,15 @@ export function StudentsLedger() {
               active: true,
             });
             admitted.push(
-              admitStudentToActiveYear(draft, {
-                cls: draft.cls,
-                due: draft.due,
-                active: true,
-              }),
+              admitStudentToActiveYear(
+                draft,
+                {
+                  cls: draft.cls,
+                  due: draft.due,
+                  active: true,
+                },
+                { syncRemote: false },
+              ),
             );
           }
 
@@ -4199,29 +4209,69 @@ export function StudentsLedger() {
           }
 
           let syncFailed = 0;
+          const yearFieldEntries: Array<{
+            studentId: string;
+            academicYear: string;
+            cls: string;
+            due: number;
+            active: boolean;
+          }> = [];
+
           for (const student of reenrolled) {
-            await apiUpsertStudent(student).catch((err) => {
+            try {
+              const saved = await apiUpsertStudent(student);
+              const studentId = saved.id || student.id;
+              yearFieldEntries.push({
+                studentId,
+                academicYear,
+                cls: student.cls,
+                due: student.due,
+                active: true,
+              });
+            } catch (err) {
               syncFailed += 1;
               toast.error(err instanceof Error ? err.message : `Could not sync ${student.name}`);
-            });
+            }
           }
           for (const student of admitted) {
             try {
               const saved = await apiUpsertStudent(student, { createOnly: true });
+              const studentId = saved.id || student.id;
               if (saved.id !== student.id) {
                 setStudents((prev) => [
                   { ...student, ...saved, id: saved.id },
                   ...prev.filter((s) => s.id !== student.id),
                 ]);
-                enrollStudentInActiveYear(saved.id, {
-                  cls: student.cls,
-                  due: student.due,
-                  active: true,
-                });
+                enrollStudentInActiveYear(
+                  saved.id,
+                  {
+                    cls: student.cls,
+                    due: student.due,
+                    active: true,
+                  },
+                  { syncRemote: false },
+                );
               }
+              yearFieldEntries.push({
+                studentId,
+                academicYear,
+                cls: student.cls,
+                due: student.due,
+                active: true,
+              });
             } catch (err) {
               syncFailed += 1;
               toast.error(err instanceof Error ? err.message : `Could not sync ${student.name}`);
+            }
+          }
+
+          // One batched ledger sync after students exist on the server (avoids hundreds of 500s).
+          if (yearFieldEntries.length) {
+            const CHUNK = 50;
+            for (let i = 0; i < yearFieldEntries.length; i += CHUNK) {
+              await apiSyncStudentYearFields(yearFieldEntries.slice(i, i + CHUNK)).catch(() => {
+                /* create.php already wrote active-year ledger; local books kept */
+              });
             }
           }
 
