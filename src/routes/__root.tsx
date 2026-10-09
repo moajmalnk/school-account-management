@@ -2,8 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Outlet, Link, createRootRouteWithContext, useRouter } from "@tanstack/react-router";
 import { useEffect } from "react";
 
-import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
-import { PwaUpdateToast } from "@/components/pwa/PwaUpdateToast";
+import { DashboardPwaPrompts } from "@/components/pwa/DashboardPwaPrompts";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/lib/auth";
 import { LocaleProvider } from "@/lib/locale/LocaleProvider";
@@ -99,8 +98,7 @@ function RootComponent() {
           <OrgCurrencyBridge />
           <PwaProvider>
             <Outlet />
-            <PwaInstallBanner />
-            <PwaUpdateToast />
+            <DashboardPwaPrompts />
             <Toaster />
           </PwaProvider>
         </LocaleProvider>

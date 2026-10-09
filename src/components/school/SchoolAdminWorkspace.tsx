@@ -163,6 +163,7 @@ import {
 import { SignaturePadDialog } from "@/components/school/SignaturePadDialog";
 import { BankAccountsManager } from "@/components/school/BankAccountsManager";
 import { OrgCurrencyCard } from "@/components/school/OrgCurrencyCard";
+import { ReceiptPrintLayoutCard } from "@/components/school/ReceiptPrintLayoutCard";
 import { OrganicCard } from "@/components/ui/organic-card";
 import { ImageCropDialog } from "@/components/ui/image-crop-dialog";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
@@ -11742,12 +11743,31 @@ function ReceivePayment() {
     [payments],
   );
 
+  const studentsByName = useMemo(() => {
+    const map = new Map<string, Student[]>();
+    for (const s of students) {
+      const key = s.name.trim().toLowerCase().replace(/\s+/g, " ");
+      const list = map.get(key);
+      if (list) list.push(s);
+      else map.set(key, [s]);
+    }
+    return map;
+  }, [students]);
+
   const filteredPayments = useMemo(() => {
     const q = historyQuery.trim().toLowerCase();
     if (!q) return payments;
+    const studentIdsFor = (p: Payment): string[] => {
+      if (p.payerType === "external") return [];
+      const matches = studentsByName.get(p.name.trim().toLowerCase().replace(/\s+/g, " ")) ?? [];
+      if (matches.length <= 1 || !p.className?.trim()) return matches.map((s) => s.id);
+      const inClass = matches.filter((s) => studentBelongsToClass(s.cls, p.className ?? ""));
+      return (inClass.length ? inClass : matches).map((s) => s.id);
+    };
     return payments.filter((p) => {
       const haystack = [
         p.id,
+        ...studentIdsFor(p),
         p.name,
         p.cat,
         p.mode,
@@ -11768,7 +11788,7 @@ function ReceivePayment() {
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [payments, historyQuery]);
+  }, [payments, historyQuery, studentsByName]);
 
   const summaryName = isExternal ? externalPayer.trim() || "External payer" : stu;
   const studentLinesValid =
@@ -12673,7 +12693,7 @@ function ReceivePayment() {
           <Input
             value={historyQuery}
             onChange={(e) => setHistoryQuery(e.target.value)}
-            placeholder="Search by payer, student, category, narration, amount…"
+            placeholder="Search by student ID, payer, category, narration, amount…"
             className="h-10 rounded-xl border-[#E5E5E5] bg-white pl-9 pr-9 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100"
             aria-label="Search payment history"
           />
@@ -21882,6 +21902,10 @@ function SchoolDetailsCard({
                 className="mt-1.5"
               />
             </div>
+          </div>
+
+          <div className="border-t border-[#E5E5E5] pt-5 dark:border-white/10">
+            <ReceiptPrintLayoutCard />
           </div>
 
           <div className="border-t border-[#E5E5E5] pt-5 dark:border-white/10">

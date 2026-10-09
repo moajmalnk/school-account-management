@@ -18,6 +18,7 @@ import { getActiveBrandPalette, pdfFontName } from "@/lib/brand-theme";
 import { defaultSealToPng, defaultSignatureSvg, svgMarkupToPng } from "@/lib/school-marks";
 import { amountInWords } from "@/lib/amount-words";
 import { isEmbeddedWebView, saveFile } from "@/lib/native-download";
+import { getReceiptPrintLayout, type ReceiptPrintLayout } from "@/lib/receipt-layout";
 import { formatDownloadFilename, slugYear, todayStamp } from "@/lib/download-names";
 import {
   feeStatementHeadline,
@@ -1119,14 +1120,7 @@ async function createReceiptPdf(
   doc.setFontSize(11);
   doc.text(amountFormatted, boxX + boxW - 4, boxY + 7.2, { align: "right" });
 
-  const note = pdfSafe(payment.narration || "")
-    .replace(/Fee breakdown:.*$/i, "")
-    .replace(
-      new RegExp(String.raw`(?:^|\s*[·|]\s*)(?:Bank|Cash)\s+${CURRENCY_TOKEN_SRC}\s*[\d,]+`, "gi"),
-      "",
-    )
-    .replace(/^[·|\s]+|[·|\s]+$/g, "")
-    .trim();
+  const note = receiptNarrationNote(payment);
   let afterY = Math.max(boxY + boxH, boxY + wordLines.length * 4.2) + 10;
   if (note) {
     doc.setFont(pdfFontName(), "italic");
@@ -1150,7 +1144,27 @@ async function createReceiptPdf(
     branding,
   );
 
-  const filename = formatDownloadFilename("receipt", "pdf", {
+  return { doc, filename: receiptFilename(payment, schoolName, academicYear, branding) };
+}
+
+function receiptNarrationNote(payment: Payment): string {
+  return pdfSafe(payment.narration || "")
+    .replace(/Fee breakdown:.*$/i, "")
+    .replace(
+      new RegExp(String.raw`(?:^|\s*[·|]\s*)(?:Bank|Cash)\s+${CURRENCY_TOKEN_SRC}\s*[\d,]+`, "gi"),
+      "",
+    )
+    .replace(/^[·|\s]+|[·|\s]+$/g, "")
+    .trim();
+}
+
+function receiptFilename(
+  payment: Payment,
+  schoolName: string,
+  academicYear: string,
+  branding?: ReceiptBranding,
+): string {
+  return formatDownloadFilename("receipt", "pdf", {
     id: payment.id,
     studentId: branding?.studentId,
     name: payment.name,
@@ -1158,9 +1172,403 @@ async function createReceiptPdf(
     year: slugYear(academicYear),
     date: todayStamp(),
   });
-  return { doc, filename };
 }
 
+type A5ReceiptAssets = {
+  logo: PdfLogo | null;
+  letterhead: PdfLogo | null;
+  seal: PdfLogo | null;
+  signature: PdfLogo | null;
+};
+
+type A5ReceiptContext = {
+  payment: Payment;
+  schoolName: string;
+  academicYear: string;
+  branding?: ReceiptBranding;
+  assets: A5ReceiptAssets;
+  generatedAt: string;
+  issuedAt: string;
+};
+
+/** A4 landscape split into two A5 portrait halves (148.5 × 210 mm each). */
+const A5_PANEL_WIDTH = 297 / 2;
+
+/**
+ * Draw one A5 receipt inside a vertical half of an A4 landscape page.
+ * Returns where the body ends and the pinned footer starts so callers can detect overflow.
+ */
+function drawA5ReceiptPanel(
+  doc: jsPDF,
+  frameX: number,
+  copyLabel: string | null,
+  ctx: A5ReceiptContext,
+): { contentBottom: number; footerTop: number } {
+  const ink = receiptInk();
+  const { payment, branding, assets } = ctx;
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const frameW = A5_PANEL_WIDTH;
+  const m = 9;
+  const left = frameX + m;
+  const right = frameX + frameW - m;
+  const contentW = frameW - m * 2;
+  const centerX = frameX + frameW / 2;
+  const displayName = pdfSafe(ctx.schoolName || "School");
+  const isExternal = payment.payerType === "external";
+
+  let y = 8;
+  if (assets.letterhead) {
+    const aspect = assets.letterhead.width / Math.max(1, assets.letterhead.height);
+    let drawW = contentW;
+    let drawH = drawW / aspect;
+    if (drawH > 30) {
+      drawH = 30;
+      drawW = drawH * aspect;
+    }
+    doc.addImage(assets.letterhead.dataUrl, "PNG", centerX - drawW / 2, y, drawW, drawH);
+    y += drawH + 3;
+  } else {
+    const bounds = pickLogoBounds(assets.logo);
+    const logoW = Math.min(bounds.maxW * 0.62, contentW * 0.7);
+    const logoH = bounds.maxH * 0.62;
+    drawLogoPlate(
+      doc,
+      centerX - logoW / 2,
+      y,
+      assets.logo,
+      schoolInitials(displayName) || "SC",
+      logoW,
+      logoH,
+    );
+    y += logoH + 4.6;
+
+    doc.setFont(pdfFontName(), "bold");
+    doc.setFontSize(displayName.length > 34 ? 10.5 : 13);
+    doc.setTextColor(...ink.tealDeep);
+    const nameLines = (doc.splitTextToSize(displayName, contentW * 0.95) as string[]).slice(0, 2);
+    doc.text(nameLines, centerX, y, { align: "center" });
+    y += nameLines.length * 4.8 + 0.4;
+
+    const address = pdfSafe(branding?.address || "").toUpperCase();
+    if (address) {
+      doc.setFont(pdfFontName(), "normal");
+      doc.setFontSize(6.4);
+      doc.setTextColor(...ink.muted);
+      const addressLines = (doc.splitTextToSize(address, contentW * 0.92) as string[]).slice(0, 2);
+      doc.text(addressLines, centerX, y, { align: "center" });
+      y += addressLines.length * 2.8 + 0.8;
+    }
+
+    const contactLine = [branding?.phone, branding?.email]
+      .map((v) => pdfSafe(v || "").trim())
+      .filter(Boolean)
+      .join("  |  ");
+    if (contactLine) {
+      doc.setFont(pdfFontName(), "normal");
+      doc.setFontSize(6.6);
+      doc.setTextColor(...ink.tealDeep);
+      doc.text(contactLine, centerX, y, { align: "center" });
+      y += 3.6;
+    }
+    y += 1;
+  }
+
+  doc.setDrawColor(...ink.line);
+  doc.setLineWidth(0.22);
+  doc.line(left, y, right, y);
+  y += 3.6;
+
+  const barW = 58;
+  const barH = 7.5;
+  doc.setFillColor(...ink.teal);
+  doc.roundedRect(centerX - barW / 2, y, barW, barH, 1.8, 1.8, "F");
+  doc.setFont(pdfFontName(), "bold");
+  doc.setFontSize(9.5);
+  doc.setTextColor(...ink.white);
+  doc.text("Payment Receipt", centerX, y + 5.1, { align: "center" });
+
+  if (copyLabel) {
+    doc.setFont(pdfFontName(), "bold");
+    doc.setFontSize(5.8);
+    const pillW = doc.getTextWidth(copyLabel) + 5;
+    const pillH = 5;
+    const pillY = y + (barH - pillH) / 2;
+    doc.setDrawColor(...ink.teal);
+    doc.setLineWidth(0.3);
+    doc.setFillColor(...ink.white);
+    doc.roundedRect(right - pillW, pillY, pillW, pillH, 2.5, 2.5, "FD");
+    doc.setTextColor(...ink.teal);
+    doc.text(copyLabel, right - pillW / 2, pillY + 3.45, { align: "center" });
+  }
+  y += barH;
+
+  if (ctx.academicYear) {
+    doc.setFont(pdfFontName(), "normal");
+    doc.setFontSize(6.3);
+    doc.setTextColor(...ink.muted);
+    doc.text(pdfSafe(ctx.academicYear), centerX, y + 3.6, { align: "center" });
+    y += 5;
+  } else {
+    y += 2;
+  }
+
+  const metaTop = y + 4;
+  const labelW = 21;
+  const leftValueMax = contentW * 0.58 - labelW;
+  const metaRows: [string, string][] = isExternal
+    ? [
+        ["Payer Name", pdfSafe(payment.name)],
+        ["Payer Type", "External"],
+        ["Contact", pdfSafe(branding?.studentContact || "—")],
+      ]
+    : [
+        ["Student Name", pdfSafe(payment.name)],
+        ["Class & Div", pdfSafe(payment.className || "—")],
+        ["Contact", pdfSafe(branding?.studentContact || "—")],
+        ["Place", pdfSafe(branding?.studentPlace || "—")],
+      ];
+
+  let metaY = metaTop;
+  for (const [label, value] of metaRows) {
+    doc.setFont(pdfFontName(), "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(...ink.muted);
+    doc.text(label, left, metaY);
+    doc.setTextColor(...ink.ink);
+    doc.text(":", left + labelW - 2.5, metaY);
+    doc.setFont(pdfFontName(), "bold");
+    doc.setFontSize(7.6);
+    const valueLines = (doc.splitTextToSize(value, leftValueMax) as string[]).slice(0, 2);
+    doc.text(valueLines, left + labelW, metaY);
+    metaY += Math.max(4.6, valueLines.length * 3.3 + 1.3);
+  }
+
+  doc.setFont(pdfFontName(), "bold");
+  doc.setFontSize(11.5);
+  doc.setTextColor(...ink.ink);
+  doc.text(pdfSafe(payment.id), right, metaTop, { align: "right" });
+  doc.setFont(pdfFontName(), "normal");
+  doc.setFontSize(6.4);
+  doc.setTextColor(...ink.muted);
+  doc.text(`Issued ${ctx.issuedAt}`, right, metaTop + 4.6, { align: "right" });
+  doc.setFontSize(7);
+  doc.setTextColor(...ink.ink);
+  doc.text(`Payment Mode: ${pdfSafe(payment.mode || "—")}`, right, metaTop + 9.2, {
+    align: "right",
+  });
+
+  const items = receiptLineItems(payment);
+  const amountColW = 28;
+  const slColW = 13;
+  autoTable(doc, {
+    startY: Math.max(metaY, metaTop + 12) + 1.5,
+    margin: { left, right: pageWidth - right },
+    tableWidth: contentW,
+    head: [["Sl.No", "Description", "Amount"]],
+    body: items.map((item, index) => [
+      String(index + 1),
+      item.description,
+      formatAmount(item.amount),
+    ]),
+    theme: "grid",
+    styles: {
+      fontSize: 7.8,
+      cellPadding: { top: 2.2, right: 3, bottom: 2.2, left: 3 },
+      lineColor: ink.line,
+      lineWidth: 0.16,
+      textColor: ink.ink,
+      valign: "middle",
+      minCellHeight: 6,
+    },
+    headStyles: {
+      fillColor: ink.teal,
+      textColor: ink.white,
+      fontStyle: "bold",
+      fontSize: 7.4,
+      halign: "left",
+      cellPadding: { top: 2.6, right: 3, bottom: 2.6, left: 3 },
+    },
+    alternateRowStyles: { fillColor: ink.zebra },
+    columnStyles: {
+      0: { cellWidth: slColW, halign: "center" },
+      1: { cellWidth: contentW - slColW - amountColW },
+      2: { cellWidth: amountColW, halign: "right", fontStyle: "bold" },
+    },
+    didParseCell: (data) => {
+      if (data.section === "head" && data.column.index === 2) {
+        data.cell.styles.halign = "right";
+      }
+    },
+  });
+
+  const tableEnd = lastPdfTableY(doc);
+  const boxW = 54;
+  const boxH = 8.5;
+  const boxX = right - boxW;
+  const boxY = tableEnd + 4.5;
+
+  doc.setFont(pdfFontName(), "normal");
+  doc.setFontSize(6.4);
+  doc.setTextColor(...ink.muted);
+  const wordLines = (
+    doc.splitTextToSize(
+      `Amount In Words: ${amountInWords(payment.amount)}`,
+      contentW - boxW - 5,
+    ) as string[]
+  ).slice(0, 3);
+  doc.text(wordLines, left, boxY + 3.4);
+
+  doc.setFillColor(...ink.teal);
+  doc.roundedRect(boxX, boxY, boxW, boxH, 1.2, 1.2, "F");
+  doc.setFont(pdfFontName(), "bold");
+  doc.setFontSize(6.8);
+  doc.setTextColor(...ink.white);
+  doc.text("Amount Received", boxX + 3, boxY + 5.5);
+  doc.setFontSize(9);
+  doc.text(formatMoneyPdf(payment.amount), boxX + boxW - 3, boxY + 5.7, { align: "right" });
+
+  let contentBottom = Math.max(boxY + boxH, boxY + wordLines.length * 2.9) + 2;
+  const note = receiptNarrationNote(payment);
+  if (note) {
+    doc.setFont(pdfFontName(), "italic");
+    doc.setFontSize(6.2);
+    doc.setTextColor(...ink.muted);
+    const noteLines = (doc.splitTextToSize(`Note: ${note}`, contentW) as string[]).slice(0, 2);
+    doc.text(noteLines, left, contentBottom + 3);
+    contentBottom += noteLines.length * 2.8 + 3;
+  }
+
+  const stripH = 2;
+  const sealSize = 22;
+  const signW = 36;
+  const signH = 12;
+  const lowestSealY = pageHeight - stripH - 4 - 4.2 - 3.2 - sealSize;
+  const sealY = Math.min(lowestSealY, contentBottom + 10);
+  const labelY = sealY + sealSize + 3.2;
+  const genY = labelY + 4.2;
+
+  if (assets.seal) {
+    try {
+      doc.addImage(assets.seal.dataUrl, "PNG", left, sealY, sealSize, sealSize);
+    } catch {
+      /* skip unreadable seal */
+    }
+  }
+  if (assets.signature) {
+    try {
+      doc.addImage(
+        assets.signature.dataUrl,
+        "PNG",
+        right - signW,
+        sealY + (sealSize - signH) / 2,
+        signW,
+        signH,
+      );
+    } catch {
+      /* skip unreadable signature */
+    }
+  }
+
+  doc.setFont(pdfFontName(), "normal");
+  doc.setTextColor(...ink.muted);
+  doc.setFontSize(6.6);
+  const signatory = branding?.principalName?.trim();
+  doc.text(signatory ? pdfSafe(signatory) : "Authorized Signatory", right - signW / 2, labelY, {
+    align: "center",
+  });
+  doc.setFontSize(6);
+  doc.text("School Seal", left + sealSize / 2, labelY, { align: "center" });
+
+  doc.setFontSize(5.6);
+  doc.text(`Generated ${ctx.generatedAt}`, left, genY);
+  doc.text("Computer-generated receipt", right, genY, { align: "right" });
+
+  doc.setFillColor(...ink.teal);
+  doc.rect(frameX, pageHeight - stripH, frameW, stripH, "F");
+
+  return { contentBottom, footerTop: lowestSealY - 2 };
+}
+
+function drawA5CutGuide(doc: jsPDF) {
+  const pageHeight = doc.internal.pageSize.getHeight();
+  doc.setDrawColor(...receiptInk().muted);
+  doc.setLineWidth(0.2);
+  doc.setLineDashPattern([1.6, 1.4], 0);
+  doc.line(A5_PANEL_WIDTH, 5, A5_PANEL_WIDTH, pageHeight - 5);
+  doc.setLineDashPattern([], 0);
+}
+
+/**
+ * A4 landscape sheet holding A5 receipts: two copies side by side, or a single copy on
+ * the right half. Returns null when the receipt has too many lines to fit an A5 panel.
+ */
+async function createA5ReceiptPdf(
+  payment: Payment,
+  schoolName: string,
+  academicYear: string,
+  layout: Exclude<ReceiptPrintLayout, "a4-portrait">,
+  branding?: ReceiptBranding,
+): Promise<jsPDF | null> {
+  const displayName = pdfSafe(schoolName || "School");
+  const [logo, letterhead, seal, signature] = await Promise.all([
+    loadLogoForPdf(branding?.logoUrl),
+    loadLetterheadForPdf(branding?.letterheadUrl),
+    loadReceiptSealPng(displayName, branding),
+    loadSchoolMarkPng(
+      branding?.signatureUrl,
+      defaultSignatureSvg(branding?.principalName || "", "#1E293B"),
+      480,
+      160,
+    ),
+  ]);
+  const generatedAt = formatNow();
+  const ctx: A5ReceiptContext = {
+    payment,
+    schoolName,
+    academicYear,
+    branding,
+    assets: { logo, letterhead, seal, signature },
+    generatedAt,
+    issuedAt: formatReceiptIssuedAt(payment.time, generatedAt),
+  };
+
+  const probe = new jsPDF({ unit: "mm", format: "a4", orientation: "landscape" });
+  const fit = drawA5ReceiptPanel(probe, A5_PANEL_WIDTH, "STUDENT COPY", {
+    ...ctx,
+    assets: { ...ctx.assets, seal: null, signature: null },
+  });
+  if (probe.getNumberOfPages() > 1 || fit.contentBottom > fit.footerTop) return null;
+
+  const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "landscape" });
+  paintPdfPageBackground(doc, doc.internal.pageSize.getWidth(), doc.internal.pageSize.getHeight());
+  if (layout === "a5-duplicate") {
+    drawA5ReceiptPanel(doc, 0, "OFFICE COPY", ctx);
+    drawA5ReceiptPanel(doc, A5_PANEL_WIDTH, "STUDENT COPY", ctx);
+  } else {
+    drawA5ReceiptPanel(doc, A5_PANEL_WIDTH, null, ctx);
+  }
+  drawA5CutGuide(doc);
+  return doc;
+}
+
+async function createReceiptPdfForLayout(
+  payment: Payment,
+  schoolName: string,
+  academicYear: string,
+  branding: ReceiptBranding | undefined,
+  layout: ReceiptPrintLayout,
+): Promise<{ doc: jsPDF; filename: string }> {
+  if (layout !== "a4-portrait") {
+    const doc = await createA5ReceiptPdf(payment, schoolName, academicYear, layout, branding);
+    if (doc) {
+      return { doc, filename: receiptFilename(payment, schoolName, academicYear, branding) };
+    }
+  }
+  return createReceiptPdf(payment, schoolName, academicYear, branding);
+}
+
+/** Shareable copy for parents — always a single full-page receipt. */
 export async function buildReceiptPdfBlob(
   payment: Payment,
   schoolName: string,
@@ -1171,14 +1579,22 @@ export async function buildReceiptPdfBlob(
   return { blob: doc.output("blob"), filename };
 }
 
+/** Print / download / preview using this device's receipt layout unless one is passed. */
 export async function downloadReceiptPdf(
   payment: Payment,
   schoolName: string,
   academicYear: string,
   branding?: ReceiptBranding,
   action: PdfEmitAction = "download",
+  layout: ReceiptPrintLayout = getReceiptPrintLayout(),
 ) {
-  const { doc, filename } = await createReceiptPdf(payment, schoolName, academicYear, branding);
+  const { doc, filename } = await createReceiptPdfForLayout(
+    payment,
+    schoolName,
+    academicYear,
+    branding,
+    layout,
+  );
   emitPdf(doc, filename, action);
 }
 

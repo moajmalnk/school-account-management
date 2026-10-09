@@ -3,7 +3,6 @@ import type { ReactNode } from "react";
 
 import { FeezoBrand } from "@/components/brand/FeezoBrand";
 import { OrganicCard } from "@/components/ui/organic-card";
-import { PwaInstallCard } from "@/components/pwa/PwaInstallBanner";
 import { BRAND } from "@/lib/brand";
 
 export function AuthShell({
@@ -36,10 +35,6 @@ export function AuthShell({
           <p className="mt-2 text-[14px] text-black/55">{subtitle}</p>
           {children}
         </OrganicCard>
-
-        <div className="mt-4">
-          <PwaInstallCard />
-        </div>
 
         <div className="mt-6 flex flex-col items-center gap-2 text-center">
           <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[12px] font-medium text-black/45">
