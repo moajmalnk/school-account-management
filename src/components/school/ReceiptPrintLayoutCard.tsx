@@ -6,7 +6,10 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import {
   getReceiptPrintLayout,
+  RECEIPT_PRINT_COPY_OPTIONS,
   RECEIPT_PRINT_LAYOUTS,
+  getReceiptPrintCopies,
+  setReceiptPrintCopies,
   setReceiptPrintLayout,
   type ReceiptPrintLayout,
 } from "@/lib/receipt-layout";
@@ -36,6 +39,7 @@ function SheetPreview({ layout }: { layout: ReceiptPrintLayout }) {
 /** Settings → School: paper layout for printed / downloaded fee receipts on this device. */
 export function ReceiptPrintLayoutCard() {
   const [layout, setLayout] = useState<ReceiptPrintLayout>(() => getReceiptPrintLayout());
+  const [copies, setCopies] = useState(() => getReceiptPrintCopies());
 
   const choose = (next: ReceiptPrintLayout) => {
     if (next === layout) return;
@@ -43,6 +47,15 @@ export function ReceiptPrintLayoutCard() {
     setReceiptPrintLayout(next);
     const option = RECEIPT_PRINT_LAYOUTS.find((o) => o.value === next);
     toast.success(`Receipts will print as ${option?.label ?? next}`, {
+      description: "Saved on this device",
+    });
+  };
+
+  const chooseCopies = (next: number) => {
+    if (next === copies) return;
+    setCopies(next);
+    setReceiptPrintCopies(next);
+    toast.success(next === 1 ? "Receipts will print 1 copy" : `Receipts will print ${next} copies`, {
       description: "Saved on this device",
     });
   };
@@ -88,10 +101,37 @@ export function ReceiptPrintLayoutCard() {
           );
         })}
       </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+          Print copies
+        </span>
+        <div className="inline-flex rounded-full border border-black/10 p-0.5 dark:border-white/10">
+          {RECEIPT_PRINT_COPY_OPTIONS.map((count) => {
+            const active = count === copies;
+            return (
+              <button
+                key={count}
+                type="button"
+                onClick={() => chooseCopies(count)}
+                aria-pressed={active}
+                className={cn(
+                  "min-w-9 rounded-full px-3 py-1 text-[12.5px] font-semibold tabular-nums transition",
+                  active
+                    ? "bg-[#0F766E] text-white"
+                    : "text-black/55 hover:text-black dark:text-zinc-400 dark:hover:text-zinc-100",
+                )}
+              >
+                {count}
+              </button>
+            );
+          })}
+        </div>
+        <span className="text-[11.5px] text-black/45 dark:text-zinc-500">Default is 1</span>
+      </div>
       <p className="mt-2 text-[11.5px] leading-snug text-black/50 dark:text-zinc-400">
-        Used for receipt print and download on this device. Landscape layouts print on A4 landscape
-        with a dashed cut line; receipts with too many fee lines for A5 fall back to A4 portrait.
-        WhatsApp shares always send the A4 copy.
+        Used for receipt print and download on this device. Print jobs send this many copies;
+        downloads and WhatsApp always send one. Landscape layouts print on A4 landscape with a
+        dashed cut line; receipts with too many fee lines for A5 fall back to A4 portrait.
       </p>
     </div>
   );

@@ -11,6 +11,7 @@ export type TenantSubscription = {
   currency: string;
   billingCycle: string;
   renewalDate: string | null;
+  renewalAmount?: number | null;
   tenantName?: string;
   planFlags: PlanFlags;
   invoices: PlatformInvoice[];
@@ -27,6 +28,8 @@ export async function fetchTenantSubscription(): Promise<TenantSubscription> {
     currency: data.currency || "INR",
     billingCycle: data.billingCycle || "Monthly",
     renewalDate: data.renewalDate || null,
+    renewalAmount:
+      data.renewalAmount == null ? null : Number(data.renewalAmount) > 0 ? Number(data.renewalAmount) : null,
     tenantName: data.tenantName,
     planFlags: normalizePlanFlags(data.planFlags),
     invoices: Array.isArray(data.invoices) ? data.invoices : [],

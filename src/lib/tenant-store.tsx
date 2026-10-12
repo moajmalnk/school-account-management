@@ -4752,13 +4752,46 @@ export function parentFieldsFromStudent(student: Student): ParentEditableStudent
   };
 }
 
-/** Read a student by public share token from persisted tenant storage. */
+function listSnapshotKeys(): string[] {
+  const keys: string[] = [];
+  if (typeof window === "undefined") return keys;
+  const seen = new Set<string>();
+  const add = (key: string | null | undefined) => {
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    keys.push(key);
+  };
+  add(activeStoreKey);
+  add(STORAGE_KEY);
+  try {
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (key === STORAGE_KEY || (key && key.startsWith(`${STORAGE_KEY}/`))) add(key);
+    }
+  } catch {
+    /* private mode */
+  }
+  return keys;
+}
+
+function findShareTokenSnapshot(
+  token: string,
+): { key: string; snap: Snapshot; index: number } | null {
+  for (const key of listSnapshotKeys()) {
+    const snap = readSnapshot(key);
+    if (!snap) continue;
+    const index = snap.students.findIndex((s) => s.shareToken === token && !s.deletedAt);
+    if (index >= 0) return { key, snap, index };
+  }
+  return null;
+}
+
+/** Read a student by public share token from any campus cache on this device. */
 export function getStudentByShareToken(token: string): Student | null {
   const normalized = token.trim();
   if (!normalized) return null;
-  const snap = readSnapshot();
-  const fromSnap = snap?.students.find((s) => s.shareToken === normalized && !s.deletedAt);
-  if (fromSnap) return fromSnap;
+  const found = findShareTokenSnapshot(normalized);
+  if (found) return found.snap.students[found.index];
   return SEED_STUDENTS.find((s) => s.shareToken === normalized && !s.deletedAt) ?? null;
 }
 
@@ -5004,11 +5037,9 @@ export function applyParentStudentUpdate(
   const normalized = token.trim();
   if (!normalized) return null;
 
-  const snap = readSnapshot();
-  if (!snap) return null;
-
-  const idx = snap.students.findIndex((s) => s.shareToken === normalized);
-  if (idx < 0) return null;
+  const found = findShareTokenSnapshot(normalized);
+  if (!found) return null;
+  const { key, snap, index: idx } = found;
 
   const current = snap.students[idx];
   const guardian = patch.guardian.trim();
@@ -5036,11 +5067,12 @@ export function applyParentStudentUpdate(
     needsBus: patch.needsBus === true,
     busPoint1: patch.needsBus ? patch.busPoint1 : undefined,
     busPoint2: patch.needsBus ? patch.busPoint2 : undefined,
+    shareToken: undefined,
   });
 
   const nextStudents = [...snap.students];
   nextStudents[idx] = updated;
-  writeSnapshot({ ...snap, students: nextStudents });
+  writeSnapshot({ ...snap, students: nextStudents }, key);
   return updated;
 }
 

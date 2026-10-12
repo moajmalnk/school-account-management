@@ -27,7 +27,12 @@ export const RECEIPT_PRINT_LAYOUTS: {
 ];
 
 const STORAGE_KEY = "feezo/receipt-print-layout";
+const COPIES_KEY = "feezo/receipt-print-copies";
 const DEFAULT_LAYOUT: ReceiptPrintLayout = "a4-portrait";
+
+/** How many identical sheets a print job sends. Downloads stay a single file. */
+export const RECEIPT_PRINT_COPY_OPTIONS = [1, 2, 3] as const;
+export const DEFAULT_RECEIPT_PRINT_COPIES = 1;
 
 function isLayout(value: unknown): value is ReceiptPrintLayout {
   return RECEIPT_PRINT_LAYOUTS.some((option) => option.value === value);
@@ -47,6 +52,30 @@ export function setReceiptPrintLayout(layout: ReceiptPrintLayout): void {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(STORAGE_KEY, layout);
+  } catch {
+    /* private mode / storage full */
+  }
+}
+
+export function getReceiptPrintCopies(): number {
+  if (typeof window === "undefined") return DEFAULT_RECEIPT_PRINT_COPIES;
+  try {
+    const stored = Number(window.localStorage.getItem(COPIES_KEY));
+    return (RECEIPT_PRINT_COPY_OPTIONS as readonly number[]).includes(stored)
+      ? stored
+      : DEFAULT_RECEIPT_PRINT_COPIES;
+  } catch {
+    return DEFAULT_RECEIPT_PRINT_COPIES;
+  }
+}
+
+export function setReceiptPrintCopies(copies: number): void {
+  if (typeof window === "undefined") return;
+  const next = (RECEIPT_PRINT_COPY_OPTIONS as readonly number[]).includes(copies)
+    ? copies
+    : DEFAULT_RECEIPT_PRINT_COPIES;
+  try {
+    window.localStorage.setItem(COPIES_KEY, String(next));
   } catch {
     /* private mode / storage full */
   }

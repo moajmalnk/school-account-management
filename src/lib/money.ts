@@ -120,7 +120,8 @@ function toNumber(amount: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function fractionDigits(n: number): number {
+function fractionDigits(n: number, currency?: string): number {
+  if (currency === "OMR") return Math.abs(n - Math.round(n)) < 0.0005 ? 0 : 3;
   return Math.abs(n - Math.round(n)) < 0.005 ? 0 : 2;
 }
 
@@ -140,7 +141,7 @@ function numberFormat(locale: string, options: Intl.NumberFormatOptions): Intl.N
 export function formatAmount(amount: unknown, currency?: string): string {
   const n = toNumber(amount);
   const code = normalizeCurrency(currency ?? getDefaultCurrency());
-  const digits = fractionDigits(n);
+  const digits = fractionDigits(n, code);
   try {
     return numberFormat(intlLocaleFor(state.language, code), {
       minimumFractionDigits: digits,
@@ -155,7 +156,7 @@ export function formatAmount(amount: unknown, currency?: string): string {
 export function formatMoney(amount: unknown, currency?: string): string {
   const n = toNumber(amount);
   const code = normalizeCurrency(currency ?? getDefaultCurrency());
-  const digits = fractionDigits(n);
+  const digits = fractionDigits(n, code);
   try {
     const out = numberFormat(intlLocaleFor(state.language, code), {
       style: "currency",
@@ -167,7 +168,7 @@ export function formatMoney(amount: unknown, currency?: string): string {
     // Multi-letter symbols (AED, SAR, CHF) read better with a space: "AED 1,234".
     return out.replace(/^(-?)([A-Z]{2,4})\s*(?=\d)/, "$1$2 ");
   } catch {
-    return `${code} ${n.toFixed(2)}`;
+    return `${code} ${n.toFixed(fractionDigits(n, code))}`;
   }
 }
 
@@ -231,7 +232,7 @@ export function moneyColumnLabel(
 }
 
 /** Regex source matching any supported currency symbol/code (for parsing stored narration). */
-export const CURRENCY_TOKEN_SRC = String.raw`(?:₹|Rs\.?|C\$|\$|€|£|INR|USD|AED|AUD|CAD|EUR|GBP|SAR|CHF)`;
+export const CURRENCY_TOKEN_SRC = String.raw`(?:₹|Rs\.?|C\$|\$|€|£|INR|USD|AED|AUD|CAD|EUR|GBP|SAR|OMR|CHF)`;
 
 /** Replace any known currency glyph with an ASCII-safe prefix (PDF text sanitising). */
 export function asciiCurrencyText(text: string): string {
@@ -240,5 +241,5 @@ export function asciiCurrencyText(text: string): string {
 
 /** Strip currency symbols/codes so "AED 1,250" / "₹1,250" / "$1,250" parse as 1250. */
 export function stripCurrency(text: string): string {
-  return text.replace(/₹|Rs\.?|C\$|\$|€|£|\b(INR|USD|AED|AUD|CAD|EUR|GBP|SAR|CHF)\b/gi, "").trim();
+  return text.replace(/₹|Rs\.?|C\$|\$|€|£|\b(INR|USD|AED|AUD|CAD|EUR|GBP|SAR|OMR|CHF)\b/gi, "").trim();
 }

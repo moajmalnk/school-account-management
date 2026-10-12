@@ -138,6 +138,7 @@ function InvoiceDocRow({
           <div className="mt-0.5 font-mono text-[10.5px] text-black/45 dark:text-zinc-500">
             {invoice.issueDate}
             {invoice.periodLabel ? ` · ${invoice.periodLabel}` : ` · ${invoice.billingCycle}`}
+            {invoice.nextDueDate ? ` · next ${invoice.nextDueDate}` : ""}
             {invoice.receiptNumber ? ` · ${invoice.receiptNumber}` : ""}
           </div>
         </div>
@@ -190,8 +191,8 @@ function DocumentsEmptyState({ schoolLabel }: { schoolLabel: string }) {
       </span>
       <p className="mt-4 text-[15px] font-semibold text-black dark:text-zinc-50">No invoices yet</p>
       <p className="mt-1 max-w-[16rem] text-[13px] leading-snug text-black/50 dark:text-zinc-400">
-        Feezo will issue the first invoice and receipt for this plan. Documents for {schoolLabel}{" "}
-        will show up here.
+        Bills for {schoolLabel} show up here after a collection is recorded. You can download the
+        invoice and the receipt from each one.
       </p>
     </div>
   );
@@ -249,8 +250,8 @@ export function TenantSubscriptionPanel({
   const outstanding = unpaidInvoice(invoices);
   const planName = data?.planName || data?.tier || "Basic";
   const cycle = normalizeCycle(data?.billingCycle || latest?.billingCycle);
-  const renewalDate = data?.renewalDate || latest?.dueDate || null;
-  const currency = data?.currency || "INR";
+  const renewalDate = data?.renewalDate || latest?.nextDueDate || latest?.dueDate || null;
+  const currency = data?.currency || latest?.currency || "INR";
   const lastTotal = latest ? Number(latest.total) || 0 : 0;
   const catalogMonthly = data?.monthly || 0;
   const catalogAnnual = data?.annually || 0;
@@ -260,7 +261,12 @@ export function TenantSubscriptionPanel({
     (catalogAnnual ? Math.round(catalogAnnual / 12) : 0);
   const annually =
     catalogAnnual || (cycle === "Annual" ? lastTotal : 0) || (monthly > 0 ? monthly * 12 : 0);
-  const rowPrice = cycle === "Annual" ? annually || lastTotal : monthly || lastTotal;
+  const hintedNext = Number(latest?.nextAmount) > 0 ? Number(latest?.nextAmount) : 0;
+  const scheduled =
+    data?.renewalAmount != null && data.renewalAmount > 0
+      ? data.renewalAmount
+      : hintedNext || lastTotal;
+  const rowPrice = latest ? scheduled : cycle === "Annual" ? annually || lastTotal : monthly || lastTotal;
   const displayStatus = resolveDisplayStatus(data?.status || "Active", renewalDate, latest);
   const showAlert =
     displayStatus === "Expires soon" || displayStatus === "Overdue" || Boolean(outstanding);

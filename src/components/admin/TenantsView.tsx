@@ -22,6 +22,7 @@ import {
   GraduationCap,
   Users,
   Receipt,
+  CalendarClock,
   ChevronUp,
   Check,
 } from "lucide-react";
@@ -39,6 +40,7 @@ import { ApiError, getApiToken } from "@/lib/api/client";
 import { TenantsViewSkeleton } from "@/components/admin/TenantsViewSkeleton";
 import { mobileFabClass } from "@/components/layout/MobileTabBar";
 import { PlatformInvoicesPanel } from "@/components/admin/PlatformInvoicesPanel";
+import { TenantSubscriptionsPanel } from "@/components/admin/TenantSubscriptionsPanel";
 import { TenantActivityPanel } from "@/components/admin/TenantActivityPanel";
 import { TenantAccessControl } from "@/components/admin/TenantAccessControl";
 import { OrganicCard } from "@/components/ui/organic-card";
@@ -1066,6 +1068,7 @@ const TENANT_DETAIL_TABS = [
   { id: "staff", label: "Staff", icon: Users },
   { id: "payments", label: "Payments", icon: Receipt },
   { id: "billing", label: "Billing", icon: Wallet },
+  { id: "subscriptions", label: "Subscriptions", icon: CalendarClock },
   { id: "activity", label: "Activity", icon: Activity },
   { id: "access", label: "Access", icon: Shield },
 ] as const;
@@ -1933,6 +1936,17 @@ function TenantDetailDrawer({
                   />
                 </div>
               </div>
+            </TabsContent>
+
+            <TabsContent value="subscriptions" className="mt-0">
+              {tab === "subscriptions" && (
+                <TenantSubscriptionsPanel
+                  tenantId={tenant.id}
+                  tenantName={tenant.name}
+                  schoolHost={`${tenant.subdomain}.schoolaccounts.in`}
+                  currency={snapshot?.currency || billing?.currency}
+                />
+              )}
             </TabsContent>
 
             <TabsContent value="activity" className="mt-0">

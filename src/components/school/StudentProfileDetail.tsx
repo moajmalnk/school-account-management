@@ -699,14 +699,22 @@ export function StudentProfileDetail({
   const waHref = waDigits ? `https://wa.me/${waDigits}` : undefined;
 
   const openShare = () => {
-    let token = student.shareToken ?? shareToken;
-    if (!token) {
-      token = createStudentShareToken();
-      const next = { ...student, shareToken: token };
-      syncStudent(next);
-    }
-    setShareToken(token);
-    setShareOpen(true);
+    void (async () => {
+      let token = (student.shareToken ?? shareToken).trim();
+      if (!token) token = createStudentShareToken();
+      try {
+        const saved = await syncStudent({ ...student, shareToken: token });
+        token = (saved.shareToken ?? token).trim();
+      } catch {
+        return;
+      }
+      if (!token) {
+        toast.error("Could not save the parent link");
+        return;
+      }
+      setShareToken(token);
+      setShareOpen(true);
+    })();
   };
 
   const updatePhoto = async (photoUrl: string | undefined) => {

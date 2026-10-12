@@ -8,6 +8,7 @@ export const CURRENCY_CODES = [
   "EUR",
   "GBP",
   "SAR",
+  "OMR",
   "CHF",
 ] as const;
 
@@ -24,6 +25,7 @@ export const CURRENCIES: CurrencyOption[] = [
   { code: "EUR", symbol: "€", label: "Euro" },
   { code: "GBP", symbol: "£", label: "British Pound" },
   { code: "SAR", symbol: "SAR", label: "Saudi Riyal" },
+  { code: "OMR", symbol: "OMR", label: "Omani Riyal" },
   { code: "CHF", symbol: "CHF", label: "Swiss Franc" },
 ];
 
@@ -56,6 +58,7 @@ export const COUNTRY_CURRENCY: Record<string, CurrencyCode> = {
   IN: "INR",
   AE: "AED",
   SA: "SAR",
+  OM: "OMR",
   US: "USD",
   GB: "GBP",
   AU: "AUD",
@@ -98,6 +101,7 @@ export const CURRENCY_DEFAULT_COUNTRY: Record<CurrencyCode, string> = {
   INR: "IN",
   AED: "AE",
   SAR: "SA",
+  OMR: "OM",
   USD: "US",
   GBP: "GB",
   AUD: "AU",
@@ -159,6 +163,7 @@ export function intlLocaleFor(language: string, currency: string): string {
   if (currency === "AUD") return "en-AU";
   if (currency === "CAD") return "en-CA";
   if (currency === "AED" && language.startsWith("ar")) return "ar-AE";
+  if (currency === "OMR") return language.startsWith("ar") ? "ar-OM" : "en-OM";
   return "en-US";
 }
 

@@ -12,7 +12,7 @@ const Toaster = ({ ...props }: React.ComponentProps<typeof Sonner>) => {
       closeButton
       richColors={false}
       expand={false}
-      offset={{ top: 16, right: 16 }}
+      offset={{ top: "max(16px, env(safe-area-inset-top))", right: 16 }}
       gap={8}
       visibleToasts={3}
       duration={3200}
@@ -23,7 +23,7 @@ const Toaster = ({ ...props }: React.ComponentProps<typeof Sonner>) => {
           title:
             "sa-toast-title !m-0 !min-w-0 !flex-1 !text-[13px] !font-medium !leading-snug !tracking-tight !text-white group-has-[[data-button]]:!whitespace-nowrap group-has-[[data-button]]:!overflow-hidden group-has-[[data-button]]:!text-ellipsis",
           description:
-            "!hidden group-has-[[data-button]]:!block !mt-0.5 !truncate !text-[11px] !font-normal !leading-tight !text-white/70",
+            "!mt-0.5 !whitespace-normal !text-[12px] !font-normal !leading-snug !text-white/75",
           actionButton:
             "!order-3 !ml-1 !shrink-0 !whitespace-nowrap !rounded-full !bg-white/15 !px-3 !py-1.5 !text-[11px] !font-semibold !text-white hover:!bg-white/25",
           cancelButton:

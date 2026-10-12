@@ -3128,17 +3128,24 @@ export function AdmitStudentPage() {
     e.preventDefault();
     const newStu = createStudent();
     if (!newStu?.shareToken) return;
-    persistAdmitted(newStu);
-    setAdmittedId(newStu.id);
-    setShareToken(newStu.shareToken);
-    setShareName(newStu.name);
-    setSharePhone(newStu.phone ?? "");
-    setShareGuardian(newStu.guardian);
-    setShareOpen(true);
-    toast.success(`${newStu.name} admitted`, {
-      description: `${newStu.id} · collection link ready for parents`,
-      position: "top-center",
-    });
+    void (async () => {
+      try {
+        await apiUpsertStudent(newStu, { createOnly: true });
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Could not save the parent link");
+        return;
+      }
+      setAdmittedId(newStu.id);
+      setShareToken(newStu.shareToken ?? "");
+      setShareName(newStu.name);
+      setSharePhone(newStu.phone ?? "");
+      setShareGuardian(newStu.guardian);
+      setShareOpen(true);
+      toast.success(`${newStu.name} admitted`, {
+        description: `${newStu.id} · collection link ready for parents`,
+        position: "top-center",
+      });
+    })();
   };
 
   return (

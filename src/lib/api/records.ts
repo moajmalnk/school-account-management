@@ -87,6 +87,40 @@ export async function apiUpsertStudent(
   }
 }
 
+/** Authenticated student row, including the current parent share token. */
+export async function apiGetStudent(id: string): Promise<Student> {
+  return apiRequest<Student>(`/api/students/get.php?id=${encodeURIComponent(id)}`);
+}
+
+/** Public parent profile. No login — the share token is the credential. */
+export async function apiGetParentStudent(token: string): Promise<Student> {
+  const data = await apiRequest<{ student: Student }>(
+    `/api/parent/student.php?token=${encodeURIComponent(token)}`,
+    { auth: false, skipUnauthorized: true },
+  );
+  return { ...data.student, shareToken: data.student.shareToken || token };
+}
+
+/**
+ * Save parent-editable fields and retire the share token.
+ * The same link cannot be used again.
+ */
+export async function apiSubmitParentStudent(
+  token: string,
+  fields: Record<string, unknown>,
+): Promise<Student> {
+  const data = await apiRequest<{ student: Student; linkExpired?: boolean }>(
+    "/api/parent/student.php",
+    {
+      method: "POST",
+      auth: false,
+      skipUnauthorized: true,
+      body: { token, ...fields },
+    },
+  );
+  return { ...data.student, shareToken: undefined };
+}
+
 export async function apiDeleteStudent(
   id: string,
   opts?: { hard?: boolean; restore?: boolean },

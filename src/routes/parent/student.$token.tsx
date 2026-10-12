@@ -23,6 +23,7 @@ import {
   getStudentByShareToken,
   getTransportRoutesForParent,
   GUARDIAN_RELATIONS,
+  normalizeStudent,
   parentFieldsFromStudent,
   resolveTransportFeeForStudent,
   studentNeedsTransport,
@@ -32,6 +33,8 @@ import {
   type ParentEditableStudentFields,
   type Student,
 } from "@/lib/tenant-store";
+import { ApiError } from "@/lib/api/client";
+import { apiGetParentStudent, apiSubmitParentStudent } from "@/lib/api/records";
 import { cn, glassCardClass } from "@/lib/utils";
 import type { ReactNode } from "react";
 import { formatMoney, getOrgCurrency, useOrgCurrency } from "@/lib/money";
@@ -78,20 +81,48 @@ const emptyParentFields = (): ParentEditableStudentFields => ({
 
 function ParentStudentPage() {
   const { token } = Route.useParams();
-  const [student, setStudent] = useState<Student | null>(() => getStudentByShareToken(token));
+  const cached = getStudentByShareToken(token);
+  const [student, setStudent] = useState<Student | null>(cached);
+  const [lookup, setLookup] = useState<"ready" | "loading" | "missing">(
+    cached ? "ready" : "loading",
+  );
   const orgCurrency = useOrgCurrency();
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [savedNote, setSavedNote] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState<ParentEditableStudentFields>(() =>
-    student ? parentFieldsFromStudent(student) : emptyParentFields(),
+    cached ? parentFieldsFromStudent(cached) : emptyParentFields(),
   );
 
   useEffect(() => {
-    const next = getStudentByShareToken(token);
-    setStudent(next);
-    if (next) setForm(parentFieldsFromStudent(next));
+    let cancelled = false;
+    setLookup("loading");
+    void apiGetParentStudent(token)
+      .then((remote) => {
+        if (cancelled) return;
+        const next = normalizeStudent({ ...remote, shareToken: token });
+        setStudent(next);
+        setForm(parentFieldsFromStudent(next));
+        setLookup("ready");
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        const offline = !(err instanceof ApiError) || err.status === 0;
+        const local = offline ? getStudentByShareToken(token) : null;
+        if (local) {
+          setStudent(local);
+          setForm(parentFieldsFromStudent(local));
+          setLookup("ready");
+          return;
+        }
+        setStudent(null);
+        setLookup("missing");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
   const locked = useMemo(
@@ -156,8 +187,9 @@ function ParentStudentPage() {
     e.target.value = "";
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitted || saving) return;
     if (!form.guardian.trim()) {
       toast.error("Guardian name is required");
       return;
@@ -167,37 +199,65 @@ function ParentStudentPage() {
       toast.error("Aadhaar must be 12 digits");
       return;
     }
-    setSaving(true);
-    const updated = applyParentStudentUpdate(token, {
+    const patch = {
       ...form,
       aadhaar: aadhaarDigits || undefined,
-    });
-    setSaving(false);
-    if (!updated) {
-      toast.error("Could not save · link may be invalid or expired");
-      return;
+    };
+    setSaving(true);
+    try {
+      let updated: Student | null = null;
+      try {
+        updated = await apiSubmitParentStudent(token, patch);
+        applyParentStudentUpdate(token, patch);
+      } catch (err) {
+        const offline = !(err instanceof ApiError) || err.status === 0;
+        if (!offline) {
+          if (err instanceof ApiError && err.status === 404) {
+            setStudent(null);
+            setLookup("missing");
+            toast.error("This link has expired. Ask the school for a new link.");
+            return;
+          }
+          toast.error(err instanceof Error ? err.message : "Could not save");
+          return;
+        }
+        updated = applyParentStudentUpdate(token, patch);
+        if (!updated) {
+          toast.error("Could not save. This link may be invalid or expired.");
+          return;
+        }
+      }
+      setStudent({ ...updated, shareToken: undefined });
+      setSubmitted(true);
+      const fee = resolveTransportFeeForStudent(updated, getTransportRoutesForParent());
+      const transportNote =
+        studentNeedsTransport(updated) && fee.amount && fee.amount > 0
+          ? `Vehicle fee ${formatMoney(fee.amount, getOrgCurrency())}. The school will collect this separately.`
+          : "School records have been synced with your changes.";
+      setSavedNote(
+        `${transportNote} This link is now closed. Ask the school for a new link if anything else needs to change.`,
+      );
+    } finally {
+      setSaving(false);
     }
-    setStudent(updated);
-    setForm(parentFieldsFromStudent(updated));
-    setSaved(true);
-    const fee = resolveTransportFeeForStudent(updated, getTransportRoutesForParent());
-    const transportNote =
-      studentNeedsTransport(updated) && fee.amount && fee.amount > 0
-        ? `Vehicle fee ${formatMoney(fee.amount, getOrgCurrency())} · school will collect separately`
-        : "School records have been synced with your changes";
-    toast.success("Profile updated", {
-      description: transportNote,
-    });
   };
+
+  if (lookup === "loading") {
+    return (
+      <div className="tenant-canvas flex min-h-dvh items-center justify-center px-4">
+        <p className="text-[13px] font-medium text-slate-500">Opening profile…</p>
+      </div>
+    );
+  }
 
   if (!student || !locked) {
     return (
       <div className="tenant-canvas flex min-h-dvh items-center justify-center px-4">
         <div className={cn(glassCardClass, "max-w-md p-6 text-center")}>
-          <h1 className="text-lg font-bold text-slate-900">Link not found</h1>
+          <h1 className="text-lg font-bold text-slate-900">Link expired</h1>
           <p className="mt-2 text-[13px] text-slate-500">
-            This parent profile link is invalid or no longer active. Ask the school office for a
-            fresh invite.
+            This link can be used once. It has already been submitted, or it is no longer active.
+            Ask the school office for a new link if you need to update the profile again.
           </p>
           <Link
             to="/login"
@@ -212,6 +272,11 @@ function ParentStudentPage() {
 
   return (
     <div className="tenant-canvas min-h-dvh px-4 py-6 sm:py-10">
+      <ProfileSavedPopup
+        open={Boolean(savedNote)}
+        message={savedNote ?? ""}
+        onClose={() => setSavedNote(null)}
+      />
       <div className="mx-auto w-full max-w-2xl space-y-5">
         <header className="space-y-1">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
@@ -221,8 +286,9 @@ function ParentStudentPage() {
             Complete {locked.name}&apos;s details
           </h1>
           <p className="text-[13px] text-slate-500">
-            School-filled fields are locked. Update the profile photo and remaining details, then
-            save.
+            {submitted
+              ? "Your update was saved and this link is now closed."
+              : "School-filled fields are locked. Update the profile photo and remaining details, then save. This link closes after one save."}
           </p>
         </header>
 
@@ -242,6 +308,20 @@ function ParentStudentPage() {
           </div>
         </section>
 
+        {submitted ? (
+          <section className={cn(glassCardClass, "flex flex-col items-center px-6 py-10 text-center")}>
+            <span className="grid h-12 w-12 place-items-center rounded-full bg-[#22C55E]/15 text-[#16A34A]">
+              <CheckCircle2 className="h-6 w-6" />
+            </span>
+            <h2 className="mt-4 text-[18px] font-bold tracking-tight text-slate-900">
+              Profile submitted
+            </h2>
+            <p className="mt-2 max-w-md text-[13px] leading-relaxed text-slate-500">
+              {savedNote ??
+                "School records have been synced. This link is closed. Ask the school for a new link if anything else needs to change."}
+            </p>
+          </section>
+        ) : (
         <section className={cn(glassCardClass, "p-5 md:p-6")}>
           <form onSubmit={handleSave} className="space-y-4">
             <div className="text-[12px] font-semibold uppercase tracking-wider text-slate-600">
@@ -543,12 +623,6 @@ function ParentStudentPage() {
             ) : null}
 
             <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
-              {saved && (
-                <span className="mr-auto inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#10B981]">
-                  <CheckCircle2 className="h-4 w-4" />
-                  Saved
-                </span>
-              )}
               <Button
                 type="submit"
                 disabled={saving}
@@ -559,6 +633,77 @@ function ParentStudentPage() {
             </div>
           </form>
         </section>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const SPARKS = [
+  { x: "-22px", y: "-28px", color: "#34D399", delay: "0ms" },
+  { x: "18px", y: "-26px", color: "#FBBF24", delay: "40ms" },
+  { x: "-30px", y: "-8px", color: "#2DD4BF", delay: "80ms" },
+  { x: "26px", y: "-6px", color: "#F472B6", delay: "20ms" },
+  { x: "0px", y: "-34px", color: "#A7F3D0", delay: "60ms" },
+  { x: "12px", y: "-16px", color: "#FDE68A", delay: "100ms" },
+] as const;
+
+function ProfileSavedPopup({
+  open,
+  message,
+  onClose,
+}: {
+  open: boolean;
+  message: string;
+  onClose: () => void;
+}) {
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    if (!open) return;
+    const timer = window.setTimeout(() => onCloseRef.current(), 4200);
+    return () => window.clearTimeout(timer);
+  }, [open]);
+
+  if (!open) return null;
+
+  return (
+    <div className="pointer-events-none fixed inset-x-0 top-[max(1rem,env(safe-area-inset-top))] z-[80] flex justify-center px-4">
+      <div
+        role="status"
+        className="pointer-events-auto relative flex w-full max-w-md items-start gap-3 rounded-2xl border border-white/10 bg-[#1C1C1E] px-4 py-3.5 text-white shadow-[0_18px_40px_-18px_rgba(0,0,0,0.55)]"
+      >
+        <span className="relative grid h-9 w-9 shrink-0 place-items-center">
+          {SPARKS.map((spark) => (
+            <span
+              key={`${spark.x}-${spark.y}`}
+              className="absolute h-1.5 w-1.5 rounded-full"
+              style={{
+                background: spark.color,
+                animation: "feezo-spark 700ms ease-out forwards",
+                animationDelay: spark.delay,
+                ["--spark-x" as string]: spark.x,
+                ["--spark-y" as string]: spark.y,
+              }}
+            />
+          ))}
+          <span className="grid h-9 w-9 place-items-center rounded-full bg-[#22C55E]/15 text-[#22C55E]">
+            <CheckCircle2 className="h-5 w-5" />
+          </span>
+        </span>
+        <span className="min-w-0 flex-1 pt-0.5">
+          <span className="block text-[14px] font-semibold leading-snug">Profile updated</span>
+          <span className="mt-0.5 block text-[12.5px] leading-snug text-white/75">{message}</span>
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-white/60 hover:bg-white/10 hover:text-white"
+          aria-label="Dismiss"
+        >
+          ×
+        </button>
       </div>
     </div>
   );

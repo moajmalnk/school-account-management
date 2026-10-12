@@ -402,6 +402,8 @@ export type PlatformInvoice = {
   paymentRef?: string | null;
   receiptNumber?: string | null;
   notes?: string | null;
+  nextDueDate?: string | null;
+  nextAmount?: number | null;
   tenantId?: string | null;
   tenantName?: string | null;
 };
@@ -425,12 +427,26 @@ export async function issueSuperAdminTenantInvoice(input: {
   dueDate?: string;
   periodLabel?: string;
   paymentMethod?: string;
+  paymentRef?: string;
   markPaid?: boolean;
   notes?: string;
+  amount?: number;
+  nextDueDate?: string;
+  nextAmount?: number | null;
 }): Promise<PlatformInvoice> {
   return apiRequest<PlatformInvoice>("/api/super-admin/tenants/invoices.php", {
     method: "POST",
     body: { action: "issue", ...input },
+  });
+}
+
+export async function voidSuperAdminTenantInvoice(input: {
+  tenantId: string;
+  invoiceId: string;
+}): Promise<PlatformInvoice> {
+  return apiRequest<PlatformInvoice>("/api/super-admin/tenants/invoices.php", {
+    method: "POST",
+    body: { action: "void", ...input },
   });
 }
 

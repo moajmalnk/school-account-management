@@ -33,6 +33,7 @@ const UNITS: Record<string, { major: [string, string]; minor: [string, string] }
   CAD: { major: ["Canadian Dollar", "Canadian Dollars"], minor: ["Cent", "Cents"] },
   AED: { major: ["Dirham", "Dirhams"], minor: ["Fils", "Fils"] },
   SAR: { major: ["Riyal", "Riyals"], minor: ["Halala", "Halalas"] },
+  OMR: { major: ["Riyal", "Riyals"], minor: ["Baisa", "Baisa"] },
   EUR: { major: ["Euro", "Euros"], minor: ["Cent", "Cents"] },
   GBP: { major: ["Pound", "Pounds"], minor: ["Penny", "Pence"] },
   CHF: { major: ["Franc", "Francs"], minor: ["Centime", "Centimes"] },
@@ -120,7 +121,9 @@ export function amountToIndianWords(n: number): string {
 export function amountInWords(amount: number, currency: string = getDefaultCurrency()): string {
   const abs = Math.abs(Number(amount) || 0);
   const major = Math.floor(abs + 1e-9);
-  const minor = Math.round((abs - major) * 100);
+  // Omani riyal subdivides into 1,000 baisa; every other currency uses 100.
+  const minorScale = currency === "OMR" ? 1000 : 100;
+  const minor = Math.round((abs - major) * minorScale);
   const units = UNITS[currency];
   const majorWords = titleCase(numberToWords(major, currency));
   if (!units) {

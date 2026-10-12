@@ -18,7 +18,11 @@ import { getActiveBrandPalette, pdfFontName } from "@/lib/brand-theme";
 import { defaultSealToPng, defaultSignatureSvg, svgMarkupToPng } from "@/lib/school-marks";
 import { amountInWords } from "@/lib/amount-words";
 import { isEmbeddedWebView, saveFile } from "@/lib/native-download";
-import { getReceiptPrintLayout, type ReceiptPrintLayout } from "@/lib/receipt-layout";
+import {
+  getReceiptPrintCopies,
+  getReceiptPrintLayout,
+  type ReceiptPrintLayout,
+} from "@/lib/receipt-layout";
 import { formatDownloadFilename, slugYear, todayStamp } from "@/lib/download-names";
 import {
   feeStatementHeadline,
@@ -93,6 +97,29 @@ export function previewJsPdf(doc: jsPDF, filename = "document.pdf") {
   }
   tab.addEventListener("beforeunload", () => URL.revokeObjectURL(url), { once: true });
   setTimeout(() => URL.revokeObjectURL(url), 120_000);
+}
+
+/** Repeat the finished pages so one print job produces N identical copies. */
+function repeatPdfForPrint(doc: jsPDF, copies: number) {
+  const extra = Math.max(0, Math.floor(copies) - 1);
+  if (extra === 0) return;
+  const pageCount = doc.getNumberOfPages();
+  const pages = doc.internal.pages as unknown as unknown[][];
+  const snapshots = pages.slice(1, pageCount + 1).map((commands) => commands.slice());
+  const sizes = snapshots.map((_, index) => {
+    doc.setPage(index + 1);
+    return {
+      width: doc.internal.pageSize.getWidth(),
+      height: doc.internal.pageSize.getHeight(),
+    };
+  });
+  for (let copy = 0; copy < extra; copy++) {
+    for (let index = 0; index < pageCount; index++) {
+      const { width, height } = sizes[index];
+      doc.addPage([width, height], width > height ? "l" : "p");
+      pages[doc.getNumberOfPages()].push(...snapshots[index]);
+    }
+  }
 }
 
 export function emitPdf(doc: jsPDF, filename: string, action: PdfEmitAction = "download") {
@@ -1595,6 +1622,7 @@ export async function downloadReceiptPdf(
     branding,
     layout,
   );
+  if (action === "print") repeatPdfForPrint(doc, getReceiptPrintCopies());
   emitPdf(doc, filename, action);
 }
 
