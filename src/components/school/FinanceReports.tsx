@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { FeesReportExportDialog, type FeesExportChoice, type FeesExportFormat } from "@/components/school/FeesReportExportDialog";
 import { isRecordDeleted } from "@/components/school/ProfileAccountActions";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -39,6 +40,7 @@ import { MonthPicker, DatePicker } from "@/components/ui/date-picker";
 import { FinanceBarCard, FinanceDonutCard } from "@/components/school/finance-charts";
 import { OrganicCard } from "@/components/ui/organic-card";
 import { WhatsAppIcon, whatsappIconBtnClass } from "@/components/ui/whatsapp-icon";
+import { buildClassFeeSheet, feeSheetCatalog } from "@/lib/class-fee-sheet";
 import { openWhatsAppShare } from "@/lib/whatsapp-notify";
 import {
   bankBalance,
@@ -131,6 +133,10 @@ function pdfEventDateTime(value?: string | Date | null) {
 
 function pdfStatementCell(content: string, extra?: TablePdfRichCell["styles"]): TablePdfRichCell {
   return { content, styles: extra };
+}
+
+function classLabelForExport(className: string): string {
+  return className === "all" ? "All classes" : className;
 }
 
 function reportDownloadName(
@@ -1838,47 +1844,6 @@ export function FeesReport() {
     formatMoney(row.total),
   ]);
 
-  const feesReportPdfHeaders = [
-    "Receipt",
-    "Student",
-    "Class",
-    "Category",
-    "Period",
-    "Mode",
-    moneyColumnLabel("Amount", { pdf: true }),
-    "Time",
-  ] as const;
-
-  const buildFeesReportPdfRows = () =>
-    filteredCollections.map((payment) => [
-      payment.id,
-      truncatePdfCell(payment.name, 48),
-      payment.resolvedClass,
-      payment.cat,
-      resolvePaymentFeePeriod(payment) ?? "-",
-      payment.mode,
-      formatAmount(payment.amount),
-      formatEventDateTime(payment.time),
-    ]);
-
-  const buildFeesOutstandingPdfRows = () =>
-    filteredDues.map((row) => [
-      row.student.id,
-      truncatePdfCell(row.student.name, 48),
-      row.student.cls,
-      truncatePdfCell(row.student.guardian, 40),
-      formatAmount(row.pending),
-      formatAmount(row.overdue),
-      formatAmount(row.total),
-    ]);
-
-  const feesReportPdfSummary = () => [
-    { label: "Fees Collected", value: formatMoneyPdf(collected) },
-    { label: "Due", value: formatMoneyPdf(outstandingPending) },
-    { label: "Overdue", value: formatMoneyPdf(outstandingOverdue) },
-    { label: "Students Overdue", value: String(studentsWithOverdue) },
-  ];
-
   const clearCollectionFilters = () => {
     setCollectionQuery("");
     setCollectionCategory("all");
@@ -1891,85 +1856,129 @@ export function FeesReport() {
     setDuesClass("all");
   };
 
-  const handleCsv = () => {
-    downloadCsv(
-      reportDownloadName("fees-report", "csv", schoolName, academicYear),
-      ["Receipt", "Student", "Class", "Category", "Fee Period", "Mode", "Amount", "Time"],
-      filteredCollections.map((p) => [
-        p.id,
-        p.name,
-        p.resolvedClass === "—" ? "" : p.resolvedClass,
-        p.cat,
-        resolvePaymentFeePeriod(p) ?? "",
-        p.mode,
-        p.amount,
-        formatEventDateTime(p.time),
-      ]),
+  const [exportFormat, setExportFormat] = useState<FeesExportFormat | null>(null);
+
+  const sheetStudents = useMemo(() => {
+    const q = duesQuery.trim().toLowerCase();
+    return studentsWithLiveDues.filter((student) => {
+      if (duesClass !== "all" && student.cls !== duesClass) return false;
+      if (!q) return true;
+      return [student.id, student.name, student.cls, student.guardian]
+        .join(" ")
+        .toLowerCase()
+        .includes(q);
+    });
+  }, [studentsWithLiveDues, duesClass, duesQuery]);
+
+  const feeColumns = useMemo(
+    () =>
+      feeSheetCatalog(
+        classes,
+        new Set(sheetStudents.map((student) => student.cls)),
+        activeFeeTerms,
+      ),
+    [classes, sheetStudents, activeFeeTerms],
+  );
+
+  const runClassSheetExport = (format: FeesExportFormat, choice: FeesExportChoice) => {
+    if (!sheetStudents.length) {
+      toast.error("Nothing to export · no students in this class filter");
+      return;
+    }
+    const columns = choice.mode === "full" ? [...feeColumns.terms, ...feeColumns.heads] : choice.columns;
+    const detailed = columns.length > 0;
+    const rows = buildClassFeeSheet({
+      students: sheetStudents,
+      columns,
+      payments,
+      classes,
+      feeTerms: activeFeeTerms,
+      transportRoutes,
+      academicYear,
+      feeBreaks: studentFeeBreaks,
+      fullBalance: !detailed,
+    });
+    const scope =
+      choice.mode === "full"
+        ? "Full schedule"
+        : columns.map((column) => column.label).join(", ");
+    const headers = detailed
+      ? ["Name", "Class", "Division", ...columns.map((column) => column.label), "Total"]
+      : ["Name", "Class", "Division", "Balance"];
+    const pdfHeaders = detailed
+      ? [
+          "Name",
+          "Class",
+          "Division",
+          ...columns.map((column) => moneyColumnLabel(column.label, { pdf: true })),
+          moneyColumnLabel("Total", { pdf: true }),
+        ]
+      : ["Name", "Class", "Division", moneyColumnLabel("Balance", { pdf: true })];
+    const sheetRows = rows.map((row) =>
+      detailed
+        ? [row.name, row.className, row.division, ...row.amounts, row.total]
+        : [row.name, row.className, row.division, row.total],
     );
-    toast.success("Fees report exported", { description: "CSV download started" });
-  };
-
-  const handlePdf = () => {
-    downloadTablePdf({
-      filename: reportDownloadName("fees-report", "pdf", schoolName, academicYear),
-      title: "Fees Report",
-      subtitle: `${schoolName} · ${academicYear}`,
-      headers: [...feesReportPdfHeaders],
-      rows: buildFeesReportPdfRows(),
-      summaryItems: feesReportPdfSummary(),
-      appendTables: [
-        {
-          title: "Outstanding Dues",
-          headers: [
-            "ID",
-            "Student",
-            "Class",
-            "Guardian",
-            moneyColumnLabel("Due", { pdf: true }),
-            moneyColumnLabel("Overdue", { pdf: true }),
-            moneyColumnLabel("Total", { pdf: true }),
+    const pdfRows = rows.map((row) =>
+      detailed
+        ? [
+            truncatePdfCell(row.name, 36),
+            row.className,
+            row.division || "-",
+            ...row.amounts.map((amount) => formatAmount(amount)),
+            formatAmount(row.total),
+          ]
+        : [
+            truncatePdfCell(row.name, 36),
+            row.className,
+            row.division || "-",
+            formatAmount(row.total),
           ],
-          rows: buildFeesOutstandingPdfRows(),
-        },
-      ],
-      emptyMessage: "No student fee receipts recorded for this period",
-      landscape: true,
-    });
-    toast.success("Fees report PDF downloaded");
-  };
+    );
+    const selectedTotal = rows.reduce((sum, row) => sum + row.total, 0);
+    const filename = reportDownloadName("fees-report", format === "csv" ? "csv" : "pdf", schoolName, academicYear);
 
-  const handlePrint = () => {
+    if (format === "csv") {
+      downloadCsv(filename, headers, sheetRows);
+      toast.success("Class fee sheet exported", { description: scope });
+      return;
+    }
+
     downloadTablePdf({
-      filename: reportDownloadName("fees-report", "pdf", schoolName, academicYear),
-      title: "Fees Report",
-      subtitle: `${schoolName} · ${academicYear}`,
-      headers: [...feesReportPdfHeaders],
-      rows: buildFeesReportPdfRows(),
-      summaryItems: feesReportPdfSummary(),
-      appendTables: [
-        {
-          title: "Outstanding Dues",
-          headers: [
-            "ID",
-            "Student",
-            "Class",
-            "Guardian",
-            moneyColumnLabel("Due", { pdf: true }),
-            moneyColumnLabel("Overdue", { pdf: true }),
-            moneyColumnLabel("Total", { pdf: true }),
-          ],
-          rows: buildFeesOutstandingPdfRows(),
-        },
+      filename,
+      title: "Class fee sheet",
+      subtitle: `${schoolName} · ${academicYear} · ${classLabelForExport(duesClass)} · ${scope}`,
+      headers: pdfHeaders,
+      rows: pdfRows,
+      summaryItems: [
+        { label: "Students", value: String(rows.length) },
+        { label: "Outstanding", value: formatMoneyPdf(selectedTotal) },
       ],
-      emptyMessage: "No student fee receipts recorded for this period",
+      emptyMessage: "No students in this class filter",
       landscape: true,
-      action: "print",
+      action: format === "print" ? "print" : undefined,
     });
-    toast.success("Print dialog opened");
+    toast.success(format === "print" ? "Print dialog opened" : "Class fee sheet downloaded");
   };
 
   return (
     <div className="flex flex-col gap-4 sm:gap-5">
+      <FeesReportExportDialog
+        open={exportFormat !== null}
+        format={exportFormat}
+        terms={feeColumns.terms}
+        heads={feeColumns.heads}
+        studentCount={sheetStudents.length}
+        classLabel={classLabelForExport(duesClass)}
+        onOpenChange={(next) => {
+          if (!next) setExportFormat(null);
+        }}
+        onConfirm={(choice) => {
+          const format = exportFormat;
+          setExportFormat(null);
+          if (format) runClassSheetExport(format, choice);
+        }}
+      />
       <OrganicCard tone="white" cornerSide="tr" padded className="shrink-0">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 flex-1">
@@ -1978,13 +1987,28 @@ export function FeesReport() {
               Student fee collections and outstanding dues · {academicYear}
             </p>
           </div>
-          <div className="w-full shrink-0 lg:w-auto lg:min-w-[260px]">
-            <ExportActions
-              onCsv={handleCsv}
-              onPdf={handlePdf}
-              onPrint={handlePrint}
-              confirmTitle="Fees Report"
-            />
+          <div className="grid w-full shrink-0 grid-cols-1 gap-2 min-[420px]:grid-cols-3 lg:w-auto lg:min-w-[260px]">
+            <button
+              type="button"
+              onClick={() => setExportFormat("csv")}
+              className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 py-1.5 text-[11.5px] font-medium text-black transition-colors hover:bg-[#F4F4F5] dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 sm:text-[12px]"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" /> Export CSV
+            </button>
+            <button
+              type="button"
+              onClick={() => setExportFormat("pdf")}
+              className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full bg-[#0F766E] px-3 py-1.5 text-[11.5px] font-semibold text-white transition-colors hover:bg-[#0D9488] sm:text-[12px]"
+            >
+              <Download className="h-3.5 w-3.5 shrink-0" /> Export PDF
+            </button>
+            <button
+              type="button"
+              onClick={() => setExportFormat("print")}
+              className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 py-1.5 text-[11.5px] font-medium text-black transition-colors hover:bg-[#F4F4F5] dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 sm:text-[12px]"
+            >
+              <Printer className="h-3.5 w-3.5 shrink-0" /> Print PDF
+            </button>
           </div>
         </div>
         <SummaryStrip

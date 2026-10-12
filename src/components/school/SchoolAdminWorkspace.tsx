@@ -312,6 +312,8 @@ import {
 } from "@/lib/payment-category-create";
 import { FeeCategoriesCard } from "@/components/school/FeeCategoriesCard";
 import { DocumentNumbersPanel } from "@/components/school/DocumentNumbersPanel";
+import { WhatsAppMessageComposer } from "@/components/school/WhatsAppMessageComposer";
+import { WhatsAppMessagesCard } from "@/components/school/WhatsAppMessagesCard";
 import {
   SettingsMobileNavProvider,
   SettingsMobileBackButton,
@@ -394,9 +396,12 @@ import {
   renderWhatsAppTemplate,
   buildStudentWhatsAppVars,
   WHATSAPP_TEMPLATE_VARS,
-  DEFAULT_OVERDUE_WHATSAPP_TEMPLATE,
-  DEFAULT_GENERAL_WHATSAPP_TEMPLATE,
 } from "@/lib/whatsapp-notify";
+import {
+  buildFeeReceiptWhatsApp,
+  buildPaymentVoucherWhatsApp,
+  feeReminderTemplateFor,
+} from "@/lib/whatsapp-messages";
 import { formatPhoneDisplay, toWhatsAppDigits } from "@/lib/phone";
 import {
   WhatsAppIcon,
@@ -3841,17 +3846,8 @@ export function StudentsLedger() {
       return;
     }
     const hasOverdue = selectedWithPhone.some((row) => row.student.due > 0);
-    setBulkWhatsAppMsg(
-      hasOverdue ? DEFAULT_OVERDUE_WHATSAPP_TEMPLATE : DEFAULT_GENERAL_WHATSAPP_TEMPLATE,
-    );
+    setBulkWhatsAppMsg(feeReminderTemplateFor(hasOverdue));
     setBulkWhatsAppOpen(true);
-  };
-
-  const insertTemplateVar = (key: string) => {
-    const token = `{{${key}}}`;
-    setBulkWhatsAppMsg((prev) =>
-      prev.trim() ? `${prev}${prev.endsWith(" ") ? "" : " "}${token}` : token,
-    );
   };
 
   const bulkWhatsAppPreview = useMemo(() => {
@@ -5083,37 +5079,17 @@ export function StudentsLedger() {
               {selectedStudents.length > selectedWithPhone.length
                 ? ` · ${selectedStudents.length - selectedWithPhone.length} without phone skipped`
                 : ""}
-              . Use {"{{amount}}"} and {"{{due_date}}"} for personalized overdue reminders.
+              . Each student receives their own message.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4 sm:px-6">
-            <div>
-              <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-                <Label htmlFor="bulk-wa-msg" className="mr-1 text-[12px] text-slate-500">
-                  Message template
-                </Label>
-                {WHATSAPP_TEMPLATE_VARS.map((v) => (
-                  <button
-                    key={v.key}
-                    type="button"
-                    onClick={() => insertTemplateVar(v.key)}
-                    className="rounded-full border border-[#E5E5E5] bg-[#F8FAFC] px-2 py-0.5 font-mono text-[10px] font-medium text-slate-600 transition-colors hover:border-[#0F766E]/40 hover:bg-[#F0FDFA] hover:text-[#0F766E]"
-                    title={`Insert {{${v.key}}}`}
-                  >
-                    {`{{${v.key}}}`}
-                  </button>
-                ))}
-              </div>
-              <Textarea
-                id="bulk-wa-msg"
-                value={bulkWhatsAppMsg}
-                onChange={(e) => setBulkWhatsAppMsg(e.target.value)}
-                rows={5}
-                placeholder="Type the WhatsApp message… use {{amount}} {{due_date}}"
-                className="mt-0.5 max-h-40 min-h-[120px] resize-y rounded-lg border-[#E5E5E5] bg-white font-mono text-[12.5px] leading-relaxed"
-              />
-            </div>
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4 sm:px-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <WhatsAppMessageComposer
+              value={bulkWhatsAppMsg}
+              onChange={setBulkWhatsAppMsg}
+              fields={WHATSAPP_TEMPLATE_VARS}
+              placeholder="Write the reminder in plain words…"
+            />
             {bulkWhatsAppPreview && (
               <div className="rounded-lg border border-[#CCFBF1] bg-[#F8FBFF] px-3 py-2.5">
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-[#0F766E]">
@@ -7921,13 +7897,19 @@ function FinanceOverview({
   const shareTransaction = async (payment: Payment) => {
     const student = findReceiptStudent(students, payment);
     const branding = receiptBrandingFromSchool(schoolDetails, student);
-    const text = [
-      `${schoolName} · Fee Receipt ${payment.id}`,
-      `Account: ${payment.name}`,
-      `Amount: ${formatMoney(payment.amount)}`,
-      `AY: ${academicYear}`,
-      "Receipt PDF attached.",
-    ].join("\n");
+    const text = buildFeeReceiptWhatsApp({
+      school: schoolName,
+      guardian: student?.guardian,
+      studentName: payment.name,
+      className: student?.cls || payment.className,
+      studentId: student?.id,
+      receiptNo: payment.id,
+      amount: payment.amount,
+      mode: payment.mode,
+      date: formatEventDateTime(payment.time),
+      academicYear,
+      category: payment.cat,
+    });
 
     try {
       const { blob, filename } = await buildReceiptPdfBlob(
@@ -11272,13 +11254,19 @@ function ReceivePayment() {
   const shareHistoryReceipt = async (payment: Payment) => {
     const student = findReceiptStudent(students, payment);
     const branding = receiptBrandingFromSchool(schoolDetails, student);
-    const text = [
-      `${schoolName} · Fee Receipt ${payment.id}`,
-      `Account: ${payment.name}`,
-      `Amount: ${formatMoney(payment.amount)}`,
-      `AY: ${academicYear}`,
-      "Receipt PDF attached.",
-    ].join("\n");
+    const text = buildFeeReceiptWhatsApp({
+      school: schoolName,
+      guardian: student?.guardian,
+      studentName: payment.name,
+      className: student?.cls || payment.className,
+      studentId: student?.id,
+      receiptNo: payment.id,
+      amount: payment.amount,
+      mode: payment.mode,
+      date: formatEventDateTime(payment.time),
+      academicYear,
+      category: payment.cat,
+    });
 
     try {
       const { blob, filename } = await buildReceiptPdfBlob(
@@ -13160,17 +13148,18 @@ function findDisbursalStaff(staff: Staff[], payment: MadePayment): Staff | undef
   );
 }
 
-function disbursalShareText(payment: MadePayment): string {
-  return [
-    `Payment Voucher · ${payment.id}`,
-    `Payee: ${payment.payee}`,
-    `Type: ${payment.payeeType}`,
-    `Description: ${payment.desc}`,
-    `Mode: ${payment.mode}`,
-    `Amount: ${formatMoney(payment.amount)}`,
-    `Status: ${payment.status}`,
-    `Time: ${formatEventDateTime(payment.time)}`,
-  ].join("\n");
+function disbursalShareText(payment: MadePayment, schoolName: string): string {
+  return buildPaymentVoucherWhatsApp({
+    school: schoolName,
+    payee: payment.payee,
+    payeeType: payment.payeeType,
+    voucherNo: payment.id,
+    description: payment.desc,
+    mode: payment.mode,
+    amount: payment.amount,
+    status: payment.status,
+    time: payment.time,
+  });
 }
 
 /** Salary slip for payroll rows, payment voucher for everything else. */
@@ -13497,13 +13486,19 @@ function LedgerStatementWithVouchers({ view = "ledger" }: { view?: "ledger" | "j
 
   const shareReceipt = async (payment: Payment) => {
     const student = findReceiptStudent(students, payment);
-    const text = [
-      `${schoolName} · Fee Receipt ${payment.id}`,
-      `Account: ${payment.name}`,
-      `Amount: ${formatMoney(payment.amount)}`,
-      `AY: ${academicYear}`,
-      "Receipt PDF attached.",
-    ].join("\n");
+    const text = buildFeeReceiptWhatsApp({
+      school: schoolName,
+      guardian: student?.guardian,
+      studentName: payment.name,
+      className: student?.cls || payment.className,
+      studentId: student?.id,
+      receiptNo: payment.id,
+      amount: payment.amount,
+      mode: payment.mode,
+      date: formatEventDateTime(payment.time),
+      academicYear,
+      category: payment.cat,
+    });
     try {
       const { blob, filename } = await buildReceiptPdfBlob(
         payment,
@@ -13531,7 +13526,7 @@ function LedgerStatementWithVouchers({ view = "ledger" }: { view?: "ledger" | "j
   };
 
   const shareDisbursal = (payment: MadePayment) => {
-    const text = disbursalShareText(payment);
+    const text = disbursalShareText(payment, schoolName);
     const phone = findDisbursalStaff(staff, payment)?.phone;
     if (openWhatsAppShare(text, phone)) {
       toast.success("Opening WhatsApp");
@@ -14601,7 +14596,7 @@ function MakePayment() {
 
   const shareDisbursal = (payment: MadePayment) => {
     const member = findDisbursalStaff(staff, payment);
-    sharePayload(`Payment ${payment.id}`, disbursalShareText(payment), member?.phone);
+    sharePayload(`Payment ${payment.id}`, disbursalShareText(payment, schoolName), member?.phone);
   };
 
   const openEditDisbursal = (payment: MadePayment) => {
@@ -22426,6 +22421,8 @@ function CategoriesCard({
         </div>
 
         <DocumentNumbersPanel branchId={activeBranchId} branchName={activeBranch?.name} />
+
+        <WhatsAppMessagesCard />
 
         <div className="col-span-12 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 dark:border-white/10 dark:bg-zinc-900/40">
           <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-black/35 dark:text-zinc-500">

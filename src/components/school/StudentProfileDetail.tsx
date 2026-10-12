@@ -75,6 +75,7 @@ import {
   sharePdfViaWhatsApp,
   toNotifyWhatsAppNumber,
 } from "@/lib/whatsapp-notify";
+import { buildFeeReceiptWhatsApp } from "@/lib/whatsapp-messages";
 import {
   apiCreateFeeBreak,
   apiDeleteFeeBreak,
@@ -2218,16 +2219,19 @@ function ReceiptsList({
 
   const handleSend = async (r: Receipt) => {
     const number = toNotifyWhatsAppNumber(phone);
-    const greeting = guardian.trim() ? `Dear ${guardian.trim()},` : "Dear Parent,";
-    const message = [
-      greeting,
-      "",
-      `Fee receipt for ${student.name} (${student.id}).`,
-      `Receipt: ${r.id}`,
-      `Amount: ${formatMoney(r.amount)}`,
-      `AY: ${academicYear}`,
-      "Receipt PDF attached.",
-    ].join("\n");
+    const message = buildFeeReceiptWhatsApp({
+      school: schoolName,
+      guardian,
+      studentName: student.name,
+      className: student.cls,
+      studentId: student.id,
+      receiptNo: r.id,
+      amount: r.amount,
+      mode: r.mode,
+      date: r.date,
+      academicYear,
+      category: r.cat,
+    });
 
     const payment = {
       id: r.id,
