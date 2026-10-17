@@ -339,6 +339,9 @@ export async function updateSuperAdminTenant(input: UpdateTenantInput): Promise<
   return apiRequest<Tenant>("/api/super-admin/tenants/update.php", {
     method: "POST",
     body: input,
+    // Meta edits are small; give flaky Hostinger routes one extra beat + transport retry.
+    timeoutMs: 18_000,
+    networkRetries: 2,
   });
 }
 

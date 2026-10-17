@@ -12,7 +12,11 @@ import { HELP_GLOSSARY } from "../src/lib/help/glossary";
 import { HELP_CATEGORIES, HELP_FAQS, HELP_GUIDES, type HelpAccess } from "../src/lib/help/guides";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const outFile = resolve(root, "backend/data/help_kb.json");
+/** Vite app may keep a local copy; PHP AI loads feezo-backend/data/help_kb.json. */
+const outFiles = [
+  resolve(root, "backend/data/help_kb.json"),
+  resolve(root, "../feezo-backend/data/help_kb.json"),
+];
 
 const categoryTitle = new Map(HELP_CATEGORIES.map((c) => [c.id, c.title]));
 
@@ -36,6 +40,8 @@ const kb = {
     summary: g.summary,
     minutes: g.minutes,
     keywords: g.keywords,
+    procedure: g.procedure,
+    flowchartTitle: g.flowchart?.title,
     requires: describeAccess(g.access),
     warning: g.warning,
     openTo: g.openTo,
@@ -51,8 +57,11 @@ const kb = {
   glossary: HELP_GLOSSARY,
 };
 
-mkdirSync(dirname(outFile), { recursive: true });
-writeFileSync(outFile, `${JSON.stringify(kb, null, 1)}\n`, "utf8");
+const payload = `${JSON.stringify(kb, null, 1)}\n`;
+for (const outFile of outFiles) {
+  mkdirSync(dirname(outFile), { recursive: true });
+  writeFileSync(outFile, payload, "utf8");
+}
 console.log(
-  `help_kb.json: ${kb.guides.length} guides, ${kb.faqs.length} FAQs, ${kb.glossary.length} terms → ${outFile}`,
+  `help_kb.json: ${kb.guides.length} guides, ${kb.faqs.length} FAQs, ${kb.glossary.length} terms → ${outFiles.join(" · ")}`,
 );

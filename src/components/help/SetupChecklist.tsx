@@ -8,7 +8,10 @@ import {
   CheckCircle2,
   ChevronDown,
   Circle,
+  FileDigit,
   GraduationCap,
+  Landmark,
+  MapPinned,
   ReceiptText,
   Sparkles,
   UserPlus,
@@ -34,6 +37,8 @@ type ChecklistStep = {
   guideId: string;
   icon: LucideIcon;
   access?: HelpAccess;
+  /** Accounts-critical path from School Accounts Manual. */
+  accounts?: boolean;
 };
 
 function readCollapsed(): boolean {
@@ -91,6 +96,9 @@ export function SetupChecklist({ onOpenGuide }: { onOpenGuide: (guideId: string)
     activePayments,
     activeStaff,
     tenantUsers,
+    branches,
+    activeBranchId,
+    activePaymentCategories,
   } = useTenantStore();
   const [collapsed, setCollapsed] = useState(false);
 
@@ -111,6 +119,17 @@ export function SetupChecklist({ onOpenGuide }: { onOpenGuide: (guideId: string)
         access: { kind: "settings", tab: "school" },
       },
       {
+        id: "campus",
+        title: "Confirm campus / branch",
+        why: "Every receipt posts to the campus open in the top bar.",
+        done: branches.length > 0 && Boolean(activeBranchId),
+        href: "/tenant/settings?tab=branches",
+        guideId: "branches",
+        icon: MapPinned,
+        access: { kind: "settings", tab: "branches" },
+        accounts: true,
+      },
+      {
         id: "year",
         title: "Confirm your academic year",
         why: "All fees and receipts are kept year by year.",
@@ -119,6 +138,7 @@ export function SetupChecklist({ onOpenGuide }: { onOpenGuide: (guideId: string)
         guideId: "academic-year",
         icon: CalendarRange,
         access: { kind: "settings", tab: "system" },
+        accounts: true,
       },
       {
         id: "classes",
@@ -132,7 +152,7 @@ export function SetupChecklist({ onOpenGuide }: { onOpenGuide: (guideId: string)
       },
       {
         id: "fees",
-        title: "Set the fee structure",
+        title: "Set fee categories and structure",
         why: "Feezo then works out every student's dues for you.",
         done: activeClasses.some(
           (c) => (c.feeSchedule?.length ?? 0) > 0 || (c.tuitionFeeAmount ?? 0) > 0,
@@ -141,6 +161,30 @@ export function SetupChecklist({ onOpenGuide }: { onOpenGuide: (guideId: string)
         guideId: "classes-fees",
         icon: BookOpen,
         access: { kind: "settings", tab: "classes" },
+        accounts: true,
+      },
+      {
+        id: "ledgers",
+        title: "Set account groups and ledgers",
+        why: "Income, expense, cash and bank must be classified before go-live.",
+        done: activePaymentCategories.length > 0,
+        href: "/tenant/finance?tab=ledger",
+        guideId: "ledgers-setup",
+        icon: Landmark,
+        access: { kind: "finance", view: "ledger" },
+        accounts: true,
+      },
+      {
+        id: "doc-numbers",
+        title: "Check document numbers",
+        why: "Receipt and payment prefixes keep each campus sequence clear.",
+        // Soft predicate: first live receipt proves numbering was used.
+        done: activePayments.length > 0,
+        href: "/tenant/settings?tab=system",
+        guideId: "document-numbers",
+        icon: FileDigit,
+        access: { kind: "settings", tab: "system" },
+        accounts: true,
       },
       {
         id: "student",
@@ -161,6 +205,7 @@ export function SetupChecklist({ onOpenGuide }: { onOpenGuide: (guideId: string)
         guideId: "receive-payment",
         icon: ReceiptText,
         access: { kind: "finance", view: "receive" },
+        accounts: true,
       },
       {
         id: "team",
@@ -184,6 +229,9 @@ export function SetupChecklist({ onOpenGuide }: { onOpenGuide: (guideId: string)
     activePayments.length,
     activeStaff.length,
     tenantUsers.length,
+    branches.length,
+    activeBranchId,
+    activePaymentCategories.length,
   ]);
 
   const doneCount = steps.filter((s) => s.done).length;
@@ -282,7 +330,7 @@ export function SetupChecklist({ onOpenGuide }: { onOpenGuide: (guideId: string)
                   <div className="min-w-0">
                     <div
                       className={cn(
-                        "flex items-center gap-1.5 text-[13.5px] font-semibold text-slate-900 dark:text-zinc-50",
+                        "flex flex-wrap items-center gap-1.5 text-[13.5px] font-semibold text-slate-900 dark:text-zinc-50",
                         step.done &&
                           "text-slate-500 line-through decoration-slate-300 dark:text-zinc-500",
                       )}
@@ -290,6 +338,11 @@ export function SetupChecklist({ onOpenGuide }: { onOpenGuide: (guideId: string)
                       <Icon className="h-3.5 w-3.5 shrink-0 opacity-60" aria-hidden />
                       <span className="font-mono text-[11px] text-slate-400">{index + 1}.</span>
                       {step.title}
+                      {step.accounts ? (
+                        <span className="rounded-md bg-[#0F766E]/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#0F766E] no-underline dark:bg-teal-400/10 dark:text-[#2DD4BF]">
+                          Accounts
+                        </span>
+                      ) : null}
                     </div>
                     <p className="mt-0.5 text-[12px] leading-snug text-slate-500 dark:text-zinc-400">
                       {step.why}

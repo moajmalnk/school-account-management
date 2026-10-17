@@ -271,6 +271,7 @@ import {
 import {
   isPeriodOnBreak,
   buildStudentFeeStatement,
+  resolveStudentFeeDirectoryStatus,
   sumStudentFeeRoster,
   withLiveStudentFeeDues,
 } from "@/lib/student-fees";
@@ -752,6 +753,11 @@ const bulkFilterBtn =
 const bulkFilterBtnOverdue = cn(
   bulkFilterBtn,
   "border-[#FECACA] text-[#DC2626] hover:bg-[#FEF2F2] dark:border-rose-500/40 dark:text-rose-300 dark:hover:bg-rose-950/40",
+);
+
+const bulkFilterBtnDue = cn(
+  bulkFilterBtn,
+  "border-[#FDE68A] text-[#B45309] hover:bg-[#FFFBEB] dark:border-amber-500/40 dark:text-amber-300 dark:hover:bg-amber-950/40",
 );
 
 const bulkFilterBtnPaid = cn(
@@ -1434,7 +1440,7 @@ function PremiumDashboard({
                     {liveStudents.length}
                   </div>
                   <div className="mt-1 text-[11px] font-medium text-emerald-800/80 dark:text-emerald-100/70">
-                    {paidCount} paid · {liveStudents.length - paidCount} overdue
+                    {paidCount} paid · {liveStudents.length - paidCount} with dues
                   </div>
                 </div>
               </button>
@@ -2218,12 +2224,13 @@ export function SchoolDashboard() {
   );
 }
 
-type StatusFilter = "all" | "paid" | "overdue";
+type StatusFilter = "all" | "paid" | "due" | "overdue";
 type EnrollmentFilter = "all" | "active" | "inactive";
 
 const STATUS_TABS: { key: StatusFilter; label: string }[] = [
   { key: "all", label: "All Students" },
   { key: "paid", label: "Paid" },
+  { key: "due", label: "Due" },
   { key: "overdue", label: "Overdue" },
 ];
 
@@ -2354,11 +2361,11 @@ function personInitials(name: string) {
 }
 
 const directoryStatCardClass =
-  "flex min-w-0 w-full flex-row items-center justify-between gap-2 p-2.5 md:min-h-[108px] md:flex-col md:items-stretch md:justify-between md:p-6";
+  "flex min-w-0 w-full max-w-full flex-row items-center justify-between gap-1.5 overflow-hidden p-2 sm:gap-2 sm:p-2.5 md:min-h-[108px] md:flex-col md:items-stretch md:justify-between md:p-6";
 const directoryStatLabelClass =
-  "text-[8px] font-semibold uppercase leading-tight tracking-wider md:text-[10px]";
+  "min-w-0 truncate text-[8px] font-semibold uppercase leading-tight tracking-wider md:text-[10px]";
 const directoryStatValueClass =
-  "shrink-0 font-mono text-[18px] font-semibold leading-none tracking-tight text-black dark:text-zinc-50 md:text-[32px]";
+  "min-w-0 max-w-full font-mono text-[15px] font-semibold leading-none tracking-tight text-black [overflow-wrap:anywhere] dark:text-zinc-50 sm:text-[18px] md:text-[32px]";
 
 function DirectoryPersonAvatar({ name, photoUrl }: { name: string; photoUrl?: string }) {
   return (
@@ -2378,7 +2385,7 @@ const directoryMobileListClass =
 
 const directoryMobileCardClass = cn(
   premiumCardClass,
-  "flex w-full min-w-0 max-w-full flex-col gap-2.5 overflow-hidden p-3 text-left transition-all active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E] focus-visible:ring-offset-2 sm:gap-3 sm:p-3.5",
+  "flex w-full min-w-0 max-w-full flex-col gap-2 overflow-hidden p-2.5 text-left transition-all active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E] focus-visible:ring-offset-1 sm:gap-3 sm:p-3.5",
 );
 
 const directoryMintChipClass =
@@ -2644,18 +2651,34 @@ function DirectoryRecycleBinList({
   );
 }
 
-function StudentFeesStatusBadge({ due }: { due: number }) {
-  if (due === 0) {
+function StudentFeesStatusBadge({
+  due,
+  overdueDue = 0,
+}: {
+  due: number;
+  /** Past-due portion only — pending dues must not show as Overdue. */
+  overdueDue?: number;
+}) {
+  const status = resolveStudentFeeDirectoryStatus(due, overdueDue);
+  if (status === "Paid") {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#CCFBF1] px-2.5 py-1 text-[10.5px] font-semibold text-[#10B981] dark:bg-[#0F766E]/30 dark:text-[#5EEAD4]">
-        <span className="h-1.5 w-1.5 rounded-full bg-[#10B981] dark:bg-[#2DD4BF]" />
+      <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-[#CCFBF1] px-2 py-0.5 text-[10px] font-semibold text-[#10B981] dark:bg-[#0F766E]/30 dark:text-[#5EEAD4] sm:gap-1.5 sm:px-2.5 sm:py-1 sm:text-[10.5px]">
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#10B981] dark:bg-[#2DD4BF]" />
         Paid
       </span>
     );
   }
+  if (status === "Due") {
+    return (
+      <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[10px] font-semibold text-[#B45309] dark:bg-amber-950/40 dark:text-[#FBBF24] sm:gap-1.5 sm:px-2.5 sm:py-1 sm:text-[10.5px]">
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#F59E0B] dark:bg-[#FBBF24]" />
+        Due
+      </span>
+    );
+  }
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FEE2E2] px-2.5 py-1 text-[10.5px] font-semibold text-[#EF4444] dark:bg-rose-950/50 dark:text-[#FDA4AF]">
-      <span className="h-1.5 w-1.5 rounded-full bg-[#EF4444] dark:bg-[#FB7185]" />
+    <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-[#FEE2E2] px-2 py-0.5 text-[10px] font-semibold text-[#EF4444] dark:bg-rose-950/50 dark:text-[#FDA4AF] sm:gap-1.5 sm:px-2.5 sm:py-1 sm:text-[10.5px]">
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#EF4444] dark:bg-[#FB7185]" />
       Overdue
     </span>
   );
@@ -2663,6 +2686,7 @@ function StudentFeesStatusBadge({ due }: { due: number }) {
 
 function StudentsDirectoryTable({
   students,
+  overdueByStudentId,
   selectedIds,
   onToggleSelect,
   onToggleSelectAll,
@@ -2671,6 +2695,7 @@ function StudentsDirectoryTable({
   bulkBar,
 }: {
   students: Student[];
+  overdueByStudentId: Record<string, number>;
   selectedIds: Set<string>;
   onToggleSelect: (id: string, selected: boolean) => void;
   onToggleSelectAll: (selected: boolean) => void;
@@ -2683,19 +2708,19 @@ function StudentsDirectoryTable({
 
   return (
     <>
-      <div className="space-y-3 lg:hidden">
+      <div className="w-full min-w-0 max-w-full space-y-3 overflow-x-clip lg:hidden">
         {bulkBar ? (
-          <div className={cn(glassCardClass, "overflow-hidden p-0")}>{bulkBar}</div>
+          <div className={cn(glassCardClass, "max-w-full overflow-hidden p-0")}>{bulkBar}</div>
         ) : null}
         <div className={cn(directoryMobileListClass)}>
           {students.length > 0 && (
-            <div className="flex items-center gap-2 px-0.5 md:col-span-2">
+            <div className="flex min-w-0 items-center gap-2 px-0.5 md:col-span-2">
               <Checkbox
                 checked={allSelected ? true : someSelected ? "indeterminate" : false}
                 onCheckedChange={(v) => onToggleSelectAll(v === true)}
                 aria-label="Select all students"
               />
-              <span className="text-[12px] font-medium text-slate-500">
+              <span className="min-w-0 truncate text-[12px] font-medium text-slate-500">
                 {allSelected
                   ? "All selected"
                   : someSelected
@@ -2734,8 +2759,8 @@ function StudentsDirectoryTable({
                   isSelected && "ring-2 ring-[#0F766E]/35",
                 )}
               >
-                <div className="flex min-w-0 items-start justify-between gap-2">
-                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                <div className="flex min-w-0 items-start justify-between gap-1.5 sm:gap-2">
+                  <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
                     <div
                       onClick={(e) => e.stopPropagation()}
                       onKeyDown={(e) => e.stopPropagation()}
@@ -2748,8 +2773,8 @@ function StudentsDirectoryTable({
                       />
                     </div>
                     <DirectoryPersonAvatar name={student.name} photoUrl={student.photoUrl} />
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-[13.5px] font-semibold leading-tight text-slate-900 dark:text-zinc-100 sm:text-[14px]">
+                    <div className="min-w-0 flex-1 overflow-hidden">
+                      <div className="truncate text-[13px] font-semibold leading-tight text-slate-900 dark:text-zinc-100 sm:text-[14px]">
                         {student.name}
                       </div>
                       <div className="mt-0.5 truncate font-mono text-[10px] text-slate-400 dark:text-zinc-500 sm:text-[10.5px]">
@@ -2757,17 +2782,20 @@ function StudentsDirectoryTable({
                       </div>
                     </div>
                   </div>
-                  <div className="shrink-0">
-                    <StudentFeesStatusBadge due={student.due} />
+                  <div className="shrink-0 self-start">
+                    <StudentFeesStatusBadge
+                      due={student.due}
+                      overdueDue={overdueByStudentId[student.id] ?? 0}
+                    />
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
                   <span className={directoryMintChipClass}>{student.cls}</span>
                 </div>
 
-                <div className="flex items-center justify-between gap-2 border-t border-[#F0F0F0] pt-2 dark:border-white/10 sm:pt-2.5">
-                  <div className="min-w-0">
+                <div className="flex min-w-0 items-center justify-between gap-2 border-t border-[#F0F0F0] pt-2 dark:border-white/10 sm:pt-2.5">
+                  <div className="min-w-0 flex-1 overflow-hidden">
                     <div className="truncate text-[11.5px] font-medium text-black/75 dark:text-zinc-300 sm:text-[12px]">
                       {student.guardian}
                     </div>
@@ -2775,7 +2803,7 @@ function StudentsDirectoryTable({
                       {hasPhone ? formatPhone(student.phone) : "No contact on file"}
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
+                  <div className="flex shrink-0 items-center gap-1">
                     <ContactAction
                       icon={Phone}
                       label="Call"
@@ -2969,7 +2997,10 @@ function StudentsDirectoryTable({
                           />
                         </div>
                         <div className="flex w-[88px] shrink-0 justify-end">
-                          <StudentFeesStatusBadge due={student.due} />
+                          <StudentFeesStatusBadge
+                            due={student.due}
+                            overdueDue={overdueByStudentId[student.id] ?? 0}
+                          />
                         </div>
                       </div>
                     </td>
@@ -3577,9 +3608,16 @@ export function StudentsLedger() {
     const q = searchQuery.trim().toLowerCase();
     return directoryStudents
       .filter((s) => studentMatchesClassDivisionFilter(s.cls, gradeFilter, divisionFilter))
-      .filter((s) =>
-        statusFilter === "all" ? true : statusFilter === "paid" ? s.due === 0 : s.due > 0,
-      )
+      .filter((s) => {
+        if (statusFilter === "all") return true;
+        const overdue = Math.max(0, feeTotals.overdueByStudentId[s.id] ?? 0);
+        const status = resolveStudentFeeDirectoryStatus(s.due, overdue);
+        return statusFilter === "paid"
+          ? status === "Paid"
+          : statusFilter === "due"
+            ? status === "Due"
+            : status === "Overdue";
+      })
       .filter((s) => {
         const active = isRecordActive(s.active);
         return enrollmentFilter === "all" ? true : enrollmentFilter === "active" ? active : !active;
@@ -3591,7 +3629,15 @@ export function StudentsLedger() {
           .toLowerCase();
         return haystack.includes(q);
       });
-  }, [directoryStudents, gradeFilter, divisionFilter, statusFilter, enrollmentFilter, searchQuery]);
+  }, [
+    directoryStudents,
+    gradeFilter,
+    divisionFilter,
+    statusFilter,
+    enrollmentFilter,
+    searchQuery,
+    feeTotals.overdueByStudentId,
+  ]);
 
   useEffect(() => {
     setSelectedIds((prev) => {
@@ -3658,13 +3704,23 @@ export function StudentsLedger() {
 
   const clearSelection = () => setSelectedIds(new Set());
 
-  const selectByFeesStatus = (kind: "paid" | "overdue") => {
-    const matches = filtered.filter((s) => (kind === "paid" ? s.due === 0 : s.due > 0));
+  const selectByFeesStatus = (kind: "paid" | "due" | "overdue") => {
+    const matches = filtered.filter((s) => {
+      const overdue = Math.max(0, feeTotals.overdueByStudentId[s.id] ?? 0);
+      const status = resolveStudentFeeDirectoryStatus(s.due, overdue);
+      return kind === "paid"
+        ? status === "Paid"
+        : kind === "due"
+          ? status === "Due"
+          : status === "Overdue";
+    });
     if (!matches.length) {
       toast.error(
         kind === "paid"
           ? "No paid students in the current view"
-          : "No overdue students in the current view",
+          : kind === "due"
+            ? "No due (pending) students in the current view"
+            : "No overdue students in the current view",
       );
       return;
     }
@@ -3672,7 +3728,9 @@ export function StudentsLedger() {
     toast.success(
       kind === "paid"
         ? `${matches.length} paid student${matches.length === 1 ? "" : "s"} selected`
-        : `${matches.length} overdue student${matches.length === 1 ? "" : "s"} selected`,
+        : kind === "due"
+          ? `${matches.length} due student${matches.length === 1 ? "" : "s"} selected`
+          : `${matches.length} overdue student${matches.length === 1 ? "" : "s"} selected`,
     );
   };
 
@@ -3845,7 +3903,9 @@ export function StudentsLedger() {
       });
       return;
     }
-    const hasOverdue = selectedWithPhone.some((row) => row.student.due > 0);
+    const hasOverdue = selectedWithPhone.some(
+      (row) => Math.max(0, feeTotals.overdueByStudentId[row.student.id] ?? 0) > 0,
+    );
     setBulkWhatsAppMsg(feeReminderTemplateFor(hasOverdue));
     setBulkWhatsAppOpen(true);
   };
@@ -3933,12 +3993,12 @@ export function StudentsLedger() {
   const analytics = useMemo(
     () => ({
       paid: feeTotals.paidCount,
-      overdue: feeTotals.outstandingCount,
+      overdue: feeTotals.overdueCount,
       total: directoryStudents.length,
       male: directoryStudents.filter((s) => s.gender === "M").length,
       female: directoryStudents.filter((s) => s.gender === "F").length,
     }),
-    [directoryStudents, feeTotals.paidCount, feeTotals.outstandingCount],
+    [directoryStudents, feeTotals.paidCount, feeTotals.overdueCount],
   );
 
   const feeTotalDueCleared = feeTotals.pendingDue <= 0;
@@ -4324,20 +4384,30 @@ export function StudentsLedger() {
         : divisionFilter === "all"
           ? gradeFilter
           : `${gradeFilter} · Div ${divisionFilter}`,
-      statusFilter === "all" ? "All Students" : statusFilter === "paid" ? "Paid" : "Overdue",
+      statusFilter === "all"
+        ? "All Students"
+        : statusFilter === "paid"
+          ? "Paid"
+          : statusFilter === "due"
+            ? "Due"
+            : "Overdue",
     ].join(" · ");
     const rowsHtml = filtered
-      .map(
-        (s) => `<tr>
+      .map((s) => {
+        const feeStatus = resolveStudentFeeDirectoryStatus(
+          s.due,
+          Math.max(0, feeTotals.overdueByStudentId[s.id] ?? 0),
+        );
+        return `<tr>
           <td>${s.id}</td>
           <td>${s.name}</td>
           <td>${s.cls}</td>
           <td>${s.guardian}</td>
           <td>${s.phone ?? ""}</td>
-          <td>${s.due === 0 ? "Paid" : "Overdue"}</td>
+          <td>${feeStatus}</td>
           <td style="text-align:right">${s.due === 0 ? "Cleared" : formatMoney(s.due)}</td>
-        </tr>`,
-      )
+        </tr>`;
+      })
       .join("");
     win.document.write(`<!doctype html><html><head><title>Students Ledger · ${stampedAt}</title>
       <style>
@@ -4385,6 +4455,13 @@ export function StudentsLedger() {
               className={bulkFilterBtnOverdue}
             >
               Select overdue
+            </button>
+            <button
+              type="button"
+              onClick={() => selectByFeesStatus("due")}
+              className={bulkFilterBtnDue}
+            >
+              Select due
             </button>
             <button
               type="button"
@@ -4462,68 +4539,58 @@ export function StudentsLedger() {
 
   return (
     <div className="w-full min-w-0 max-w-full space-y-3 overflow-x-clip lg:space-y-6">
-      <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
+      <div className="grid w-full min-w-0 max-w-full grid-cols-2 gap-1.5 sm:gap-3 xl:grid-cols-4">
         <div className={cn(glassCardClass, directoryStatCardClass)}>
-          <div className="flex min-w-0 flex-1 items-center justify-between gap-1 md:items-start md:gap-2">
-            <div className={cn(directoryStatLabelClass, "text-slate-500")}>Total Fee</div>
-            <Wallet className="h-3 w-3 shrink-0 text-[#0F766E] md:h-4 md:w-4" />
-          </div>
-          <div className="min-w-0 shrink-0 text-right md:text-left">
-            <div
-              className={cn(
-                directoryStatValueClass,
-                "max-w-full break-words text-[15px] sm:text-[18px] md:text-[26px] lg:text-[32px]",
-              )}
-            >
+          <div className="flex min-w-0 flex-1 flex-col gap-1 overflow-hidden md:gap-2">
+            <div className="flex min-w-0 items-center justify-between gap-1">
+              <div className={cn(directoryStatLabelClass, "text-slate-500")}>Total Fee</div>
+              <Wallet className="h-3 w-3 shrink-0 text-[#0F766E] md:h-4 md:w-4" />
+            </div>
+            <div className={cn(directoryStatValueClass, "md:text-[26px] lg:text-[32px]")}>
               {formatMoney(feeTotals.totalFee)}
             </div>
-            <div className="mt-0.5 font-mono text-[9px] text-slate-500 md:mt-1.5 md:text-[11px]">
+            <div className="truncate font-mono text-[9px] text-slate-500 md:text-[11px]">
               {analytics.total} students · {analytics.male}M · {analytics.female}F
             </div>
           </div>
         </div>
 
         <div className={cn(glassCardClass, directoryStatCardClass, "bg-[#CCFBF1]/40")}>
-          <div className="flex min-w-0 flex-1 items-center justify-between gap-1 md:items-start md:gap-2">
-            <div className={cn(directoryStatLabelClass, "text-slate-600")}>Total Paid</div>
-            <CheckCircle2 className="h-3 w-3 shrink-0 text-[#10B981] md:h-4 md:w-4" />
-          </div>
-          <div className="min-w-0 shrink-0 text-right md:text-left">
+          <div className="flex min-w-0 flex-1 flex-col gap-1 overflow-hidden md:gap-2">
+            <div className="flex min-w-0 items-center justify-between gap-1">
+              <div className={cn(directoryStatLabelClass, "text-slate-600")}>Total Paid</div>
+              <CheckCircle2 className="h-3 w-3 shrink-0 text-[#10B981] md:h-4 md:w-4" />
+            </div>
             <div
               className={cn(
                 directoryStatValueClass,
-                "max-w-full break-words text-[15px] text-[#10B981] sm:text-[18px] md:text-[26px] lg:text-[32px]",
+                "text-[#10B981] md:text-[26px] lg:text-[32px]",
               )}
             >
               {formatMoney(feeTotals.totalPaid)}
             </div>
-            <div className="mt-0.5 font-mono text-[9px] text-slate-500 md:mt-1.5 md:text-[11px]">
+            <div className="truncate font-mono text-[9px] text-slate-500 md:text-[11px]">
               {analytics.paid} paid students
             </div>
           </div>
         </div>
 
         <div className={cn(glassCardClass, directoryStatCardClass)}>
-          <div className="flex min-w-0 flex-1 items-center justify-between gap-1 md:items-start md:gap-2">
-            <div className={cn(directoryStatLabelClass, "text-slate-500")}>Total Due</div>
-            {feeTotalDueCleared ? (
-              <CheckCircle2 className="h-3 w-3 shrink-0 text-[#10B981] md:h-4 md:w-4" />
-            ) : (
-              <AlertTriangle className="h-3 w-3 shrink-0 text-[#F59E0B] md:h-4 md:w-4" />
-            )}
-          </div>
-          <div className="min-w-0 shrink-0 text-right md:text-left">
-            <div
-              className={cn(
-                directoryStatValueClass,
-                "max-w-full break-words text-[15px] sm:text-[18px] md:text-[26px] lg:text-[32px]",
+          <div className="flex min-w-0 flex-1 flex-col gap-1 overflow-hidden md:gap-2">
+            <div className="flex min-w-0 items-center justify-between gap-1">
+              <div className={cn(directoryStatLabelClass, "text-slate-500")}>Total Due</div>
+              {feeTotalDueCleared ? (
+                <CheckCircle2 className="h-3 w-3 shrink-0 text-[#10B981] md:h-4 md:w-4" />
+              ) : (
+                <AlertTriangle className="h-3 w-3 shrink-0 text-[#F59E0B] md:h-4 md:w-4" />
               )}
-            >
+            </div>
+            <div className={cn(directoryStatValueClass, "md:text-[26px] lg:text-[32px]")}>
               {formatMoney(feeTotals.pendingDue)}
             </div>
             <span
               className={cn(
-                "mt-1 inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider md:mt-1.5 md:text-[10px]",
+                "inline-flex w-fit max-w-full items-center truncate rounded-full px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase tracking-wider sm:px-2 sm:text-[9px] md:text-[10px]",
                 feeTotalDueCleared ? "bg-[#0F172A] text-[#10B981]" : "bg-[#0F172A] text-[#F59E0B]",
               )}
             >
@@ -4540,27 +4607,27 @@ export function StudentsLedger() {
               "border-transparent bg-[#EF4444] text-white shadow-[0_10px_30px_-12px_rgba(239,68,68,0.38)] dark:bg-[#EF4444]",
           )}
         >
-          <div className="flex min-w-0 flex-1 items-center justify-between gap-1 md:items-start md:gap-2">
-            <div
-              className={cn(
-                directoryStatLabelClass,
-                feeOverdueActive ? "text-white/80" : "text-slate-500",
-              )}
-            >
-              Over Due
+          <div className="flex min-w-0 flex-1 flex-col gap-1 overflow-hidden md:gap-2">
+            <div className="flex min-w-0 items-center justify-between gap-1">
+              <div
+                className={cn(
+                  directoryStatLabelClass,
+                  feeOverdueActive ? "text-white/80" : "text-slate-500",
+                )}
+              >
+                Over Due
+              </div>
+              <AlertTriangle
+                className={cn(
+                  "h-3 w-3 shrink-0 md:h-4 md:w-4",
+                  feeOverdueActive ? "text-white" : "text-[#EF4444]",
+                )}
+              />
             </div>
-            <AlertTriangle
-              className={cn(
-                "h-3 w-3 shrink-0 md:h-4 md:w-4",
-                feeOverdueActive ? "text-white" : "text-[#EF4444]",
-              )}
-            />
-          </div>
-          <div className="min-w-0 shrink-0 text-right md:text-left">
             <div
               className={cn(
                 directoryStatValueClass,
-                "max-w-full break-words text-[15px] sm:text-[18px] md:text-[26px] lg:text-[32px]",
+                "md:text-[26px] lg:text-[32px]",
                 feeOverdueActive && "text-white dark:text-white",
               )}
             >
@@ -4568,7 +4635,7 @@ export function StudentsLedger() {
             </div>
             <span
               className={cn(
-                "mt-1 inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider md:mt-1.5 md:text-[10px]",
+                "inline-flex w-fit max-w-full items-center truncate rounded-full px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase tracking-wider sm:px-2 sm:text-[9px] md:text-[10px]",
                 feeOverdueActive ? "bg-[#0F172A] text-[#EF4444]" : "bg-[#0F172A] text-[#10B981]",
               )}
             >
@@ -4912,6 +4979,7 @@ export function StudentsLedger() {
 
           <StudentsDirectoryTable
             students={filtered}
+            overdueByStudentId={feeTotals.overdueByStudentId}
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
             onToggleSelectAll={toggleSelectAll}
@@ -10395,12 +10463,53 @@ function ReceivePayment() {
     if (isExternal || editingPayment || !selected) return;
 
     const deepLink = deepLinkCollectRef.current;
-    const preferVehicle = deepLink?.feeKind === "vehicle" || (deepLink?.periods.length ?? 0) > 0;
+    const preferVehicle = deepLink?.feeKind === "vehicle";
 
     setFeeItems((prev) => {
       const nonVehicle = prev.filter((item) => !isVehicleFeeCategory(item.description));
       const existingVehicle = prev.find((item) => isVehicleFeeCategory(item.description));
       const needsTransport = studentNeedsTransport(selected);
+
+      // Deep-link from student Payments · Collect now (tuition / academic fee line)
+      if (!preferVehicle && deepLink && deepLink.periods.length > 0) {
+        const choices = feePeriodChoices(
+          feeTerms,
+          defaultCategory,
+          periodOpts,
+          matchedClass,
+          matchedRoute,
+        );
+        const lines = deepLink.periods.map((periodLabel) => {
+          const match =
+            choices.find(
+              (c) => c.period.trim().toLowerCase() === periodLabel.trim().toLowerCase(),
+            ) ?? null;
+          const kind = match?.kind ?? (matchedClass?.billingCycle === "Term" ? "term" : "month");
+          const period = match?.period ?? periodLabel;
+          let line = createFeeLineItem({
+            description: defaultCategory,
+            feePeriodKind: kind,
+            feePeriod: period,
+          });
+          const prefill = prefillAmountForFeeLine(
+            line,
+            matchedClass,
+            feeTerms,
+            tuitionFee,
+            vehicleFee,
+            collectionStartMonth,
+            matchedRoute,
+            transportShift,
+            getPrefillBalanceContext([line]),
+          );
+          if (prefill !== undefined) {
+            line = { ...line, amount: String(prefill) };
+          }
+          return line;
+        });
+        deepLinkCollectRef.current = null;
+        return lines.length > 0 ? lines : prev;
+      }
 
       if (!needsTransport) {
         deepLinkCollectRef.current = null;

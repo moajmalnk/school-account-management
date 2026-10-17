@@ -3,6 +3,7 @@ import { formatMoney } from "@/lib/money";
 import {
   DEFAULT_GENERAL_WHATSAPP_TEMPLATE,
   DEFAULT_OVERDUE_WHATSAPP_TEMPLATE,
+  LEGACY_OVERDUE_WHATSAPP_TEMPLATES,
   renderWhatsAppTemplate,
 } from "@/lib/whatsapp-notify";
 
@@ -62,7 +63,7 @@ export const WHATSAPP_MESSAGE_FIELDS: Record<
   },
   feeReminder: {
     title: "Fee reminder",
-    hint: "Starting text for parent reminders from the student list.",
+    hint: "Used for parent reminders from the student list and Payments → WhatsApp.",
     vars: [
       { key: "guardian", label: "Guardian" },
       { key: "student_name", label: "Student" },
@@ -72,6 +73,10 @@ export const WHATSAPP_MESSAGE_FIELDS: Record<
       { key: "amount", label: "Balance" },
       { key: "due_date", label: "Due date" },
       { key: "fees_status", label: "Status" },
+      { key: "fee", label: "Fee / period" },
+      { key: "charge", label: "Charge" },
+      { key: "paid", label: "Paid" },
+      { key: "academic_year", label: "Year" },
     ],
   },
   paymentVoucher: {
@@ -99,6 +104,31 @@ export function defaultWhatsAppTemplates(): WhatsAppMessageTemplates {
   };
 }
 
+function normalizeTemplateText(value: string): string {
+  return value.replace(/\r\n/g, "\n").trim();
+}
+
+function migrateFeeReminderTemplate(saved: string | undefined, fallback: string): string {
+  const text = textOr(saved, fallback);
+  const normalized = normalizeTemplateText(text);
+  if (
+    LEGACY_OVERDUE_WHATSAPP_TEMPLATES.some(
+      (legacy) => normalizeTemplateText(legacy) === normalized,
+    )
+  ) {
+    return fallback;
+  }
+  return text;
+}
+
+/** Drop label-only lines left empty when a detail was not available for this send. */
+function stripEmptyLabeledLines(text: string): string {
+  return text
+    .replace(/^[^\n:]{1,48}:[ \t]*$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export function loadWhatsAppTemplates(): WhatsAppMessageTemplates {
   const defaults = defaultWhatsAppTemplates();
   if (typeof window === "undefined") return defaults;
@@ -108,7 +138,7 @@ export function loadWhatsAppTemplates(): WhatsAppMessageTemplates {
     const parsed = JSON.parse(raw) as Partial<WhatsAppMessageTemplates>;
     return {
       feeReceipt: textOr(parsed.feeReceipt, defaults.feeReceipt),
-      feeReminder: textOr(parsed.feeReminder, defaults.feeReminder),
+      feeReminder: migrateFeeReminderTemplate(parsed.feeReminder, defaults.feeReminder),
       paymentVoucher: textOr(parsed.paymentVoucher, defaults.paymentVoucher),
     };
   } catch {
@@ -178,6 +208,54 @@ export function feeReminderTemplateFor(hasOverdue: boolean): string {
   const customized = saved !== DEFAULT_FEE_REMINDER_WHATSAPP.trim();
   if (customized || hasOverdue) return saved;
   return DEFAULT_GENERAL_WHATSAPP_TEMPLATE;
+}
+
+/** Render the saved Fee reminder template for one student / fee line. */
+export function buildFeeReminderWhatsApp(input: {
+  guardian?: string;
+  studentName: string;
+  className?: string;
+  studentId?: string;
+  school: string;
+  /** Outstanding balance (maps to {{amount}}). */
+  amount: number;
+  dueDate?: string;
+  feesStatus?: string;
+  academicYear?: string;
+  /** Period / line label e.g. Term 2 (maps to {{fee}}). */
+  feeLabel?: string;
+  charge?: number;
+  paid?: number;
+}): string {
+  const template = loadWhatsAppTemplates().feeReminder;
+  const balance = Math.max(0, Number.isFinite(input.amount) ? input.amount : 0);
+  const status =
+    input.feesStatus?.trim() ||
+    (balance > 0 ? "Due" : "Paid");
+  return stripEmptyLabeledLines(
+    renderWhatsAppTemplate(template, {
+      guardian: input.guardian?.trim() || "Parent",
+      student_name: input.studentName,
+      class: input.className?.trim() || "—",
+      student_id: input.studentId?.trim() || "",
+      school: input.school.trim() || "School",
+      amount: formatMoney(balance),
+      due_date: input.dueDate?.trim() || "—",
+      fees_status: status,
+      status,
+      academic_year: input.academicYear?.trim() || "",
+      fee: input.feeLabel?.trim() || "",
+      category: input.feeLabel?.trim() || "",
+      charge:
+        input.charge != null && Number.isFinite(input.charge)
+          ? formatMoney(Math.max(0, input.charge))
+          : "",
+      paid:
+        input.paid != null && Number.isFinite(input.paid)
+          ? formatMoney(Math.max(0, input.paid))
+          : "",
+    }),
+  );
 }
 
 export function buildPaymentVoucherWhatsApp(input: {

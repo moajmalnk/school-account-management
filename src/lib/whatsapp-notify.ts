@@ -163,12 +163,42 @@ export const DEFAULT_OVERDUE_WHATSAPP_TEMPLATE = `Dear {{guardian}},
 
 This is a fee reminder from {{school}} for {{student_name}} ({{class}}).
 
+Fee: {{fee}}
+Due Date: {{due_date}}
+Charge: {{charge}}
+Paid: {{paid}}
+Balance Due: {{amount}}
+Academic Year: {{academic_year}}
+Status: {{fees_status}}
+
+Please clear the outstanding amount at your earliest convenience.
+
+Thank you.`;
+
+/** Prior defaults kept so saved copies can migrate to the richer Fee reminder. */
+export const LEGACY_OVERDUE_WHATSAPP_TEMPLATES = [
+  `Dear {{guardian}},
+
+This is a fee reminder from {{school}} for {{student_name}} ({{class}}).
+
 Outstanding balance: {{amount}}
 Due by: {{due_date}}
 
 Kindly clear the dues at the earliest.
 
-Thank you.`;
+Thank you.`,
+  `Dear {{guardian}},
+
+This is a fee reminder from {{school}} for {{student_name}} ({{class}}).
+
+Outstanding balance: {{amount}}
+Due by: {{due_date}}
+Status: {{fees_status}}
+
+Kindly clear the dues at the earliest.
+
+Thank you.`,
+] as const;
 
 export const DEFAULT_GENERAL_WHATSAPP_TEMPLATE = `Dear {{guardian}},
 

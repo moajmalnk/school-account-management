@@ -179,7 +179,7 @@ export function ImpersonationChip({ compact = false }: { compact?: boolean }) {
           className={cn(
             "inline-flex max-w-[7.5rem] items-center gap-1 rounded-full border border-amber-300/80 bg-amber-50 px-2 py-2 text-[11px] font-semibold text-amber-950 shadow-sm backdrop-blur-md transition-colors hover:border-amber-400 hover:bg-amber-100/90 dark:border-amber-500/30 dark:bg-amber-950/50 dark:text-amber-100 dark:hover:bg-amber-900/60 sm:gap-1.5 sm:px-2.5 sm:text-[12px] lg:max-w-[9rem]",
             compact &&
-              "h-8 max-w-none shrink-0 justify-center px-2 py-0 sm:max-w-[6.5rem] sm:px-2 lg:h-9 lg:max-w-[7.5rem]",
+              "h-8 w-8 max-w-8 shrink-0 justify-center px-0 py-0 sm:h-8 sm:w-auto sm:max-w-[6.5rem] sm:px-2 lg:h-9 lg:max-w-[7.5rem]",
           )}
         >
           <span className="relative grid h-3.5 w-3.5 shrink-0 place-items-center">
@@ -253,7 +253,7 @@ export function BranchSwitcher({ compact = false }: { compact?: boolean }) {
         aria-label="Loading campus"
         className={cn(
           "h-9 w-[8.5rem] rounded-full bg-white/70 sm:w-[10rem]",
-          compact && "h-8 w-[7.5rem]",
+          compact && "h-8 w-[5.25rem] sm:w-[7.5rem]",
         )}
       />
     );
@@ -306,7 +306,7 @@ export function BranchSwitcher({ compact = false }: { compact?: boolean }) {
             className={cn(
               "inline-flex max-w-[9.5rem] items-center gap-1 rounded-full border border-slate-200/80 bg-white/80 px-2.5 py-2 text-[11px] font-semibold text-slate-800 shadow-sm backdrop-blur-md transition-colors hover:border-[#0F766E]/40 hover:text-[#0F766E] disabled:cursor-wait disabled:opacity-70 dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-100 dark:hover:text-[#2DD4BF] lg:max-w-[12rem] lg:gap-1.5 lg:px-3.5 lg:text-[12px]",
               compact &&
-                "h-8 max-w-[6.5rem] px-2 py-0 text-[10px] sm:max-w-[7.75rem] lg:h-9 lg:max-w-[10rem] lg:px-2.5 lg:text-[11px] xl:max-w-[12rem]",
+                "h-8 max-w-[5.25rem] px-1.5 py-0 text-[10px] sm:max-w-[7.75rem] sm:px-2 lg:h-9 lg:max-w-[10rem] lg:px-2.5 lg:text-[11px] xl:max-w-[12rem]",
             )}
           >
             {branchSyncing ? (
@@ -314,7 +314,7 @@ export function BranchSwitcher({ compact = false }: { compact?: boolean }) {
             ) : (
               <Building2 className="hidden h-3.5 w-3.5 shrink-0 lg:block" strokeWidth={2.25} />
             )}
-            <span className="truncate">{label}</span>
+            <span className="min-w-0 truncate">{label}</span>
             <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" />
           </button>
         </DropdownMenuTrigger>
@@ -386,7 +386,7 @@ export function AcademicYearSwitcher({ compact = false }: { compact?: boolean })
         aria-label="Loading academic year"
         className={cn(
           "h-9 w-[7rem] shrink-0 rounded-full bg-emerald-500/25 sm:w-[9rem]",
-          compact && "h-8 w-[5.75rem] sm:w-[7rem]",
+          compact && "h-8 w-[4.75rem] sm:w-[7rem]",
         )}
       />
     );
@@ -402,7 +402,7 @@ export function AcademicYearSwitcher({ compact = false }: { compact?: boolean })
           className={cn(
             "inline-flex h-9 max-w-[11rem] shrink-0 items-center gap-1 rounded-full bg-[#10B981] px-2.5 text-[11px] font-semibold text-white shadow-sm shadow-emerald-500/25 transition-opacity hover:opacity-90",
             compact &&
-              "h-8 max-w-[5.75rem] px-2 text-[10px] sm:max-w-[7.5rem] sm:px-2.5 sm:text-[11px]",
+              "h-8 max-w-[4.75rem] px-1.5 text-[10px] sm:max-w-[7.5rem] sm:px-2.5 sm:text-[11px]",
           )}
         >
           <span className="min-w-0 truncate">{academicYear}</span>

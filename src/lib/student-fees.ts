@@ -143,21 +143,33 @@ export function summarizeStudentDueBuckets(
 /**
  * Paid amount drives status — never mark a zero-amount paid line as Partially Paid.
  * Due = unpaid, not yet past due date · Overdue = unpaid past due ·
- * Partially Paid = some payment received, balance remains.
+ * Partially Paid = some payment received, balance remains (still past-due → Overdue).
  */
 export function resolveStudentLedgerStatus(
   charge: number,
   paid: number,
   dueLabel: string,
+  now = new Date(),
 ): StudentLedgerStatus {
   const safeCharge = Math.max(0, charge);
   const safePaid = Math.max(0, paid);
   const balance = Math.max(0, safeCharge - safePaid);
   if (balance <= 0 && safeCharge > 0) return "Paid";
+  if (balance > 0 && isPastDue(dueLabel, now)) return "Overdue";
   if (safePaid > 0 && balance > 0) return "Partially Paid";
-  if (safePaid <= 0 && balance > 0) {
-    return isPastDue(dueLabel) ? "Overdue" : "Due";
-  }
+  if (safePaid <= 0 && balance > 0) return "Due";
+  return "Due";
+}
+
+/** Directory badge / filter: Paid · Due (pending) · Overdue (past due). */
+export type StudentFeeDirectoryStatus = "Paid" | "Due" | "Overdue";
+
+export function resolveStudentFeeDirectoryStatus(
+  totalDue: number,
+  overdueDue: number,
+): StudentFeeDirectoryStatus {
+  if (totalDue <= 0) return "Paid";
+  if (overdueDue > 0) return "Overdue";
   return "Due";
 }
 
@@ -593,7 +605,13 @@ function leftoverPaymentLine(
 
 function toLedgerRow(draft: ChargeDraft): StudentLedgerRow {
   const dueRaw = (draft.due ?? "").trim();
-  const dueIso = /^\d{4}-\d{2}-\d{2}/.test(dueRaw) ? dueRaw.slice(0, 10) : undefined;
+  const parsedDue = parseFlexibleDate(dueRaw);
+  const dueIso = parsedDue
+    ? toIsoDate(parsedDue)
+    : /^\d{4}-\d{2}-\d{2}/.test(dueRaw)
+      ? dueRaw.slice(0, 10)
+      : undefined;
+  const dueForStatus = dueIso || dueRaw;
   if (draft.onBreak) {
     return {
       date: draft.date,
@@ -618,7 +636,7 @@ function toLedgerRow(draft: ChargeDraft): StudentLedgerRow {
     charge,
     paid,
     balance,
-    status: resolveStudentLedgerStatus(charge, paid, draft.due),
+    status: resolveStudentLedgerStatus(charge, paid, dueForStatus),
     periodLabel: draft.periodLabel,
     dueIso,
     origin: draft.origin ?? "schedule",
@@ -731,7 +749,7 @@ function computeFeeTotals(
       dueToday,
       Math.max(0, headline.totalDue - Math.min(overdueDue, headline.totalDue)),
     ),
-    overdue: headline.totalDue > 0 && ledger.some((row) => row.status === "Overdue"),
+    overdue: Math.min(overdueDue, headline.totalDue) > 0,
   };
 }
 

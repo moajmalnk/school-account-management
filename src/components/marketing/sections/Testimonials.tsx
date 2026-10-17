@@ -85,7 +85,7 @@ function TestimonialCard({
             {item.school}
           </h3>
           <p className="mt-0.5 truncate font-mono text-[11px] text-[#0f766e]">
-            {item.subdomain}.schoolaccounts.in
+            {item.subdomain}.feezo.app
           </p>
           {"tenantId" in item && item.tenantId ? (
             <p className="mt-0.5 font-mono text-[10px] text-[var(--mkt-muted)]">{item.tenantId}</p>

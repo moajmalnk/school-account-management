@@ -11,6 +11,7 @@ import {
   ThumbsUp,
 } from "lucide-react";
 
+import { HelpFlowchart } from "@/components/help/HelpFlowchart";
 import { VideoSlot } from "@/components/help/VideoSlot";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { BRAND } from "@/lib/brand";
@@ -85,6 +86,11 @@ export function GuideView({
             <header className="shrink-0 border-b border-slate-200/80 px-5 pb-4 pt-5 pr-14 dark:border-white/10 sm:px-6">
               <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[#0F766E] dark:text-[#2DD4BF]">
                 {category?.title}
+                {guide.procedure ? (
+                  <span className="rounded-full bg-[#0F766E]/10 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-[#0F766E] dark:bg-teal-400/10 dark:text-[#2DD4BF]">
+                    {guide.procedure}
+                  </span>
+                ) : null}
                 <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[10px] normal-case tracking-normal text-slate-500 dark:bg-white/10 dark:text-zinc-400">
                   <Clock className="h-3 w-3" />
                   {guide.minutes} min
@@ -100,6 +106,10 @@ export function GuideView({
 
             <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6">
               <VideoSlot videoId={HELP_VIDEOS[guide.id]} title={guide.title} />
+
+              {guide.flowchart && (
+                <HelpFlowchart title={guide.flowchart.title} mermaid={guide.flowchart.mermaid} />
+              )}
 
               {guide.warning && (
                 <div className="flex gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-[12.5px] leading-snug text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-200">

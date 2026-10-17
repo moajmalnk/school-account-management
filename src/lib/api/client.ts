@@ -33,6 +33,9 @@ export const PRODUCTION_API_BASE_URL = "https://api.feezo.app";
 /** Fail fast when api.feezo.app is unreachable instead of waiting for browser TCP timeout. */
 export const API_REQUEST_TIMEOUT_MS = 12_000;
 
+/** Token refresh must not hang the UI longer than a normal API call. */
+const REFRESH_TIMEOUT_MS = 10_000;
+
 /** API origin for media / absolute links (always Hostinger, including in Vite). */
 export function apiBaseUrl(): string {
   const raw = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
@@ -40,8 +43,13 @@ export function apiBaseUrl(): string {
   return PRODUCTION_API_BASE_URL;
 }
 
-/** Browser fetch always hits production Hostinger — never a local PHP server. */
+/**
+ * Browser fetch origin for JSON API calls.
+ * In Vite, same-origin `/api` avoids CORS preflight and uses the configured proxy —
+ * far more reliable on flaky routes to api.feezo.app.
+ */
 export function apiRequestOrigin(): string {
+  if (import.meta.env.DEV) return "";
   return apiBaseUrl();
 }
 
@@ -259,26 +267,35 @@ async function postRefresh(refreshToken: string): Promise<{
   status: number;
   data: RefreshResponse | null;
 }> {
-  const res = await fetch(`${apiRequestOrigin()}/api/auth/refresh.php`, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ refreshToken }),
-  });
-  const raw = await res.text();
-  let payload: ApiEnvelope<RefreshResponse> | null = null;
+  const timeoutController = new AbortController();
+  const timeoutId = window.setTimeout(() => timeoutController.abort(), REFRESH_TIMEOUT_MS);
   try {
-    payload = raw ? (JSON.parse(raw) as ApiEnvelope<RefreshResponse>) : null;
+    const res = await fetch(`${apiRequestOrigin()}/api/auth/refresh.php`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ refreshToken }),
+      signal: timeoutController.signal,
+    });
+    const raw = await res.text();
+    let payload: ApiEnvelope<RefreshResponse> | null = null;
+    try {
+      payload = raw ? (JSON.parse(raw) as ApiEnvelope<RefreshResponse>) : null;
+    } catch {
+      payload = null;
+    }
+    if (envelopeCode(payload) === TENANT_DEACTIVATED_CODE) tenantDeactivatedSignal = true;
+    return {
+      status: res.status,
+      data: payload?.success && payload.data?.token ? payload.data : null,
+    };
   } catch {
-    payload = null;
+    return { status: 0, data: null };
+  } finally {
+    window.clearTimeout(timeoutId);
   }
-  if (envelopeCode(payload) === TENANT_DEACTIVATED_CODE) tenantDeactivatedSignal = true;
-  return {
-    status: res.status,
-    data: payload?.success && payload.data?.token ? payload.data : null,
-  };
 }
 
 async function doRefreshAccessToken(): Promise<TokenRefreshResult> {
@@ -354,6 +371,11 @@ type RequestOptions = {
   skipUnauthorized?: boolean;
   retried?: boolean;
   timeoutMs?: number;
+  /**
+   * Extra attempts after transport timeout / network drop (status 0).
+   * Safe: only retries when the first attempt never got an HTTP response.
+   */
+  networkRetries?: number;
 };
 
 function linkAbortSignals(...signals: AbortSignal[]): AbortSignal {
@@ -378,6 +400,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     skipUnauthorized = false,
     retried = false,
     timeoutMs = API_REQUEST_TIMEOUT_MS,
+    networkRetries = 1,
   } = options;
 
   if (auth && unauthorizedNotified && !skipUnauthorized) {
@@ -429,8 +452,18 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       signal: requestSignal,
     });
   } catch (err) {
-    if (timeoutController.signal.aborted && !signal?.aborted) {
-      throw new ApiError("Request timed out — API may be unreachable", 0);
+    const timedOut = timeoutController.signal.aborted && !signal?.aborted;
+    if (timedOut || err instanceof TypeError) {
+      if (networkRetries > 0 && !signal?.aborted) {
+        await new Promise((r) => setTimeout(r, 280));
+        return apiRequest<T>(path, {
+          ...options,
+          networkRetries: networkRetries - 1,
+        });
+      }
+      if (timedOut) {
+        throw new ApiError("Request timed out — API may be unreachable", 0);
+      }
     }
     throw err instanceof Error ? err : new Error("Network request failed");
   } finally {

@@ -19,11 +19,22 @@ export const HELP_CATEGORIES: HelpCategory[] = [
   { id: "start", title: "Getting started", description: "Find your way around in five minutes" },
   { id: "students", title: "Students", description: "Admissions, profiles and follow-ups" },
   { id: "staff", title: "Staff", description: "Team, roles, salary and leave" },
-  { id: "finance", title: "Finance", description: "Receipts, payments, transfers and books" },
-  { id: "reports", title: "Reports", description: "Ledgers, P&L, balance sheet and exports" },
+  {
+    id: "finance",
+    title: "Finance",
+    description: "Cash ops, ledgers and day-to-day accounts",
+  },
+  {
+    id: "reports",
+    title: "Reports",
+    description: "Day book through Balance Sheet",
+  },
   { id: "settings", title: "Settings", description: "School profile, classes, fees and users" },
   { id: "subscription", title: "Subscription", description: "Plan, renewal and invoices" },
 ];
+
+/** Accounts department workflow grouping (School Accounts Manual ch. 33). */
+export type HelpProcedure = "setup" | "daily" | "monthly";
 
 /** Who can open the screen a guide describes. Unset = everyone. */
 export type HelpAccess =
@@ -38,6 +49,11 @@ export type HelpStep = {
   tip?: string;
 };
 
+export type HelpFlowchartSpec = {
+  title: string;
+  mermaid: string;
+};
+
 export type HelpGuide = {
   id: string;
   category: HelpCategoryId;
@@ -50,6 +66,10 @@ export type HelpGuide = {
   openTo?: { href: string; label: string };
   warning?: string;
   related?: string[];
+  /** Primary process diagram shown under the summary in GuideView. */
+  flowchart?: HelpFlowchartSpec;
+  /** Accounts workflow bucket for Setup / Daily / Monthly strips. */
+  procedure?: HelpProcedure;
 };
 
 /**
@@ -383,8 +403,17 @@ export const HELP_GUIDES: HelpGuide[] = [
     summary: "Record basic salary once, then pay every month in a few taps.",
     minutes: 3,
     access: { kind: "finance", view: "make" },
+    procedure: "daily",
     keywords: ["salary", "payroll", "pay staff", "basic salary", "attendance", "hold salary"],
     openTo: { href: "/tenant/finance?tab=make", label: "Open Make Payment" },
+    flowchart: {
+      title: "Salary payment path",
+      mermaid: `flowchart LR
+  profile[Set_Basic_Salary_on_Staff] --> make[Make_Payment_Salary]
+  make --> pick[Staff_Month_Amount_Mode]
+  pick --> save[Review_and_Save]
+  save --> history[Check_Salary_History]`,
+    },
     steps: [
       {
         title: "Set the salary",
@@ -393,15 +422,15 @@ export const HELP_GUIDES: HelpGuide[] = [
       },
       {
         title: "Pay the salary",
-        body: "Finance → Make payment → Payee Type: Salary. Choose the staff member and Salary month. Days Present, Paid Leave and Unpaid Leave adjust the amount automatically.",
+        body: "Finance → Make payment → Payee Type: Salary. Choose the staff member and Salary month. Days Present, Paid Leave and Unpaid Leave adjust the amount automatically. Accounting: Debit Salary Expense / Credit Cash or Bank.",
       },
       {
         title: "Pay now or hold",
-        body: "Confirm Payment, then choose Pay Now (money has gone out) or Hold (salary is owed but not yet paid).",
+        body: "Confirm Payment, then choose Pay Now (money has gone out) or Hold (salary is owed but not yet paid). Check Staff Salary History after save.",
         tip: "Held salaries show as Salary Outstanding on the Dashboard until you pay them.",
       },
     ],
-    related: ["make-payment", "salary-report", "leave-types"],
+    related: ["make-payment", "salary-report", "leave-types", "queued-payments"],
   },
   {
     id: "leave-types",
@@ -430,65 +459,122 @@ export const HELP_GUIDES: HelpGuide[] = [
     id: "receive-payment",
     category: "finance",
     title: "Collect a fee and share the receipt",
-    summary: "Record a student's payment and send the receipt on WhatsApp.",
-    minutes: 2,
+    summary:
+      "Record a student fee collection with the correct category, mode and date — then print or share the receipt.",
+    minutes: 3,
     access: { kind: "finance", view: "receive" },
-    keywords: ["receive", "collect", "fee", "receipt", "payment", "upi", "cash", "bank", "print"],
+    procedure: "daily",
+    keywords: [
+      "receive",
+      "collect",
+      "fee",
+      "receipt",
+      "payment",
+      "upi",
+      "cash",
+      "bank",
+      "print",
+      "tuition",
+    ],
     openTo: { href: "/tenant/finance?tab=receive", label: "Open Receive Payment" },
+    flowchart: {
+      title: "Receive payment flow",
+      mermaid: `flowchart TD
+  openNode[Open_Receive_Payment] --> pick[Select_Class_and_Student]
+  pick --> fee[Choose_Fee_Category_and_Amount]
+  fee --> mode[Set_Mode_Cash_Bank_or_Both]
+  mode --> when[Confirm_Paid_Date_and_Time]
+  when --> save[Review_and_Save]
+  save --> receipt[Open_Print_or_Share_Receipt]
+  receipt --> verify[Verify_Fee_Status_Updated]`,
+    },
     steps: [
+      {
+        title: "Confirm campus and year",
+        body: "Check the header Campus / Branch and Academic Year before you collect. Wrong context mis-routes the receipt and fee status.",
+      },
       {
         title: "Open Receive payment",
         body: "Finance → Receive payment, or the green Receive payment tile on the Dashboard.",
       },
       {
         title: "Pick the student",
-        body: "Received From: Student. Choose Class, then Student. Their pending fees appear automatically.",
-        tip: "Money from someone who is not a student (donation, canteen rent)? Choose External payer and pick an Income ledger.",
+        body: "Received From: Student. Choose Class, then Student. Pending fees appear automatically.",
+        tip: "Money from a non-student (donation, rent)? Choose External payer and pick an Income ledger.",
       },
       {
-        title: "Choose what is being paid",
-        body: "Each fee line has a Fee description, Fee period(s) and Amount. Class Tier one-time fees (Admission, Exam, …) appear under Fee description for that class and prefill once. Tap Add fee item to collect several fees in one receipt.",
+        title: "Choose fee category and amount",
+        body: "Select the fee line (Tuition, Admission, Exam, Transport, …). Verify the amount matches what was paid. Add fee item to collect several lines on one receipt.",
       },
       {
         title: "Mode, date and proof",
-        body: "Choose Bank, Cash or Both (split between the two). Adjust Date / Time if the money came earlier, and attach a UPI screenshot or bank slip with the paperclip.",
+        body: "Choose Cash, Bank/UPI or Both. Set Paid Date & Time. Attach a UPI screenshot or bank slip if needed.",
       },
       {
-        title: "Record and share",
-        body: "Tap Record Payment. In Payment History use WhatsApp, Print or Download on the receipt.",
-        tip: "Made a mistake? Tap Edit on the receipt in Payment History. The student's balance updates automatically.",
+        title: "Save, then share the receipt",
+        body: "Record Payment. Open the receipt to Print or PDF, or share on WhatsApp from Payment History.",
+        tip: "Mistake? Edit the receipt in Payment History — the student’s balance updates automatically.",
       },
     ],
-    related: ["student-profile", "fees-report", "daybook"],
+    warning:
+      "Always confirm Campus and Academic Year in the top bar before saving. Receipts belong to the campus and year that were open when you recorded them.",
+    related: ["fees-report", "daybook", "fee-break", "daily-ops"],
   },
   {
     id: "make-payment",
     category: "finance",
-    title: "Record an expense",
-    summary: "Pay bills, suppliers or any school expense.",
-    minutes: 2,
+    title: "Record an expense or vendor payment",
+    summary:
+      "Pay salary, other expenses or vendors from Make Payment — pick the right payee type and expense ledger.",
+    minutes: 3,
     access: { kind: "finance", view: "make" },
-    keywords: ["expense", "make payment", "bill", "supplier", "voucher", "spend", "pay"],
+    procedure: "daily",
+    keywords: [
+      "expense",
+      "make payment",
+      "bill",
+      "supplier",
+      "vendor",
+      "voucher",
+      "spend",
+      "pay",
+      "electricity",
+    ],
     openTo: { href: "/tenant/finance?tab=make", label: "Open Make Payment" },
+    flowchart: {
+      title: "Make payment branches",
+      mermaid: `flowchart TD
+  openNode[Open_Make_Payment] --> type[Choose_Payee_Type]
+  type --> salary[Salary]
+  type --> expense[Other_Expense]
+  type --> vendor[Vendor]
+  salary --> fill[Amount_Mode_Narration]
+  expense --> ledger[Pick_Expense_Ledger]
+  vendor --> ledger
+  ledger --> fill
+  fill --> save[Review_and_Save]
+  save --> history[Check_Payment_History]`,
+    },
     steps: [
       {
         title: "Open Make payment",
         body: "Finance → Make payment, or the red tile on the Dashboard.",
       },
       {
-        title: "Choose Other Expense",
-        body: "Payee Type: Other Expense. Pick the Expense ledger (for example Electricity, Stationery).",
+        title: "Choose payee type",
+        body: "Salary for staff payroll, Other Expense for bills (electricity, stationery), or Vendor for supplier payments.",
       },
       {
-        title: "Describe and pay",
-        body: "Add Description / Line Items and Amount, choose the payment mode and attach the bill.",
+        title: "Ledger, amount and mode",
+        body: "For expenses/vendors pick the correct Expense ledger. Enter amount, Cash/Bank/UPI mode, narration and attach the bill if available.",
       },
       {
-        title: "Confirm",
-        body: "Confirm Payment, then Pay Now. It appears in Made Payment Details, where you can edit, share or download it.",
+        title: "Review and save",
+        body: "Confirm Payment, then Pay Now. It appears in Made Payment Details for edit, share or download.",
+        tip: "Wrong ledger (expense under Income)? Fix it before month-end — it distorts P&L.",
       },
     ],
-    related: ["salary-setup", "fund-transfer", "pl-report"],
+    related: ["salary-setup", "queued-payments", "fund-transfer", "pl-report", "daily-ops"],
   },
   {
     id: "fund-transfer",
@@ -526,12 +612,15 @@ export const HELP_GUIDES: HelpGuide[] = [
   {
     id: "classes-fees",
     category: "finance",
-    title: "Set up classes and fee structure",
-    summary: "Tell Feezo what each class pays so collection is automatic.",
+    title: "Fee categories and class fee structure",
+    summary:
+      "Create fee categories (Tuition, Admission, Exam…) then set each class schedule so dues calculate automatically.",
     minutes: 5,
     access: { kind: "settings", tab: "classes" },
+    procedure: "setup",
     keywords: [
       "fee structure",
+      "fee category",
       "class",
       "installment",
       "term",
@@ -541,10 +630,23 @@ export const HELP_GUIDES: HelpGuide[] = [
       "setup",
     ],
     openTo: { href: "/tenant/settings?tab=classes", label: "Open Class Tier" },
+    flowchart: {
+      title: "Fee setup path",
+      mermaid: `flowchart LR
+  cats[Create_Fee_Categories] --> classNode[Add_Classes]
+  classNode --> mode[Pick_Billing_Mode]
+  mode --> amounts[Enter_Installments_and_One_Time]
+  amounts --> receive[Visible_in_Receive_Payment]`,
+    },
     steps: [
       {
+        title: "Create fee categories",
+        body: "Settings → Fee Category (or Receive Payment → Add fee category). Typical names: Tuition, Admission, Exam, Transport, Lab, Library, Activity, Other. Reuse an existing category when possible.",
+        image: IMG.setup,
+      },
+      {
         title: "Add a class",
-        body: "Settings → Class Tier → Classes → add. Enter Class (for example Grade 8) and Division (for example B). A class teacher is optional.",
+        body: "Settings → Class Tier → Classes → add. Enter Class (for example Grade 8) and Division (for example B).",
       },
       {
         title: "Pick a billing mode",
@@ -552,16 +654,179 @@ export const HELP_GUIDES: HelpGuide[] = [
       },
       {
         title: "Enter the amounts",
-        body: "Add each installment with its Amount and Due date, choose Fee collection starts from, and add One-time fees (admission, books) with Add fee.",
-        tip: "Every student in this class inherits this schedule, so the dues on their profile are filled in for you.",
-      },
-      {
-        title: "Extra fee categories",
-        body: "Add from Finance → Receive Payment → Add fee category, or Settings → Fee Category. Same Add Fee Category popup either way — name, optional installments, and Active.",
-        image: IMG.setup,
+        body: "Add each installment with Amount and Due date, choose Fee collection starts from, and add One-time fees (admission, books) with Add fee.",
+        tip: "Every student in this class inherits this schedule, so dues on their profile fill in automatically.",
       },
     ],
-    related: ["concessions", "admit-student", "receive-payment"],
+    related: ["ledgers-setup", "concessions", "admit-student", "receive-payment"],
+  },
+  {
+    id: "ledgers-setup",
+    category: "finance",
+    title: "Account groups and ledgers",
+    summary:
+      "Create ledgers under the correct Account Group (Income, Expense, Asset, Liability) before recording live transactions.",
+    minutes: 4,
+    access: { kind: "finance", view: "ledger" },
+    procedure: "setup",
+    keywords: [
+      "ledger",
+      "account group",
+      "chart of accounts",
+      "income",
+      "expense",
+      "asset",
+      "liability",
+      "setup",
+      "classify",
+    ],
+    openTo: { href: "/tenant/finance?tab=ledger", label: "Open Ledger" },
+    flowchart: {
+      title: "Ledger creation control",
+      mermaid: `flowchart TD
+  openNode[Open_Ledger_Setup] --> name[Enter_Ledger_Name]
+  name --> group[Select_Account_Group]
+  group --> check{Income_Expense_Asset_or_Liability}
+  check -->|Correct| save[Save_and_Verify]
+  check -->|Wrong_group| fix[Change_Group_Before_Save]
+  fix --> save
+  save --> use[Use_in_Receive_or_Make_Payment]`,
+    },
+    steps: [
+      {
+        title: "Open ledger / account setup",
+        body: "Finance → Ledger (or the account catalog used when receiving/making payment). Fee categories and payment categories often seed common income/expense ledgers.",
+      },
+      {
+        title: "Choose the Account Group",
+        body: "Income for fee and other income; Expense for salary, electricity, vendor costs; Asset for Cash/Bank; Liability for payables. Never put an expense under Income or vice versa.",
+      },
+      {
+        title: "Create the ledger",
+        body: "Enter the name, select the group, fill other fields, then Save.",
+      },
+      {
+        title: "Verify in transactions",
+        body: "Confirm the new ledger appears in Receive Payment (income) or Make Payment (expense) before you go live.",
+      },
+    ],
+    warning:
+      "Wrong classification routes money to the wrong side of P&L and Balance Sheet. Fix the group before month-end close.",
+    related: ["document-numbers", "classes-fees", "journals", "make-payment"],
+  },
+  {
+    id: "document-numbers",
+    category: "finance",
+    title: "Document numbers and prefixes",
+    summary:
+      "Set receipt and payment prefixes (for example RC-00001, PAY-00001) so each campus keeps a clear sequence.",
+    minutes: 2,
+    access: { kind: "settings", tab: "system" },
+    procedure: "setup",
+    keywords: [
+      "document number",
+      "prefix",
+      "sequence",
+      "receipt number",
+      "voucher number",
+      "RC",
+      "PAY",
+      "numbering",
+    ],
+    openTo: { href: "/tenant/settings?tab=system", label: "Open System settings" },
+    flowchart: {
+      title: "Numbering setup",
+      mermaid: `flowchart LR
+  openNode[Open_Numbering_Config] --> type[Pick_Document_Type]
+  type --> prefix[Set_Prefix_and_Sequence]
+  prefix --> save[Save]
+  save --> test[Test_Next_Number_on_Save]`,
+    },
+    steps: [
+      {
+        title: "Open numbering settings",
+        body: "Settings → System (or Finance document settings). Pick the document type: Receipt, Payment, Journal.",
+      },
+      {
+        title: "Set prefix and starting sequence",
+        body: "Examples: RC- for receipts, PAY- for payments. Prefer branch-separated numbering when you run multiple campuses.",
+      },
+      {
+        title: "Save and test",
+        body: "Save, then record a test receipt/payment and confirm the next number increments as expected.",
+      },
+    ],
+    related: ["ledgers-setup", "branches", "receive-payment"],
+  },
+  {
+    id: "queued-payments",
+    category: "finance",
+    title: "Queued and cleared payments",
+    summary:
+      "Record a payment as Queued until cash or bank actually leaves, then mark Cleared — never clear early.",
+    minutes: 2,
+    access: { kind: "finance", view: "make" },
+    procedure: "daily",
+    keywords: ["queued", "cleared", "pending payment", "clear payment", "status", "cash control"],
+    openTo: { href: "/tenant/finance?tab=make", label: "Open Make Payment" },
+    flowchart: {
+      title: "Queued to cleared lifecycle",
+      mermaid: `flowchart TD
+  record[Record_Payment] --> queued[Status_Queued]
+  queued --> pay[Actually_Pay_from_Cash_or_Bank]
+  pay --> clear[Mark_Cleared]
+  clear --> books[Cash_and_Bank_Updated]
+  queued -->|Do_not_clear_early| wait[Wait_Until_Real_Payment]`,
+    },
+    steps: [
+      {
+        title: "Record the payment",
+        body: "Save from Make Payment. Some payments stay Queued until funds actually leave Cash or Bank.",
+      },
+      {
+        title: "Pay from Cash or Bank",
+        body: "Hand over cash, initiate UPI/NEFT, or issue the cheque. Only then is the payment real.",
+      },
+      {
+        title: "Mark Cleared",
+        body: "Clear the payment after the real outflow. Clearing early makes Day Book and bank balances lie.",
+      },
+    ],
+    warning: "Do not mark Cleared before the money actually leaves. It breaks end-of-day cash control.",
+    related: ["make-payment", "daybook", "reconciliation", "accounts-errors"],
+  },
+  {
+    id: "fee-break",
+    category: "finance",
+    title: "Fee break (exempt a fee line)",
+    summary:
+      "Exempt a student’s fee line for a period so it is not collected in Receive Payment.",
+    minutes: 2,
+    access: { kind: "finance", view: "fees" },
+    keywords: ["fee break", "exempt", "waive period", "skip fee", "holiday fee"],
+    openTo: { href: "/tenant/finance?tab=fees", label: "Open Fees Report" },
+    flowchart: {
+      title: "Fee break path",
+      mermaid: `flowchart LR
+  identify[Identify_Student_and_Period] --> breakNode[Apply_Fee_Break]
+  breakNode --> save[Save]
+  save --> confirm[Confirm_Not_Collected_in_Receive]`,
+    },
+    steps: [
+      {
+        title: "Identify student and period",
+        body: "Find the student and the fee period/line that should not be collected (for example a waived month).",
+      },
+      {
+        title: "Apply Fee Break",
+        body: "Use Fee Break on that fee line and Save.",
+      },
+      {
+        title: "Confirm in Receive Payment",
+        body: "Open Receive Payment for that student — the broken line should not appear as collectable.",
+      },
+    ],
+    related: ["concessions", "fees-report", "receive-payment"],
   },
   {
     id: "concessions",
@@ -586,15 +851,17 @@ export const HELP_GUIDES: HelpGuide[] = [
         body: "Finance → Concession Report lists every waiver given, useful for audits and management review.",
       },
     ],
-    related: ["classes-fees", "fees-report"],
+    related: ["classes-fees", "fee-break", "fees-report"],
   },
   {
     id: "journals",
     category: "finance",
-    title: "Journals: edit or delete entries safely",
-    summary: "Manual vouchers, opening balances and the rules that keep books balanced.",
-    minutes: 3,
+    title: "Manual journal and opening balances",
+    summary:
+      "Post adjustments where Total Debit equals Total Credit, and enter opening balances when going live mid-year.",
+    minutes: 4,
     access: { kind: "finance", view: "journals" },
+    procedure: "setup",
     keywords: [
       "journal",
       "voucher",
@@ -604,8 +871,19 @@ export const HELP_GUIDES: HelpGuide[] = [
       "debit",
       "credit",
       "correction",
+      "manual journal",
     ],
     openTo: { href: "/tenant/finance?tab=journals", label: "Open Journals" },
+    flowchart: {
+      title: "Manual journal rule",
+      mermaid: `flowchart TD
+  openNode[Open_Manual_Journal] --> lines[Add_Two_or_More_Lines]
+  lines --> balance{Total_Debit_Equals_Credit}
+  balance -->|Yes| save[Save]
+  balance -->|No| fix[Adjust_Amounts]
+  fix --> balance
+  save --> ledger[Visible_in_Ledger_and_TB]`,
+    },
     steps: [
       {
         title: "Where entries come from",
@@ -617,16 +895,162 @@ export const HELP_GUIDES: HelpGuide[] = [
       },
       {
         title: "Manual vouchers",
-        body: "Tap New journal for adjustments, or Opening balances when you start using Feezo mid-year.",
+        body: "Tap New journal. Add at least two lines with accounts and Debit/Credit. Total Debit must equal Total Credit before Save.",
       },
       {
-        title: "The two rules",
-        body: "Total debits must equal total credits, and the same account cannot be on both sides of one voucher. Feezo will not save a voucher that breaks either rule.",
+        title: "Opening balances (go-live)",
+        body: "When starting Feezo mid-year, use Opening balances for existing Cash, Bank and Balance Sheet accounts. Balance the opening journal, then Save before daily transactions.",
       },
     ],
     warning:
-      "Deleting a voucher changes balances in every report for that year. Edit instead of delete where possible.",
-    related: ["year-close", "trial-balance", "ledger"],
+      "Deleting a voucher changes balances in every report for that year. Edit instead of delete where possible. Same account cannot appear on both sides of one voucher.",
+    related: ["year-close", "trial-balance", "ledger", "ledgers-setup"],
+  },
+  {
+    id: "daily-ops",
+    category: "finance",
+    title: "Daily operating procedure",
+    summary:
+      "Start-of-day checks, fee collection, expenses, then Day Book cash close — the accounts desk rhythm.",
+    minutes: 3,
+    access: { kind: "finance", view: "daybook" },
+    procedure: "daily",
+    keywords: [
+      "daily",
+      "operating procedure",
+      "start of day",
+      "end of day",
+      "cash count",
+      "routine",
+      "accounts desk",
+    ],
+    openTo: { href: "/tenant/finance?tab=daybook", label: "Open Day Book" },
+    flowchart: {
+      title: "Daily accounts rhythm",
+      mermaid: `flowchart TD
+  start[Start_Confirm_Campus_and_Year] --> collect[Collect_Fees_Receive_Payment]
+  collect --> expense[Record_Expenses_Make_Payment]
+  expense --> eod[End_of_Day_Day_Book]
+  eod --> cash[Compare_System_vs_Physical_Cash]
+  cash --> bank[Review_Bank_and_UPI_Lines]`,
+    },
+    steps: [
+      {
+        title: "Start of day",
+        body: "Confirm Campus / Branch and Academic Year. Clear any pending queued payments that were paid overnight.",
+      },
+      {
+        title: "During fee collection",
+        body: "Student → fee category → amount → mode → save → receipt. Keep modes accurate (Cash vs Bank/UPI).",
+      },
+      {
+        title: "When an expense occurs",
+        body: "Make Payment → correct ledger → amount → mode → narration → save. Clear only after real payment.",
+      },
+      {
+        title: "End of day",
+        body: "Open Day Book for today. Compare system cash with physical cash. Review bank/UPI lines. Investigate differences before leaving.",
+      },
+    ],
+    related: ["receive-payment", "make-payment", "daybook", "monthly-close"],
+  },
+  {
+    id: "monthly-close",
+    category: "finance",
+    title: "Monthly closing procedure",
+    summary:
+      "Fees → Salary → Day Book → Bank Rec → Ledgers → Trial Balance → P&L → Balance Sheet before you call the month closed.",
+    minutes: 5,
+    access: { kind: "finance", view: "trial" },
+    procedure: "monthly",
+    keywords: [
+      "monthly close",
+      "month end",
+      "closing",
+      "trial balance",
+      "profit and loss",
+      "balance sheet",
+      "accounts close",
+    ],
+    openTo: { href: "/tenant/finance?tab=trial", label: "Open Trial Balance" },
+    flowchart: {
+      title: "Month-end close sequence",
+      mermaid: `flowchart TD
+  fees[Fees_Report_Outstanding] --> salary[Salary_Report]
+  salary --> daybook[Month_Day_Book]
+  daybook --> bank[Bank_Reconciliation]
+  bank --> ledgers[Key_Income_Expense_Ledgers]
+  ledgers --> tb[Trial_Balance_Dr_Equals_Cr]
+  tb --> pl[Profit_and_Loss]
+  pl --> bs[Balance_Sheet]`,
+    },
+    steps: [
+      {
+        title: "Fees and salary",
+        body: "Run Fees Report for outstanding. Review Salary Report for the month and clear any held payments.",
+      },
+      {
+        title: "Day Book and bank",
+        body: "Review the month’s Day Book. Complete Bank Reconciliation until Difference = 0.",
+      },
+      {
+        title: "Spot-check ledgers",
+        body: "Open key Income and Expense ledgers. Drill unusual lines back to the source receipt or payment.",
+      },
+      {
+        title: "Trial Balance, P&L, Balance Sheet",
+        body: "Confirm Trial Balance Debit = Credit. Review Profit & Loss (Income − Expenses). Confirm Balance Sheet Assets = Liabilities + Equity.",
+      },
+    ],
+    related: ["fees-report", "daybook", "reconciliation", "trial-balance", "pl-report", "balance-sheet"],
+  },
+  {
+    id: "accounts-errors",
+    category: "finance",
+    title: "Common accounts errors and controls",
+    summary:
+      "Wrong campus, year, ledger, mode or duplicate entries — how to spot them and fix at the source.",
+    minutes: 3,
+    access: { kind: "finance", view: "overview" },
+    keywords: [
+      "error",
+      "control",
+      "wrong campus",
+      "wrong year",
+      "wrong ledger",
+      "duplicate",
+      "troubleshoot",
+      "accounts",
+    ],
+    flowchart: {
+      title: "Error decision tree",
+      mermaid: `flowchart TD
+  symptom[Something_Looks_Wrong] --> where{Where}
+  where -->|Wrong_campus_or_year| switch[Switch_Header_and_Re_enter]
+  where -->|Wrong_ledger| edit[Edit_at_Source_Receipt_or_Payment]
+  where -->|Queued_too_early| clear[Clear_Only_After_Real_Pay]
+  where -->|TB_not_balanced| journal[Check_Manual_Journal_and_Opening]
+  where -->|Analytics_odd| source[Trace_to_Receive_or_Make_Payment]`,
+    },
+    steps: [
+      {
+        title: "Wrong campus or year",
+        body: "Receipts belong to the campus and year open at save time. Delete/correct, switch the header, then re-enter.",
+      },
+      {
+        title: "Wrong ledger or mode",
+        body: "Edit the receipt or payment at the source. Do not try to “fix” Analytics — correct the transaction.",
+      },
+      {
+        title: "Queued vs cleared",
+        body: "Clear only after cash/bank actually moves. Early clear breaks Day Book cash counts.",
+      },
+      {
+        title: "Trial Balance off",
+        body: "Find the unbalanced account → open Ledger → fix the source voucher or opening journal.",
+      },
+    ],
+    related: ["switch-campus-year", "queued-payments", "journals", "trial-balance", "analytics"],
   },
   {
     id: "year-close",
@@ -659,55 +1083,92 @@ export const HELP_GUIDES: HelpGuide[] = [
         tip: "Seeing an amount in Suspense after an older close? Reopen books, then Close books again. Feezo re-posts it correctly and Suspense returns to zero.",
       },
     ],
-    related: ["academic-year", "journals", "balance-sheet"],
+    related: ["academic-year", "journals", "balance-sheet", "monthly-close"],
   },
 
   /* --------------------------------- Reports --------------------------------- */
   {
     id: "fees-report",
     category: "reports",
-    title: "Fees report: who paid and who is due",
-    summary: "Collections, dues and overdue fees by class.",
-    minutes: 1,
+    title: "Fee follow-up and outstanding fees",
+    summary:
+      "Review Paid / Partially Paid / Outstanding by class or student, then collect or follow up.",
+    minutes: 2,
     access: { kind: "finance", view: "fees" },
-    keywords: ["fees report", "due", "overdue", "collection", "pending", "defaulters"],
+    procedure: "monthly",
+    keywords: [
+      "fees report",
+      "due",
+      "overdue",
+      "outstanding",
+      "collection",
+      "pending",
+      "defaulters",
+      "follow-up",
+    ],
     openTo: { href: "/tenant/finance?tab=fees", label: "Open Fees Report" },
+    flowchart: {
+      title: "Outstanding follow-up",
+      mermaid: `flowchart TD
+  openNode[Open_Fees_Report] --> period[Select_Period]
+  period --> status{Fee_Status}
+  status -->|Paid| done[No_Action]
+  status -->|Partial| collect[Collect_Balance_Receive_Payment]
+  status -->|Outstanding| follow[Class_or_Student_Follow_Up]
+  follow --> collect`,
+    },
     steps: [
       {
-        title: "Open it",
-        body: "Finance → Fees Report.",
+        title: "Open Fees Report",
+        body: "Finance → Fees Report. Select the period if needed.",
       },
       {
-        title: "Filter",
-        body: "Use the filters to narrow down to a class or to overdue students.",
+        title: "Review statuses",
+        body: "Check Paid, Partially Paid and Outstanding lines. Note outstanding totals by class.",
       },
       {
-        title: "Act on it",
-        body: "Export to share with management, or go to Students → Select overdue → Bulk WhatsApp to send reminders.",
+        title: "Act on gaps",
+        body: "Drill class- or student-wise views. Collect remaining dues in Receive Payment, or send Bulk WhatsApp reminders from Students.",
       },
     ],
-    related: ["bulk-actions", "concessions"],
+    related: ["receive-payment", "bulk-actions", "concessions", "monthly-close"],
   },
   {
     id: "daybook",
     category: "reports",
-    title: "Day Book: today's cash activity",
-    summary: "Every receipt and payment for a day, for end-of-day cash counts.",
-    minutes: 1,
+    title: "Day Book: end-of-day cash control",
+    summary:
+      "Review today's inflows and outflows, compare system cash with physical cash, then investigate differences.",
+    minutes: 2,
     access: { kind: "finance", view: "daybook" },
-    keywords: ["day book", "daily", "cash count", "today", "closing"],
+    procedure: "daily",
+    keywords: ["day book", "daily", "cash count", "today", "closing", "end of day", "physical cash"],
     openTo: { href: "/tenant/finance?tab=daybook", label: "Open Day Book" },
+    flowchart: {
+      title: "End-of-day Day Book",
+      mermaid: `flowchart TD
+  openNode[Open_Day_Book_Today] --> review[Review_Inflows_and_Outflows]
+  review --> system[Check_System_Cash_Balance]
+  system --> physical[Count_Physical_Cash]
+  physical --> match{Balances_Match}
+  match -->|Yes| done[Day_Closed]
+  match -->|No| investigate[Investigate_Missing_or_Wrong_Mode]`,
+    },
     steps: [
       {
-        title: "Open Day Book",
-        body: "Finance → Day Book lists everything collected and paid on the chosen date.",
+        title: "Open Day Book for today",
+        body: "Finance → Day Book. Confirm the date is today (or the day you are closing).",
       },
       {
-        title: "Count the cash",
-        body: "Compare the cash total with the money in the drawer at closing time.",
+        title: "Review inflows and outflows",
+        body: "Scan receipts and payments. Watch for wrong payment modes (Cash recorded as Bank).",
+      },
+      {
+        title: "Compare system vs physical cash",
+        body: "Match Feezo’s cash balance to the drawer. Investigate any difference before you leave.",
       },
     ],
-    related: ["receive-payment", "reconciliation"],
+    related: ["receive-payment", "make-payment", "reconciliation", "daily-ops"],
   },
   {
     id: "salary-report",
@@ -716,6 +1177,7 @@ export const HELP_GUIDES: HelpGuide[] = [
     summary: "Payroll paid and still owed per month.",
     minutes: 1,
     access: { kind: "finance", view: "salary" },
+    procedure: "monthly",
     keywords: ["salary report", "payroll", "staff payable"],
     openTo: { href: "/tenant/finance?tab=salary", label: "Open Salary Report" },
     steps: [
@@ -725,141 +1187,172 @@ export const HELP_GUIDES: HelpGuide[] = [
       },
       {
         title: "Pay what is pending",
-        body: "Held salaries can be paid from Make payment.",
+        body: "Held salaries can be paid from Make payment → Salary. Check Staff Salary History after save.",
       },
     ],
-    related: ["salary-setup"],
+    related: ["salary-setup", "make-payment", "monthly-close"],
   },
   {
     id: "reconciliation",
     category: "reports",
     title: "Bank reconciliation",
-    summary: "Match your bank statement with Feezo's books.",
+    summary: "Match Feezo bank/UPI lines to the statement until Difference equals zero.",
     minutes: 3,
     access: { kind: "finance", view: "reconciliation" },
-    keywords: ["reconciliation", "bank statement", "match", "cleared", "bank balance"],
+    procedure: "monthly",
+    keywords: ["reconciliation", "bank statement", "match", "cleared", "bank balance", "difference"],
     openTo: { href: "/tenant/finance?tab=reconciliation", label: "Open Bank Reconciliation" },
+    flowchart: {
+      title: "Bank reconciliation",
+      mermaid: `flowchart TD
+  openNode[Open_Bank_Reconciliation] --> stmt[Enter_Statement_Total]
+  stmt --> match[Match_Feezo_Bank_UPI_Lines]
+  match --> diff{Difference_Equals_Zero}
+  diff -->|Yes| done[Reconciled]
+  diff -->|No| investigate[Find_Missing_Charges_or_Transfers]
+  investigate --> match`,
+    },
     steps: [
       {
         title: "Open Bank Reconciliation",
         body: "Finance → Bank Reconciliation lists every bank and UPI receipt and payment.",
       },
       {
-        title: "Enter the statement balance",
+        title: "Enter the statement total",
         body: "Type the closing balance from your bank statement.",
       },
       {
-        title: "Untick what the bank hasn't shown yet",
-        body: "Every entry starts as cleared. Untick the ones missing from the statement (cheques not yet deposited, payments not yet debited). The difference should reach zero.",
-        tip: "A difference that won't go away is usually a bank charge or a transfer not recorded yet.",
+        title: "Match until Difference = 0",
+        body: "Select matching lines. Untick items the bank has not shown yet. Investigate bank charges or unrecorded transfers until the difference is zero.",
       },
     ],
-    related: ["fund-transfer", "daybook"],
+    related: ["fund-transfer", "daybook", "monthly-close"],
   },
   {
     id: "analytics",
     category: "reports",
-    title: "Analytics",
-    summary: "Charts of income, expense and collection trends.",
-    minutes: 1,
+    title: "Analytics (investigate at source)",
+    summary:
+      "Use charts to spot odd amounts — never edit Analytics; correct the Receive or Make Payment that caused it.",
+    minutes: 2,
     access: { kind: "finance", view: "analytics" },
-    keywords: ["analytics", "charts", "insights", "trend", "graph"],
+    keywords: ["analytics", "charts", "insights", "trend", "graph", "investigate"],
     openTo: { href: "/tenant/finance?tab=analytics", label: "Open Analytics" },
+    flowchart: {
+      title: "Analytics investigation",
+      mermaid: `flowchart TD
+  spot[Spot_Odd_Amount] --> noEdit[Do_Not_Edit_Analytics]
+  noEdit --> trace[Trace_Receive_or_Make_Payment]
+  trace --> fix[Correct_at_Source]
+  fix --> recheck[Re_check_Analytics]`,
+    },
     steps: [
       {
         title: "Open Analytics",
         body: "Finance → Analytics shows where money comes from and where it goes.",
       },
       {
+        title: "Investigate, don’t edit",
+        body: "If a category looks wrong, open the source receipt or payment and fix it there. Analytics refreshes from transactions.",
+      },
+      {
         title: "Use it monthly",
         body: "Compare months to spot falling collections or rising expenses early.",
       },
     ],
-    related: ["pl-report"],
+    related: ["receive-payment", "make-payment", "pl-report", "accounts-errors"],
   },
   {
     id: "ledger",
     category: "reports",
-    title: "Ledger statements",
-    summary: "Every movement in one account, with running balance.",
-    minutes: 1,
+    title: "Ledger review",
+    summary: "Opening, Debit, Credit and Closing for one account — drill unusual lines to the source.",
+    minutes: 2,
     access: { kind: "finance", view: "ledger" },
-    keywords: ["ledger", "account statement", "running balance", "general ledger"],
+    procedure: "monthly",
+    keywords: ["ledger", "account statement", "running balance", "general ledger", "opening", "closing"],
     openTo: { href: "/tenant/finance?tab=ledger", label: "Open Ledger" },
     steps: [
       {
         title: "Pick an account",
-        body: "Finance → Ledger, then choose an account such as Cash, a bank or Tuition Fee.",
+        body: "Finance → Ledger, then choose Cash, a bank, Tuition Fee or an expense ledger.",
+      },
+      {
+        title: "Review balances",
+        body: "Check Opening, Debit, Credit and Closing. Unusual spikes deserve a drill-down.",
       },
       {
         title: "Open the source",
-        body: "Tap any line to open the receipt, payment or journal behind it.",
+        body: "Tap any line to open the receipt, payment or journal behind it and correct if needed.",
       },
     ],
-    related: ["journals", "trial-balance"],
+    related: ["journals", "trial-balance", "ledgers-setup", "monthly-close"],
   },
   {
     id: "trial-balance",
     category: "reports",
     title: "Trial balance",
-    summary: "Quick check that the books are balanced.",
-    minutes: 1,
+    summary: "Confirm Debit total equals Credit total for the period — first gate of month-end.",
+    minutes: 2,
     access: { kind: "finance", view: "trial" },
-    keywords: ["trial balance", "debit", "credit", "balanced", "check"],
+    procedure: "monthly",
+    keywords: ["trial balance", "debit", "credit", "balanced", "check", "month end"],
     openTo: { href: "/tenant/finance?tab=trial", label: "Open Trial Balance" },
     steps: [
       {
-        title: "Open it",
-        body: "Finance → Trial Balance lists every account with its debit or credit balance.",
+        title: "Open Trial Balance",
+        body: "Finance → Trial Balance. Select the period you are closing.",
       },
       {
-        title: "Totals must match",
-        body: "Debit total equals credit total when everything is right. If not, see the “Balances don't match” question below.",
+        title: "Confirm Debit = Credit",
+        body: "Totals must match. If not, open the unbalanced account in Ledger and fix the source voucher or opening journal.",
       },
     ],
-    related: ["journals", "balance-sheet"],
+    related: ["journals", "ledger", "balance-sheet", "monthly-close", "accounts-errors"],
   },
   {
     id: "pl-report",
     category: "reports",
     title: "Profit & Loss",
-    summary: "Income vs expenses for the year.",
-    minutes: 1,
+    summary: "Fee and other income versus salary and expenses — Net = Income − Expenses.",
+    minutes: 2,
     access: { kind: "finance", view: "pl" },
+    procedure: "monthly",
     keywords: ["profit", "loss", "p&l", "pl", "income statement", "surplus", "deficit"],
     openTo: { href: "/tenant/finance?tab=pl", label: "Open Profit & Loss" },
     steps: [
       {
-        title: "Open it",
-        body: "Finance → Profit & Loss shows total income, total expenses and the surplus or deficit.",
+        title: "Open Profit & Loss",
+        body: "Finance → Profit & Loss for the period. Review fee income, other income, salary and other expenses.",
       },
       {
-        title: "Export",
-        body: "Download as PDF or CSV for your auditor or management meeting.",
+        title: "Read the net",
+        body: "Net = Income − Expenses (surplus or deficit). Export PDF/CSV for management or auditor.",
       },
     ],
-    related: ["balance-sheet", "year-close"],
+    related: ["balance-sheet", "year-close", "monthly-close", "make-payment"],
   },
   {
     id: "balance-sheet",
     category: "reports",
     title: "Balance sheet",
-    summary: "What the school owns and owes on a date.",
-    minutes: 1,
+    summary: "Assets, Liabilities and Equity on a date — Assets must equal Liabilities + Equity.",
+    minutes: 2,
     access: { kind: "finance", view: "balance" },
+    procedure: "monthly",
     keywords: ["balance sheet", "assets", "liabilities", "equity", "retained earnings"],
     openTo: { href: "/tenant/finance?tab=balance", label: "Open Balance Sheet" },
     steps: [
       {
-        title: "Open it",
-        body: "Finance → Balance Sheet lists assets (cash, bank, receivables) and liabilities.",
+        title: "Open Balance Sheet",
+        body: "Finance → Balance Sheet for the period. Review Assets (cash, bank, receivables) and Liabilities.",
       },
       {
-        title: "Suspense should be zero",
-        body: "If Suspense shows an amount, follow the fix in “Close or reopen the financial year”.",
+        title: "Confirm the equation",
+        body: "Assets = Liabilities + Equity. If Suspense shows an amount, reopen/close books or fix the source entry.",
       },
     ],
-    related: ["year-close", "trial-balance"],
+    related: ["year-close", "trial-balance", "monthly-close"],
   },
 
   /* --------------------------------- Settings -------------------------------- */
@@ -894,12 +1387,26 @@ export const HELP_GUIDES: HelpGuide[] = [
     id: "academic-year",
     category: "settings",
     title: "Academic / financial year",
-    summary: "Add a new year, rename or close old ones.",
+    summary:
+      "Confirm the working year before every save, then add or manage years in System settings.",
     minutes: 2,
     access: { kind: "settings", tab: "system" },
-    keywords: ["academic year", "financial year", "add year", "new year", "AY"],
+    procedure: "setup",
+    keywords: ["academic year", "financial year", "add year", "new year", "AY", "confirm year"],
     openTo: { href: "/tenant/settings?tab=system", label: "Open System settings" },
+    flowchart: {
+      title: "Year selection gate",
+      mermaid: `flowchart TD
+  check[Check_Selected_Year_in_Header] --> match{Matches_Work_Period}
+  match -->|Yes| proceed[Proceed_with_Transactions]
+  match -->|No| select[Select_Correct_Year]
+  select --> proceed`,
+    },
     steps: [
+      {
+        title: "Confirm the year in the header",
+        body: "Before Receive/Make Payment, check the Academic Year in the top bar matches the period you are working on (for example 2025–26).",
+      },
       {
         title: "Open Financial Year",
         body: "Settings → System → Financial Year lists every year with its status: Open books, Closed or Available.",
@@ -915,18 +1422,32 @@ export const HELP_GUIDES: HelpGuide[] = [
     ],
     warning:
       "Delete removes that year's receipts, enrollments and fee periods. Close the year instead unless it was created by mistake.",
-    related: ["year-close", "switch-campus-year"],
+    related: ["year-close", "switch-campus-year", "document-numbers"],
   },
   {
     id: "branches",
     category: "settings",
-    title: "Branches (campuses)",
-    summary: "Run several campuses with separate books from one login.",
+    title: "Campus / Branch",
+    summary:
+      "Confirm the correct campus before every save — books and receipts are campus-scoped.",
     minutes: 2,
     access: { kind: "settings", tab: "branches" },
-    keywords: ["branch", "campus", "multi campus", "location"],
+    procedure: "setup",
+    keywords: ["branch", "campus", "multi campus", "location", "confirm campus"],
     openTo: { href: "/tenant/settings?tab=branches", label: "Open Branches" },
+    flowchart: {
+      title: "Campus check before save",
+      mermaid: `flowchart TD
+  openNode[Open_Finance] --> header[Check_Header_Campus]
+  header --> select[Select_Correct_Branch]
+  select --> recheck[Re_check_Before_Every_Save]
+  recheck --> save[Save_Transaction]`,
+    },
     steps: [
+      {
+        title: "Check the header Campus / Branch",
+        body: "Every receipt and payment posts to the campus open in the top bar. Re-check before each save.",
+      },
       {
         title: "Add a campus",
         body: "Settings → Branches, or the campus menu in the top bar → Add branch.",
@@ -934,10 +1455,10 @@ export const HELP_GUIDES: HelpGuide[] = [
       },
       {
         title: "Switch between them",
-        body: "Pick the campus from the top bar. Each campus has its own students and receipts.",
+        body: "Pick the campus from the top bar. Each campus has its own students, ledgers and receipts.",
       },
     ],
-    related: ["switch-campus-year", "team-users"],
+    related: ["switch-campus-year", "team-users", "document-numbers", "ledgers-setup"],
   },
   {
     id: "team-users",
@@ -1091,22 +1612,43 @@ export const HELP_FAQS: HelpFaq[] = [
     id: "wrong-campus",
     question: "I recorded something in the wrong campus or year",
     answer:
-      "Open the receipt or payment from Payment History / Made Payment Details, note the details, delete it, then switch to the correct campus or year and record it again.",
-    guideId: "receive-payment",
+      "Open the receipt or payment from Payment History / Made Payment Details, note the details, delete it, then switch to the correct campus or year and record it again. Always re-check the header before the next save.",
+    guideId: "accounts-errors",
   },
   {
     id: "balances-mismatch",
     question: "Balances don't match / trial balance is off",
     answer:
-      "Look for Suspense on the Balance Sheet. If it came from an older year-end close, Reopen books then Close books again in Journals. Otherwise check Opening balances and any recent manual journals.",
-    guideId: "year-close",
+      "Open Trial Balance and find accounts where Debit ≠ Credit. Drill into Ledger, then fix the source receipt, payment, opening balance or manual journal. If Suspense appears on the Balance Sheet after an older year-end close, Reopen books then Close books again.",
+    guideId: "trial-balance",
+  },
+  {
+    id: "queued-vs-cleared",
+    question: "What is the difference between Queued and Cleared?",
+    answer:
+      "Queued means the payment is recorded but cash/bank has not left yet. Mark Cleared only after you actually pay. Clearing early makes Day Book and bank balances incorrect.",
+    guideId: "queued-payments",
+  },
+  {
+    id: "wrong-ledger",
+    question: "I posted to the wrong ledger or Account Group",
+    answer:
+      "Edit the receipt or payment at the source and choose the correct ledger. Never put an expense under Income (or vice versa) — it distorts Profit & Loss. For chart setup, see Account groups and ledgers.",
+    guideId: "ledgers-setup",
   },
   {
     id: "student-due-wrong",
     question: "A student's due amount looks wrong",
     answer:
-      "Dues come from the class fee schedule minus concessions and receipts. Check the class in Settings → Class Tier, then any concession on the student, then their Payments tab.",
+      "Dues come from the class fee schedule minus concessions, fee breaks and receipts. Check Settings → Class Tier, then any concession or Fee Break on the student, then their Payments tab.",
     guideId: "classes-fees",
+  },
+  {
+    id: "bank-diff-not-zero",
+    question: "Bank reconciliation difference won't reach zero",
+    answer:
+      "Look for bank charges, UPI not recorded, cheques not yet cleared, or fund transfers missing in Feezo. Match or untick lines until Difference = 0. Do not invent Analytics edits — fix transactions.",
+    guideId: "reconciliation",
   },
   {
     id: "logged-out",
@@ -1150,6 +1692,6 @@ export const HELP_QUICK_TASKS: QuickTask[] = [
   { label: "Admit a student", guideId: "admit-student" },
   { label: "Set fee structure", guideId: "classes-fees" },
   { label: "Pay salary", guideId: "salary-setup" },
+  { label: "Close the month", guideId: "monthly-close" },
   { label: "Add a team login", guideId: "team-users" },
-  { label: "Close the year", guideId: "year-close" },
 ];

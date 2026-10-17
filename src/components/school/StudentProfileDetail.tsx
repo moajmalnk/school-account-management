@@ -71,11 +71,12 @@ import {
   receiptBrandingFromSchool,
 } from "@/lib/finance-export";
 import {
+  buildWhatsAppShareUrl,
   sendWhatsAppNotify,
   sharePdfViaWhatsApp,
   toNotifyWhatsAppNumber,
 } from "@/lib/whatsapp-notify";
-import { buildFeeReceiptWhatsApp } from "@/lib/whatsapp-messages";
+import { buildFeeReceiptWhatsApp, buildFeeReminderWhatsApp } from "@/lib/whatsapp-messages";
 import {
   apiCreateFeeBreak,
   apiDeleteFeeBreak,
@@ -1195,6 +1196,7 @@ export function StudentProfileDetail({
             <FeesTable
               title="Academic Fees"
               subtitle="Tuition and school fee schedule"
+              feeKind="tuition"
               ledger={ledger}
               student={student}
               guardian={student.guardian}
@@ -1213,6 +1215,7 @@ export function StudentProfileDetail({
                     ? `Route ${vehicleFees.routeLabel} · attendance-based transport charges`
                     : "Transport fee schedule for this student"
                 }
+                feeKind="vehicle"
                 ledger={vehicleFees.ledger}
                 student={student}
                 guardian={student.guardian}
@@ -1806,6 +1809,7 @@ function buildOverdueWhatsAppHref({
   guardian,
   studentName,
   studentId,
+  studentClass,
   schoolName,
   academicYear,
   row,
@@ -1814,30 +1818,29 @@ function buildOverdueWhatsAppHref({
   guardian: string;
   studentName: string;
   studentId: string;
+  studentClass?: string;
   schoolName: string;
   academicYear: string;
   row: LedgerRow;
 }) {
   const digits = toWhatsAppDigits(phone);
   if (!digits) return null;
-  const greetingName = guardian.trim() || "Parent/Guardian";
-  const message = [
-    `Dear ${greetingName},`,
-    "",
-    `This is a reminder from ${schoolName} regarding an overdue fee for ${studentName} (${studentId}).`,
-    "",
-    `Fee: ${row.desc}`,
-    `Due Date: ${row.due}`,
-    `Charge: ${formatMoney(row.charge)}`,
-    `Paid: ${formatMoney(row.paid)}`,
-    `Balance Due: ${formatMoney(row.balance)}`,
-    `Academic Year: ${academicYear}`,
-    "",
-    "Please clear the outstanding amount at your earliest convenience.",
-    "",
-    "Thank you.",
-  ].join("\n");
-  return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
+  const message = buildFeeReminderWhatsApp({
+    guardian,
+    studentName,
+    studentId,
+    className: studentClass,
+    school: schoolName,
+    amount: row.balance,
+    dueDate: row.due,
+    feesStatus: row.status,
+    academicYear,
+    feeLabel: row.desc,
+    charge: row.charge,
+    paid: row.paid,
+  });
+  if (!message) return null;
+  return buildWhatsAppShareUrl(message, digits);
 }
 
 function OverdueWhatsAppButton({ href, compact }: { href: string | null; compact?: boolean }) {
@@ -1886,6 +1889,7 @@ function FeesTable({
   phone,
   schoolName,
   academicYear,
+  feeKind = "tuition",
   title = "Fees Details",
   subtitle,
 }: {
@@ -1895,9 +1899,11 @@ function FeesTable({
   phone: string;
   schoolName: string;
   academicYear: string;
+  feeKind?: "tuition" | "vehicle";
   title?: string;
   subtitle?: string;
 }) {
+  const navigate = useNavigate();
   const [selectedRow, setSelectedRow] = useState<LedgerRow | null>(null);
   const paidPct =
     selectedRow && selectedRow.charge > 0
@@ -1910,10 +1916,27 @@ function FeesTable({
       guardian,
       studentName: student.name,
       studentId: student.id,
+      studentClass: student.cls,
       schoolName,
       academicYear,
       row,
     });
+
+  /** Reminders / collect for any open balance — Due, Partially Paid, Overdue (not Paid). */
+  const showFeeReminder = (row: LedgerRow) => row.balance > 0;
+
+  const openCollectNow = (row: LedgerRow) => {
+    const period = (row.periodLabel || row.desc).trim();
+    navigate({
+      to: "/tenant/finance",
+      search: {
+        tab: "receive",
+        studentId: student.id,
+        feeKind,
+        ...(period ? { periods: period } : {}),
+      },
+    });
+  };
 
   return (
     <>
@@ -1955,7 +1978,7 @@ function FeesTable({
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-1.5">
                       <StatusBadge status={r.status} />
-                      {r.status === "Overdue" && (
+                      {showFeeReminder(r) && (
                         <OverdueWhatsAppButton href={overdueHref(r)} compact />
                       )}
                     </div>
@@ -2064,7 +2087,7 @@ function FeesTable({
                       <td className="py-4 pl-4 pr-1">
                         <div className="flex flex-col items-start gap-1.5">
                           <StatusBadge status={r.status} />
-                          {r.status === "Overdue" && (
+                          {showFeeReminder(r) && (
                             <OverdueWhatsAppButton href={overdueHref(r)} compact />
                           )}
                         </div>
@@ -2098,7 +2121,7 @@ function FeesTable({
                 <div className="mt-1 text-[18px] font-semibold text-black">{selectedRow.desc}</div>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <StatusBadge status={selectedRow.status} />
-                  {selectedRow.status === "Overdue" && (
+                  {showFeeReminder(selectedRow) && (
                     <OverdueWhatsAppButton href={overdueHref(selectedRow)} />
                   )}
                 </div>
@@ -2125,6 +2148,19 @@ function FeesTable({
                   />
                 </div>
               </div>
+
+              {showFeeReminder(selectedRow) ? (
+                <DialogFooter className="sm:justify-center">
+                  <Button
+                    type="button"
+                    className="h-10 rounded-full bg-[#0F766E] px-4 text-[13px] font-semibold text-white hover:bg-[#0D9488]"
+                    onClick={() => openCollectNow(selectedRow)}
+                  >
+                    <Wallet className="mr-1.5 h-4 w-4" />
+                    Collect now
+                  </Button>
+                </DialogFooter>
+              ) : null}
             </div>
           )}
         </DialogContent>

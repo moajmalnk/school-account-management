@@ -3,12 +3,14 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   ArrowRight,
   BookOpenText,
-  CalendarRange,
+  CalendarCheck,
   Clock,
   CreditCard,
+  Download,
   GraduationCap,
   HelpCircle,
   IndianRupee,
+  Landmark,
   LifeBuoy,
   Mail,
   MessageCircle,
@@ -18,6 +20,7 @@ import {
   Search,
   Settings,
   Sparkles,
+  Sun,
   UserCog,
   UserPlus,
   Users,
@@ -71,8 +74,40 @@ const QUICK_TASK_ICONS: Record<string, LucideIcon> = {
   "classes-fees": ReceiptText,
   "salary-setup": Wallet,
   "team-users": Users,
-  "year-close": CalendarRange,
+  "monthly-close": CalendarCheck,
 };
+
+const ACCOUNTS_WORKFLOWS: {
+  id: string;
+  title: string;
+  blurb: string;
+  guideId: string;
+  icon: LucideIcon;
+}[] = [
+  {
+    id: "setup",
+    title: "Setup",
+    blurb: "Campus → year → fees → ledgers → document numbers",
+    guideId: "ledgers-setup",
+    icon: Landmark,
+  },
+  {
+    id: "daily",
+    title: "Daily",
+    blurb: "Collect fees, record expenses, close Day Book",
+    guideId: "daily-ops",
+    icon: Sun,
+  },
+  {
+    id: "monthly",
+    title: "Monthly",
+    blurb: "Fees → bank rec → Trial Balance → P&L → Balance Sheet",
+    guideId: "monthly-close",
+    icon: CalendarCheck,
+  },
+];
+
+const ACCOUNTS_MANUAL_HREF = "/Feezo%20Usermanual%20copy.pdf";
 
 export function HelpCenter() {
   const { session } = useAuth();
@@ -321,6 +356,59 @@ export function HelpCenter() {
       ) : (
         <>
           <SetupChecklist onOpenGuide={openGuide} />
+
+          {ACCOUNTS_WORKFLOWS.some((w) => guideById.has(w.guideId)) ? (
+            <section
+              className={cn(glassCardClass, "w-full p-4 sm:p-5")}
+              aria-labelledby="accounts-workflows-title"
+            >
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <h2
+                    id="accounts-workflows-title"
+                    className="text-[16px] font-bold tracking-tight text-slate-900 dark:text-zinc-50"
+                  >
+                    Accounts workflows
+                  </h2>
+                  <p className="text-[12.5px] text-slate-500 dark:text-zinc-400">
+                    Setup · Daily · Monthly — from the School Accounts manual
+                  </p>
+                </div>
+                <a
+                  href={ACCOUNTS_MANUAL_HREF}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 text-[12px] font-semibold text-slate-700 transition-colors hover:border-[#0F766E]/40 hover:text-[#0F766E] dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:text-[#2DD4BF]"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Download full accounts manual
+                </a>
+              </div>
+              <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                {ACCOUNTS_WORKFLOWS.filter((w) => guideById.has(w.guideId)).map((w) => {
+                  const Icon = w.icon;
+                  return (
+                    <button
+                      key={w.id}
+                      type="button"
+                      onClick={() => openGuide(w.guideId)}
+                      className="group flex min-h-[5rem] flex-col items-start gap-2 rounded-2xl border border-slate-200/80 bg-white/90 p-3.5 text-left transition-all hover:-translate-y-0.5 hover:border-[#0F766E]/35 hover:shadow-[0_14px_28px_-18px_rgba(15,118,110,0.45)] dark:border-white/10 dark:bg-zinc-900/80 dark:hover:border-teal-400/30"
+                    >
+                      <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#0F766E]/10 text-[#0F766E] transition-colors group-hover:bg-[#0F766E] group-hover:text-white dark:bg-teal-400/10 dark:text-[#2DD4BF] dark:group-hover:bg-teal-500 dark:group-hover:text-zinc-950">
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <span className="text-[14px] font-semibold text-slate-900 dark:text-zinc-50">
+                        {w.title}
+                      </span>
+                      <span className="text-[12px] leading-snug text-slate-500 dark:text-zinc-400">
+                        {w.blurb}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
 
           <section
             className={cn(glassCardClass, "w-full p-4 sm:p-5")}

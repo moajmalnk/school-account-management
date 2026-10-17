@@ -45,6 +45,10 @@ export function scoreHelpGuide(guide: HelpGuide, tokens: string[], loose = false
   const summary = normalize(guide.summary);
   const keywords = normalize(guide.keywords.join(" "));
   const body = normalize(guide.steps.map((s) => `${s.title} ${s.body} ${s.tip ?? ""}`).join(" "));
+  const flowchart = normalize(
+    guide.flowchart ? `${guide.flowchart.title} ${guide.flowchart.mermaid}` : "",
+  );
+  const procedure = normalize(guide.procedure ?? "");
   let score = 0;
   let hits = 0;
   for (const token of tokens) {
@@ -52,6 +56,8 @@ export function scoreHelpGuide(guide: HelpGuide, tokens: string[], loose = false
     if (title.includes(token)) hit += 6;
     if (keywords.includes(token)) hit += 4;
     if (summary.includes(token)) hit += 2;
+    if (flowchart.includes(token)) hit += 2;
+    if (procedure.includes(token)) hit += 1;
     if (body.includes(token)) hit += 1;
     if (!hit && !loose) return 0;
     if (hit) hits += 1;

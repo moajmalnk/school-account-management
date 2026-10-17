@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 export type WhatsAppComposerField = { key: string; label: string };
 
 const CHIP_CLASS =
-  "mx-[3px] inline-flex items-center gap-1 rounded-md bg-[#CCFBF1] px-1.5 py-[1px] align-baseline text-[12px] font-semibold leading-none text-[#0F766E] dark:bg-teal-400/15 dark:text-teal-100";
+  "inline-flex items-center gap-1 rounded-md bg-[#CCFBF1] px-1.5 py-[1px] align-baseline text-[12px] font-semibold leading-none text-[#0F766E] dark:bg-teal-400/15 dark:text-teal-100";
 
 export function WhatsAppMessageComposer({
   value,
@@ -35,58 +35,68 @@ export function WhatsAppMessageComposer({
     onChange(serializeEditor(root));
   };
 
+  /** Always insert at the caret — same detail can be used more than once. */
   const place = (key: string, label: string) => {
     const root = editorRef.current;
     if (!root) return;
     root.focus();
-    const existing = root.querySelector(`[data-field="${cssEscape(key)}"]`);
-    if (existing) {
-      placeCaretAfter(existing);
-      existing.scrollIntoView({ block: "nearest" });
-      return;
-    }
     const chip = createChip(key, label);
+    const trailing = document.createTextNode(" ");
     const selection = window.getSelection();
     const inside =
       selection && selection.rangeCount > 0 && root.contains(selection.anchorNode);
     if (inside && selection) {
       const range = selection.getRangeAt(0);
       range.deleteContents();
-      range.insertNode(chip);
-      const space = document.createTextNode(" ");
-      chip.after(space);
-      placeCaretAfter(space);
+      const fragment = document.createDocumentFragment();
+      if (needsSpaceBefore(range)) fragment.appendChild(document.createTextNode(" "));
+      fragment.appendChild(chip);
+      fragment.appendChild(trailing);
+      range.insertNode(fragment);
+      placeCaretAfter(trailing);
     } else {
       const current = serializeEditor(root);
       if (current && !/[\s\n]$/.test(current)) root.appendChild(document.createTextNode(" "));
       root.appendChild(chip);
-      const space = document.createTextNode(" ");
-      root.appendChild(space);
-      placeCaretAfter(space);
+      root.appendChild(trailing);
+      placeCaretAfter(trailing);
     }
+    chip.scrollIntoView({ block: "nearest" });
     publish();
   };
 
   return (
     <div>
+      <p className="mb-1.5 text-[11px] text-black/45 dark:text-zinc-500">
+        Tap a detail to insert it at the cursor. You can add the same one more than once.
+      </p>
       <div className="flex flex-wrap gap-1.5">
         {fields.map((item) => {
-          const used = templateHasField(value, item.key);
+          const count = templateFieldCount(value, item.key);
           return (
             <button
               key={item.key}
               type="button"
-              title={used ? "Already in the message" : "Add to the message"}
+              title={
+                count > 0
+                  ? `Insert ${item.label} again (${count} in message)`
+                  : `Insert ${item.label}`
+              }
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => place(item.key, item.label)}
               className={cn(
-                "rounded-full border px-2.5 py-1 text-[12px] font-medium transition-colors",
-                used
-                  ? "border-[#99F6E4] bg-[#F0FDFA] text-[#0F766E]"
+                "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] font-medium transition-colors",
+                count > 0
+                  ? "border-[#99F6E4] bg-[#F0FDFA] text-[#0F766E] hover:border-[#0F766E]/50 hover:bg-[#CCFBF1] dark:border-teal-500/40 dark:bg-teal-950/40 dark:text-teal-200"
                   : "border-[#E5E5E5] bg-white text-black/70 hover:border-[#0F766E]/40 hover:bg-[#F0FDFA] hover:text-[#0F766E] dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-300",
               )}
             >
-              {item.label}
+              <span>{item.label}</span>
+              {count > 0 ? (
+                <span className="rounded-full bg-[#0F766E]/12 px-1.5 py-px font-mono text-[10px] font-bold tabular-nums text-[#0F766E] dark:bg-teal-400/15 dark:text-teal-200">
+                  {count}
+                </span>
+              ) : null}
             </button>
           );
         })}
@@ -126,13 +136,10 @@ export function WhatsAppMessageComposer({
   );
 }
 
-function templateHasField(template: string, key: string): boolean {
+function templateFieldCount(template: string, key: string): number {
   const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`\\{\\{\\s*${escaped}\\s*\\}\\}`).test(template);
-}
-
-function cssEscape(value: string): string {
-  return window.CSS?.escape ? window.CSS.escape(value) : value.replace(/"/g, '\\"');
+  const matches = template.match(new RegExp(`\\{\\{\\s*${escaped}\\s*\\}\\}`, "g"));
+  return matches?.length ?? 0;
 }
 
 function fieldLabel(key: string, fields: readonly WhatsAppComposerField[]): string {
@@ -197,7 +204,31 @@ function nodeToText(node: Node): string {
 function serializeEditor(root: HTMLElement): string {
   const raw = Array.from(root.childNodes).map(nodeToText).join("");
   if (!raw.includes("{{") && raw.trim() === "") return "";
-  return raw;
+  // Chips used to carry CSS margin that looked like a space — keep a real gap so
+  // repeated details (e.g. receipt no.) do not render as RC-1023RC-1023.
+  return raw.replace(/\}\}(\s*)\{\{/g, (_match, ws: string) => `}}${ws || " "}{{`);
+}
+
+function needsSpaceBefore(range: Range): boolean {
+  const node = range.startContainer;
+  if (node.nodeType === Node.TEXT_NODE) {
+    const text = node.textContent ?? "";
+    const before = text.slice(0, range.startOffset);
+    if (!before) {
+      const prev = node.previousSibling;
+      return Boolean(prev && prev instanceof HTMLElement && prev.dataset.field);
+    }
+    return !/[\s\n]$/.test(before);
+  }
+  if (node instanceof HTMLElement) {
+    const prev =
+      range.startOffset > 0 ? node.childNodes[range.startOffset - 1] : node.previousSibling;
+    if (prev instanceof HTMLElement && prev.dataset.field) return true;
+    if (prev?.nodeType === Node.TEXT_NODE) {
+      return !/[\s\n]$/.test(prev.textContent ?? "");
+    }
+  }
+  return false;
 }
 
 function placeCaretAfter(node: Node) {

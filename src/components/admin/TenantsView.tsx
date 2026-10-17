@@ -23,6 +23,7 @@ import {
   Users,
   Receipt,
   CalendarClock,
+  ChevronDown,
   ChevronUp,
   Check,
 } from "lucide-react";
@@ -509,7 +510,7 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (tenant: Tenant
                     {t.name}
                   </div>
                   <div className="mt-0.5 truncate font-mono text-[11px] text-[#0F766E]">
-                    {t.subdomain}.schoolaccounts.in
+                    {t.subdomain}.feezo.app
                   </div>
                   <div className="mt-0.5 font-mono text-[11px] text-black/40">{t.id}</div>
                 </div>
@@ -929,7 +930,7 @@ function TenantFormDrawer({
                 className="flex-1 bg-transparent px-3 py-2 font-mono text-[13px] outline-none"
               />
               <span className="grid place-items-center bg-[#F4F4F5] px-3 font-mono text-[12px] text-black/55">
-                .schoolaccounts.in
+                .feezo.app
               </span>
             </div>
           </Field>
@@ -1073,67 +1074,59 @@ const TENANT_DETAIL_TABS = [
   { id: "access", label: "Access", icon: Shield },
 ] as const;
 
-function TenantDetailTabSheet({
+/** Inline section picker — nested Sheet/Dialog portals sit under Dialog z-[80] and fail on mobile. */
+function TenantDetailTabPicker({
   open,
-  onOpenChange,
   tab,
   onTabChange,
+  onClose,
 }: {
   open: boolean;
-  onOpenChange: (open: boolean) => void;
   tab: string;
   onTabChange: (tab: string) => void;
+  onClose: () => void;
 }) {
+  if (!open) return null;
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="bottom"
-        className="z-[60] max-h-[min(85dvh,560px)] overflow-y-auto rounded-t-[1.75rem] border-[#E5E5E5] bg-white px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2"
-      >
-        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-black/10" aria-hidden />
-        <SheetHeader className="space-y-1 text-left">
-          <SheetTitle className="text-[16px] font-semibold tracking-tight text-black">
-            Tenant sections
-          </SheetTitle>
-          <SheetDescription className="text-[12px] text-black/55">
-            Choose what to view in this school profile
-          </SheetDescription>
-        </SheetHeader>
-        <div className="mt-4 grid gap-1.5">
-          {TENANT_DETAIL_TABS.map((item) => {
-            const Icon = item.icon;
-            const active = tab === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => {
-                  onTabChange(item.id);
-                  onOpenChange(false);
-                }}
-                className={cn(
-                  "flex w-full items-center gap-3 rounded-2xl px-3.5 py-3 text-left transition active:scale-[0.99]",
-                  active
-                    ? "bg-[#0F766E] text-white shadow-sm"
-                    : "bg-[#F4F4F5] text-black/75 hover:bg-[#ECECEC]",
-                )}
-              >
-                <span
-                  className={cn(
-                    "grid h-9 w-9 shrink-0 place-items-center rounded-xl",
-                    active ? "bg-white/20 text-white" : "bg-white text-[#0F766E]",
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                </span>
-                <span className="flex-1 text-[14px] font-semibold">{item.label}</span>
-                {active ? <Check className="h-4 w-4 shrink-0 opacity-90" aria-hidden /> : null}
-              </button>
-            );
-          })}
-        </div>
-      </SheetContent>
-    </Sheet>
+    <div
+      className="mobile-scrollbar-none mt-2 max-h-[min(52dvh,360px)] overflow-y-auto overscroll-contain rounded-2xl border border-[#E5E5E5] bg-white p-1.5 shadow-[0_12px_32px_-18px_rgba(15,23,42,0.35)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      role="listbox"
+      aria-label="Tenant sections"
+    >
+      {TENANT_DETAIL_TABS.map((item) => {
+        const Icon = item.icon;
+        const active = tab === item.id;
+        return (
+          <button
+            key={item.id}
+            type="button"
+            role="option"
+            aria-selected={active}
+            onClick={() => {
+              onTabChange(item.id);
+              onClose();
+            }}
+            className={cn(
+              "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition active:scale-[0.99]",
+              active
+                ? "bg-[#0F766E] text-white shadow-sm"
+                : "text-black/75 hover:bg-[#F4F4F5]",
+            )}
+          >
+            <span
+              className={cn(
+                "grid h-8 w-8 shrink-0 place-items-center rounded-lg",
+                active ? "bg-white/20 text-white" : "bg-[#F4F4F5] text-[#0F766E]",
+              )}
+            >
+              <Icon className="h-4 w-4" />
+            </span>
+            <span className="flex-1 text-[13.5px] font-semibold">{item.label}</span>
+            {active ? <Check className="h-4 w-4 shrink-0 opacity-90" aria-hidden /> : null}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -1288,17 +1281,17 @@ function TenantDetailDrawer({
             Tenant Details
           </DialogTitle>
           <DialogDescription className="text-[12px] text-black/55">
-            {tenant.name} · {tenant.id} · {tenant.subdomain}.schoolaccounts.in
+            {tenant.name} · {tenant.id} · {tenant.subdomain}.feezo.app
           </DialogDescription>
         </DialogHeader>
 
         <Tabs value={tab} onValueChange={onTabChange} className="flex min-h-0 flex-1 flex-col">
-          <div className="shrink-0 border-b border-[#E5E5E5] bg-white px-3 py-3 md:hidden">
+          <div className="relative z-10 shrink-0 border-b border-[#E5E5E5] bg-white px-3 py-3 md:hidden">
             <button
               type="button"
-              onClick={() => setTabSheetOpen(true)}
+              onClick={() => setTabSheetOpen((open) => !open)}
               className="flex w-full items-center justify-between gap-3 rounded-2xl border border-[#E5E5E5] bg-[#F4F4F5] px-3.5 py-3 text-left transition active:scale-[0.99]"
-              aria-haspopup="dialog"
+              aria-haspopup="listbox"
               aria-expanded={tabSheetOpen}
             >
               <span className="flex min-w-0 items-center gap-2.5">
@@ -1316,19 +1309,23 @@ function TenantDetailDrawer({
                   </span>
                 </span>
               </span>
-              <ChevronUp className="h-4 w-4 shrink-0 text-black/45" aria-hidden />
+              {tabSheetOpen ? (
+                <ChevronUp className="h-4 w-4 shrink-0 text-black/45" aria-hidden />
+              ) : (
+                <ChevronDown className="h-4 w-4 shrink-0 text-black/45" aria-hidden />
+              )}
             </button>
-            <TenantDetailTabSheet
+            <TenantDetailTabPicker
               open={tabSheetOpen}
-              onOpenChange={setTabSheetOpen}
               tab={tab}
               onTabChange={onTabChange}
+              onClose={() => setTabSheetOpen(false)}
             />
           </div>
 
           <div className="hidden shrink-0 border-b border-[#E5E5E5] bg-white px-3 pt-3 sm:px-6 md:block">
-            <div className="-mx-1 overflow-x-auto px-1 pb-1">
-              <TabsList className="inline-flex h-auto min-w-full gap-1.5 rounded-none bg-transparent p-0 pb-3">
+            <div className="mobile-scrollbar-none -mx-1 overflow-x-auto px-1 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <TabsList className="inline-flex h-auto min-w-max gap-1.5 rounded-none bg-transparent p-0">
                 {TENANT_DETAIL_TABS.map((item) => {
                   const Icon = item.icon;
                   return (
@@ -1349,7 +1346,7 @@ function TenantDetailDrawer({
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 sm:px-6 sm:py-5">
+          <div className="mobile-scrollbar-none min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 [scrollbar-width:none] sm:px-6 sm:py-5 [&::-webkit-scrollbar]:hidden">
             <TabsContent value="overview" className="mt-0">
               <div className="grid grid-cols-12 gap-3">
                 <div className="col-span-12 flex flex-wrap items-center gap-2">
@@ -2172,7 +2169,7 @@ function EditTenantDrawer({
                 className="flex-1 bg-transparent px-3 py-2 font-mono text-[13px] outline-none"
               />
               <span className="grid place-items-center bg-[#F4F4F5] px-3 font-mono text-[12px] text-black/55">
-                .schoolaccounts.in
+                .feezo.app
               </span>
             </div>
           </Field>

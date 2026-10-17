@@ -1,6 +1,20 @@
 import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Bell, ChevronLeft, Home, LifeBuoy, Settings, UserCog, Users, Wallet } from "lucide-react";
+import {
+  Bell,
+  ChevronLeft,
+  Home,
+  LifeBuoy,
+  MoreHorizontal,
+  Moon,
+  RefreshCw,
+  Settings,
+  Sun,
+  UserCog,
+  Users,
+  Wallet,
+} from "lucide-react";
 import { useEffect } from "react";
+import { toast } from "sonner";
 
 import {
   AcademicYearBooksFade,
@@ -9,10 +23,15 @@ import {
   ImpersonationChip,
   TenantDesktopTopBar,
   TenantMacDock,
-  ThemeModeToggle,
-  HardRefreshButton,
   useWorkspaceSubViewBack,
 } from "@/components/layout/TenantGlassShell";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { hardRefreshApp } from "@/lib/app-version";
 import {
   SettingsUnsavedProvider,
   useTenantNavigationGuard,
@@ -161,11 +180,11 @@ function TenantShell() {
   }, [hydrated, session, activeBranchId, branches, openBranch]);
 
   return (
-    <div className="tenant-canvas flex min-h-dvh flex-col text-slate-900 dark:text-zinc-100">
+    <div className="tenant-canvas flex min-h-dvh max-w-[100vw] flex-col overflow-x-clip text-slate-900 dark:text-zinc-100">
       <TenantMobileHeader />
       <div
         className={cn(
-          "flex min-h-0 w-full flex-1 gap-4 px-4 py-4 md:gap-5 md:px-5 md:py-5",
+          "flex min-h-0 w-full min-w-0 max-w-full flex-1 gap-3 overflow-x-clip px-3 py-3 sm:gap-4 sm:px-4 sm:py-4 md:gap-5 md:px-5 md:py-5",
           isVertical && placement === "Left" && "flex-row",
           isVertical && placement === "Right" && "flex-row-reverse",
           (isTop || isBottom) && "flex-col",
@@ -175,7 +194,7 @@ function TenantShell() {
         {isTop && <TenantMacDock placement={placement} className="order-first" />}
         {isVertical && <TenantMacDock placement={placement} />}
 
-        <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="relative z-0 flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-x-clip">
           <TenantDesktopTopBar />
           {/* Thin progress while campus sync runs with content already visible */}
           {(branchSyncing || !hydrated) && (
@@ -222,9 +241,9 @@ function TenantShell() {
 
 function TenantMobileHeader() {
   const { session } = useAuth();
-  const navigate = useNavigate();
   const { guardedNavigate, tryNavigate } = useTenantNavigationGuard();
-  const { notifications, schoolDetails, activeBranch, branches } = useTenantStore();
+  const { notifications, schoolDetails, activeBranch, branches, themeSettings, setThemeSettings } =
+    useTenantStore();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { showBack, goBack, backLabel } = useWorkspaceSubViewBack();
   const onNotifications = pathname.startsWith("/tenant/notifications");
@@ -248,13 +267,16 @@ function TenantMobileHeader() {
       : "HOME";
   const logoUrl = resolveMediaUrl(schoolDetails.logoUrl);
   const initials = schoolInitials(tenantName);
+  const isDark = themeSettings.mode === "Dark";
+  const iconBtnClass =
+    "grid h-8 w-8 shrink-0 place-items-center rounded-full border border-white/80 bg-white/70 text-slate-600 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-300";
 
   return (
     <header
       data-tenant-mobile-header
-      className="sticky top-0 z-30 bg-gradient-to-b from-white/80 to-transparent px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl dark:from-[#0a0a0a]/95 dark:via-[#0a0a0a]/65 dark:to-transparent md:hidden"
+      className="sticky top-0 z-30 max-w-[100vw] overflow-x-clip bg-gradient-to-b from-white/80 to-transparent px-3 pb-2.5 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl dark:from-[#0a0a0a]/95 dark:via-[#0a0a0a]/65 dark:to-transparent sm:px-4 sm:pb-3 md:hidden"
     >
-      <div className="flex w-full min-w-0 flex-nowrap items-center gap-1.5 sm:gap-2">
+      <div className="flex w-full min-w-0 max-w-full items-center gap-1.5">
         {showBack ? (
           <button
             type="button"
@@ -265,7 +287,7 @@ function TenantMobileHeader() {
             aria-label={backLabel}
             className={cn(
               glassInsetClass,
-              "grid h-9 w-9 shrink-0 place-items-center text-slate-700 transition-colors hover:text-[#0F766E] dark:text-zinc-200 dark:hover:text-[#2DD4BF] sm:h-10 sm:w-10",
+              "grid h-8 w-8 shrink-0 place-items-center text-slate-700 transition-colors hover:text-[#0F766E] dark:text-zinc-200 dark:hover:text-[#2DD4BF]",
             )}
           >
             <ChevronLeft className="h-5 w-5" />
@@ -273,7 +295,7 @@ function TenantMobileHeader() {
         ) : (
           <div
             className={cn(
-              "grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-xl text-[11px] font-bold text-white sm:h-10 sm:w-10",
+              "grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-xl text-[10px] font-bold text-white",
               !logoUrl && "bg-gradient-to-br from-[#0F766E] to-[#115E59]",
             )}
           >
@@ -290,7 +312,7 @@ function TenantMobileHeader() {
         )}
         <div className="min-w-0 flex-1 overflow-hidden">
           <div
-            className="truncate text-[10px] font-bold uppercase leading-tight tracking-[0.04em] text-slate-900 sm:text-[11px] dark:text-zinc-100"
+            className="truncate text-[10px] font-bold uppercase leading-tight tracking-[0.04em] text-slate-900 dark:text-zinc-100"
             title={`${tenantLabel} - ${sectionLabel}`}
           >
             {tenantLabel} - {sectionLabel}
@@ -301,35 +323,67 @@ function TenantMobileHeader() {
             </div>
           ) : null}
         </div>
-        <div className="flex shrink-0 flex-nowrap items-center gap-1 sm:gap-1.5">
+        <div className="flex min-w-0 shrink items-center justify-end gap-1">
           <ImpersonationChip compact />
           <BranchSwitcher compact />
           <AcademicYearSwitcher compact />
-          <ThemeModeToggle className="h-9 w-9 shrink-0 rounded-full border border-white/80 bg-white/70 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-200 sm:h-10 sm:w-10" />
-          <HardRefreshButton className="h-9 w-9 shrink-0 rounded-full border border-white/80 bg-white/70 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-200 sm:h-10 sm:w-10" />
-          <button
-            type="button"
-            onClick={() => guardedNavigate("/tenant/support")}
-            aria-label="Help & support"
-            aria-current={pathname.startsWith("/tenant/support") ? "page" : undefined}
-            className={cn(
-              "grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/80 bg-white/70 text-slate-600 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-300 sm:h-10 sm:w-10",
-              pathname.startsWith("/tenant/support") && "text-[#0F766E] dark:text-[#2DD4BF]",
-            )}
-          >
-            <LifeBuoy className="h-4 w-4 sm:h-[18px] sm:w-[18px]" />
-          </button>
           <button
             type="button"
             onClick={() => guardedNavigate("/tenant/notifications")}
             aria-label="Notifications"
-            className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/80 bg-white/70 text-slate-600 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-300 sm:h-10 sm:w-10"
+            className={cn(iconBtnClass, "relative")}
           >
-            <Bell className="h-4 w-4 sm:h-[18px] sm:w-[18px]" />
+            <Bell className="h-4 w-4" />
             {unreadCount > 0 && (
-              <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full border-2 border-white bg-[#0F766E] dark:border-zinc-900 sm:right-2.5 sm:top-2.5" />
+              <span className="absolute right-1 top-1 h-2 w-2 rounded-full border-2 border-white bg-[#0F766E] dark:border-zinc-900" />
             )}
           </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" aria-label="More actions" className={iconBtnClass}>
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              collisionPadding={12}
+              className="z-[250] min-w-[11.5rem] rounded-xl border-white/60 bg-white/95 p-1 backdrop-blur-xl dark:border-white/10 dark:bg-zinc-900"
+            >
+              <DropdownMenuItem
+                className="cursor-pointer gap-2 rounded-lg text-[13px]"
+                onSelect={() =>
+                  setThemeSettings((prev) => ({
+                    ...prev,
+                    mode: prev.mode === "Dark" ? "Light" : "Dark",
+                  }))
+                }
+              >
+                {isDark ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+                {isDark ? "Light mode" : "Dark mode"}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer gap-2 rounded-lg text-[13px]"
+                onSelect={() => {
+                  toast.message("Hard refresh", {
+                    description: "Clearing cache and reloading latest data…",
+                  });
+                  void hardRefreshApp().catch(() =>
+                    toast.error("Could not refresh", { description: "Try again in a moment." }),
+                  );
+                }}
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Hard refresh
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer gap-2 rounded-lg text-[13px]"
+                onSelect={() => guardedNavigate("/tenant/support")}
+              >
+                <LifeBuoy className="h-3.5 w-3.5" />
+                Help & support
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </header>

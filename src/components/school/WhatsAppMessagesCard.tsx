@@ -42,17 +42,20 @@ export function WhatsAppMessagesCard() {
         : {
             guardian: "Rajesh Sharma",
             student_name: "Ararav Sharma",
-            class: "2025 - JULY",
+            class: "Grade 8 - B",
             student_id: "STU-2887",
             school,
             receipt_no: "RC-1023",
-            amount: active === "feeReminder" ? "SAR 61,000" : "SAR 46,000",
+            amount: active === "feeReminder" ? "SAR 5,000" : "SAR 46,000",
             mode: "Bank",
             date: "12 Oct 2026",
             academic_year: "AY 2025-26",
             category: "Tuition",
-            due_date: "31 Oct 2026",
+            due_date: "10 Sep 2026",
             fees_status: "Overdue",
+            fee: "Term 2",
+            charge: "SAR 5,000",
+            paid: "SAR 0",
           };
     return renderWhatsAppTemplate(draft[active], sample).trim();
   }, [active, draft, school]);
@@ -78,8 +81,8 @@ export function WhatsAppMessagesCard() {
             WhatsApp messages
           </Label>
           <p className="mt-0.5 max-w-xl text-[11px] leading-relaxed text-black/45">
-            The message parents and payees receive. Tap a detail to place it in the sentence — it
-            fills in for each person. Saved on this device for {school}.
+            The message parents and payees receive. Tap a detail to insert it at the cursor — use
+            the same detail more than once if you need. Saved on this device for {school}.
           </p>
         </div>
         <Button
