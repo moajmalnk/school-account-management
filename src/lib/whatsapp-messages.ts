@@ -258,6 +258,169 @@ export function buildFeeReminderWhatsApp(input: {
   );
 }
 
+export type FeeReminderLineInput = {
+  label: string;
+  balance: number;
+  dueDate?: string;
+  status?: string;
+  charge?: number;
+  paid?: number;
+};
+
+const BULK_LIST_LIMIT = 8;
+
+function isOverdueStatus(status?: string): boolean {
+  return (status || "").trim().toLowerCase() === "overdue";
+}
+
+/** Compact period list so WhatsApp stays readable (and under URL length limits). */
+function formatBulkFeeBreakdown(lines: FeeReminderLineInput[]): string {
+  if (lines.length === 0) return "";
+
+  const overdue = lines.filter((line) => isOverdueStatus(line.status));
+  const pending = lines.filter((line) => !isOverdueStatus(line.status));
+  const overdueTotal = overdue.reduce((sum, line) => sum + line.balance, 0);
+  const pendingTotal = pending.reduce((sum, line) => sum + line.balance, 0);
+
+  const dues = lines
+    .map((line) => line.dueDate?.trim())
+    .filter((value): value is string => Boolean(value && value !== "—"));
+  const firstDue = dues[0];
+  const lastDue = dues[dues.length - 1];
+
+  // Group identical balances (e.g. 36 × ₹1,600 transport months).
+  const byAmount = new Map<number, number>();
+  for (const line of lines) {
+    const key = Math.round(line.balance);
+    byAmount.set(key, (byAmount.get(key) ?? 0) + 1);
+  }
+  const amountGroups = [...byAmount.entries()].sort((a, b) => b[1] - a[1]);
+  const uniform = amountGroups.length === 1 && amountGroups[0][1] === lines.length;
+
+  const block: string[] = ["*Open dues*"];
+  block.push(`Periods: ${lines.length}`);
+  if (firstDue && lastDue && firstDue !== lastDue) {
+    block.push(`From: ${firstDue}`);
+    block.push(`To: ${lastDue}`);
+  } else if (firstDue) {
+    block.push(`Due: ${firstDue}`);
+  }
+  if (overdue.length > 0) {
+    block.push(`Overdue: ${formatMoney(overdueTotal)} (${overdue.length})`);
+  }
+  if (pending.length > 0) {
+    block.push(`Pending: ${formatMoney(pendingTotal)} (${pending.length})`);
+  }
+
+  if (uniform) {
+    const [amount, count] = amountGroups[0];
+    block.push(`Each: ${formatMoney(amount)}`);
+    block.push(`Total: *${formatMoney(amount * count)}*`);
+    return block.join("\n");
+  }
+
+  block.push("");
+  block.push("*By amount*");
+  for (const [amount, count] of amountGroups.slice(0, 6)) {
+    block.push(
+      count === 1
+        ? `• ${formatMoney(amount)}`
+        : `• ${formatMoney(amount)} × ${count} = ${formatMoney(amount * count)}`,
+    );
+  }
+  if (amountGroups.length > 6) {
+    block.push(`…and ${amountGroups.length - 6} more amounts`);
+  }
+
+  if (lines.length <= BULK_LIST_LIMIT) {
+    block.push("");
+    block.push("*Periods*");
+    for (const line of lines) {
+      const due = line.dueDate?.trim();
+      block.push(
+        due && due !== "—"
+          ? `• ${line.label} — ${formatMoney(line.balance)} (${due})`
+          : `• ${line.label} — ${formatMoney(line.balance)}`,
+      );
+    }
+  } else {
+    block.push("");
+    block.push("*Next periods*");
+    for (const line of lines.slice(0, 5)) {
+      const due = line.dueDate?.trim();
+      block.push(
+        due && due !== "—"
+          ? `• ${line.label} — ${formatMoney(line.balance)} (${due})`
+          : `• ${line.label} — ${formatMoney(line.balance)}`,
+      );
+    }
+    block.push(`…and ${lines.length - 5} more`);
+  }
+
+  return block.join("\n");
+}
+
+/** Fee reminder for several open lines — template summary + compact aligned breakdown. */
+export function buildBulkFeeReminderWhatsApp(input: {
+  guardian?: string;
+  studentName: string;
+  className?: string;
+  studentId?: string;
+  school: string;
+  academicYear?: string;
+  lines: FeeReminderLineInput[];
+}): string {
+  const open = input.lines.filter((line) => line.balance > 0);
+  if (open.length === 0) return "";
+  if (open.length === 1) {
+    const only = open[0];
+    return buildFeeReminderWhatsApp({
+      guardian: input.guardian,
+      studentName: input.studentName,
+      className: input.className,
+      studentId: input.studentId,
+      school: input.school,
+      academicYear: input.academicYear,
+      amount: only.balance,
+      dueDate: only.dueDate,
+      feesStatus: only.status,
+      feeLabel: only.label,
+      charge: only.charge,
+      paid: only.paid,
+    });
+  }
+
+  const totalBalance = open.reduce((sum, line) => sum + line.balance, 0);
+  const totalCharge = open.reduce((sum, line) => sum + (line.charge ?? 0), 0);
+  const totalPaid = open.reduce((sum, line) => sum + (line.paid ?? 0), 0);
+  const hasOverdue = open.some((line) => isOverdueStatus(line.status));
+  const dues = open
+    .map((line) => line.dueDate?.trim())
+    .filter((value): value is string => Boolean(value && value !== "—"));
+  const firstDue = dues[0];
+  const lastDue = dues[dues.length - 1];
+  const dueLabel =
+    firstDue && lastDue && firstDue !== lastDue ? `${firstDue} – ${lastDue}` : firstDue || "—";
+
+  const summary = buildFeeReminderWhatsApp({
+    guardian: input.guardian,
+    studentName: input.studentName,
+    className: input.className,
+    studentId: input.studentId,
+    school: input.school,
+    academicYear: input.academicYear,
+    amount: totalBalance,
+    dueDate: dueLabel,
+    feesStatus: hasOverdue ? "Overdue" : "Due",
+    feeLabel: `${open.length} open periods`,
+    charge: totalCharge > 0 ? totalCharge : undefined,
+    paid: totalPaid > 0 ? totalPaid : undefined,
+  });
+
+  const breakdown = formatBulkFeeBreakdown(open);
+  return `${summary}\n\n${breakdown}`.trim();
+}
+
 export function buildPaymentVoucherWhatsApp(input: {
   school: string;
   payee: string;

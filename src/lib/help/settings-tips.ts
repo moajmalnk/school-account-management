@@ -443,8 +443,8 @@ export const THEME_TIP: InfoTipContent = {
 export const DOWNLOADS_TIP: InfoTipContent = {
   title: "Download file names",
   points: [
-    "Sets the file name for each type of download, e.g. receipts and reports.",
-    "Use tokens like {name}, {date} or {school}; they're filled in automatically.",
-    "Clear a field to go back to the default name. Applies to the whole organisation.",
+    "One place for every download name on Feezo — receipts, vouchers, reports, CSV exports, bulk templates, and billing PDFs.",
+    "Use tokens like {name}, {date}, {school}, or {report}; they fill in automatically when someone downloads.",
+    "Clear a field to restore the default. Names apply across the whole organisation.",
   ],
 };

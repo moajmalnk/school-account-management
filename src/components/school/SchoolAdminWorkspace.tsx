@@ -360,10 +360,11 @@ import {
 } from "@/lib/brand-theme";
 import {
   DEFAULT_FILE_NAMES,
+  DOWNLOAD_KIND_EXT,
+  DOWNLOAD_KIND_GROUPS,
   DOWNLOAD_KIND_HINTS,
   DOWNLOAD_KIND_LABELS,
   DOWNLOAD_KIND_TOKENS,
-  DOWNLOAD_KINDS,
   DOWNLOAD_TOKEN_HELP,
   DOWNLOAD_TOKENS,
   formatDownloadFilename,
@@ -4043,7 +4044,11 @@ export function StudentsLedger() {
     const sampleGrade = defaultClass ? splitStudentClassForCsv(defaultClass).grade : "Grade 1";
     const sampleDivision = defaultClass ? splitStudentClassForCsv(defaultClass).division : "";
     downloadCsv(
-      "students-bulk-upload-template.csv",
+      formatDownloadFilename("bulkTemplate", "csv", {
+        report: "students",
+        school: schoolName,
+        date: todayStamp(),
+      }),
       [...STUDENT_CSV_HEADERS],
       [
         [
@@ -5866,7 +5871,11 @@ export function StaffRoster() {
 
   const downloadStaffTemplate = () => {
     downloadCsv(
-      "staff-bulk-upload-template.csv",
+      formatDownloadFilename("bulkTemplate", "csv", {
+        report: "staff",
+        school: schoolName,
+        date: todayStamp(),
+      }),
       [
         "Name",
         "Role",
@@ -6157,7 +6166,11 @@ export function StaffRoster() {
             ["STF-019", "Sample Staff", payrollMonth, "18", "24", "0", "2"],
           ];
     downloadCsv(
-      `staff-attendance-demo-${payrollMonth}.csv`,
+      formatDownloadFilename("staffAttendance", "csv", {
+        date: payrollMonth,
+        id: payrollMonth,
+        school: schoolName,
+      }),
       [
         "Staff ID",
         "Name",
@@ -11921,7 +11934,11 @@ function ReceivePayment() {
 
   const downloadFeeTemplate = () => {
     downloadCsv(
-      "fee-collection-bulk-upload-template.csv",
+      formatDownloadFilename("bulkTemplate", "csv", {
+        report: "fee-collection",
+        school: schoolName,
+        date: todayStamp(),
+      }),
       [...FEE_COLLECTION_CSV_HEADERS],
       feeCollectionCsvTemplateRows(),
     );
@@ -11932,7 +11949,11 @@ function ReceivePayment() {
 
   const downloadFeeDemo = () => {
     downloadCsv(
-      "fee-collection-bulk-upload-demo.csv",
+      formatDownloadFilename("bulkDemo", "csv", {
+        report: "fee-collection",
+        school: schoolName,
+        date: todayStamp(),
+      }),
       [...FEE_COLLECTION_CSV_HEADERS],
       feeCollectionCsvDemoRows(students),
     );
@@ -14349,7 +14370,11 @@ function MakePayment() {
 
   const downloadExpenseTemplate = () => {
     downloadCsv(
-      "expense-bulk-upload-template.csv",
+      formatDownloadFilename("bulkTemplate", "csv", {
+        report: "expense",
+        school: schoolName,
+        date: todayStamp(),
+      }),
       [...EXPENSE_CSV_HEADERS],
       expenseCsvTemplateRows(),
     );
@@ -14360,7 +14385,11 @@ function MakePayment() {
 
   const downloadExpenseDemo = () => {
     downloadCsv(
-      "expense-bulk-upload-demo.csv",
+      formatDownloadFilename("bulkDemo", "csv", {
+        report: "expense",
+        school: schoolName,
+        date: todayStamp(),
+      }),
       [...EXPENSE_CSV_HEADERS],
       expenseCsvDemoRows(activeStaff),
     );
@@ -19771,7 +19800,8 @@ function TransportCard({
 }) {
   type RouteFeeDraftRow = { id: string; label: string; amount: string; dueDate: string };
 
-  const { students, schoolDetails } = useTenantStore();
+  const { students, schoolDetails, academicYear } = useTenantStore();
+  const schoolName = schoolDetails.name || "School";
   const orphanedBusPoints = useMemo(
     () =>
       collectOrphanedStudentBusPoints(
@@ -20120,7 +20150,11 @@ function TransportCard({
 
   const downloadRouteTemplate = () => {
     downloadCsv(
-      "bus-routes-bulk-upload-template.csv",
+      formatDownloadFilename("bulkTemplate", "csv", {
+        report: "bus-routes",
+        school: schoolName,
+        date: todayStamp(),
+      }),
       [...TRANSPORT_ROUTE_CSV_HEADERS],
       transportRouteCsvTemplateRows(),
     );
@@ -20131,7 +20165,11 @@ function TransportCard({
 
   const downloadRouteDemoCsv = () => {
     downloadCsv(
-      "bus-routes-demo.csv",
+      formatDownloadFilename("bulkDemo", "csv", {
+        report: "bus-routes",
+        school: schoolName,
+        date: todayStamp(),
+      }),
       [...TRANSPORT_ROUTE_CSV_HEADERS],
       transportRouteCsvDemoRows(),
     );
@@ -20147,13 +20185,12 @@ function TransportCard({
       });
       return;
     }
-    const schoolSlug = (schoolDetails.name || "school")
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
     downloadCsv(
-      `bus-routes-${schoolSlug || "school"}-${todayStamp()}.csv`,
+      formatDownloadFilename("busRoutes", "csv", {
+        school: schoolName,
+        date: todayStamp(),
+        year: slugYear(academicYear),
+      }),
       [...TRANSPORT_ROUTE_EXPORT_HEADERS],
       transportRoutes.map((route) => transportRouteToCsvRow(route, transportVehicles)),
     );
@@ -22539,7 +22576,8 @@ function CategoriesCard({
             <InfoTip content={DOWNLOADS_TIP} className="-my-1" />
           </div>
           <p className="mt-1.5 text-[10.5px] leading-relaxed text-black/45 dark:text-zinc-500">
-            File names for each download. Hover the{" "}
+            All platform downloads use these file names — receipts, reports, CSV exports, bulk
+            templates, and billing PDFs. Hover the{" "}
             <CircleHelp className="inline h-3 w-3 align-text-bottom text-black/40" /> help icon on a
             field for tokens and examples. Extension is added automatically.
           </p>
@@ -22565,27 +22603,36 @@ function CategoriesCard({
               </TooltipProvider>
             ))}
           </div>
-          <div className="mt-3 grid grid-cols-12 gap-3">
-            {DOWNLOAD_KINDS.map((kind) => (
-              <div
-                key={kind}
-                className="col-span-12 min-w-0 sm:col-span-6 lg:col-span-4 xl:col-span-3"
-              >
-                <ThemePatternField
-                  label={DOWNLOAD_KIND_LABELS[kind]}
-                  kind={kind}
-                  value={themeSettings.fileNames?.[kind] ?? DEFAULT_FILE_NAMES[kind]}
-                  onChange={(next) => {
-                    setThemeSettings((prev) => ({
-                      ...prev,
-                      fileNames: {
-                        ...DEFAULT_FILE_NAMES,
-                        ...prev.fileNames,
-                        [kind]: next,
-                      },
-                    }));
-                  }}
-                />
+          <div className="mt-4 space-y-4">
+            {DOWNLOAD_KIND_GROUPS.map((group) => (
+              <div key={group.title}>
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-black/40 dark:text-zinc-500">
+                  {group.title}
+                </div>
+                <div className="grid grid-cols-12 gap-3">
+                  {group.kinds.map((kind) => (
+                    <div
+                      key={kind}
+                      className="col-span-12 min-w-0 sm:col-span-6 lg:col-span-3"
+                    >
+                      <ThemePatternField
+                        label={DOWNLOAD_KIND_LABELS[kind]}
+                        kind={kind}
+                        value={themeSettings.fileNames?.[kind] ?? DEFAULT_FILE_NAMES[kind]}
+                        onChange={(next) => {
+                          setThemeSettings((prev) => ({
+                            ...prev,
+                            fileNames: {
+                              ...DEFAULT_FILE_NAMES,
+                              ...prev.fileNames,
+                              [kind]: next,
+                            },
+                          }));
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
@@ -22720,10 +22767,7 @@ function ThemePatternField({
     if (next !== value) onChange(next);
   };
 
-  const ext =
-    kind === "students" || kind === "staff" || kind === "transactions" || kind === "madePayments"
-      ? "csv"
-      : "pdf";
+  const ext = DOWNLOAD_KIND_EXT[kind];
   const example = previewDownloadFilename(kind, draft || DEFAULT_FILE_NAMES[kind], ext);
   const tokens = DOWNLOAD_KIND_TOKENS[kind];
   const hint = DOWNLOAD_KIND_HINTS[kind];

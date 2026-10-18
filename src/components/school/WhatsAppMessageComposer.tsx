@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Redo2, Undo2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -6,6 +7,14 @@ export type WhatsAppComposerField = { key: string; label: string };
 
 const CHIP_CLASS =
   "inline-flex items-center gap-1 rounded-md bg-[#CCFBF1] px-1.5 py-[1px] align-baseline text-[12px] font-semibold leading-none text-[#0F766E] dark:bg-teal-400/15 dark:text-teal-100";
+
+const HISTORY_LIMIT = 60;
+
+type HistoryState = {
+  past: string[];
+  present: string;
+  future: string[];
+};
 
 export function WhatsAppMessageComposer({
   value,
@@ -22,6 +31,24 @@ export function WhatsAppMessageComposer({
   const labels = useRef(fields);
   labels.current = fields;
 
+  const historyRef = useRef<HistoryState>({ past: [], present: value, future: [] });
+  const applyingHistory = useRef(false);
+  const pendingEcho = useRef<string | null>(null);
+  const typingBurst = useRef(false);
+  const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+
+  const syncButtons = () => {
+    setCanUndo(historyRef.current.past.length > 0);
+    setCanRedo(historyRef.current.future.length > 0);
+  };
+
+  const emit = (next: string) => {
+    pendingEcho.current = next;
+    onChange(next);
+  };
+
   useEffect(() => {
     const root = editorRef.current;
     if (!root) return;
@@ -29,10 +56,106 @@ export function WhatsAppMessageComposer({
     fillEditor(root, value, labels.current);
   }, [value, fields]);
 
-  const publish = () => {
+  // Echoes from our own edits keep history; tab switch / Reset replace it.
+  useEffect(() => {
+    if (applyingHistory.current) {
+      applyingHistory.current = false;
+      historyRef.current.present = value;
+      pendingEcho.current = null;
+      syncButtons();
+      return;
+    }
+    if (pendingEcho.current !== null && value === pendingEcho.current) {
+      pendingEcho.current = null;
+      return;
+    }
+    if (value !== historyRef.current.present) {
+      historyRef.current = { past: [], present: value, future: [] };
+      typingBurst.current = false;
+      syncButtons();
+    }
+  }, [value]);
+
+  useEffect(() => {
+    return () => {
+      if (typingTimer.current) clearTimeout(typingTimer.current);
+    };
+  }, []);
+
+  const endTypingBurst = () => {
+    if (typingTimer.current) {
+      clearTimeout(typingTimer.current);
+      typingTimer.current = null;
+    }
+    typingBurst.current = false;
+  };
+
+  const commit = (next: string) => {
+    endTypingBurst();
+    const hist = historyRef.current;
+    if (next === hist.present) {
+      emit(next);
+      return;
+    }
+    hist.past.push(hist.present);
+    if (hist.past.length > HISTORY_LIMIT) hist.past.shift();
+    hist.present = next;
+    hist.future = [];
+    syncButtons();
+    emit(next);
+  };
+
+  const publishNow = () => {
     const root = editorRef.current;
     if (!root) return;
-    onChange(serializeEditor(root));
+    commit(serializeEditor(root));
+  };
+
+  const publishTyping = () => {
+    const root = editorRef.current;
+    if (!root) return;
+    const next = serializeEditor(root);
+    const hist = historyRef.current;
+    if (!typingBurst.current) {
+      typingBurst.current = true;
+      if (next !== hist.present) {
+        hist.past.push(hist.present);
+        if (hist.past.length > HISTORY_LIMIT) hist.past.shift();
+        hist.future = [];
+      }
+    }
+    hist.present = next;
+    syncButtons();
+    emit(next);
+    if (typingTimer.current) clearTimeout(typingTimer.current);
+    typingTimer.current = setTimeout(() => {
+      typingTimer.current = null;
+      typingBurst.current = false;
+    }, 400);
+  };
+
+  const undo = () => {
+    endTypingBurst();
+    const hist = historyRef.current;
+    if (!hist.past.length) return;
+    const prev = hist.past.pop()!;
+    hist.future.unshift(hist.present);
+    hist.present = prev;
+    applyingHistory.current = true;
+    syncButtons();
+    emit(prev);
+  };
+
+  const redo = () => {
+    endTypingBurst();
+    const hist = historyRef.current;
+    if (!hist.future.length) return;
+    const next = hist.future.shift()!;
+    hist.past.push(hist.present);
+    hist.present = next;
+    applyingHistory.current = true;
+    syncButtons();
+    emit(next);
   };
 
   /** Always insert at the caret — same detail can be used more than once. */
@@ -62,14 +185,42 @@ export function WhatsAppMessageComposer({
       placeCaretAfter(trailing);
     }
     chip.scrollIntoView({ block: "nearest" });
-    publish();
+    publishNow();
   };
 
   return (
     <div>
-      <p className="mb-1.5 text-[11px] text-black/45 dark:text-zinc-500">
-        Tap a detail to insert it at the cursor. You can add the same one more than once.
-      </p>
+      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] text-black/45 dark:text-zinc-500">
+          Tap a detail to insert it at the cursor. You can add the same one more than once.
+        </p>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            title="Undo (⌘Z / Ctrl+Z)"
+            aria-label="Undo"
+            disabled={!canUndo}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={undo}
+            className="inline-flex h-7 items-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2.5 text-[11px] font-semibold text-black/65 transition-colors hover:border-[#0F766E]/40 hover:bg-[#F0FDFA] hover:text-[#0F766E] disabled:cursor-not-allowed disabled:opacity-35 dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-300"
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+            Undo
+          </button>
+          <button
+            type="button"
+            title="Redo (⌘⇧Z / Ctrl+Y)"
+            aria-label="Redo"
+            disabled={!canRedo}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={redo}
+            className="inline-flex h-7 items-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2.5 text-[11px] font-semibold text-black/65 transition-colors hover:border-[#0F766E]/40 hover:bg-[#F0FDFA] hover:text-[#0F766E] disabled:cursor-not-allowed disabled:opacity-35 dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-300"
+          >
+            <Redo2 className="h-3.5 w-3.5" />
+            Redo
+          </button>
+        </div>
+      </div>
       <div className="flex flex-wrap gap-1.5">
         {fields.map((item) => {
           const count = templateFieldCount(value, item.key);
@@ -114,12 +265,26 @@ export function WhatsAppMessageComposer({
           aria-label="WhatsApp message"
           contentEditable
           suppressContentEditableWarning
-          onInput={publish}
+          onInput={publishTyping}
           onPaste={(event) => {
             event.preventDefault();
             const text = event.clipboardData.getData("text/plain").replace(/\r\n/g, "\n");
             insertPlainText(text);
-            publish();
+            publishNow();
+          }}
+          onKeyDown={(event) => {
+            const key = event.key.toLowerCase();
+            const mod = event.metaKey || event.ctrlKey;
+            if (!mod) return;
+            if (key === "z" && !event.shiftKey) {
+              event.preventDefault();
+              undo();
+              return;
+            }
+            if ((key === "z" && event.shiftKey) || key === "y") {
+              event.preventDefault();
+              redo();
+            }
           }}
           onMouseDown={(event) => {
             const target = event.target as HTMLElement;
@@ -127,7 +292,7 @@ export function WhatsAppMessageComposer({
             if (!remove) return;
             event.preventDefault();
             remove.parentElement?.remove();
-            publish();
+            publishNow();
           }}
           className="max-h-[320px] min-h-[220px] overflow-y-auto rounded-xl border border-[#E5E5E5] bg-white px-3 py-2.5 text-[13.5px] leading-6 text-black outline-none [scrollbar-width:none] focus:border-[#0F766E]/40 dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-100 [&::-webkit-scrollbar]:hidden"
         />

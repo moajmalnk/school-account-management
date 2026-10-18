@@ -142,8 +142,39 @@ export function WhatsAppMessagesCard() {
   );
 }
 
+/** WhatsApp Web–accurate chat wallpaper (doodle icons on #efeae2). */
+const WA_WALLPAPER = `url("data:image/svg+xml,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="260" height="260" viewBox="0 0 260 260">
+    <g fill="none" stroke="#0b141a" stroke-opacity="0.045" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M28 36c8-10 22-8 28 2 4 7 2 16-5 21-8 6-19 4-24-4-4-7-3-14 1-19z"/>
+      <path d="M92 48h18M101 39v18"/>
+      <circle cx="168" cy="42" r="11"/>
+      <path d="M162 42h12M168 36v12"/>
+      <path d="M220 34l14 8-14 8-14-8z"/>
+      <path d="M40 110c0-8 6-14 14-14h10v28H54c-8 0-14-6-14-14z"/>
+      <path d="M98 98c10 0 18 8 18 18s-8 18-18 18-18-8-18-18 8-18 18-18z"/>
+      <path d="M98 108v16M90 116h16"/>
+      <path d="M160 102h28v22h-28z"/>
+      <path d="M166 102v-6h16v6"/>
+      <path d="M218 108c8-2 16 4 14 12-2 6-8 10-14 8l-10 6 2-12c-4-4-4-10 0-14 2-2 5-2 8 0z"/>
+      <path d="M36 178h22l-4 10H32z"/>
+      <circle cx="47" cy="198" r="7"/>
+      <path d="M96 172c12 0 20 10 16 20-3 8-12 12-20 9"/>
+      <path d="M158 176l18-8 8 18-18 8z"/>
+      <path d="M214 174h24v8h-24zM218 182h16v16h-16z"/>
+      <path d="M48 236c10-6 22 0 24 12"/>
+      <path d="M110 230h20M120 220v20"/>
+      <circle cx="178" cy="236" r="9"/>
+      <path d="M222 228c8 4 12 14 6 22"/>
+    </g>
+  </svg>`,
+)}")`;
+
 function WhatsAppChatPreview({ title, message }: { title: string; message: string }) {
-  const time = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const time = new Date()
+    .toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true })
+    .replace(/\s?[AP]M$/i, "")
+    .trim();
   const initials = title
     .split(/\s+/)
     .filter(Boolean)
@@ -152,54 +183,92 @@ function WhatsAppChatPreview({ title, message }: { title: string; message: strin
     .join("");
 
   return (
-    <div className="flex h-full min-h-[280px] flex-col overflow-hidden rounded-xl border border-[#d1d7db] bg-white shadow-sm">
-      <div className="flex items-center gap-2.5 border-b border-[#e9edef] bg-[#f0f2f5] px-3 py-2">
-        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#dfe5e7] text-[12px] font-semibold text-[#54656f]">
+    <div
+      className="flex h-full min-h-[320px] flex-col overflow-hidden rounded-xl border border-[#d1d7db] bg-[#fff] shadow-[0_1px_3px_rgba(11,20,26,0.08)]"
+      style={{ fontFamily: '"Segoe UI","Helvetica Neue",Helvetica,Arial,sans-serif' }}
+    >
+      {/* Chat header — WhatsApp Web */}
+      <div className="flex items-center gap-3 border-b border-[#e9edef] bg-[#f0f2f5] px-4 py-2.5">
+        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#dfe5e7] text-[13px] font-semibold tracking-wide text-[#54656f]">
           {initials || "?"}
         </div>
-        <div className="min-w-0">
-          <div className="truncate text-[15px] font-medium leading-tight text-[#111b21]">{title}</div>
-          <div className="text-[12px] leading-tight text-[#667781]">online</div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[16px] font-normal leading-[21px] text-[#111b21]">
+            {title}
+          </div>
+          <div className="text-[13px] leading-[18px] text-[#667781]">online</div>
+        </div>
+        <div className="flex shrink-0 items-center gap-5 text-[#54656f]">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden fill="currentColor">
+            <path d="M15.9 14.3H15l-.3-.3c1-1.1 1.6-2.6 1.6-4.2 0-3.5-2.9-6.4-6.4-6.4S3.5 6.3 3.5 9.8s2.9 6.4 6.4 6.4c1.6 0 3.1-.6 4.2-1.6l.3.3v.8l5.1 5.1 1.5-1.5-5.1-5zm-6 0c-2.5 0-4.5-2-4.5-4.5s2-4.5 4.5-4.5 4.5 2 4.5 4.5-2 4.5-4.5 4.5z" />
+          </svg>
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden fill="currentColor">
+            <path d="M12 7a2 2 0 1 0-.001-4.001A2 2 0 0 0 12 7zm0 2a2 2 0 1 0-.001 4.001A2 2 0 0 0 12 9zm0 6a2 2 0 1 0-.001 4.001A2 2 0 0 0 12 15z" />
+          </svg>
         </div>
       </div>
+
+      {/* Message pane */}
       <div
-        className="min-h-0 flex-1 overflow-y-auto px-[12px] py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="relative min-h-0 flex-1 overflow-y-auto px-4 py-3 [scrollbar-width:thin] [scrollbar-color:#cfcfcf_transparent]"
         style={{
           backgroundColor: "#efeae2",
-          backgroundImage:
-            "radial-gradient(rgba(11,20,26,0.045) 0.6px, transparent 0.7px), radial-gradient(rgba(11,20,26,0.03) 0.6px, transparent 0.7px)",
-          backgroundPosition: "0 0, 18px 22px",
-          backgroundSize: "36px 36px",
+          backgroundImage: WA_WALLPAPER,
+          backgroundRepeat: "repeat",
+          backgroundSize: "260px 260px",
         }}
       >
-        <div className="relative ml-auto w-fit max-w-[92%] rounded-[7.5px] rounded-tr-[0] bg-[#d9fdd3] px-[9px] pb-1 pt-[6px] text-[#d9fdd3] shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]">
-          <svg viewBox="0 0 8 13" width="8" height="13" aria-hidden className="absolute -right-2 top-0">
-            <path
-              fill="rgba(11,20,26,0.13)"
-              d="M5.188 1H0v11.193l6.467-8.625C7.526 2.156 6.958 1 5.188 1z"
-            />
-            <path fill="currentColor" d="M5.188 0H0v11.193l6.467-8.625C7.526 1.156 6.958 0 5.188 0z" />
-          </svg>
-          <div
-            className="whitespace-pre-wrap break-words text-[14.2px] leading-[19px] text-[#111b21] after:clear-both after:block after:content-['']"
-            style={{ fontFamily: '"Segoe UI", Helvetica, Arial, sans-serif' }}
-          >
-            {message || "Write a message to see it here."}
-            <span className="float-right ml-3 mt-[6px] inline-flex translate-y-[3px] items-center gap-[3px] text-[11px] leading-none text-[#667781]">
-              {time}
-              <svg viewBox="0 0 16 11" width="16" height="11" aria-hidden className="block">
-                <path
-                  fill="#53bdeb"
-                  d="m10.9 1.1-6.4 6.4L2.2 5.2 1.1 6.3l3.4 3.4 7.5-7.5-1.1-1.1z"
-                />
-                <path
-                  fill="#53bdeb"
-                  d="m15.2 1.1-6.4 6.4-.7-.7-1.1 1.1 1.8 1.8 7.5-7.5-1.1-1.1z"
-                />
-              </svg>
-            </span>
+        <div className="flex justify-end">
+          <div className="relative max-w-[85%] rounded-[7.5px] rounded-tr-[0] bg-[#d9fdd3] px-[9px] pb-[5px] pt-[6px] text-[#d9fdd3] shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]">
+            {/* Outgoing bubble tail */}
+            <svg
+              viewBox="0 0 8 13"
+              width="8"
+              height="13"
+              aria-hidden
+              className="absolute -right-[7px] top-0"
+            >
+              <path
+                fill="rgba(11,20,26,0.13)"
+                d="M5.188 1H0v11.193l6.467-8.625C7.526 2.156 6.958 1 5.188 1z"
+              />
+              <path
+                fill="#d9fdd3"
+                d="M5.188 0H0v11.193l6.467-8.625C7.526 1.156 6.958 0 5.188 0z"
+              />
+            </svg>
+            <div className="whitespace-pre-wrap break-words text-[14.2px] font-normal leading-[19px] text-[#111b21] after:clear-both after:block after:content-['']">
+              {message || "Write a message to see it here."}
+              <span className="float-right ml-3 mt-[5px] inline-flex translate-y-[2px] items-center gap-[3px] text-[11px] leading-none text-[#667781]">
+                {time}
+                {/* Double blue ticks (read) */}
+                <svg viewBox="0 0 16 11" width="16" height="11" aria-hidden className="block">
+                  <path
+                    fill="#53bdeb"
+                    d="M11.071.593 4.5 7.164 1.929 4.593.5 6.021l4 4 8-8L11.071.593z"
+                  />
+                  <path
+                    fill="#53bdeb"
+                    d="M15.071.593 8.5 7.164l-.9-.9-1.429 1.428 2.329 2.329 8-8L15.071.593z"
+                  />
+                </svg>
+              </span>
+            </div>
           </div>
         </div>
+      </div>
+
+      {/* Composer chrome — matches WhatsApp Web footer */}
+      <div className="flex items-center gap-2 bg-[#f0f2f5] px-3 py-2">
+        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden className="shrink-0 text-[#54656f]" fill="currentColor">
+          <path d="M9.153 11.603c.795 0 1.44-.66 1.44-1.47s-.645-1.47-1.44-1.47-1.44.66-1.44 1.47.645 1.47 1.44 1.47zm-3.204 1.47c-.795 0-1.44.66-1.44 1.47s.645 1.47 1.44 1.47 1.44-.66 1.44-1.47-.645-1.47-1.44-1.47zm6.408 0c-.795 0-1.44.66-1.44 1.47s.645 1.47 1.44 1.47 1.44-.66 1.44-1.47-.645-1.47-1.44-1.47zm3.204-1.47c-.795 0-1.44.66-1.44 1.47s.645 1.47 1.44 1.47 1.44-.66 1.44-1.47-.645-1.47-1.44-1.47zM12 2C6.486 2 2 6.486 2 12s4.486 10 10 10 10-4.486 10-10S17.514 2 12 2zm0 18.4c-4.632 0-8.4-3.768-8.4-8.4S7.368 3.6 12 3.6s8.4 3.768 8.4 8.4-3.768 8.4-8.4 8.4z" />
+        </svg>
+        <div className="flex min-h-[42px] min-w-0 flex-1 items-center rounded-[8px] bg-white px-3 text-[15px] text-[#667781]">
+          Type a message
+        </div>
+        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden className="shrink-0 text-[#54656f]" fill="currentColor">
+          <path d="M11.999 14.942c2.001 0 3.531-1.53 3.531-3.531V4.35c0-2.001-1.53-3.531-3.531-3.531S8.469 2.35 8.469 4.35v7.061c0 2.001 1.53 3.531 3.53 3.531zm6.238-3.53c0 3.531-2.942 6.002-6.237 6.002s-6.237-2.471-6.237-6.002H3.761c0 4.001 3.178 7.297 7.061 7.885v3.884h2.354v-3.884c3.884-.588 7.061-3.884 7.061-7.885h-2z" />
+        </svg>
       </div>
     </div>
   );

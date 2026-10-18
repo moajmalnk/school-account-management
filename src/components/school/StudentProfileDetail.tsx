@@ -72,11 +72,16 @@ import {
 } from "@/lib/finance-export";
 import {
   buildWhatsAppShareUrl,
+  openWhatsAppShare,
   sendWhatsAppNotify,
   sharePdfViaWhatsApp,
   toNotifyWhatsAppNumber,
 } from "@/lib/whatsapp-notify";
-import { buildFeeReceiptWhatsApp, buildFeeReminderWhatsApp } from "@/lib/whatsapp-messages";
+import {
+  buildBulkFeeReminderWhatsApp,
+  buildFeeReceiptWhatsApp,
+  buildFeeReminderWhatsApp,
+} from "@/lib/whatsapp-messages";
 import {
   apiCreateFeeBreak,
   apiDeleteFeeBreak,
@@ -134,17 +139,17 @@ const todayISO = () => {
 const CARD_FRAME =
   "rounded-xl border border-slate-100 bg-white p-4 shadow-sm sm:p-6 dark:border-white/10 dark:bg-[#171717] dark:text-zinc-100 dark:shadow-black/40";
 
-/** Match Students Directory summary cards — compact on phone, tall glass tiles on desktop. */
+/** Four KPI tiles stay one row — compact type on phones, taller glass tiles from sm up. */
 const feeStatCardClass = cn(
   glassCardClass,
-  "flex min-w-0 w-full flex-col justify-between gap-2 overflow-hidden p-3 sm:min-h-[108px] sm:gap-3 sm:p-5 md:p-6",
+  "flex h-full min-h-0 min-w-0 w-full flex-col justify-between gap-1.5 overflow-hidden rounded-xl p-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:min-h-[108px] sm:gap-3 sm:rounded-2xl sm:p-5 sm:shadow-sm md:p-6",
 );
 const feeStatLabelClass =
-  "min-w-0 text-[9px] font-semibold uppercase leading-tight tracking-wider text-slate-500 dark:text-zinc-400 sm:text-[10px]";
+  "min-w-0 truncate text-[8px] font-semibold uppercase leading-tight tracking-wider text-slate-500 dark:text-zinc-400 min-[400px]:text-[9px] sm:text-[10px]";
 const feeStatValueClass =
-  "min-w-0 max-w-full break-words font-mono text-[17px] font-semibold leading-none tracking-tight tabular-nums text-black dark:text-zinc-50 sm:text-[26px] md:text-[32px]";
+  "min-w-0 max-w-full truncate font-mono text-[13px] font-semibold leading-none tracking-tight tabular-nums text-black dark:text-zinc-50 min-[400px]:text-[15px] sm:text-[22px] md:text-[28px] lg:text-[32px]";
 const feeStatBadgeClass =
-  "mt-1.5 inline-flex max-w-full items-center rounded-full px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider sm:mt-2 sm:text-[10px]";
+  "mt-1 inline-flex max-w-full truncate items-center rounded-full px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase tracking-wider min-[400px]:text-[9px] sm:mt-2 sm:px-2 sm:text-[10px]";
 
 const profileBottomPad = "pb-[calc(5.75rem+env(safe-area-inset-bottom))] md:pb-0";
 const MAX_FILES_PER_DOC = 8;
@@ -700,6 +705,72 @@ export function StudentProfileDetail({
   const waDigits = toWhatsAppDigits(student.phone);
   const waHref = waDigits ? `https://wa.me/${waDigits}` : undefined;
 
+  const openBalanceLines = useMemo(() => {
+    const fromTuition = ledger
+      .filter((row) => row.balance > 0)
+      .map((row) => ({
+        label: row.periodLabel || row.desc,
+        balance: row.balance,
+        dueDate: row.due,
+        status: row.status,
+        charge: row.charge,
+        paid: row.paid,
+      }));
+    const fromVehicle = vehicleFees.applicable
+      ? vehicleFees.ledger
+          .filter((row) => row.balance > 0)
+          .map((row) => ({
+            label: row.periodLabel || row.desc,
+            balance: row.balance,
+            dueDate: row.due,
+            status: row.status,
+            charge: row.charge,
+            paid: row.paid,
+          }))
+      : [];
+    return [...fromTuition, ...fromVehicle];
+  }, [ledger, vehicleFees]);
+
+  const openCollectAll = () => {
+    navigate({
+      to: "/tenant/finance",
+      search: { tab: "receive", studentId: student.id },
+    });
+  };
+
+  const openBulkWhatsApp = () => {
+    if (openBalanceLines.length === 0) {
+      toast.error("Nothing due to remind", {
+        description: "All fee lines for this year are cleared.",
+      });
+      return;
+    }
+    const message = buildBulkFeeReminderWhatsApp({
+      guardian: student.guardian,
+      studentName: student.name,
+      className: student.cls,
+      studentId: student.id,
+      school: schoolName,
+      academicYear,
+      lines: openBalanceLines,
+    });
+    if (!message) {
+      toast.error("Could not build WhatsApp message");
+      return;
+    }
+    if (!openWhatsAppShare(message, student.phone)) {
+      toast.error("Could not open WhatsApp", {
+        description: "Add a guardian phone number or allow pop-ups.",
+      });
+      return;
+    }
+    toast.success("Opening WhatsApp", {
+      description: `${openBalanceLines.length} open fee line${
+        openBalanceLines.length === 1 ? "" : "s"
+      } · ${formatMoney(openBalanceLines.reduce((sum, line) => sum + line.balance, 0))}`,
+    });
+  };
+
   const openShare = () => {
     void (async () => {
       let token = (student.shareToken ?? shareToken).trim();
@@ -1076,52 +1147,74 @@ export function StudentProfileDetail({
 
         <ProfileTabPanel value="payments" className="space-y-4 sm:space-y-6">
           <section className={CARD_FRAME}>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <h2 className="text-base font-semibold text-black">Fees Overview</h2>
-                {student.hasConcession ? (
-                  <div className="mt-2 space-y-1">
-                    <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-900">
-                      Fee concession
-                    </span>
-                    {concessionSummary.length > 0 ? (
-                      <p className="text-[12px] leading-relaxed text-slate-600">
-                        {concessionSummary.join(" · ")}
-                      </p>
-                    ) : null}
-                    {student.concessionReason ? (
-                      <p className="text-[12px] text-slate-500">{student.concessionReason}</p>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full shrink-0 rounded-full sm:w-auto"
-                  onClick={() => setFeeBreaksOpen(true)}
-                >
-                  <CalendarOff className="h-3.5 w-3.5" />
-                  Manage fee breaks
-                  {studentBreaks.length > 0 ? (
-                    <span className="ml-1 rounded-full bg-[#CCFBF1] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[#0F766E]">
-                      {studentBreaks.length}
-                    </span>
+            <div>
+              <h2 className="text-base font-semibold text-black">Fees Overview</h2>
+              {student.hasConcession ? (
+                <div className="mt-2 space-y-1">
+                  <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-900">
+                    Fee concession
+                  </span>
+                  {concessionSummary.length > 0 ? (
+                    <p className="text-[12px] leading-relaxed text-slate-600">
+                      {concessionSummary.join(" · ")}
+                    </p>
                   ) : null}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full shrink-0 rounded-full sm:w-auto"
-                  onClick={() => void handleDownloadParentFeeReport()}
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  Download report for parents
-                </Button>
-              </div>
+                  {student.concessionReason ? (
+                    <p className="text-[12px] text-slate-500">{student.concessionReason}</p>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
-            <div className="mt-4 grid w-full min-w-0 grid-cols-2 gap-2 sm:mt-5 sm:gap-3 xl:grid-cols-4">
+
+            <div className="mt-3 grid w-full min-w-0 grid-cols-2 gap-2 sm:grid-cols-4">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 w-full min-w-0 justify-center gap-1.5 rounded-full px-2.5 text-[12px] font-semibold sm:text-[13px]"
+                onClick={() => setFeeBreaksOpen(true)}
+              >
+                <CalendarOff className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">Manage fee breaks</span>
+                {studentBreaks.length > 0 ? (
+                  <span className="shrink-0 rounded-full bg-[#CCFBF1] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[#0F766E]">
+                    {studentBreaks.length}
+                  </span>
+                ) : null}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 w-full min-w-0 justify-center gap-1.5 rounded-full px-2.5 text-[12px] font-semibold sm:text-[13px]"
+                onClick={() => void handleDownloadParentFeeReport()}
+              >
+                <Download className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">Download report</span>
+              </Button>
+              <button
+                type="button"
+                disabled={openBalanceLines.length === 0}
+                onClick={openBulkWhatsApp}
+                className="inline-flex h-10 w-full min-w-0 items-center justify-center gap-1.5 rounded-full border border-[#25D366]/40 bg-[#25D366]/10 px-2.5 text-[12px] font-semibold text-[#128C7E] transition-colors hover:bg-[#25D366]/18 disabled:cursor-not-allowed disabled:opacity-40 sm:text-[13px]"
+              >
+                <MessageCircle className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">WhatsApp all due</span>
+                {openBalanceLines.length > 0 ? (
+                  <span className="shrink-0 rounded-full bg-[#128C7E]/12 px-1.5 py-px font-mono text-[10px] font-bold tabular-nums">
+                    {openBalanceLines.length}
+                  </span>
+                ) : null}
+              </button>
+              <Button
+                type="button"
+                className="h-10 w-full min-w-0 justify-center gap-1.5 rounded-full bg-[#0F766E] px-2.5 text-[12px] font-semibold text-white hover:bg-[#0D9488] sm:text-[13px]"
+                onClick={openCollectAll}
+              >
+                <Wallet className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">Collect now</span>
+              </Button>
+            </div>
+
+            <div className="mt-4 grid w-full min-w-0 grid-cols-4 items-stretch gap-1.5 sm:mt-5 sm:gap-3">
               <FeeStatBox
                 label="Total Fee"
                 value={formatMoney(fees.totalFee)}
@@ -1584,29 +1677,41 @@ function FeeStatBox({
 }) {
   return (
     <div className={cn(feeStatCardClass, accentClass)}>
-      <div className="flex min-w-0 items-start justify-between gap-2">
-        <div className={feeStatLabelClass}>{label}</div>
-        <Icon className={cn("h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4", iconClass)} strokeWidth={2.25} />
+      <div className="flex min-w-0 items-start justify-between gap-1 sm:gap-2">
+        <div className={feeStatLabelClass} title={label}>
+          {label}
+        </div>
+        <Icon
+          className={cn("h-3 w-3 shrink-0 sm:h-4 sm:w-4", iconClass)}
+          strokeWidth={2.25}
+          aria-hidden
+        />
       </div>
-      <div className={cn(feeStatValueClass, valueClassName)}>{value}</div>
+      <div className={cn(feeStatValueClass, valueClassName)} title={value}>
+        {value}
+      </div>
     </div>
   );
 }
 
 function FeeDueBox({ totalDue, overdue }: { totalDue: number; overdue: boolean }) {
   const cleared = totalDue <= 0;
+  const amount = formatMoney(totalDue);
+  const status = cleared ? "[ CLEARED ]" : overdue ? "[ OVERDUE ]" : "[ PENDING ]";
   return (
     <div className={feeStatCardClass}>
-      <div className="flex min-w-0 items-start justify-between gap-2">
+      <div className="flex min-w-0 items-start justify-between gap-1 sm:gap-2">
         <div className={feeStatLabelClass}>Total Due</div>
         {cleared ? (
-          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[#10B981] sm:h-4 sm:w-4" />
+          <CheckCircle2 className="h-3 w-3 shrink-0 text-[#10B981] sm:h-4 sm:w-4" aria-hidden />
         ) : (
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[#F59E0B] sm:h-4 sm:w-4" />
+          <AlertTriangle className="h-3 w-3 shrink-0 text-[#F59E0B] sm:h-4 sm:w-4" aria-hidden />
         )}
       </div>
-      <div>
-        <div className={feeStatValueClass}>{formatMoney(totalDue)}</div>
+      <div className="min-w-0">
+        <div className={feeStatValueClass} title={amount}>
+          {amount}
+        </div>
         <span
           className={cn(
             feeStatBadgeClass,
@@ -1616,8 +1721,9 @@ function FeeDueBox({ totalDue, overdue }: { totalDue: number; overdue: boolean }
                 ? "bg-[#0F172A] text-[#EF4444]"
                 : "bg-[#0F172A] text-[#F59E0B]",
           )}
+          title={status}
         >
-          {cleared ? "[ CLEARED ]" : overdue ? "[ OVERDUE ]" : "[ PENDING ]"}
+          {status}
         </span>
       </div>
     </div>
@@ -1626,6 +1732,8 @@ function FeeDueBox({ totalDue, overdue }: { totalDue: number; overdue: boolean }
 
 function FeeOverdueBox({ overdueDue }: { overdueDue: number }) {
   const active = overdueDue > 0;
+  const amount = formatMoney(overdueDue);
+  const status = active ? "[ OVERDUE ]" : "[ NONE ]";
   return (
     <div
       className={cn(
@@ -1635,28 +1743,27 @@ function FeeOverdueBox({ overdueDue }: { overdueDue: number }) {
           : undefined,
       )}
     >
-      <div className="flex min-w-0 items-start justify-between gap-2">
+      <div className="flex min-w-0 items-start justify-between gap-1 sm:gap-2">
         <div className={cn(feeStatLabelClass, active && "text-white/80 dark:text-white/80")}>
           Over Due
         </div>
         <AlertTriangle
-          className={cn(
-            "h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4",
-            active ? "text-white" : "text-[#EF4444]",
-          )}
+          className={cn("h-3 w-3 shrink-0 sm:h-4 sm:w-4", active ? "text-white" : "text-[#EF4444]")}
+          aria-hidden
         />
       </div>
-      <div>
-        <div className={cn(feeStatValueClass, active && "text-white dark:text-white")}>
-          {formatMoney(overdueDue)}
+      <div className="min-w-0">
+        <div className={cn(feeStatValueClass, active && "text-white dark:text-white")} title={amount}>
+          {amount}
         </div>
         <span
           className={cn(
             feeStatBadgeClass,
             active ? "bg-[#0F172A] text-[#EF4444]" : "bg-[#0F172A] text-[#10B981]",
           )}
+          title={status}
         >
-          {active ? "[ OVERDUE ]" : "[ NONE ]"}
+          {status}
         </span>
       </div>
     </div>
@@ -1882,6 +1989,10 @@ function OverdueWhatsAppButton({ href, compact }: { href: string | null; compact
   );
 }
 
+function feeLineKey(row: LedgerRow, index: number): string {
+  return `${row.periodLabel || row.desc}|${row.due}|${row.charge}|${index}`;
+}
+
 function FeesTable({
   ledger,
   student,
@@ -1905,10 +2016,27 @@ function FeesTable({
 }) {
   const navigate = useNavigate();
   const [selectedRow, setSelectedRow] = useState<LedgerRow | null>(null);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
   const paidPct =
     selectedRow && selectedRow.charge > 0
       ? Math.round((selectedRow.paid / selectedRow.charge) * 100)
       : 0;
+
+  const openRows = useMemo(
+    () =>
+      ledger
+        .map((row, index) => ({ row, index, key: feeLineKey(row, index) }))
+        .filter(({ row }) => row.balance > 0),
+    [ledger],
+  );
+
+  useEffect(() => {
+    const valid = new Set(openRows.map(({ key }) => key));
+    setSelectedKeys((prev) => {
+      const next = new Set([...prev].filter((key) => valid.has(key)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [openRows]);
 
   const overdueHref = (row: LedgerRow) =>
     buildOverdueWhatsAppHref({
@@ -1938,20 +2066,116 @@ function FeesTable({
     });
   };
 
+  const toggleKey = (key: string, on: boolean) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  };
+
+  const allOpenSelected =
+    openRows.length > 0 && openRows.every(({ key }) => selectedKeys.has(key));
+
+  const toggleAllOpen = (on: boolean) => {
+    setSelectedKeys(on ? new Set(openRows.map(({ key }) => key)) : new Set());
+  };
+
+  const sendBulkWhatsApp = (rows: LedgerRow[]) => {
+    const lines = rows
+      .filter((row) => row.balance > 0)
+      .map((row) => ({
+        label: row.periodLabel || row.desc,
+        balance: row.balance,
+        dueDate: row.due,
+        status: row.status,
+        charge: row.charge,
+        paid: row.paid,
+      }));
+    if (lines.length === 0) {
+      toast.error("Select fee lines with a balance");
+      return;
+    }
+    const message = buildBulkFeeReminderWhatsApp({
+      guardian,
+      studentName: student.name,
+      className: student.cls,
+      studentId: student.id,
+      school: schoolName,
+      academicYear,
+      lines,
+    });
+    if (!message) {
+      toast.error("Could not build WhatsApp message");
+      return;
+    }
+    if (!openWhatsAppShare(message, phone)) {
+      toast.error("Could not open WhatsApp", {
+        description: "Add a guardian phone number or allow pop-ups.",
+      });
+      return;
+    }
+    toast.success("Opening WhatsApp", {
+      description: `${lines.length} fee line${lines.length === 1 ? "" : "s"} selected`,
+    });
+  };
+
+  const selectedOpenRows = openRows
+    .filter(({ key }) => selectedKeys.has(key))
+    .map(({ row }) => row);
+
   return (
     <>
       <div>
-        <div className="mb-4 flex items-end justify-between gap-4">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="text-base font-semibold text-black">{title}</h2>
             <div className="mt-1 text-[12px] text-black/55">
               {subtitle ?? `Statement ledger sheet · ${ledger.length} line items on file`}
             </div>
           </div>
-          <span className="rounded-full border border-[#E5E5E5] bg-[#F4F4F5] px-2.5 py-1 font-mono text-[10.5px] font-medium text-black/65">
-            AY {academicYear}
-          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            {openRows.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => sendBulkWhatsApp(openRows.map(({ row }) => row))}
+                className="inline-flex items-center gap-1 rounded-full border border-[#25D366]/35 bg-[#25D366]/10 px-2.5 py-1 text-[11px] font-semibold text-[#128C7E] transition-colors hover:bg-[#25D366]/18"
+              >
+                <MessageCircle className="h-3.5 w-3.5" />
+                WhatsApp all due
+                <span className="font-mono text-[10px] tabular-nums">{openRows.length}</span>
+              </button>
+            ) : null}
+            <span className="rounded-full border border-[#E5E5E5] bg-[#F4F4F5] px-2.5 py-1 font-mono text-[10.5px] font-medium text-black/65">
+              AY {academicYear}
+            </span>
+          </div>
         </div>
+
+        {openRows.length > 0 ? (
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] px-3 py-2">
+            <label className="inline-flex items-center gap-2 text-[12px] font-medium text-black/65">
+              <Checkbox
+                checked={allOpenSelected}
+                onCheckedChange={(v) => toggleAllOpen(v === true)}
+                aria-label="Select all open fee lines"
+              />
+              {selectedOpenRows.length > 0
+                ? `${selectedOpenRows.length} selected`
+                : `Select open lines (${openRows.length})`}
+            </label>
+            <button
+              type="button"
+              disabled={selectedOpenRows.length === 0}
+              onClick={() => sendBulkWhatsApp(selectedOpenRows)}
+              className="inline-flex items-center gap-1 rounded-full border border-[#25D366]/35 bg-[#25D366]/10 px-2.5 py-1 text-[11px] font-semibold text-[#128C7E] transition-colors hover:bg-[#25D366]/18 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <MessageCircle className="h-3.5 w-3.5" />
+              WhatsApp selected
+            </button>
+          </div>
+        ) : null}
 
         {ledger.length === 0 ? (
           <div className="rounded-xl border border-dashed border-[#E5E5E5] bg-[#FAFAFA] px-4 py-10 text-center">
@@ -1963,22 +2187,42 @@ function FeesTable({
         ) : (
           <>
             <div className="space-y-2.5 md:hidden">
-              {ledger.map((r, i) => (
-                <button
+              {ledger.map((r, i) => {
+                const key = feeLineKey(r, i);
+                const canSelect = showFeeReminder(r);
+                return (
+                <div
                   key={i}
-                  type="button"
-                  onClick={() => setSelectedRow(r)}
-                  aria-label={`View details for ${r.desc}`}
-                  className="w-full rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 text-left transition-colors hover:border-black/15 hover:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]"
+                  className="w-full rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 text-left transition-colors hover:border-black/15 hover:bg-[#F4F4F5]"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="truncate text-[14px] font-semibold text-black">{r.desc}</div>
-                      <div className="mt-1 font-mono text-[11px] text-black/45">{r.date}</div>
+                    <div className="flex min-w-0 items-start gap-2">
+                      {canSelect ? (
+                        <div
+                          className="pt-0.5"
+                          onClick={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => e.stopPropagation()}
+                        >
+                          <Checkbox
+                            checked={selectedKeys.has(key)}
+                            onCheckedChange={(v) => toggleKey(key, v === true)}
+                            aria-label={`Select ${r.desc}`}
+                          />
+                        </div>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedRow(r)}
+                        aria-label={`View details for ${r.desc}`}
+                        className="min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]"
+                      >
+                        <div className="truncate text-[14px] font-semibold text-black">{r.desc}</div>
+                        <div className="mt-1 font-mono text-[11px] text-black/45">{r.date}</div>
+                      </button>
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-1.5">
                       <StatusBadge status={r.status} />
-                      {showFeeReminder(r) && (
+                      {canSelect && (
                         <OverdueWhatsAppButton href={overdueHref(r)} compact />
                       )}
                     </div>
@@ -2019,15 +2263,19 @@ function FeesTable({
                       </div>
                     </div>
                   </div>
-                </button>
-              ))}
+                </div>
+                );
+              })}
             </div>
 
             <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[720px] border-collapse text-left">
+              <table className="w-full min-w-[760px] border-collapse text-left">
                 <thead>
                   <tr>
-                    <th className="border-b border-[#E5E5E5] pb-4 pl-1 pr-4 text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                    <th className="border-b border-[#E5E5E5] w-10 pb-4 pl-1 pr-2">
+                      <span className="sr-only">Select</span>
+                    </th>
+                    <th className="border-b border-[#E5E5E5] pb-4 pr-4 text-[11px] font-semibold uppercase tracking-wider text-black/45">
                       Date
                     </th>
                     <th className="border-b border-[#E5E5E5] px-4 pb-4 text-[11px] font-semibold uppercase tracking-wider text-black/45">
@@ -2051,7 +2299,10 @@ function FeesTable({
                   </tr>
                 </thead>
                 <tbody>
-                  {ledger.map((r, i) => (
+                  {ledger.map((r, i) => {
+                    const key = feeLineKey(r, i);
+                    const canSelect = showFeeReminder(r);
+                    return (
                     <tr
                       key={i}
                       role="button"
@@ -2066,7 +2317,22 @@ function FeesTable({
                       aria-label={`View details for ${r.desc}`}
                       className="cursor-pointer border-b border-[#F0F0F0] transition-colors last:border-b-0 hover:bg-[#F4F4F5] focus-visible:bg-[#F4F4F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0F766E]"
                     >
-                      <td className="py-4 pl-1 pr-4 font-mono text-[13px] text-black/55">
+                      <td
+                        className="py-4 pl-1 pr-2"
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                      >
+                        {canSelect ? (
+                          <Checkbox
+                            checked={selectedKeys.has(key)}
+                            onCheckedChange={(v) => toggleKey(key, v === true)}
+                            aria-label={`Select ${r.desc}`}
+                          />
+                        ) : (
+                          <span className="inline-block w-4" />
+                        )}
+                      </td>
+                      <td className="py-4 pr-4 font-mono text-[13px] text-black/55">
                         {r.date}
                       </td>
                       <td className="px-4 py-4 text-[13px] font-medium text-black">{r.desc}</td>
@@ -2087,13 +2353,14 @@ function FeesTable({
                       <td className="py-4 pl-4 pr-1">
                         <div className="flex flex-col items-start gap-1.5">
                           <StatusBadge status={r.status} />
-                          {showFeeReminder(r) && (
+                          {canSelect && (
                             <OverdueWhatsAppButton href={overdueHref(r)} compact />
                           )}
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

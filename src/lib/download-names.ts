@@ -1,4 +1,4 @@
-/** Filename patterns for school downloads (Settings → System). */
+/** Filename patterns for school downloads (Settings → System → Downloads). */
 
 export const DOWNLOAD_KINDS = [
   "receipt",
@@ -10,11 +10,46 @@ export const DOWNLOAD_KINDS = [
   "staff",
   "studentFeeReport",
   "reports",
+  "aiReport",
+  "busRoutes",
+  "staffAttendance",
+  "bulkTemplate",
+  "bulkDemo",
   "platformInvoice",
   "platformReceipt",
 ] as const;
 
 export type DownloadKind = (typeof DOWNLOAD_KINDS)[number];
+
+/** Settings UI groups — every platform download name is managed here. */
+export const DOWNLOAD_KIND_GROUPS: { title: string; kinds: DownloadKind[] }[] = [
+  {
+    title: "Documents & PDFs",
+    kinds: [
+      "receipt",
+      "voucher",
+      "salarySlip",
+      "studentFeeReport",
+      "reports",
+      "aiReport",
+      "platformInvoice",
+      "platformReceipt",
+    ],
+  },
+  {
+    title: "Exports & import templates",
+    kinds: [
+      "transactions",
+      "madePayments",
+      "students",
+      "staff",
+      "busRoutes",
+      "staffAttendance",
+      "bulkTemplate",
+      "bulkDemo",
+    ],
+  },
+];
 
 export const DOWNLOAD_KIND_LABELS: Record<DownloadKind, string> = {
   receipt: "Receipt",
@@ -26,6 +61,11 @@ export const DOWNLOAD_KIND_LABELS: Record<DownloadKind, string> = {
   staff: "Staff",
   studentFeeReport: "Student fee report",
   reports: "Reports",
+  aiReport: "Feezo AI report",
+  busRoutes: "Bus routes",
+  staffAttendance: "Staff attendance",
+  bulkTemplate: "Bulk upload template",
+  bulkDemo: "Bulk upload demo",
   platformInvoice: "Invoice",
   platformReceipt: "Billing receipt",
 };
@@ -35,13 +75,19 @@ export const DOWNLOAD_KIND_HINTS: Record<DownloadKind, string> = {
   receipt: "Fee payment receipt PDF. {id} = payment ID, {studentId} = student ID.",
   voucher: "Expense / payment voucher PDF. {id} = voucher ID.",
   salarySlip: "Staff salary slip PDF. {id} = slip or staff ID.",
-  transactions: "Finance transactions export (CSV).",
+  transactions: "Finance transactions export (CSV / PDF).",
   madePayments: "Made payments export (CSV).",
   students: "Students directory export (CSV).",
   staff: "Staff directory export (CSV).",
   studentFeeReport:
-    "Parent fee statement from student Payments → Download report. Default: student-fee-{year} → student-fee-ay-2026-27.pdf",
-  reports: "Other finance PDF reports. {report} is the report type (e.g. general-ledger).",
+    "Parent fee statement from student Payments → Download report. Default: student-fee-{year}.",
+  reports: "Finance PDF/CSV reports. {report} is the report type (e.g. general-ledger).",
+  aiReport: "PDF exported from Feezo AI chat. Uses {school} and {date}.",
+  busRoutes: "Transport routes export (CSV) from Settings → Transport.",
+  staffAttendance: "Staff attendance demo / import CSV. {date} or {id} can hold the payroll month.",
+  bulkTemplate:
+    "CSV templates for bulk upload (students, staff, fees, expenses, bus routes). {report} = type key.",
+  bulkDemo: "Sample CSV demos for bulk upload. {report} = type key (e.g. fee-collection).",
   platformInvoice: "Platform billing invoice PDF.",
   platformReceipt: "Platform billing receipt PDF.",
 };
@@ -56,8 +102,32 @@ export const DEFAULT_FILE_NAMES: Record<DownloadKind, string> = {
   staff: "staff-directory",
   studentFeeReport: "student-fee-{year}",
   reports: "{report}-{year}",
+  aiReport: "feezo-ai-{school}-{date}",
+  busRoutes: "bus-routes-{school}-{date}",
+  staffAttendance: "staff-attendance-{date}",
+  bulkTemplate: "{report}-bulk-upload-template",
+  bulkDemo: "{report}-bulk-upload-demo",
   platformInvoice: "{id}",
   platformReceipt: "{id}",
+};
+
+export const DOWNLOAD_KIND_EXT: Record<DownloadKind, "pdf" | "csv"> = {
+  receipt: "pdf",
+  voucher: "pdf",
+  salarySlip: "pdf",
+  transactions: "csv",
+  madePayments: "csv",
+  students: "csv",
+  staff: "csv",
+  studentFeeReport: "pdf",
+  reports: "pdf",
+  aiReport: "pdf",
+  busRoutes: "csv",
+  staffAttendance: "csv",
+  bulkTemplate: "csv",
+  bulkDemo: "csv",
+  platformInvoice: "pdf",
+  platformReceipt: "pdf",
 };
 
 export const DOWNLOAD_TOKENS = [
@@ -78,10 +148,11 @@ export const DOWNLOAD_TOKEN_HELP: Record<DownloadToken, string> = {
     "Record ID — payment (PAY-001), voucher, invoice, or student/staff id when used for that download",
   "{studentId}": "Student ID (e.g. STU-001) — use on receipts and student fee report",
   "{name}": "Person name (student, staff, or payer)",
-  "{date}": "Today’s date as YYYY-MM-DD",
+  "{date}": "Today’s date as YYYY-MM-DD (or payroll month for attendance)",
   "{year}": "Academic year slug (e.g. ay-2026-27 from AY 2026-27)",
   "{school}": "School / campus name",
-  "{report}": "Report type key (e.g. student-fee, general-ledger) — used by Reports",
+  "{report}":
+    "Report or import type key (e.g. general-ledger, students, fee-collection, bus-routes)",
 };
 
 /** Tokens most useful for each kind (for tip chips). */
@@ -95,6 +166,11 @@ export const DOWNLOAD_KIND_TOKENS: Record<DownloadKind, DownloadToken[]> = {
   staff: ["{date}", "{school}"],
   studentFeeReport: ["{studentId}", "{name}", "{year}", "{date}", "{school}", "{id}"],
   reports: ["{report}", "{year}", "{date}", "{school}"],
+  aiReport: ["{school}", "{date}", "{year}"],
+  busRoutes: ["{school}", "{date}", "{year}"],
+  staffAttendance: ["{date}", "{id}", "{school}"],
+  bulkTemplate: ["{report}", "{date}", "{school}"],
+  bulkDemo: ["{report}", "{date}", "{school}"],
   platformInvoice: ["{id}", "{date}", "{school}"],
   platformReceipt: ["{id}", "{date}", "{school}"],
 };
@@ -220,13 +296,38 @@ export function exampleVarsForKind(kind: DownloadKind): DownloadNameVars {
       year: "ay-2026-27",
     };
   }
+  if (kind === "bulkTemplate" || kind === "bulkDemo") {
+    return {
+      ...EXAMPLE_DOWNLOAD_VARS,
+      report: "students",
+    };
+  }
+  if (kind === "busRoutes") {
+    return {
+      ...EXAMPLE_DOWNLOAD_VARS,
+      school: "meridian-public-school",
+    };
+  }
+  if (kind === "staffAttendance") {
+    return {
+      ...EXAMPLE_DOWNLOAD_VARS,
+      date: "2026-04",
+      id: "2026-04",
+    };
+  }
+  if (kind === "aiReport") {
+    return {
+      ...EXAMPLE_DOWNLOAD_VARS,
+      school: "meridian-public-school",
+    };
+  }
   return EXAMPLE_DOWNLOAD_VARS;
 }
 
 export function previewDownloadFilename(
   kind: DownloadKind,
   pattern: string,
-  ext: "pdf" | "csv" = "pdf",
+  ext: "pdf" | "csv" = DOWNLOAD_KIND_EXT[kind],
 ): string {
   return formatDownloadFilename(kind, ext, exampleVarsForKind(kind), {
     ...activeFileNames,

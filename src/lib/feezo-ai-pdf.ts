@@ -2,7 +2,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
 import type { FeezoLocale, FeezoUiBlock } from "@/lib/api/ai";
-import { todayStamp } from "@/lib/download-names";
+import { formatDownloadFilename, todayStamp } from "@/lib/download-names";
 import { asciiCurrencyText } from "@/lib/money";
 import { saveFile } from "@/lib/native-download";
 
@@ -647,11 +647,12 @@ export function downloadFeezoAiPdf(input: FeezoAiPdfInput): void {
 
   drawFooter(doc, school);
 
-  const stamp = todayStamp();
-  const safeSchool = pdfSafeText(school)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 32);
-  void saveFile(doc.output("blob"), `feezo-ai-${safeSchool || "report"}-${stamp}.pdf`);
+  void saveFile(
+    doc.output("blob"),
+    formatDownloadFilename("aiReport", "pdf", {
+      school: pdfSafeText(school) || "school",
+      date: todayStamp(),
+      report: "feezo-ai",
+    }),
+  );
 }
