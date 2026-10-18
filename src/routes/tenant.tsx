@@ -1,12 +1,14 @@
 import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Bell,
+  CalendarDays,
   ChevronLeft,
   Home,
   LifeBuoy,
   MoreHorizontal,
   Moon,
   RefreshCw,
+  Search,
   Settings,
   Sun,
   UserCog,
@@ -29,6 +31,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { hardRefreshApp } from "@/lib/app-version";
@@ -36,6 +39,11 @@ import {
   SettingsUnsavedProvider,
   useTenantNavigationGuard,
 } from "@/components/school/settings-unsaved-guard";
+import {
+  openTenantGlobalSearch,
+  TenantGlobalSearch,
+  TenantGlobalSearchTrigger,
+} from "@/components/school/TenantGlobalSearch";
 import { WorkspaceOpeningScreen } from "@/components/school/TenantDirectorySkeleton";
 import { FeezoAssistant } from "@/components/ai/FeezoAssistant";
 import {
@@ -53,7 +61,11 @@ import {
 } from "@/lib/auth";
 import { apiMe } from "@/lib/api/auth";
 import { resolveMediaUrl } from "@/lib/media";
-import { normalizePlanFlags } from "@/lib/permissions";
+import {
+  normalizePlanFlags,
+  planAllowsGlobalSearch,
+  planAllowsStudentAttendance,
+} from "@/lib/permissions";
 import { TenantStoreProvider, schoolInitials, useTenantStore } from "@/lib/tenant-store";
 import { cn, glassInsetClass } from "@/lib/utils";
 
@@ -74,6 +86,12 @@ const MOBILE_TABS: MobileTabItem[] = [
     label: "Students",
     icon: Users,
     match: (p) => p.startsWith("/tenant/students"),
+  },
+  {
+    to: "/tenant/attendance",
+    label: "Attendance",
+    icon: CalendarDays,
+    match: (p) => p.startsWith("/tenant/attendance"),
   },
   {
     to: "/tenant/staff",
@@ -234,6 +252,8 @@ function TenantShell() {
       )}
 
       <TenantMobileNav />
+      {/* Single dialog host — desktop bar + mobile icon open via event / ⌘K */}
+      <TenantGlobalSearch trigger="none" />
       <FeezoAssistant />
     </div>
   );
@@ -242,29 +262,28 @@ function TenantShell() {
 function TenantMobileHeader() {
   const { session } = useAuth();
   const { guardedNavigate, tryNavigate } = useTenantNavigationGuard();
-  const { notifications, schoolDetails, activeBranch, branches, themeSettings, setThemeSettings } =
-    useTenantStore();
+  const { notifications, schoolDetails, themeSettings, setThemeSettings } = useTenantStore();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { showBack, goBack, backLabel } = useWorkspaceSubViewBack();
   const onNotifications = pathname.startsWith("/tenant/notifications");
   const NAV_LABELS: Record<string, string> = {
-    "/tenant/dashboard": "HOME",
-    "/tenant/students": "STUDENTS",
-    "/tenant/staff": "STAFF",
-    "/tenant/finance": "FINANCE",
-    "/tenant/support": "SUPPORT",
-    "/tenant/billing": "SUBSCRIPTION",
-    "/tenant/settings": "SETTINGS",
+    "/tenant/dashboard": "Home",
+    "/tenant/students": "Students",
+    "/tenant/attendance": "Attendance",
+    "/tenant/staff": "Staff",
+    "/tenant/finance": "Finance",
+    "/tenant/support": "Support",
+    "/tenant/billing": "Subscription",
+    "/tenant/settings": "Settings",
   };
   const activeKey = Object.keys(NAV_LABELS).find((k) => pathname.startsWith(k));
   const unreadCount = notifications.filter((n) => !n.read).length;
   const tenantName = schoolDetails.name || session?.tenantName || "Silver Hills Global";
-  const tenantLabel = tenantName.toUpperCase();
   const sectionLabel = onNotifications
-    ? "NOTIFICATIONS"
+    ? "Notifications"
     : activeKey
-      ? NAV_LABELS[activeKey]
-      : "HOME";
+      ? (NAV_LABELS[activeKey] ?? "Home")
+      : "Home";
   const logoUrl = resolveMediaUrl(schoolDetails.logoUrl);
   const initials = schoolInitials(tenantName);
   const isDark = themeSettings.mode === "Dark";
@@ -274,9 +293,10 @@ function TenantMobileHeader() {
   return (
     <header
       data-tenant-mobile-header
-      className="sticky top-0 z-30 max-w-[100vw] overflow-x-clip bg-gradient-to-b from-white/80 to-transparent px-3 pb-2.5 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl dark:from-[#0a0a0a]/95 dark:via-[#0a0a0a]/65 dark:to-transparent sm:px-4 sm:pb-3 md:hidden"
+      className="sticky top-0 z-30 max-w-[100vw] overflow-x-clip bg-gradient-to-b from-white/80 to-transparent px-2.5 pb-2 pt-[calc(0.65rem+env(safe-area-inset-top))] backdrop-blur-xl dark:from-[#0a0a0a]/95 dark:via-[#0a0a0a]/65 dark:to-transparent sm:px-3 sm:pb-2.5 md:hidden"
     >
-      <div className="flex w-full min-w-0 max-w-full items-center gap-1.5">
+      {/* Fixed icon row — never wraps; campus/year use compact icons */}
+      <div className="flex w-full min-w-0 max-w-full items-center gap-1">
         {showBack ? (
           <button
             type="button"
@@ -298,57 +318,64 @@ function TenantMobileHeader() {
               "grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-xl text-[10px] font-bold text-white",
               !logoUrl && "bg-gradient-to-br from-[#0F766E] to-[#115E59]",
             )}
+            title={tenantName}
+            aria-label={`${tenantName} · ${sectionLabel}`}
           >
             {logoUrl ? (
-              <img
-                src={logoUrl}
-                alt={tenantName}
-                className="h-full w-full bg-white object-contain p-0.5"
-              />
+              <img src={logoUrl} alt="" className="h-full w-full bg-white object-contain p-0.5" />
             ) : (
               initials
             )}
           </div>
         )}
-        <div className="min-w-0 flex-1 overflow-hidden">
-          <div
-            className="truncate text-[10px] font-bold uppercase leading-tight tracking-[0.04em] text-slate-900 dark:text-zinc-100"
-            title={`${tenantLabel} - ${sectionLabel}`}
-          >
-            {tenantLabel} - {sectionLabel}
-          </div>
-          {branches.length > 1 && activeBranch?.name ? (
-            <div className="truncate text-[10px] font-medium text-slate-500 dark:text-zinc-400">
-              {activeBranch.name}
-            </div>
-          ) : null}
-        </div>
-        <div className="flex min-w-0 shrink items-center justify-end gap-1">
+
+        <div className="min-w-0 flex-1" aria-hidden />
+
+        <div className="flex shrink-0 items-center gap-1">
           <ImpersonationChip compact />
-          <BranchSwitcher compact />
-          <AcademicYearSwitcher compact />
-          <button
-            type="button"
-            onClick={() => guardedNavigate("/tenant/notifications")}
-            aria-label="Notifications"
-            className={cn(iconBtnClass, "relative")}
-          >
-            <Bell className="h-4 w-4" />
-            {unreadCount > 0 && (
-              <span className="absolute right-1 top-1 h-2 w-2 rounded-full border-2 border-white bg-[#0F766E] dark:border-zinc-900" />
-            )}
-          </button>
+          <BranchSwitcher iconOnly />
+          <AcademicYearSwitcher iconOnly />
+          <TenantGlobalSearchTrigger variant="icon" className={iconBtnClass} />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button type="button" aria-label="More actions" className={iconBtnClass}>
+              <button
+                type="button"
+                aria-label="More actions"
+                className={cn(iconBtnClass, "relative")}
+              >
                 <MoreHorizontal className="h-4 w-4" />
+                {unreadCount > 0 ? (
+                  <span className="absolute right-1 top-1 h-2 w-2 rounded-full border-2 border-white bg-[#0F766E] dark:border-zinc-900" />
+                ) : null}
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
               collisionPadding={12}
-              className="z-[250] min-w-[11.5rem] rounded-xl border-white/60 bg-white/95 p-1 backdrop-blur-xl dark:border-white/10 dark:bg-zinc-900"
+              className="z-[250] min-w-[12rem] rounded-xl border-white/60 bg-white/95 p-1 backdrop-blur-xl dark:border-white/10 dark:bg-zinc-900"
             >
+              {planAllowsGlobalSearch(session?.planFlags) ? (
+                <DropdownMenuItem
+                  className="cursor-pointer gap-2 rounded-lg text-[13px]"
+                  onSelect={() => openTenantGlobalSearch()}
+                >
+                  <Search className="h-3.5 w-3.5" />
+                  Search workspace
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuItem
+                className="cursor-pointer gap-2 rounded-lg text-[13px]"
+                onSelect={() => guardedNavigate("/tenant/notifications")}
+              >
+                <Bell className="h-3.5 w-3.5" />
+                Notifications
+                {unreadCount > 0 ? (
+                  <span className="ml-auto rounded-full bg-[#0F766E] px-1.5 py-0.5 font-mono text-[10px] font-bold text-white">
+                    {unreadCount}
+                  </span>
+                ) : null}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="cursor-pointer gap-2 rounded-lg text-[13px]"
                 onSelect={() =>
@@ -396,6 +423,12 @@ function TenantMobileNav() {
   const items = MOBILE_TABS.filter((tab) => {
     if (tab.to.startsWith("/tenant/dashboard")) return sessionHasPermission(session, "dashboard");
     if (tab.to.startsWith("/tenant/students")) return sessionHasPermission(session, "students");
+    if (tab.to.startsWith("/tenant/attendance")) {
+      return (
+        sessionHasPermission(session, "students") &&
+        planAllowsStudentAttendance(session?.planFlags)
+      );
+    }
     if (tab.to.startsWith("/tenant/staff")) return sessionHasPermission(session, "staff");
     if (tab.to.startsWith("/tenant/finance")) return sessionHasAnyFinance(session);
     if (tab.to.startsWith("/tenant/settings")) return sessionCanAccessSettings(session);

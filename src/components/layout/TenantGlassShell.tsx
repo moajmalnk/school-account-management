@@ -2,6 +2,7 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Bell,
   Building2,
+  CalendarDays,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
@@ -17,6 +18,7 @@ import {
   PanelLeftOpen,
   Plus,
   RefreshCw,
+  Search,
   Settings,
   Sun,
   UserCog,
@@ -62,6 +64,10 @@ import {
   resolveFinancialYearInput,
 } from "@/components/school/FinancialYearFields";
 import { AddBranchDialog } from "@/components/school/AddBranchDialog";
+import {
+  openTenantGlobalSearch,
+  TenantGlobalSearchTrigger,
+} from "@/components/school/TenantGlobalSearch";
 import { useTenantNavigationGuard } from "@/components/school/settings-unsaved-guard";
 import { FloatingDock, type FloatingDockItem } from "@/components/ui/floating-dock";
 import {
@@ -83,41 +89,96 @@ import {
   useTenantStore,
   type ThemeSettings,
 } from "@/lib/tenant-store";
-import { planAllowsMultipleBranches } from "@/lib/permissions";
+import {
+  planAllowsMultipleBranches,
+  planAllowsStudentAttendance,
+  planAllowsGlobalSearch,
+} from "@/lib/permissions";
 import { isFinanceTab } from "@/lib/finance-tabs";
 import { resolveMediaUrl } from "@/lib/media";
+import {
+  TenantDashboardSkeleton,
+  TenantDirectorySkeleton,
+  WorkspaceOpeningScreen,
+} from "@/components/school/TenantDirectorySkeleton";
 import { cn, glassInsetClass, glassPanelClass } from "@/lib/utils";
 
+/** Fire success toast after books skeleton settles (avoids toast over empty zeros). */
+export function toastBooksOpened(
+  verb: "Opened" | "Reopened",
+  year: string,
+  stats: { receipts: number; enrolled: number },
+) {
+  window.setTimeout(() => {
+    toast.success(`${verb} books for ${year}`, {
+      description: `${stats.receipts} receipt${stats.receipts === 1 ? "" : "s"} · ${stats.enrolled} student${stats.enrolled === 1 ? "" : "s"} enrolled`,
+    });
+  }, 640);
+}
+
+function BooksYearSkeleton({ year, pathname }: { year: string; pathname: string }) {
+  const isDirectory =
+    pathname.includes("/students") ||
+    pathname.includes("/staff") ||
+    pathname.includes("/finance");
+  const label = `Opening ${year} books`;
+  const detail = "Loading enrollments, receipts, and fee schedules for this year…";
+
+  return (
+    <div
+      className="relative flex min-h-[min(70vh,36rem)] w-full min-w-0 flex-1 flex-col"
+      aria-busy="true"
+      aria-live="polite"
+      aria-label={label}
+    >
+      <div className="pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center px-4 sm:top-3">
+        <div
+          className={cn(
+            glassPanelClass,
+            "inline-flex max-w-[min(26rem,calc(100vw-2rem))] items-center gap-2.5 rounded-xl border border-white/70 px-3.5 py-2.5 shadow-lg shadow-slate-900/10 backdrop-blur-xl dark:border-white/10 dark:shadow-black/40",
+          )}
+          role="status"
+        >
+          <Loader2
+            className="h-3.5 w-3.5 shrink-0 animate-spin text-[#0F766E] dark:text-[#2DD4BF]"
+            strokeWidth={2.5}
+          />
+          <div className="min-w-0">
+            <div className="truncate text-[12px] font-semibold text-slate-800 dark:text-zinc-100">
+              {label}
+            </div>
+            <div className="truncate text-[10.5px] text-slate-500 dark:text-zinc-400">{detail}</div>
+          </div>
+        </div>
+      </div>
+      <div className="min-h-0 flex-1 pt-12 sm:pt-14">
+        {isDirectory ? (
+          <TenantDirectorySkeleton label={label} />
+        ) : (
+          <TenantDashboardSkeleton />
+        )}
+      </div>
+    </div>
+  );
+}
+
 /**
- * Soft workspace transition when campus or academic-year books change.
- * Never blanks the page (opacity-0) — keep content/skeleton visible under a status chip.
+ * When financial year (or cold campus) books change, swap the workspace for a
+ * full skeleton until overlays settle — never flash empty ₹0 / empty tables.
  */
 export function AcademicYearBooksFade({ children }: { children: ReactNode }) {
-  const { academicYear, activeBranch, hydrated, branchSyncing } = useTenantStore();
-  const prevYearRef = useRef(academicYear);
-  const yearReady = useRef(false);
-  const [yearTransition, setYearTransition] = useState(false);
+  const { activeBranch, branchSyncing, branchContentReady, booksOpening } = useTenantStore();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
 
-  useEffect(() => {
-    // Skip the first hydrate so seed→API year swaps don't flash a transition chip.
-    if (!hydrated) return;
-    if (!yearReady.current) {
-      yearReady.current = true;
-      prevYearRef.current = academicYear;
-      return;
-    }
-    if (academicYear === prevYearRef.current) return;
-    prevYearRef.current = academicYear;
-    setYearTransition(true);
-    const t = window.setTimeout(() => setYearTransition(false), 320);
-    return () => window.clearTimeout(t);
-  }, [academicYear, hydrated]);
+  const yearBusy = Boolean(booksOpening);
+  const branchBlocking = branchSyncing && !branchContentReady;
+  const branchSoft = branchSyncing && branchContentReady && !yearBusy;
+  const showSkeleton = yearBusy || branchBlocking;
 
-  const busy = branchSyncing || yearTransition;
-  const statusLabel = branchSyncing
-    ? `Opening ${activeBranch?.name?.trim() || "campus"}…`
-    : yearTransition
-      ? `Opening ${academicYear} books…`
+  const statusLabel = yearBusy
+    ? `Opening ${booksOpening} books…`
+    : branchSoft
+      ? `Opening ${activeBranch?.name?.trim() || "campus"}…`
       : null;
 
   return (
@@ -125,13 +186,22 @@ export function AcademicYearBooksFade({ children }: { children: ReactNode }) {
       <div
         className={cn(
           "flex min-h-0 min-w-0 flex-1 flex-col transition-[opacity,filter] duration-200 ease-out",
-          busy ? "pointer-events-none opacity-[0.58] saturate-[0.9]" : "opacity-100",
+          branchSoft ? "pointer-events-none opacity-[0.58] saturate-[0.9]" : "opacity-100",
         )}
-        aria-busy={busy}
+        aria-busy={showSkeleton || branchSoft}
       >
-        {children}
+        {yearBusy && booksOpening ? (
+          <BooksYearSkeleton year={booksOpening} pathname={pathname} />
+        ) : branchBlocking ? (
+          <WorkspaceOpeningScreen
+            label={`Opening ${activeBranch?.name?.trim() || "campus"}`}
+            detail="Loading campus books and catalogs…"
+          />
+        ) : (
+          children
+        )}
       </div>
-      {busy && statusLabel ? (
+      {branchSoft && statusLabel ? (
         <div
           className="pointer-events-none absolute inset-x-0 top-5 z-20 flex justify-center px-4 sm:top-6"
           role="status"
@@ -140,7 +210,7 @@ export function AcademicYearBooksFade({ children }: { children: ReactNode }) {
           <div
             className={cn(
               glassPanelClass,
-              "inline-flex max-w-[min(22rem,calc(100vw-2rem))] items-center gap-2 rounded-full border border-white/70 px-3.5 py-2 text-[12px] font-semibold text-slate-800 shadow-lg shadow-slate-900/10 backdrop-blur-xl dark:border-white/10 dark:text-zinc-100 dark:shadow-black/40",
+              "inline-flex max-w-[min(22rem,calc(100vw-2rem))] items-center gap-2 rounded-xl border border-white/70 px-3.5 py-2 text-[12px] font-semibold text-slate-800 shadow-lg shadow-slate-900/10 backdrop-blur-xl dark:border-white/10 dark:text-zinc-100 dark:shadow-black/40",
             )}
           >
             <Loader2
@@ -228,7 +298,30 @@ export function ImpersonationChip({ compact = false }: { compact?: boolean }) {
   );
 }
 
-export function BranchSwitcher({ compact = false }: { compact?: boolean }) {
+/** Compact year label for tight headers — "AY 2026-27" → "26-27". */
+export function shortAcademicYearLabel(year: string): string {
+  const trimmed = year.trim();
+  const range = trimmed.match(/(\d{2})(\d{2})\s*[-–/]\s*(\d{2,4})/);
+  if (range) {
+    const end = range[3]!.length === 4 ? range[3]!.slice(2) : range[3]!;
+    return `${range[2]}-${end}`;
+  }
+  const plain = trimmed.match(/(\d{4})\s*[-–/]\s*(\d{2,4})/);
+  if (plain) {
+    const end = plain[2]!.length === 4 ? plain[2]!.slice(2) : plain[2]!;
+    return `${plain[1]!.slice(2)}-${end}`;
+  }
+  return trimmed.replace(/^AY\s+/i, "").slice(0, 7);
+}
+
+export function BranchSwitcher({
+  compact = false,
+  iconOnly = false,
+}: {
+  compact?: boolean;
+  /** Circular building icon — full campus name in the menu (mobile header). */
+  iconOnly?: boolean;
+}) {
   const { session } = useAuth();
   const { branches, activeBranchId, openBranch, hydrated, branchSyncing } = useTenantStore();
   const unsavedGuard = useOptionalSettingsUnsavedGuard();
@@ -253,7 +346,8 @@ export function BranchSwitcher({ compact = false }: { compact?: boolean }) {
         aria-label="Loading campus"
         className={cn(
           "h-9 w-[8.5rem] rounded-full bg-white/70 sm:w-[10rem]",
-          compact && "h-8 w-[5.25rem] sm:w-[7.5rem]",
+          compact && !iconOnly && "h-8 w-[5.25rem] sm:w-[7.5rem]",
+          iconOnly && "h-8 w-8 shrink-0",
         )}
       />
     );
@@ -303,19 +397,31 @@ export function BranchSwitcher({ compact = false }: { compact?: boolean }) {
             type="button"
             disabled={branchSyncing}
             aria-busy={branchSyncing}
+            title={label}
+            aria-label={`Campus: ${label}`}
             className={cn(
               "inline-flex max-w-[9.5rem] items-center gap-1 rounded-full border border-slate-200/80 bg-white/80 px-2.5 py-2 text-[11px] font-semibold text-slate-800 shadow-sm backdrop-blur-md transition-colors hover:border-[#0F766E]/40 hover:text-[#0F766E] disabled:cursor-wait disabled:opacity-70 dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-100 dark:hover:text-[#2DD4BF] lg:max-w-[12rem] lg:gap-1.5 lg:px-3.5 lg:text-[12px]",
               compact &&
+                !iconOnly &&
                 "h-8 max-w-[5.25rem] px-1.5 py-0 text-[10px] sm:max-w-[7.75rem] sm:px-2 lg:h-9 lg:max-w-[10rem] lg:px-2.5 lg:text-[11px] xl:max-w-[12rem]",
+              iconOnly &&
+                "h-8 w-8 max-w-8 shrink-0 justify-center px-0 py-0 text-slate-600 dark:text-zinc-300",
             )}
           >
             {branchSyncing ? (
               <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" strokeWidth={2.25} />
             ) : (
-              <Building2 className="hidden h-3.5 w-3.5 shrink-0 lg:block" strokeWidth={2.25} />
+              <Building2
+                className={cn("h-3.5 w-3.5 shrink-0", !iconOnly && "hidden lg:block")}
+                strokeWidth={2.25}
+              />
             )}
-            <span className="min-w-0 truncate">{label}</span>
-            <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" />
+            {!iconOnly ? (
+              <>
+                <span className="min-w-0 truncate">{label}</span>
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" />
+              </>
+            ) : null}
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
@@ -364,20 +470,34 @@ export function BranchSwitcher({ compact = false }: { compact?: boolean }) {
   );
 }
 
-export function AcademicYearSwitcher({ compact = false }: { compact?: boolean }) {
-  const { academicYear, academicYears, closedAcademicYears, openAcademicYear, hydrated } =
-    useTenantStore();
+export function AcademicYearSwitcher({
+  compact = false,
+  iconOnly = false,
+}: {
+  compact?: boolean;
+  /** Short year pill (e.g. 26-27) for mobile headers that must always fit. */
+  iconOnly?: boolean;
+}) {
+  const {
+    academicYear,
+    academicYears,
+    closedAcademicYears,
+    openAcademicYear,
+    hydrated,
+    booksOpening,
+  } = useTenantStore();
   const selectableYears = useMemo(
     () => academicYears.filter((y) => !closedAcademicYears.includes(y) || y === academicYear),
     [academicYear, academicYears, closedAcademicYears],
   );
   const closedOthers = closedAcademicYears.filter((y) => y !== academicYear);
+  const yearBusy = Boolean(booksOpening);
+  const shortLabel = academicYear ? shortAcademicYearLabel(academicYear) : "";
 
   const openYear = (y: string, verb: "Opened" | "Reopened") => {
+    if (yearBusy || y === academicYear) return;
     const stats = openAcademicYear(y);
-    toast.success(`${verb} books for ${y}`, {
-      description: `${stats.receipts} receipt${stats.receipts === 1 ? "" : "s"} · ${stats.enrolled} student${stats.enrolled === 1 ? "" : "s"} enrolled`,
-    });
+    toastBooksOpened(verb, y, stats);
   };
 
   if (!hydrated || !academicYear) {
@@ -386,7 +506,8 @@ export function AcademicYearSwitcher({ compact = false }: { compact?: boolean })
         aria-label="Loading academic year"
         className={cn(
           "h-9 w-[7rem] shrink-0 rounded-full bg-emerald-500/25 sm:w-[9rem]",
-          compact && "h-8 w-[4.75rem] sm:w-[7rem]",
+          compact && !iconOnly && "h-8 w-[4.75rem] sm:w-[7rem]",
+          iconOnly && "h-8 w-[3.25rem] shrink-0",
         )}
       />
     );
@@ -399,14 +520,18 @@ export function AcademicYearSwitcher({ compact = false }: { compact?: boolean })
           type="button"
           title={academicYear}
           aria-label={`Academic year: ${academicYear}`}
+          disabled={yearBusy}
+          aria-busy={yearBusy}
           className={cn(
-            "inline-flex h-9 max-w-[11rem] shrink-0 items-center gap-1 rounded-full bg-[#10B981] px-2.5 text-[11px] font-semibold text-white shadow-sm shadow-emerald-500/25 transition-opacity hover:opacity-90",
+            "inline-flex h-9 max-w-[11rem] shrink-0 items-center gap-1 rounded-full bg-[#10B981] px-2.5 text-[11px] font-semibold text-white shadow-sm shadow-emerald-500/25 transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-80",
             compact &&
+              !iconOnly &&
               "h-8 max-w-[4.75rem] px-1.5 text-[10px] sm:max-w-[7.5rem] sm:px-2.5 sm:text-[11px]",
+            iconOnly && "h-8 w-auto max-w-none gap-0.5 px-2 text-[10px] tabular-nums",
           )}
         >
-          <span className="min-w-0 truncate">{academicYear}</span>
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-80" />
+          <span className="min-w-0 truncate">{iconOnly ? shortLabel : academicYear}</span>
+          {!iconOnly ? <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-80" /> : null}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -594,6 +719,7 @@ type NavEntry = {
 const NAV: NavEntry[] = [
   { to: "/tenant/dashboard", label: "Home", icon: LayoutDashboard },
   { to: "/tenant/students", label: "Students", icon: Users },
+  { to: "/tenant/attendance", label: "Attendance", icon: CalendarDays },
   { to: "/tenant/staff", label: "Staff", icon: UserCog },
   { to: "/tenant/finance", label: "Finance", icon: Wallet },
   { to: "/tenant/support", label: "Support", icon: LifeBuoy },
@@ -604,6 +730,11 @@ const NAV: NavEntry[] = [
 function navAllowed(to: string, session: ReturnType<typeof useAuth>["session"]): boolean {
   if (to.startsWith("/tenant/dashboard")) return sessionHasPermission(session, "dashboard");
   if (to.startsWith("/tenant/students")) return sessionHasPermission(session, "students");
+  if (to.startsWith("/tenant/attendance")) {
+    return (
+      sessionHasPermission(session, "students") && planAllowsStudentAttendance(session?.planFlags)
+    );
+  }
   if (to.startsWith("/tenant/staff")) return sessionHasPermission(session, "staff");
   if (to.startsWith("/tenant/finance")) return sessionHasAnyFinance(session);
   if (to.startsWith("/tenant/billing")) return sessionCanAccessSettings(session);
@@ -936,7 +1067,9 @@ export function TenantDesktopTopBar() {
     notifications,
     schoolDetails,
     hydrated,
+    booksOpening,
   } = useTenantStore();
+  const yearBusy = Boolean(booksOpening);
   const { showBack, goBack, backLabel } = useWorkspaceSubViewBack();
   const { guardedNavigate, tryNavigate } = useTenantNavigationGuard();
   const [pendingLogout, setPendingLogout] = useState(false);
@@ -982,9 +1115,11 @@ export function TenantDesktopTopBar() {
       toast.error(`${label} already exists`);
       return;
     }
-    toast.success(`Opened books for ${label}`, {
-      description: "Fee periods cloned from the previous year · ready to enroll students",
-    });
+    window.setTimeout(() => {
+      toast.success(`Opened books for ${label}`, {
+        description: "Fee periods cloned from the previous year · ready to enroll students",
+      });
+    }, 640);
     resetYearDraft();
     setAddYearOpen(false);
   };
@@ -997,7 +1132,7 @@ export function TenantDesktopTopBar() {
           "mb-4 hidden min-w-0 items-center gap-2 overflow-hidden rounded-2xl px-2.5 py-2 md:flex md:flex-nowrap md:gap-2 md:px-3 md:py-2.5 lg:mb-5 lg:gap-3 lg:px-4 lg:py-3 xl:px-5 xl:py-3.5",
         )}
       >
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 lg:gap-2.5">
+        <div className="flex min-w-0 shrink-0 items-center gap-1.5 lg:min-w-0 lg:max-w-[min(40%,18rem)] lg:flex-1 lg:gap-2.5 xl:max-w-[min(36%,22rem)]">
           {showBack && (
             <button
               type="button"
@@ -1012,17 +1147,18 @@ export function TenantDesktopTopBar() {
               )}
             >
               <ChevronLeft className="h-4 w-4 shrink-0" />
-              <span className="hidden text-[13px] font-semibold lg:inline">Back</span>
+              <span className="hidden text-[13px] font-semibold xl:inline">Back</span>
             </button>
           )}
+          {/* Desktop: school title only (logo lives in the dock/sidebar) */}
           <div className="min-w-0 flex-1 overflow-hidden">
             <h1
-              className="truncate text-[11px] font-bold uppercase tracking-wide text-slate-900 sm:text-[12px] lg:text-[14px] xl:text-[16px] dark:text-zinc-100"
+              className="truncate text-[13px] font-bold tracking-tight text-slate-900 lg:text-[14px] xl:text-[16px] dark:text-zinc-100"
               title={tenantName}
             >
               {tenantName}
             </h1>
-            <p className="mt-0.5 hidden truncate text-[11px] text-slate-500 xl:block dark:text-zinc-400">
+            <p className="mt-0.5 hidden truncate text-[11px] text-slate-500 2xl:block dark:text-zinc-400">
               Tenant administration workspace
             </p>
           </div>
@@ -1043,7 +1179,9 @@ export function TenantDesktopTopBar() {
                   <button
                     type="button"
                     title={academicYear}
-                    className="inline-flex h-8 max-w-[5.75rem] shrink-0 items-center gap-1 rounded-full bg-[#10B981] px-2 text-[10px] font-semibold text-white shadow-sm shadow-emerald-500/25 transition-opacity hover:opacity-90 sm:max-w-[7.5rem] sm:px-2.5 sm:text-[11px] lg:h-9 lg:max-w-[11rem] lg:gap-1.5 lg:px-3 lg:text-[12px] xl:max-w-[13rem]"
+                    disabled={yearBusy}
+                    aria-busy={yearBusy}
+                    className="inline-flex h-8 max-w-[5.75rem] shrink-0 items-center gap-1 rounded-full bg-[#10B981] px-2 text-[10px] font-semibold text-white shadow-sm shadow-emerald-500/25 transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-80 sm:max-w-[7.5rem] sm:px-2.5 sm:text-[11px] lg:h-9 lg:max-w-[11rem] lg:gap-1.5 lg:px-3 lg:text-[12px] xl:max-w-[13rem]"
                   >
                     <CheckCircle2
                       className="hidden h-3.5 w-3.5 shrink-0 xl:block"
@@ -1063,10 +1201,9 @@ export function TenantDesktopTopBar() {
                   <DropdownMenuRadioGroup
                     value={academicYear}
                     onValueChange={(y) => {
+                      if (yearBusy || y === academicYear) return;
                       const stats = openAcademicYear(y);
-                      toast.success(`Opened books for ${y}`, {
-                        description: `${stats.receipts} receipt${stats.receipts === 1 ? "" : "s"} · ${stats.enrolled} student${stats.enrolled === 1 ? "" : "s"} enrolled`,
-                      });
+                      toastBooksOpened("Opened", y, stats);
                     }}
                   >
                     {selectableYears.map((y) => (
@@ -1089,9 +1226,7 @@ export function TenantDesktopTopBar() {
                             className="rounded-md text-[13px] text-slate-500"
                             onSelect={() => {
                               const stats = openAcademicYear(y);
-                              toast.success(`Reopened books for ${y}`, {
-                                description: `${stats.receipts} receipt${stats.receipts === 1 ? "" : "s"} · ${stats.enrolled} student${stats.enrolled === 1 ? "" : "s"} enrolled`,
-                              });
+                              toastBooksOpened("Reopened", y, stats);
                             }}
                           >
                             {y} · reopen
@@ -1118,17 +1253,11 @@ export function TenantDesktopTopBar() {
           <div className="flex shrink-0 flex-nowrap items-center gap-1 lg:gap-1.5">
             <ThemeModeToggle className="h-8 w-8 lg:h-9 lg:w-9 xl:h-10 xl:w-10" />
 
-            {/* Full utility row on large screens */}
+            {/* Opens the shared search host mounted in the tenant layout */}
+            <TenantGlobalSearchTrigger variant="bar" />
+
             <div className="hidden items-center gap-1 lg:flex lg:gap-1.5">
               <HardRefreshButton className="h-9 w-9 xl:h-10 xl:w-10" />
-              <button
-                type="button"
-                onClick={() => guardedNavigate("/tenant/settings")}
-                aria-label="Settings"
-                className="glass-inset grid h-9 w-9 place-items-center rounded-xl text-slate-600 transition-colors hover:text-[#0F766E] dark:text-zinc-300 dark:hover:text-[#2DD4BF] xl:h-10 xl:w-10"
-              >
-                <Settings className="h-[18px] w-[18px]" />
-              </button>
               <button
                 type="button"
                 onClick={() => guardedNavigate("/tenant/notifications")}
@@ -1172,6 +1301,15 @@ export function TenantDesktopTopBar() {
                 align="end"
                 className="min-w-[12rem] rounded-lg border-white/60 bg-white/95 p-1 backdrop-blur-xl dark:border-white/10 dark:bg-zinc-900"
               >
+                {planAllowsGlobalSearch(session?.planFlags) ? (
+                  <DropdownMenuItem
+                    className="cursor-pointer gap-2 rounded-md text-[13px]"
+                    onSelect={() => openTenantGlobalSearch()}
+                  >
+                    <Search className="h-3.5 w-3.5" />
+                    Search workspace
+                  </DropdownMenuItem>
+                ) : null}
                 <DropdownMenuItem
                   className="cursor-pointer gap-2 rounded-md text-[13px]"
                   onSelect={() => {
@@ -1180,13 +1318,6 @@ export function TenantDesktopTopBar() {
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
                   Hard refresh
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="cursor-pointer gap-2 rounded-md text-[13px]"
-                  onSelect={() => guardedNavigate("/tenant/settings")}
-                >
-                  <Settings className="h-3.5 w-3.5" />
-                  Settings
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="cursor-pointer gap-2 rounded-md text-[13px]"

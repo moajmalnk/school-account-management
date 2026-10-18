@@ -65,41 +65,38 @@ export function OrgCurrencyCard() {
   };
 
   return (
-    <div className="grid grid-cols-12 gap-4">
-      <div className="col-span-12 sm:col-span-6 lg:col-span-6">
-        <Label className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
-          Base currency
-          <InfoTip content={BASE_CURRENCY_TIP} className="-my-1" />
-        </Label>
-        <div className="mt-1.5 flex items-center gap-2">
-          <Select
-            value={draft}
-            onValueChange={(v) => setDraft(v as CurrencyCode)}
-            disabled={!canEdit || saving}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {CURRENCIES.map((c) => (
-                <SelectItem key={c.code} value={c.code}>
-                  {c.code} · {c.symbol} — {c.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {canEdit && dirty ? (
-            <Button type="button" size="sm" onClick={requestSave} disabled={saving}>
-              {saving ? "Saving…" : "Save"}
-            </Button>
-          ) : null}
-        </div>
-        <p className="mt-1.5 text-[11.5px] leading-snug text-black/50 dark:text-zinc-400">
-          Fees, receipts, reports and WhatsApp messages use this currency. Changing it relabels
-          amounts — stored values are never converted.
-          {!canEdit ? " Only the school admin can change it." : ""}
-        </p>
+    <div className="col-span-12 sm:col-span-6 lg:col-span-6">
+      <Label className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
+        Base currency
+        <InfoTip content={BASE_CURRENCY_TIP} className="-my-1" />
+      </Label>
+      <div className="mt-1.5 flex items-center gap-2">
+        <Select
+          value={draft}
+          onValueChange={(v) => setDraft(v as CurrencyCode)}
+          disabled={!canEdit || saving}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {CURRENCIES.map((c) => (
+              <SelectItem key={c.code} value={c.code}>
+                {c.code} · {c.symbol} — {c.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {canEdit && dirty ? (
+          <Button type="button" size="sm" onClick={requestSave} disabled={saving}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        ) : null}
       </div>
+      <p className="mt-1.5 text-[11px] leading-snug text-black/45 dark:text-zinc-400">
+        Fees, receipts and WhatsApp use this label. Amounts are never converted.
+        {!canEdit ? " Admin only." : ""}
+      </p>
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>

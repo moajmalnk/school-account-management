@@ -1,7 +1,7 @@
 import {
   BarChart3,
   BookOpen,
-  FileText,
+  CreditCard,
   Headset,
   Loader2,
   Maximize2,
@@ -10,9 +10,11 @@ import {
   MicOff,
   Minimize2,
   Rocket,
+  Search,
   Send,
   Sparkles,
   UserRound,
+  Users,
   Wallet,
   X,
 } from "lucide-react";
@@ -25,6 +27,9 @@ import { FeezoMessageRenderer } from "@/components/ai/FeezoMessageRenderer";
 import { FeezoRichText } from "@/components/ai/FeezoRichText";
 import type { useFeezoAssistant } from "@/components/ai/useFeezoAssistant";
 import { useFeezoVoice } from "@/components/ai/useFeezoVoice";
+import { buildFeezoFollowUps } from "@/lib/feezo-followups";
+import { resolveMediaUrl } from "@/lib/media";
+import { schoolInitials, useTenantStore } from "@/lib/tenant-store";
 import { cn } from "@/lib/utils";
 
 type AssistantApi = ReturnType<typeof useFeezoAssistant>;
@@ -35,38 +40,87 @@ type Props = {
 
 type Tip = {
   label: string;
+  description: string;
   prompt: string;
   icon: typeof Wallet;
 };
 
 const TIPS_EN: Tip[] = [
-  { label: "Financial status", prompt: "What is our current financial status?", icon: Wallet },
-  { label: "Overdue fees", prompt: "Show overdue fee students", icon: BarChart3 },
-  { label: "How do I…", prompt: "How do I collect a fee and send the receipt?", icon: BookOpen },
+  {
+    label: "Financial status",
+    description: "Balances, collections & books snapshot",
+    prompt: "What is our current financial status?",
+    icon: Wallet,
+  },
+  {
+    label: "Overdue fees",
+    description: "Students with open overdue dues",
+    prompt: "Show overdue fee students",
+    icon: BarChart3,
+  },
+  {
+    label: "Find anyone",
+    description: "Search by name, phone, email or ID",
+    prompt: "Find a student or staff by phone number or admission ID",
+    icon: Search,
+  },
+  {
+    label: "Receive payment",
+    description: "Open fee collection for a student",
+    prompt: "How do I receive a fee payment and send the WhatsApp receipt?",
+    icon: CreditCard,
+  },
   {
     label: "Set up my school",
-    prompt: "Help me set up my school in Feezo step by step",
+    description: "Branches, class tier, fees & users",
+    prompt: "Help me set up my school in Feezo step by step — school details, branches, class tier, fee categories, and users",
     icon: Rocket,
   },
-  { label: "Fees report", prompt: "Open fees report", icon: FileText },
-  { label: "Student profile", prompt: "Open Muhammed class 4 profile", icon: UserRound },
+  {
+    label: "Staff & payroll",
+    description: "Roster, attendance and salary report",
+    prompt: "Open staff roster and explain how salary report works",
+    icon: Users,
+  },
 ];
 
 const TIPS_ML: Tip[] = [
-  { label: "സാമ്പത്തിക സ്ഥിതി", prompt: "ഇപ്പോഴത്തെ സാമ്പത്തിക സ്ഥിതി?", icon: Wallet },
-  { label: "കുടിശ്ശിക", prompt: "കുടിശ്ശികയുള്ള വിദ്യാർത്ഥികൾ", icon: BarChart3 },
   {
-    label: "എങ്ങനെ…",
-    prompt: "ഫീസ് വാങ്ങി രസീത് അയക്കുന്നത് എങ്ങനെ?",
-    icon: BookOpen,
+    label: "സാമ്പത്തിക സ്ഥിതി",
+    description: "ബാലൻസ്, കളക്ഷൻ, ബുക്കുകൾ",
+    prompt: "ഇപ്പോഴത്തെ സാമ്പത്തിക സ്ഥിതി?",
+    icon: Wallet,
+  },
+  {
+    label: "കുടിശ്ശിക",
+    description: "കുടിശ്ശികയുള്ള വിദ്യാർത്ഥികൾ",
+    prompt: "കുടിശ്ശികയുള്ള വിദ്യാർത്ഥികൾ കാണിക്കൂ",
+    icon: BarChart3,
+  },
+  {
+    label: "ആരെയും കണ്ടെത്തുക",
+    description: "പേര്, ഫോൺ, ഇമെയിൽ അല്ലെങ്കിൽ ID",
+    prompt: "ഫോൺ നമ്പർ അല്ലെങ്കിൽ അഡ്മിഷൻ ID ഉപയോഗിച്ച് വിദ്യാർത്ഥി അല്ലെങ്കിൽ സ്റ്റാഫ് കണ്ടെത്തൂ",
+    icon: Search,
+  },
+  {
+    label: "ഫീസ് സ്വീകരിക്കുക",
+    description: "പേയ്മെന്റ് + WhatsApp രസീത്",
+    prompt: "ഫീസ് വാങ്ങി WhatsApp രസീത് അയക്കുന്നത് എങ്ങനെ?",
+    icon: CreditCard,
   },
   {
     label: "സ്കൂൾ സെറ്റപ്പ്",
-    prompt: "എന്റെ സ്കൂൾ Feezo-ൽ സെറ്റപ്പ് ചെയ്യാൻ സഹായിക്കൂ",
+    description: "ബ്രാഞ്ച്, ക്ലാസ് ടയർ, ഫീസ്, യൂസർ",
+    prompt: "എന്റെ സ്കൂൾ Feezo-ൽ സെറ്റപ്പ് ചെയ്യാൻ സഹായിക്കൂ — സ്കൂൾ വിവരങ്ങൾ, ബ്രാഞ്ചുകൾ, ക്ലാസ് ടയർ, ഫീസ്, യൂസർമാർ",
     icon: Rocket,
   },
-  { label: "ഫീസ് റിപ്പോർട്ട്", prompt: "ഫീസ് റിപ്പോർട്ട് തുറക്കുക", icon: FileText },
-  { label: "വിദ്യാർത്ഥി", prompt: "മുഹമ്മദ് ക്ലാസ് 4 പ്രൊഫൈൽ തുറക്കുക", icon: UserRound },
+  {
+    label: "സ്റ്റാഫ് & ശമ്പളം",
+    description: "റോസ്റ്റർ, അറ്റൻഡൻസ്, ശമ്പള റിപ്പോർട്ട്",
+    prompt: "സ്റ്റാഫ് റോസ്റ്റർ തുറക്കൂ, ശമ്പള റിപ്പോർട്ട് എങ്ങനെ പ്രവർത്തിക്കുന്നു എന്ന് വിശദീകരിക്കൂ",
+    icon: Users,
+  },
 ];
 
 const FULLSCREEN_KEY = "feezo.ai.fullscreen.v1";
@@ -80,6 +134,37 @@ function FeezoMark({ className }: { className?: string }) {
       )}
     >
       <Sparkles className="h-[42%] w-[42%]" strokeWidth={2.35} />
+    </div>
+  );
+}
+
+/** School / company avatar — logo when set, otherwise initials. */
+function SchoolMark({
+  name,
+  logoUrl,
+  className,
+}: {
+  name: string;
+  logoUrl?: string;
+  className?: string;
+}) {
+  const src = resolveMediaUrl(logoUrl);
+  const initials = schoolInitials(name || "School");
+  return (
+    <div
+      className={cn(
+        "grid shrink-0 place-items-center overflow-hidden rounded-[0.7rem] text-[11px] font-bold text-white shadow-sm shadow-teal-950/15 ring-1 ring-slate-200/80 dark:ring-white/15",
+        !src && "bg-gradient-to-br from-[#0F766E] to-[#0D5C56]",
+        className,
+      )}
+      title={name}
+      aria-hidden
+    >
+      {src ? (
+        <img src={src} alt="" className="h-full w-full bg-white object-contain p-0.5" />
+      ) : (
+        initials
+      )}
     </div>
   );
 }
@@ -118,6 +203,11 @@ export function FeezoChatPanel({ assistant }: Props) {
     newChat,
     regenerate,
   } = assistant;
+
+  const { schoolDetails, activeBranch, academicYear } = useTenantStore();
+  const schoolName = schoolDetails.name?.trim() || "Your school";
+  const campusName = activeBranch?.name?.trim() || "";
+  const schoolTagline = schoolDetails.tagline?.trim() || "";
 
   const [draft, setDraft] = useState("");
   const [interim, setInterim] = useState("");
@@ -193,9 +283,13 @@ export function FeezoChatPanel({ assistant }: Props) {
 
   const tips = locale === "ml" ? TIPS_ML : TIPS_EN;
   const title = locale === "ml" ? "ഫീസോ AI" : "Feezo AI";
-  const subtitle =
-    locale === "ml"
-      ? "സ്കൂൾ അസിസ്റ്റന്റ് · ടൈപ്പ് അല്ലെങ്കിൽ മൈക്ക്"
+  const profileLine = [schoolName, campusName].filter(Boolean).join(" · ");
+  const subtitle = profileLine
+    ? academicYear
+      ? `${profileLine} · ${academicYear}`
+      : profileLine
+    : locale === "ml"
+      ? "സ്കൂൾ അസിസ്റ്റന്റ്"
       : "School operations assistant";
 
   const statusLabel = voice.listening
@@ -249,14 +343,22 @@ export function FeezoChatPanel({ assistant }: Props) {
         {/* Brand accent */}
         <div className="h-[3px] shrink-0 bg-gradient-to-r from-[#0F766E] via-[#14B8A6] to-[#0F766E]" />
 
-        {/* Header */}
+        {/* Header — school profile + Feezo AI */}
         <header
           className={cn(
-            "flex shrink-0 items-center gap-3 border-b border-slate-200/80 bg-white/95 px-3.5 py-3 backdrop-blur-md dark:border-white/[0.07] dark:bg-[#0F141B]/95 sm:px-4",
+            "flex shrink-0 items-center gap-2.5 border-b border-slate-200/80 bg-white/95 px-3.5 py-3 backdrop-blur-md dark:border-white/[0.07] dark:bg-[#0F141B]/95 sm:gap-3 sm:px-4",
             fullscreen && "pt-[max(0.75rem,env(safe-area-inset-top))]",
           )}
         >
-          <FeezoMark className="h-10 w-10 shrink-0" />
+          <div className="relative shrink-0">
+            <SchoolMark name={schoolName} logoUrl={schoolDetails.logoUrl} className="h-10 w-10" />
+            <span
+              className="absolute -bottom-0.5 -right-0.5 grid h-4 w-4 place-items-center rounded-md bg-gradient-to-br from-[#0F766E] to-[#0D5C56] text-white shadow-sm ring-2 ring-white dark:ring-[#0F141B]"
+              title="Feezo AI"
+            >
+              <Sparkles className="h-2.5 w-2.5" strokeWidth={2.5} />
+            </span>
+          </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <h2
@@ -286,7 +388,8 @@ export function FeezoChatPanel({ assistant }: Props) {
             </div>
             <p
               id={descId}
-              className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-zinc-400"
+              className="mt-0.5 truncate text-[11px] font-medium text-slate-600 dark:text-zinc-300"
+              title={subtitle}
             >
               {subtitle}
             </p>
@@ -365,8 +468,8 @@ export function FeezoChatPanel({ assistant }: Props) {
           ref={scrollerRef}
           className={cn(
             "relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-3.5 py-4 sm:px-4",
-            "[scrollbar-width:thin] [scrollbar-color:rgba(148,163,184,0.45)_transparent]",
-            "[&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-300/70 dark:[&::-webkit-scrollbar-thumb]:bg-zinc-700",
+            // Keep scrollable; hide chrome so the panel stays clean.
+            "[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
           )}
         >
           {/* Soft wash */}
@@ -378,19 +481,46 @@ export function FeezoChatPanel({ assistant }: Props) {
           {messages.length === 0 ? (
             <div
               className={cn(
-                "relative flex h-full min-h-[300px] flex-col justify-center gap-6",
+                // min-h-full centers short content; without fixed h-full the panel can grow & scroll.
+                "relative flex min-h-full flex-col justify-center gap-5 pb-2 pt-1",
                 contentMax,
               )}
             >
               <div className="text-center">
-                <FeezoMark className="mx-auto h-14 w-14 shadow-md shadow-teal-900/20" />
-                <h3 className="mt-4 text-[17px] font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
+                <div className="mx-auto flex w-fit flex-col items-center gap-3 rounded-2xl border border-slate-200/90 bg-white px-5 py-4 shadow-sm dark:border-white/[0.08] dark:bg-zinc-900/80">
+                  <div className="relative">
+                    <SchoolMark
+                      name={schoolName}
+                      logoUrl={schoolDetails.logoUrl}
+                      className="h-14 w-14 text-[13px] shadow-md shadow-teal-900/15"
+                    />
+                    <span className="absolute -bottom-1 -right-1 grid h-5 w-5 place-items-center rounded-lg bg-gradient-to-br from-[#0F766E] to-[#0D5C56] text-white shadow ring-2 ring-white dark:ring-zinc-900">
+                      <Sparkles className="h-3 w-3" strokeWidth={2.5} />
+                    </span>
+                  </div>
+                  <div className="min-w-0 max-w-[16rem]">
+                    <p className="truncate text-[14px] font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
+                      {schoolName}
+                    </p>
+                    {campusName || academicYear ? (
+                      <p className="mt-0.5 truncate text-[11.5px] text-slate-500 dark:text-zinc-400">
+                        {[campusName, academicYear].filter(Boolean).join(" · ")}
+                      </p>
+                    ) : null}
+                    {schoolTagline ? (
+                      <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-slate-400 dark:text-zinc-500">
+                        {schoolTagline}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+                <h3 className="mt-5 text-[17px] font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
                   {locale === "ml" ? "എങ്ങനെ സഹായിക്കാം?" : "How can I help today?"}
                 </h3>
-                <p className="mx-auto mt-2 max-w-[300px] text-[12.5px] leading-relaxed text-slate-500 dark:text-zinc-400">
+                <p className="mx-auto mt-2 max-w-[320px] text-[12.5px] leading-relaxed text-slate-500 dark:text-zinc-400">
                   {locale === "ml"
-                    ? "സ്കൂൾ ഡാറ്റ, റിപ്പോർട്ടുകൾ, അല്ലെങ്കിൽ മാറ്റങ്ങൾ — സ്ഥിരീകരണത്തിന് ശേഷം മാത്രം സേവ്."
-                    : "Ask about finances, open reports, or propose changes. Nothing saves until you verify."}
+                    ? `${schoolName}-ന് വേണ്ടി ഫീസ്, വിദ്യാർത്ഥികൾ, സ്റ്റാഫ്, റിപ്പോർട്ടുകൾ — സ്ഥിരീകരണത്തിന് ശേഷം മാത്രം സേവ്.`
+                    : `Ask about fees, students, staff, or setup for ${schoolName}. Nothing saves until you verify.`}
                 </p>
               </div>
 
@@ -412,11 +542,11 @@ export function FeezoChatPanel({ assistant }: Props) {
                         <Icon className="h-3.5 w-3.5" strokeWidth={2.25} />
                       </span>
                       <span className="min-w-0">
-                        <span className="block text-[11px] font-semibold text-slate-800 dark:text-zinc-100">
+                        <span className="block text-[12px] font-semibold text-slate-800 dark:text-zinc-100">
                           {tip.label}
                         </span>
                         <span className="mt-0.5 block text-[11.5px] leading-snug text-slate-500 dark:text-zinc-400">
-                          {tip.prompt}
+                          {tip.description}
                         </span>
                       </span>
                     </button>
@@ -452,6 +582,18 @@ export function FeezoChatPanel({ assistant }: Props) {
                   m.role === "assistant" &&
                   !messages.slice(i + 1).some((x) => x.role === "assistant");
                 const isUser = m.role === "user";
+                const priorUser = isUser
+                  ? null
+                  : [...messages.slice(0, i)].reverse().find((x) => x.role === "user");
+                const followUps =
+                  isLastAssistant && !busy
+                    ? buildFeezoFollowUps({
+                        locale,
+                        userText: priorUser?.content ?? "",
+                        assistantText: m.content,
+                        navigations: m.navigations,
+                      })
+                    : [];
 
                 return (
                   <div
@@ -518,7 +660,7 @@ export function FeezoChatPanel({ assistant }: Props) {
                       </div>
 
                       {!isUser ? (
-                        <div className="mt-1.5 px-0.5">
+                        <div className="mt-1.5 w-full space-y-2.5 px-0.5">
                           <FeezoMessageActions
                             locale={locale}
                             messageId={m.id}
@@ -529,6 +671,34 @@ export function FeezoChatPanel({ assistant }: Props) {
                             alwaysVisible={isLastAssistant}
                             onRegenerate={busy ? undefined : () => void regenerate(m.id)}
                           />
+                          {followUps.length > 0 ? (
+                            <div className="space-y-1.5">
+                              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400 dark:text-zinc-500">
+                                {locale === "ml" ? "നിർദ്ദേശിത ചോദ്യങ്ങൾ" : "Suggested questions"}
+                              </p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {followUps.map((chip) => (
+                                  <button
+                                    key={chip.prompt}
+                                    type="button"
+                                    disabled={busy}
+                                    title={chip.prompt}
+                                    onClick={() => void send(chip.prompt)}
+                                    className={cn(
+                                      "max-w-full rounded-xl border border-slate-200/90 bg-white px-3 py-1.5 text-left text-[11.5px] font-medium leading-snug text-slate-700 shadow-sm transition",
+                                      "hover:border-teal-300/80 hover:bg-[#F0FDFA] hover:text-[#0F766E]",
+                                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]/25",
+                                      "disabled:pointer-events-none disabled:opacity-45",
+                                      "dark:border-white/[0.1] dark:bg-zinc-900/80 dark:text-zinc-200",
+                                      "dark:hover:border-teal-500/40 dark:hover:bg-teal-950/30 dark:hover:text-teal-200",
+                                    )}
+                                  >
+                                    {chip.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
                       ) : null}
                     </div>

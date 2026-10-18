@@ -29,10 +29,12 @@ export type SuperAdminPlanFlags = {
   feeCollection: boolean;
   extraUsers: boolean;
   staffAttendance: boolean;
+  studentAttendance: boolean;
   payroll: boolean;
   autoFeeCollection: boolean;
   whatsapp: boolean;
   branches: boolean;
+  globalSearch: boolean;
 };
 
 export type SuperAdminPlan = {

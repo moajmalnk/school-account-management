@@ -133,10 +133,12 @@ export type PlanFlags = {
   feeCollection: boolean;
   extraUsers: boolean;
   staffAttendance: boolean;
+  studentAttendance: boolean;
   payroll: boolean;
   autoFeeCollection: boolean;
   whatsapp: boolean;
   branches: boolean;
+  globalSearch: boolean;
 };
 
 export const DEFAULT_PLAN_FLAGS: PlanFlags = {
@@ -150,10 +152,12 @@ export const DEFAULT_PLAN_FLAGS: PlanFlags = {
   feeCollection: true,
   extraUsers: true,
   staffAttendance: true,
+  studentAttendance: true,
   payroll: true,
   autoFeeCollection: true,
   whatsapp: true,
   branches: true,
+  globalSearch: true,
 };
 
 /** Catalog labels for Super Admin Plans and tenant Subscriptions. */
@@ -163,6 +167,7 @@ export const PLAN_FEATURE_ITEMS: { key: keyof PlanFlags; label: string }[] = [
   { key: "classes", label: "Class Management" },
   { key: "staff", label: "Staff Management" },
   { key: "staffAttendance", label: "Staff Attendance" },
+  { key: "studentAttendance", label: "Student Attendance" },
   { key: "payroll", label: "Automatic Payroll" },
   { key: "vehicle", label: "Vehicle Management" },
   { key: "analytics", label: "Advanced Analytical Reporting" },
@@ -172,6 +177,7 @@ export const PLAN_FEATURE_ITEMS: { key: keyof PlanFlags; label: string }[] = [
   { key: "autoFeeCollection", label: "Automatic Fee Collection" },
   { key: "whatsapp", label: "WhatsApp Integration" },
   { key: "branches", label: "Multiple Branches" },
+  { key: "globalSearch", label: "Global Search" },
 ];
 
 export function normalizePlanFlags(value: unknown): PlanFlags {
@@ -223,6 +229,16 @@ export function planAllowsMultipleBranches(flags: PlanFlags | undefined | null):
 export function planAllowsExtraUsers(flags: PlanFlags | undefined | null): boolean {
   if (!flags) return true;
   return Boolean(flags.extraUsers);
+}
+
+export function planAllowsGlobalSearch(flags: PlanFlags | undefined | null): boolean {
+  if (!flags) return true;
+  return Boolean(flags.globalSearch);
+}
+
+export function planAllowsStudentAttendance(flags: PlanFlags | undefined | null): boolean {
+  if (!flags) return true;
+  return Boolean(flags.studentAttendance);
 }
 
 export function planAllowsModule(

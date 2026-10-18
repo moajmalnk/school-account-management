@@ -111,6 +111,11 @@ import {
   ProfileAccountActions,
 } from "@/components/school/ProfileAccountActions";
 import {
+  analyzeStudentRecordLinks,
+  describeStudentProtectedHistory,
+  studentHasProtectedHistory,
+} from "@/lib/student-lifecycle";
+import {
   ProfileDetailTabs,
   ProfileTabPanel,
   STUDENT_PROFILE_TABS,
@@ -118,6 +123,8 @@ import {
   type ProfileDetailTabId,
   type StudentProfileTabId,
 } from "@/components/school/ProfileDetailTabs";
+import { StudentAttendanceTab } from "@/components/school/attendance/StudentAttendanceTab";
+import { planAllowsStudentAttendance } from "@/lib/permissions";
 import { cn, glassCardClass } from "@/lib/utils";
 import { formatDobDisplay } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
@@ -449,11 +456,23 @@ export function StudentProfileDetail({
   } = useTenantStore();
   const { session } = useAuth();
   const schoolName = schoolDetails.name || session?.tenantName || "Silver Hills Global";
+  const studentTabs = useMemo(
+    () =>
+      STUDENT_PROFILE_TABS.filter(
+        (t) => t.id !== "attendance" || planAllowsStudentAttendance(session?.planFlags),
+      ),
+    [session?.planFlags],
+  );
   const [shareOpen, setShareOpen] = useState(false);
   const [shareToken, setShareToken] = useState(student.shareToken ?? "");
-  const activeTab: StudentProfileTabId = isStudentProfileTab(search.tab) ? search.tab : "profile";
+  const activeTab: StudentProfileTabId =
+    isStudentProfileTab(search.tab) &&
+    (search.tab !== "attendance" || planAllowsStudentAttendance(session?.planFlags))
+      ? search.tab
+      : "profile";
   const setActiveTab = (tab: ProfileDetailTabId) => {
     if (!isStudentProfileTab(tab)) return;
+    if (tab === "attendance" && !planAllowsStudentAttendance(session?.planFlags)) return;
     navigate({
       to: "/tenant/students",
       search: {
@@ -803,22 +822,51 @@ export function StudentProfileDetail({
 
   const isActive = isRecordActive(student.active);
 
-  const toggleActive = (nextActive: boolean) => {
-    const updated = { ...student, active: nextActive };
+  const recordLinks = useMemo(
+    () => analyzeStudentRecordLinks(student, activePayments, studentFeeBreaks),
+    [student, activePayments, studentFeeBreaks],
+  );
+  const deleteBlocked = studentHasProtectedHistory(recordLinks);
+  const deleteBlockedReason = deleteBlocked
+    ? `Cannot move to Recycle Bin — this student has ${describeStudentProtectedHistory(recordLinks)}. Deactivate instead to keep the ledger intact.`
+    : undefined;
+
+  const toggleActive = (nextActive: boolean, reason?: string) => {
+    const updated: Student = {
+      ...student,
+      active: nextActive,
+      deactivationReason: nextActive
+        ? undefined
+        : (reason?.trim() || student.deactivationReason || undefined),
+    };
     syncStudent(updated);
     toast.success(nextActive ? `${student.name} reactivated` : `${student.name} deactivated`, {
-      description: student.id,
+      description: nextActive
+        ? student.id
+        : reason?.trim()
+          ? `${student.id} · ${reason.trim()}`
+          : student.id,
     });
   };
 
   const deleteStudent = () => {
+    if (deleteBlocked) {
+      toast.error("Recycle Bin unavailable", {
+        description: deleteBlockedReason,
+      });
+      return;
+    }
     const updated = { ...student, deletedAt: new Date().toISOString() };
     setStudents((prev) => prev.map((s) => (s.id === student.id ? updated : s)));
-    void apiDeleteStudent(student.id).catch((err) =>
-      toast.error("Could not move student to recycle bin on server", {
+    void apiDeleteStudent(student.id).catch((err) => {
+      // Roll back optimistic soft-delete when the server refuses (payments, etc.).
+      setStudents((prev) =>
+        prev.map((s) => (s.id === student.id ? { ...s, deletedAt: undefined } : s)),
+      );
+      toast.error("Could not move student to recycle bin", {
         description: err instanceof Error ? err.message : "Delete failed",
-      }),
-    );
+      });
+    });
     toast.error(`${student.name} moved to recycle bin`, { description: student.id });
     onBack();
   };
@@ -893,7 +941,7 @@ export function StudentProfileDetail({
         </div>
       </section>
 
-      <ProfileDetailTabs tabs={STUDENT_PROFILE_TABS} value={activeTab} onValueChange={setActiveTab}>
+      <ProfileDetailTabs tabs={studentTabs} value={activeTab} onValueChange={setActiveTab}>
         <ProfileTabPanel value="profile">
           <div className="grid grid-cols-1 gap-4 sm:gap-5">
             <ProfileDataTable
@@ -1104,6 +1152,12 @@ export function StudentProfileDetail({
               </div>
             </section>
           </div>
+        </ProfileTabPanel>
+
+        <ProfileTabPanel value="attendance">
+          <section className={CARD_FRAME}>
+            <StudentAttendanceTab student={student} />
+          </section>
         </ProfileTabPanel>
 
         <ProfileTabPanel value="documents">
@@ -1354,6 +1408,10 @@ export function StudentProfileDetail({
         entityLabel="student"
         onToggleActive={toggleActive}
         onDelete={deleteStudent}
+        canDelete={!deleteBlocked}
+        deleteBlockedReason={deleteBlockedReason}
+        requireDeactivateReason
+        lastDeactivationReason={student.deactivationReason}
       />
     </div>
   );
@@ -2017,6 +2075,7 @@ function FeesTable({
   const navigate = useNavigate();
   const [selectedRow, setSelectedRow] = useState<LedgerRow | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
+  const [openScope, setOpenScope] = useState<"overdue" | "due" | "all">("all");
   const paidPct =
     selectedRow && selectedRow.charge > 0
       ? Math.round((selectedRow.paid / selectedRow.charge) * 100)
@@ -2030,6 +2089,16 @@ function FeesTable({
     [ledger],
   );
 
+  const overdueRows = useMemo(
+    () => openRows.filter(({ row }) => row.status === "Overdue"),
+    [openRows],
+  );
+  const dueRows = useMemo(
+    () => openRows.filter(({ row }) => row.status !== "Overdue"),
+    [openRows],
+  );
+  const scopedRows = openScope === "overdue" ? overdueRows : openScope === "due" ? dueRows : openRows;
+
   useEffect(() => {
     const valid = new Set(openRows.map(({ key }) => key));
     setSelectedKeys((prev) => {
@@ -2037,6 +2106,14 @@ function FeesTable({
       return next.size === prev.size ? prev : next;
     });
   }, [openRows]);
+
+  useEffect(() => {
+    if (openScope === "overdue" && overdueRows.length === 0 && dueRows.length > 0) {
+      setOpenScope("due");
+    } else if (openScope === "due" && dueRows.length === 0 && overdueRows.length > 0) {
+      setOpenScope("overdue");
+    }
+  }, [openScope, overdueRows.length, dueRows.length]);
 
   const overdueHref = (row: LedgerRow) =>
     buildOverdueWhatsAppHref({
@@ -2053,18 +2130,29 @@ function FeesTable({
   /** Reminders / collect for any open balance — Due, Partially Paid, Overdue (not Paid). */
   const showFeeReminder = (row: LedgerRow) => row.balance > 0;
 
-  const openCollectNow = (row: LedgerRow) => {
-    const period = (row.periodLabel || row.desc).trim();
+  const openCollectRows = (rows: LedgerRow[]) => {
+    const targets = rows.filter((row) => row.balance > 0);
+    if (targets.length === 0) {
+      toast.error("Nothing to collect", {
+        description: "No open balance in this group.",
+      });
+      return;
+    }
+    const periods = targets
+      .map((row) => (row.periodLabel || row.desc).trim())
+      .filter(Boolean);
     navigate({
       to: "/tenant/finance",
       search: {
         tab: "receive",
         studentId: student.id,
         feeKind,
-        ...(period ? { periods: period } : {}),
+        ...(periods.length ? { periods: periods.join(",") } : {}),
       },
     });
   };
+
+  const openCollectNow = (row: LedgerRow) => openCollectRows([row]);
 
   const toggleKey = (key: string, on: boolean) => {
     setSelectedKeys((prev) => {
@@ -2075,14 +2163,21 @@ function FeesTable({
     });
   };
 
-  const allOpenSelected =
-    openRows.length > 0 && openRows.every(({ key }) => selectedKeys.has(key));
+  const scopedSelected =
+    scopedRows.length > 0 && scopedRows.every(({ key }) => selectedKeys.has(key));
 
-  const toggleAllOpen = (on: boolean) => {
-    setSelectedKeys(on ? new Set(openRows.map(({ key }) => key)) : new Set());
+  const toggleScoped = (on: boolean) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      for (const { key } of scopedRows) {
+        if (on) next.add(key);
+        else next.delete(key);
+      }
+      return next;
+    });
   };
 
-  const sendBulkWhatsApp = (rows: LedgerRow[]) => {
+  const sendBulkWhatsApp = (rows: LedgerRow[], label?: string) => {
     const lines = rows
       .filter((row) => row.balance > 0)
       .map((row) => ({
@@ -2094,7 +2189,9 @@ function FeesTable({
         paid: row.paid,
       }));
     if (lines.length === 0) {
-      toast.error("Select fee lines with a balance");
+      toast.error("No fee lines to remind", {
+        description: label ? `Nothing in ${label}.` : "Select lines with a balance.",
+      });
       return;
     }
     const message = buildBulkFeeReminderWhatsApp({
@@ -2117,13 +2214,17 @@ function FeesTable({
       return;
     }
     toast.success("Opening WhatsApp", {
-      description: `${lines.length} fee line${lines.length === 1 ? "" : "s"} selected`,
+      description: `${lines.length} ${label ?? "fee line"}${lines.length === 1 ? "" : "s"}`,
     });
   };
 
-  const selectedOpenRows = openRows
+  const selectedScopedRows = scopedRows
     .filter(({ key }) => selectedKeys.has(key))
     .map(({ row }) => row);
+  const actionRows = selectedScopedRows.length > 0 ? selectedScopedRows : scopedRows.map(({ row }) => row);
+  const actionLabel =
+    openScope === "overdue" ? "overdue" : openScope === "due" ? "due" : "open";
+  const scopeTotal = scopedRows.reduce((sum, { row }) => sum + row.balance, 0);
 
   return (
     <>
@@ -2135,45 +2236,83 @@ function FeesTable({
               {subtitle ?? `Statement ledger sheet · ${ledger.length} line items on file`}
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {openRows.length > 0 ? (
-              <button
-                type="button"
-                onClick={() => sendBulkWhatsApp(openRows.map(({ row }) => row))}
-                className="inline-flex items-center gap-1 rounded-full border border-[#25D366]/35 bg-[#25D366]/10 px-2.5 py-1 text-[11px] font-semibold text-[#128C7E] transition-colors hover:bg-[#25D366]/18"
-              >
-                <MessageCircle className="h-3.5 w-3.5" />
-                WhatsApp all due
-                <span className="font-mono text-[10px] tabular-nums">{openRows.length}</span>
-              </button>
-            ) : null}
-            <span className="rounded-full border border-[#E5E5E5] bg-[#F4F4F5] px-2.5 py-1 font-mono text-[10.5px] font-medium text-black/65">
-              AY {academicYear}
-            </span>
-          </div>
+          <span className="w-fit rounded-full border border-[#E5E5E5] bg-[#F4F4F5] px-2.5 py-1 font-mono text-[10.5px] font-medium text-black/65">
+            AY {academicYear}
+          </span>
         </div>
 
         {openRows.length > 0 ? (
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] px-3 py-2">
-            <label className="inline-flex items-center gap-2 text-[12px] font-medium text-black/65">
-              <Checkbox
-                checked={allOpenSelected}
-                onCheckedChange={(v) => toggleAllOpen(v === true)}
-                aria-label="Select all open fee lines"
-              />
-              {selectedOpenRows.length > 0
-                ? `${selectedOpenRows.length} selected`
-                : `Select open lines (${openRows.length})`}
-            </label>
-            <button
-              type="button"
-              disabled={selectedOpenRows.length === 0}
-              onClick={() => sendBulkWhatsApp(selectedOpenRows)}
-              className="inline-flex items-center gap-1 rounded-full border border-[#25D366]/35 bg-[#25D366]/10 px-2.5 py-1 text-[11px] font-semibold text-[#128C7E] transition-colors hover:bg-[#25D366]/18 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <MessageCircle className="h-3.5 w-3.5" />
-              WhatsApp selected
-            </button>
+          <div className="mb-3 space-y-2.5 rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-3">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {(
+                [
+                  { id: "overdue" as const, label: "Overdue", count: overdueRows.length, tone: "danger" },
+                  { id: "due" as const, label: "Due", count: dueRows.length, tone: "warn" },
+                  { id: "all" as const, label: "All open", count: openRows.length, tone: "neutral" },
+                ] as const
+              ).map((scope) => {
+                const active = openScope === scope.id;
+                const disabled = scope.count === 0;
+                return (
+                  <button
+                    key={scope.id}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => {
+                      setOpenScope(scope.id);
+                      setSelectedKeys(new Set());
+                    }}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-35",
+                      active && scope.tone === "danger" && "border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C]",
+                      active && scope.tone === "warn" && "border-[#FDE68A] bg-[#FFFBEB] text-[#B45309]",
+                      active && scope.tone === "neutral" && "border-[#99F6E4] bg-[#F0FDFA] text-[#0F766E]",
+                      !active &&
+                        "border-[#E5E5E5] bg-white text-black/60 hover:border-black/20 hover:text-black",
+                    )}
+                  >
+                    {scope.label}
+                    <span className="font-mono text-[10px] tabular-nums">{scope.count}</span>
+                  </button>
+                );
+              })}
+              <span className="ml-auto font-mono text-[11px] font-semibold tabular-nums text-black/55">
+                {formatMoney(scopeTotal)}
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#EFEFEF] pt-2.5">
+              <label className="inline-flex items-center gap-2 text-[12px] font-medium text-black/65">
+                <Checkbox
+                  checked={scopedSelected}
+                  onCheckedChange={(v) => toggleScoped(v === true)}
+                  aria-label={`Select ${actionLabel} fee lines`}
+                />
+                {selectedScopedRows.length > 0
+                  ? `${selectedScopedRows.length} selected`
+                  : `Select ${actionLabel} (${scopedRows.length})`}
+              </label>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={actionRows.length === 0}
+                  onClick={() => sendBulkWhatsApp(actionRows, actionLabel)}
+                  className="inline-flex h-8 items-center gap-1 rounded-full border border-[#25D366]/35 bg-[#25D366]/10 px-2.5 text-[11px] font-semibold text-[#128C7E] transition-colors hover:bg-[#25D366]/18 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  WhatsApp {selectedScopedRows.length > 0 ? "selected" : actionLabel}
+                </button>
+                <Button
+                  type="button"
+                  disabled={actionRows.length === 0}
+                  className="h-8 rounded-full bg-[#0F766E] px-2.5 text-[11px] font-semibold text-white hover:bg-[#0D9488] disabled:opacity-40"
+                  onClick={() => openCollectRows(actionRows)}
+                >
+                  <Wallet className="mr-1 h-3.5 w-3.5" />
+                  Collect {selectedScopedRows.length > 0 ? "selected" : actionLabel}
+                </Button>
+              </div>
+            </div>
           </div>
         ) : null}
 

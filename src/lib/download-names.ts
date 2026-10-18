@@ -13,6 +13,7 @@ export const DOWNLOAD_KINDS = [
   "aiReport",
   "busRoutes",
   "staffAttendance",
+  "studentAttendance",
   "bulkTemplate",
   "bulkDemo",
   "platformInvoice",
@@ -45,6 +46,7 @@ export const DOWNLOAD_KIND_GROUPS: { title: string; kinds: DownloadKind[] }[] = 
       "staff",
       "busRoutes",
       "staffAttendance",
+      "studentAttendance",
       "bulkTemplate",
       "bulkDemo",
     ],
@@ -64,6 +66,7 @@ export const DOWNLOAD_KIND_LABELS: Record<DownloadKind, string> = {
   aiReport: "Feezo AI report",
   busRoutes: "Bus routes",
   staffAttendance: "Staff attendance",
+  studentAttendance: "Student attendance",
   bulkTemplate: "Bulk upload template",
   bulkDemo: "Bulk upload demo",
   platformInvoice: "Invoice",
@@ -85,6 +88,7 @@ export const DOWNLOAD_KIND_HINTS: Record<DownloadKind, string> = {
   aiReport: "PDF exported from Feezo AI chat. Uses {school} and {date}.",
   busRoutes: "Transport routes export (CSV) from Settings → Transport.",
   staffAttendance: "Staff attendance demo / import CSV. {date} or {id} can hold the payroll month.",
+  studentAttendance: "Student attendance daily/monthly PDF or CSV. {date} = day or YYYY-MM month.",
   bulkTemplate:
     "CSV templates for bulk upload (students, staff, fees, expenses, bus routes). {report} = type key.",
   bulkDemo: "Sample CSV demos for bulk upload. {report} = type key (e.g. fee-collection).",
@@ -105,6 +109,7 @@ export const DEFAULT_FILE_NAMES: Record<DownloadKind, string> = {
   aiReport: "feezo-ai-{school}-{date}",
   busRoutes: "bus-routes-{school}-{date}",
   staffAttendance: "staff-attendance-{date}",
+  studentAttendance: "student-attendance-{report}-{date}",
   bulkTemplate: "{report}-bulk-upload-template",
   bulkDemo: "{report}-bulk-upload-demo",
   platformInvoice: "{id}",
@@ -124,6 +129,7 @@ export const DOWNLOAD_KIND_EXT: Record<DownloadKind, "pdf" | "csv"> = {
   aiReport: "pdf",
   busRoutes: "csv",
   staffAttendance: "csv",
+  studentAttendance: "pdf",
   bulkTemplate: "csv",
   bulkDemo: "csv",
   platformInvoice: "pdf",
@@ -169,6 +175,7 @@ export const DOWNLOAD_KIND_TOKENS: Record<DownloadKind, DownloadToken[]> = {
   aiReport: ["{school}", "{date}", "{year}"],
   busRoutes: ["{school}", "{date}", "{year}"],
   staffAttendance: ["{date}", "{id}", "{school}"],
+  studentAttendance: ["{date}", "{report}", "{school}", "{year}"],
   bulkTemplate: ["{report}", "{date}", "{school}"],
   bulkDemo: ["{report}", "{date}", "{school}"],
   platformInvoice: ["{id}", "{date}", "{school}"],
@@ -313,6 +320,13 @@ export function exampleVarsForKind(kind: DownloadKind): DownloadNameVars {
       ...EXAMPLE_DOWNLOAD_VARS,
       date: "2026-04",
       id: "2026-04",
+    };
+  }
+  if (kind === "studentAttendance") {
+    return {
+      ...EXAMPLE_DOWNLOAD_VARS,
+      date: "2026-10-18",
+      report: "daily",
     };
   }
   if (kind === "aiReport") {

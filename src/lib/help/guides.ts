@@ -341,7 +341,49 @@ export const HELP_GUIDES: HelpGuide[] = [
         body: "Deleted students go to the Recycle Bin, where you can restore them.",
       },
     ],
-    related: ["student-profile", "fees-report"],
+    related: ["student-profile", "fees-report", "student-attendance"],
+  },
+  {
+    id: "student-attendance",
+    category: "students",
+    title: "Mark attendance and notify parents",
+    summary: "Daily class rolls, monthly PDFs, and WhatsApp absence alerts.",
+    minutes: 3,
+    access: { kind: "permission", key: "students" },
+    keywords: [
+      "attendance",
+      "absent",
+      "present",
+      "halfday",
+      "leave",
+      "late",
+      "whatsapp",
+      "pdf",
+      "register",
+      "class",
+      "division",
+    ],
+    openTo: { href: "/tenant/attendance", label: "Open Attendance" },
+    steps: [
+      {
+        title: "Open Attendance",
+        body: "From the dock or mobile tab, open Attendance. Pick the date, then tap Mark students.",
+      },
+      {
+        title: "Filter by class and division",
+        body: "Use the Class and Division filters so you only see the roll you need. Set Present, Absent, Halfday, Late, or Leave for each student — or tap All present for the filtered list.",
+      },
+      {
+        title: "Save and notify",
+        body: "Confirm Save. Feezo can then WhatsApp parents of students who are not Present (when a phone number is on file).",
+        tip: "Customise the alert wording in Settings → WhatsApp messages → Attendance alert.",
+      },
+      {
+        title: "Export reports",
+        body: "Use Daily, Monthly, or Detailed report to download a PDF or share it on WhatsApp. Each student profile also has an Attendance tab for month history.",
+      },
+    ],
+    related: ["student-profile", "bulk-actions"],
   },
 
   /* ---------------------------------- Staff ---------------------------------- */

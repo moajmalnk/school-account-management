@@ -168,6 +168,7 @@ export function SupportDeskView() {
   const [editingMessage, setEditingMessage] = useState<SupportMessage | null>(null);
   const [deletingMessage, setDeletingMessage] = useState<SupportMessage | null>(null);
   const [pendingStatusChange, setPendingStatusChange] = useState<"closed" | "open" | null>(null);
+  const [pendingDeleteChat, setPendingDeleteChat] = useState(false);
   const threadScrollRef = useRef<HTMLDivElement>(null);
 
   const canEditMessage = useCallback((msg: SupportMessage) => {
@@ -525,6 +526,27 @@ export function SupportDeskView() {
     void reopenTicket();
   };
 
+  const confirmDeleteChat = async () => {
+    if (!thread || replyBusy || thread.status !== "closed") return;
+    const id = thread.id;
+    setReplyBusy(true);
+    try {
+      await postSuperAdminSupport<{ deleted: boolean; ticketId: string }>({
+        action: "ticket.delete",
+        ticketId: id,
+      });
+      setTickets((prev) => prev.filter((t) => t.id !== id));
+      setPendingDeleteChat(false);
+      void navigate({ to: "/super-admin/support" });
+      toast.success("Chat deleted");
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Delete failed";
+      toast.error("Could not delete", { description: msg });
+    } finally {
+      setReplyBusy(false);
+    }
+  };
+
   const saveChannels = async () => {
     setSavingChannels(true);
     try {
@@ -841,15 +863,29 @@ export function SupportDeskView() {
                             Close
                           </Button>
                         ) : (
-                          <Button
-                            type="button"
-                            size="sm"
-                            className="h-8 rounded-full bg-[#0F766E] px-3 text-white hover:bg-[#0D9488]"
-                            disabled={replyBusy}
-                            onClick={() => setPendingStatusChange("open")}
-                          >
-                            Reopen
-                          </Button>
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 rounded-full px-2.5 text-[12px] text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                              disabled={replyBusy}
+                              onClick={() => setPendingDeleteChat(true)}
+                              aria-label="Delete chat"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              <span className="ml-1 hidden sm:inline">Delete</span>
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="h-8 rounded-full bg-[#0F766E] px-3 text-white hover:bg-[#0D9488]"
+                              disabled={replyBusy}
+                              onClick={() => setPendingStatusChange("open")}
+                            >
+                              Reopen
+                            </Button>
+                          </div>
                         )}
                       </div>
                       <div
@@ -882,7 +918,7 @@ export function SupportDeskView() {
                       <div className="shrink-0 border-t border-black/5 px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 dark:border-white/10 sm:px-3">
                         {thread.status === "closed" ? (
                           <p className="rounded-2xl bg-white/80 px-3 py-2 text-center text-[12px] text-black/50 dark:bg-zinc-900/80 dark:text-zinc-400">
-                            Closed. Reopen from the header, or the school can write again.
+                            Closed. Reopen or delete from the header, or the school can write again.
                           </p>
                         ) : (
                           <SupportComposer
@@ -1350,6 +1386,40 @@ export function SupportDeskView() {
               }}
             >
               Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={pendingDeleteChat}
+        onOpenChange={(open) => {
+          if (!open && !replyBusy) setPendingDeleteChat(false);
+        }}
+      >
+        <AlertDialogContent className="max-w-sm rounded-2xl border border-[#E5E5E5] bg-white dark:border-white/10 dark:bg-zinc-900">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-black dark:text-zinc-50">
+              Delete this chat?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-black/60 dark:text-zinc-400">
+              This permanently removes the closed conversation and all messages for this school.
+              This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={replyBusy} className="rounded-full">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={replyBusy}
+              className="rounded-full bg-[#EF4444] text-white hover:bg-[#DC2626]"
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmDeleteChat();
+              }}
+            >
+              {replyBusy ? "Deleting…" : "Delete chat"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

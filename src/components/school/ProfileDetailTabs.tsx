@@ -20,7 +20,13 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
-export const STUDENT_PROFILE_TAB_IDS = ["profile", "academic", "documents", "payments"] as const;
+export const STUDENT_PROFILE_TAB_IDS = [
+  "profile",
+  "academic",
+  "attendance",
+  "documents",
+  "payments",
+] as const;
 
 export const STAFF_PROFILE_TAB_IDS = [
   "profile",
@@ -44,6 +50,7 @@ export type ProfileDetailTab = {
 export const STUDENT_PROFILE_TABS: ProfileDetailTab[] = [
   { id: "profile", label: "Profile", icon: UserRound },
   { id: "academic", label: "Academic", shortLabel: "Academic", icon: GraduationCap },
+  { id: "attendance", label: "Attendance", shortLabel: "Attend.", icon: CalendarDays },
   { id: "documents", label: "Documents", shortLabel: "Docs", icon: FileText },
   { id: "payments", label: "Payments", icon: Wallet },
 ];

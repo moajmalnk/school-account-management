@@ -30,10 +30,12 @@ const EMPTY_FLAGS: SuperAdminPlanFlags = {
   feeCollection: false,
   extraUsers: false,
   staffAttendance: false,
+  studentAttendance: false,
   payroll: false,
   autoFeeCollection: false,
   whatsapp: false,
   branches: false,
+  globalSearch: false,
 };
 
 /** Catalog defaults — used when API is empty / offline */
@@ -53,6 +55,7 @@ const DEFAULT_PLANS: SuperAdminPlan[] = [
       vehicle: true,
       analytics: true,
       feeReminders: true,
+      globalSearch: true,
     },
   },
   {
@@ -73,6 +76,8 @@ const DEFAULT_PLANS: SuperAdminPlan[] = [
       feeCollection: true,
       extraUsers: true,
       branches: true,
+      globalSearch: true,
+      studentAttendance: true,
     },
   },
   {
@@ -88,6 +93,7 @@ const DEFAULT_PLANS: SuperAdminPlan[] = [
       classes: true,
       staff: true,
       staffAttendance: true,
+      studentAttendance: true,
       payroll: true,
       vehicle: true,
       analytics: true,
@@ -97,6 +103,7 @@ const DEFAULT_PLANS: SuperAdminPlan[] = [
       autoFeeCollection: true,
       whatsapp: true,
       branches: true,
+      globalSearch: true,
     },
   },
 ];

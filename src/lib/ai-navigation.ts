@@ -7,6 +7,7 @@ export const FEEZO_NAV_PATHS = [
   "/tenant/students",
   "/tenant/students/admit",
   "/tenant/students/edit",
+  "/tenant/attendance",
   "/tenant/staff",
   "/tenant/staff/edit",
   "/tenant/finance",
@@ -33,7 +34,7 @@ const SETTINGS_TABS = [
   "support",
 ] as const;
 
-const STUDENT_TABS = ["profile", "academic", "documents", "payments"] as const;
+const STUDENT_TABS = ["profile", "academic", "attendance", "documents", "payments"] as const;
 const STAFF_TABS = ["profile", "professional", "attendance", "documents", "payments"] as const;
 
 export type FeezoNormalizedNav = {
@@ -55,6 +56,8 @@ const ALIASES: Record<string, { to: FeezoNavPath; search?: Record<string, string
     "students.admit": { to: "/tenant/students/admit", label: "Admit student" },
     "students.edit": { to: "/tenant/students/edit", label: "Edit student" },
     admit: { to: "/tenant/students/admit", label: "Admit student" },
+    attendance: { to: "/tenant/attendance", label: "Attendance" },
+    "mark.attendance": { to: "/tenant/attendance", label: "Mark attendance" },
     staff: { to: "/tenant/staff", label: "Staff" },
     "staff.list": { to: "/tenant/staff", label: "Staff" },
     "staff.edit": { to: "/tenant/staff/edit", label: "Edit staff" },
@@ -341,7 +344,8 @@ export function feezoNavigationCatalogText(): string {
     "Navigation URLs (use navigate tool):",
     "- /tenant/dashboard",
     "- /tenant/ai (assistant panel; refresh-safe)",
-    "- /tenant/students?id=STU-…&tab=profile|academic|documents|payments",
+    "- /tenant/students?id=STU-…&tab=profile|academic|attendance|documents|payments",
+    "- /tenant/attendance",
     "- /tenant/students/admit",
     "- /tenant/students/edit?id=STU-…",
     "- /tenant/staff?id=STF-…&tab=profile|professional|attendance|documents|payments",

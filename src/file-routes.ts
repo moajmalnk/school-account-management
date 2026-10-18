@@ -1,6 +1,6 @@
 /**
- * Ensures TanStack Router IDE types include routes even when
- * routeTree.gen.ts (@ts-nocheck) lags in the language service.
+ * Patches FileRoutesByPath for routes the IDE misses while routeTree.gen.ts
+ * is @ts-nocheck. Import from router.tsx and from new route modules.
  */
 declare module "@tanstack/react-router" {
   interface FileRoutesByPath {
@@ -57,6 +57,13 @@ declare module "@tanstack/react-router" {
       id: "/tenant/ai";
       path: "/ai";
       fullPath: "/tenant/ai";
+      preLoaderRoute: unknown;
+      parentRoute: unknown;
+    };
+    "/tenant/attendance": {
+      id: "/tenant/attendance";
+      path: "/attendance";
+      fullPath: "/tenant/attendance";
       preLoaderRoute: unknown;
       parentRoute: unknown;
     };

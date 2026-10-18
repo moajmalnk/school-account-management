@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { ArrowLeft, BookOpen, KeyRound, Loader2, Mail, Plus, Users } from "lucide-react";
+import { ArrowLeft, BookOpen, KeyRound, Loader2, Mail, Plus, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -37,6 +37,7 @@ import {
   closeSupportTicket,
   createSupportTicket,
   deleteSupportMessage,
+  deleteSupportTicket,
   editSupportMessage,
   fetchSupportDesk,
   fetchSupportTickets,
@@ -351,6 +352,7 @@ export function CustomerSupportCard({
   const [editingMessage, setEditingMessage] = useState<SupportMessage | null>(null);
   const [deletingMessage, setDeletingMessage] = useState<SupportMessage | null>(null);
   const [pendingStatusChange, setPendingStatusChange] = useState<"closed" | "open" | null>(null);
+  const [pendingDeleteChat, setPendingDeleteChat] = useState(false);
   const threadScrollRef = useRef<HTMLDivElement>(null);
 
   const canEditMessage = useCallback((msg: SupportMessage) => {
@@ -700,6 +702,27 @@ export function CustomerSupportCard({
     void setTicketStatus(pendingStatusChange);
   };
 
+  const confirmDeleteChat = async () => {
+    if (!activeTicket || ticketBusy || activeTicket.status !== "closed") return;
+    const id = activeTicket.id;
+    setTicketBusy(true);
+    try {
+      await deleteSupportTicket(id);
+      setTickets((prev) => prev.filter((t) => t.id !== id));
+      setPendingDeleteChat(false);
+      void navigate({
+        to: "/tenant/settings",
+        search: (prev) => ({ ...prev, tab: "support", chat: undefined }),
+      });
+      toast.success("Chat deleted");
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Could not delete chat";
+      toast.error("Could not delete", { description: msg });
+    } finally {
+      setTicketBusy(false);
+    }
+  };
+
   useEffect(() => {
     if (!chatId || chatId === "new") return;
     const ticket = tickets.find((item) => item.id === chatId);
@@ -912,15 +935,29 @@ export function CustomerSupportCard({
                     </div>
                   </div>
                   {activeTicket.status === "closed" ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-8 shrink-0 rounded-full bg-[#0F766E] px-3 text-[12px] text-white hover:bg-[#0D9488]"
-                      disabled={ticketBusy}
-                      onClick={() => setPendingStatusChange("open")}
-                    >
-                      Reopen
-                    </Button>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-full px-2.5 text-[12px] text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:text-rose-400 dark:hover:bg-rose-950/40"
+                        disabled={ticketBusy}
+                        onClick={() => setPendingDeleteChat(true)}
+                        aria-label="Delete chat"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        <span className="ml-1 hidden sm:inline">Delete</span>
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-8 rounded-full bg-[#0F766E] px-3 text-[12px] text-white hover:bg-[#0D9488]"
+                        disabled={ticketBusy}
+                        onClick={() => setPendingStatusChange("open")}
+                      >
+                        Reopen
+                      </Button>
+                    </div>
                   ) : (
                     <Button
                       type="button"
@@ -962,7 +999,8 @@ export function CustomerSupportCard({
                 <div className="shrink-0 border-t border-black/5 bg-[#E8EEE9] px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 dark:border-white/10 dark:bg-zinc-950 sm:px-3">
                   {activeTicket.status === "closed" ? (
                     <p className="rounded-2xl bg-white/80 px-3 py-2 text-center text-[12px] text-black/50 dark:bg-zinc-900/80 dark:text-zinc-400">
-                      Chat closed. Reopen it from the header, or start a new one from the list.
+                      Chat closed. Reopen it from the header, delete it permanently, or start a new
+                      one from the list.
                     </p>
                   ) : (
                     <SupportComposer
@@ -1183,6 +1221,40 @@ export function CustomerSupportCard({
               }}
             >
               Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={pendingDeleteChat}
+        onOpenChange={(open) => {
+          if (!open && !ticketBusy) setPendingDeleteChat(false);
+        }}
+      >
+        <AlertDialogContent className="max-w-sm rounded-2xl border border-[#E5E5E5] bg-white dark:border-white/10 dark:bg-zinc-900">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-black dark:text-zinc-50">
+              Delete this chat?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-black/60 dark:text-zinc-400">
+              This permanently removes the closed conversation and all messages. This cannot be
+              undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={ticketBusy} className="rounded-full">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={ticketBusy}
+              className="rounded-full bg-[#EF4444] text-white hover:bg-[#DC2626]"
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmDeleteChat();
+              }}
+            >
+              {ticketBusy ? "Deleting…" : "Delete chat"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

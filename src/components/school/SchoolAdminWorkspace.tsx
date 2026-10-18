@@ -163,6 +163,7 @@ import {
 import { SignaturePadDialog } from "@/components/school/SignaturePadDialog";
 import { BankAccountsManager } from "@/components/school/BankAccountsManager";
 import { OrgCurrencyCard } from "@/components/school/OrgCurrencyCard";
+import { OrgLanguageCard } from "@/components/school/OrgLanguageCard";
 import { ReceiptPrintLayoutCard } from "@/components/school/ReceiptPrintLayoutCard";
 import { OrganicCard } from "@/components/ui/organic-card";
 import { ImageCropDialog } from "@/components/ui/image-crop-dialog";
@@ -301,6 +302,10 @@ import {
   isRecordActive,
   isRecordDeleted,
 } from "@/components/school/ProfileAccountActions";
+import {
+  analyzeStudentRecordLinks,
+  studentHasProtectedHistory,
+} from "@/lib/student-lifecycle";
 import { SettingsUsersCard } from "@/components/school/SettingsUsersCard";
 import {
   AddFeeCategoryDialog,
@@ -2047,6 +2052,7 @@ export function SchoolDashboard() {
     academicYear,
     hydrated,
     branchContentReady,
+    booksOpening,
     activeBranch,
     branches,
     schoolDetails,
@@ -2164,11 +2170,15 @@ export function SchoolDashboard() {
       .slice(0, 5);
   }, [payments, disbursements]);
 
-  if (!hydrated || !branchContentReady) {
+  if (!hydrated || !branchContentReady || booksOpening) {
     return (
       <WorkspaceOpeningScreen
-        label="Opening dashboard"
-        detail="Loading school overview and books…"
+        label={booksOpening ? `Opening ${booksOpening} books` : "Opening dashboard"}
+        detail={
+          booksOpening
+            ? "Loading enrollments, receipts, and fee schedules for this year…"
+            : "Loading school overview and books…"
+        }
       />
     );
   }
@@ -3415,6 +3425,7 @@ export function StudentsLedger() {
     academicYear,
     hydrated,
     branchContentReady,
+    booksOpening,
     activePayments,
     activeFeeTerms,
     transportRoutes,
@@ -3449,6 +3460,9 @@ export function StudentsLedger() {
   const [bulkWhatsAppSending, setBulkWhatsAppSending] = useState(false);
   const [bulkClassOpen, setBulkClassOpen] = useState(false);
   const [bulkTargetClass, setBulkTargetClass] = useState("");
+  const [bulkDeactivateOpen, setBulkDeactivateOpen] = useState(false);
+  const [bulkDeactivateReason, setBulkDeactivateReason] = useState("");
+  const [bulkDeactivateReasonError, setBulkDeactivateReasonError] = useState(false);
   const reconciledClassKeysRef = useRef(new Set<string>());
 
   useEffect(() => {
@@ -3750,13 +3764,23 @@ export function StudentsLedger() {
   const purgeStudent = (id: string) => {
     const target = deletedStudents.find((s) => s.id === id);
     if (!target) return;
+    const links = analyzeStudentRecordLinks(target, activePayments, studentFeeBreaks);
+    if (studentHasProtectedHistory(links)) {
+      setPendingPurgeId(null);
+      toast.error("Permanent delete blocked", {
+        description:
+          "This student has payments or related records. Restore them and use Deactivate instead.",
+      });
+      return;
+    }
     setStudents((prev) => prev.filter((s) => s.id !== id));
     setPendingPurgeId(null);
-    void apiDeleteStudent(id, { hard: true }).catch((err) =>
+    void apiDeleteStudent(id, { hard: true }).catch((err) => {
+      setStudents((prev) => (prev.some((s) => s.id === id) ? prev : [...prev, target]));
       toast.error("Could not permanently delete student on server", {
         description: err instanceof Error ? err.message : "Delete failed",
-      }),
-    );
+      });
+    });
     toast.error(`${target.name} permanently deleted`, { description: target.id });
   };
 
@@ -3783,40 +3807,102 @@ export function StudentsLedger() {
       setPendingBulkPurgeIds(null);
       return;
     }
-    const idSet = new Set(ids);
-    const count = ids.length;
-    setStudents((prev) => prev.filter((s) => !idSet.has(s.id)));
+    const targets = deletedStudents.filter((s) => ids.includes(s.id));
+    const allowed = targets.filter(
+      (s) =>
+        !studentHasProtectedHistory(
+          analyzeStudentRecordLinks(s, activePayments, studentFeeBreaks),
+        ),
+    );
+    const blocked = targets.length - allowed.length;
     setPendingBulkPurgeIds(null);
-    for (const id of ids) {
-      void apiDeleteStudent(id, { hard: true }).catch((err) =>
+    if (!allowed.length) {
+      toast.error("Permanent delete blocked", {
+        description:
+          "Selected students have payments or related records. Restore and deactivate instead.",
+      });
+      return;
+    }
+    const idSet = new Set(allowed.map((s) => s.id));
+    setStudents((prev) => prev.filter((s) => !idSet.has(s.id)));
+    for (const student of allowed) {
+      void apiDeleteStudent(student.id, { hard: true }).catch((err) => {
+        setStudents((prev) =>
+          prev.some((s) => s.id === student.id) ? prev : [...prev, student],
+        );
         toast.error("Could not permanently delete student on server", {
           description: err instanceof Error ? err.message : "Delete failed",
-        }),
-      );
+        });
+      });
     }
-    toast.error(`${count} student${count === 1 ? "" : "s"} permanently deleted`, {
-      description: "This cannot be undone",
-    });
+    toast.error(
+      `${allowed.length} student${allowed.length === 1 ? "" : "s"} permanently deleted`,
+      blocked > 0
+        ? {
+            description: `${blocked} skipped — payments or related records still on file`,
+          }
+        : { description: "This cannot be undone" },
+    );
   };
 
-  const bulkChangeStatus = (nextActive: boolean) => {
+  const bulkChangeStatus = (nextActive: boolean, reason?: string) => {
     if (!selectedIds.size) {
       toast.error("Select at least one student");
       return;
     }
     const ids = selectedIds;
-    setStudents((prev) => prev.map((s) => (ids.has(s.id) ? { ...s, active: nextActive } : s)));
+    const reasonTrim = reason?.trim();
+    setStudents((prev) =>
+      prev.map((s) =>
+        ids.has(s.id)
+          ? {
+              ...s,
+              active: nextActive,
+              deactivationReason: nextActive
+                ? undefined
+                : reasonTrim || s.deactivationReason,
+            }
+          : s,
+      ),
+    );
     for (const id of ids) {
       const target = liveStudents.find((s) => s.id === id);
       if (!target) continue;
-      void apiUpsertStudent({ ...target, active: nextActive }).catch(() => {});
+      void apiUpsertStudent({
+        ...target,
+        active: nextActive,
+        deactivationReason: nextActive ? undefined : reasonTrim || undefined,
+      }).catch(() => {});
     }
     toast.success(
       nextActive
         ? `${ids.size} student${ids.size === 1 ? "" : "s"} set to Active`
-        : `${ids.size} student${ids.size === 1 ? "" : "s"} set to Inactive`,
+        : `${ids.size} student${ids.size === 1 ? "" : "s"} deactivated`,
+      !nextActive && reasonTrim ? { description: reasonTrim } : undefined,
     );
     clearSelection();
+  };
+
+  const openBulkDeactivate = () => {
+    if (!selectedIds.size) {
+      toast.error("Select at least one student");
+      return;
+    }
+    setBulkDeactivateReason("");
+    setBulkDeactivateReasonError(false);
+    setBulkDeactivateOpen(true);
+  };
+
+  const confirmBulkDeactivate = () => {
+    const reason = bulkDeactivateReason.trim();
+    if (reason.length < 3) {
+      setBulkDeactivateReasonError(true);
+      return;
+    }
+    setBulkDeactivateOpen(false);
+    bulkChangeStatus(false, reason);
+    setBulkDeactivateReason("");
+    setBulkDeactivateReasonError(false);
   };
 
   const openBulkChangeClass = () => {
@@ -3875,22 +3961,44 @@ export function StudentsLedger() {
       setPendingBulkDelete(false);
       return;
     }
-    const ids = new Set(selectedIds);
+    const selected = liveStudents.filter((s) => selectedIds.has(s.id));
+    const allowed = selected.filter(
+      (s) =>
+        !studentHasProtectedHistory(
+          analyzeStudentRecordLinks(s, activePayments, studentFeeBreaks),
+        ),
+    );
+    const blocked = selected.length - allowed.length;
+    setPendingBulkDelete(false);
+    if (!allowed.length) {
+      toast.error("Recycle Bin unavailable", {
+        description:
+          "Selected students have payments or related records. Use Set Inactive (with a reason) instead.",
+      });
+      return;
+    }
+    const ids = new Set(allowed.map((s) => s.id));
     const stamp = new Date().toISOString();
-    const count = ids.size;
     setStudents((prev) => prev.map((s) => (ids.has(s.id) ? { ...s, deletedAt: stamp } : s)));
-    for (const id of ids) {
-      void apiDeleteStudent(id).catch((err) =>
+    for (const student of allowed) {
+      void apiDeleteStudent(student.id).catch((err) => {
+        setStudents((prev) =>
+          prev.map((s) => (s.id === student.id ? { ...s, deletedAt: undefined } : s)),
+        );
         toast.error("Could not delete student on server", {
           description: err instanceof Error ? err.message : "Delete failed",
-        }),
-      );
+        });
+      });
     }
     clearSelection();
-    setPendingBulkDelete(false);
-    toast.success(`${count} student${count === 1 ? "" : "s"} moved to recycle bin`, {
-      description: "Restore anytime from Recycle",
-    });
+    toast.success(
+      `${allowed.length} student${allowed.length === 1 ? "" : "s"} moved to recycle bin`,
+      blocked > 0
+        ? {
+            description: `${blocked} kept — payments or related records (deactivate those instead)`,
+          }
+        : { description: "Restore anytime from Recycle" },
+    );
   };
 
   const openBulkWhatsApp = () => {
@@ -4503,7 +4611,7 @@ export function StudentsLedger() {
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="cursor-pointer rounded-md text-[13px]"
-                  onClick={() => bulkChangeStatus(false)}
+                  onClick={openBulkDeactivate}
                 >
                   Set Inactive
                 </DropdownMenuItem>
@@ -4534,8 +4642,12 @@ export function StudentsLedger() {
       />
     ) : undefined;
 
-  if (!hydrated || !branchContentReady) {
-    return <TenantDirectorySkeleton label="Loading students directory" />;
+  if (!hydrated || !branchContentReady || booksOpening) {
+    return (
+      <TenantDirectorySkeleton
+        label={booksOpening ? `Opening ${booksOpening} books` : "Loading students directory"}
+      />
+    );
   }
 
   if (activeStudent) {
@@ -5027,9 +5139,71 @@ export function StudentsLedger() {
           if (!next) setPendingBulkDelete(false);
         }}
         title="Delete selected students"
-        description={`Move ${selectedIds.size} selected student${selectedIds.size === 1 ? "" : "s"} to the recycle bin? You can restore them later from Recycle.`}
+        description={`Students with payments, dues, fee breaks, documents, or concessions cannot be recycled — only those without related records will move to Recycle Bin. Prefer Set Inactive with a reason when history exists.`}
         onConfirm={confirmBulkDeleteStudents}
       />
+
+      <Dialog
+        open={bulkDeactivateOpen}
+        onOpenChange={(open) => {
+          setBulkDeactivateOpen(open);
+          if (!open) {
+            setBulkDeactivateReason("");
+            setBulkDeactivateReasonError(false);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md rounded-xl border border-[#E5E5E5] bg-white p-6 dark:border-white/10 dark:bg-zinc-900">
+          <DialogHeader>
+            <DialogTitle className="text-[20px] font-semibold text-black dark:text-zinc-50">
+              Deactivate selected students
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60 dark:text-zinc-400">
+              {selectedIds.size} student{selectedIds.size === 1 ? "" : "s"} will be marked inactive.
+              Payment history stays intact — add a shared reason for the audit trail.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-4 space-y-2">
+            <Label
+              htmlFor="bulk-deactivate-reason"
+              className="text-[12px] font-semibold text-slate-700 dark:text-zinc-200"
+            >
+              Reason <span className="text-rose-500">*</span>
+            </Label>
+            <Textarea
+              id="bulk-deactivate-reason"
+              value={bulkDeactivateReason}
+              onChange={(e) => {
+                setBulkDeactivateReason(e.target.value);
+                if (e.target.value.trim().length >= 3) setBulkDeactivateReasonError(false);
+              }}
+              placeholder="e.g. End of term archive, transferred batch, long leave…"
+              rows={3}
+              className={cn(
+                "resize-none rounded-xl text-[13px]",
+                bulkDeactivateReasonError && "border-rose-400 focus-visible:ring-rose-400/30",
+              )}
+            />
+            {bulkDeactivateReasonError ? (
+              <p className="text-[12px] text-rose-600 dark:text-rose-400">
+                Enter at least a short reason (3+ characters).
+              </p>
+            ) : null}
+          </div>
+          <DialogFooter className="mt-5 flex-row justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setBulkDeactivateOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+              onClick={confirmBulkDeactivate}
+            >
+              Deactivate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={bulkClassOpen}
@@ -5254,6 +5428,7 @@ export function StaffRoster() {
     roles,
     hydrated,
     branchContentReady,
+    booksOpening,
     schoolDetails,
     academicYear,
   } = useTenantStore();
@@ -6294,8 +6469,12 @@ export function StaffRoster() {
     reader.readAsText(file);
   };
 
-  if (!hydrated || !branchContentReady) {
-    return <TenantDirectorySkeleton label="Loading staff directory" />;
+  if (!hydrated || !branchContentReady || booksOpening) {
+    return (
+      <TenantDirectorySkeleton
+        label={booksOpening ? `Opening ${booksOpening} books` : "Loading staff directory"}
+      />
+    );
   }
 
   if (activeStaff) {
@@ -16072,14 +16251,6 @@ export function SchoolSettings() {
   const initials = schoolInitials(tenantName);
   const logoUrl = resolveMediaUrl(schoolDetails.logoUrl);
 
-  const campusHint =
-    branches.length > 1 && activeBranch ? (
-      <p className="mb-2 text-[12px] text-black/55 dark:text-zinc-400">
-        Configuring{" "}
-        <span className="font-semibold text-black dark:text-zinc-100">{activeBranch.name}</span>
-      </p>
-    ) : null;
-
   const settingsDataLoading = !hydrated || !branchContentReady;
 
   const renderSettingsPanel = (
@@ -16095,24 +16266,20 @@ export function SchoolSettings() {
 
   const renderSettingsContent = (listLayout: "cards" | "table", pinSupport = false) => (
     <>
-      {activeTab === "school" && (
-        <>
-          {campusHint}
-          {settingsDataLoading ? (
-            <TenantSettingsListSkeleton label="Loading school details" layout={listLayout} />
-          ) : (
-            <SchoolDetailsCard
-              schoolDetails={schoolDetails}
-              setSchoolDetails={setSchoolDetails}
-              onDirtyChange={setSchoolDirty}
-              onBindActions={(actions: { save: () => Promise<boolean>; discard: () => void }) => {
-                schoolActionsRef.current = actions;
-              }}
-              saveDisabled={branchSyncing}
-            />
-          )}
-        </>
-      )}
+      {activeTab === "school" &&
+        (settingsDataLoading ? (
+          <TenantSettingsListSkeleton label="Loading school details" layout={listLayout} />
+        ) : (
+          <SchoolDetailsCard
+            schoolDetails={schoolDetails}
+            setSchoolDetails={setSchoolDetails}
+            onDirtyChange={setSchoolDirty}
+            onBindActions={(actions: { save: () => Promise<boolean>; discard: () => void }) => {
+              schoolActionsRef.current = actions;
+            }}
+            saveDisabled={branchSyncing}
+          />
+        ))}
 
       {activeTab === "branches" &&
         renderSettingsPanel(
@@ -16129,7 +16296,6 @@ export function SchoolSettings() {
 
       {classTierOpen && (
         <>
-          {campusHint}
           {canViewClasses && canViewDepartments ? (
             <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="inline-flex w-full max-w-md rounded-full border border-[#E5E5E5] bg-white/90 p-1 shadow-sm dark:border-white/10 dark:bg-zinc-900/80 sm:w-auto">
@@ -16205,31 +16371,23 @@ export function SchoolSettings() {
         </>
       )}
 
-      {activeTab === "leave" && (
-        <>
-          {campusHint}
-          {renderSettingsPanel(
-            <LeaveTypesCard leaveTypes={leaveTypes} setLeaveTypes={setLeaveTypes} />,
-            "Loading leave types",
-            listLayout,
-          )}
-        </>
-      )}
+      {activeTab === "leave" &&
+        renderSettingsPanel(
+          <LeaveTypesCard leaveTypes={leaveTypes} setLeaveTypes={setLeaveTypes} />,
+          "Loading leave types",
+          listLayout,
+        )}
 
-      {activeTab === "fees" && (
-        <>
-          {campusHint}
-          {renderSettingsPanel(
-            <FeeCategoriesCard
-              paymentCategories={paymentCategories}
-              setPaymentCategories={setPaymentCategories}
-              feeTerms={feeTerms}
-            />,
-            "Loading fee categories",
-            listLayout,
-          )}
-        </>
-      )}
+      {activeTab === "fees" &&
+        renderSettingsPanel(
+          <FeeCategoriesCard
+            paymentCategories={paymentCategories}
+            setPaymentCategories={setPaymentCategories}
+            feeTerms={feeTerms}
+          />,
+          "Loading fee categories",
+          listLayout,
+        )}
 
       {activeTab === "users" &&
         renderSettingsPanel(
@@ -16255,36 +16413,31 @@ export function SchoolSettings() {
           listLayout,
         )}
 
-      {activeTab === "transport" && (
-        <>
-          {campusHint}
-          {renderSettingsPanel(
-            <div className="space-y-3">
-              <TransportCard
-                listLayout={listLayout}
-                transportRoutes={transportRoutes}
-                setTransportRoutes={setTransportRoutes}
-                transportVehicles={transportVehicles}
-                setTransportVehicles={setTransportVehicles}
-                feeTerms={feeTerms}
-              />
-              <VehicleCard
-                listLayout={listLayout}
-                transportVehicles={transportVehicles}
-                setTransportVehicles={setTransportVehicles}
-                transportRoutes={transportRoutes}
-              />
-            </div>,
-            "Loading bus points",
-            listLayout,
-          )}
-        </>
-      )}
+      {activeTab === "transport" &&
+        renderSettingsPanel(
+          <div className="space-y-3">
+            <TransportCard
+              listLayout={listLayout}
+              transportRoutes={transportRoutes}
+              setTransportRoutes={setTransportRoutes}
+              transportVehicles={transportVehicles}
+              setTransportVehicles={setTransportVehicles}
+              feeTerms={feeTerms}
+            />
+            <VehicleCard
+              listLayout={listLayout}
+              transportVehicles={transportVehicles}
+              setTransportVehicles={setTransportVehicles}
+              transportRoutes={transportRoutes}
+            />
+          </div>,
+          "Loading bus points",
+          listLayout,
+        )}
 
       {activeTab === "system" &&
         (hydrated && branchContentReady ? (
           <div className="grid grid-cols-12 items-start gap-3 sm:gap-4 lg:gap-5">
-            {campusHint ? <div className="col-span-12">{campusHint}</div> : null}
             <CategoriesCard
               academicYears={academicYears}
               academicYear={academicYear}
@@ -22057,10 +22210,6 @@ function SchoolDetailsCard({
           </div>
 
           <div className="border-t border-[#E5E5E5] pt-5 dark:border-white/10">
-            <OrgCurrencyCard />
-          </div>
-
-          <div className="border-t border-[#E5E5E5] pt-5 dark:border-white/10">
             <BankAccountsManager />
           </div>
         </div>
@@ -22201,11 +22350,14 @@ function CategoriesCard({
       toast.error(`${nextLabel} already exists`);
       return;
     }
-    toast.success(`Opened books for ${nextLabel}`, {
-      description: getApiToken()
-        ? "Synced to server · fee periods cloned from the previous year"
-        : "Fee periods cloned from the previous year · ready to enroll students",
-    });
+    // Defer toast until books skeleton settles (same cadence as top-bar year switch).
+    window.setTimeout(() => {
+      toast.success(`Opened books for ${nextLabel}`, {
+        description: getApiToken()
+          ? "Synced to server · fee periods cloned from the previous year"
+          : "Fee periods cloned from the previous year · ready to enroll students",
+      });
+    }, 640);
     const nextKey = suggestNextBooksMonthKey(nextLabel, academicYears);
     setAddMonthKey(nextKey);
     setAddEndMonthKey(defaultClosingMonthKey(nextKey));
@@ -22242,9 +22394,11 @@ function CategoriesCard({
   const activateYear = (year: string) => {
     if (year === academicYear) return;
     const stats = openAcademicYear(year);
-    toast.success(`Opened books for ${year}`, {
-      description: `${stats.receipts} receipt${stats.receipts === 1 ? "" : "s"} · ${stats.enrolled} student${stats.enrolled === 1 ? "" : "s"} enrolled`,
-    });
+    window.setTimeout(() => {
+      toast.success(`Opened books for ${year}`, {
+        description: `${stats.receipts} receipt${stats.receipts === 1 ? "" : "s"} · ${stats.enrolled} student${stats.enrolled === 1 ? "" : "s"} enrolled`,
+      });
+    }, 640);
   };
 
   const toggleClosed = (year: string, closed: boolean) => {
@@ -22297,13 +22451,13 @@ function CategoriesCard({
       <SettingsResponsiveCardHeader
         title="System Constants"
         info={SYSTEM_TIP}
-        subtitle="Financial year books, document numbers per campus, then how the workspace and downloads look"
+        subtitle="Financial year books, base currency & language, document numbers per campus, then how the workspace and downloads look"
         titleClassName="text-black dark:text-zinc-50"
         subtitleClassName="text-black/55"
       />
 
-      <div className="mt-4 grid grid-cols-12 items-start gap-3">
-        <div className="col-span-12 self-start rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-7 dark:border-white/10 dark:bg-zinc-900/40">
+      <div className="mt-4 grid grid-cols-12 items-stretch gap-3">
+        <div className="col-span-12 flex h-full flex-col rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-7 dark:border-white/10 dark:bg-zinc-900/40">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <Label className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
@@ -22443,9 +22597,16 @@ function CategoriesCard({
               <Plus className="mr-1 h-3.5 w-3.5" /> Add year
             </Button>
           </form>
+
+          <div className="mt-auto border-t border-[#E5E5E5] pt-4 dark:border-white/10">
+            <div className="grid grid-cols-12 gap-3">
+              <OrgCurrencyCard />
+              <OrgLanguageCard />
+            </div>
+          </div>
         </div>
 
-        <div className="col-span-12 self-start space-y-4 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-5 dark:border-white/10 dark:bg-zinc-900/40">
+        <div className="col-span-12 h-full space-y-4 rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] p-3.5 lg:col-span-5 dark:border-white/10 dark:bg-zinc-900/40">
           <ThemeSection title="Colors" info={THEME_TIP}>
             <ThemeColorField
               label="Primary"

@@ -271,6 +271,14 @@ export async function reopenSupportTicket(ticketId: string): Promise<SupportTick
   return data.ticket;
 }
 
+/** Permanently remove a closed chat (messages cascade). */
+export async function deleteSupportTicket(ticketId: string): Promise<void> {
+  await apiRequest<{ deleted: boolean; ticketId: string }>("/api/support/tickets.php", {
+    method: "POST",
+    body: { action: "delete", ticketId },
+  });
+}
+
 export async function editSupportMessage(input: {
   ticketId: string;
   messageId: string;

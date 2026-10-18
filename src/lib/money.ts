@@ -9,6 +9,7 @@ import {
   safeStorage,
   STORAGE_KEYS,
 } from "@/lib/locale/currencies";
+import { getOrgLanguage } from "@/lib/locale/languages";
 
 /**
  * Single money formatter for Feezo. Stored amounts are never converted —
@@ -31,7 +32,7 @@ function readInitialState(): MoneyState {
     mode: "visitor",
     orgCurrency: isCurrencyCode(storedOrg) ? storedOrg : "INR",
     visitorCurrency: isCurrencyCode(storedVisitor) ? storedVisitor : "INR",
-    language: "en",
+    language: getOrgLanguage(),
   };
 }
 
@@ -71,6 +72,11 @@ export function setMoneyDefaults(currency: string, language?: string) {
     visitorCurrency: normalizeCurrency(currency, state.visitorCurrency),
     language: language ?? state.language,
   });
+}
+
+/** Organization base language (number formatting / future UI locale). */
+export function setMoneyLanguage(language: string) {
+  update({ language: language.trim() || state.language });
 }
 
 /** School base currency from school.php / bundle.php. Cached for the next cold start. */

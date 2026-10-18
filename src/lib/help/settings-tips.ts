@@ -12,7 +12,7 @@ export const SCHOOL_DETAILS_TIP: InfoTipContent = {
     "Changes apply to documents you download from now on. Receipts already downloaded or shared keep the old look.",
     "Nothing is saved until you press Save Changes. Leaving with unsaved edits asks you first.",
   ],
-  note: "Base currency and bank accounts below save on their own. They don't need Save Changes.",
+  note: "Bank accounts below save on their own. They don't need Save Changes.",
 };
 
 export const SCHOOL_MEDIA_TIPS: Record<
@@ -74,6 +74,17 @@ export const BASE_CURRENCY_TIP: InfoTipContent = {
   note: "Set this once before you start collecting fees.",
 };
 
+export const BASE_LANGUAGE_TIP: InfoTipContent = {
+  title: "Base language",
+  points: [
+    "One language for the whole organisation (all campuses).",
+    "English is available now. Arabic, Hindi and Malayalam are listed for upcoming releases.",
+    "When a language ships, menus, receipts and WhatsApp wording follow this setting.",
+    "Only the school admin can change it. It saves immediately.",
+  ],
+  note: "Pick English today — other languages unlock in place when ready.",
+};
+
 export const BANK_DETAILS_TIP: InfoTipContent = {
   title: "Bank details",
   points: [
@@ -92,7 +103,7 @@ export const BRANCHES_TIP: InfoTipContent = {
   title: "How campuses work",
   points: [
     "Each campus keeps its own students, staff, receipts, classes, fees, bus routes, school details and document numbers.",
-    "Team users, theme, base currency and the financial year list are shared by all campuses.",
+    "Team users, theme, base currency, base language and the financial year list are shared by all campuses.",
     "Drag rows to set the order in the campus switcher.",
     "The main campus can't be deleted. Other campuses can only be deleted once their students, staff and receipts are removed.",
   ],
@@ -416,6 +427,7 @@ export const FINANCIAL_YEAR_TIP: InfoTipContent = {
     "Open: makes that year the active books for fees, receipts and reports.",
     "Close: moves a finished year to “Closed years” in the year switcher. Reopen brings it back.",
     "Edit: changes the start/closing months. Receipts, fees and enrolments move to the new label.",
+    "Base currency and base language at the bottom of this card apply to the whole organisation and save on their own.",
   ],
   note: "Delete permanently removes that year's receipts, enrolments and fee periods, on every campus. It can't be undone.",
 };

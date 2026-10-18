@@ -15,7 +15,15 @@ import {
 import { renderWhatsAppTemplate } from "@/lib/whatsapp-notify";
 import { useTenantStore } from "@/lib/tenant-store";
 
-const ORDER: WhatsAppMessageKind[] = ["feeReceipt", "feeReminder", "paymentVoucher"];
+const ORDER: WhatsAppMessageKind[] = [
+  "feeReceipt",
+  "feeReminder",
+  "feeReminderBulk",
+  "paymentVoucher",
+  "attendanceAbsent",
+  "attendanceDailyReport",
+  "attendanceMonthlyReport",
+];
 
 export function WhatsAppMessagesCard() {
   const { schoolDetails } = useTenantStore();
@@ -39,24 +47,65 @@ export function WhatsAppMessagesCard() {
             status: "Cleared",
             date: "7 Oct 2026, 10:30",
           }
-        : {
-            guardian: "Rajesh Sharma",
-            student_name: "Ararav Sharma",
-            class: "Grade 8 - B",
-            student_id: "STU-2887",
-            school,
-            receipt_no: "RC-1023",
-            amount: active === "feeReminder" ? "SAR 5,000" : "SAR 46,000",
-            mode: "Bank",
-            date: "12 Oct 2026",
-            academic_year: "AY 2025-26",
-            category: "Tuition",
-            due_date: "10 Sep 2026",
-            fees_status: "Overdue",
-            fee: "Term 2",
-            charge: "SAR 5,000",
-            paid: "SAR 0",
-          };
+        : active === "feeReminderBulk"
+          ? {
+              guardian: "Mohan Krishnan",
+              student_name: "Aanya Krishnan",
+              class: "Grade 8 - B",
+              student_id: "STU-031",
+              school,
+              amount: "SAR 57,600",
+              open_count: "36",
+              overdue_count: "31",
+              due_count: "5",
+              overdue_amount: "SAR 49,600",
+              due_amount: "SAR 8,000",
+              period_range: "1 Apr 2024 – 1 Mar 2027",
+              each_amount: "SAR 1,600",
+              fees_status: "Overdue",
+              academic_year: "AY 2025-26",
+              detail_block: "*Detail*\nSAR 1,600 × 36 = *SAR 57,600*",
+            }
+          : active === "attendanceAbsent"
+            ? {
+                guardian: "Rajesh Sharma",
+                student_name: "Ararav Sharma",
+                class: "Grade 8 - B",
+                student_id: "STU-2887",
+                school,
+                date: "18 Oct 2026",
+                status: "Absent",
+              }
+            : active === "attendanceDailyReport"
+              ? {
+                  school,
+                  date: "18 Oct 2026",
+                  summary: "Present 976 · Absent 54 · Halfday 53 · Leave 61",
+                }
+              : active === "attendanceMonthlyReport"
+                ? {
+                    school,
+                    period: "October 2026",
+                    summary: "1,144 students · avg 88% present",
+                  }
+                : {
+                    guardian: "Rajesh Sharma",
+                    student_name: "Ararav Sharma",
+                    class: "Grade 8 - B",
+                    student_id: "STU-2887",
+                    school,
+                    receipt_no: "RC-1023",
+                    amount: active === "feeReminder" ? "SAR 5,000" : "SAR 46,000",
+                    mode: "Bank",
+                    date: "12 Oct 2026",
+                    academic_year: "AY 2025-26",
+                    category: "Tuition",
+                    due_date: "10 Sep 2026",
+                    fees_status: "Overdue",
+                    fee: "Term 2",
+                    charge: "SAR 5,000",
+                    paid: "SAR 0",
+                  };
     return renderWhatsAppTemplate(draft[active], sample).trim();
   }, [active, draft, school]);
 
@@ -80,14 +129,14 @@ export function WhatsAppMessagesCard() {
           <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55 dark:text-zinc-400">
             WhatsApp messages
           </Label>
-          <p className="mt-0.5 max-w-xl text-[11px] leading-relaxed text-black/45">
-            The message parents and payees receive. Tap a detail to insert it at the cursor — use
-            the same detail more than once if you need. Saved on this device for {school}.
+          <p className="mt-0.5 max-w-xl text-[11px] leading-relaxed text-black/45 dark:text-zinc-400">
+            Manage fee, voucher, and attendance WhatsApp wording. Tap a detail to insert it — saved
+            on this device for {school}.
           </p>
         </div>
         <Button
           type="button"
-          className="h-8 rounded-full bg-black px-3 text-[12px] text-white hover:bg-black/85"
+          className="h-8 rounded-full bg-black px-3 text-[12px] text-white hover:bg-black/85 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
           onClick={save}
         >
           Save messages
@@ -105,7 +154,7 @@ export function WhatsAppMessagesCard() {
               className={
                 selected
                   ? "rounded-full bg-[#0F766E] px-3 py-1 text-[12px] font-semibold text-white"
-                  : "rounded-full border border-[#E5E5E5] bg-white px-3 py-1 text-[12px] font-medium text-black/60 hover:border-black/30 dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-300"
+                  : "rounded-full border border-[#E5E5E5] bg-white px-3 py-1 text-[12px] font-medium text-black/60 hover:border-black/30 dark:border-white/15 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-zinc-100"
               }
             >
               {WHATSAPP_MESSAGE_FIELDS[kind].title}
@@ -116,7 +165,7 @@ export function WhatsAppMessagesCard() {
 
       <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
         <div>
-          <p className="text-[11px] text-black/45">{meta.hint}</p>
+          <p className="text-[11px] text-black/45 dark:text-zinc-400">{meta.hint}</p>
           <div className="mt-2">
             <WhatsAppMessageComposer
               value={draft[active]}
@@ -128,13 +177,19 @@ export function WhatsAppMessagesCard() {
           <button
             type="button"
             onClick={resetActive}
-            className="mt-2 text-[11px] font-medium text-black/45 underline-offset-2 hover:text-black hover:underline"
+            className="mt-2 text-[11px] font-medium text-black/45 underline-offset-2 hover:text-black hover:underline dark:text-zinc-400 dark:hover:text-zinc-100"
           >
             Reset this message
           </button>
         </div>
         <WhatsAppChatPreview
-          title={active === "paymentVoucher" ? "Suhail K K" : "Rajesh Sharma"}
+          title={
+            active === "paymentVoucher"
+              ? "Suhail K K"
+              : active === "feeReminderBulk"
+                ? "Mohan Krishnan"
+                : "Rajesh Sharma"
+          }
           message={preview}
         />
       </div>
@@ -184,21 +239,29 @@ function WhatsAppChatPreview({ title, message }: { title: string; message: strin
 
   return (
     <div
-      className="flex h-full min-h-[320px] flex-col overflow-hidden rounded-xl border border-[#d1d7db] bg-[#fff] shadow-[0_1px_3px_rgba(11,20,26,0.08)]"
-      style={{ fontFamily: '"Segoe UI","Helvetica Neue",Helvetica,Arial,sans-serif' }}
+      className="force-light flex h-full min-h-[320px] flex-col overflow-hidden rounded-xl border border-[#d1d7db] bg-[#ffffff] text-[#111b21] shadow-[0_1px_3px_rgba(11,20,26,0.08)] dark:border-[#3b4a54] dark:shadow-[0_1px_3px_rgba(0,0,0,0.35)]"
+      style={{
+        fontFamily: '"Segoe UI","Helvetica Neue",Helvetica,Arial,sans-serif',
+        colorScheme: "light",
+      }}
     >
-      {/* Chat header — WhatsApp Web */}
+      {/* Chat header — WhatsApp Web (always light) */}
       <div className="flex items-center gap-3 border-b border-[#e9edef] bg-[#f0f2f5] px-4 py-2.5">
-        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#dfe5e7] text-[13px] font-semibold tracking-wide text-[#54656f]">
+        <div
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-[13px] font-semibold tracking-wide"
+          style={{ backgroundColor: "#dfe5e7", color: "#54656f" }}
+        >
           {initials || "?"}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[16px] font-normal leading-[21px] text-[#111b21]">
+          <div className="truncate text-[16px] font-normal leading-[21px]" style={{ color: "#111b21" }}>
             {title}
           </div>
-          <div className="text-[13px] leading-[18px] text-[#667781]">online</div>
+          <div className="text-[13px] leading-[18px]" style={{ color: "#667781" }}>
+            online
+          </div>
         </div>
-        <div className="flex shrink-0 items-center gap-5 text-[#54656f]">
+        <div className="flex shrink-0 items-center gap-5" style={{ color: "#54656f" }}>
           <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden fill="currentColor">
             <path d="M15.9 14.3H15l-.3-.3c1-1.1 1.6-2.6 1.6-4.2 0-3.5-2.9-6.4-6.4-6.4S3.5 6.3 3.5 9.8s2.9 6.4 6.4 6.4c1.6 0 3.1-.6 4.2-1.6l.3.3v.8l5.1 5.1 1.5-1.5-5.1-5zm-6 0c-2.5 0-4.5-2-4.5-4.5s2-4.5 4.5-4.5 4.5 2 4.5 4.5-2 4.5-4.5 4.5z" />
           </svg>
@@ -216,10 +279,14 @@ function WhatsAppChatPreview({ title, message }: { title: string; message: strin
           backgroundImage: WA_WALLPAPER,
           backgroundRepeat: "repeat",
           backgroundSize: "260px 260px",
+          color: "#111b21",
         }}
       >
         <div className="flex justify-end">
-          <div className="relative max-w-[85%] rounded-[7.5px] rounded-tr-[0] bg-[#d9fdd3] px-[9px] pb-[5px] pt-[6px] text-[#d9fdd3] shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]">
+          <div
+            className="relative max-w-[85%] rounded-[7.5px] rounded-tr-[0] px-[9px] pb-[5px] pt-[6px] shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]"
+            style={{ backgroundColor: "#d9fdd3", color: "#d9fdd3" }}
+          >
             {/* Outgoing bubble tail */}
             <svg
               viewBox="0 0 8 13"
@@ -237,9 +304,15 @@ function WhatsAppChatPreview({ title, message }: { title: string; message: strin
                 d="M5.188 0H0v11.193l6.467-8.625C7.526 1.156 6.958 0 5.188 0z"
               />
             </svg>
-            <div className="whitespace-pre-wrap break-words text-[14.2px] font-normal leading-[19px] text-[#111b21] after:clear-both after:block after:content-['']">
+            <div
+              className="whitespace-pre-wrap break-words text-[14.2px] font-normal leading-[19px] after:clear-both after:block after:content-['']"
+              style={{ color: "#111b21" }}
+            >
               {message || "Write a message to see it here."}
-              <span className="float-right ml-3 mt-[5px] inline-flex translate-y-[2px] items-center gap-[3px] text-[11px] leading-none text-[#667781]">
+              <span
+                className="float-right ml-3 mt-[5px] inline-flex translate-y-[2px] items-center gap-[3px] text-[11px] leading-none"
+                style={{ color: "#667781" }}
+              >
                 {time}
                 {/* Double blue ticks (read) */}
                 <svg viewBox="0 0 16 11" width="16" height="11" aria-hidden className="block">
@@ -258,15 +331,25 @@ function WhatsAppChatPreview({ title, message }: { title: string; message: strin
         </div>
       </div>
 
-      {/* Composer chrome — matches WhatsApp Web footer */}
-      <div className="flex items-center gap-2 bg-[#f0f2f5] px-3 py-2">
-        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden className="shrink-0 text-[#54656f]" fill="currentColor">
-          <path d="M9.153 11.603c.795 0 1.44-.66 1.44-1.47s-.645-1.47-1.44-1.47-1.44.66-1.44 1.47.645 1.47 1.44 1.47zm-3.204 1.47c-.795 0-1.44.66-1.44 1.47s.645 1.47 1.44 1.47 1.44-.66 1.44-1.47-.645-1.47-1.44-1.47zm6.408 0c-.795 0-1.44.66-1.44 1.47s.645 1.47 1.44 1.47 1.44-.66 1.44-1.47-.645-1.47-1.44-1.47zm3.204-1.47c-.795 0-1.44.66-1.44 1.47s.645 1.47 1.44 1.47 1.44-.66 1.44-1.47-.645-1.47-1.44-1.47zM12 2C6.486 2 2 6.486 2 12s4.486 10 10 10 10-4.486 10-10S17.514 2 12 2zm0 18.4c-4.632 0-8.4-3.768-8.4-8.4S7.368 3.6 12 3.6s8.4 3.768 8.4 8.4-3.768 8.4-8.4 8.4z" />
-        </svg>
-        <div className="flex min-h-[42px] min-w-0 flex-1 items-center rounded-[8px] bg-white px-3 text-[15px] text-[#667781]">
+      {/* Preview-only composer (no emoji control) */}
+      <div
+        className="flex items-center gap-2.5 px-3 py-2.5"
+        style={{ backgroundColor: "#f0f2f5" }}
+      >
+        <div
+          className="flex min-h-[42px] min-w-0 flex-1 items-center rounded-full px-4 text-[15px] leading-none"
+          style={{ backgroundColor: "#ffffff", color: "#8696a0" }}
+        >
           Type a message
         </div>
-        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden className="shrink-0 text-[#54656f]" fill="currentColor">
+        <svg
+          viewBox="0 0 24 24"
+          width="22"
+          height="22"
+          aria-hidden
+          className="shrink-0"
+          fill="#54656f"
+        >
           <path d="M11.999 14.942c2.001 0 3.531-1.53 3.531-3.531V4.35c0-2.001-1.53-3.531-3.531-3.531S8.469 2.35 8.469 4.35v7.061c0 2.001 1.53 3.531 3.53 3.531zm6.238-3.53c0 3.531-2.942 6.002-6.237 6.002s-6.237-2.471-6.237-6.002H3.761c0 4.001 3.178 7.297 7.061 7.885v3.884h2.354v-3.884c3.884-.588 7.061-3.884 7.061-7.885h-2z" />
         </svg>
       </div>

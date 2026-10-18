@@ -23,6 +23,21 @@ The receipt PDF is attached. Thank you.`;
 
 export const DEFAULT_FEE_REMINDER_WHATSAPP = DEFAULT_OVERDUE_WHATSAPP_TEMPLATE;
 
+/** Bulk / multi-period reminder — Payments → WhatsApp overdue / due / all open. */
+export const DEFAULT_FEE_REMINDER_BULK_WHATSAPP = `Dear {{guardian}},
+
+{{school}} — fee reminder for *{{student_name}}* ({{class}}).
+
+*Total balance: {{amount}}*
+• Overdue: {{overdue_amount}} ({{overdue_count}} periods)
+• Due: {{due_amount}} ({{due_count}} periods)
+• Open: {{open_count}} · {{period_range}}
+• Year: {{academic_year}} · {{fees_status}}
+
+{{detail_block}}
+
+Kindly arrange payment at the earliest. Thank you.`;
+
 export const DEFAULT_PAYMENT_VOUCHER_WHATSAPP = `Hello {{payee}},
 
 {{kind}} from {{school}} has been recorded.
@@ -36,7 +51,41 @@ Date: {{date}}
 
 Thank you.`;
 
-export type WhatsAppMessageKind = "feeReceipt" | "feeReminder" | "paymentVoucher";
+const DEFAULT_ATTENDANCE_ABSENT_WHATSAPP = `Dear {{guardian}},
+
+This is an attendance notice from {{school}} for {{student_name}} ({{class}}).
+
+Date: {{date}}
+Status: {{status}}
+
+Please contact the school office if you have any questions.
+
+Thank you.`;
+
+const DEFAULT_ATTENDANCE_DAILY_REPORT_WHATSAPP = `Dear Parent,
+
+Please find the daily attendance register from {{school}} for {{date}}.
+
+{{summary}}
+
+Thank you.`;
+
+const DEFAULT_ATTENDANCE_MONTHLY_REPORT_WHATSAPP = `Dear Parent,
+
+Please find the monthly attendance summary from {{school}} for {{period}}.
+
+{{summary}}
+
+Thank you.`;
+
+export type WhatsAppMessageKind =
+  | "feeReceipt"
+  | "feeReminder"
+  | "feeReminderBulk"
+  | "paymentVoucher"
+  | "attendanceAbsent"
+  | "attendanceDailyReport"
+  | "attendanceMonthlyReport";
 
 export type WhatsAppMessageTemplates = Record<WhatsAppMessageKind, string>;
 
@@ -63,7 +112,7 @@ export const WHATSAPP_MESSAGE_FIELDS: Record<
   },
   feeReminder: {
     title: "Fee reminder",
-    hint: "Used for parent reminders from the student list and Payments → WhatsApp.",
+    hint: "One fee line — row WhatsApp on student Payments.",
     vars: [
       { key: "guardian", label: "Guardian" },
       { key: "student_name", label: "Student" },
@@ -77,6 +126,28 @@ export const WHATSAPP_MESSAGE_FIELDS: Record<
       { key: "charge", label: "Charge" },
       { key: "paid", label: "Paid" },
       { key: "academic_year", label: "Year" },
+    ],
+  },
+  feeReminderBulk: {
+    title: "Bulk reminder",
+    hint: "Used when you WhatsApp overdue, due, or all open from student Payments. Keep it short — Detail block fills the period summary.",
+    vars: [
+      { key: "guardian", label: "Guardian" },
+      { key: "student_name", label: "Student" },
+      { key: "class", label: "Class" },
+      { key: "student_id", label: "Student ID" },
+      { key: "school", label: "School" },
+      { key: "amount", label: "Balance" },
+      { key: "open_count", label: "Open count" },
+      { key: "overdue_count", label: "Overdue count" },
+      { key: "due_count", label: "Due count" },
+      { key: "overdue_amount", label: "Overdue amt" },
+      { key: "due_amount", label: "Due amt" },
+      { key: "period_range", label: "Period range" },
+      { key: "each_amount", label: "Each amount" },
+      { key: "fees_status", label: "Status" },
+      { key: "academic_year", label: "Year" },
+      { key: "detail_block", label: "Detail block" },
     ],
   },
   paymentVoucher: {
@@ -94,13 +165,48 @@ export const WHATSAPP_MESSAGE_FIELDS: Record<
       { key: "date", label: "Date" },
     ],
   },
+  attendanceAbsent: {
+    title: "Attendance alert",
+    hint: "Sent to parents after saving non-Present marks.",
+    vars: [
+      { key: "guardian", label: "Guardian" },
+      { key: "student_name", label: "Student" },
+      { key: "class", label: "Class" },
+      { key: "student_id", label: "Student ID" },
+      { key: "school", label: "School" },
+      { key: "date", label: "Date" },
+      { key: "status", label: "Status" },
+    ],
+  },
+  attendanceDailyReport: {
+    title: "Daily attendance report",
+    hint: "Caption when sharing the daily attendance PDF on WhatsApp.",
+    vars: [
+      { key: "school", label: "School" },
+      { key: "date", label: "Date" },
+      { key: "summary", label: "Summary" },
+    ],
+  },
+  attendanceMonthlyReport: {
+    title: "Monthly attendance report",
+    hint: "Caption when sharing the monthly attendance PDF on WhatsApp.",
+    vars: [
+      { key: "school", label: "School" },
+      { key: "period", label: "Period" },
+      { key: "summary", label: "Summary" },
+    ],
+  },
 };
 
 export function defaultWhatsAppTemplates(): WhatsAppMessageTemplates {
   return {
     feeReceipt: DEFAULT_FEE_RECEIPT_WHATSAPP,
     feeReminder: DEFAULT_FEE_REMINDER_WHATSAPP,
+    feeReminderBulk: DEFAULT_FEE_REMINDER_BULK_WHATSAPP,
     paymentVoucher: DEFAULT_PAYMENT_VOUCHER_WHATSAPP,
+    attendanceAbsent: DEFAULT_ATTENDANCE_ABSENT_WHATSAPP,
+    attendanceDailyReport: DEFAULT_ATTENDANCE_DAILY_REPORT_WHATSAPP,
+    attendanceMonthlyReport: DEFAULT_ATTENDANCE_MONTHLY_REPORT_WHATSAPP,
   };
 }
 
@@ -139,7 +245,14 @@ export function loadWhatsAppTemplates(): WhatsAppMessageTemplates {
     return {
       feeReceipt: textOr(parsed.feeReceipt, defaults.feeReceipt),
       feeReminder: migrateFeeReminderTemplate(parsed.feeReminder, defaults.feeReminder),
+      feeReminderBulk: textOr(parsed.feeReminderBulk, defaults.feeReminderBulk),
       paymentVoucher: textOr(parsed.paymentVoucher, defaults.paymentVoucher),
+      attendanceAbsent: textOr(parsed.attendanceAbsent, defaults.attendanceAbsent),
+      attendanceDailyReport: textOr(parsed.attendanceDailyReport, defaults.attendanceDailyReport),
+      attendanceMonthlyReport: textOr(
+        parsed.attendanceMonthlyReport,
+        defaults.attendanceMonthlyReport,
+      ),
     };
   } catch {
     return defaults;
@@ -151,7 +264,14 @@ export function saveWhatsAppTemplates(next: WhatsAppMessageTemplates): void {
   const stored: WhatsAppMessageTemplates = {
     feeReceipt: textOr(next.feeReceipt, defaults.feeReceipt),
     feeReminder: textOr(next.feeReminder, defaults.feeReminder),
+    feeReminderBulk: textOr(next.feeReminderBulk, defaults.feeReminderBulk),
     paymentVoucher: textOr(next.paymentVoucher, defaults.paymentVoucher),
+    attendanceAbsent: textOr(next.attendanceAbsent, defaults.attendanceAbsent),
+    attendanceDailyReport: textOr(next.attendanceDailyReport, defaults.attendanceDailyReport),
+    attendanceMonthlyReport: textOr(
+      next.attendanceMonthlyReport,
+      defaults.attendanceMonthlyReport,
+    ),
   };
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
 }
@@ -273,22 +393,36 @@ function isOverdueStatus(status?: string): boolean {
   return (status || "").trim().toLowerCase() === "overdue";
 }
 
-/** Compact period list so WhatsApp stays readable (and under URL length limits). */
-function formatBulkFeeBreakdown(lines: FeeReminderLineInput[]): string {
-  if (lines.length === 0) return "";
+type BulkFeeStats = {
+  totalBalance: number;
+  overdueCount: number;
+  dueCount: number;
+  overdueAmount: number;
+  dueAmount: number;
+  periodRange: string;
+  eachAmount: string;
+  detailBlock: string;
+  feesStatus: string;
+};
 
+/** Compact detail lines for the {{detail_block}} token (keeps WhatsApp readable). */
+function buildBulkFeeStats(lines: FeeReminderLineInput[]): BulkFeeStats {
   const overdue = lines.filter((line) => isOverdueStatus(line.status));
   const pending = lines.filter((line) => !isOverdueStatus(line.status));
-  const overdueTotal = overdue.reduce((sum, line) => sum + line.balance, 0);
-  const pendingTotal = pending.reduce((sum, line) => sum + line.balance, 0);
+  const overdueAmount = overdue.reduce((sum, line) => sum + line.balance, 0);
+  const dueAmount = pending.reduce((sum, line) => sum + line.balance, 0);
+  const totalBalance = overdueAmount + dueAmount;
 
   const dues = lines
     .map((line) => line.dueDate?.trim())
     .filter((value): value is string => Boolean(value && value !== "—"));
   const firstDue = dues[0];
   const lastDue = dues[dues.length - 1];
+  const periodRange =
+    firstDue && lastDue && firstDue !== lastDue
+      ? `${firstDue} – ${lastDue}`
+      : firstDue || "—";
 
-  // Group identical balances (e.g. 36 × ₹1,600 transport months).
   const byAmount = new Map<number, number>();
   for (const line of lines) {
     const key = Math.round(line.balance);
@@ -296,71 +430,66 @@ function formatBulkFeeBreakdown(lines: FeeReminderLineInput[]): string {
   }
   const amountGroups = [...byAmount.entries()].sort((a, b) => b[1] - a[1]);
   const uniform = amountGroups.length === 1 && amountGroups[0][1] === lines.length;
+  const eachAmount = uniform ? formatMoney(amountGroups[0][0]) : "";
 
-  const block: string[] = ["*Open dues*"];
-  block.push(`Periods: ${lines.length}`);
-  if (firstDue && lastDue && firstDue !== lastDue) {
-    block.push(`From: ${firstDue}`);
-    block.push(`To: ${lastDue}`);
-  } else if (firstDue) {
-    block.push(`Due: ${firstDue}`);
-  }
-  if (overdue.length > 0) {
-    block.push(`Overdue: ${formatMoney(overdueTotal)} (${overdue.length})`);
-  }
-  if (pending.length > 0) {
-    block.push(`Pending: ${formatMoney(pendingTotal)} (${pending.length})`);
-  }
-
+  const block: string[] = [];
   if (uniform) {
     const [amount, count] = amountGroups[0];
-    block.push(`Each: ${formatMoney(amount)}`);
-    block.push(`Total: *${formatMoney(amount * count)}*`);
-    return block.join("\n");
-  }
-
-  block.push("");
-  block.push("*By amount*");
-  for (const [amount, count] of amountGroups.slice(0, 6)) {
-    block.push(
-      count === 1
-        ? `• ${formatMoney(amount)}`
-        : `• ${formatMoney(amount)} × ${count} = ${formatMoney(amount * count)}`,
-    );
-  }
-  if (amountGroups.length > 6) {
-    block.push(`…and ${amountGroups.length - 6} more amounts`);
-  }
-
-  if (lines.length <= BULK_LIST_LIMIT) {
-    block.push("");
-    block.push("*Periods*");
-    for (const line of lines) {
-      const due = line.dueDate?.trim();
-      block.push(
-        due && due !== "—"
-          ? `• ${line.label} — ${formatMoney(line.balance)} (${due})`
-          : `• ${line.label} — ${formatMoney(line.balance)}`,
-      );
-    }
+    block.push(`*Detail*`);
+    block.push(`${formatMoney(amount)} × ${count} = *${formatMoney(amount * count)}*`);
   } else {
-    block.push("");
-    block.push("*Next periods*");
-    for (const line of lines.slice(0, 5)) {
-      const due = line.dueDate?.trim();
+    block.push("*By amount*");
+    for (const [amount, count] of amountGroups.slice(0, 6)) {
       block.push(
-        due && due !== "—"
-          ? `• ${line.label} — ${formatMoney(line.balance)} (${due})`
-          : `• ${line.label} — ${formatMoney(line.balance)}`,
+        count === 1
+          ? `• ${formatMoney(amount)}`
+          : `• ${formatMoney(amount)} × ${count} = ${formatMoney(amount * count)}`,
       );
     }
-    block.push(`…and ${lines.length - 5} more`);
+    if (amountGroups.length > 6) {
+      block.push(`…and ${amountGroups.length - 6} more amounts`);
+    }
+
+    if (lines.length <= BULK_LIST_LIMIT) {
+      block.push("");
+      block.push("*Periods*");
+      for (const line of lines) {
+        const due = line.dueDate?.trim();
+        block.push(
+          due && due !== "—"
+            ? `• ${line.label} — ${formatMoney(line.balance)} (${due})`
+            : `• ${line.label} — ${formatMoney(line.balance)}`,
+        );
+      }
+    } else {
+      block.push("");
+      block.push("*Next periods*");
+      for (const line of lines.slice(0, 5)) {
+        const due = line.dueDate?.trim();
+        block.push(
+          due && due !== "—"
+            ? `• ${line.label} — ${formatMoney(line.balance)} (${due})`
+            : `• ${line.label} — ${formatMoney(line.balance)}`,
+        );
+      }
+      block.push(`…and ${lines.length - 5} more`);
+    }
   }
 
-  return block.join("\n");
+  return {
+    totalBalance,
+    overdueCount: overdue.length,
+    dueCount: pending.length,
+    overdueAmount,
+    dueAmount,
+    periodRange,
+    eachAmount,
+    detailBlock: block.join("\n").trim(),
+    feesStatus: overdue.length > 0 ? "Overdue" : "Due",
+  };
 }
 
-/** Fee reminder for several open lines — template summary + compact aligned breakdown. */
+/** Multi-period reminder — uses Settings → WhatsApp → Bulk reminder template. */
 export function buildBulkFeeReminderWhatsApp(input: {
   guardian?: string;
   studentName: string;
@@ -390,35 +519,32 @@ export function buildBulkFeeReminderWhatsApp(input: {
     });
   }
 
-  const totalBalance = open.reduce((sum, line) => sum + line.balance, 0);
-  const totalCharge = open.reduce((sum, line) => sum + (line.charge ?? 0), 0);
-  const totalPaid = open.reduce((sum, line) => sum + (line.paid ?? 0), 0);
-  const hasOverdue = open.some((line) => isOverdueStatus(line.status));
-  const dues = open
-    .map((line) => line.dueDate?.trim())
-    .filter((value): value is string => Boolean(value && value !== "—"));
-  const firstDue = dues[0];
-  const lastDue = dues[dues.length - 1];
-  const dueLabel =
-    firstDue && lastDue && firstDue !== lastDue ? `${firstDue} – ${lastDue}` : firstDue || "—";
-
-  const summary = buildFeeReminderWhatsApp({
-    guardian: input.guardian,
-    studentName: input.studentName,
-    className: input.className,
-    studentId: input.studentId,
-    school: input.school,
-    academicYear: input.academicYear,
-    amount: totalBalance,
-    dueDate: dueLabel,
-    feesStatus: hasOverdue ? "Overdue" : "Due",
-    feeLabel: `${open.length} open periods`,
-    charge: totalCharge > 0 ? totalCharge : undefined,
-    paid: totalPaid > 0 ? totalPaid : undefined,
-  });
-
-  const breakdown = formatBulkFeeBreakdown(open);
-  return `${summary}\n\n${breakdown}`.trim();
+  const stats = buildBulkFeeStats(open);
+  const template = loadWhatsAppTemplates().feeReminderBulk;
+  return stripEmptyLabeledLines(
+    renderWhatsAppTemplate(template, {
+      guardian: input.guardian?.trim() || "Parent",
+      student_name: input.studentName,
+      class: input.className?.trim() || "—",
+      student_id: input.studentId?.trim() || "",
+      school: input.school.trim() || "School",
+      amount: formatMoney(stats.totalBalance),
+      open_count: String(open.length),
+      overdue_count: String(stats.overdueCount),
+      due_count: String(stats.dueCount),
+      overdue_amount: formatMoney(stats.overdueAmount),
+      due_amount: formatMoney(stats.dueAmount),
+      period_range: stats.periodRange,
+      period_from: stats.periodRange.split("–")[0]?.trim() || "",
+      period_to: stats.periodRange.split("–")[1]?.trim() || "",
+      each_amount: stats.eachAmount,
+      fees_status: stats.feesStatus,
+      status: stats.feesStatus,
+      academic_year: input.academicYear?.trim() || "",
+      detail_block: stats.detailBlock,
+      summary: stats.detailBlock,
+    }),
+  );
 }
 
 export function buildPaymentVoucherWhatsApp(input: {

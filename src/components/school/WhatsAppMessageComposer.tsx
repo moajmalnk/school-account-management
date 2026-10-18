@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 export type WhatsAppComposerField = { key: string; label: string };
 
 const CHIP_CLASS =
-  "inline-flex items-center gap-1 rounded-md bg-[#CCFBF1] px-1.5 py-[1px] align-baseline text-[12px] font-semibold leading-none text-[#0F766E] dark:bg-teal-400/15 dark:text-teal-100";
+  "inline-flex items-center gap-1 rounded-md bg-[#CCFBF1] px-1.5 py-[1px] align-baseline text-[12px] font-semibold leading-none text-[#0F766E] dark:bg-teal-500/20 dark:text-teal-200";
 
 const HISTORY_LIMIT = 60;
 
@@ -191,7 +191,7 @@ export function WhatsAppMessageComposer({
   return (
     <div>
       <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[11px] text-black/45 dark:text-zinc-500">
+        <p className="text-[11px] text-black/45 dark:text-zinc-400">
           Tap a detail to insert it at the cursor. You can add the same one more than once.
         </p>
         <div className="flex items-center gap-1">
@@ -202,7 +202,7 @@ export function WhatsAppMessageComposer({
             disabled={!canUndo}
             onMouseDown={(event) => event.preventDefault()}
             onClick={undo}
-            className="inline-flex h-7 items-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2.5 text-[11px] font-semibold text-black/65 transition-colors hover:border-[#0F766E]/40 hover:bg-[#F0FDFA] hover:text-[#0F766E] disabled:cursor-not-allowed disabled:opacity-35 dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-300"
+            className="inline-flex h-7 items-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2.5 text-[11px] font-semibold text-black/65 transition-colors hover:border-[#0F766E]/40 hover:bg-[#F0FDFA] hover:text-[#0F766E] disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/20 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-teal-500/50 dark:hover:bg-teal-950/50 dark:hover:text-teal-200 dark:disabled:border-white/10 dark:disabled:text-zinc-500 dark:disabled:opacity-55"
           >
             <Undo2 className="h-3.5 w-3.5" />
             Undo
@@ -214,7 +214,7 @@ export function WhatsAppMessageComposer({
             disabled={!canRedo}
             onMouseDown={(event) => event.preventDefault()}
             onClick={redo}
-            className="inline-flex h-7 items-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2.5 text-[11px] font-semibold text-black/65 transition-colors hover:border-[#0F766E]/40 hover:bg-[#F0FDFA] hover:text-[#0F766E] disabled:cursor-not-allowed disabled:opacity-35 dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-300"
+            className="inline-flex h-7 items-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2.5 text-[11px] font-semibold text-black/65 transition-colors hover:border-[#0F766E]/40 hover:bg-[#F0FDFA] hover:text-[#0F766E] disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/20 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-teal-500/50 dark:hover:bg-teal-950/50 dark:hover:text-teal-200 dark:disabled:border-white/10 dark:disabled:text-zinc-500 dark:disabled:opacity-55"
           >
             <Redo2 className="h-3.5 w-3.5" />
             Redo
@@ -238,13 +238,13 @@ export function WhatsAppMessageComposer({
               className={cn(
                 "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] font-medium transition-colors",
                 count > 0
-                  ? "border-[#99F6E4] bg-[#F0FDFA] text-[#0F766E] hover:border-[#0F766E]/50 hover:bg-[#CCFBF1] dark:border-teal-500/40 dark:bg-teal-950/40 dark:text-teal-200"
-                  : "border-[#E5E5E5] bg-white text-black/70 hover:border-[#0F766E]/40 hover:bg-[#F0FDFA] hover:text-[#0F766E] dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-300",
+                  ? "border-[#99F6E4] bg-[#F0FDFA] text-[#0F766E] hover:border-[#0F766E]/50 hover:bg-[#CCFBF1] dark:border-teal-400/45 dark:bg-teal-950/55 dark:text-teal-200"
+                  : "border-[#E5E5E5] bg-white text-black/70 hover:border-[#0F766E]/40 hover:bg-[#F0FDFA] hover:text-[#0F766E] dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-teal-500/40 dark:hover:text-teal-200",
               )}
             >
               <span>{item.label}</span>
               {count > 0 ? (
-                <span className="rounded-full bg-[#0F766E]/12 px-1.5 py-px font-mono text-[10px] font-bold tabular-nums text-[#0F766E] dark:bg-teal-400/15 dark:text-teal-200">
+                <span className="rounded-full bg-[#0F766E]/12 px-1.5 py-px font-mono text-[10px] font-bold tabular-nums text-[#0F766E] dark:bg-teal-400/20 dark:text-teal-100">
                   {count}
                 </span>
               ) : null}
@@ -294,7 +294,7 @@ export function WhatsAppMessageComposer({
             remove.parentElement?.remove();
             publishNow();
           }}
-          className="max-h-[320px] min-h-[220px] overflow-y-auto rounded-xl border border-[#E5E5E5] bg-white px-3 py-2.5 text-[13.5px] leading-6 text-black outline-none [scrollbar-width:none] focus:border-[#0F766E]/40 dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-100 [&::-webkit-scrollbar]:hidden"
+          className="max-h-[320px] min-h-[220px] overflow-y-auto rounded-xl border border-[#E5E5E5] bg-white px-3 py-2.5 text-[13.5px] leading-6 text-black outline-none [scrollbar-width:none] focus:border-[#0F766E]/40 dark:border-white/15 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-teal-500/45 [&::-webkit-scrollbar]:hidden"
         />
       </div>
     </div>
@@ -325,7 +325,8 @@ function createChip(key: string, label: string): HTMLSpanElement {
   remove.type = "button";
   remove.tabIndex = -1;
   remove.dataset.removeField = "true";
-  remove.className = "text-[13px] font-medium leading-none text-[#0F766E]/55 hover:text-[#0F766E]";
+  remove.className =
+    "text-[13px] font-medium leading-none text-[#0F766E]/55 hover:text-[#0F766E] dark:text-teal-200/70 dark:hover:text-teal-100";
   remove.setAttribute("aria-label", `Remove ${label}`);
   remove.textContent = "×";
   chip.append(name, remove);

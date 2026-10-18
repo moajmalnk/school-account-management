@@ -167,6 +167,8 @@ export type Student = {
   busPoint1?: string;
   busPoint2?: string;
   active?: boolean;
+  /** Why the student was deactivated (audit note; set from Account Status). */
+  deactivationReason?: string;
   /** Opaque token for the public parent profile link */
   shareToken?: string;
   /** Identity documents with optional file attachments */
@@ -4333,6 +4335,11 @@ type TenantStoreValue = {
    * When true during branchSyncing, cached campus data is already on screen.
    */
   branchContentReady: boolean;
+  /**
+   * Active academic-year label while books are being remounted (ledger overlay, catalogs).
+   * UI should show a full skeleton — never empty zeros — until this clears.
+   */
+  booksOpening: string | null;
   branches: CampusBranch[];
   setBranches: Dispatch<SetStateAction<CampusBranch[]>>;
   activeBranchId: string;
@@ -5286,6 +5293,9 @@ export function TenantStoreProvider({
   const [branchContentReady, setBranchContentReady] = useState(
     () => !liveApi || cachedSnapshot !== null,
   );
+  /** Non-null while switching financial year — drives workspace skeleton. */
+  const [booksOpening, setBooksOpening] = useState<string | null>(null);
+  const booksOpeningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const branchSwitchSeq = useRef(0);
   const branchesRef = useRef(branches);
   branchesRef.current = branches;
@@ -5854,11 +5864,25 @@ export function TenantStoreProvider({
     [transportRoutes, academicYear],
   );
 
+  const beginBooksOpening = useCallback((year: string) => {
+    setBooksOpening(year);
+    if (booksOpeningTimerRef.current) {
+      clearTimeout(booksOpeningTimerRef.current);
+    }
+    // Hold skeleton long enough for ledger overlays + dependent memos to settle,
+    // so the workspace never flashes empty ₹0 / “no students” mid-switch.
+    booksOpeningTimerRef.current = setTimeout(() => {
+      setBooksOpening(null);
+      booksOpeningTimerRef.current = null;
+    }, 620);
+  }, []);
+
   const setAcademicYear = useCallback<Dispatch<SetStateAction<string>>>(
     (action) => {
       setAcademicYearState((prev) => {
         const next = typeof action === "function" ? action(prev) : action;
         if (next === prev) return prev;
+        beginBooksOpening(next);
         setClosedAcademicYears((prevClosed) => prevClosed.filter((y) => y !== next));
         setStudentYearLedgers((ledgers) => {
           const ensured = ensureYearLedger(ledgers, next);
@@ -5880,7 +5904,7 @@ export function TenantStoreProvider({
         return next;
       });
     },
-    [academicYears, closedAcademicYears],
+    [academicYears, beginBooksOpening, closedAcademicYears],
   );
 
   const openAcademicYear = useCallback(
@@ -5935,6 +5959,7 @@ export function TenantStoreProvider({
       setTransportRoutes((prev) => [...prev, ...clonedCatalogs.transportRoutes]);
       setStudentYearLedgers((prev) => ensureYearLedger(prev, year));
       setAcademicYears(nextYears);
+      beginBooksOpening(year);
       setAcademicYearState(year);
       if (getApiToken()) {
         void (async () => {
@@ -5958,6 +5983,7 @@ export function TenantStoreProvider({
     [
       academicYear,
       academicYears,
+      beginBooksOpening,
       classes,
       closedAcademicYears,
       departments,
@@ -6158,6 +6184,7 @@ export function TenantStoreProvider({
       setTransportRoutes((prev) => prev.filter((item) => taggedAcademicYear(item) !== year));
       setStaff((prev) => prev.filter((item) => taggedAcademicYear(item) !== year));
       if (academicYear === year && nextActive) {
+        beginBooksOpening(nextActive);
         setAcademicYearState(nextActive);
       }
       if (getApiToken()) {
@@ -6179,7 +6206,14 @@ export function TenantStoreProvider({
       }
       return true;
     },
-    [academicYear, academicYears, canDeleteAcademicYear, closedAcademicYears, feeTerms],
+    [
+      academicYear,
+      academicYears,
+      beginBooksOpening,
+      canDeleteAcademicYear,
+      closedAcademicYears,
+      feeTerms,
+    ],
   );
 
   const enrollStudentInActiveYear = useCallback(
@@ -6513,6 +6547,7 @@ export function TenantStoreProvider({
       hydrated,
       branchSyncing,
       branchContentReady,
+      booksOpening,
       branches,
       setBranches,
       activeBranchId,
@@ -6565,6 +6600,7 @@ export function TenantStoreProvider({
       hydrated,
       branchSyncing,
       branchContentReady,
+      booksOpening,
       branches,
       activeBranchId,
       activeBranch,
