@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Command as CommandPrimitive } from "cmdk";
 import {
@@ -508,7 +508,7 @@ export function TenantGlobalSearch({
   className,
   onOpenChange,
   trigger = "bar",
-}: TenantGlobalSearchProps) {
+}: TenantGlobalSearchProps): ReactElement | null {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [modKey, setModKey] = useState("⌘");
@@ -649,6 +649,8 @@ export function TenantGlobalSearch({
 
   const badgeClass =
     "shrink-0 rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 transition-colors group-data-[selected=true]:bg-white group-data-[selected=true]:text-[#0F766E] dark:bg-white/10 dark:text-zinc-400 dark:group-data-[selected=true]:bg-zinc-900 dark:group-data-[selected=true]:text-[#5EEAD4]";
+
+  if (!searchAllowed) return null;
 
   return (
     <>
