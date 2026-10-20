@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-
-import "@/file-routes";
 import { Camera, CheckCircle2, Loader2, Lock } from "lucide-react";
 import { toast } from "sonner";
+
+import "@/file-routes";
 
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
