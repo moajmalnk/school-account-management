@@ -50,6 +50,7 @@ import { Route as SuperAdminSupportHelpRouteImport } from './routes/super-admin/
 import { Route as SuperAdminSupportContactRouteImport } from './routes/super-admin/support/contact'
 import { Route as SuperAdminSupportAutoReplyRouteImport } from './routes/super-admin/support/auto-reply'
 import { Route as SuperAdminSupportTicketIdRouteImport } from './routes/super-admin/support/$ticketId'
+import { Route as StaffCollectTokenRouteImport } from './routes/staff/collect.$token'
 import { Route as ParentStudentTokenRouteImport } from './routes/parent/student.$token'
 
 const TermsRoute = TermsRouteImport.update({
@@ -260,6 +261,11 @@ const SuperAdminSupportTicketIdRoute =
     path: '/$ticketId',
     getParentRoute: () => SuperAdminSupportRoute,
   } as any)
+const StaffCollectTokenRoute = StaffCollectTokenRouteImport.update({
+  id: '/staff/collect/$token',
+  path: '/staff/collect/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ParentStudentTokenRoute = ParentStudentTokenRouteImport.update({
   id: '/parent/student/$token',
   path: '/parent/student/$token',
@@ -300,6 +306,7 @@ export interface FileRoutesByFullPath {
   '/super-admin/': typeof SuperAdminIndexRoute
   '/tenant/': typeof TenantIndexRoute
   '/parent/student/$token': typeof ParentStudentTokenRoute
+  '/staff/collect/$token': typeof StaffCollectTokenRoute
   '/super-admin/support/$ticketId': typeof SuperAdminSupportTicketIdRoute
   '/super-admin/support/auto-reply': typeof SuperAdminSupportAutoReplyRoute
   '/super-admin/support/contact': typeof SuperAdminSupportContactRoute
@@ -340,6 +347,7 @@ export interface FileRoutesByTo {
   '/super-admin': typeof SuperAdminIndexRoute
   '/tenant': typeof TenantIndexRoute
   '/parent/student/$token': typeof ParentStudentTokenRoute
+  '/staff/collect/$token': typeof StaffCollectTokenRoute
   '/super-admin/support/$ticketId': typeof SuperAdminSupportTicketIdRoute
   '/super-admin/support/auto-reply': typeof SuperAdminSupportAutoReplyRoute
   '/super-admin/support/contact': typeof SuperAdminSupportContactRoute
@@ -385,6 +393,7 @@ export interface FileRoutesById {
   '/super-admin/': typeof SuperAdminIndexRoute
   '/tenant/': typeof TenantIndexRoute
   '/parent/student/$token': typeof ParentStudentTokenRoute
+  '/staff/collect/$token': typeof StaffCollectTokenRoute
   '/super-admin/support/$ticketId': typeof SuperAdminSupportTicketIdRoute
   '/super-admin/support/auto-reply': typeof SuperAdminSupportAutoReplyRoute
   '/super-admin/support/contact': typeof SuperAdminSupportContactRoute
@@ -431,6 +440,7 @@ export interface FileRouteTypes {
     | '/super-admin/'
     | '/tenant/'
     | '/parent/student/$token'
+    | '/staff/collect/$token'
     | '/super-admin/support/$ticketId'
     | '/super-admin/support/auto-reply'
     | '/super-admin/support/contact'
@@ -471,6 +481,7 @@ export interface FileRouteTypes {
     | '/super-admin'
     | '/tenant'
     | '/parent/student/$token'
+    | '/staff/collect/$token'
     | '/super-admin/support/$ticketId'
     | '/super-admin/support/auto-reply'
     | '/super-admin/support/contact'
@@ -515,6 +526,7 @@ export interface FileRouteTypes {
     | '/super-admin/'
     | '/tenant/'
     | '/parent/student/$token'
+    | '/staff/collect/$token'
     | '/super-admin/support/$ticketId'
     | '/super-admin/support/auto-reply'
     | '/super-admin/support/contact'
@@ -542,6 +554,7 @@ export interface RootRouteChildren {
   TenantRoute: typeof TenantRouteWithChildren
   TermsRoute: typeof TermsRoute
   ParentStudentTokenRoute: typeof ParentStudentTokenRoute
+  StaffCollectTokenRoute: typeof StaffCollectTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -833,6 +846,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SuperAdminSupportTicketIdRouteImport
       parentRoute: typeof SuperAdminSupportRoute
     }
+    '/staff/collect/$token': {
+      id: '/staff/collect/$token'
+      path: '/staff/collect/$token'
+      fullPath: '/staff/collect/$token'
+      preLoaderRoute: typeof StaffCollectTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/parent/student/$token': {
       id: '/parent/student/$token'
       path: '/parent/student/$token'
@@ -950,6 +970,7 @@ const rootRouteChildren: RootRouteChildren = {
   TenantRoute: TenantRouteWithChildren,
   TermsRoute: TermsRoute,
   ParentStudentTokenRoute: ParentStudentTokenRoute,
+  StaffCollectTokenRoute: StaffCollectTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

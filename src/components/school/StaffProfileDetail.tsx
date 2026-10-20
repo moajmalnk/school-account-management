@@ -3,6 +3,8 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
   Pencil,
+  ClipboardList,
+  Loader2,
   Camera,
   X,
   FileText,
@@ -43,6 +45,8 @@ import {
   upsertStaffAttendanceMonth,
   normalizeStaffAttendanceMonth,
   normalizeStaff,
+  createStaffShareToken,
+  staffCollectGaps,
   salaryHistoryPayrollMonth,
   salaryPaidAmountForMonth,
   isSalaryMonthSettled,
@@ -61,6 +65,7 @@ import {
 } from "@/lib/permissions";
 import { Checkbox } from "@/components/ui/checkbox";
 import { isRecordActive, ProfileAccountActions } from "@/components/school/ProfileAccountActions";
+import { ShareStaffCollectDialog } from "@/components/school/ShareStaffCollectDialog";
 import {
   ProfileDetailTabs,
   ProfileTabPanel,
@@ -74,11 +79,13 @@ import { cn } from "@/lib/utils";
 import { buildStaffPayrollStatement } from "@/lib/staff-payroll";
 import { downloadStaffPayrollReportPdf, receiptBrandingFromSchool } from "@/lib/finance-export";
 import { formatAmount, formatMoney, moneyColumnLabel, moneySymbol } from "@/lib/money";
+import { formatPhoneDisplay } from "@/lib/phone";
 
 const CARD_FRAME =
   "rounded-xl border border-slate-100 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#171717] dark:text-zinc-100 dark:shadow-black/40";
 const META_LABEL =
   "text-[11px] font-semibold uppercase tracking-wider text-black/45 dark:text-zinc-400";
+const EMPTY = <span className="font-normal text-black/40">—</span>;
 const MAX_FILE_BYTES = 1_500_000;
 const MAX_FILES_PER_DOC = 8;
 
@@ -236,6 +243,13 @@ function formatJoinedAt(iso: string) {
   return formatStatusDateTime(iso.includes("T") ? iso : `${iso}T09:30:00`);
 }
 
+function formatDob(iso?: string) {
+  if (!iso) return null;
+  const d = new Date(`${iso.slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
 function formatStatusDateTime(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
@@ -300,6 +314,14 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
     activeBranchId,
   } = useTenantStore();
   const schoolName = schoolDetails.name || session?.tenantName || "School";
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareToken, setShareToken] = useState(staff.shareToken ?? "");
+  const [openingShare, setOpeningShare] = useState(false);
+  const collectGaps = useMemo(() => staffCollectGaps(staff), [staff]);
+
+  useEffect(() => {
+    setShareToken(staff.shareToken ?? "");
+  }, [staff.id, staff.shareToken]);
 
   const syncStaff = async (updated: Staff) => {
     setStaff((prev) => prev.map((s) => (s.id === staff.id ? updated : s)));
@@ -799,6 +821,24 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
     });
   };
 
+  const openShare = () => {
+    if (openingShare) return;
+    setOpeningShare(true);
+    void (async () => {
+      let token = (staff.shareToken ?? shareToken).trim();
+      if (!token) token = createStaffShareToken();
+      const saved = await syncStaff({ ...staff, shareToken: token });
+      if (!saved) return;
+      token = (saved.shareToken ?? token).trim();
+      if (!token) {
+        toast.error("Could not create the collection link");
+        return;
+      }
+      setShareToken(token);
+      setShareOpen(true);
+    })().finally(() => setOpeningShare(false));
+  };
+
   const deleteStaff = () => {
     setStaff((prev) =>
       prev.map((s) => (s.id === staff.id ? { ...s, deletedAt: new Date().toISOString() } : s)),
@@ -814,6 +854,15 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
 
   return (
     <div className="flex flex-col gap-4 pb-[calc(5.75rem+env(safe-area-inset-bottom))] sm:gap-6 md:pb-0">
+      <ShareStaffCollectDialog
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        token={shareToken}
+        staffName={staff.name}
+        schoolName={schoolName}
+        staffPhone={staff.phone}
+        missing={collectGaps}
+      />
       <section className="overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.06)] dark:border-white/10 dark:bg-[#171717] dark:shadow-black/40">
         <div className="h-1 bg-gradient-to-r from-[#0F766E] via-[#115E59] to-[#99F6E4]" />
         <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:p-6">
@@ -846,14 +895,29 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={openEditPage}
-            className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-[#0F766E] px-4 text-[13px] font-semibold text-white shadow-sm transition-colors hover:bg-[#0D9488]"
-          >
-            <Pencil className="h-4 w-4" />
-            Edit Profile
-          </button>
+          <div className="flex shrink-0 flex-wrap items-center justify-center gap-2 sm:justify-end">
+            <button
+              type="button"
+              onClick={openShare}
+              disabled={openingShare}
+              className="inline-flex h-10 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 text-[13px] font-semibold text-slate-700 shadow-sm transition-colors hover:border-[#99F6E4] hover:bg-[#F0FDFA] hover:text-[#0F766E] disabled:opacity-60"
+            >
+              {openingShare ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ClipboardList className="h-4 w-4" />
+              )}
+              Collect
+            </button>
+            <button
+              type="button"
+              onClick={openEditPage}
+              className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-[#0F766E] px-4 text-[13px] font-semibold text-white shadow-sm transition-colors hover:bg-[#0D9488]"
+            >
+              <Pencil className="h-4 w-4" />
+              Edit Profile
+            </button>
+          </div>
         </div>
       </section>
 
@@ -870,16 +934,42 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
                   {staff.id}
                 </MetaRow>
 
+                <MetaRow label="Gender">
+                  {staff.gender === "F" ? "Female" : staff.gender === "M" ? "Male" : EMPTY}
+                </MetaRow>
+
+                <MetaRow label="Date of birth">
+                  {formatDob(staff.dob) || EMPTY}
+                </MetaRow>
+
+                <MetaRow label="Blood group">
+                  {staff.bloodGroup || EMPTY}
+                </MetaRow>
+
                 <MetaRow label="Phone" mono>
-                  {staff.phone || <span className="font-normal text-black/40">—</span>}
+                  {staff.phone ? formatPhoneDisplay(staff.phone) : EMPTY}
                 </MetaRow>
 
-                <MetaRow label="Alternative Number" mono>
-                  {staff.altPhone || <span className="font-normal text-black/40">—</span>}
+                <MetaRow label="Alternative number" mono>
+                  {staff.altPhone ? formatPhoneDisplay(staff.altPhone) : EMPTY}
                 </MetaRow>
 
-                <MetaRow label="Guardian Number" mono>
-                  {staff.guardianPhone || <span className="font-normal text-black/40">—</span>}
+                <MetaRow label="Email">
+                  {staff.email || EMPTY}
+                </MetaRow>
+
+                <MetaRow label="Address">
+                  {staff.address || EMPTY}
+                </MetaRow>
+
+                <MetaRow label="Emergency contact">
+                  {staff.emergencyName
+                    ? `${staff.emergencyName}${staff.emergencyRelation ? ` · ${staff.emergencyRelation}` : ""}`
+                    : EMPTY}
+                </MetaRow>
+
+                <MetaRow label="Emergency number" mono>
+                  {staff.guardianPhone ? formatPhoneDisplay(staff.guardianPhone) : EMPTY}
                 </MetaRow>
               </div>
             </section>

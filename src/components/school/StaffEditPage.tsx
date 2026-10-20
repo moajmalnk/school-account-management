@@ -4,16 +4,31 @@ import { toast } from "sonner";
 import { Camera, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
 import { ImageCropDialog } from "@/components/ui/image-crop-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { FieldSelect } from "@/components/school/SchoolAdminWorkspace";
 import { StaffOrgQuickCreateDialogs } from "@/components/school/StaffOrgQuickCreate";
 import { apiUpsertStaff } from "@/lib/api/records";
 import { apiUploadDataUrl } from "@/lib/api/settings";
-import { useTenantStore, type Staff } from "@/lib/tenant-store";
+import {
+  BLOOD_GROUPS,
+  STAFF_EMERGENCY_RELATIONS,
+  useTenantStore,
+  type Staff,
+  type StaffEmergencyRelation,
+} from "@/lib/tenant-store";
 import { cn, glassCardClass } from "@/lib/utils";
 
 type StaffDraft = {
@@ -24,9 +39,17 @@ type StaffDraft = {
   altPhone: string;
   guardianPhone: string;
   photoUrl: string;
+  gender: "" | "M" | "F";
+  dob: string;
+  email: string;
+  address: string;
+  bloodGroup: string;
+  emergencyName: string;
+  emergencyRelation: "" | StaffEmergencyRelation;
 };
 
 function draftFromStaff(staff: Staff): StaffDraft {
+  const relation = STAFF_EMERGENCY_RELATIONS.find((item) => item === staff.emergencyRelation);
   return {
     name: staff.name,
     role: staff.role,
@@ -35,6 +58,13 @@ function draftFromStaff(staff: Staff): StaffDraft {
     altPhone: staff.altPhone ?? "",
     guardianPhone: staff.guardianPhone ?? "",
     photoUrl: staff.photoUrl ?? "",
+    gender: staff.gender === "M" || staff.gender === "F" ? staff.gender : "",
+    dob: staff.dob ?? "",
+    email: staff.email ?? "",
+    address: staff.address ?? "",
+    bloodGroup: staff.bloodGroup ?? "",
+    emergencyName: staff.emergencyName ?? "",
+    emergencyRelation: relation ?? "",
   };
 }
 
@@ -64,7 +94,19 @@ function applyDraftToStaff(staff: Staff, draft: StaffDraft): Staff {
     altPhone: emptyToUndefined(draft.altPhone),
     guardianPhone: emptyToUndefined(draft.guardianPhone),
     photoUrl: draft.photoUrl || undefined,
+    gender: draft.gender || undefined,
+    dob: emptyToUndefined(draft.dob),
+    email: emptyToUndefined(draft.email),
+    address: emptyToUndefined(draft.address),
+    bloodGroup: emptyToUndefined(draft.bloodGroup),
+    emergencyName: emptyToUndefined(draft.emergencyName),
+    emergencyRelation: draft.emergencyRelation || undefined,
   };
+}
+
+function todayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 export function StaffEditPage() {
@@ -85,10 +127,22 @@ export function StaffEditPage() {
   const [createRoleOpen, setCreateRoleOpen] = useState(false);
   const [createDeptOpen, setCreateDeptOpen] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
+  const baseline = member ? JSON.stringify(draftFromStaff(member)) : "";
+  const dirty = baseline !== "" && JSON.stringify(draft) !== baseline;
 
   useEffect(() => {
     if (member) setDraft(draftFromStaff(member));
   }, [member]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const onLeave = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onLeave);
+    return () => window.removeEventListener("beforeunload", onLeave);
+  }, [dirty]);
 
   const patchDraft = <K extends keyof StaffDraft>(key: K, value: StaffDraft[K]) => {
     setDraft((prev) => ({ ...prev, [key]: value }));
@@ -149,6 +203,15 @@ export function StaffEditPage() {
     if (!member) return;
     if (!draft.name.trim() || !draft.role.trim()) {
       toast.error("Name and role are required");
+      return;
+    }
+    const email = draft.email.trim();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error("Enter a valid email address");
+      return;
+    }
+    if (draft.guardianPhone.trim() && !draft.emergencyName.trim()) {
+      toast.error("Add the emergency contact name");
       return;
     }
     setSaving(true);
@@ -286,11 +349,113 @@ export function StaffEditPage() {
                 onChange={(altPhone) => patchDraft("altPhone", altPhone)}
               />
             </FormField>
-            <FormField label="Guardian Number">
+            <FormField label="Emergency number">
               <PhoneInput
                 value={draft.guardianPhone}
                 onChange={(guardianPhone) => patchDraft("guardianPhone", guardianPhone)}
               />
+            </FormField>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <FormField label="Gender">
+              <Select
+                value={draft.gender || undefined}
+                onValueChange={(gender) =>
+                  patchDraft("gender", gender === "M" || gender === "F" ? gender : "")
+                }
+              >
+                <SelectTrigger className="h-10 rounded-xl">
+                  <SelectValue placeholder="Select gender" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="M">Male</SelectItem>
+                  <SelectItem value="F">Female</SelectItem>
+                </SelectContent>
+              </Select>
+            </FormField>
+            <FormField label="Date of birth">
+              <DatePicker
+                value={draft.dob}
+                onChange={(dob) => patchDraft("dob", dob)}
+                placeholder="Select date"
+                valueFormat="iso"
+                variant="pill"
+                quickPicks={[]}
+                min="1940-01-01"
+                max={todayISO()}
+                className="h-9 w-full"
+              />
+            </FormField>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <FormField label="Blood group">
+              <Select
+                value={draft.bloodGroup || undefined}
+                onValueChange={(bloodGroup) => patchDraft("bloodGroup", bloodGroup)}
+              >
+                <SelectTrigger className="h-10 rounded-xl">
+                  <SelectValue placeholder="Select blood group" />
+                </SelectTrigger>
+                <SelectContent>
+                  {BLOOD_GROUPS.map((group) => (
+                    <SelectItem key={group} value={group}>
+                      {group}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
+            <FormField label="Email">
+              <Input
+                type="email"
+                value={draft.email}
+                maxLength={255}
+                onChange={(e) => patchDraft("email", e.target.value)}
+                placeholder="name@email.com"
+                className="font-mono text-[13px]"
+              />
+            </FormField>
+          </div>
+
+          <FormField label="Residential address">
+            <Textarea
+              value={draft.address}
+              maxLength={2000}
+              onChange={(e) => patchDraft("address", e.target.value)}
+              placeholder="House, street, city, PIN"
+              className="min-h-[72px] resize-none rounded-xl text-[13px]"
+            />
+          </FormField>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <FormField label="Emergency contact name">
+              <Input
+                value={draft.emergencyName}
+                maxLength={120}
+                onChange={(e) => patchDraft("emergencyName", e.target.value)}
+                placeholder="e.g. Anita Menon"
+              />
+            </FormField>
+            <FormField label="Emergency relation">
+              <Select
+                value={draft.emergencyRelation || undefined}
+                onValueChange={(relation) =>
+                  patchDraft("emergencyRelation", relation as StaffEmergencyRelation)
+                }
+              >
+                <SelectTrigger className="h-10 rounded-xl">
+                  <SelectValue placeholder="Select relation" />
+                </SelectTrigger>
+                <SelectContent>
+                  {STAFF_EMERGENCY_RELATIONS.map((relation) => (
+                    <SelectItem key={relation} value={relation}>
+                      {relation}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </FormField>
           </div>
 
@@ -305,7 +470,7 @@ export function StaffEditPage() {
             </Button>
             <Button
               type="submit"
-              disabled={saving}
+              disabled={saving || !draft.name.trim() || !draft.role.trim()}
               className="h-9 min-w-0 flex-1 rounded-full bg-[#0F766E] px-2 text-[11px] text-white hover:bg-[#0D9488] sm:h-10 sm:flex-none sm:px-4 sm:text-sm"
             >
               {saving ? (

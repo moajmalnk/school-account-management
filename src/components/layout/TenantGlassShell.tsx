@@ -96,11 +96,7 @@ import {
 } from "@/lib/permissions";
 import { isFinanceTab } from "@/lib/finance-tabs";
 import { resolveMediaUrl } from "@/lib/media";
-import {
-  TenantDashboardSkeleton,
-  TenantDirectorySkeleton,
-  WorkspaceOpeningScreen,
-} from "@/components/school/TenantDirectorySkeleton";
+import { WorkspaceOpeningScreen } from "@/components/school/TenantDirectorySkeleton";
 import { cn, glassInsetClass, glassPanelClass } from "@/lib/utils";
 
 /** Fire success toast after books skeleton settles (avoids toast over empty zeros). */
@@ -121,44 +117,13 @@ function BooksYearSkeleton({ year, pathname }: { year: string; pathname: string 
     pathname.includes("/students") ||
     pathname.includes("/staff") ||
     pathname.includes("/finance");
-  const label = `Opening ${year} books`;
-  const detail = "Loading enrollments, receipts, and fee schedules for this year…";
 
   return (
-    <div
-      className="relative flex min-h-[min(70vh,36rem)] w-full min-w-0 flex-1 flex-col"
-      aria-busy="true"
-      aria-live="polite"
-      aria-label={label}
-    >
-      <div className="pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center px-4 sm:top-3">
-        <div
-          className={cn(
-            glassPanelClass,
-            "inline-flex max-w-[min(26rem,calc(100vw-2rem))] items-center gap-2.5 rounded-xl border border-white/70 px-3.5 py-2.5 shadow-lg shadow-slate-900/10 backdrop-blur-xl dark:border-white/10 dark:shadow-black/40",
-          )}
-          role="status"
-        >
-          <Loader2
-            className="h-3.5 w-3.5 shrink-0 animate-spin text-[#0F766E] dark:text-[#2DD4BF]"
-            strokeWidth={2.5}
-          />
-          <div className="min-w-0">
-            <div className="truncate text-[12px] font-semibold text-slate-800 dark:text-zinc-100">
-              {label}
-            </div>
-            <div className="truncate text-[10.5px] text-slate-500 dark:text-zinc-400">{detail}</div>
-          </div>
-        </div>
-      </div>
-      <div className="min-h-0 flex-1 pt-12 sm:pt-14">
-        {isDirectory ? (
-          <TenantDirectorySkeleton label={label} />
-        ) : (
-          <TenantDashboardSkeleton />
-        )}
-      </div>
-    </div>
+    <WorkspaceOpeningScreen
+      label={`Opening ${year} books`}
+      detail="Loading enrollments, receipts, and fee schedules for this year…"
+      variant={isDirectory ? "directory" : "dashboard"}
+    />
   );
 }
 
@@ -173,22 +138,15 @@ export function AcademicYearBooksFade({ children }: { children: ReactNode }) {
   const yearBusy = Boolean(booksOpening);
   const branchBlocking = branchSyncing && !branchContentReady;
   const branchSoft = branchSyncing && branchContentReady && !yearBusy;
-  const showSkeleton = yearBusy || branchBlocking;
-
-  const statusLabel = yearBusy
-    ? `Opening ${booksOpening} books…`
-    : branchSoft
-      ? `Opening ${activeBranch?.name?.trim() || "campus"}…`
-      : null;
 
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       <div
         className={cn(
           "flex min-h-0 min-w-0 flex-1 flex-col transition-[opacity,filter] duration-200 ease-out",
-          branchSoft ? "pointer-events-none opacity-[0.58] saturate-[0.9]" : "opacity-100",
+          branchSoft ? "pointer-events-none opacity-[0.72] saturate-[0.92]" : "opacity-100",
         )}
-        aria-busy={showSkeleton || branchSoft}
+        aria-busy={yearBusy || branchBlocking || branchSoft}
       >
         {yearBusy && booksOpening ? (
           <BooksYearSkeleton year={booksOpening} pathname={pathname} />
@@ -201,26 +159,6 @@ export function AcademicYearBooksFade({ children }: { children: ReactNode }) {
           children
         )}
       </div>
-      {branchSoft && statusLabel ? (
-        <div
-          className="pointer-events-none absolute inset-x-0 top-5 z-20 flex justify-center px-4 sm:top-6"
-          role="status"
-          aria-live="polite"
-        >
-          <div
-            className={cn(
-              glassPanelClass,
-              "inline-flex max-w-[min(22rem,calc(100vw-2rem))] items-center gap-2 rounded-xl border border-white/70 px-3.5 py-2 text-[12px] font-semibold text-slate-800 shadow-lg shadow-slate-900/10 backdrop-blur-xl dark:border-white/10 dark:text-zinc-100 dark:shadow-black/40",
-            )}
-          >
-            <Loader2
-              className="h-3.5 w-3.5 shrink-0 animate-spin text-[#0F766E] dark:text-[#2DD4BF]"
-              strokeWidth={2.5}
-            />
-            <span className="truncate">{statusLabel}</span>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

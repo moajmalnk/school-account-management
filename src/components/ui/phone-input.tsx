@@ -177,8 +177,9 @@ export function PhoneInput({
         aria-label={ariaLabel ?? "Phone number"}
         placeholder={placeholder ?? nationalPlaceholder(country)}
         value={national}
+        maxLength={15}
         onChange={(e) => {
-          const next = phoneDigits(e.target.value);
+          const next = phoneDigits(e.target.value).slice(0, 15);
           setNational(next);
           emit(country, next);
         }}

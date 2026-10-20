@@ -74,6 +74,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: unknown;
       parentRoute: unknown;
     };
+    "/staff/collect/$token": {
+      id: "/staff/collect/$token";
+      path: "/staff/collect/$token";
+      fullPath: "/staff/collect/$token";
+      preLoaderRoute: unknown;
+      parentRoute: unknown;
+    };
   }
 }
 

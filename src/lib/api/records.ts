@@ -174,10 +174,21 @@ export async function apiUpsertStaff(
     altPhone: withPhoto.altPhone ?? null,
     guardianPhone: withPhoto.guardianPhone ?? null,
     photoUrl: withPhoto.photoUrl ?? null,
+    gender: withPhoto.gender ?? null,
+    dob: withPhoto.dob ?? null,
+    email: withPhoto.email ?? null,
+    address: withPhoto.address ?? null,
+    bloodGroup: withPhoto.bloodGroup ?? null,
+    emergencyName: withPhoto.emergencyName ?? null,
+    emergencyRelation: withPhoto.emergencyRelation ?? null,
+    ...(withPhoto.shareToken ? { shareToken: withPhoto.shareToken } : {}),
     basicSalary: withPhoto.basicSalary ?? 0,
     additionalAllowances: withPhoto.additionalAllowances ?? 0,
     documents: withPhoto.documents ?? [],
     academicYear: withPhoto.academicYear ?? null,
+    ...(Array.isArray(withPhoto.attendanceByMonth)
+      ? { attendanceByMonth: withPhoto.attendanceByMonth }
+      : {}),
   };
 
   if (opts?.createOnly) {
@@ -212,6 +223,78 @@ export async function apiUpsertStaff(
     }
     throw err;
   }
+}
+
+export type StaffCollectProfile = {
+  id: string;
+  name: string;
+  role: string;
+  dept: string;
+  joinedAt?: string | null;
+  phone?: string | null;
+  altPhone?: string | null;
+  guardianPhone?: string | null;
+  photoUrl?: string | null;
+  gender?: "M" | "F" | null;
+  dob?: string | null;
+  email?: string | null;
+  address?: string | null;
+  bloodGroup?: string | null;
+  emergencyName?: string | null;
+  emergencyRelation?: string | null;
+};
+
+export type StaffCollectSchool = {
+  name?: string | null;
+  logoUrl?: string | null;
+  phone?: string | null;
+  email?: string | null;
+};
+
+/**
+ * Public staff collection form. The share token is the only credential.
+ * Salary, documents, and login are not returned.
+ */
+export async function apiGetStaffCollect(token: string): Promise<{
+  staff: StaffCollectProfile;
+  school: StaffCollectSchool;
+}> {
+  return apiRequest(`/api/staff/collect.php?token=${encodeURIComponent(token)}`, {
+    auth: false,
+    skipUnauthorized: true,
+  });
+}
+
+/**
+ * Save the staff member's own personal details and retire the share token.
+ * Role, department, and salary are not accepted.
+ */
+export async function apiSubmitStaffCollect(
+  token: string,
+  fields: {
+    phone: string;
+    altPhone?: string;
+    guardianPhone?: string;
+    photoUrl?: string;
+    gender?: "M" | "F" | "";
+    dob?: string;
+    email?: string;
+    address?: string;
+    bloodGroup?: string;
+    emergencyName?: string;
+    emergencyRelation?: string;
+  },
+): Promise<StaffCollectProfile> {
+  const data = await apiRequest<{ staff: StaffCollectProfile; linkExpired?: boolean }>(
+    "/api/staff/collect.php",
+    {
+      method: "POST",
+      auth: false,
+      skipUnauthorized: true,
+      body: { token, ...fields },
+    },
+  );
+  return data.staff;
 }
 
 export async function apiDeleteStaff(

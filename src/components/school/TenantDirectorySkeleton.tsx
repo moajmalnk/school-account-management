@@ -1,7 +1,7 @@
-import { Loader2 } from "lucide-react";
+import { useRouterState } from "@tanstack/react-router";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn, dashCardClass, glassCardClass, glassPanelClass } from "@/lib/utils";
+import { cn, dashCardClass, glassCardClass } from "@/lib/utils";
 
 const bone = "bg-black/[0.07] dark:bg-white/[0.08]";
 const boneSoft = "bg-black/[0.05] dark:bg-white/[0.05]";
@@ -22,52 +22,58 @@ const DASH_SKELETON = {
 function Bone({ className }: { className?: string }) {
   return (
     <Skeleton
-      className={cn("skeleton-shimmer relative overflow-hidden", bone, className)}
+      className={cn(
+        "skeleton-shimmer relative animate-none overflow-hidden",
+        bone,
+        className,
+      )}
     />
   );
 }
 
+function openingVariantForPath(pathname: string): "dashboard" | "directory" {
+  if (
+    pathname.includes("/students") ||
+    pathname.includes("/staff") ||
+    pathname.includes("/finance")
+  ) {
+    return "directory";
+  }
+  return "dashboard";
+}
+
 /**
  * Full main-pane opening state while the tenant route chunk / store boots.
- * Keeps the chrome (header + dock) and fills the blank content area.
+ * Chrome (header + dock) stays put; the content pane is a layout-matched shimmer.
  */
 export function WorkspaceOpeningScreen({
   label = "Opening workspace",
   detail = "Loading campus books and catalogs…",
+  variant,
 }: {
   label?: string;
   detail?: string;
+  variant?: "dashboard" | "directory";
 }) {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const resolved = variant ?? openingVariantForPath(pathname);
+
   return (
     <div
-      className="relative flex min-h-[min(70vh,36rem)] w-full min-w-0 flex-1 flex-col"
+      className="flex min-h-[min(70vh,36rem)] w-full min-w-0 flex-1 flex-col"
+      role="status"
       aria-busy="true"
       aria-live="polite"
       aria-label={label}
     >
-      <div className="pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center px-4 sm:top-3">
-        <div
-          className={cn(
-            glassPanelClass,
-            "inline-flex max-w-[min(24rem,calc(100vw-2rem))] items-center gap-2.5 rounded-full border border-white/70 px-3.5 py-2 shadow-lg shadow-slate-900/10 backdrop-blur-xl dark:border-white/10 dark:shadow-black/40",
-          )}
-          role="status"
-        >
-          <Loader2
-            className="h-3.5 w-3.5 shrink-0 animate-spin text-[#0F766E] dark:text-[#2DD4BF]"
-            strokeWidth={2.5}
-          />
-          <div className="min-w-0">
-            <div className="truncate text-[12px] font-semibold text-slate-800 dark:text-zinc-100">
-              {label}
-            </div>
-            <div className="truncate text-[10.5px] text-slate-500 dark:text-zinc-400">{detail}</div>
-          </div>
-        </div>
-      </div>
-      <div className="min-h-0 flex-1 pt-12 sm:pt-14">
+      <p className="sr-only">
+        {label}. {detail}
+      </p>
+      {resolved === "directory" ? (
+        <TenantDirectorySkeleton label={label} />
+      ) : (
         <TenantDashboardSkeleton />
-      </div>
+      )}
     </div>
   );
 }

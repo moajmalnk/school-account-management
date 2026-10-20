@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { MarkStudentAttendanceModal } from "@/components/school/attendance/MarkStudentAttendanceModal";
+import { StaffAttendancePanel } from "@/components/school/attendance/StaffAttendancePanel";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -30,6 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   apiAttendanceDay,
   apiAttendanceReport,
@@ -172,7 +174,7 @@ function Donut({ percent }: { percent: number }) {
   );
 }
 
-export function AttendanceWorkspace() {
+function StudentAttendanceBoard() {
   const { schoolDetails, classes: classConfigs } = useTenantStore();
   const schoolName = schoolDetails.name || "School";
 
@@ -379,16 +381,11 @@ export function AttendanceWorkspace() {
   const notPresent = summary?.notPresent ?? [];
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-4 px-3 pb-24 pt-3 sm:px-4 md:px-6 md:pb-8">
+    <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-[22px] font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
-            Attendance
-          </h1>
-          <p className="mt-0.5 text-[13px] text-slate-500 dark:text-zinc-400">
-            Mark students by class &amp; division, export registers, and notify parents.
-          </p>
-        </div>
+        <p className="max-w-xl text-[13px] text-slate-500 dark:text-zinc-400">
+          Mark by class and division, then export the register or send it on WhatsApp.
+        </p>
         <div className="flex items-center gap-2">
           <DatePicker
             value={date}
@@ -685,6 +682,36 @@ export function AttendanceWorkspace() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+export function AttendanceWorkspace() {
+  const [tab, setTab] = useState<"students" | "staff">("students");
+
+  return (
+    <div className="mx-auto w-full max-w-7xl space-y-4 px-3 pb-24 pt-3 sm:px-4 md:px-6 md:pb-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-[22px] font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
+            Attendance
+          </h1>
+          <p className="mt-0.5 text-[13px] text-slate-500 dark:text-zinc-400">
+            Daily class register for students. Monthly payable days for staff.
+          </p>
+        </div>
+        <Tabs value={tab} onValueChange={(value) => setTab(value === "staff" ? "staff" : "students")}>
+          <TabsList className="h-10 rounded-full bg-slate-100 p-1 dark:bg-white/10">
+            <TabsTrigger value="students" className="rounded-full px-4 data-[state=active]:text-[#0F766E]">
+              Students attendance
+            </TabsTrigger>
+            <TabsTrigger value="staff" className="rounded-full px-4 data-[state=active]:text-[#0F766E]">
+              Staff attendance
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+      {tab === "students" ? <StudentAttendanceBoard /> : <StaffAttendancePanel />}
     </div>
   );
 }

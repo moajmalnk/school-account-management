@@ -296,6 +296,9 @@ export type StaffStatusEvent = {
   note?: string;
 };
 
+export const STAFF_EMERGENCY_RELATIONS = ["Spouse", "Parent", "Sibling", "Other"] as const;
+export type StaffEmergencyRelation = (typeof STAFF_EMERGENCY_RELATIONS)[number];
+
 export type Staff = {
   id: string;
   name: string;
@@ -311,6 +314,16 @@ export type Staff = {
   /** Guardian / emergency contact number */
   guardianPhone?: string;
   photoUrl?: string;
+  gender?: "M" | "F";
+  dob?: string;
+  email?: string;
+  address?: string;
+  bloodGroup?: string;
+  /** Emergency contact person. The number is `guardianPhone`. */
+  emergencyName?: string;
+  emergencyRelation?: StaffEmergencyRelation;
+  /** One-time public link credential. Cleared after the staff member submits. */
+  shareToken?: string;
   basicSalary: number;
   additionalAllowances: number;
   /** Monthly attendance rows · drives pro-rata salary when present */
@@ -850,6 +863,24 @@ export function normalizeStaff(raw: Partial<Staff> & Pick<Staff, "id" | "name">)
         ? raw.guardianPhone.trim()
         : undefined,
     photoUrl: typeof raw.photoUrl === "string" && raw.photoUrl ? raw.photoUrl : undefined,
+    gender: raw.gender === "M" || raw.gender === "F" ? raw.gender : undefined,
+    dob: typeof raw.dob === "string" && raw.dob.trim() ? raw.dob.trim().slice(0, 10) : undefined,
+    email: typeof raw.email === "string" && raw.email.trim() ? raw.email.trim() : undefined,
+    address: typeof raw.address === "string" && raw.address.trim() ? raw.address.trim() : undefined,
+    bloodGroup:
+      typeof raw.bloodGroup === "string" &&
+      (BLOOD_GROUPS as readonly string[]).includes(raw.bloodGroup.trim())
+        ? raw.bloodGroup.trim()
+        : undefined,
+    emergencyName:
+      typeof raw.emergencyName === "string" && raw.emergencyName.trim()
+        ? raw.emergencyName.trim()
+        : undefined,
+    emergencyRelation: (STAFF_EMERGENCY_RELATIONS as readonly string[]).includes(
+      raw.emergencyRelation ?? "",
+    )
+      ? raw.emergencyRelation
+      : undefined,
     basicSalary:
       typeof raw.basicSalary === "number" && Number.isFinite(raw.basicSalary)
         ? raw.basicSalary
@@ -865,6 +896,10 @@ export function normalizeStaff(raw: Partial<Staff> & Pick<Staff, "id" | "name">)
     deletedAt:
       typeof raw.deletedAt === "string" && raw.deletedAt.trim() ? raw.deletedAt.trim() : undefined,
     academicYear: readAcademicYearTag(raw),
+    shareToken:
+      typeof raw.shareToken === "string" && raw.shareToken.trim()
+        ? raw.shareToken.trim()
+        : undefined,
   };
 }
 
@@ -4706,6 +4741,105 @@ export function parentStudentPath(token: string): string {
 export function parentStudentAbsoluteUrl(token: string): string {
   if (typeof window === "undefined") return parentStudentPath(token);
   return `${window.location.origin}${parentStudentPath(token)}`;
+}
+
+/** URL-safe token for a one-time staff collection link. */
+export function createStaffShareToken(): string {
+  return createStudentShareToken();
+}
+
+/** Public path the staff member opens to submit their own contact details. */
+export function staffCollectPath(token: string): string {
+  return `/staff/collect/${token}`;
+}
+
+/** Absolute collection URL for copy and WhatsApp. */
+export function staffCollectAbsoluteUrl(token: string): string {
+  if (typeof window === "undefined") return staffCollectPath(token);
+  return `${window.location.origin}${staffCollectPath(token)}`;
+}
+
+/** Fields a staff member may submit. Role, department, and salary stay with the school. */
+export type StaffCollectFields = {
+  phone?: string;
+  altPhone?: string;
+  guardianPhone?: string;
+  photoUrl?: string;
+  gender?: "M" | "F";
+  dob?: string;
+  email?: string;
+  address?: string;
+  bloodGroup?: string;
+  emergencyName?: string;
+  emergencyRelation?: StaffEmergencyRelation;
+};
+
+/** Personal details still blank on the roster. Used to explain why the link is being sent. */
+export function staffCollectGaps(
+  staff: Pick<
+    Staff,
+    "photoUrl" | "phone" | "email" | "dob" | "address" | "emergencyName" | "guardianPhone"
+  >,
+): string[] {
+  const gaps: string[] = [];
+  if (!staff.photoUrl) gaps.push("Photo");
+  if (!staff.phone?.trim()) gaps.push("Mobile number");
+  if (!staff.email?.trim()) gaps.push("Email");
+  if (!staff.dob?.trim()) gaps.push("Date of birth");
+  if (!staff.address?.trim()) gaps.push("Address");
+  if (!staff.emergencyName?.trim() || !staff.guardianPhone?.trim()) gaps.push("Emergency contact");
+  return gaps;
+}
+
+function findStaffShareTokenSnapshot(
+  token: string,
+): { key: string; snap: Snapshot; index: number } | null {
+  for (const key of listSnapshotKeys()) {
+    const snap = readSnapshot(key);
+    if (!snap) continue;
+    const index = snap.staff.findIndex((member) => member.shareToken === token && !member.deletedAt);
+    if (index >= 0) return { key, snap, index };
+  }
+  return null;
+}
+
+/** Staff row cached on this device for a collection link. Salary stays in the full record. */
+export function getStaffByShareToken(token: string): Staff | null {
+  const normalized = token.trim();
+  if (!normalized) return null;
+  const found = findStaffShareTokenSnapshot(normalized);
+  return found ? found.snap.staff[found.index] : null;
+}
+
+/**
+ * Write a staff member's own submission into the local roster and retire the link.
+ * Employment fields and pay are left untouched.
+ */
+export function applyStaffCollectUpdate(token: string, patch: StaffCollectFields): Staff | null {
+  const found = findStaffShareTokenSnapshot(token.trim());
+  if (!found) return null;
+  const current = found.snap.staff[found.index];
+  const phone = patch.phone?.trim();
+  if (!phone) return null;
+  const updated = normalizeStaff({
+    ...current,
+    phone,
+    altPhone: patch.altPhone?.trim() || undefined,
+    guardianPhone: patch.guardianPhone?.trim() || undefined,
+    photoUrl: patch.photoUrl?.trim() || undefined,
+    gender: patch.gender,
+    dob: patch.dob,
+    email: patch.email,
+    address: patch.address,
+    bloodGroup: patch.bloodGroup,
+    emergencyName: patch.emergencyName,
+    emergencyRelation: patch.emergencyRelation,
+    shareToken: undefined,
+  });
+  const nextStaff = found.snap.staff.slice();
+  nextStaff[found.index] = updated;
+  writeSnapshot({ ...found.snap, staff: nextStaff }, found.key);
+  return updated;
 }
 
 export type ParentEditableStudentFields = {
