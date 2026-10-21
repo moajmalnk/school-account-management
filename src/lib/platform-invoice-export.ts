@@ -62,6 +62,11 @@ export function platformMoney(currency: string, amount: number): string {
   return formatMoneyPdf(Math.abs(amount), currency);
 }
 
+export function platformCycleLabel(cycle: string): string {
+  if (cycle === "HalfYearly") return "Half yearly";
+  return cycle;
+}
+
 export function isFlatPricing(invoice: PlatformInvoiceDoc): boolean {
   return (
     invoice.pricingModel === "flat_cycle" ||
@@ -71,7 +76,7 @@ export function isFlatPricing(invoice: PlatformInvoiceDoc): boolean {
 
 export function platformLineDescription(invoice: PlatformInvoiceDoc): string {
   if (isFlatPricing(invoice)) {
-    return `Flat period licence (${pdfSafe(invoice.billingCycle)})`;
+    return `Flat period licence (${pdfSafe(platformCycleLabel(invoice.billingCycle))})`;
   }
   const seats = invoice.studentsBilled;
   const seatLabel = seats === 1 ? "1 student" : `${formatCount(seats)} students`;
@@ -80,11 +85,11 @@ export function platformLineDescription(invoice: PlatformInvoiceDoc): string {
 
 export function platformCoverLine(invoice: PlatformInvoiceDoc): string {
   if (isFlatPricing(invoice)) {
-    return `Covers flat ${pdfSafe(invoice.billingCycle).toLowerCase()} platform licence.`;
+    return `Covers flat ${pdfSafe(platformCycleLabel(invoice.billingCycle)).toLowerCase()} platform licence.`;
   }
   const seats = invoice.studentsBilled;
   const seatLabel = seats === 1 ? "1 seat" : `${formatCount(seats)} seats`;
-  return `Covers ${seatLabel} - ${pdfSafe(invoice.billingCycle)} licence.`;
+  return `Covers ${seatLabel} - ${pdfSafe(platformCycleLabel(invoice.billingCycle))} licence.`;
 }
 
 type Layout = {
@@ -374,8 +379,8 @@ function buildInvoiceDoc(invoice: PlatformInvoiceDoc, opts?: { schoolHost?: stri
   y = drawMetaGrid(layout, y, [
     ["Issue date", invoice.issueDate],
     ["Due date", invoice.dueDate],
-    ["Period", invoice.periodLabel || invoice.billingCycle],
-    ["Cycle", invoice.billingCycle],
+    ["Period", invoice.periodLabel || platformCycleLabel(invoice.billingCycle)],
+    ["Cycle", platformCycleLabel(invoice.billingCycle)],
   ]);
 
   amountTable(doc, y, margin, contentW, [
@@ -440,8 +445,8 @@ function buildReceiptDoc(invoice: PlatformInvoiceDoc, opts?: { schoolHost?: stri
     ["Paid at", paidAt],
     ["Method", invoice.paymentMethod || "-"],
     ["Reference", invoice.paymentRef || "-"],
-    ["Period", invoice.periodLabel || invoice.billingCycle],
-    ["Cycle", invoice.billingCycle],
+    ["Period", invoice.periodLabel || platformCycleLabel(invoice.billingCycle)],
+    ["Cycle", platformCycleLabel(invoice.billingCycle)],
   ]);
 
   amountTable(

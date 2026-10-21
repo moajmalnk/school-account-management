@@ -86,20 +86,36 @@ export function feeSheetColumnBalance(statement: StudentFeeStatement, column: Fe
 }
 
 /**
- * Paid = the chosen columns are billed and nothing is left.
- * Partially paid = some payment is on those columns and a balance remains.
- * Not paid = billed, with no payment yet.
- * Students with nothing billed on the selection are only included in All.
+ * Every student lands in one status, so Paid + Partially paid + Not paid equals All.
+ * Paid means nothing is left to collect on this sheet, including a cleared or unbilled student.
+ * Partially paid means some payment was received and a balance remains.
+ * Not paid means a balance remains and nothing has been received.
  */
 export function feeSheetPaymentBucket(
-  charge: number,
+  _charge: number,
   paid: number,
   balance: number,
-): Exclude<FeeSheetPaymentFilter, "all"> | "none" {
-  if (charge <= 0) return "none";
+): Exclude<FeeSheetPaymentFilter, "all"> {
   if (balance <= 0) return "paid";
   if (paid > 0) return "partial";
   return "unpaid";
+}
+
+function feeSheetStudentMoney(
+  statement: StudentFeeStatement,
+  columns: FeeSheetColumn[],
+  studentDue: number,
+  useWholeBalance: boolean,
+): { charge: number; paid: number; balance: number } {
+  if (!useWholeBalance && columns.length > 0) {
+    const scoped = feeSheetScopeMoney(statement, columns);
+    if (scoped.charge > 0 || scoped.paid > 0 || scoped.balance > 0) return scoped;
+  }
+  return {
+    charge: Math.max(0, statement.totalFee),
+    paid: Math.max(0, statement.totalPaid),
+    balance: Math.max(0, studentDue, statement.totalDue),
+  };
 }
 
 function feeSheetScopeMoney(
@@ -169,14 +185,12 @@ export function buildClassFeeSheet(input: {
         })
       : null;
     if (paymentStatus !== "all" && statement) {
-      const useWholeBalance = Boolean(input.fullBalance) || input.columns.length === 0;
-      const money = useWholeBalance
-        ? {
-            charge: Math.max(0, statement.totalFee),
-            paid: Math.max(0, statement.totalPaid),
-            balance: Math.max(0, student.due),
-          }
-        : feeSheetScopeMoney(statement, input.columns);
+      const money = feeSheetStudentMoney(
+        statement,
+        input.columns,
+        student.due,
+        Boolean(input.fullBalance) || input.columns.length === 0,
+      );
       if (feeSheetPaymentBucket(money.charge, money.paid, money.balance) !== paymentStatus) {
         continue;
       }
@@ -238,18 +252,13 @@ export function countFeeSheetPayments(input: {
       academicYear: input.academicYear,
       feeBreaks: input.feeBreaks,
     });
-    const useWholeBalance = Boolean(input.fullBalance) || columns.length === 0;
-    const money = useWholeBalance
-      ? {
-          charge: Math.max(0, statement.totalFee),
-          paid: Math.max(0, statement.totalPaid),
-          balance: Math.max(0, student.due),
-        }
-      : feeSheetScopeMoney(statement, columns);
-    const bucket = feeSheetPaymentBucket(money.charge, money.paid, money.balance);
-    if (bucket === "paid" || bucket === "partial" || bucket === "unpaid") {
-      counts[bucket] += 1;
-    }
+    const money = feeSheetStudentMoney(
+      statement,
+      columns,
+      student.due,
+      Boolean(input.fullBalance) || columns.length === 0,
+    );
+    counts[feeSheetPaymentBucket(money.charge, money.paid, money.balance)] += 1;
   }
   return counts;
 }

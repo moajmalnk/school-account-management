@@ -14625,8 +14625,9 @@ function MakePayment() {
         .join(" · ");
     }
 
+    const localId = `pending-${Date.now()}`;
     const disbursal: MadePayment = {
-      id: `DISB-${Date.now().toString().slice(-6)}`,
+      id: localId,
       payee: beneficiary.trim(),
       desc,
       amount: value,
@@ -14645,7 +14646,15 @@ function MakePayment() {
     });
 
     void apiCreateDisbursement({
-      ...disbursal,
+      payee: disbursal.payee,
+      desc: disbursal.desc,
+      amount: disbursal.amount,
+      mode: disbursal.mode,
+      payeeType: disbursal.payeeType,
+      ledgerId: disbursal.ledgerId,
+      time: disbursal.time,
+      status: disbursal.status,
+      attachments: disbursal.attachments,
       staffId: payeeType === "Salary" ? selectedStaffId || undefined : undefined,
     })
       .then((saved) => {
@@ -14967,7 +14976,7 @@ function MakePayment() {
     const importSequentially = () =>
       importRowsSequentially(
         rows,
-        async (row, index) => {
+        async (row) => {
           let payee = row.payee;
           let ledgerId: string | null = null;
           if (row.payeeType === "Other Expense") {
@@ -14977,8 +14986,7 @@ function MakePayment() {
               payee = ledger.name;
             }
           }
-          const disbursal: MadePayment = {
-            id: `DISB-${Date.now().toString(36).toUpperCase()}${String(index).padStart(3, "0")}`,
+          const saved = await apiCreateDisbursement({
             payee,
             desc: row.desc,
             amount: row.amount,
@@ -14987,12 +14995,9 @@ function MakePayment() {
             ledgerId,
             time: toSqlDateTime(row.time),
             status: row.status,
-          };
-          const saved = await apiCreateDisbursement({
-            ...disbursal,
             staffId: row.staffId,
           });
-          applySaved(saved, row, disbursal.id);
+          applySaved(saved, row, saved.id || `pending-${row.line}`);
         },
         (current, total) => setExpenseImportProgress({ current, total }),
       );

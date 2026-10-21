@@ -148,7 +148,7 @@ function matchesTrialWindow(info: TrialInfo | null, window: TrialWindow): boolea
   return trialWindowOf(info) === window;
 }
 
-type BillingCycle = "Monthly" | "Quarterly" | "Annual";
+type BillingCycle = "Monthly" | "Quarterly" | "HalfYearly" | "Annual";
 type Currency = "INR" | "USD" | "AED" | "EUR";
 type PaymentMethod = "Cashfree" | "Bank Transfer" | "Recorded by Feezo";
 /** Per student = seats × rate. Flat cycle = fixed fee for the billing period. */
@@ -182,8 +182,16 @@ const PRICING_MODEL_LABEL: Record<PricingModel, string> = {
   flat_cycle: "Flat per cycle",
 };
 
+const BILLING_CYCLES: BillingCycle[] = ["Monthly", "Quarterly", "HalfYearly", "Annual"];
+
+function billingCycleLabel(cycle: BillingCycle): string {
+  if (cycle === "HalfYearly") return "Half yearly";
+  return cycle;
+}
+
 function cycleUnitLabel(cycle: BillingCycle): string {
   if (cycle === "Quarterly") return "quarter";
+  if (cycle === "HalfYearly") return "half year";
   if (cycle === "Annual") return "year";
   return "month";
 }
@@ -692,7 +700,7 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (tenant: Tenant
           if (!detailTarget) return;
           upsertBilling(detailTarget.id, rule);
           toast.success("Billing rules saved", {
-            description: `${detailTarget.name} · ${rule.cycle} · ${PRICING_MODEL_LABEL[rule.pricingModel]} · ${billingRateDescription(rule, CURRENCY_SYMBOL[rule.currency])}`,
+            description: `${detailTarget.name} · ${billingCycleLabel(rule.cycle)} · ${PRICING_MODEL_LABEL[rule.pricingModel]} · ${billingRateDescription(rule, CURRENCY_SYMBOL[rule.currency])}`,
           });
         }}
       />
@@ -705,7 +713,7 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (tenant: Tenant
           if (!billingTarget) return;
           upsertBilling(billingTarget.id, rule);
           toast.success("Billing rules saved", {
-            description: `${billingTarget.name} · ${rule.cycle} · ${PRICING_MODEL_LABEL[rule.pricingModel]} · ${billingRateDescription(rule, CURRENCY_SYMBOL[rule.currency])}`,
+            description: `${billingTarget.name} · ${billingCycleLabel(rule.cycle)} · ${PRICING_MODEL_LABEL[rule.pricingModel]} · ${billingRateDescription(rule, CURRENCY_SYMBOL[rule.currency])}`,
           });
           setBillingTarget(null);
         }}
@@ -1784,7 +1792,7 @@ function TenantDetailDrawer({
                 <div className="col-span-12">
                   <Field label="Billing Cycle">
                     <div className="grid grid-cols-12 gap-2">
-                      {(["Monthly", "Quarterly", "Annual"] as BillingCycle[]).map((c) => {
+                      {BILLING_CYCLES.map((c) => {
                         const sel = draft.cycle === c;
                         return (
                           <button
@@ -1792,13 +1800,13 @@ function TenantDetailDrawer({
                             type="button"
                             onClick={() => set("cycle", c)}
                             className={cn(
-                              "col-span-4 rounded-xl border px-3 py-2.5 text-[12px] font-semibold transition",
+                              "col-span-6 rounded-xl border px-3 py-2.5 text-[12px] font-semibold transition sm:col-span-3",
                               sel
                                 ? "border-transparent bg-[#0F766E] text-white shadow-sm"
                                 : "border-[#E5E5E5] bg-white text-black/65 hover:border-black/30",
                             )}
                           >
-                            {c}
+                            {billingCycleLabel(c)}
                           </button>
                         );
                       })}
@@ -1923,7 +1931,7 @@ function TenantDetailDrawer({
                     {draft.pricingModel === "per_student"
                       ? `${seats.toLocaleString("en-IN")} × ${sym}${draft.ratePerStudent}`
                       : `${sym}${draft.ratePerStudent}/${cycleUnitLabel(draft.cycle)}`}{" "}
-                    · {draft.cycle} · {collectionSummary(draft)}
+                    · {billingCycleLabel(draft.cycle)} · {collectionSummary(draft)}
                   </div>
                 </div>
 
@@ -1960,7 +1968,7 @@ function TenantDetailDrawer({
                       discountPercent: draft.discountPercent,
                       taxPercent: draft.taxPercent,
                       paymentMethod: draft.paymentMethod,
-                      periodLabel: `${draft.cycle} · ${PRICING_MODEL_LABEL[draft.pricingModel]} · ${draft.nextInvoice}`,
+                      periodLabel: `${billingCycleLabel(draft.cycle)} · ${PRICING_MODEL_LABEL[draft.pricingModel]} · ${draft.nextInvoice}`,
                       issueDate: new Date().toISOString().slice(0, 10),
                       dueDate: draft.nextInvoice || new Date().toISOString().slice(0, 10),
                     }}
@@ -2427,8 +2435,8 @@ function BillingRulesDrawer({
           </Field>
 
           <Field label="Billing Cycle">
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              {(["Monthly", "Quarterly", "Annual"] as BillingCycle[]).map((c) => {
+            <div className="grid grid-cols-2 gap-2">
+              {BILLING_CYCLES.map((c) => {
                 const sel = draft.cycle === c;
                 return (
                   <button
@@ -2441,7 +2449,7 @@ function BillingRulesDrawer({
                         : "border-[#E5E5E5] bg-white text-black/65 hover:border-black/30"
                     }`}
                   >
-                    {c}
+                    {billingCycleLabel(c)}
                   </button>
                 );
               })}

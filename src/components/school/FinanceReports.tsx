@@ -140,6 +140,11 @@ function classLabelForExport(className: string): string {
   return className === "all" ? "All classes" : className;
 }
 
+function exportClassName(cls: string): string {
+  const name = cls.trim();
+  return name || "Unassigned";
+}
+
 function reportDownloadName(
   report: string,
   ext: "pdf" | "csv",
@@ -1874,20 +1879,28 @@ export function FeesReport() {
     });
   }, [studentsWithLiveDues, duesClass, duesQuery]);
 
-  const feeColumns = useMemo(
-    () =>
-      feeSheetCatalog(
-        classes,
-        new Set(sheetStudents.map((student) => student.cls)),
-        activeFeeTerms,
-      ),
-    [classes, sheetStudents, activeFeeTerms],
+  const exportClasses = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const student of sheetStudents) {
+      const name = exportClassName(student.cls);
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => a.name.localeCompare(b.name, "en", { numeric: true }));
+  }, [sheetStudents]);
+
+  const catalogFor = useCallback(
+    (classNames: string[]) =>
+      feeSheetCatalog(classes, new Set(classNames), activeFeeTerms),
+    [classes, activeFeeTerms],
   );
 
   const paymentCounts = useCallback(
-    (columns: Parameters<typeof countFeeSheetPayments>[0]["columns"]) =>
-      countFeeSheetPayments({
-        students: sheetStudents,
+    (columns: Parameters<typeof countFeeSheetPayments>[0]["columns"], classNames: string[]) => {
+      const allowed = new Set(classNames);
+      return countFeeSheetPayments({
+        students: sheetStudents.filter((student) => allowed.has(exportClassName(student.cls))),
         columns,
         payments,
         classes,
@@ -1896,7 +1909,8 @@ export function FeesReport() {
         academicYear,
         feeBreaks: studentFeeBreaks,
         fullBalance: columns.length === 0,
-      }),
+      });
+    },
     [
       sheetStudents,
       payments,
@@ -1909,14 +1923,16 @@ export function FeesReport() {
   );
 
   const runClassSheetExport = (format: FeesExportFormat, choice: FeesExportChoice) => {
-    if (!sheetStudents.length) {
-      toast.error("Nothing to export · no students in this class filter");
+    const allowed = new Set(choice.classes);
+    const students = sheetStudents.filter((student) => allowed.has(exportClassName(student.cls)));
+    if (!students.length) {
+      toast.error("Nothing to export · no students in the chosen classes");
       return;
     }
-    const columns = choice.mode === "full" ? [...feeColumns.terms, ...feeColumns.heads] : choice.columns;
+    const columns = choice.columns;
     const detailed = columns.length > 0;
     const rows = buildClassFeeSheet({
-      students: sheetStudents,
+      students,
       columns,
       payments,
       classes,
@@ -1931,6 +1947,10 @@ export function FeesReport() {
       toast.error("Nothing to export · no students match this payment status");
       return;
     }
+    const classScope =
+      choice.classes.length === exportClasses.length
+        ? classLabelForExport(duesClass)
+        : choice.classes.join(", ");
     const paymentLabel =
       choice.paymentStatus === "paid"
         ? "Paid"
@@ -1982,7 +2002,7 @@ export function FeesReport() {
     downloadTablePdf({
       filename,
       title: "Class fee sheet",
-      subtitle: `${schoolName} · ${academicYear} · ${classLabelForExport(duesClass)} · ${paymentLabel} · ${scope}${
+      subtitle: `${schoolName} · ${academicYear} · ${classScope} · ${paymentLabel} · ${scope}${
         detailed ? ` · Amounts in ${pdfCurrencyPrefix()}` : ""
       }`,
       headers: pdfHeaders,
@@ -2003,10 +2023,8 @@ export function FeesReport() {
       <FeesReportExportDialog
         open={exportFormat !== null}
         format={exportFormat}
-        terms={feeColumns.terms}
-        heads={feeColumns.heads}
-        studentCount={sheetStudents.length}
-        classLabel={classLabelForExport(duesClass)}
+        classes={exportClasses}
+        catalogFor={catalogFor}
         paymentCounts={paymentCounts}
         onOpenChange={(next) => {
           if (!next) setExportFormat(null);

@@ -19,6 +19,12 @@ export type FeesExportChoice = {
   mode: "full" | "selected";
   columns: FeeSheetColumn[];
   paymentStatus: FeeSheetPaymentFilter;
+  classes: string[];
+};
+
+export type FeesExportClassOption = {
+  name: string;
+  count: number;
 };
 
 const PAYMENT_OPTIONS: { id: FeeSheetPaymentFilter; title: string; hint: string }[] = [
@@ -37,34 +43,56 @@ const FORMAT_LABEL: Record<FeesExportFormat, string> = {
 export function FeesReportExportDialog({
   open,
   format,
-  terms,
-  heads,
-  studentCount,
-  classLabel,
+  classes,
+  catalogFor,
   paymentCounts,
   onOpenChange,
   onConfirm,
 }: {
   open: boolean;
   format: FeesExportFormat | null;
-  terms: FeeSheetColumn[];
-  heads: FeeSheetColumn[];
-  studentCount: number;
-  classLabel: string;
-  paymentCounts: (columns: FeeSheetColumn[]) => FeeSheetPaymentCounts;
+  classes: FeesExportClassOption[];
+  catalogFor: (classNames: string[]) => { terms: FeeSheetColumn[]; heads: FeeSheetColumn[] };
+  paymentCounts: (columns: FeeSheetColumn[], classNames: string[]) => FeeSheetPaymentCounts;
   onOpenChange: (open: boolean) => void;
   onConfirm: (choice: FeesExportChoice) => void;
 }) {
   const [mode, setMode] = useState<"full" | "selected">("full");
   const [paymentStatus, setPaymentStatus] = useState<FeeSheetPaymentFilter>("all");
+  const [pickedClasses, setPickedClasses] = useState<Set<string>>(() => new Set());
   const [picked, setPicked] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     if (!open) return;
     setMode("full");
     setPaymentStatus("all");
-    setPicked(new Set([...terms, ...heads].map((column) => column.key)));
-  }, [open, terms, heads]);
+    setPickedClasses(new Set(classes.map((item) => item.name)));
+  }, [open, classes]);
+
+  const selectedClassNames = useMemo(
+    () => classes.map((item) => item.name).filter((name) => pickedClasses.has(name)),
+    [classes, pickedClasses],
+  );
+  const allClassesOn = classes.length > 0 && selectedClassNames.length === classes.length;
+  const selectedStudentCount = classes.reduce(
+    (sum, item) => (pickedClasses.has(item.name) ? sum + item.count : sum),
+    0,
+  );
+
+  const catalog = useMemo(
+    () => catalogFor(selectedClassNames),
+    [catalogFor, selectedClassNames],
+  );
+  const terms = catalog.terms;
+  const heads = catalog.heads;
+  const catalogKeys = useMemo(
+    () => [...terms, ...heads].map((column) => column.key),
+    [terms, heads],
+  );
+
+  useEffect(() => {
+    setPicked(new Set(catalogKeys));
+  }, [catalogKeys]);
 
   const selectedColumns = useMemo(() => {
     const all = [...terms, ...heads];
@@ -93,14 +121,32 @@ export function FeesReportExportDialog({
   };
 
   const counts = useMemo(() => {
-    if (!open) {
-      return { all: studentCount, paid: 0, partial: 0, unpaid: 0 };
+    if (!open || selectedClassNames.length === 0) {
+      return { all: 0, paid: 0, partial: 0, unpaid: 0 };
     }
-    return paymentCounts(selectedColumns);
-  }, [open, paymentCounts, selectedColumns, studentCount]);
+    return paymentCounts(selectedColumns, selectedClassNames);
+  }, [open, paymentCounts, selectedColumns, selectedClassNames]);
   const matchedStudents = counts[paymentStatus];
-  const canExport = (mode === "full" || selectedColumns.length > 0) && matchedStudents > 0;
+  const canExport =
+    selectedClassNames.length > 0 &&
+    (mode === "full" || selectedColumns.length > 0) &&
+    matchedStudents > 0;
   const action = format ? FORMAT_LABEL[format] : "Export";
+
+  const selectAllClasses = () => {
+    setPickedClasses(new Set(classes.map((item) => item.name)));
+  };
+
+  const toggleClass = (name: string) => {
+    setPickedClasses((prev) => {
+      const every = classes.every((item) => prev.has(item.name));
+      if (every) return new Set([name]);
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -110,8 +156,9 @@ export function FeesReportExportDialog({
             {action === "Print PDF" ? "Print class fee sheet" : "Export class fee sheet"}
           </DialogTitle>
           <DialogDescription className="text-[13px] leading-relaxed text-black/60">
-            {studentCount} student{studentCount === 1 ? "" : "s"} · {classLabel}. Choose who to
-            include, then the full schedule or only the terms and fee heads this file should include.
+            {selectedStudentCount} student{selectedStudentCount === 1 ? "" : "s"}. Choose classes
+            and payment status, then the full schedule or only the terms and fee heads this file
+            should include.
           </DialogDescription>
         </DialogHeader>
 
@@ -149,6 +196,81 @@ export function FeesReportExportDialog({
                     </div>
                     <div className={cn("mt-0.5 text-[11px]", selected ? "text-white/80" : "text-black/45")}>
                       {option.hint}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                Classes
+              </div>
+              {classes.length > 1 ? (
+                <button
+                  type="button"
+                  className="text-[11px] font-semibold text-[#0F766E] hover:underline"
+                  onClick={selectAllClasses}
+                >
+                  {allClassesOn ? "All selected" : "Select all"}
+                </button>
+              ) : null}
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <button
+                type="button"
+                onClick={selectAllClasses}
+                className={cn(
+                  "rounded-xl border px-3 py-2.5 text-left transition",
+                  allClassesOn
+                    ? "border-transparent bg-[#0F766E] text-white shadow-sm"
+                    : "border-[#E5E5E5] bg-white text-black/70 hover:border-black/30",
+                )}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[13px] font-semibold">All classes</span>
+                  <span
+                    className={cn(
+                      "text-[11px] font-semibold tabular-nums",
+                      allClassesOn ? "text-white/80" : "text-black/40",
+                    )}
+                  >
+                    {classes.reduce((sum, item) => sum + item.count, 0)}
+                  </span>
+                </div>
+                <div className={cn("mt-0.5 text-[11px]", allClassesOn ? "text-white/80" : "text-black/45")}>
+                  Every class in this report
+                </div>
+              </button>
+              {classes.map((item) => {
+                const selected = !allClassesOn && pickedClasses.has(item.name);
+                return (
+                  <button
+                    key={item.name}
+                    type="button"
+                    onClick={() => toggleClass(item.name)}
+                    className={cn(
+                      "rounded-xl border px-3 py-2.5 text-left transition",
+                      selected
+                        ? "border-transparent bg-[#0F766E] text-white shadow-sm"
+                        : "border-[#E5E5E5] bg-white text-black/70 hover:border-black/30",
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 truncate text-[13px] font-semibold">{item.name}</span>
+                      <span
+                        className={cn(
+                          "shrink-0 text-[11px] font-semibold tabular-nums",
+                          selected ? "text-white/80" : "text-black/40",
+                        )}
+                      >
+                        {item.count}
+                      </span>
+                    </div>
+                    <div className={cn("mt-0.5 text-[11px]", selected ? "text-white/80" : "text-black/45")}>
+                      {item.count === 1 ? "1 student" : `${item.count} students`}
                     </div>
                   </button>
                 );
@@ -239,7 +361,14 @@ export function FeesReportExportDialog({
             type="button"
             disabled={!canExport || !format}
             className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
-            onClick={() => onConfirm({ mode, columns: selectedColumns, paymentStatus })}
+            onClick={() =>
+              onConfirm({
+                mode,
+                columns: selectedColumns,
+                paymentStatus,
+                classes: selectedClassNames,
+              })
+            }
           >
             {action}
           </Button>

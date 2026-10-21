@@ -13,6 +13,7 @@ import {
   downloadPlatformReceiptPdf,
   isFlatPricing,
   platformCoverLine,
+  platformCycleLabel,
   platformLineDescription,
   platformMoney,
   type PlatformInvoiceDoc,
@@ -148,15 +149,15 @@ export function PlatformDocumentPreview({
                   <MetaCell label="Paid at" value={paidAt} />
                   <MetaCell label="Method" value={invoice.paymentMethod || "—"} />
                   <MetaCell label="Reference" value={invoice.paymentRef || "—"} />
-                  <MetaCell label="Period" value={invoice.periodLabel || invoice.billingCycle} />
-                  <MetaCell label="Cycle" value={invoice.billingCycle} />
+                  <MetaCell label="Period" value={invoice.periodLabel || platformCycleLabel(invoice.billingCycle)} />
+                  <MetaCell label="Cycle" value={platformCycleLabel(invoice.billingCycle)} />
                 </>
               ) : (
                 <>
                   <MetaCell label="Issue date" value={invoice.issueDate} />
                   <MetaCell label="Due date" value={invoice.dueDate} />
-                  <MetaCell label="Period" value={invoice.periodLabel || invoice.billingCycle} />
-                  <MetaCell label="Cycle" value={invoice.billingCycle} />
+                  <MetaCell label="Period" value={invoice.periodLabel || platformCycleLabel(invoice.billingCycle)} />
+                  <MetaCell label="Cycle" value={platformCycleLabel(invoice.billingCycle)} />
                 </>
               )}
             </div>

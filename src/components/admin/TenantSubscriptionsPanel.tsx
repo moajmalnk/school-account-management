@@ -36,9 +36,16 @@ import { normalizeCurrency } from "@/lib/locale/currencies";
 import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
-type Cadence = "Monthly" | "Quarterly" | "Custom";
+type Cadence = "Monthly" | "Quarterly" | "HalfYearly" | "Custom";
 
-const CADENCES: Cadence[] = ["Monthly", "Quarterly", "Custom"];
+const CADENCES: Cadence[] = ["Monthly", "Quarterly", "HalfYearly", "Custom"];
+
+const CADENCE_LABEL: Record<Cadence, string> = {
+  Monthly: "Monthly",
+  Quarterly: "Quarterly",
+  HalfYearly: "Half yearly",
+  Custom: "Custom",
+};
 const METHODS = ["Bank transfer", "Cash", "UPI", "Card", "Cheque"];
 
 function todayIso(): string {
@@ -76,11 +83,14 @@ function monthLabel(iso: string): string {
 function suggestPeriod(cadence: Cadence, collectedOn: string, nextDue: string): string {
   if (cadence === "Monthly") return `Monthly · ${monthLabel(collectedOn)}`;
   if (cadence === "Quarterly") return `Quarterly · ${pretty(collectedOn)} – ${pretty(nextDue)}`;
+  if (cadence === "HalfYearly") return `Half yearly · ${pretty(collectedOn)} – ${pretty(nextDue)}`;
   return `Custom · ${pretty(collectedOn)} – ${pretty(nextDue)}`;
 }
 
 function defaultNextDue(collectedOn: string, cadence: Cadence): string {
-  return addMonths(collectedOn, cadence === "Quarterly" ? 3 : 1);
+  if (cadence === "Quarterly") return addMonths(collectedOn, 3);
+  if (cadence === "HalfYearly") return addMonths(collectedOn, 6);
+  return addMonths(collectedOn, 1);
 }
 
 function statusClass(status: string): string {
@@ -255,7 +265,7 @@ export function TenantSubscriptionsPanel({
             <Label className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
               Cadence
             </Label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {CADENCES.map((option) => {
                 const selected = cadence === option;
                 return (
@@ -270,7 +280,7 @@ export function TenantSubscriptionsPanel({
                         : "border-[#E5E5E5] bg-white text-black/65 hover:border-black/30",
                     )}
                   >
-                    {option}
+                    {CADENCE_LABEL[option]}
                   </button>
                 );
               })}
