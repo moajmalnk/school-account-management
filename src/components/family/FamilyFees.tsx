@@ -6,7 +6,7 @@ import { FamilyCard, FamilyHeader, FamilySkeleton } from "@/components/family/Fa
 import { Button } from "@/components/ui/button";
 import {
   familyFeeOrder,
-  familyFeeRelease,
+  familyFeeResume,
   familyFeeVerify,
   familyFees,
   type FeeLine,
@@ -41,6 +41,7 @@ export function FamilyFees() {
   const [data, setData] = useState<Awaited<ReturnType<typeof familyFees>> | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [resumingId, setResumingId] = useState("");
   const busyRef = useRef(false);
   const [error, setError] = useState("");
 
@@ -115,30 +116,68 @@ export function FamilyFees() {
     if (student) load(student.id);
   }
 
+  async function resume(orderId: string) {
+    if (!student || !orderId || busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    setResumingId(orderId);
+    try {
+      const order = await familyFeeResume(student.id, orderId);
+      if (order.paid || !order.paymentSessionId) {
+        const receipt = await familyFeeVerify({ provider: "cashfree", orderId });
+        finishPaid(receipt.receiptId);
+        return;
+      }
+      const outcome = await openCashfreeCheckout(
+        order.paymentSessionId,
+        checkoutReturnUrl("/family/fees", order.orderId),
+      );
+      if (outcome === "redirect" || outcome === "closed") {
+        setBusy(false);
+        load(student.id);
+        return;
+      }
+      const receipt = await familyFeeVerify({ provider: "cashfree", orderId: order.orderId });
+      finishPaid(receipt.receiptId);
+    } catch (err) {
+      const pending = err instanceof ApiError && err.status === 409;
+      toast.error(pending ? "This payment expired" : "Could not reopen the payment", {
+        description: err instanceof ApiError ? err.message : "Select the fee and pay again.",
+      });
+      setBusy(false);
+      load(student.id);
+    } finally {
+      busyRef.current = false;
+      setResumingId("");
+    }
+  }
+
   async function pay() {
     if (!student || !data?.payEnabled || selected.length === 0 || busyRef.current) return;
     busyRef.current = true;
     setBusy(true);
     let orderId = "";
-    let reportedPaid = false;
     try {
       const order = await familyFeeOrder(student.id, selected);
       orderId = order.orderId;
+      if (!order.paymentSessionId) {
+        throw new Error("Payment session was not created");
+      }
       const outcome = await openCashfreeCheckout(
         order.paymentSessionId,
         checkoutReturnUrl("/family/fees", order.orderId),
       );
-      if (outcome === "closed") {
-        await familyFeeRelease(order.orderId);
-        finishFailed("Payment was not completed");
+      if (outcome === "redirect" || outcome === "closed") {
+        setBusy(false);
+        load(student.id);
         return;
       }
-      reportedPaid = true;
       const receipt = await familyFeeVerify({ provider: "cashfree", orderId: order.orderId });
       finishPaid(receipt.receiptId);
     } catch (err) {
-      if (orderId && !reportedPaid) {
-        await familyFeeRelease(orderId).catch(() => undefined);
+      if (orderId) {
+        setBusy(false);
+        load(student.id);
       }
       finishFailed(err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Could not start payment");
     } finally {
@@ -228,18 +267,10 @@ export function FamilyFees() {
               <h2 className="text-sm font-semibold">{group.label}</h2>
               {group.lines.map((line) => {
                 const on = selected.includes(line.key);
-                return (
-                  <button
-                    key={line.key}
-                    type="button"
-                    disabled={tab === "due" && !line.selectable}
-                    onClick={() => toggle(line)}
-                    className={cn(
-                      "w-full rounded-[22px] p-4 text-left",
-                      on ? "bg-[#F0FDFA] dark:bg-teal-950" : "bg-[#F8E6D4] dark:bg-orange-950/50",
-                      tab === "due" && !line.selectable && "opacity-70",
-                    )}
-                  >
+                const orderId = line.checkoutOrderId ?? "";
+                const showResume = tab === "due" && line.locked && orderId !== "";
+                const body = (
+                  <>
                     <span className="flex items-start gap-3">
                       <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-slate-500 dark:bg-zinc-900 dark:text-zinc-300">
                         <FileText className="h-4 w-4" />
@@ -251,7 +282,7 @@ export function FamilyFees() {
                           {line.locked ? " · Payment in progress" : ""}
                         </span>
                       </span>
-                      {tab === "due" ? (
+                      {tab === "due" && !line.locked ? (
                         <span
                           className={cn(
                             "mt-1 grid h-6 w-6 shrink-0 place-items-center rounded-full border-2",
@@ -278,6 +309,40 @@ export function FamilyFees() {
                         </span>
                       </span>
                     </span>
+                    {showResume ? (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void resume(orderId)}
+                        className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-2xl bg-[#0F766E] text-[13px] font-semibold text-white disabled:opacity-60"
+                      >
+                        {resumingId === orderId ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                        Continue payment
+                      </button>
+                    ) : null}
+                  </>
+                );
+                const cardClass = cn(
+                  "w-full rounded-[22px] p-4 text-left",
+                  on ? "bg-[#F0FDFA] dark:bg-teal-950" : "bg-[#F8E6D4] dark:bg-orange-950/50",
+                  tab === "due" && !line.selectable && !line.locked && "opacity-70",
+                );
+                if (line.locked) {
+                  return (
+                    <div key={line.key} className={cardClass}>
+                      {body}
+                    </div>
+                  );
+                }
+                return (
+                  <button
+                    key={line.key}
+                    type="button"
+                    disabled={tab === "due" && !line.selectable}
+                    onClick={() => toggle(line)}
+                    className={cardClass}
+                  >
+                    {body}
                   </button>
                 );
               })}

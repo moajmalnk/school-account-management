@@ -366,6 +366,7 @@ export function TenantSubscriptionPanel({
           order.paymentSessionId,
           checkoutReturnUrl("/tenant/settings?tab=subscription", order.orderId),
         );
+        if (outcome === "redirect") return;
         if (outcome === "closed") {
           await releaseSubscriptionCheckout(order.orderId);
           toast.error("Payment was not completed");

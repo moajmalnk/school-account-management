@@ -8,7 +8,10 @@ import { AuthProvider } from "@/lib/auth";
 import { LocaleProvider } from "@/lib/locale/LocaleProvider";
 import { OrgCurrencyBridge } from "@/lib/locale/OrgCurrencyBridge";
 import { PwaProvider } from "@/lib/pwa";
+import { installCheckoutReturn } from "@/lib/cashfree-checkout";
 import { applyWorkspaceThemeMode, peekStoredThemeMode } from "@/lib/tenant-store";
+
+installCheckoutReturn();
 
 function useStoredColorScheme() {
   useEffect(() => {

@@ -328,16 +328,24 @@ export type FeeLine = {
   status: string;
   selectable: boolean;
   locked: boolean;
+  checkoutOrderId?: string;
 };
 
 export type FeeCheckout = {
   provider: "cashfree";
   orderId: string;
-  paymentSessionId: string;
+  paymentSessionId?: string;
   amount: number;
-  currency: string;
-  name: string;
-  description: string;
+  currency?: string;
+  name?: string;
+  description?: string;
+  paid?: boolean;
+};
+
+export type PendingFeeCheckout = {
+  orderId: string;
+  amount: number;
+  lineKeys: string[];
 };
 
 export function familyFees(studentId: string) {
@@ -350,7 +358,15 @@ export function familyFees(studentId: string) {
     payEnabled: boolean;
     payProvider: "cashfree";
     keyId: string;
+    pendingCheckouts?: PendingFeeCheckout[];
   }>(`/api/family/fees.php?studentId=${encodeURIComponent(studentId)}`);
+}
+
+export function familyFeeResume(studentId: string, orderId: string) {
+  return familyRequest<FeeCheckout>("/api/family/fees.php", {
+    method: "POST",
+    body: { action: "resume", studentId, orderId },
+  });
 }
 
 export function familyFeeOrder(studentId: string, lineKeys: string[]) {
