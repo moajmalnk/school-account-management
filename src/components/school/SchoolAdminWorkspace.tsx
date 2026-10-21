@@ -794,10 +794,10 @@ const bulkActionDeleteBtn =
 const bulkActionWhatsAppBtn =
   "inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#10B981] px-3 text-[13px] font-semibold text-white transition-colors hover:bg-[#059669]";
 
-/** Directory toolbar chips — two per row on mobile; auto width from sm+ */
+/** Directory toolbar chips — two per row until the content column is wide enough for one line. */
 const directoryToolbarBtn = cn(
   mobileOutlineBtn,
-  "col-span-6 h-9 w-full min-w-0 justify-center gap-1 px-1.5 text-[11px] sm:col-auto sm:h-10 sm:w-auto sm:justify-center sm:gap-1.5 sm:px-3 sm:text-[12.5px]",
+  "col-span-6 h-9 w-full min-w-0 justify-center gap-1 px-1.5 text-[11px] xl:col-auto xl:h-10 xl:w-auto xl:justify-center xl:gap-1.5 xl:px-3 xl:text-[12.5px]",
 );
 
 const mobilePrimaryBtn =
@@ -809,12 +809,12 @@ const admitFormInputClass =
 const admitFormOutlineBtnClass =
   "dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800";
 
-/** Mobile: title then full-width 12-col actions. sm+: title · buttons one row */
+/** Title on its own row until xl, so the sidebar does not push the buttons over the heading. */
 const directoryHeaderRow =
-  "flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3";
+  "flex w-full min-w-0 flex-col gap-2 xl:flex-row xl:items-center xl:justify-between xl:gap-3";
 
 const directoryToolbarRow =
-  "grid w-full grid-cols-12 gap-1.5 sm:flex sm:w-auto sm:max-w-full sm:flex-wrap sm:items-center sm:justify-end sm:gap-2";
+  "grid w-full grid-cols-12 gap-1.5 xl:flex xl:w-auto xl:max-w-full xl:flex-wrap xl:items-center xl:justify-end xl:gap-2";
 
 const directoryFilterCardClass = cn(glassCardClass, "min-w-0 p-3 sm:p-3.5 md:p-5");
 
@@ -2432,7 +2432,7 @@ function DirectoryPersonAvatar({ name, photoUrl }: { name: string; photoUrl?: st
 }
 
 const directoryMobileListClass =
-  "grid w-full min-w-0 max-w-full grid-cols-1 gap-2.5 md:grid-cols-2 md:gap-3";
+  "grid w-full min-w-0 max-w-full grid-cols-1 gap-2.5 pb-24 md:gap-3 md:pb-28";
 
 const directoryMobileCardClass = cn(
   premiumCardClass,
@@ -2765,7 +2765,7 @@ function StudentsDirectoryTable({
         ) : null}
         <div className={cn(directoryMobileListClass)}>
           {students.length > 0 && (
-            <div className="flex min-w-0 items-center gap-2 px-0.5 md:col-span-2">
+            <div className="flex min-w-0 items-center gap-2 px-0.5">
               <Checkbox
                 checked={allSelected ? true : someSelected ? "indeterminate" : false}
                 onCheckedChange={(v) => onToggleSelectAll(v === true)}
@@ -2781,7 +2781,7 @@ function StudentsDirectoryTable({
             </div>
           )}
           {students.length === 0 && (
-            <div className={cn(directoryEmptyClass, "md:col-span-2")}>
+            <div className={directoryEmptyClass}>
               No students enrolled for this academic year.
             </div>
           )}
@@ -2845,8 +2845,8 @@ function StudentsDirectoryTable({
                   <span className={directoryMintChipClass}>{student.cls}</span>
                 </div>
 
-                <div className="flex min-w-0 items-center justify-between gap-2 border-t border-[#F0F0F0] pt-2 dark:border-white/10 sm:pt-2.5">
-                  <div className="min-w-0 flex-1 overflow-hidden">
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-t border-[#F0F0F0] pt-2 dark:border-white/10 sm:pt-2.5">
+                  <div className="min-w-0 flex-1 basis-32 overflow-hidden">
                     <div className="truncate text-[11.5px] font-medium text-black/75 dark:text-zinc-300 sm:text-[12px]">
                       {student.guardian}
                     </div>
@@ -4827,7 +4827,7 @@ export function StudentsLedger() {
               </h1>
             </div>
           ) : (
-            <h1 className="min-w-0 shrink text-[16px] font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50 md:text-[24px] md:font-semibold lg:text-[28px]">
+            <h1 className="min-w-0 truncate text-[16px] font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50 md:text-[24px] md:font-semibold lg:text-[28px]">
               Students Directory
             </h1>
           )}
@@ -4941,9 +4941,9 @@ export function StudentsLedger() {
                 <DropdownMenuTrigger asChild>
                   <button type="button" className={directoryToolbarBtn} disabled={importing}>
                     <ArrowUpFromLine className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate sm:hidden">Data</span>
-                    <span className="hidden truncate sm:inline">Import / Export</span>
-                    <ChevronDown className="hidden h-3.5 w-3.5 shrink-0 opacity-50 sm:inline" />
+                    <span className="truncate xl:hidden">Data</span>
+                    <span className="hidden truncate xl:inline">Import / Export</span>
+                    <ChevronDown className="hidden h-3.5 w-3.5 shrink-0 opacity-50 xl:inline" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
@@ -6763,9 +6763,9 @@ export function StaffRoster() {
                 <DropdownMenuTrigger asChild>
                   <button type="button" className={directoryToolbarBtn} disabled={importingStaff}>
                     <ArrowUpFromLine className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate sm:hidden">Data</span>
-                    <span className="hidden truncate sm:inline">Import / Export</span>
-                    <ChevronDown className="hidden h-3.5 w-3.5 shrink-0 opacity-50 sm:inline" />
+                    <span className="truncate xl:hidden">Data</span>
+                    <span className="hidden truncate xl:inline">Import / Export</span>
+                    <ChevronDown className="hidden h-3.5 w-3.5 shrink-0 opacity-50 xl:inline" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
@@ -7000,7 +7000,7 @@ export function StaffRoster() {
 
           <div className={cn(directoryMobileListClass, "lg:hidden")}>
             {filteredStaff.length > 0 && (
-              <div className="flex items-center gap-2 px-0.5 md:col-span-2">
+              <div className="flex items-center gap-2 px-0.5">
                 <Checkbox
                   checked={allStaffSelected ? true : someStaffSelected ? "indeterminate" : false}
                   onCheckedChange={(v) => toggleStaffSelectAll(v === true)}
@@ -7016,7 +7016,7 @@ export function StaffRoster() {
               </div>
             )}
             {filteredStaff.length === 0 && (
-              <div className={cn(directoryEmptyClass, "md:col-span-2")}>
+              <div className={directoryEmptyClass}>
                 No staff records match the current filters.
               </div>
             )}
@@ -16674,6 +16674,7 @@ export function SchoolSettings() {
           tenantId={session?.tenantId}
           tenantName={schoolDetails.name || session?.tenantName || "School"}
           schoolHost={typeof window !== "undefined" ? window.location.hostname : undefined}
+          returnOrderId={search.orderId}
         />
       )}
     </>
@@ -18173,13 +18174,15 @@ function ClassesCard({
           <Trash2 className="h-3.5 w-3.5" />
         </button>
       ) : (
-        <span
-          className="grid h-9 w-9 place-items-center rounded-full border border-[#E5E5E5] bg-[#F8F8F9] text-black/30 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-600 lg:h-8 lg:w-8"
-          title={`Cannot delete while ${blockedByStudents} student${blockedByStudents === 1 ? "" : "s"} are enrolled`}
+        <button
+          type="button"
+          onClick={() => requestDelete(c)}
           aria-label={`${className} cannot be deleted while ${blockedByStudents} students are enrolled`}
+          title={`${blockedByStudents} student${blockedByStudents === 1 ? "" : "s"} enrolled · move them before deleting`}
+          className="grid h-9 w-9 place-items-center rounded-full border border-[#FECACA] bg-[#FEF2F2] text-[#EF4444] transition-colors hover:border-[#F87171] hover:bg-[#FEE2E2] lg:h-8 lg:w-8"
         >
           <Trash2 className="h-3.5 w-3.5" />
-        </span>
+        </button>
       )}
     </div>
   );

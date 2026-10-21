@@ -1,3 +1,4 @@
+import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
@@ -35,7 +36,7 @@ import {
   startSubscriptionCheckout,
   type TenantSubscription,
 } from "@/lib/api/subscription";
-import { openCashfreeCheckout } from "@/lib/cashfree-checkout";
+import { checkoutReturnUrl, openCashfreeCheckout } from "@/lib/cashfree-checkout";
 import type { PlatformInvoice } from "@/lib/api/super-admin";
 import { PLAN_FEATURE_ITEMS } from "@/lib/permissions";
 import { formatMoney } from "@/lib/money";
@@ -49,6 +50,7 @@ type TenantSubscriptionPanelProps = {
   tenantName: string;
   tenantId?: string;
   schoolHost?: string;
+  returnOrderId?: string;
 };
 
 function autoRenewStorageKey(tenantId?: string): string {
@@ -209,7 +211,9 @@ export function TenantSubscriptionPanel({
   tenantName,
   tenantId,
   schoolHost,
+  returnOrderId,
 }: TenantSubscriptionPanelProps) {
+  const navigate = useNavigate();
   const [data, setData] = useState<TenantSubscription | null>(null);
   const [loading, setLoading] = useState(true);
   const [autoRenew, setAutoRenew] = useState(() => readAutoRenew(tenantId));
@@ -239,6 +243,34 @@ export function TenantSubscriptionPanel({
   useEffect(() => {
     void load();
   }, [load]);
+
+  const confirmedReturn = useRef("");
+  useEffect(() => {
+    if (!returnOrderId || confirmedReturn.current === returnOrderId) return;
+    confirmedReturn.current = returnOrderId;
+    void (async () => {
+      try {
+        const paid = await confirmSubscriptionCheckout(returnOrderId);
+        toast.success("Plan renewed", {
+          description: paid.receiptNumber
+            ? `Receipt ${paid.receiptNumber}. Next due ${paid.nextDueDate}.`
+            : "Cashfree confirmed this invoice.",
+        });
+        await load();
+      } catch (err) {
+        const pending = err instanceof ApiError && err.status === 409;
+        toast.error(pending ? "Payment is still processing" : "Could not confirm the payment", {
+          description: err instanceof ApiError ? err.message : "Refresh this page in a moment.",
+        });
+      } finally {
+        void navigate({
+          to: "/tenant/settings",
+          search: { tab: "subscription" },
+          replace: true,
+        });
+      }
+    })();
+  }, [returnOrderId, load, navigate]);
 
   useEffect(() => {
     setAutoRenew(readAutoRenew(tenantId));
@@ -329,7 +361,11 @@ export function TenantSubscriptionPanel({
       try {
         const order = await startSubscriptionCheckout(selectedCycle);
         orderId = order.orderId;
-        const outcome = await openCashfreeCheckout(order.paymentSessionId);
+        setRenewOpen(false);
+        const outcome = await openCashfreeCheckout(
+          order.paymentSessionId,
+          checkoutReturnUrl("/tenant/settings?tab=subscription", order.orderId),
+        );
         if (outcome === "closed") {
           await releaseSubscriptionCheckout(order.orderId);
           toast.error("Payment was not completed");

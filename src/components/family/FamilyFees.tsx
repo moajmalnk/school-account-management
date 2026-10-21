@@ -12,7 +12,7 @@ import {
   type FeeLine,
 } from "@/lib/api/family";
 import { ApiError } from "@/lib/api/client";
-import { openCashfreeCheckout } from "@/lib/cashfree-checkout";
+import { checkoutReturnUrl, openCashfreeCheckout } from "@/lib/cashfree-checkout";
 import { useFamily } from "@/lib/family-session";
 import { cn } from "@/lib/utils";
 
@@ -55,6 +55,30 @@ export function FamilyFees() {
   useEffect(() => {
     if (!student) return;
     load(student.id);
+  }, [student]);
+
+  const settledReturn = useRef("");
+  useEffect(() => {
+    const orderId = new URLSearchParams(window.location.search).get("order_id")?.trim() ?? "";
+    if (!/^[A-Za-z0-9_-]{4,50}$/.test(orderId) || settledReturn.current === orderId) return;
+    settledReturn.current = orderId;
+    void (async () => {
+      try {
+        const receipt = await familyFeeVerify({ provider: "cashfree", orderId });
+        toast.success(`Paid. Receipt ${receipt.receiptId}`);
+        if (student) load(student.id);
+      } catch (err) {
+        const pending = err instanceof ApiError && err.status === 409;
+        toast.error(pending ? "Payment is still processing" : "Could not confirm the payment", {
+          description: err instanceof ApiError ? err.message : "Refresh this page in a moment.",
+        });
+      } finally {
+        const params = new URLSearchParams(window.location.search);
+        params.delete("order_id");
+        const next = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
+        window.history.replaceState({}, "", next);
+      }
+    })();
   }, [student]);
 
   const lines = data?.lines ?? [];
@@ -100,7 +124,10 @@ export function FamilyFees() {
     try {
       const order = await familyFeeOrder(student.id, selected);
       orderId = order.orderId;
-      const outcome = await openCashfreeCheckout(order.paymentSessionId);
+      const outcome = await openCashfreeCheckout(
+        order.paymentSessionId,
+        checkoutReturnUrl("/family/fees", order.orderId),
+      );
       if (outcome === "closed") {
         await familyFeeRelease(order.orderId);
         finishFailed("Payment was not completed");
