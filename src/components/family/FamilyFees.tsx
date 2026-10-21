@@ -1,15 +1,9 @@
-import { Check, ChevronDown, Loader2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { CalendarDays, Check, FileText, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { FamilyCard, FamilyHeader, FamilySkeleton } from "@/components/family/FamilyChrome";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   familyFeeOrder,
   familyFeeRelease,
@@ -47,7 +41,8 @@ function money(amount: number, currency: string) {
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: currency || "INR",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(amount);
 }
 
@@ -75,7 +70,6 @@ function loadScript(src: string, ready: () => boolean) {
 export function FamilyFees() {
   const { student, profile } = useFamily();
   const [tab, setTab] = useState<"due" | "paid" | "receipts">("due");
-  const [category, setCategory] = useState("all");
   const [data, setData] = useState<Awaited<ReturnType<typeof familyFees>> | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -94,10 +88,7 @@ export function FamilyFees() {
     load(student.id);
   }, [student]);
 
-  const lines = useMemo(() => {
-    const all = data?.lines ?? [];
-    return all.filter((line) => category === "all" || line.category === category);
-  }, [data, category]);
+  const lines = data?.lines ?? [];
 
   const visible = lines.filter((line) => {
     if (tab === "due") return line.balance > 0 && line.status !== "On Break";
@@ -205,68 +196,46 @@ export function FamilyFees() {
     );
   }
 
-  const typeOptions = [{ value: "all", label: "All types" }, ...data.categories.map((item) => ({ value: item.slug, label: item.label }))];
-  const typeLabel = typeOptions.find((option) => option.value === category)?.label ?? "All types";
+  const groups: { label: string; lines: FeeLine[] }[] = [];
+  for (const line of visible) {
+    const label = line.categoryLabel || "Fees";
+    const group = groups.find((item) => item.label === label);
+    if (group) group.lines.push(line);
+    else groups.push({ label, lines: [line] });
+  }
 
   return (
-    <div className="flex h-[calc(100dvh-7.75rem)] min-h-0 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <FamilyHeader showBell={false} />
-      <div className="shrink-0 space-y-4 px-4 pb-3">
+      <div className="shrink-0 space-y-3 px-4 pb-3">
         <div>
-          <div className="flex items-center justify-between gap-3">
-            <h1 className="text-lg font-semibold">Fees</h1>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="Fee type"
-                  className="group inline-flex h-9 max-w-[11rem] items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm dark:border-white/10 dark:bg-zinc-900"
-                >
-                  <span className="truncate">{typeLabel}</span>
-                  <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-data-[state=open]:rotate-180" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="z-50 min-w-[11rem] rounded-2xl p-1.5">
-                {typeOptions.map((option) => (
-                  <DropdownMenuItem
-                    key={option.value}
-                    className={cn("gap-2 rounded-xl", category === option.value && "bg-[#F0FDFA] dark:bg-teal-950")}
-                    onSelect={() => setCategory(option.value)}
-                  >
-                    <span className="min-w-0 flex-1 truncate">{option.label}</span>
-                    {category === option.value ? <Check className="h-4 w-4 text-[#0F766E]" /> : <span className="h-4 w-4" />}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-          <p className="mt-1 text-xs text-slate-500">
-            {data.payEnabled
-              ? data.payProvider === "easebuzz"
-                ? "Pay the selected dues by card, UPI, or net banking."
-                : "Pay the selected dues online."
-              : "Select what is due. Online payment opens once the school turns it on."}
+          <h1 className="text-lg font-semibold">Fee installments</h1>
+          <p className="mt-0.5 text-xs text-slate-500">
+            {data.payProvider === "easebuzz" || !data.payEnabled
+              ? "Pay online securely via Easebuzz"
+              : "Pay online securely"}
           </p>
         </div>
-        {tab === "due" && nextDue ? (
-          <div className="inline-flex items-center rounded-xl bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">
-            Next due {dueLabel(nextDue)}
+        {tab === "due" && visible.length > 0 ? (
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-[#FFF1E6] px-3 py-1.5 text-xs font-semibold text-[#E07A2F] dark:bg-orange-950 dark:text-orange-200">
+            <CalendarDays className="h-3.5 w-3.5" />
+            Next due: {nextDue ? dueLabel(nextDue) : "Due now"}
           </div>
         ) : null}
-        <div className="grid grid-cols-3 gap-2">
+        <div className="flex gap-2">
           {(["due", "paid", "receipts"] as const).map((item) => (
             <button
               key={item}
               type="button"
               onClick={() => setTab(item)}
               className={cn(
-                "rounded-xl border px-2 py-2 text-xs font-medium capitalize",
+                "rounded-full px-4 py-2 text-xs font-semibold",
                 tab === item
-                  ? "border-[#0F766E] bg-teal-50 text-[#0F766E] dark:bg-teal-950"
-                  : "border-slate-200 bg-white dark:border-white/10 dark:bg-zinc-900",
+                  ? "bg-[#0F766E] text-white"
+                  : "bg-white text-slate-600 dark:bg-zinc-900 dark:text-zinc-300",
               )}
             >
-              {item === "due" ? "Due fees" : item === "paid" ? "Paid fees" : "Receipts"}
+              {item === "due" ? "Due Fees" : item === "paid" ? "Paid Fees" : "Receipts Fees"}
             </button>
           ))}
         </div>
@@ -295,66 +264,73 @@ export function FamilyFees() {
             <p className="text-sm text-slate-500">{tab === "due" ? "Nothing is due." : "No paid fees in this view."}</p>
           </FamilyCard>
         ) : (
-          visible.map((line) => {
-            const on = selected.includes(line.key);
-            const overdue = line.status === "Overdue";
-            return (
-              <button
-                key={line.key}
-                type="button"
-                disabled={tab === "due" && !line.selectable}
-                onClick={() => toggle(line)}
-                className={cn(
-                  "w-full rounded-2xl border bg-white p-4 text-left dark:bg-zinc-900",
-                  on ? "border-[#0F766E]" : "border-slate-200 dark:border-white/10",
-                  tab === "due" && !line.selectable && "opacity-70",
-                )}
-              >
-                <span className="flex items-start justify-between gap-3">
-                  <span className="min-w-0">
-                    <span className="block text-sm font-medium">{line.label}</span>
-                    <span className="mt-0.5 block text-xs text-slate-500">
-                      {[student.cls, data.academicYear].filter(Boolean).join(" · ")}
-                      {line.locked ? " · Payment in progress" : ""}
+          groups.map((group) => (
+            <section key={group.label} className="space-y-3">
+              <h2 className="text-sm font-semibold">{group.label}</h2>
+              {group.lines.map((line) => {
+                const on = selected.includes(line.key);
+                return (
+                  <button
+                    key={line.key}
+                    type="button"
+                    disabled={tab === "due" && !line.selectable}
+                    onClick={() => toggle(line)}
+                    className={cn(
+                      "w-full rounded-[22px] p-4 text-left",
+                      on ? "bg-[#F0FDFA] dark:bg-teal-950" : "bg-[#F8E6D4] dark:bg-orange-950/50",
+                      tab === "due" && !line.selectable && "opacity-70",
+                    )}
+                  >
+                    <span className="flex items-start gap-3">
+                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-slate-500 dark:bg-zinc-900 dark:text-zinc-300">
+                        <FileText className="h-4 w-4" />
+                      </span>
+                      <span className="min-w-0 flex-1 pt-0.5">
+                        <span className="block text-sm font-semibold">{line.label}</span>
+                        <span className="mt-0.5 block text-xs text-slate-500 dark:text-zinc-400">
+                          {[student.cls, data.academicYear].filter(Boolean).join(" · ")}
+                          {line.locked ? " · Payment in progress" : ""}
+                        </span>
+                      </span>
+                      {tab === "due" ? (
+                        <span
+                          className={cn(
+                            "mt-1 grid h-6 w-6 shrink-0 place-items-center rounded-full border-2",
+                            on ? "border-[#0F766E] bg-[#0F766E] text-white" : "border-slate-300 bg-white/70 dark:border-zinc-500 dark:bg-transparent",
+                          )}
+                        >
+                          {on ? <Check className="h-3.5 w-3.5" /> : null}
+                        </span>
+                      ) : null}
                     </span>
-                  </span>
-                  {tab === "due" ? (
-                    <span
-                      className={cn(
-                        "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border",
-                        on ? "border-[#0F766E] bg-[#0F766E] text-white" : "border-slate-300",
-                      )}
-                    >
-                      {on ? <Check className="h-3.5 w-3.5" /> : null}
+                    <span className="mt-4 flex items-end justify-between gap-3 pl-[3.25rem]">
+                      <span>
+                        <span className="block text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                          {tab === "due" ? "Due date" : "Status"}
+                        </span>
+                        <span className={cn("mt-0.5 block text-sm font-semibold", tab === "due" && "text-[#E11D48]")}>
+                          {tab === "due" ? dueLabel(line.dueDate) : line.status}
+                        </span>
+                      </span>
+                      <span className="text-right">
+                        <span className="block text-[10px] font-medium uppercase tracking-wide text-slate-400">Amount</span>
+                        <span className="mt-0.5 block text-sm font-semibold">
+                          {money(tab === "due" ? line.balance : line.paid, data.currency)}
+                        </span>
+                      </span>
                     </span>
-                  ) : null}
-                </span>
-                <span className="mt-4 flex items-end justify-between gap-3">
-                  <span>
-                    <span className="block text-[10px] font-medium uppercase tracking-wide text-slate-400">
-                      {tab === "due" ? "Due date" : "Status"}
-                    </span>
-                    <span className={cn("mt-0.5 block text-sm font-semibold", overdue && "text-rose-600")}>
-                      {tab === "due" ? dueLabel(line.dueDate) : line.status}
-                    </span>
-                  </span>
-                  <span className="text-right">
-                    <span className="block text-[10px] font-medium uppercase tracking-wide text-slate-400">Amount</span>
-                    <span className="mt-0.5 block text-sm font-semibold">
-                      {money(tab === "due" ? line.balance : line.paid, data.currency)}
-                    </span>
-                  </span>
-                </span>
-              </button>
-            );
-          })
+                  </button>
+                );
+              })}
+            </section>
+          ))
         )}
       </div>
       {tab === "due" && selected.length > 0 ? (
-        <div className="mx-4 mb-3 shrink-0 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-xl dark:border-white/10 dark:bg-zinc-900">
+        <div className="mx-4 mb-3 shrink-0 rounded-[22px] bg-white px-4 py-3 shadow-xl dark:bg-zinc-900">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-[11px] font-medium tracking-wide text-slate-500">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                 {selected.length} selected
               </p>
               <p className="text-lg font-semibold">{money(total, data.currency)}</p>
@@ -363,7 +339,7 @@ export function FamilyFees() {
               type="button"
               disabled={busy || !data.payEnabled}
               onClick={() => void pay()}
-              className="rounded-xl bg-[#0F766E] text-white hover:bg-[#115E59]"
+              className="rounded-full bg-[#0F766E] px-5 text-white hover:bg-[#115E59]"
             >
               {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Pay now
