@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   AlertTriangle,
@@ -40,7 +40,7 @@ import { MonthPicker, DatePicker } from "@/components/ui/date-picker";
 import { FinanceBarCard, FinanceDonutCard } from "@/components/school/finance-charts";
 import { OrganicCard } from "@/components/ui/organic-card";
 import { WhatsAppIcon, whatsappIconBtnClass } from "@/components/ui/whatsapp-icon";
-import { buildClassFeeSheet, feeSheetCatalog } from "@/lib/class-fee-sheet";
+import { buildClassFeeSheet, countFeeSheetPayments, feeSheetCatalog } from "@/lib/class-fee-sheet";
 import { openWhatsAppShare } from "@/lib/whatsapp-notify";
 import {
   bankBalance,
@@ -1884,6 +1884,30 @@ export function FeesReport() {
     [classes, sheetStudents, activeFeeTerms],
   );
 
+  const paymentCounts = useCallback(
+    (columns: Parameters<typeof countFeeSheetPayments>[0]["columns"]) =>
+      countFeeSheetPayments({
+        students: sheetStudents,
+        columns,
+        payments,
+        classes,
+        feeTerms: activeFeeTerms,
+        transportRoutes,
+        academicYear,
+        feeBreaks: studentFeeBreaks,
+        fullBalance: columns.length === 0,
+      }),
+    [
+      sheetStudents,
+      payments,
+      classes,
+      activeFeeTerms,
+      transportRoutes,
+      academicYear,
+      studentFeeBreaks,
+    ],
+  );
+
   const runClassSheetExport = (format: FeesExportFormat, choice: FeesExportChoice) => {
     if (!sheetStudents.length) {
       toast.error("Nothing to export · no students in this class filter");
@@ -1901,7 +1925,20 @@ export function FeesReport() {
       academicYear,
       feeBreaks: studentFeeBreaks,
       fullBalance: !detailed,
+      paymentStatus: choice.paymentStatus,
     });
+    if (!rows.length) {
+      toast.error("Nothing to export · no students match this payment status");
+      return;
+    }
+    const paymentLabel =
+      choice.paymentStatus === "paid"
+        ? "Paid"
+        : choice.paymentStatus === "partial"
+          ? "Partially paid"
+          : choice.paymentStatus === "unpaid"
+            ? "Not paid"
+            : "All students";
     const scope =
       choice.mode === "full"
         ? "Full schedule"
@@ -1938,14 +1975,14 @@ export function FeesReport() {
 
     if (format === "csv") {
       downloadCsv(filename, headers, sheetRows);
-      toast.success("Class fee sheet exported", { description: scope });
+      toast.success("Class fee sheet exported", { description: `${paymentLabel} · ${scope}` });
       return;
     }
 
     downloadTablePdf({
       filename,
       title: "Class fee sheet",
-      subtitle: `${schoolName} · ${academicYear} · ${classLabelForExport(duesClass)} · ${scope}${
+      subtitle: `${schoolName} · ${academicYear} · ${classLabelForExport(duesClass)} · ${paymentLabel} · ${scope}${
         detailed ? ` · Amounts in ${pdfCurrencyPrefix()}` : ""
       }`,
       headers: pdfHeaders,
@@ -1970,6 +2007,7 @@ export function FeesReport() {
         heads={feeColumns.heads}
         studentCount={sheetStudents.length}
         classLabel={classLabelForExport(duesClass)}
+        paymentCounts={paymentCounts}
         onOpenChange={(next) => {
           if (!next) setExportFormat(null);
         }}

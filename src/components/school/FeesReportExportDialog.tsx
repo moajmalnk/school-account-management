@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { FeeSheetColumn } from "@/lib/class-fee-sheet";
+import type { FeeSheetColumn, FeeSheetPaymentCounts, FeeSheetPaymentFilter } from "@/lib/class-fee-sheet";
 import { cn } from "@/lib/utils";
 
 export type FeesExportFormat = "csv" | "pdf" | "print";
@@ -18,7 +18,15 @@ export type FeesExportFormat = "csv" | "pdf" | "print";
 export type FeesExportChoice = {
   mode: "full" | "selected";
   columns: FeeSheetColumn[];
+  paymentStatus: FeeSheetPaymentFilter;
 };
+
+const PAYMENT_OPTIONS: { id: FeeSheetPaymentFilter; title: string; hint: string }[] = [
+  { id: "all", title: "All", hint: "Every student" },
+  { id: "paid", title: "Paid", hint: "Nothing left on this sheet" },
+  { id: "partial", title: "Partially paid", hint: "Some amount received" },
+  { id: "unpaid", title: "Not paid", hint: "No payment yet" },
+];
 
 const FORMAT_LABEL: Record<FeesExportFormat, string> = {
   csv: "Export CSV",
@@ -33,6 +41,7 @@ export function FeesReportExportDialog({
   heads,
   studentCount,
   classLabel,
+  paymentCounts,
   onOpenChange,
   onConfirm,
 }: {
@@ -42,15 +51,18 @@ export function FeesReportExportDialog({
   heads: FeeSheetColumn[];
   studentCount: number;
   classLabel: string;
+  paymentCounts: (columns: FeeSheetColumn[]) => FeeSheetPaymentCounts;
   onOpenChange: (open: boolean) => void;
   onConfirm: (choice: FeesExportChoice) => void;
 }) {
   const [mode, setMode] = useState<"full" | "selected">("full");
+  const [paymentStatus, setPaymentStatus] = useState<FeeSheetPaymentFilter>("all");
   const [picked, setPicked] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     if (!open) return;
     setMode("full");
+    setPaymentStatus("all");
     setPicked(new Set([...terms, ...heads].map((column) => column.key)));
   }, [open, terms, heads]);
 
@@ -80,7 +92,14 @@ export function FeesReportExportDialog({
     });
   };
 
-  const canExport = mode === "full" || selectedColumns.length > 0;
+  const counts = useMemo(() => {
+    if (!open) {
+      return { all: studentCount, paid: 0, partial: 0, unpaid: 0 };
+    }
+    return paymentCounts(selectedColumns);
+  }, [open, paymentCounts, selectedColumns, studentCount]);
+  const matchedStudents = counts[paymentStatus];
+  const canExport = (mode === "full" || selectedColumns.length > 0) && matchedStudents > 0;
   const action = format ? FORMAT_LABEL[format] : "Export";
 
   return (
@@ -91,12 +110,52 @@ export function FeesReportExportDialog({
             {action === "Print PDF" ? "Print class fee sheet" : "Export class fee sheet"}
           </DialogTitle>
           <DialogDescription className="text-[13px] leading-relaxed text-black/60">
-            {studentCount} student{studentCount === 1 ? "" : "s"} · {classLabel}. Choose the full
-            schedule, or only the terms and fee heads this file should include.
+            {studentCount} student{studentCount === 1 ? "" : "s"} · {classLabel}. Choose who to
+            include, then the full schedule or only the terms and fee heads this file should include.
           </DialogDescription>
         </DialogHeader>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+          <div>
+            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-black/45">
+              Payment status
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {PAYMENT_OPTIONS.map((option) => {
+                const selected = paymentStatus === option.id;
+                const count = counts[option.id];
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setPaymentStatus(option.id)}
+                    className={cn(
+                      "rounded-xl border px-3 py-2.5 text-left transition",
+                      selected
+                        ? "border-transparent bg-[#0F766E] text-white shadow-sm"
+                        : "border-[#E5E5E5] bg-white text-black/70 hover:border-black/30",
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[13px] font-semibold">{option.title}</span>
+                      <span
+                        className={cn(
+                          "text-[11px] font-semibold tabular-nums",
+                          selected ? "text-white/80" : "text-black/40",
+                        )}
+                      >
+                        {count}
+                      </span>
+                    </div>
+                    <div className={cn("mt-0.5 text-[11px]", selected ? "text-white/80" : "text-black/45")}>
+                      {option.hint}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-2">
             {(
               [
@@ -180,7 +239,7 @@ export function FeesReportExportDialog({
             type="button"
             disabled={!canExport || !format}
             className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
-            onClick={() => onConfirm({ mode, columns: selectedColumns })}
+            onClick={() => onConfirm({ mode, columns: selectedColumns, paymentStatus })}
           >
             {action}
           </Button>
