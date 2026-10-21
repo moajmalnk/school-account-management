@@ -15,10 +15,13 @@ export const BRAND = {
     /** wa.me expects digits only, no + */
     whatsappNumber: "917736483502",
     location: "Malappuram, Kerala",
+    registeredAddress:
+      "Building No. 15-566/G, Kuzhimanna, Melekeezhisseri, Malappuram, Kerala - 673641",
     country: "India",
     hours: "Mon – Sat · 9:30 AM – 6:30 PM IST",
     responseTime: "Replies within 1 business day",
-    mapQuery: "Malappuram, Kerala, India",
+    mapQuery:
+      "Building No. 15-566/G, Kuzhimanna, Melekeezhisseri, Malappuram, Kerala 673641",
   },
   legal: {
     termsPath: "/terms",
@@ -30,5 +33,8 @@ export const BRAND = {
     refundPolicyUrl: "https://www.feezo.app/refund-policy",
     dataDeletionUrl: "https://www.feezo.app/data-deletion",
     supportEmail: "support@feezo.app",
+    operator: "MAC ADZ",
+    operatorNotice:
+      "Feezo (feezo.app) is a proprietary software platform owned and operated by MAC ADZ. All payment processing, merchant billing, and settlements are managed under MAC ADZ.",
   },
 } as const;

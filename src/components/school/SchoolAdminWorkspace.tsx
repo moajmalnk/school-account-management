@@ -162,12 +162,14 @@ import {
 } from "@/components/school/FinancialYearFields";
 import { SignaturePadDialog } from "@/components/school/SignaturePadDialog";
 import { BankAccountsManager } from "@/components/school/BankAccountsManager";
+import { AcademicsWorkspace } from "@/components/school/AcademicsWorkspace";
 import { OrgCurrencyCard } from "@/components/school/OrgCurrencyCard";
 import { OrgLanguageCard } from "@/components/school/OrgLanguageCard";
 import { ReceiptPrintLayoutCard } from "@/components/school/ReceiptPrintLayoutCard";
 import { OrganicCard } from "@/components/ui/organic-card";
 import { ImageCropDialog } from "@/components/ui/image-crop-dialog";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
+import { SchoolLogo } from "@/components/ui/school-logo";
 import {
   academicYearCoverageCaption,
   booksRangeKeysFromLabel,
@@ -254,6 +256,7 @@ import {
   type StaffAttendanceMonth,
   type Student,
   type StudentYearLedger,
+  withStudentStatusChange,
   type ThemeSettings,
   type TransportRoute,
   type TransportVehicle,
@@ -264,6 +267,7 @@ import {
 } from "@/lib/tenant-store";
 import { classSelectOptions } from "@/lib/class-options";
 import { StudentProfileDetail } from "@/components/school/StudentProfileDetail";
+import { AcademicPromotionDialog } from "@/components/school/AcademicPromotionDialog";
 import {
   StudentConcessionSection,
   emptyConcessionState,
@@ -280,6 +284,7 @@ import {
   concessionOtherFeePrefillAmount,
   concessionVehiclePrefillAmount,
   isConcessionTierEnabled,
+  isFullConcessionTier,
   resolveConcessionOtherFees,
   resolveConcessionTuitionClassConfig,
   studentHasConcession,
@@ -317,6 +322,7 @@ import {
   validateFeeCategorySchedule,
 } from "@/lib/payment-category-create";
 import { FeeCategoriesCard } from "@/components/school/FeeCategoriesCard";
+import { ParentPayCard } from "@/components/school/ParentPayCard";
 import { DocumentNumbersPanel } from "@/components/school/DocumentNumbersPanel";
 import { WhatsAppMessageComposer } from "@/components/school/WhatsAppMessageComposer";
 import { WhatsAppMessagesCard } from "@/components/school/WhatsAppMessagesCard";
@@ -356,6 +362,7 @@ import {
   VEHICLES_TIP,
 } from "@/lib/help/settings-tips";
 import { CustomerSupportCard } from "@/components/school/CustomerSupportCard";
+import { TenantSubscriptionPanel } from "@/components/school/TenantSubscriptionPanel";
 import { DefaultSchoolSeal } from "@/components/school/DefaultSchoolSeal";
 import {
   BRAND_PRESETS,
@@ -427,6 +434,10 @@ import {
   ProfitLossReport,
   SalaryReport,
 } from "@/components/school/FinanceReports";
+import { CashFlowReport } from "@/components/school/finance/CashFlowReport";
+import { FeeAgingReport } from "@/components/school/finance/FeeAgingReport";
+import { FeeHeadReport } from "@/components/school/finance/FeeHeadReport";
+import { VehicleFeesReport } from "@/components/school/finance/VehicleFeesReport";
 import {
   GlAccountStatementReport,
   type GlStatementVoucher,
@@ -591,6 +602,7 @@ import {
   filterPaymentsByPeriod,
   PAYMENT_PERIOD_OPTIONS,
   type CustomDateRange,
+  type DatedAmount,
   type PaymentPeriod,
 } from "@/lib/payment-period";
 import { numberToWords } from "@/lib/amount-words";
@@ -1067,6 +1079,7 @@ type PremiumDashboardProps = {
   periodReceiptCount: number;
   periodExpenseCount: number;
   periodPayments: Payment[];
+  periodExpenses: DatedAmount[];
   totalDue: number;
   outstandingStudentCount: number;
   feePaidCount: number;
@@ -1346,6 +1359,7 @@ function PremiumDashboard({
   periodReceiptCount,
   periodExpenseCount,
   periodPayments,
+  periodExpenses,
   totalDue,
   outstandingStudentCount,
   feePaidCount,
@@ -1399,8 +1413,16 @@ function PremiumDashboard({
   }, [liveStudents.length]);
 
   const incomeExpenseWeeks = useMemo(
-    () => buildIncomeExpenseSeries(periodPayments, expenseTotal, period, customRange),
-    [periodPayments, expenseTotal, period, customRange],
+    () =>
+      buildIncomeExpenseSeries(
+        periodPayments,
+        expenseTotal,
+        period,
+        customRange,
+        new Date(),
+        periodExpenses,
+      ),
+    [periodPayments, expenseTotal, period, customRange, periodExpenses],
   );
 
   const newAdmissions = liveStudents.length;
@@ -1796,27 +1818,37 @@ function PremiumDashboard({
               {periodLabel}
             </span>
           </div>
-          <ChartContainer config={incomeExpenseChartConfig} className="mt-4 h-[160px] w-full">
-            <AreaChart data={incomeExpenseWeeks} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="expenseFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#EF4444" stopOpacity={0.35} />
-                  <stop offset="100%" stopColor="#EF4444" stopOpacity={0.02} />
-                </linearGradient>
-                <linearGradient id="incomeFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#10B981" stopOpacity={0.28} />
-                  <stop offset="100%" stopColor="#10B981" stopOpacity={0.02} />
-                </linearGradient>
-              </defs>
+          <div className="mt-3 flex items-center gap-4 text-[11px] font-medium text-slate-500 dark:text-zinc-400">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-[#10B981]" />
+              Income
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-[#EF4444]" />
+              Expense
+            </span>
+          </div>
+          <ChartContainer
+            config={incomeExpenseChartConfig}
+            className="mt-2 aspect-auto h-[168px] w-full min-w-0"
+          >
+            <BarChart
+              data={incomeExpenseWeeks}
+              margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+              barGap={6}
+              barCategoryGap="32%"
+            >
               <CartesianGrid vertical={false} strokeDasharray="4 4" stroke="rgba(15,23,42,0.06)" />
               <XAxis
                 dataKey="label"
                 tickLine={false}
                 axisLine={false}
                 tick={{ fontSize: 10, fill: "#64748B" }}
+                interval={incomeExpenseWeeks.length > 6 ? "preserveStartEnd" : 0}
               />
-              <YAxis hide />
+              <YAxis hide domain={[0, "dataMax"]} />
               <ChartTooltip
+                cursor={{ fill: "rgba(15,23,42,0.04)" }}
                 content={
                   <ChartTooltipContent
                     formatter={(value, name) => [
@@ -1826,21 +1858,21 @@ function PremiumDashboard({
                   />
                 }
               />
-              <Area
-                type="monotone"
-                dataKey="expense"
-                stroke="var(--color-expense)"
-                strokeWidth={2}
-                fill="url(#expenseFill)"
-              />
-              <Area
-                type="monotone"
+              <Bar
                 dataKey="income"
-                stroke="var(--color-income)"
-                strokeWidth={2}
-                fill="url(#incomeFill)"
+                fill="#10B981"
+                radius={[6, 6, 0, 0]}
+                maxBarSize={22}
+                minPointSize={(value) => (Number(value) > 0 ? 8 : 0)}
               />
-            </AreaChart>
+              <Bar
+                dataKey="expense"
+                fill="#EF4444"
+                radius={[6, 6, 0, 0]}
+                maxBarSize={22}
+                minPointSize={(value) => (Number(value) > 0 ? 8 : 0)}
+              />
+            </BarChart>
           </ChartContainer>
           <div className="mt-4">
             <IncomeExpenseSummaryTiles
@@ -2146,6 +2178,13 @@ export function SchoolDashboard() {
     () => operatingExpenseForPeriod(disbursements, period, customRange),
     [disbursements, period, customRange],
   );
+  const periodExpenseRows = useMemo(
+    () =>
+      filterDisbursementsByPeriod(disbursements, period, customRange)
+        .filter(isClearedDisbursement)
+        .map((row) => ({ time: row.time, amount: row.amount })),
+    [disbursements, period, customRange],
+  );
   const periodExpenseCount = useMemo(
     () =>
       filterDisbursementsByPeriod(disbursements, period, customRange).filter(isClearedDisbursement)
@@ -2193,6 +2232,7 @@ export function SchoolDashboard() {
         periodReceiptCount={filteredPayments.length}
         periodExpenseCount={periodExpenseCount}
         periodPayments={filteredPayments}
+        periodExpenses={periodExpenseRows}
         totalDue={totalDue}
         outstandingStudentCount={feeRoster.outstandingCount}
         feePaidCount={feeRoster.paidCount}
@@ -2417,7 +2457,7 @@ function FinanceFloatingPaymentActions({
   onTransfer: () => void;
 }) {
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-40 px-3 md:hidden">
+    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-40 px-2 md:hidden">
       <div
         role="tablist"
         aria-label="Payment actions"
@@ -2598,7 +2638,7 @@ function DirectoryRecycleBinList({
         )}
       </div>
 
-      <div className={directoryMobileListClass}>
+      <div className="grid w-full min-w-0 max-w-full grid-cols-1 gap-2.5">
         {items.map((item) => {
           const deletedLabel = item.deletedAt
             ? formatInAppZone(new Date(item.deletedAt), {
@@ -2616,7 +2656,7 @@ function DirectoryRecycleBinList({
                 isSelected && "ring-2 ring-[#0F766E]/25",
               )}
             >
-              <div className="flex min-w-0 items-center gap-3">
+              <div className="flex min-w-0 flex-1 items-center gap-3">
                 <Checkbox
                   checked={isSelected}
                   onCheckedChange={(v) => toggleOne(item.id, v === true)}
@@ -2624,19 +2664,19 @@ function DirectoryRecycleBinList({
                   className="shrink-0"
                 />
                 <DirectoryPersonAvatar name={item.name} photoUrl={item.photoUrl} />
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1 overflow-hidden">
                   <div className="truncate text-[14px] font-semibold leading-tight text-black dark:text-zinc-100">
                     {item.name}
                   </div>
                   <div className="mt-0.5 truncate font-mono text-[10.5px] text-black/45 dark:text-zinc-500">
                     {subtitleFor(item)}
                   </div>
-                  <div className="mt-1 text-[11px] text-black/40 dark:text-zinc-500">
+                  <div className="mt-1 truncate text-[11px] text-black/40 dark:text-zinc-500">
                     Deleted {deletedLabel}
                   </div>
                 </div>
               </div>
-              <div className="flex shrink-0 items-center gap-2 sm:justify-end">
+              <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
                 <button
                   type="button"
                   onClick={() => onRestore(item.id)}
@@ -3459,6 +3499,7 @@ export function StudentsLedger() {
   const [bulkWhatsAppMsg, setBulkWhatsAppMsg] = useState("");
   const [bulkWhatsAppSending, setBulkWhatsAppSending] = useState(false);
   const [bulkClassOpen, setBulkClassOpen] = useState(false);
+  const [promotionOpen, setPromotionOpen] = useState(false);
   const [bulkTargetClass, setBulkTargetClass] = useState("");
   const [bulkDeactivateOpen, setBulkDeactivateOpen] = useState(false);
   const [bulkDeactivateReason, setBulkDeactivateReason] = useState("");
@@ -3671,6 +3712,23 @@ export function StudentsLedger() {
     [filtered, selectedIds],
   );
 
+  const promotionStudents = useMemo(() => {
+    const inClass = directoryStudents.filter((student) =>
+      studentMatchesClassDivisionFilter(student.cls, gradeFilter, divisionFilter),
+    );
+    if (selectedIds.size === 0) return inClass;
+    return inClass.filter((student) => selectedIds.has(student.id));
+  }, [directoryStudents, gradeFilter, divisionFilter, selectedIds]);
+
+  const promotionScopeLabel =
+    selectedIds.size > 0
+      ? `${promotionStudents.length} selected student${promotionStudents.length === 1 ? "" : "s"}`
+      : gradeFilter === "all"
+        ? "all classes"
+        : divisionFilter === "all"
+          ? gradeFilter
+          : `${gradeFilter} · ${divisionFilter}`;
+
   const selectedWithPhone = useMemo(() => {
     return selectedStudents
       .map((s) => ({ student: s, number: toNotifyWhatsAppNumber(s.phone) }))
@@ -3853,17 +3911,7 @@ export function StudentsLedger() {
     const ids = selectedIds;
     const reasonTrim = reason?.trim();
     setStudents((prev) =>
-      prev.map((s) =>
-        ids.has(s.id)
-          ? {
-              ...s,
-              active: nextActive,
-              deactivationReason: nextActive
-                ? undefined
-                : reasonTrim || s.deactivationReason,
-            }
-          : s,
-      ),
+      prev.map((s) => (ids.has(s.id) ? withStudentStatusChange(s, nextActive, reasonTrim) : s)),
     );
     for (const id of ids) {
       const target = liveStudents.find((s) => s.id === id);
@@ -4073,7 +4121,7 @@ export function StudentsLedger() {
         });
         if (!result.ok) {
           toast.error("WhatsApp send failed", {
-            description: result.body.slice(0, 180) || `HTTP ${result.status}`,
+            description: result.error ?? `HTTP ${result.status}`,
           });
           return;
         }
@@ -4799,6 +4847,17 @@ export function StudentsLedger() {
               <span>Admit</span>
             </button>
           )}
+          {!showRecycleBin && (
+            <button
+              type="button"
+              onClick={() => setPromotionOpen(true)}
+              className={cn(directoryToolbarBtn, "text-slate-900")}
+              aria-label="Promote students to the next academic year"
+            >
+              <GraduationCap className="h-3.5 w-3.5 shrink-0" />
+              <span>Promote</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setShowRecycleBin((v) => !v)}
@@ -5314,6 +5373,17 @@ export function StudentsLedger() {
         </DialogContent>
       </Dialog>
 
+      <AcademicPromotionDialog
+        open={promotionOpen}
+        onOpenChange={setPromotionOpen}
+        sourceYear={academicYear}
+        students={promotionStudents}
+        scopeLabel={promotionScopeLabel}
+        startWithInactive={
+          selectedIds.size > 0 && promotionStudents.some((student) => student.active === false)
+        }
+      />
+
       <Dialog open={bulkWhatsAppOpen} onOpenChange={setBulkWhatsAppOpen}>
         <DialogContent className="flex max-h-[min(90dvh,760px)] w-[calc(100%-1.5rem)] max-w-2xl flex-col gap-0 overflow-hidden rounded-xl border border-[#E5E5E5] bg-white p-0 sm:max-w-2xl">
           <DialogHeader className="shrink-0 space-y-1.5 border-b border-[#F0F0F0] px-5 pb-4 pt-5 pr-12 text-left sm:px-6 sm:pt-6">
@@ -5819,7 +5889,7 @@ export function StaffRoster() {
       });
       if (!result.ok) {
         toast.error("WhatsApp send failed", {
-          description: result.body.slice(0, 180) || `HTTP ${result.status}`,
+          description: result.error ?? `HTTP ${result.status}`,
         });
         return;
       }
@@ -7506,7 +7576,11 @@ export function FinanceModule() {
     | "concession"
     | "salary"
     | "daybook"
-    | "reconciliation";
+    | "reconciliation"
+    | "cashflow"
+    | "vehicle"
+    | "aging"
+    | "heads";
 
   const { session } = useAuth();
   const navigate = useNavigate();
@@ -7536,6 +7610,10 @@ export function FinanceModule() {
       "salary",
       "daybook",
       "reconciliation",
+      "cashflow",
+      "vehicle",
+      "aging",
+      "heads",
     ];
     const next = fallbacks.find((v) => sessionCanAccessFinanceView(session, v));
     if (!next) {
@@ -7681,6 +7759,38 @@ export function FinanceModule() {
     return (
       <div className="w-full space-y-4 sm:space-y-5">
         <BankReconciliationReport />
+      </div>
+    );
+  }
+
+  if (view === "cashflow") {
+    return (
+      <div className="w-full space-y-4 sm:space-y-5">
+        <CashFlowReport />
+      </div>
+    );
+  }
+
+  if (view === "vehicle") {
+    return (
+      <div className="w-full space-y-4 sm:space-y-5">
+        <VehicleFeesReport />
+      </div>
+    );
+  }
+
+  if (view === "aging") {
+    return (
+      <div className="w-full space-y-4 sm:space-y-5">
+        <FeeAgingReport />
+      </div>
+    );
+  }
+
+  if (view === "heads") {
+    return (
+      <div className="w-full space-y-4 sm:space-y-5">
+        <FeeHeadReport />
       </div>
     );
   }
@@ -7872,6 +7982,64 @@ const FINANCE_REPORT_GROUPS = [
       },
     ],
   },
+  {
+    title: "Recovery & statements",
+    description: "Cash flow, transport fees, aging, and fee heads",
+    tiles: [
+      {
+        k: "cashflow" as const,
+        l: "Cash Flow",
+        d: "Operating, investing, financing",
+        icon: Banknote,
+        surface:
+          "border-lime-200/70 bg-gradient-to-br from-lime-50 via-white to-white hover:border-lime-300/80 dark:border-lime-500/25 dark:from-lime-500/[0.14] dark:via-zinc-900 dark:to-zinc-950 dark:hover:border-lime-400/35",
+        iconWrap:
+          "bg-gradient-to-br from-lime-500 to-green-600 text-white shadow-md shadow-lime-600/25 ring-1 ring-lime-400/40",
+        glow: "bg-lime-400/30",
+        arrowHover:
+          "group-hover:border-lime-300 group-hover:bg-lime-50 group-hover:text-lime-700 dark:group-hover:border-lime-500/40 dark:group-hover:bg-lime-500/10 dark:group-hover:text-lime-300",
+      },
+      {
+        k: "vehicle" as const,
+        l: "Vehicle Fees",
+        d: "Route collections, due & overdue",
+        icon: Bus,
+        surface:
+          "border-blue-200/60 bg-gradient-to-br from-blue-50 via-white to-white hover:border-blue-300/70 dark:border-blue-500/25 dark:from-blue-500/[0.14] dark:via-zinc-900 dark:to-zinc-950 dark:hover:border-blue-400/35",
+        iconWrap:
+          "bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md shadow-blue-500/25 ring-1 ring-blue-400/40",
+        glow: "bg-blue-400/30",
+        arrowHover:
+          "group-hover:border-blue-300 group-hover:bg-blue-50 group-hover:text-blue-700 dark:group-hover:border-blue-500/40 dark:group-hover:bg-blue-500/10 dark:group-hover:text-blue-300",
+      },
+      {
+        k: "aging" as const,
+        l: "Fee Aging",
+        d: "Dues by age bucket",
+        icon: Clock,
+        surface:
+          "border-red-200/60 bg-gradient-to-br from-red-50 via-white to-white hover:border-red-300/70 dark:border-red-500/25 dark:from-red-500/[0.13] dark:via-zinc-900 dark:to-zinc-950 dark:hover:border-red-400/35",
+        iconWrap:
+          "bg-gradient-to-br from-red-500 to-rose-600 text-white shadow-md shadow-red-500/25 ring-1 ring-red-400/40",
+        glow: "bg-red-400/30",
+        arrowHover:
+          "group-hover:border-red-300 group-hover:bg-red-50 group-hover:text-red-700 dark:group-hover:border-red-500/40 dark:group-hover:bg-red-500/10 dark:group-hover:text-red-300",
+      },
+      {
+        k: "heads" as const,
+        l: "Fee Heads",
+        d: "Billed, collected, outstanding",
+        icon: FileText,
+        surface:
+          "border-amber-200/60 bg-gradient-to-br from-amber-50 via-white to-white hover:border-amber-300/70 dark:border-amber-500/25 dark:from-amber-500/[0.13] dark:via-zinc-900 dark:to-zinc-950 dark:hover:border-amber-400/35",
+        iconWrap:
+          "bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-md shadow-amber-500/25 ring-1 ring-amber-400/40",
+        glow: "bg-amber-400/30",
+        arrowHover:
+          "group-hover:border-amber-300 group-hover:bg-amber-50 group-hover:text-amber-700 dark:group-hover:border-amber-500/40 dark:group-hover:bg-amber-500/10 dark:group-hover:text-amber-300",
+      },
+    ],
+  },
 ] as const;
 
 function FinanceOverview({
@@ -7893,7 +8061,11 @@ function FinanceOverview({
       | "concession"
       | "salary"
       | "daybook"
-      | "reconciliation",
+      | "reconciliation"
+      | "cashflow"
+      | "vehicle"
+      | "aging"
+      | "heads",
   ) => void;
 }) {
   const { session } = useAuth();
@@ -8259,7 +8431,7 @@ function FinanceOverview({
   };
 
   return (
-    <div className="w-full space-y-5 pb-24 md:pb-0">
+    <div className="w-full space-y-5 pb-[calc(13.75rem+env(safe-area-inset-bottom))] md:pb-0">
       <div className="hidden md:grid md:grid-cols-3 md:gap-4">
         {sessionCanAccessFinanceView(session, "receive") && (
           <button
@@ -8327,7 +8499,7 @@ function FinanceOverview({
               Reports
             </h3>
             <p className="mt-1 text-[12.5px] text-slate-500 dark:text-zinc-400">
-              Fee operations first, then books and statements
+              Fee operations, books, then recovery and statements
             </p>
           </div>
         </div>
@@ -9623,9 +9795,28 @@ function prefillScheduledAmountForFeeLine(
       : undefined;
 
   if (effectiveStudent && studentHasConcession(effectiveStudent)) {
+    const concessionFees = effectiveStudent.concessionFees;
+    const vehicleCategory =
+      termKind === "vehicle" ||
+      lower.includes("vehicle") ||
+      lower.includes("transport") ||
+      lower.includes("bus");
+    if (vehicleCategory && isFullConcessionTier(concessionFees?.vehicle)) {
+      return 0;
+    }
+    const otherWaived = (concessionFees?.otherFees ?? []).some(
+      (fee) => fee.fullConcession === true && fee.label.trim().toLowerCase() === lower,
+    );
+    if (otherWaived) return 0;
+    if (
+      isFullConcessionTier(concessionFees?.tuition) &&
+      (termKind === "tuition" || matchClassOneTimeFeeLine(matchedClass, category, feeTerms))
+    ) {
+      return 0;
+    }
     if (
       termKind === "tuition" &&
-      isConcessionTierEnabled(effectiveStudent.concessionFees?.tuition)
+      isConcessionTierEnabled(concessionFees?.tuition)
     ) {
       const concessionClass = resolveConcessionTuitionClassConfig(
         effectiveStudent,
@@ -9647,26 +9838,23 @@ function prefillScheduledAmountForFeeLine(
             concessionClass.feeCollectionStartMonth?.trim() ||
             undefined,
         });
+        if (fromSchedule === 0) return 0;
         if (fromSchedule && fromSchedule > 0) return fromSchedule;
       }
     }
-    if (
-      (termKind === "vehicle" ||
-        lower.includes("vehicle") ||
-        lower.includes("transport") ||
-        lower.includes("bus")) &&
-      isConcessionTierEnabled(effectiveStudent.concessionFees?.vehicle)
-    ) {
+    if (vehicleCategory && isConcessionTierEnabled(concessionFees?.vehicle)) {
       const fromConcessionVehicle = concessionVehiclePrefillAmount(effectiveStudent, {
         periodLabel: item.feePeriod || selectedTerm?.label || selectedMonthPeriod?.label,
         collectionStartMonth: collectionStartMonth?.trim(),
       });
+      if (fromConcessionVehicle === 0) return 0;
       if (fromConcessionVehicle && fromConcessionVehicle > 0) return fromConcessionVehicle;
     }
     const fromOther = concessionOtherFeePrefillAmount(effectiveStudent, category, {
       periodLabel: item.feePeriod || selectedTerm?.label || selectedMonthPeriod?.label,
       collectionStartMonth: collectionStartMonth?.trim(),
     });
+    if (fromOther === 0) return 0;
     if (fromOther && fromOther > 0) return fromOther;
   }
 
@@ -10472,6 +10660,13 @@ function ReceivePayment() {
   );
 
   const vehicleFee = useMemo(() => {
+    if (
+      selected &&
+      studentHasConcession(selected) &&
+      isFullConcessionTier(selected.concessionFees?.vehicle)
+    ) {
+      return 0;
+    }
     if (transportFeeResolved?.amount && transportFeeResolved.amount > 0) {
       return transportFeeResolved.amount;
     }
@@ -10479,9 +10674,16 @@ function ReceivePayment() {
       return matchedClass.vehicleFeeAmount;
     }
     return undefined;
-  }, [transportFeeResolved, matchedClass]);
+  }, [transportFeeResolved, matchedClass, selected]);
 
   const tuitionFee = useMemo(() => {
+    if (
+      selected &&
+      studentHasConcession(selected) &&
+      isFullConcessionTier(selected.concessionFees?.tuition)
+    ) {
+      return 0;
+    }
     if (selected?.hasConcession) {
       const concessionClass = resolveConcessionTuitionClassConfig(selected, matchedClass, feeTerms);
       if (concessionClass && concessionClass.tuitionFeeAmount > 0) {
@@ -12623,8 +12825,8 @@ function ReceivePayment() {
                   <div className="col-span-12 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-3 text-[12px] leading-relaxed text-amber-950 dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-100">
                     <span className="font-semibold">Fee concession</span>
                     {" — "}
-                    This student has custom fee schedules. Amounts below use their concession rates,
-                    not the class or route defaults.
+                    This student has a fee concession. Amounts below use their concession rates,
+                    and fully waived fees stay at zero.
                     {selected.concessionReason ? (
                       <span className="mt-1 block text-amber-800/90 dark:text-amber-200/80">
                         Reason: {selected.concessionReason}
@@ -16115,9 +16317,11 @@ export function SchoolSettings() {
       { id: "school", label: "School Details" },
       { id: "branches", label: "Branches" },
       { id: "classes", label: "Class Tier" },
+      { id: "academics", label: "Academics" },
       { id: "leave", label: "Leave" },
       { id: "fees", label: "Fee Category" },
       { id: "users", label: "Users" },
+      { id: "subscription", label: "Subscription" },
       { id: "transport", label: "Bus Point" },
       { id: "system", label: "System" },
       { id: "support", label: "Support" },
@@ -16371,6 +16575,9 @@ export function SchoolSettings() {
         </>
       )}
 
+      {activeTab === "academics" &&
+        renderSettingsPanel(<AcademicsWorkspace />, "Loading academics", listLayout)}
+
       {activeTab === "leave" &&
         renderSettingsPanel(
           <LeaveTypesCard leaveTypes={leaveTypes} setLeaveTypes={setLeaveTypes} />,
@@ -16380,11 +16587,14 @@ export function SchoolSettings() {
 
       {activeTab === "fees" &&
         renderSettingsPanel(
-          <FeeCategoriesCard
-            paymentCategories={paymentCategories}
-            setPaymentCategories={setPaymentCategories}
-            feeTerms={feeTerms}
-          />,
+          <div className="space-y-4">
+            <ParentPayCard />
+            <FeeCategoriesCard
+              paymentCategories={paymentCategories}
+              setPaymentCategories={setPaymentCategories}
+              feeTerms={feeTerms}
+            />
+          </div>,
           "Loading fee categories",
           listLayout,
         )}
@@ -16392,10 +16602,6 @@ export function SchoolSettings() {
       {activeTab === "users" &&
         renderSettingsPanel(
           <div className="space-y-3">
-            <p className="text-[12px] text-black/55 dark:text-zinc-400">
-              Team logins can be limited to one or more campuses. School administrators keep access
-              to every campus.
-            </p>
             <SettingsUsersCard
               tenantUsers={tenantUsers}
               setTenantUsers={setTenantUsers}
@@ -16462,6 +16668,14 @@ export function SchoolSettings() {
       {activeTab === "support" && (
         <CustomerSupportCard onBackToSettings={backToMenu} pinToViewport={pinSupport} />
       )}
+
+      {activeTab === "subscription" && (
+        <TenantSubscriptionPanel
+          tenantId={session?.tenantId}
+          tenantName={schoolDetails.name || session?.tenantName || "School"}
+          schoolHost={typeof window !== "undefined" ? window.location.hostname : undefined}
+        />
+      )}
     </>
   );
 
@@ -16486,16 +16700,12 @@ export function SchoolSettings() {
           <div className="flex items-center gap-3 px-4 py-4">
             <div
               className={cn(
-                "grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-full text-[13px] font-bold text-white",
+                "relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-full text-[13px] font-bold text-white",
                 !logoUrl && "bg-gradient-to-br from-[#0F766E] to-[#115E59]",
               )}
             >
               {logoUrl ? (
-                <img
-                  src={logoUrl}
-                  alt={tenantName}
-                  className="h-full w-full bg-white object-contain p-0.5"
-                />
+                <SchoolLogo src={logoUrl} alt={tenantName} className="absolute inset-0" />
               ) : (
                 initials
               )}
@@ -16565,8 +16775,11 @@ export function SchoolSettings() {
           supportViewport && "lg:min-h-0 lg:shrink-0",
         )}
       >
-        <div className="mobile-scrollbar-none overflow-x-auto rounded-full border border-[#E5E5E5] bg-white/80 p-1 shadow-sm dark:border-white/10 dark:bg-zinc-900/80">
-          <div className="flex min-w-max gap-1 lg:min-w-0 lg:w-full">
+        <div className="w-full min-w-0 rounded-full border border-[#E5E5E5] bg-white/80 p-1 shadow-sm dark:border-white/10 dark:bg-zinc-900/80">
+          <div
+            className="grid w-full gap-1"
+            style={{ gridTemplateColumns: `repeat(${Math.max(settingsTabs.length, 1)}, minmax(0, 1fr))` }}
+          >
             {settingsTabs.map((tab) => {
               const active = tab.id === "classes" ? classTierOpen : activeTab === tab.id;
               return (
@@ -16575,13 +16788,13 @@ export function SchoolSettings() {
                   type="button"
                   onClick={() => setTab(tab.id)}
                   className={cn(
-                    "shrink-0 rounded-full px-3.5 py-2 text-[12px] font-semibold transition-colors lg:min-w-0 lg:flex-1",
+                    "flex min-w-0 items-center justify-center rounded-full px-1.5 py-2 text-center text-[12px] font-semibold leading-tight transition-colors",
                     active
                       ? "bg-[#0F766E] text-white shadow-sm"
                       : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-zinc-100",
                   )}
                 >
-                  <span className="block truncate text-center">{tab.label}</span>
+                  {tab.label}
                 </button>
               );
             })}
@@ -21951,10 +22164,10 @@ function SchoolDetailsCard({
               removeAriaLabel="Remove logo"
               preview={
                 draft.logoUrl ? (
-                  <img
-                    src={resolveMediaUrl(draft.logoUrl) ?? draft.logoUrl}
+                  <SchoolLogo
+                    src={draft.logoUrl}
                     alt="School logo"
-                    className="h-16 w-16 object-contain p-1.5"
+                    className="h-16 w-16"
                   />
                 ) : (
                   <div className="grid h-16 w-16 place-items-center bg-gradient-to-br from-[#0F766E] to-[#115E59] text-[13px] font-bold text-white">
@@ -22250,8 +22463,10 @@ function SchoolDetailsCard({
             : 512
         }
         outputMime={cropTarget === "letterhead" ? "image/jpeg" : "image/png"}
-        fit="contain"
-        background={cropTarget === "seal" || cropTarget === "signature" ? "transparent" : "#FFFFFF"}
+        fit={cropTarget === "logo" ? "cover" : "contain"}
+        background={
+          cropTarget === "seal" || cropTarget === "signature" ? "transparent" : "#FFFFFF"
+        }
         confirmLabel="Use image"
         onOpenChange={(next) => {
           if (!next) closeCrop();

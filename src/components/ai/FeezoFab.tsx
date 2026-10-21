@@ -1,15 +1,21 @@
 import { Sparkles } from "lucide-react";
 
-import { mobileFabClass } from "@/components/layout/MobileTabBar";
+import {
+  mobileFabAboveFinanceDockClass,
+  mobileFabAnchorClass,
+  mobileFabBottomClass,
+} from "@/components/layout/MobileTabBar";
 import { cn } from "@/lib/utils";
 
 type Props = {
   open: boolean;
   onOpen: () => void;
   label?: string;
+  /** Lift above the finance Receive / Make / Transfer bar. Other pages stay put. */
+  raised?: boolean;
 };
 
-export function FeezoFab({ open, onOpen, label = "Feezo AI" }: Props) {
+export function FeezoFab({ open, onOpen, label = "Feezo AI", raised = false }: Props) {
   if (open) return null;
 
   return (
@@ -19,7 +25,8 @@ export function FeezoFab({ open, onOpen, label = "Feezo AI" }: Props) {
         onClick={onOpen}
         aria-label={label}
         className={cn(
-          mobileFabClass,
+          mobileFabAnchorClass,
+          raised ? mobileFabAboveFinanceDockClass : mobileFabBottomClass,
           "grid h-12 w-12 place-items-center rounded-full bg-gradient-to-br from-[#0F766E] to-[#115E59] text-white shadow-lg shadow-teal-900/25 ring-2 ring-white/70 transition hover:scale-[1.03] active:scale-95 dark:ring-zinc-900/60",
         )}
       >

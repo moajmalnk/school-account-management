@@ -1,6 +1,6 @@
 import { BRAND } from "@/lib/brand";
 
-export const LEGAL_LAST_UPDATED = "2 September 2026";
+export const LEGAL_LAST_UPDATED = "21 October 2026";
 
 export const LEGAL_PAGES = [
   { id: "terms", label: "Terms of Use", path: BRAND.legal.termsPath },

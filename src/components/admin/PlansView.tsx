@@ -36,6 +36,7 @@ const EMPTY_FLAGS: SuperAdminPlanFlags = {
   whatsapp: false,
   branches: false,
   globalSearch: false,
+  exams: false,
 };
 
 /** Catalog defaults — used when API is empty / offline */
@@ -56,6 +57,7 @@ const DEFAULT_PLANS: SuperAdminPlan[] = [
       analytics: true,
       feeReminders: true,
       globalSearch: true,
+      exams: true,
     },
   },
   {
@@ -78,6 +80,7 @@ const DEFAULT_PLANS: SuperAdminPlan[] = [
       branches: true,
       globalSearch: true,
       studentAttendance: true,
+      exams: true,
     },
   },
   {
@@ -104,6 +107,7 @@ const DEFAULT_PLANS: SuperAdminPlan[] = [
       whatsapp: true,
       branches: true,
       globalSearch: true,
+      exams: true,
     },
   },
 ];

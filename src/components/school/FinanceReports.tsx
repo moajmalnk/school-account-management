@@ -106,6 +106,7 @@ import {
   formatMoneyPdf,
   moneyColumnLabel,
   moneySymbol,
+  pdfCurrencyPrefix,
 } from "@/lib/money";
 
 export type LedgerRow = {
@@ -242,27 +243,30 @@ function ExportActions({
 
   return (
     <>
-      <div className={cn("grid grid-cols-1 gap-2 min-[420px]:grid-cols-3", className)}>
+      <div className={cn("grid grid-cols-3 gap-1.5 sm:gap-2", className)}>
         <button
           type="button"
           onClick={() => setPendingExport("csv")}
-          className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 py-1.5 text-[11.5px] font-medium text-black transition-colors hover:bg-[#F4F4F5] dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 sm:text-[12px]"
+          className="inline-flex min-h-10 min-w-0 w-full items-center justify-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2 py-1.5 text-[10.5px] font-medium text-black transition-colors hover:bg-[#F4F4F5] dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 sm:gap-1.5 sm:px-3 sm:text-[12px]"
         >
-          <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" /> Export CSV
+          <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">Export CSV</span>
         </button>
         <button
           type="button"
           onClick={() => setPendingExport("pdf")}
-          className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full bg-[#0F766E] px-3 py-1.5 text-[11.5px] font-semibold text-white transition-colors hover:bg-[#0D9488] sm:text-[12px]"
+          className="inline-flex min-h-10 min-w-0 w-full items-center justify-center gap-1 rounded-full bg-[#0F766E] px-2 py-1.5 text-[10.5px] font-semibold text-white transition-colors hover:bg-[#0D9488] sm:gap-1.5 sm:px-3 sm:text-[12px]"
         >
-          <Download className="h-3.5 w-3.5 shrink-0" /> Export PDF
+          <Download className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">Export PDF</span>
         </button>
         <button
           type="button"
           onClick={onPrint}
-          className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 py-1.5 text-[11.5px] font-medium text-black transition-colors hover:bg-[#F4F4F5] dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 sm:text-[12px]"
+          className="inline-flex min-h-10 min-w-0 w-full items-center justify-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2 py-1.5 text-[10.5px] font-medium text-black transition-colors hover:bg-[#F4F4F5] dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 sm:gap-1.5 sm:px-3 sm:text-[12px]"
         >
-          <Printer className="h-3.5 w-3.5 shrink-0" /> Print PDF
+          <Printer className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">Print PDF</span>
         </button>
       </div>
 
@@ -1906,13 +1910,7 @@ export function FeesReport() {
       ? ["Name", "Class", "Division", ...columns.map((column) => column.label), "Total"]
       : ["Name", "Class", "Division", "Balance"];
     const pdfHeaders = detailed
-      ? [
-          "Name",
-          "Class",
-          "Division",
-          ...columns.map((column) => moneyColumnLabel(column.label, { pdf: true })),
-          moneyColumnLabel("Total", { pdf: true }),
-        ]
+      ? ["Name", "Class", "Division", ...columns.map((column) => column.label), "Total"]
       : ["Name", "Class", "Division", moneyColumnLabel("Balance", { pdf: true })];
     const sheetRows = rows.map((row) =>
       detailed
@@ -1947,7 +1945,9 @@ export function FeesReport() {
     downloadTablePdf({
       filename,
       title: "Class fee sheet",
-      subtitle: `${schoolName} · ${academicYear} · ${classLabelForExport(duesClass)} · ${scope}`,
+      subtitle: `${schoolName} · ${academicYear} · ${classLabelForExport(duesClass)} · ${scope}${
+        detailed ? ` · Amounts in ${pdfCurrencyPrefix()}` : ""
+      }`,
       headers: pdfHeaders,
       rows: pdfRows,
       summaryItems: [
@@ -1987,27 +1987,30 @@ export function FeesReport() {
               Student fee collections and outstanding dues · {academicYear}
             </p>
           </div>
-          <div className="grid w-full shrink-0 grid-cols-1 gap-2 min-[420px]:grid-cols-3 lg:w-auto lg:min-w-[260px]">
+          <div className="grid w-full shrink-0 grid-cols-3 gap-1.5 sm:gap-2 lg:w-auto lg:min-w-[260px]">
             <button
               type="button"
               onClick={() => setExportFormat("csv")}
-              className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 py-1.5 text-[11.5px] font-medium text-black transition-colors hover:bg-[#F4F4F5] dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 sm:text-[12px]"
+              className="inline-flex min-h-10 min-w-0 w-full items-center justify-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2 py-1.5 text-[10.5px] font-medium text-black transition-colors hover:bg-[#F4F4F5] dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 sm:gap-1.5 sm:px-3 sm:text-[12px]"
             >
-              <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" /> Export CSV
+              <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">Export CSV</span>
             </button>
             <button
               type="button"
               onClick={() => setExportFormat("pdf")}
-              className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full bg-[#0F766E] px-3 py-1.5 text-[11.5px] font-semibold text-white transition-colors hover:bg-[#0D9488] sm:text-[12px]"
+              className="inline-flex min-h-10 min-w-0 w-full items-center justify-center gap-1 rounded-full bg-[#0F766E] px-2 py-1.5 text-[10.5px] font-semibold text-white transition-colors hover:bg-[#0D9488] sm:gap-1.5 sm:px-3 sm:text-[12px]"
             >
-              <Download className="h-3.5 w-3.5 shrink-0" /> Export PDF
+              <Download className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">Export PDF</span>
             </button>
             <button
               type="button"
               onClick={() => setExportFormat("print")}
-              className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 py-1.5 text-[11.5px] font-medium text-black transition-colors hover:bg-[#F4F4F5] dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 sm:text-[12px]"
+              className="inline-flex min-h-10 min-w-0 w-full items-center justify-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2 py-1.5 text-[10.5px] font-medium text-black transition-colors hover:bg-[#F4F4F5] dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 sm:gap-1.5 sm:px-3 sm:text-[12px]"
             >
-              <Printer className="h-3.5 w-3.5 shrink-0" /> Print PDF
+              <Printer className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">Print PDF</span>
             </button>
           </div>
         </div>

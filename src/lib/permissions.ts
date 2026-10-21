@@ -18,6 +18,8 @@ export const PERMISSION_KEYS = [
   "finance.reconciliation",
   "settings.fees",
   "settings.users",
+  "parents",
+  "academics",
 ] as const;
 
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
@@ -38,7 +40,7 @@ export const PERMISSION_GROUPS: {
     id: "workspace",
     label: "Workspace",
     description: "Core school modules",
-    keys: ["dashboard", "students", "staff"],
+    keys: ["dashboard", "students", "staff", "parents", "academics"],
   },
   {
     id: "finance",
@@ -72,6 +74,8 @@ export const PERMISSION_LABELS: Record<PermissionKey, string> = {
   "finance.reconciliation": "Bank reconciliation",
   "settings.fees": "Fee categories",
   "settings.users": "Team users",
+  parents: "Parents",
+  academics: "Academics",
 };
 
 export const ALL_PERMISSIONS: PermissionSet = ["*"];
@@ -111,6 +115,7 @@ export type SettingsTabId =
   | "school"
   | "branches"
   | "classes"
+  | "academics"
   | "departments"
   | "roles"
   | "leave"
@@ -119,7 +124,8 @@ export type SettingsTabId =
   | "transport"
   | "system"
   | "support"
-  | "users";
+  | "users"
+  | "subscription";
 
 /** Subscription plan feature matrix (from Super Admin Plans). */
 export type PlanFlags = {
@@ -139,6 +145,7 @@ export type PlanFlags = {
   whatsapp: boolean;
   branches: boolean;
   globalSearch: boolean;
+  exams: boolean;
 };
 
 export const DEFAULT_PLAN_FLAGS: PlanFlags = {
@@ -158,6 +165,7 @@ export const DEFAULT_PLAN_FLAGS: PlanFlags = {
   whatsapp: true,
   branches: true,
   globalSearch: true,
+  exams: true,
 };
 
 /** Catalog labels for Super Admin Plans and tenant Subscriptions. */
@@ -178,6 +186,7 @@ export const PLAN_FEATURE_ITEMS: { key: keyof PlanFlags; label: string }[] = [
   { key: "whatsapp", label: "WhatsApp Integration" },
   { key: "branches", label: "Multiple Branches" },
   { key: "globalSearch", label: "Global Search" },
+  { key: "exams", label: "Exam grading" },
 ];
 
 export function normalizePlanFlags(value: unknown): PlanFlags {
@@ -193,6 +202,7 @@ export function normalizePlanFlags(value: unknown): PlanFlags {
 /** Settings tab → required plan flag (undefined = always allowed by plan). */
 const SETTINGS_TAB_PLAN_FLAG: Partial<Record<SettingsTabId, keyof PlanFlags>> = {
   classes: "classes",
+  academics: "exams",
   departments: "staff",
   roles: "staff",
   leave: "staff",
@@ -241,6 +251,12 @@ export function planAllowsStudentAttendance(flags: PlanFlags | undefined | null)
   return Boolean(flags.studentAttendance);
 }
 
+export function planAllowsExams(flags: PlanFlags | undefined | null): boolean {
+  if (!flags) return true;
+  if (typeof flags.exams !== "boolean") return true;
+  return flags.exams;
+}
+
 export function planAllowsModule(
   flags: PlanFlags | undefined | null,
   module: "students" | "staff" | "finance" | "dashboard" | "settings" | "notifications",
@@ -265,6 +281,16 @@ export function canAccessSettingsTab(
   }
   if (tab === "fees") {
     return hasPermission(permissions, "settings.fees") || hasPermission(permissions, "settings");
+  }
+  if (tab === "academics") {
+    return (
+      hasPermission(permissions, "settings") ||
+      hasPermission(permissions, "students") ||
+      hasPermission(permissions, "academics")
+    );
+  }
+  if (tab === "subscription") {
+    return canAccessSettingsModule(permissions);
   }
   return hasPermission(permissions, "settings");
 }
@@ -294,7 +320,11 @@ export type FinanceViewKey =
   | "concession"
   | "salary"
   | "daybook"
-  | "reconciliation";
+  | "reconciliation"
+  | "cashflow"
+  | "vehicle"
+  | "aging"
+  | "heads";
 
 const FINANCE_VIEW_PERMISSION: Record<FinanceViewKey, PermissionKey> = {
   overview: "finance.overview",
@@ -313,6 +343,10 @@ const FINANCE_VIEW_PERMISSION: Record<FinanceViewKey, PermissionKey> = {
   salary: "finance.salary",
   daybook: "finance.daybook",
   reconciliation: "finance.reconciliation",
+  cashflow: "finance.pl",
+  vehicle: "finance.fees_report",
+  aging: "finance.fees_report",
+  heads: "finance.fees_report",
 };
 
 export function canAccessFinanceView(

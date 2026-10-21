@@ -134,7 +134,7 @@ export function LegalShell({
         </article>
 
         <p className="mt-6 text-center text-[12px] text-[var(--mkt-muted)]">
-          © {new Date().getFullYear()} {BRAND.name}. Questions?{" "}
+          © {new Date().getFullYear()} {BRAND.legal.operator}. Questions?{" "}
           <a
             href={`mailto:${BRAND.legal.supportEmail}`}
             className="font-medium text-[var(--mkt-green-deep)] hover:underline"

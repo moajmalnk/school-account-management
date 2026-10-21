@@ -20,27 +20,38 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as ImpersonateRouteImport } from './routes/impersonate'
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as FamilyRouteImport } from './routes/family'
 import { Route as DataDeletionRouteImport } from './routes/data-deletion'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TenantIndexRouteImport } from './routes/tenant/index'
 import { Route as SuperAdminIndexRouteImport } from './routes/super-admin/index'
 import { Route as SignupIndexRouteImport } from './routes/signup/index'
+import { Route as FamilyIndexRouteImport } from './routes/family/index'
 import { Route as TenantSupportRouteImport } from './routes/tenant/support'
 import { Route as TenantStudentsRouteImport } from './routes/tenant/students'
 import { Route as TenantStaffRouteImport } from './routes/tenant/staff'
 import { Route as TenantSettingsRouteImport } from './routes/tenant/settings'
+import { Route as TenantParentsRouteImport } from './routes/tenant/parents'
 import { Route as TenantNotificationsRouteImport } from './routes/tenant/notifications'
 import { Route as TenantFinanceRouteImport } from './routes/tenant/finance'
 import { Route as TenantDashboardRouteImport } from './routes/tenant/dashboard'
 import { Route as TenantBillingRouteImport } from './routes/tenant/billing'
 import { Route as TenantAttendanceRouteImport } from './routes/tenant/attendance'
 import { Route as TenantAiRouteImport } from './routes/tenant/ai'
+import { Route as TenantAcademicsRouteImport } from './routes/tenant/academics'
 import { Route as SuperAdminTenantsRouteImport } from './routes/super-admin/tenants'
 import { Route as SuperAdminSupportRouteImport } from './routes/super-admin/support'
 import { Route as SuperAdminPlansRouteImport } from './routes/super-admin/plans'
 import { Route as SuperAdminOverviewRouteImport } from './routes/super-admin/overview'
 import { Route as SignupStepRouteImport } from './routes/signup/$step'
+import { Route as FamilySettingsRouteImport } from './routes/family/settings'
+import { Route as FamilyNotificationsRouteImport } from './routes/family/notifications'
+import { Route as FamilyLoginRouteImport } from './routes/family/login'
+import { Route as FamilyLeaveRouteImport } from './routes/family/leave'
+import { Route as FamilyFeesRouteImport } from './routes/family/fees'
+import { Route as FamilyAttendanceRouteImport } from './routes/family/attendance'
+import { Route as FamilyAcademicsRouteImport } from './routes/family/academics'
 import { Route as SuperAdminSupportIndexRouteImport } from './routes/super-admin/support/index'
 import { Route as TenantStudentsEditRouteImport } from './routes/tenant/students_.edit'
 import { Route as TenantStudentsAdmitRouteImport } from './routes/tenant/students_.admit'
@@ -52,6 +63,7 @@ import { Route as SuperAdminSupportAutoReplyRouteImport } from './routes/super-a
 import { Route as SuperAdminSupportTicketIdRouteImport } from './routes/super-admin/support/$ticketId'
 import { Route as StaffCollectTokenRouteImport } from './routes/staff/collect.$token'
 import { Route as ParentStudentTokenRouteImport } from './routes/parent/student.$token'
+import { Route as FamilyJoinTokenRouteImport } from './routes/family/join.$token'
 
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
@@ -108,6 +120,11 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FamilyRoute = FamilyRouteImport.update({
+  id: '/family',
+  path: '/family',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DataDeletionRoute = DataDeletionRouteImport.update({
   id: '/data-deletion',
   path: '/data-deletion',
@@ -138,6 +155,11 @@ const SignupIndexRoute = SignupIndexRouteImport.update({
   path: '/',
   getParentRoute: () => SignupRoute,
 } as any)
+const FamilyIndexRoute = FamilyIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => FamilyRoute,
+} as any)
 const TenantSupportRoute = TenantSupportRouteImport.update({
   id: '/support',
   path: '/support',
@@ -156,6 +178,11 @@ const TenantStaffRoute = TenantStaffRouteImport.update({
 const TenantSettingsRoute = TenantSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => TenantRoute,
+} as any)
+const TenantParentsRoute = TenantParentsRouteImport.update({
+  id: '/parents',
+  path: '/parents',
   getParentRoute: () => TenantRoute,
 } as any)
 const TenantNotificationsRoute = TenantNotificationsRouteImport.update({
@@ -188,6 +215,11 @@ const TenantAiRoute = TenantAiRouteImport.update({
   path: '/ai',
   getParentRoute: () => TenantRoute,
 } as any)
+const TenantAcademicsRoute = TenantAcademicsRouteImport.update({
+  id: '/academics',
+  path: '/academics',
+  getParentRoute: () => TenantRoute,
+} as any)
 const SuperAdminTenantsRoute = SuperAdminTenantsRouteImport.update({
   id: '/tenants',
   path: '/tenants',
@@ -212,6 +244,41 @@ const SignupStepRoute = SignupStepRouteImport.update({
   id: '/$step',
   path: '/$step',
   getParentRoute: () => SignupRoute,
+} as any)
+const FamilySettingsRoute = FamilySettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => FamilyRoute,
+} as any)
+const FamilyNotificationsRoute = FamilyNotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => FamilyRoute,
+} as any)
+const FamilyLoginRoute = FamilyLoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => FamilyRoute,
+} as any)
+const FamilyLeaveRoute = FamilyLeaveRouteImport.update({
+  id: '/leave',
+  path: '/leave',
+  getParentRoute: () => FamilyRoute,
+} as any)
+const FamilyFeesRoute = FamilyFeesRouteImport.update({
+  id: '/fees',
+  path: '/fees',
+  getParentRoute: () => FamilyRoute,
+} as any)
+const FamilyAttendanceRoute = FamilyAttendanceRouteImport.update({
+  id: '/attendance',
+  path: '/attendance',
+  getParentRoute: () => FamilyRoute,
+} as any)
+const FamilyAcademicsRoute = FamilyAcademicsRouteImport.update({
+  id: '/academics',
+  path: '/academics',
+  getParentRoute: () => FamilyRoute,
 } as any)
 const SuperAdminSupportIndexRoute = SuperAdminSupportIndexRouteImport.update({
   id: '/',
@@ -271,11 +338,17 @@ const ParentStudentTokenRoute = ParentStudentTokenRouteImport.update({
   path: '/parent/student/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FamilyJoinTokenRoute = FamilyJoinTokenRouteImport.update({
+  id: '/join/$token',
+  path: '/join/$token',
+  getParentRoute: () => FamilyRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/contact': typeof ContactRoute
   '/data-deletion': typeof DataDeletionRoute
+  '/family': typeof FamilyRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/home': typeof HomeRoute
   '/impersonate': typeof ImpersonateRoute
@@ -287,24 +360,35 @@ export interface FileRoutesByFullPath {
   '/super-admin': typeof SuperAdminRouteWithChildren
   '/tenant': typeof TenantRouteWithChildren
   '/terms': typeof TermsRoute
+  '/family/academics': typeof FamilyAcademicsRoute
+  '/family/attendance': typeof FamilyAttendanceRoute
+  '/family/fees': typeof FamilyFeesRoute
+  '/family/leave': typeof FamilyLeaveRoute
+  '/family/login': typeof FamilyLoginRoute
+  '/family/notifications': typeof FamilyNotificationsRoute
+  '/family/settings': typeof FamilySettingsRoute
   '/signup/$step': typeof SignupStepRoute
   '/super-admin/overview': typeof SuperAdminOverviewRoute
   '/super-admin/plans': typeof SuperAdminPlansRoute
   '/super-admin/support': typeof SuperAdminSupportRouteWithChildren
   '/super-admin/tenants': typeof SuperAdminTenantsRoute
+  '/tenant/academics': typeof TenantAcademicsRoute
   '/tenant/ai': typeof TenantAiRoute
   '/tenant/attendance': typeof TenantAttendanceRoute
   '/tenant/billing': typeof TenantBillingRoute
   '/tenant/dashboard': typeof TenantDashboardRoute
   '/tenant/finance': typeof TenantFinanceRoute
   '/tenant/notifications': typeof TenantNotificationsRoute
+  '/tenant/parents': typeof TenantParentsRoute
   '/tenant/settings': typeof TenantSettingsRoute
   '/tenant/staff': typeof TenantStaffRoute
   '/tenant/students': typeof TenantStudentsRoute
   '/tenant/support': typeof TenantSupportRoute
+  '/family/': typeof FamilyIndexRoute
   '/signup/': typeof SignupIndexRoute
   '/super-admin/': typeof SuperAdminIndexRoute
   '/tenant/': typeof TenantIndexRoute
+  '/family/join/$token': typeof FamilyJoinTokenRoute
   '/parent/student/$token': typeof ParentStudentTokenRoute
   '/staff/collect/$token': typeof StaffCollectTokenRoute
   '/super-admin/support/$ticketId': typeof SuperAdminSupportTicketIdRoute
@@ -329,23 +413,34 @@ export interface FileRoutesByTo {
   '/refund-policy': typeof RefundPolicyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/terms': typeof TermsRoute
+  '/family/academics': typeof FamilyAcademicsRoute
+  '/family/attendance': typeof FamilyAttendanceRoute
+  '/family/fees': typeof FamilyFeesRoute
+  '/family/leave': typeof FamilyLeaveRoute
+  '/family/login': typeof FamilyLoginRoute
+  '/family/notifications': typeof FamilyNotificationsRoute
+  '/family/settings': typeof FamilySettingsRoute
   '/signup/$step': typeof SignupStepRoute
   '/super-admin/overview': typeof SuperAdminOverviewRoute
   '/super-admin/plans': typeof SuperAdminPlansRoute
   '/super-admin/tenants': typeof SuperAdminTenantsRoute
+  '/tenant/academics': typeof TenantAcademicsRoute
   '/tenant/ai': typeof TenantAiRoute
   '/tenant/attendance': typeof TenantAttendanceRoute
   '/tenant/billing': typeof TenantBillingRoute
   '/tenant/dashboard': typeof TenantDashboardRoute
   '/tenant/finance': typeof TenantFinanceRoute
   '/tenant/notifications': typeof TenantNotificationsRoute
+  '/tenant/parents': typeof TenantParentsRoute
   '/tenant/settings': typeof TenantSettingsRoute
   '/tenant/staff': typeof TenantStaffRoute
   '/tenant/students': typeof TenantStudentsRoute
   '/tenant/support': typeof TenantSupportRoute
+  '/family': typeof FamilyIndexRoute
   '/signup': typeof SignupIndexRoute
   '/super-admin': typeof SuperAdminIndexRoute
   '/tenant': typeof TenantIndexRoute
+  '/family/join/$token': typeof FamilyJoinTokenRoute
   '/parent/student/$token': typeof ParentStudentTokenRoute
   '/staff/collect/$token': typeof StaffCollectTokenRoute
   '/super-admin/support/$ticketId': typeof SuperAdminSupportTicketIdRoute
@@ -363,6 +458,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/contact': typeof ContactRoute
   '/data-deletion': typeof DataDeletionRoute
+  '/family': typeof FamilyRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/home': typeof HomeRoute
   '/impersonate': typeof ImpersonateRoute
@@ -374,24 +470,35 @@ export interface FileRoutesById {
   '/super-admin': typeof SuperAdminRouteWithChildren
   '/tenant': typeof TenantRouteWithChildren
   '/terms': typeof TermsRoute
+  '/family/academics': typeof FamilyAcademicsRoute
+  '/family/attendance': typeof FamilyAttendanceRoute
+  '/family/fees': typeof FamilyFeesRoute
+  '/family/leave': typeof FamilyLeaveRoute
+  '/family/login': typeof FamilyLoginRoute
+  '/family/notifications': typeof FamilyNotificationsRoute
+  '/family/settings': typeof FamilySettingsRoute
   '/signup/$step': typeof SignupStepRoute
   '/super-admin/overview': typeof SuperAdminOverviewRoute
   '/super-admin/plans': typeof SuperAdminPlansRoute
   '/super-admin/support': typeof SuperAdminSupportRouteWithChildren
   '/super-admin/tenants': typeof SuperAdminTenantsRoute
+  '/tenant/academics': typeof TenantAcademicsRoute
   '/tenant/ai': typeof TenantAiRoute
   '/tenant/attendance': typeof TenantAttendanceRoute
   '/tenant/billing': typeof TenantBillingRoute
   '/tenant/dashboard': typeof TenantDashboardRoute
   '/tenant/finance': typeof TenantFinanceRoute
   '/tenant/notifications': typeof TenantNotificationsRoute
+  '/tenant/parents': typeof TenantParentsRoute
   '/tenant/settings': typeof TenantSettingsRoute
   '/tenant/staff': typeof TenantStaffRoute
   '/tenant/students': typeof TenantStudentsRoute
   '/tenant/support': typeof TenantSupportRoute
+  '/family/': typeof FamilyIndexRoute
   '/signup/': typeof SignupIndexRoute
   '/super-admin/': typeof SuperAdminIndexRoute
   '/tenant/': typeof TenantIndexRoute
+  '/family/join/$token': typeof FamilyJoinTokenRoute
   '/parent/student/$token': typeof ParentStudentTokenRoute
   '/staff/collect/$token': typeof StaffCollectTokenRoute
   '/super-admin/support/$ticketId': typeof SuperAdminSupportTicketIdRoute
@@ -410,6 +517,7 @@ export interface FileRouteTypes {
     | '/'
     | '/contact'
     | '/data-deletion'
+    | '/family'
     | '/forgot-password'
     | '/home'
     | '/impersonate'
@@ -421,24 +529,35 @@ export interface FileRouteTypes {
     | '/super-admin'
     | '/tenant'
     | '/terms'
+    | '/family/academics'
+    | '/family/attendance'
+    | '/family/fees'
+    | '/family/leave'
+    | '/family/login'
+    | '/family/notifications'
+    | '/family/settings'
     | '/signup/$step'
     | '/super-admin/overview'
     | '/super-admin/plans'
     | '/super-admin/support'
     | '/super-admin/tenants'
+    | '/tenant/academics'
     | '/tenant/ai'
     | '/tenant/attendance'
     | '/tenant/billing'
     | '/tenant/dashboard'
     | '/tenant/finance'
     | '/tenant/notifications'
+    | '/tenant/parents'
     | '/tenant/settings'
     | '/tenant/staff'
     | '/tenant/students'
     | '/tenant/support'
+    | '/family/'
     | '/signup/'
     | '/super-admin/'
     | '/tenant/'
+    | '/family/join/$token'
     | '/parent/student/$token'
     | '/staff/collect/$token'
     | '/super-admin/support/$ticketId'
@@ -463,23 +582,34 @@ export interface FileRouteTypes {
     | '/refund-policy'
     | '/reset-password'
     | '/terms'
+    | '/family/academics'
+    | '/family/attendance'
+    | '/family/fees'
+    | '/family/leave'
+    | '/family/login'
+    | '/family/notifications'
+    | '/family/settings'
     | '/signup/$step'
     | '/super-admin/overview'
     | '/super-admin/plans'
     | '/super-admin/tenants'
+    | '/tenant/academics'
     | '/tenant/ai'
     | '/tenant/attendance'
     | '/tenant/billing'
     | '/tenant/dashboard'
     | '/tenant/finance'
     | '/tenant/notifications'
+    | '/tenant/parents'
     | '/tenant/settings'
     | '/tenant/staff'
     | '/tenant/students'
     | '/tenant/support'
+    | '/family'
     | '/signup'
     | '/super-admin'
     | '/tenant'
+    | '/family/join/$token'
     | '/parent/student/$token'
     | '/staff/collect/$token'
     | '/super-admin/support/$ticketId'
@@ -496,6 +626,7 @@ export interface FileRouteTypes {
     | '/'
     | '/contact'
     | '/data-deletion'
+    | '/family'
     | '/forgot-password'
     | '/home'
     | '/impersonate'
@@ -507,24 +638,35 @@ export interface FileRouteTypes {
     | '/super-admin'
     | '/tenant'
     | '/terms'
+    | '/family/academics'
+    | '/family/attendance'
+    | '/family/fees'
+    | '/family/leave'
+    | '/family/login'
+    | '/family/notifications'
+    | '/family/settings'
     | '/signup/$step'
     | '/super-admin/overview'
     | '/super-admin/plans'
     | '/super-admin/support'
     | '/super-admin/tenants'
+    | '/tenant/academics'
     | '/tenant/ai'
     | '/tenant/attendance'
     | '/tenant/billing'
     | '/tenant/dashboard'
     | '/tenant/finance'
     | '/tenant/notifications'
+    | '/tenant/parents'
     | '/tenant/settings'
     | '/tenant/staff'
     | '/tenant/students'
     | '/tenant/support'
+    | '/family/'
     | '/signup/'
     | '/super-admin/'
     | '/tenant/'
+    | '/family/join/$token'
     | '/parent/student/$token'
     | '/staff/collect/$token'
     | '/super-admin/support/$ticketId'
@@ -542,6 +684,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ContactRoute: typeof ContactRoute
   DataDeletionRoute: typeof DataDeletionRoute
+  FamilyRoute: typeof FamilyRouteWithChildren
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   HomeRoute: typeof HomeRoute
   ImpersonateRoute: typeof ImpersonateRoute
@@ -636,6 +779,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/family': {
+      id: '/family'
+      path: '/family'
+      fullPath: '/family'
+      preLoaderRoute: typeof FamilyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/data-deletion': {
       id: '/data-deletion'
       path: '/data-deletion'
@@ -678,6 +828,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignupIndexRouteImport
       parentRoute: typeof SignupRoute
     }
+    '/family/': {
+      id: '/family/'
+      path: '/'
+      fullPath: '/family/'
+      preLoaderRoute: typeof FamilyIndexRouteImport
+      parentRoute: typeof FamilyRoute
+    }
     '/tenant/support': {
       id: '/tenant/support'
       path: '/support'
@@ -704,6 +861,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/tenant/settings'
       preLoaderRoute: typeof TenantSettingsRouteImport
+      parentRoute: typeof TenantRoute
+    }
+    '/tenant/parents': {
+      id: '/tenant/parents'
+      path: '/parents'
+      fullPath: '/tenant/parents'
+      preLoaderRoute: typeof TenantParentsRouteImport
       parentRoute: typeof TenantRoute
     }
     '/tenant/notifications': {
@@ -748,6 +912,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TenantAiRouteImport
       parentRoute: typeof TenantRoute
     }
+    '/tenant/academics': {
+      id: '/tenant/academics'
+      path: '/academics'
+      fullPath: '/tenant/academics'
+      preLoaderRoute: typeof TenantAcademicsRouteImport
+      parentRoute: typeof TenantRoute
+    }
     '/super-admin/tenants': {
       id: '/super-admin/tenants'
       path: '/tenants'
@@ -782,6 +953,55 @@ declare module '@tanstack/react-router' {
       fullPath: '/signup/$step'
       preLoaderRoute: typeof SignupStepRouteImport
       parentRoute: typeof SignupRoute
+    }
+    '/family/settings': {
+      id: '/family/settings'
+      path: '/settings'
+      fullPath: '/family/settings'
+      preLoaderRoute: typeof FamilySettingsRouteImport
+      parentRoute: typeof FamilyRoute
+    }
+    '/family/notifications': {
+      id: '/family/notifications'
+      path: '/notifications'
+      fullPath: '/family/notifications'
+      preLoaderRoute: typeof FamilyNotificationsRouteImport
+      parentRoute: typeof FamilyRoute
+    }
+    '/family/login': {
+      id: '/family/login'
+      path: '/login'
+      fullPath: '/family/login'
+      preLoaderRoute: typeof FamilyLoginRouteImport
+      parentRoute: typeof FamilyRoute
+    }
+    '/family/leave': {
+      id: '/family/leave'
+      path: '/leave'
+      fullPath: '/family/leave'
+      preLoaderRoute: typeof FamilyLeaveRouteImport
+      parentRoute: typeof FamilyRoute
+    }
+    '/family/fees': {
+      id: '/family/fees'
+      path: '/fees'
+      fullPath: '/family/fees'
+      preLoaderRoute: typeof FamilyFeesRouteImport
+      parentRoute: typeof FamilyRoute
+    }
+    '/family/attendance': {
+      id: '/family/attendance'
+      path: '/attendance'
+      fullPath: '/family/attendance'
+      preLoaderRoute: typeof FamilyAttendanceRouteImport
+      parentRoute: typeof FamilyRoute
+    }
+    '/family/academics': {
+      id: '/family/academics'
+      path: '/academics'
+      fullPath: '/family/academics'
+      preLoaderRoute: typeof FamilyAcademicsRouteImport
+      parentRoute: typeof FamilyRoute
     }
     '/super-admin/support/': {
       id: '/super-admin/support/'
@@ -860,8 +1080,42 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ParentStudentTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/family/join/$token': {
+      id: '/family/join/$token'
+      path: '/join/$token'
+      fullPath: '/family/join/$token'
+      preLoaderRoute: typeof FamilyJoinTokenRouteImport
+      parentRoute: typeof FamilyRoute
+    }
   }
 }
+
+interface FamilyRouteChildren {
+  FamilyAcademicsRoute: typeof FamilyAcademicsRoute
+  FamilyAttendanceRoute: typeof FamilyAttendanceRoute
+  FamilyFeesRoute: typeof FamilyFeesRoute
+  FamilyLeaveRoute: typeof FamilyLeaveRoute
+  FamilyLoginRoute: typeof FamilyLoginRoute
+  FamilyNotificationsRoute: typeof FamilyNotificationsRoute
+  FamilySettingsRoute: typeof FamilySettingsRoute
+  FamilyIndexRoute: typeof FamilyIndexRoute
+  FamilyJoinTokenRoute: typeof FamilyJoinTokenRoute
+}
+
+const FamilyRouteChildren: FamilyRouteChildren = {
+  FamilyAcademicsRoute: FamilyAcademicsRoute,
+  FamilyAttendanceRoute: FamilyAttendanceRoute,
+  FamilyFeesRoute: FamilyFeesRoute,
+  FamilyLeaveRoute: FamilyLeaveRoute,
+  FamilyLoginRoute: FamilyLoginRoute,
+  FamilyNotificationsRoute: FamilyNotificationsRoute,
+  FamilySettingsRoute: FamilySettingsRoute,
+  FamilyIndexRoute: FamilyIndexRoute,
+  FamilyJoinTokenRoute: FamilyJoinTokenRoute,
+}
+
+const FamilyRouteWithChildren =
+  FamilyRoute._addFileChildren(FamilyRouteChildren)
 
 interface SignupRouteChildren {
   SignupStepRoute: typeof SignupStepRoute
@@ -918,12 +1172,14 @@ const SuperAdminRouteWithChildren = SuperAdminRoute._addFileChildren(
 )
 
 interface TenantRouteChildren {
+  TenantAcademicsRoute: typeof TenantAcademicsRoute
   TenantAiRoute: typeof TenantAiRoute
   TenantAttendanceRoute: typeof TenantAttendanceRoute
   TenantBillingRoute: typeof TenantBillingRoute
   TenantDashboardRoute: typeof TenantDashboardRoute
   TenantFinanceRoute: typeof TenantFinanceRoute
   TenantNotificationsRoute: typeof TenantNotificationsRoute
+  TenantParentsRoute: typeof TenantParentsRoute
   TenantSettingsRoute: typeof TenantSettingsRoute
   TenantStaffRoute: typeof TenantStaffRoute
   TenantStudentsRoute: typeof TenantStudentsRoute
@@ -935,12 +1191,14 @@ interface TenantRouteChildren {
 }
 
 const TenantRouteChildren: TenantRouteChildren = {
+  TenantAcademicsRoute: TenantAcademicsRoute,
   TenantAiRoute: TenantAiRoute,
   TenantAttendanceRoute: TenantAttendanceRoute,
   TenantBillingRoute: TenantBillingRoute,
   TenantDashboardRoute: TenantDashboardRoute,
   TenantFinanceRoute: TenantFinanceRoute,
   TenantNotificationsRoute: TenantNotificationsRoute,
+  TenantParentsRoute: TenantParentsRoute,
   TenantSettingsRoute: TenantSettingsRoute,
   TenantStaffRoute: TenantStaffRoute,
   TenantStudentsRoute: TenantStudentsRoute,
@@ -958,6 +1216,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ContactRoute: ContactRoute,
   DataDeletionRoute: DataDeletionRoute,
+  FamilyRoute: FamilyRouteWithChildren,
   ForgotPasswordRoute: ForgotPasswordRoute,
   HomeRoute: HomeRoute,
   ImpersonateRoute: ImpersonateRoute,

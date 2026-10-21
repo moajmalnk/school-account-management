@@ -1,4 +1,4 @@
-import { filterByAcademicYear } from "@/lib/academic-year";
+import { filterByAcademicYear, parseAcademicYearBounds } from "@/lib/academic-year";
 import { formatEventDate, parseEventDate, parseFlexibleDate, toIsoDate } from "@/lib/dates";
 import {
   isVehicleFeeCategory,
@@ -19,10 +19,12 @@ import {
   type TransportRoute,
 } from "@/lib/tenant-store";
 import {
-  isConcessionTierEnabled,
+  fullConcessionOtherLabels,
+  isFullConcessionTier,
   resolveConcessionOtherFees,
   resolveConcessionTuitionClassConfig,
   resolveConcessionVehicleSchedule,
+  studentHasConcession,
 } from "@/lib/student-concession-fees";
 
 export type StudentLedgerStatus = "Paid" | "Partially Paid" | "Due" | "Overdue" | "On Break";
@@ -281,11 +283,18 @@ function expectedTuitionChargeLines(
   classConfig: ClassConfig | undefined,
   feeTerms: FeeTerm[],
 ): ChargeDraft[] {
+  if (studentHasConcession(student) && isFullConcessionTier(student.concessionFees?.tuition)) {
+    return [];
+  }
   const concessionClass = resolveConcessionTuitionClassConfig(student, classConfig, feeTerms);
   const effectiveClass = concessionClass ?? classConfig;
   if (!effectiveClass) return [];
+  const waivedLabels = fullConcessionOtherLabels(student);
   const scheduled = withClassFeeSchedule(effectiveClass, feeTerms).feeSchedule.filter(
-    (line) => line.amount > 0 && !isVehicleLineLabel(line.label),
+    (line) =>
+      line.amount > 0 &&
+      !isVehicleLineLabel(line.label) &&
+      !waivedLabels.has(line.label.trim().toLowerCase()),
   );
   if (scheduled.length === 0) return [];
 
@@ -304,13 +313,32 @@ function expectedTuitionChargeLines(
   });
 }
 
+/**
+ * Route installment lists are rebuilt from every vehicle period on the campus.
+ * Creating a later academic year appends those periods onto the same list.
+ * Charges for the open year stop at that year's end date so the new periods
+ * cannot raise this year's fee total. Undated lines stay, and earlier periods
+ * stay, because they were already part of this year's bill.
+ */
+function chargeDueInBilledYear(dueDate: string | undefined, academicYear: string): boolean {
+  if (!dueDate || !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) return true;
+  const end = parseAcademicYearBounds(academicYear)?.endDate;
+  if (!end) return true;
+  return dueDate <= end;
+}
+
 function expectedVehicleChargeLines(
   student: Student,
   classConfig: ClassConfig | undefined,
   transportRoutes: TransportRoute[],
   feeTerms: FeeTerm[],
+  academicYear: string,
 ): ChargeDraft[] {
   if (!studentNeedsTransport(student)) return [];
+
+  if (studentHasConcession(student) && isFullConcessionTier(student.concessionFees?.vehicle)) {
+    return [];
+  }
 
   const concessionSchedule = resolveConcessionVehicleSchedule(student);
   if (concessionSchedule.length > 0) {
@@ -340,7 +368,9 @@ function expectedVehicleChargeLines(
   const routeLabel = route ? `${route.mapFrom} → ${route.mapTo}` : undefined;
 
   if (route) {
-    const schedule = routeScheduleForShift(route, shift);
+    const schedule = routeScheduleForShift(route, shift).filter((line) =>
+      chargeDueInBilledYear(line.dueDate, academicYear),
+    );
     if (schedule.length > 0) {
       return schedule.map((line) => {
         const due = line.dueDate || "—";
@@ -827,7 +857,7 @@ export function buildStudentFeeStatement(input: {
     "tuition",
   );
   const vehicleExpected = markBreaksOnCharges(
-    expectedVehicleChargeLines(student, classConfig, transportRoutes, yearTerms),
+    expectedVehicleChargeLines(student, classConfig, transportRoutes, yearTerms, academicYear),
     feeBreaks,
     student.id,
     academicYear,
@@ -961,6 +991,7 @@ export function studentSchedulePeriodOptions(input: {
       classConfig,
       input.transportRoutes ?? [],
       yearTerms,
+      input.academicYear,
     )) {
       push(line.periodLabel || line.desc, line.charge, "vehicle");
     }

@@ -63,6 +63,7 @@ import {
   ensureYearLedger,
   filterByAcademicYear,
   getYearLedger,
+  removeStudentFromYearLedger,
   mergeStudentYearLedgers,
   normalizeAcademicYearLabel,
   parseAcademicYearBounds,
@@ -79,6 +80,7 @@ import {
   type StudentYearFields,
   type StudentYearLedger,
 } from "@/lib/academic-year";
+import type { YearPlacementEntry } from "@/lib/academic-promotion";
 import { toDobIso } from "@/lib/dates";
 import type { CurrencyCode } from "@/lib/locale/currencies";
 import { useOrgCurrency, CURRENCY_TOKEN_SRC } from "@/lib/money";
@@ -118,6 +120,8 @@ export type GuardianRelation = (typeof GUARDIAN_RELATIONS)[number];
 
 export type StudentConcessionFeeTier = {
   enabled: boolean;
+  /** When true, this fee is waived completely. Stored schedule amounts are not billed. */
+  fullConcession?: boolean;
   billingCycle: Extract<ClassBillingCycle, "Monthly" | "Term" | "Annually">;
   feeAmountMode: ClassFeeAmountMode;
   feeSchedule: ClassFeeLine[];
@@ -127,6 +131,8 @@ export type StudentConcessionFeeTier = {
 export type StudentConcessionOtherFee = {
   id: string;
   label: string;
+  /** When true, this named fee is waived completely. */
+  fullConcession?: boolean;
   billingCycle: Extract<ClassBillingCycle, "Monthly" | "Term">;
   feeAmountMode: ClassFeeAmountMode;
   feeSchedule: ClassFeeLine[];
@@ -167,8 +173,10 @@ export type Student = {
   busPoint1?: string;
   busPoint2?: string;
   active?: boolean;
-  /** Why the student was deactivated (audit note; set from Account Status). */
+  /** Why the student is currently inactive. Cleared on reactivation; past reasons stay in statusHistory. */
   deactivationReason?: string;
+  /** Append-only deactivate / reactivate log. Reactivation does not remove earlier rows. */
+  statusHistory?: StaffStatusEvent[];
   /** Opaque token for the public parent profile link */
   shareToken?: string;
   /** Identity documents with optional file attachments */
@@ -733,8 +741,10 @@ function normalizeConcessionFeeTier(raw: unknown): StudentConcessionFeeTier | un
         .map((line, index) => normalizeClassFeeLine(line, index))
         .filter((line): line is ClassFeeLine => line !== null)
     : [];
+  const fullConcession = row.fullConcession === true;
   return {
-    enabled: row.enabled === true,
+    enabled: row.enabled === true || fullConcession,
+    ...(fullConcession ? { fullConcession: true } : {}),
     billingCycle,
     feeAmountMode,
     feeSchedule,
@@ -755,6 +765,7 @@ export function normalizeStudentConcessionFees(raw: unknown): StudentConcessionF
           const id = typeof fee.id === "string" && fee.id.trim() ? fee.id.trim() : "";
           const label = typeof fee.label === "string" ? fee.label.trim() : "";
           if (!id || !label) return null;
+          const fullConcession = fee.fullConcession === true;
           const billingCycle = fee.billingCycle === "Term" ? "Term" : "Monthly";
           const feeAmountMode = fee.feeAmountMode === "custom" ? "custom" : "fixed";
           const feeSchedule = Array.isArray(fee.feeSchedule)
@@ -766,6 +777,7 @@ export function normalizeStudentConcessionFees(raw: unknown): StudentConcessionF
           const normalized: StudentConcessionOtherFee = {
             id,
             label,
+            ...(fullConcession ? { fullConcession: true } : {}),
             billingCycle,
             feeAmountMode,
             feeSchedule,
@@ -780,6 +792,89 @@ export function normalizeStudentConcessionFees(raw: unknown): StudentConcessionF
     ...(tuition ? { tuition } : {}),
     ...(vehicle ? { vehicle } : {}),
     ...(otherFees?.length ? { otherFees } : {}),
+  };
+}
+
+function normalizeStudentStatusHistory(raw: unknown): StaffStatusEvent[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const events: StaffStatusEvent[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Partial<StaffStatusEvent>;
+    if (
+      typeof row.id !== "string" ||
+      typeof row.at !== "string" ||
+      (row.type !== "deactivated" && row.type !== "reactivated")
+    ) {
+      continue;
+    }
+    events.push({
+      id: row.id,
+      type: row.type,
+      at: row.at,
+      note: typeof row.note === "string" && row.note.trim() ? row.note.trim() : undefined,
+    });
+  }
+  return events.length ? events : undefined;
+}
+
+/**
+ * Server logs win once they exist. Until that API is live, keep the history
+ * already saved on this device so a refresh does not wipe the first deactivation.
+ */
+export function mergeKeptStudentStatusHistory(remote: Student[], local: Student[]): Student[] {
+  if (!local.length) return remote;
+  const localById = new Map(local.map((student) => [student.id, student.statusHistory ?? []]));
+  return remote.map((student) => {
+    const remoteHistory = student.statusHistory ?? [];
+    const kept = localById.get(student.id) ?? [];
+    if (remoteHistory.length || kept.length === 0) return student;
+    return { ...student, statusHistory: kept };
+  });
+}
+
+/** Keep the previous deactivation in history when the account is turned active again. */
+export function withStudentStatusChange(
+  student: Student,
+  nextActive: boolean,
+  reason?: string,
+): Student {
+  const at = new Date().toISOString();
+  const history = student.statusHistory ?? [];
+  const events: StaffStatusEvent[] = [];
+  if (nextActive) {
+    events.push({
+      id: `SEV-${student.id}-on-${Date.now()}`,
+      type: "reactivated",
+      at,
+      note: "Account reactivated",
+    });
+    const prior = student.deactivationReason?.trim();
+    const alreadyLogged = history.some(
+      (event) => event.type === "deactivated" && event.note === prior,
+    );
+    if (prior && !alreadyLogged) {
+      events.push({
+        id: `SEV-${student.id}-prior-${Date.now()}`,
+        type: "deactivated",
+        at,
+        note: prior,
+      });
+    }
+  } else {
+    const note = reason?.trim();
+    events.push({
+      id: `SEV-${student.id}-off-${Date.now()}`,
+      type: "deactivated",
+      at,
+      note: note || undefined,
+    });
+  }
+  return {
+    ...student,
+    active: nextActive,
+    deactivationReason: nextActive ? undefined : reason?.trim() || student.deactivationReason,
+    statusHistory: [...events, ...history],
   };
 }
 
@@ -819,6 +914,8 @@ export function normalizeStudent(
     busPoint1: optionalTrimmedString(raw.busPoint1),
     busPoint2: optionalTrimmedString(raw.busPoint2),
     active: typeof raw.active === "boolean" ? raw.active : true,
+    deactivationReason: optionalTrimmedString(raw.deactivationReason),
+    statusHistory: normalizeStudentStatusHistory(raw.statusHistory),
     shareToken:
       typeof raw.shareToken === "string" && raw.shareToken.trim()
         ? raw.shareToken.trim()
@@ -2808,6 +2905,18 @@ function normalizeDashboardTodos(raw: unknown): string[] {
 }
 
 /** Cheap fingerprint to skip no-op cache→API repaints when counts/year/branch are unchanged. */
+function studentStatusDigest(students: unknown[]): string {
+  let events = 0;
+  let inactive = 0;
+  for (const student of students) {
+    if (!student || typeof student !== "object") continue;
+    const row = student as { active?: boolean; statusHistory?: unknown };
+    if (row.active === false) inactive += 1;
+    if (Array.isArray(row.statusHistory)) events += row.statusHistory.length;
+  }
+  return `${inactive}:${events}`;
+}
+
 function snapshotDigest(snap: {
   students: unknown[];
   staff: unknown[];
@@ -2815,7 +2924,7 @@ function snapshotDigest(snap: {
   academicYear: string;
   activeBranchId: string;
 }): string {
-  return `${snap.students.length}|${snap.staff.length}|${snap.payments.length}|${snap.academicYear}|${snap.activeBranchId}`;
+  return `${snap.students.length}|${studentStatusDigest(snap.students)}|${snap.staff.length}|${snap.payments.length}|${snap.academicYear}|${snap.activeBranchId}`;
 }
 
 const NOTIFICATION_CATEGORIES = ["fees", "admissions", "staff", "system", "transport"] as const;
@@ -4326,7 +4435,7 @@ type TenantStoreValue = {
   /** Open another year’s books (updates active year + syncs student overlays). */
   openAcademicYear: (year: string) => { receipts: number; enrolled: number };
   /** Add a year, cloning catalogs and fee terms from the nearest existing year. */
-  addAcademicYear: (year: string) => boolean;
+  addAcademicYear: (year: string, opts?: { activate?: boolean }) => boolean;
   /** Copy last year's staff roster into the open year as independent rows. */
   copyStaffFromPreviousYear: (fromYear?: string) => { copied: number; fromYear: string | null };
   /** Rename a year label across books, fees, receipts, catalogs, staff, and enrollments. */
@@ -4342,6 +4451,11 @@ type TenantStoreValue = {
     fields: StudentYearFields,
     opts?: { syncRemote?: boolean },
   ) => void;
+  /**
+   * Write class placements for one academic year.
+   * Does not change the open year's class unless `year` is the open year.
+   */
+  placeStudentsInYear: (year: string, entries: YearPlacementEntry[]) => Promise<void>;
   /** Atomically add a new student and enroll them in the active academic year. */
   admitStudentToActiveYear: (
     student: Student,
@@ -5074,6 +5188,18 @@ export function resolveTransportFeeForStudent(
     return { amount: undefined, shift: "both" };
   }
 
+  if (
+    student.hasConcession &&
+    student.concessionFees?.vehicle?.enabled &&
+    student.concessionFees.vehicle.fullConcession
+  ) {
+    return {
+      amount: 0,
+      shift: resolveTransportFeeShift(student),
+      route: findTransportRouteForStudent(student, routes),
+    };
+  }
+
   if (student.hasConcession && student.concessionFees?.vehicle?.enabled) {
     const tier = student.concessionFees.vehicle;
     const schedule = tier.feeSchedule.filter((line) => line.amount > 0);
@@ -5687,9 +5813,11 @@ export function TenantStoreProvider({
             const mergedBranches = keepLocalBranches ? branchesRef.current : remote.branches;
             // Prefer server year ledgers so every browser sees the same roster.
             // Fall back to localStorage only when the API has no year-field rows yet.
-            const localLedgers =
-              readCampusSnapshot(tenantId, remote.activeBranchId || bootBranchId)
-                ?.studentYearLedgers ?? [];
+            const localCampus = readCampusSnapshot(
+              tenantId,
+              remote.activeBranchId || bootBranchId,
+            );
+            const localLedgers = localCampus?.studentYearLedgers ?? [];
             const remoteLedgers = remote.studentYearLedgers ?? [];
             const mergedLedgers =
               remoteLedgers.length > 0
@@ -5711,7 +5839,10 @@ export function TenantStoreProvider({
             }
             const sessionTenantName = tenantNameRef.current?.trim() || "";
             const nextSnapshot = {
-              students: remote.students,
+              students: mergeKeptStudentStatusHistory(
+                remote.students,
+                localCampus?.students ?? [],
+              ),
               staff: remote.staff,
               payments: remote.payments,
               departments: remote.departments,
@@ -6057,10 +6188,11 @@ export function TenantStoreProvider({
   );
 
   const addAcademicYear = useCallback(
-    (year: string) => {
+    (year: string, opts?: { activate?: boolean }) => {
       if (academicYears.some((y) => y.toLowerCase() === year.toLowerCase())) {
         return false;
       }
+      const activate = opts?.activate !== false;
       const sourceYear =
         academicYears.find((y) => y === academicYear) ??
         academicYears[academicYears.length - 1] ??
@@ -6093,14 +6225,17 @@ export function TenantStoreProvider({
       setTransportRoutes((prev) => [...prev, ...clonedCatalogs.transportRoutes]);
       setStudentYearLedgers((prev) => ensureYearLedger(prev, year));
       setAcademicYears(nextYears);
-      beginBooksOpening(year);
-      setAcademicYearState(year);
+      if (activate) {
+        beginBooksOpening(year);
+        setAcademicYearState(year);
+      }
+      const openYear = activate ? year : academicYear;
       if (getApiToken()) {
         void (async () => {
           try {
             await apiSyncAcademicYears({
               academicYears: nextYears,
-              academicYear: year,
+              academicYear: openYear,
               closedAcademicYears,
             });
             for (const term of cloned) {
@@ -6409,6 +6544,62 @@ export function TenantStoreProvider({
     [academicYear],
   );
 
+  const placeStudentsInYear = useCallback(
+    async (year: string, entries: YearPlacementEntry[]) => {
+      const target = year.trim();
+      if (!target || entries.length === 0) return;
+      const writingOpenYear = target === academicYear;
+      const roster = new Map(students.map((student) => [student.id, student]));
+      const dueFor = (studentId: string) =>
+        writingOpenYear ? Math.max(0, Math.round(roster.get(studentId)?.due ?? 0)) : 0;
+
+      const applyLocal = () => {
+        setStudentYearLedgers((prev) => {
+          let next = ensureYearLedger(prev, target);
+          for (const entry of entries) {
+            if (entry.remove) {
+              next = removeStudentFromYearLedger(next, target, entry.studentId);
+              continue;
+            }
+            next = upsertStudentYearFields(next, target, entry.studentId, {
+              cls: entry.cls,
+              due: dueFor(entry.studentId),
+              active: entry.active,
+            });
+          }
+          return next;
+        });
+        if (!writingOpenYear) return;
+        setStudents((prev) =>
+          prev.map((student) => {
+            const entry = entries.find((item) => item.studentId === student.id);
+            if (!entry || entry.remove) return student;
+            return applyLedgerToStudent(student, {
+              cls: entry.cls,
+              due: student.due,
+              active: entry.active,
+            });
+          }),
+        );
+      };
+
+      if (getApiToken()) {
+        await apiSyncStudentYearFields(
+          entries.map((entry) => ({
+            studentId: entry.studentId,
+            academicYear: target,
+            cls: entry.cls,
+            due: dueFor(entry.studentId),
+            active: entry.active,
+            remove: entry.remove === true,
+          })),
+        );
+      }
+      applyLocal();
+    },
+    [academicYear, students],
+  );
+
   const resetTenant = () => {
     setStudents(SEED_STUDENTS);
     setStaff(SEED_YEAR_CATALOGS.staff);
@@ -6577,6 +6768,10 @@ export function TenantStoreProvider({
           }
           applyBranchWorkspaceData({
             ...workspace,
+            students: mergeKeptStudentStatusHistory(
+              workspace.students,
+              cached?.students ?? [],
+            ),
             studentYearLedgers: ledgers,
             activeBranchId: nextId,
           });
@@ -6667,6 +6862,7 @@ export function TenantStoreProvider({
       deleteAcademicYear,
       enrollStudentInActiveYear,
       admitStudentToActiveYear,
+      placeStudentsInYear,
       themeSettings,
       setThemeSettings,
       schoolDetails,
@@ -6726,6 +6922,7 @@ export function TenantStoreProvider({
       deleteAcademicYear,
       enrollStudentInActiveYear,
       admitStudentToActiveYear,
+      placeStudentsInYear,
       themeSettings,
       schoolDetails,
       dashboardTodos,

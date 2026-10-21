@@ -95,7 +95,31 @@ export type WhatsAppNotifyResult = {
   ok: boolean;
   status: number;
   body: string;
+  error: string | null;
 };
+
+/** Turn a Notify API body into a sentence a user can act on. */
+export function describeWhatsAppFailure(body: string, status: number): string {
+  const trimmed = body.trim();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed) as { error?: unknown; message?: unknown };
+      const text = [parsed.error, parsed.message].find(
+        (value) => typeof value === "string" && value.trim() !== "",
+      );
+      if (typeof text === "string") return text.trim();
+    } catch {
+      // Body was not JSON.
+    }
+  }
+  if (trimmed) return trimmed.slice(0, 180);
+  return `WhatsApp service returned HTTP ${status}.`;
+}
+
+/** The BugRicer line has no linked WhatsApp session, so sends cannot leave the server. */
+export function whatsAppGatewayNeedsConnect(message: string): boolean {
+  return /not connected|connect whatsapp/i.test(message);
+}
 
 export async function sendWhatsAppNotify(params: {
   numbers: string[];
@@ -123,7 +147,12 @@ export async function sendWhatsAppNotify(params: {
     body: form,
   });
   const body = await res.text();
-  return { ok: res.ok, status: res.status, body };
+  return {
+    ok: res.ok,
+    status: res.status,
+    body,
+    error: res.ok ? null : describeWhatsAppFailure(body, res.status),
+  };
 }
 
 /** Detects `{{ var }}` placeholders that need per-recipient rendering. */
@@ -289,7 +318,7 @@ export async function sendPersonalizedWhatsApp(params: {
         sent += 1;
       } else {
         failed += 1;
-        errors.push(`${row.number}: ${result.body.slice(0, 120) || `HTTP ${result.status}`}`);
+        errors.push(result.error ?? `HTTP ${result.status}`);
       }
     } catch (err) {
       failed += 1;

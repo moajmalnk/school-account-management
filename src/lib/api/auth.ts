@@ -24,6 +24,8 @@ export type ApiLoginSession = {
   tier?: string;
   planName?: string;
   planFlags?: PlanFlags;
+  /** School PDFs include the Feezo footer credit. Omitted means on. */
+  pdfCreditEnabled?: boolean;
 };
 
 export type ApiLoginResponse = {
@@ -66,26 +68,49 @@ export async function apiPing(): Promise<{ ok: boolean }> {
   return apiRequest<{ ok: boolean }>("/api/auth/ping.php", { timeoutMs: 15_000 });
 }
 
-/** Revoke this browser's server session. Best-effort — local logout still proceeds. */
-export async function apiLogoutCurrentDevice(): Promise<void> {
-  if (typeof window === "undefined") return;
+export type LogoutScope = "device" | "everywhere";
+
+/**
+ * End the server session for this browser.
+ * `everywhere` first revokes every other session for this login, then this one.
+ * Best-effort — local logout still proceeds when the network call fails.
+ */
+export async function apiLogoutCurrentDevice(
+  scope: LogoutScope = "device",
+): Promise<{ othersRevoked: boolean }> {
+  if (typeof window === "undefined") return { othersRevoked: false };
   const sessionId = getAuthSessionId();
   const token = window.localStorage.getItem(ACCESS_TOKEN_KEY);
-  if (!token) return;
-  try {
-    await fetch(`${apiRequestOrigin()}/api/auth/logout-device.php`, {
+  if (!token) return { othersRevoked: false };
+
+  const call = (body: Record<string, unknown>) =>
+    fetch(`${apiRequestOrigin()}/api/auth/logout-device.php`, {
       method: "POST",
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify(sessionId ? { sessionId } : {}),
+      body: JSON.stringify(body),
       keepalive: true,
     });
+
+  let othersRevoked = scope !== "everywhere";
+  if (scope === "everywhere" && sessionId) {
+    try {
+      const res = await call({ sessionId, revokeOthers: true });
+      othersRevoked = res.ok;
+    } catch {
+      othersRevoked = false;
+    }
+  }
+
+  try {
+    await call(sessionId ? { sessionId } : {});
   } catch {
     // Offline / already expired — local sign-out still holds.
   }
+  return { othersRevoked };
 }
 
 export type ForgotPasswordResponse = {

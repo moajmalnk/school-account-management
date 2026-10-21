@@ -58,13 +58,13 @@ type Channel = {
 const CHANNELS: Channel[] = [
   {
     id: "email",
-    label: "Email",
-    value: C.email,
-    hint: "Sales, onboarding & general questions",
+    label: "Support email",
+    value: BRAND.legal.supportEmail,
+    hint: "Product support and account help",
     icon: <Mail className="h-5 w-5" aria-hidden />,
-    href: `mailto:${C.email}?subject=${encodeURIComponent("Enquiry about Feezo")}`,
+    href: `mailto:${BRAND.legal.supportEmail}?subject=${encodeURIComponent("Support request")}`,
     cta: "Write to us",
-    copy: C.email,
+    copy: BRAND.legal.supportEmail,
     tone: "bg-sky-50 text-sky-600",
   },
   {
@@ -92,9 +92,9 @@ const CHANNELS: Channel[] = [
   },
   {
     id: "global",
-    label: "Global",
+    label: "Registered address",
     value: C.location,
-    hint: `Serving schools across ${C.country} & beyond`,
+    hint: C.registeredAddress,
     icon: <Globe2 className="h-5 w-5" aria-hidden />,
     href: MAP_LINK,
     cta: "View on map",
@@ -224,9 +224,9 @@ export function ContactPage() {
                 <MapPin className="h-5 w-5" aria-hidden />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-[15px] font-semibold text-[var(--mkt-ink)]">Feezo HQ</p>
-                <p className="text-[13.5px] text-[var(--mkt-muted)]">
-                  {C.location}, {C.country}
+                <p className="text-[15px] font-semibold text-[var(--mkt-ink)]">Registered address</p>
+                <p className="text-[13.5px] leading-relaxed text-[var(--mkt-muted)]">
+                  {C.registeredAddress}
                 </p>
                 <a
                   href={MAP_LINK}
@@ -242,13 +242,21 @@ export function ContactPage() {
 
           <div className="rounded-[24px] border border-[var(--mkt-line)] bg-white p-5 shadow-[0_18px_50px_-36px_rgba(26,28,44,0.45)]">
             <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--mkt-muted)]">
+              Operator
+            </p>
+            <p className="mt-3 text-[14px] leading-relaxed text-[var(--mkt-ink)]/80">
+              {BRAND.legal.operatorNotice}
+            </p>
+          </div>
+
+          <div className="rounded-[24px] border border-[var(--mkt-line)] bg-white p-5 shadow-[0_18px_50px_-36px_rgba(26,28,44,0.45)]">
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--mkt-muted)]">
               Working hours
             </p>
             <dl className="mt-3 space-y-2 text-[14px]">
               <HoursRow day="Monday – Saturday" time="9:30 AM – 6:30 PM" />
               <HoursRow day="Sunday & holidays" time="WhatsApp only" muted />
             </dl>
-            <p className="mt-3 text-[12px] text-[var(--mkt-muted)]">All times in IST (UTC+5:30).</p>
           </div>
 
           <div className="rounded-[24px] bg-[var(--mkt-ink)] p-5 text-white shadow-[0_18px_50px_-30px_rgba(26,28,44,0.7)]">

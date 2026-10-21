@@ -59,7 +59,7 @@ import { getApiToken } from "@/lib/api/client";
 import { buildClassFromLabel, matchExistingClass, nextPrefixedId } from "@/lib/student-csv";
 import { toDobIso } from "@/lib/dates";
 import { cn, glassCardClass } from "@/lib/utils";
-import { validateConcessionFees } from "@/lib/student-concession-fees";
+import { isFullConcessionTier, validateConcessionFees } from "@/lib/student-concession-fees";
 import {
   isPeriodOnBreak,
   studentFeeBreaksForYear,
@@ -265,19 +265,21 @@ export function StudentEditPage() {
           busPoint1: draft.busPoint1,
           busPoint2: draft.busPoint2,
           cls: draft.cls,
+          hasConcession: concession.hasConcession,
+          concessionFees: concession.concessionFees,
         },
         transportRoutes,
         matchedClass,
         undefined,
         activeFeeTerms,
       ),
-    [draft, transportRoutes, matchedClass, activeFeeTerms],
+    [draft, concession.hasConcession, concession.concessionFees, transportRoutes, matchedClass, activeFeeTerms],
   );
 
   const draftAsStudent = useMemo((): Student | null => {
     if (!student) return null;
     return applyDraftToStudent(student, draft, concession);
-  }, [student, draft]);
+  }, [student, draft, concession]);
 
   const vehiclePeriodOptions = useMemo(() => {
     if (!draftAsStudent || !draft.needsBus) return [];
@@ -988,7 +990,13 @@ export function StudentEditPage() {
             </div>
           )}
 
-          {draft.needsBus && draftTransportFee.amount && draftTransportFee.amount > 0 ? (
+          {draft.needsBus &&
+          concession.hasConcession &&
+          isFullConcessionTier(concession.concessionFees.vehicle) ? (
+            <p className="rounded-xl border border-[#CCFBF1] bg-[#F0FDFA]/70 px-3.5 py-3 text-[12px] leading-relaxed text-[#115E59] dark:border-teal-500/30 dark:bg-teal-950/40 dark:text-teal-100">
+              Bus fee is fully waived. Nothing is collected for transport.
+            </p>
+          ) : draft.needsBus && draftTransportFee.amount && draftTransportFee.amount > 0 ? (
             <div className="space-y-3 rounded-xl border border-[#CCFBF1] bg-[#F0FDFA]/70 px-3.5 py-3 dark:border-teal-500/30 dark:bg-teal-950/40">
               <div className="text-[12px] text-slate-600 dark:text-zinc-300">
                 Vehicle fee for selected route:{" "}

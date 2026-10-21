@@ -34,6 +34,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { SchoolLogo } from "@/components/ui/school-logo";
 import { hardRefreshApp } from "@/lib/app-version";
 import {
   SettingsUnsavedProvider,
@@ -269,11 +270,12 @@ function TenantMobileHeader() {
   const NAV_LABELS: Record<string, string> = {
     "/tenant/dashboard": "Home",
     "/tenant/students": "Students",
+    "/tenant/parents": "Parents",
     "/tenant/attendance": "Attendance",
+    "/tenant/academics": "Academics",
     "/tenant/staff": "Staff",
     "/tenant/finance": "Finance",
     "/tenant/support": "Support",
-    "/tenant/billing": "Subscription",
     "/tenant/settings": "Settings",
   };
   const activeKey = Object.keys(NAV_LABELS).find((k) => pathname.startsWith(k));
@@ -315,17 +317,13 @@ function TenantMobileHeader() {
         ) : (
           <div
             className={cn(
-              "grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-xl text-[10px] font-bold text-white",
+              "relative grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-xl text-[10px] font-bold text-white",
               !logoUrl && "bg-gradient-to-br from-[#0F766E] to-[#115E59]",
             )}
             title={tenantName}
             aria-label={`${tenantName} · ${sectionLabel}`}
           >
-            {logoUrl ? (
-              <img src={logoUrl} alt="" className="h-full w-full bg-white object-contain p-0.5" />
-            ) : (
-              initials
-            )}
+            {logoUrl ? <SchoolLogo src={logoUrl} className="absolute inset-0" /> : initials}
           </div>
         )}
 

@@ -35,6 +35,7 @@ export type SuperAdminPlanFlags = {
   whatsapp: boolean;
   branches: boolean;
   globalSearch: boolean;
+  exams: boolean;
 };
 
 export type SuperAdminPlan = {
@@ -104,6 +105,7 @@ export type ImpersonateResult = {
     tier?: string;
     planName?: string;
     planFlags?: SuperAdminPlanFlags;
+    pdfCreditEnabled?: boolean;
     impersonation?: boolean;
     ticket?: string;
   };
@@ -335,6 +337,8 @@ export type UpdateTenantInput = {
   username?: string;
   /** When set, resets the primary school admin login password. */
   password?: string;
+  /** When set, shows or hides the Feezo credit on this school's PDFs. */
+  pdfCreditEnabled?: boolean;
 };
 
 export async function updateSuperAdminTenant(input: UpdateTenantInput): Promise<Tenant> {

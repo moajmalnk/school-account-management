@@ -6,6 +6,7 @@ import {
   ChevronUp,
   FileText,
   GraduationCap,
+  Smartphone,
   UserRound,
   Wallet,
 } from "lucide-react";
@@ -26,6 +27,7 @@ export const STUDENT_PROFILE_TAB_IDS = [
   "attendance",
   "documents",
   "payments",
+  "parents-app",
 ] as const;
 
 export const STAFF_PROFILE_TAB_IDS = [
@@ -53,6 +55,7 @@ export const STUDENT_PROFILE_TABS: ProfileDetailTab[] = [
   { id: "attendance", label: "Attendance", shortLabel: "Attend.", icon: CalendarDays },
   { id: "documents", label: "Documents", shortLabel: "Docs", icon: FileText },
   { id: "payments", label: "Payments", icon: Wallet },
+  { id: "parents-app", label: "Parents app", shortLabel: "Family", icon: Smartphone },
 ];
 
 export const STAFF_PROFILE_TABS: ProfileDetailTab[] = [
@@ -231,13 +234,23 @@ export function ProfileTabPanel({
   value,
   className,
   children,
+  forceMount,
 }: {
   value: ProfileDetailTabId;
   className?: string;
   children: ReactNode;
+  /** Keep the panel mounted so an in-progress form can warn before navigation. */
+  forceMount?: boolean;
 }) {
   return (
-    <TabsContent value={value} className={cn("mt-4 focus-visible:outline-none", className)}>
+    <TabsContent
+      value={value}
+      forceMount={forceMount ? true : undefined}
+      className={cn(
+        "mt-4 focus-visible:outline-none data-[state=inactive]:hidden",
+        className,
+      )}
+    >
       {children}
     </TabsContent>
   );

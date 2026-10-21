@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Search } from "lucide-react";
+import { Loader2, Search, Upload, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { AttendanceActions } from "@/components/school/attendance/attendance-toolbar";
+import { AttendanceUploadDialog } from "@/components/school/attendance/AttendanceUploadDialog";
+import { MarkStaffAttendanceModal } from "@/components/school/attendance/MarkStaffAttendanceModal";
 import { apiUpsertStaff } from "@/lib/api/records";
+import {
+  parseStaffAttendanceTable,
+  STAFF_ATTENDANCE_HEADERS,
+  weekdaysInMonth,
+} from "@/lib/attendance-import";
+import { formatDownloadFilename } from "@/lib/download-names";
+import { downloadBlobFile } from "@/lib/finance-export";
+import { buildXlsxBlob } from "@/lib/xlsx-workbook";
 import {
   currentPayrollMonth,
   formatPayrollMonthLabel,
@@ -97,10 +108,12 @@ function SummaryStat({ label, value }: { label: string; value: string }) {
 }
 
 export function StaffAttendancePanel() {
-  const { activeStaff, setStaff, activeDepartments } = useTenantStore();
+  const { activeStaff, setStaff, activeDepartments, schoolDetails } = useTenantStore();
   const [month, setMonth] = useState(currentPayrollMonth);
   const [department, setDepartment] = useState("all");
   const [query, setQuery] = useState("");
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [editing, setEditing] = useState<Staff | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
@@ -243,19 +256,33 @@ export function StaffAttendancePanel() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <p className="max-w-xl text-[13px] leading-relaxed text-slate-500 dark:text-zinc-400">
-          One row per staff member for the payroll month. Payable days are days present plus paid
-          leave. Unpaid leave is loss of pay. A blank row is not recorded — it is not full attendance.
-        </p>
+      <AttendanceActions>
         <MonthPicker
           value={month}
           onChange={(next) => setMonth(next || currentPayrollMonth())}
           allowClear={false}
           placeholder="Select month"
-          className="h-10 w-full rounded-xl sm:w-[12.5rem]"
+          className="h-10 w-full min-w-0 rounded-xl"
         />
-      </div>
+        <Button
+          type="button"
+          className="h-10 w-full rounded-full bg-[#0F766E] px-4 text-white hover:bg-[#0D9488]"
+          disabled={roster.length === 0}
+          onClick={() => setBulkOpen(true)}
+        >
+          <UserCheck className="mr-1.5 h-4 w-4 shrink-0" />
+          <span className="truncate">Mark staff</span>
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-10 w-full rounded-full px-4"
+          onClick={() => setUploadOpen(true)}
+        >
+          <Upload className="mr-1.5 h-4 w-4 shrink-0" />
+          Upload
+        </Button>
+      </AttendanceActions>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <SummaryStat label="Staff" value={String(rows.length)} />
@@ -361,6 +388,96 @@ export function StaffAttendancePanel() {
           </div>
         )}
       </section>
+
+      <AttendanceUploadDialog
+        open={uploadOpen}
+        onOpenChange={setUploadOpen}
+        title="Upload staff attendance"
+        description={`Download the mock Excel for ${formatPayrollMonthLabel(month)}, adjust leave, then upload.`}
+        hint="Blank day counts mean full present for that month's weekdays. Present + paid leave + unpaid leave cannot pass working days."
+        onDownloadMock={() => {
+          const working = String(weekdaysInMonth(month) || 22);
+          const sample = roster.length
+            ? roster.map((member) => [member.id, member.name, month, working, working, "0", "0"])
+            : [
+                ["STF-004", "Anita Desai", month, working, working, "0", "0"],
+                ["STF-002", "Arun Thomas", month, String(Math.max(0, Number(working) - 2)), working, "2", "0"],
+                ["STF-013", "George Abraham", month, String(Math.max(0, Number(working) - 1)), working, "0", "1"],
+              ];
+          downloadBlobFile(
+            buildXlsxBlob("Staff", [[...STAFF_ATTENDANCE_HEADERS], ...sample]),
+            formatDownloadFilename("bulkDemo", "xlsx", {
+              report: "staff-attendance",
+              date: month,
+              school: schoolDetails.name || "School",
+            }),
+          );
+          toast.success("Mock Excel downloaded", {
+            description: roster.length
+              ? `${roster.length} staff listed as full present for ${formatPayrollMonthLabel(month)}.`
+              : "Sample rows use STF-004 style IDs. Replace them with real staff IDs before upload.",
+          });
+        }}
+        parseTable={(table) =>
+          parseStaffAttendanceTable(table, {
+            fallbackMonth: month,
+            knownIds: new Set(roster.map((member) => member.id.toLowerCase())),
+          })
+        }
+        onSave={async (rows) => {
+          const byId = new Map(roster.map((member) => [member.id.toLowerCase(), member]));
+          let savedCount = 0;
+          for (const row of rows) {
+            const member = byId.get(row.staffId.toLowerCase());
+            if (!member) continue;
+            const normalized = normalizeStaffAttendanceMonth({
+              month: row.month,
+              daysPresent: row.daysPresent,
+              workingDays: row.workingDays,
+              paidLeaveDays: row.paidLeaveDays,
+              unpaidLeaveDays: row.unpaidLeaveDays,
+            });
+            if (!normalized) continue;
+            const updated: Staff = {
+              ...member,
+              attendanceByMonth: upsertStaffAttendanceMonth(member.attendanceByMonth, normalized),
+            };
+            setStaff((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+            try {
+              const saved = await apiUpsertStaff(updated);
+              const merged = normalizeStaff({
+                ...updated,
+                ...saved,
+                attendanceByMonth: updated.attendanceByMonth,
+              });
+              setStaff((prev) => prev.map((item) => (item.id === updated.id ? merged : item)));
+              byId.set(member.id.toLowerCase(), merged);
+              savedCount += 1;
+            } catch (err) {
+              setStaff((prev) => prev.map((item) => (item.id === member.id ? member : item)));
+              throw err instanceof Error
+                ? new Error(
+                    savedCount > 0
+                      ? `${savedCount} saved before ${member.name} failed. ${err.message}`
+                      : err.message,
+                  )
+                : err;
+            }
+          }
+          toast.success("Staff attendance uploaded", {
+            description: `${savedCount} staff recorded for ${formatPayrollMonthLabel(month)}.`,
+          });
+        }}
+      />
+
+      <MarkStaffAttendanceModal
+        open={bulkOpen}
+        onOpenChange={setBulkOpen}
+        month={month}
+        roster={roster}
+        departments={departments}
+        initialDepartment={department}
+      />
 
       <Dialog open={Boolean(editing)} onOpenChange={(open) => (open ? null : requestClose())}>
         <DialogContent className="max-w-md rounded-2xl">

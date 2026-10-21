@@ -143,6 +143,8 @@ export async function apiSyncStudentYearFields(
     cls: string;
     due: number;
     active: boolean;
+    /** Drop the year enrollment instead of upserting it. */
+    remove?: boolean;
   }>,
 ): Promise<void> {
   if (!hasToken() || entries.length === 0) return;

@@ -6,12 +6,13 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
-  Crown,
   LifeBuoy,
   Eye,
   LayoutDashboard,
   Loader2,
   LogOut,
+  Monitor,
+  MonitorSmartphone,
   Moon,
   MoreHorizontal,
   PanelLeftClose,
@@ -37,9 +38,12 @@ import {
 } from "react";
 import { toast } from "sonner";
 
+import { apiLogoutCurrentDevice, type LogoutScope } from "@/lib/api/auth";
 import { FeezoBrand } from "@/components/brand/FeezoBrand";
+import { SchoolLogo } from "@/components/ui/school-logo";
 import { useOptionalSettingsUnsavedGuard } from "@/components/school/settings-unsaved-guard";
 import { Button } from "@/components/ui/button";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -187,7 +191,7 @@ export function ImpersonationChip({ compact = false }: { compact?: boolean }) {
           className={cn(
             "inline-flex max-w-[7.5rem] items-center gap-1 rounded-full border border-amber-300/80 bg-amber-50 px-2 py-2 text-[11px] font-semibold text-amber-950 shadow-sm backdrop-blur-md transition-colors hover:border-amber-400 hover:bg-amber-100/90 dark:border-amber-500/30 dark:bg-amber-950/50 dark:text-amber-100 dark:hover:bg-amber-900/60 sm:gap-1.5 sm:px-2.5 sm:text-[12px] lg:max-w-[9rem]",
             compact &&
-              "h-8 w-8 max-w-8 shrink-0 justify-center px-0 py-0 sm:h-8 sm:w-auto sm:max-w-[6.5rem] sm:px-2 lg:h-9 lg:max-w-[7.5rem]",
+              "h-8 w-8 max-w-8 shrink-0 justify-center gap-0 px-0 py-0 sm:h-8 sm:w-8 sm:max-w-8 sm:gap-0 sm:px-0 lg:h-9 lg:w-9 lg:max-w-9 lg:gap-0 lg:px-0 xl:w-auto xl:max-w-[8.5rem] xl:justify-start xl:gap-1.5 xl:px-2.5",
           )}
         >
           <span className="relative grid h-3.5 w-3.5 shrink-0 place-items-center">
@@ -196,8 +200,8 @@ export function ImpersonationChip({ compact = false }: { compact?: boolean }) {
           </span>
           {compact ? (
             <>
-              <span className="hidden truncate sm:inline">Preview</span>
-              <span className="sr-only sm:hidden">Preview</span>
+              <span className="hidden truncate xl:inline">Preview</span>
+              <span className="sr-only xl:hidden">Preview</span>
             </>
           ) : (
             <span className="truncate">Preview</span>
@@ -284,7 +288,7 @@ export function BranchSwitcher({
         aria-label="Loading campus"
         className={cn(
           "h-9 w-[8.5rem] rounded-full bg-white/70 sm:w-[10rem]",
-          compact && !iconOnly && "h-8 w-[5.25rem] sm:w-[7.5rem]",
+          compact && !iconOnly && "h-8 w-8 sm:w-8 lg:h-9 lg:w-9 xl:w-[10rem]",
           iconOnly && "h-8 w-8 shrink-0",
         )}
       />
@@ -341,7 +345,7 @@ export function BranchSwitcher({
               "inline-flex max-w-[9.5rem] items-center gap-1 rounded-full border border-slate-200/80 bg-white/80 px-2.5 py-2 text-[11px] font-semibold text-slate-800 shadow-sm backdrop-blur-md transition-colors hover:border-[#0F766E]/40 hover:text-[#0F766E] disabled:cursor-wait disabled:opacity-70 dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-100 dark:hover:text-[#2DD4BF] lg:max-w-[12rem] lg:gap-1.5 lg:px-3.5 lg:text-[12px]",
               compact &&
                 !iconOnly &&
-                "h-8 max-w-[5.25rem] px-1.5 py-0 text-[10px] sm:max-w-[7.75rem] sm:px-2 lg:h-9 lg:max-w-[10rem] lg:px-2.5 lg:text-[11px] xl:max-w-[12rem]",
+                "h-8 w-8 max-w-8 shrink-0 justify-center gap-0 px-0 py-0 lg:h-9 lg:w-9 lg:max-w-9 lg:gap-0 lg:px-0 xl:w-auto xl:max-w-[12rem] xl:justify-start xl:gap-1.5 xl:px-2.5 xl:text-[12px]",
               iconOnly &&
                 "h-8 w-8 max-w-8 shrink-0 justify-center px-0 py-0 text-slate-600 dark:text-zinc-300",
             )}
@@ -350,14 +354,16 @@ export function BranchSwitcher({
               <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" strokeWidth={2.25} />
             ) : (
               <Building2
-                className={cn("h-3.5 w-3.5 shrink-0", !iconOnly && "hidden lg:block")}
+                className={cn("h-3.5 w-3.5 shrink-0", !iconOnly && !compact && "hidden lg:block")}
                 strokeWidth={2.25}
               />
             )}
             {!iconOnly ? (
               <>
-                <span className="min-w-0 truncate">{label}</span>
-                <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                <span className={cn("min-w-0 truncate", compact && "hidden xl:inline")}>{label}</span>
+                <ChevronDown
+                  className={cn("h-3.5 w-3.5 shrink-0 opacity-70", compact && "hidden xl:block")}
+                />
               </>
             ) : null}
           </button>
@@ -661,7 +667,6 @@ const NAV: NavEntry[] = [
   { to: "/tenant/staff", label: "Staff", icon: UserCog },
   { to: "/tenant/finance", label: "Finance", icon: Wallet },
   { to: "/tenant/support", label: "Support", icon: LifeBuoy },
-  { to: "/tenant/billing", label: "Subscription", icon: Crown },
   { to: "/tenant/settings", label: "Settings", icon: Settings },
 ];
 
@@ -675,7 +680,6 @@ function navAllowed(to: string, session: ReturnType<typeof useAuth>["session"]):
   }
   if (to.startsWith("/tenant/staff")) return sessionHasPermission(session, "staff");
   if (to.startsWith("/tenant/finance")) return sessionHasAnyFinance(session);
-  if (to.startsWith("/tenant/billing")) return sessionCanAccessSettings(session);
   if (to.startsWith("/tenant/settings")) return sessionCanAccessSettings(session);
   return true;
 }
@@ -793,7 +797,7 @@ export function TenantMacDock({
         >
           <div
             className={cn(
-              "grid shrink-0 place-items-center overflow-hidden rounded-xl font-bold text-white shadow-md shadow-teal-900/20",
+              "relative grid shrink-0 place-items-center overflow-hidden rounded-xl font-bold text-white shadow-md shadow-teal-900/20",
               expanded
                 ? "h-11 w-11 text-[11px] max-[820px]:h-10 max-[820px]:w-10 xl:h-14 xl:w-14 xl:text-[12px]"
                 : "h-11 w-11 text-[11px] xl:h-12 xl:w-12",
@@ -802,11 +806,7 @@ export function TenantMacDock({
             title={tenantName}
             aria-label={tenantName}
           >
-            {logoUrl ? (
-              <img src={logoUrl} alt="" className="h-full w-full bg-white object-contain p-0.5" />
-            ) : (
-              initials
-            )}
+            {logoUrl ? <SchoolLogo src={logoUrl} className="absolute inset-0" /> : initials}
           </div>
           {expanded && (
             <div className="w-full min-w-0 px-1 text-center leading-tight">
@@ -1011,6 +1011,8 @@ export function TenantDesktopTopBar() {
   const { showBack, goBack, backLabel } = useWorkspaceSubViewBack();
   const { guardedNavigate, tryNavigate } = useTenantNavigationGuard();
   const [pendingLogout, setPendingLogout] = useState(false);
+  const [logoutScope, setLogoutScope] = useState<LogoutScope>("device");
+  const [signingOut, setSigningOut] = useState(false);
   const [addYearOpen, setAddYearOpen] = useState(false);
   const [addMonthKey, setAddMonthKey] = useState(() =>
     suggestNextBooksMonthKey(academicYear, academicYears),
@@ -1031,12 +1033,45 @@ export function TenantDesktopTopBar() {
     [academicYear, academicYears, closedAcademicYears],
   );
 
-  const confirmLogout = () => {
-    const name = session?.displayName ?? "Tenant Admin";
-    logout();
-    toast.success("Signed out · session cleared", { description: `Goodbye, ${name}` });
+  const closeLogout = () => {
+    if (signingOut) return;
     setPendingLogout(false);
-    navigate({ to: "/login", replace: true });
+    setLogoutScope("device");
+  };
+
+  const confirmLogout = async () => {
+    if (signingOut) return;
+    const name = session?.displayName ?? "Tenant Admin";
+    if (session?.impersonated) {
+      logout();
+      toast.success("Preview closed", { description: "You are back in your own account." });
+      setPendingLogout(false);
+      setLogoutScope("device");
+      return;
+    }
+    setSigningOut(true);
+    try {
+      const result = await apiLogoutCurrentDevice(logoutScope);
+      logout("local");
+      if (logoutScope === "everywhere" && !result.othersRevoked) {
+        toast.warning("Signed out on this device", {
+          description: "Other devices could not be reached. They may stay signed in until those sessions expire.",
+        });
+      } else if (logoutScope === "everywhere") {
+        toast.success("Signed out everywhere", {
+          description: `${name} · this browser and your other sessions were ended.`,
+        });
+      } else {
+        toast.success("Signed out of this device", {
+          description: `${name} · other devices stay signed in.`,
+        });
+      }
+      setPendingLogout(false);
+      setLogoutScope("device");
+      navigate({ to: "/login", replace: true });
+    } finally {
+      setSigningOut(false);
+    }
   };
 
   const submitNewYear = (e: FormEvent) => {
@@ -1067,10 +1102,10 @@ export function TenantDesktopTopBar() {
       <header
         className={cn(
           glassPanelClass,
-          "mb-4 hidden min-w-0 items-center gap-2 overflow-hidden rounded-2xl px-2.5 py-2 md:flex md:flex-nowrap md:gap-2 md:px-3 md:py-2.5 lg:mb-5 lg:gap-3 lg:px-4 lg:py-3 xl:px-5 xl:py-3.5",
+          "mb-4 hidden w-full min-w-0 items-center gap-2 overflow-hidden rounded-2xl px-2.5 py-2 md:flex md:flex-nowrap md:gap-2 md:px-3 md:py-2.5 lg:mb-5 lg:gap-3 lg:px-4 lg:py-3 xl:px-5 xl:py-3.5",
         )}
       >
-        <div className="flex min-w-0 shrink-0 items-center gap-1.5 lg:min-w-0 lg:max-w-[min(40%,18rem)] lg:flex-1 lg:gap-2.5 xl:max-w-[min(36%,22rem)]">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 lg:gap-2.5">
           {showBack && (
             <button
               type="button"
@@ -1102,14 +1137,14 @@ export function TenantDesktopTopBar() {
           </div>
         </div>
 
-        <div className="flex min-w-0 shrink items-center justify-end gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] sm:gap-1.5 lg:gap-2 [&::-webkit-scrollbar]:hidden">
-          <div className="flex min-w-0 flex-nowrap items-center gap-1 sm:gap-1.5 lg:gap-2">
+        <div className="flex min-w-0 shrink items-center justify-end gap-1 sm:gap-1.5 lg:gap-2">
+          <div className="flex shrink-0 flex-nowrap items-center gap-1 sm:gap-1.5 lg:gap-2">
             <ImpersonationChip compact />
             <BranchSwitcher compact />
             {!hydrated || !academicYear ? (
               <Skeleton
                 aria-label="Loading academic year"
-                className="h-8 w-[5.5rem] shrink-0 rounded-full bg-emerald-500/25 sm:w-[7rem] lg:h-9 lg:w-[10rem]"
+                className="h-8 w-16 shrink-0 rounded-full bg-emerald-500/25 lg:h-9 lg:w-20 xl:w-36"
               />
             ) : (
               <DropdownMenu>
@@ -1119,13 +1154,16 @@ export function TenantDesktopTopBar() {
                     title={academicYear}
                     disabled={yearBusy}
                     aria-busy={yearBusy}
-                    className="inline-flex h-8 max-w-[5.75rem] shrink-0 items-center gap-1 rounded-full bg-[#10B981] px-2 text-[10px] font-semibold text-white shadow-sm shadow-emerald-500/25 transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-80 sm:max-w-[7.5rem] sm:px-2.5 sm:text-[11px] lg:h-9 lg:max-w-[11rem] lg:gap-1.5 lg:px-3 lg:text-[12px] xl:max-w-[13rem]"
+                    className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full bg-[#10B981] px-2 text-[10px] font-semibold text-white shadow-sm shadow-emerald-500/25 transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-80 lg:h-9 lg:px-2.5 lg:text-[11px] xl:gap-1.5 xl:px-3 xl:text-[12px]"
                   >
                     <CheckCircle2
                       className="hidden h-3.5 w-3.5 shrink-0 xl:block"
                       strokeWidth={2.5}
                     />
-                    <span className="min-w-0 truncate">
+                    <span className="min-w-0 truncate xl:hidden">
+                      {shortAcademicYearLabel(academicYear)}
+                    </span>
+                    <span className="hidden min-w-0 truncate xl:inline">
                       {academicYear}
                       <span className="hidden 2xl:inline"> Active</span>
                     </span>
@@ -1188,7 +1226,7 @@ export function TenantDesktopTopBar() {
             )}
           </div>
 
-          <div className="flex shrink-0 flex-nowrap items-center gap-1 lg:gap-1.5">
+          <div className="flex min-w-0 flex-nowrap items-center gap-1 lg:gap-1.5">
             <ThemeModeToggle className="h-8 w-8 lg:h-9 lg:w-9 xl:h-10 xl:w-10" />
 
             {/* Opens the shared search host mounted in the tenant layout */}
@@ -1335,36 +1373,111 @@ export function TenantDesktopTopBar() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={pendingLogout} onOpenChange={setPendingLogout}>
-        <DialogContent className="max-w-sm rounded-xl border border-white/60 bg-white/90 p-6 backdrop-blur-xl">
+      <Dialog
+        open={pendingLogout}
+        onOpenChange={(open) => {
+          if (!open) closeLogout();
+          else setPendingLogout(true);
+        }}
+      >
+        <DialogContent className="max-w-sm rounded-xl border border-white/60 bg-white/95 p-6 backdrop-blur-xl dark:border-white/10 dark:bg-zinc-900">
           <DialogHeader>
-            <DialogTitle className="text-[22px] font-semibold text-slate-900">Sign Out</DialogTitle>
-            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-slate-500">
-              Are you sure you want to sign out of {tenantName}?
+            <DialogTitle className="text-[22px] font-semibold text-slate-900 dark:text-zinc-50">
+              {session?.impersonated ? "End preview" : "Sign out"}
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-slate-500 dark:text-zinc-400">
+              {session?.impersonated
+                ? `This closes the preview of ${tenantName} and returns you to your own account.`
+                : "Choose whether to end only this browser, or every place you are signed in."}
             </DialogDescription>
           </DialogHeader>
-          <p className="mt-3 text-[12px] text-slate-500">
-            Need to remove your login?{" "}
-            <a
-              href="/data-deletion"
-              className="font-medium text-[#0F766E] hover:underline"
-              onClick={() => setPendingLogout(false)}
+          {session?.impersonated ? null : (
+            <RadioGroup
+              value={logoutScope}
+              onValueChange={(value) => setLogoutScope(value as LogoutScope)}
+              className="mt-4 gap-2"
+              disabled={signingOut}
             >
-              Request account deletion
-            </a>
-          </p>
-          <DialogFooter className="mt-5 flex-row justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setPendingLogout(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={confirmLogout}
-              className="rounded-full bg-[#EF4444] text-white hover:bg-[#DC2626]"
-            >
-              Sign Out
-            </Button>
-          </DialogFooter>
+              {(
+                [
+                  {
+                    value: "device" as const,
+                    title: "This device",
+                    body: "End your session in this browser. Phones, tablets, and other browsers stay signed in.",
+                    icon: Monitor,
+                  },
+                  {
+                    value: "everywhere" as const,
+                    title: "All devices",
+                    body: "Sign out here and end every other web session for this login. You will need to sign in again on each device.",
+                    icon: MonitorSmartphone,
+                  },
+                ] as const
+              ).map((option) => {
+                const selected = logoutScope === option.value;
+                const Icon = option.icon;
+                return (
+                  <label
+                    key={option.value}
+                    className={cn(
+                      "flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors",
+                      selected
+                        ? "border-[#0F766E] bg-[#F0FDFA] dark:border-teal-400/50 dark:bg-teal-950/40"
+                        : "border-slate-200 bg-white hover:border-slate-300 dark:border-white/10 dark:bg-zinc-950 dark:hover:border-white/20",
+                      signingOut && "pointer-events-none opacity-60",
+                    )}
+                  >
+                    <RadioGroupItem value={option.value} className="mt-0.5" />
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-1.5 text-[13px] font-semibold text-slate-900 dark:text-zinc-50">
+                        <Icon className="h-3.5 w-3.5 shrink-0 text-[#0F766E] dark:text-teal-300" />
+                        {option.title}
+                      </span>
+                      <span className="mt-1 block text-[12px] leading-relaxed text-slate-500 dark:text-zinc-400">
+                        {option.body}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </RadioGroup>
+          )}
+          <Button
+            type="button"
+            disabled={signingOut}
+            onClick={() => void confirmLogout()}
+            className="mt-4 h-11 w-full rounded-xl bg-[#EF4444] text-white hover:bg-[#DC2626] disabled:opacity-70"
+          >
+            {signingOut ? (
+              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+            ) : (
+              <LogOut className="mr-1.5 h-4 w-4" />
+            )}
+            {session?.impersonated ? "End preview" : "Sign out"}
+          </Button>
+          <button
+            type="button"
+            disabled={signingOut}
+            onClick={closeLogout}
+            className="mt-2 w-full py-1.5 text-[13px] font-medium text-slate-500 transition-colors hover:text-slate-800 disabled:opacity-60 dark:text-zinc-400 dark:hover:text-zinc-100"
+          >
+            Cancel
+          </button>
+          {session?.impersonated ? null : (
+            <p className="mt-2 text-center text-[11.5px] text-slate-400 dark:text-zinc-500">
+              Need to remove your login?{" "}
+              <a
+                href="/data-deletion"
+                className="font-medium text-[#0F766E] hover:underline dark:text-teal-300"
+                onClick={() => {
+                  setPendingLogout(false);
+                  setLogoutScope("device");
+                }}
+              >
+                Request account deletion
+              </a>
+            </p>
+          )}
         </DialogContent>
       </Dialog>
     </>

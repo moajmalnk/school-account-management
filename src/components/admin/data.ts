@@ -18,4 +18,6 @@ export type Tenant = {
   accessDisabledReason?: string | null;
   /** Lifecycle status to restore on reactivation. */
   statusBeforeDisable?: Status | null;
+  /** When false, school PDFs omit the Feezo footer credit. Omitted means on. */
+  pdfCreditEnabled?: boolean;
 };

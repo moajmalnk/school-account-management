@@ -193,9 +193,15 @@ export type IncomeExpensePoint = {
   expense: number;
 };
 
+export type DatedAmount = {
+  time?: string | null;
+  amount: number;
+};
+
 /**
  * Build chart points for the selected period.
- * Income is summed from payments; expense is spread across the same buckets.
+ * Income and expense are summed into the same calendar buckets from their dates.
+ * "All" uses the span of the actual receipts and payments (months, or years when longer).
  */
 export function buildIncomeExpenseSeries(
   payments: Payment[],
@@ -203,43 +209,90 @@ export function buildIncomeExpenseSeries(
   period: PaymentPeriod,
   customRange?: CustomDateRange,
   reference = new Date(),
+  expenses?: DatedAmount[],
 ): IncomeExpensePoint[] {
-  const range = getPeriodRange(period, customRange, reference);
+  const incomeTotal = payments.reduce((sum, payment) => sum + payment.amount, 0);
+  const expenseRows = expenses ?? [];
+  const datedExpenseTotal = expenseRows.reduce((sum, row) => sum + row.amount, 0);
+  const expenseFallback = expenses ? datedExpenseTotal : expenseTotal;
+
+  const range =
+    getPeriodRange(period, customRange, reference) ??
+    boundsFromDatedAmounts(
+      [
+        ...payments.map((payment) => payment.time),
+        ...expenseRows.map((row) => row.time),
+      ],
+      reference,
+    );
+
   if (!range) {
-    return [
-      { label: "All", income: payments.reduce((s, p) => s + p.amount, 0), expense: expenseTotal },
-    ];
+    return [{ label: "All", income: incomeTotal, expense: expenseFallback }];
   }
 
   const buckets = createPeriodBuckets(period, range.start, range.end, reference);
   if (buckets.length === 0) {
-    return [{ label: "Period", income: 0, expense: expenseTotal }];
+    return [{ label: "Period", income: incomeTotal, expense: expenseFallback }];
   }
 
-  const incomeByBucket = buckets.map(() => 0);
-  for (const payment of payments) {
-    const date = parsePaymentDate(payment.time, reference);
-    if (!date) {
-      incomeByBucket[incomeByBucket.length - 1] += payment.amount;
-      continue;
-    }
-    const idx = buckets.findIndex((b) => date >= b.start && date <= b.end);
-    if (idx >= 0) incomeByBucket[idx] += payment.amount;
-  }
-
-  const weights = buckets.map((b) =>
-    Math.max(
-      1,
-      Math.round((startOfDay(b.end).getTime() - startOfDay(b.start).getTime()) / 86_400_000) + 1,
-    ),
+  const incomeByBucket = sumIntoBuckets(
+    buckets,
+    payments.map((payment) => ({ time: payment.time, amount: payment.amount })),
+    reference,
   );
-  const weightSum = weights.reduce((s, w) => s + w, 0) || 1;
+  const expenseByBucket = expenses
+    ? sumIntoBuckets(buckets, expenseRows, reference)
+    : spreadTotalAcrossBuckets(buckets, expenseTotal);
 
   return buckets.map((bucket, index) => ({
     label: bucket.label,
     income: incomeByBucket[index],
-    expense: Math.round((expenseTotal * weights[index]) / weightSum),
+    expense: expenseByBucket[index],
   }));
+}
+
+function boundsFromDatedAmounts(
+  times: Array<string | null | undefined>,
+  reference: Date,
+): { start: Date; end: Date } | null {
+  const dates = times
+    .map((time) => parsePaymentDate(String(time ?? ""), reference))
+    .filter((date): date is Date => date != null);
+  if (dates.length === 0) return null;
+  const earliest = new Date(Math.min(...dates.map((date) => date.getTime())));
+  const latest = new Date(Math.max(...dates.map((date) => date.getTime())));
+  return { start: startOfMonth(earliest), end: endOfDay(latest) };
+}
+
+function sumIntoBuckets(buckets: PeriodBucket[], rows: DatedAmount[], reference: Date): number[] {
+  const totals = buckets.map(() => 0);
+  for (const row of rows) {
+    const date = parsePaymentDate(String(row.time ?? ""), reference);
+    if (!date) {
+      totals[totals.length - 1] += row.amount;
+      continue;
+    }
+    const index = buckets.findIndex((bucket) => date >= bucket.start && date <= bucket.end);
+    if (index >= 0) totals[index] += row.amount;
+  }
+  return totals;
+}
+
+/** Used only when expense rows are not available — keeps the period total intact. */
+function spreadTotalAcrossBuckets(buckets: PeriodBucket[], total: number): number[] {
+  const weights = buckets.map((bucket) =>
+    Math.max(
+      1,
+      Math.round(
+        (startOfDay(bucket.end).getTime() - startOfDay(bucket.start).getTime()) / 86_400_000,
+      ) + 1,
+    ),
+  );
+  const weightSum = weights.reduce((sum, weight) => sum + weight, 0) || 1;
+  const amounts = weights.map((weight) => Math.round((total * weight) / weightSum));
+  const drift = total - amounts.reduce((sum, amount) => sum + amount, 0);
+  if (amounts.length > 0) amounts[amounts.length - 1] += drift;
+  return amounts;
 }
 
 type PeriodBucket = { label: string; start: Date; end: Date };
@@ -250,6 +303,12 @@ function createPeriodBuckets(
   end: Date,
   reference: Date,
 ): PeriodBucket[] {
+  if (period === "all") {
+    const months =
+      (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1;
+    return months > 12 ? yearBucketsInRange(start, end) : monthBucketsInRange(start, end);
+  }
+
   if (period === "today" || period === "yesterday") {
     const day = startOfDay(start);
     return [
@@ -306,6 +365,22 @@ function weekBucketsInRange(start: Date, end: Date): PeriodBucket[] {
   return buckets;
 }
 
+function yearBucketsInRange(start: Date, end: Date): PeriodBucket[] {
+  const buckets: PeriodBucket[] = [];
+  let year = start.getFullYear();
+  while (year <= end.getFullYear() && buckets.length < 12) {
+    const yearStart = new Date(year, 0, 1);
+    const yearEnd = endOfYear(yearStart);
+    buckets.push({
+      label: String(year),
+      start: yearStart < start ? start : yearStart,
+      end: yearEnd > end ? end : yearEnd,
+    });
+    year += 1;
+  }
+  return buckets;
+}
+
 function monthBucketsInRange(start: Date, end: Date): PeriodBucket[] {
   const buckets: PeriodBucket[] = [];
   let cursor = startOfMonth(start);
@@ -313,8 +388,12 @@ function monthBucketsInRange(start: Date, end: Date): PeriodBucket[] {
     const monthEnd = endOfMonth(cursor);
     const clippedStart = cursor < start ? start : cursor;
     const clippedEnd = monthEnd > end ? end : monthEnd;
+    const spansYears = start.getFullYear() !== end.getFullYear();
     buckets.push({
-      label: cursor.toLocaleDateString("en-IN", { month: "short" }),
+      label: cursor.toLocaleDateString(
+        "en-IN",
+        spansYears ? { month: "short", year: "2-digit" } : { month: "short" },
+      ),
       start: clippedStart,
       end: clippedEnd,
     });

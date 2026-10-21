@@ -94,7 +94,7 @@ export const SUPPORT_FAQ_NAV: Record<
   subscription: {
     title: "Your plan",
     links: [
-      { label: "Open Subscription", to: "/tenant/billing", primary: true },
+      { label: "Open Subscription", to: "/tenant/settings", search: { tab: "subscription" }, primary: true },
       { label: "Guide", ...GUIDE("subscription") },
     ],
   },

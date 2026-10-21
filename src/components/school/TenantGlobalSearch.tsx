@@ -8,6 +8,7 @@ import {
   CalendarDays,
   CreditCard,
   Crown,
+  GraduationCap,
   LayoutDashboard,
   LifeBuoy,
   Search,
@@ -113,6 +114,25 @@ function buildNavCatalog(session: ReturnType<typeof useAuth>["session"]): NavSea
       allowed: canStudents && planAllowsStudentAttendance(session?.planFlags),
     },
     {
+      id: "page-parents",
+      label: "Parents app",
+      hint: "Open a student, then the Parents app tab",
+      keywords: "parents guardians family invite parent app",
+      to: "/tenant/students",
+      icon: Users,
+      allowed: canStudents,
+    },
+    {
+      id: "page-academics",
+      label: "Academics",
+      hint: "Exams and report cards",
+      keywords: "academics exams marks report card grades results",
+      to: "/tenant/settings",
+      search: { tab: "academics" },
+      icon: GraduationCap,
+      allowed: settingsTab("academics"),
+    },
+    {
       id: "page-staff",
       label: "Staff",
       hint: "Roster",
@@ -147,15 +167,6 @@ function buildNavCatalog(session: ReturnType<typeof useAuth>["session"]): NavSea
       to: "/tenant/support",
       icon: LifeBuoy,
       allowed: true,
-    },
-    {
-      id: "page-billing",
-      label: "Subscription",
-      hint: "Billing & plan",
-      keywords: "billing subscription plan invoice",
-      to: "/tenant/billing",
-      icon: Crown,
-      allowed: canSettings,
     },
     {
       id: "page-settings",
@@ -238,6 +249,16 @@ function buildNavCatalog(session: ReturnType<typeof useAuth>["session"]): NavSea
       search: { tab: "users" },
       icon: Users,
       allowed: settingsTab("users"),
+    },
+    {
+      id: "settings-subscription",
+      label: "Subscription",
+      hint: "Settings",
+      keywords: "billing subscription plan invoice renewal",
+      to: "/tenant/settings",
+      search: { tab: "subscription" },
+      icon: Crown,
+      allowed: settingsTab("subscription"),
     },
     {
       id: "settings-transport",
@@ -422,6 +443,46 @@ function buildNavCatalog(session: ReturnType<typeof useAuth>["session"]): NavSea
       icon: Wallet,
       allowed: financeView("reconciliation"),
     },
+    {
+      id: "finance-cashflow",
+      label: "Cash flow",
+      hint: "Finance",
+      keywords: "cash flow cashflow statement",
+      to: "/tenant/finance",
+      search: { tab: "cashflow" },
+      icon: Wallet,
+      allowed: financeView("cashflow"),
+    },
+    {
+      id: "finance-vehicle",
+      label: "Vehicle fees",
+      hint: "Finance",
+      keywords: "vehicle fees transport bus route",
+      to: "/tenant/finance",
+      search: { tab: "vehicle" },
+      icon: CreditCard,
+      allowed: financeView("vehicle"),
+    },
+    {
+      id: "finance-aging",
+      label: "Fee aging",
+      hint: "Finance",
+      keywords: "fee aging overdue buckets receivables",
+      to: "/tenant/finance",
+      search: { tab: "aging" },
+      icon: CreditCard,
+      allowed: financeView("aging"),
+    },
+    {
+      id: "finance-heads",
+      label: "Fee heads",
+      hint: "Finance",
+      keywords: "fee heads category collection billed",
+      to: "/tenant/finance",
+      search: { tab: "heads" },
+      icon: CreditCard,
+      allowed: financeView("heads"),
+    },
   ];
 
   return [...pages, ...settingsTabs, ...financeTabs].filter((item) => item.allowed);
@@ -476,13 +537,13 @@ export function TenantGlobalSearchTrigger({
         onClick={() => openTenantGlobalSearch()}
         aria-label="Open global search"
         className={cn(
-          "glass-inset group flex h-9 w-[min(100%,14rem)] items-center gap-2 rounded-xl px-3 text-left text-slate-500 transition-colors hover:text-[#0F766E] dark:text-zinc-400 dark:hover:text-[#2DD4BF] xl:h-10 xl:w-60",
+          "glass-inset group flex h-8 w-[8.5rem] min-w-[2.25rem] max-w-full shrink basis-[8.5rem] items-center gap-1.5 overflow-hidden rounded-xl px-2.5 text-left text-slate-500 transition-colors hover:text-[#0F766E] dark:text-zinc-400 dark:hover:text-[#2DD4BF] lg:h-9 lg:w-52 lg:basis-52 lg:gap-2 lg:px-3 xl:h-10 xl:w-60 xl:basis-60",
           className,
         )}
       >
         <Search className="h-4 w-4 shrink-0 opacity-70" strokeWidth={2} />
         <span className="min-w-0 flex-1 truncate text-[13px]">Search workspace…</span>
-        <kbd className="pointer-events-none hidden h-5 shrink-0 items-center rounded-md border border-slate-200/80 bg-white/70 px-1.5 font-mono text-[10px] font-medium text-slate-400 dark:border-white/10 dark:bg-zinc-900/60 dark:text-zinc-500 sm:inline-flex">
+        <kbd className="pointer-events-none hidden h-5 shrink-0 items-center rounded-md border border-slate-200/80 bg-white/70 px-1.5 font-mono text-[10px] font-medium text-slate-400 dark:border-white/10 dark:bg-zinc-900/60 dark:text-zinc-500 lg:inline-flex">
           {modKey}K
         </kbd>
       </button>
@@ -615,11 +676,8 @@ export function TenantGlobalSearch({
   const go = (to: FeezoNavPath, search?: Record<string, string>) => {
     setOpenTracked(false);
     const run = () => {
-      if (search && Object.keys(search).length > 0) {
-        void navigate({ to, search });
-      } else {
-        void navigate({ to });
-      }
+      const query = new URLSearchParams(search ?? {}).toString();
+      void navigate({ href: query ? `${to}?${query}` : to });
     };
     if (tryNavigate) tryNavigate(run);
     else run();
@@ -660,13 +718,13 @@ export function TenantGlobalSearch({
           onClick={() => setOpenTracked(true)}
           aria-label="Open global search"
           className={cn(
-            "glass-inset group flex h-9 w-[min(100%,14rem)] items-center gap-2 rounded-xl px-3 text-left text-slate-500 transition-colors hover:text-[#0F766E] dark:text-zinc-400 dark:hover:text-[#2DD4BF] xl:h-10 xl:w-60",
+            "glass-inset group flex h-8 w-[8.5rem] min-w-[2.25rem] max-w-full shrink basis-[8.5rem] items-center gap-1.5 overflow-hidden rounded-xl px-2.5 text-left text-slate-500 transition-colors hover:text-[#0F766E] dark:text-zinc-400 dark:hover:text-[#2DD4BF] lg:h-9 lg:w-52 lg:basis-52 lg:gap-2 lg:px-3 xl:h-10 xl:w-60 xl:basis-60",
             className,
           )}
         >
           <Search className="h-4 w-4 shrink-0 opacity-70" strokeWidth={2} />
           <span className="min-w-0 flex-1 truncate text-[13px]">Search workspace…</span>
-          <kbd className="pointer-events-none hidden h-5 shrink-0 items-center rounded-md border border-slate-200/80 bg-white/70 px-1.5 font-mono text-[10px] font-medium text-slate-400 dark:border-white/10 dark:bg-zinc-900/60 dark:text-zinc-500 sm:inline-flex">
+          <kbd className="pointer-events-none hidden h-5 shrink-0 items-center rounded-md border border-slate-200/80 bg-white/70 px-1.5 font-mono text-[10px] font-medium text-slate-400 dark:border-white/10 dark:bg-zinc-900/60 dark:text-zinc-500 lg:inline-flex">
             {modKey}K
           </kbd>
         </button>

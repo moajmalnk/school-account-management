@@ -28,7 +28,7 @@ function PrivacyPolicyPage() {
         This Privacy Policy explains how <strong>{BRAND.name}</strong> (“we”, “us”, or “our”)
         collects, uses, stores, and shares information when you use our school account management
         platform, including our website, progressive web app, and any iOS or Android applications
-        that connect to the same services (together, the “Service”).
+        that connect to the same services (together, the “Service”). {BRAND.legal.operatorNotice}
       </p>
 
       <LegalSection title="1. Who this applies to">

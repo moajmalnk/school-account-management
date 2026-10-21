@@ -17,10 +17,22 @@ function useHideFeezoFab(): boolean {
   });
 }
 
+/** Reports hub pins a payment bar over the tab dock. Only that screen lifts the FAB. */
+function useRaiseFeezoFab(): boolean {
+  return useRouterState({
+    select: (s) => {
+      if (s.location.pathname !== "/tenant/finance") return false;
+      const tab = new URLSearchParams(s.location.searchStr).get("tab");
+      return !tab;
+    },
+  });
+}
+
 /** Tenant-wide Feezo AI — FAB + chat panel. */
 export function FeezoAssistant() {
   const assistant = useFeezoAssistant();
   const hideFab = useHideFeezoFab();
+  const raiseFab = useRaiseFeezoFab();
 
   return (
     <>
@@ -29,6 +41,7 @@ export function FeezoAssistant() {
           open={assistant.open}
           onOpen={() => assistant.setOpen(true)}
           label={assistant.locale === "ml" ? "ഫീസോ AI" : "Feezo AI"}
+          raised={raiseFab}
         />
       )}
       <FeezoChatPanel assistant={assistant} />

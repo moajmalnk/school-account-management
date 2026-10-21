@@ -3,7 +3,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
-import { downloadTablePdf, type PdfEmitAction } from "@/lib/finance-export";
+import { downloadTablePdf, drawPdfFeezoCredit, type PdfEmitAction } from "@/lib/finance-export";
 import { formatDownloadFilename } from "@/lib/download-names";
 import {
   ATTENDANCE_STATUS_LABELS,
@@ -176,8 +176,18 @@ export function buildAttendanceDailyPdfBlob(params: {
     body: params.students.map((s) => [s.studentId, s.name, s.cls, statusLabel(s.status)]),
     styles: { fontSize: 8 },
   });
+  stampAttendancePdfCredit(doc);
   const blob = doc.output("blob");
   return { blob, filename };
+}
+
+function stampAttendancePdfCredit(doc: jsPDF) {
+  const pageCount = doc.getNumberOfPages();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  for (let page = 1; page <= pageCount; page += 1) {
+    doc.setPage(page);
+    drawPdfFeezoCredit(doc, pageHeight - 8);
+  }
 }
 
 export function buildAttendanceMonthlyPdfBlob(params: {
@@ -212,6 +222,7 @@ export function buildAttendanceMonthlyPdfBlob(params: {
     ]),
     styles: { fontSize: 8 },
   });
+  stampAttendancePdfCredit(doc);
   const blob = doc.output("blob");
   return { blob, filename };
 }

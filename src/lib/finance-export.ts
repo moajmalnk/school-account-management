@@ -14,6 +14,7 @@ import {
   type Staff,
   type Student,
 } from "@/lib/tenant-store";
+import { sessionPdfCreditEnabled } from "@/lib/auth";
 import { getActiveBrandPalette, pdfFontName } from "@/lib/brand-theme";
 import { defaultSealToPng, defaultSignatureSvg, svgMarkupToPng } from "@/lib/school-marks";
 import { amountInWords } from "@/lib/amount-words";
@@ -153,6 +154,8 @@ function pdfSafe(text: string) {
   return asciiCurrencyText(String(text ?? ""))
     .replace(/[·•∙]/g, " | ")
     .replace(/[−–—]/g, "-")
+    .replace(/\s*[→⇒➔➜➞]+\s*/g, " -> ")
+    .replace(/\s*[←⇐]+\s*/g, " <- ")
     .replace(/[“”]/g, '"')
     .replace(/[‘’]/g, "'")
     .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "");
@@ -320,7 +323,7 @@ function buildDefaultTableColumnStyles(
       return;
     }
     if (label.includes("type")) {
-      fixedWidths[index] = 20;
+      fixedWidths[index] = 34;
       return;
     }
     if (label.includes("line")) {
@@ -374,22 +377,35 @@ function buildDefaultTableColumnStyles(
   });
 
   const fixedTotal = Object.values(fixedWidths).reduce((sum, width) => sum + width, 0);
-  const narrationIndex = labels.findIndex(
-    (label) => label.includes("narration") || label.includes("note") || label.includes("remark"),
-  );
-  if (narrationIndex >= 0) {
-    styles[narrationIndex] = {
-      ...styles[narrationIndex],
-      cellWidth: Math.max(42, contentWidth - fixedTotal),
-      halign: "left",
+  const openIndexes = labels
+    .map((_, index) => index)
+    .filter((index) => fixedWidths[index] == null);
+  const growIndexes = openIndexes.filter((index) => {
+    const label = labels[index] ?? "";
+    return (
+      label.includes("narration") ||
+      label.includes("note") ||
+      label.includes("remark") ||
+      label.includes("particular")
+    );
+  });
+  const companionIndexes = openIndexes.filter((index) => !growIndexes.includes(index));
+  const companionWidth = 40;
+  const reserved = companionIndexes.length * companionWidth;
+  const growRoom = Math.max(36, contentWidth - fixedTotal - reserved);
+  const growShare = growIndexes.length > 0 ? growRoom / growIndexes.length : 0;
+
+  for (const index of companionIndexes) {
+    styles[index] = {
+      ...styles[index],
+      cellWidth: companionWidth,
+      halign: styles[index]?.halign ?? "left",
     };
   }
-
-  const particularsIndex = labels.findIndex((label) => label.includes("particular"));
-  if (particularsIndex >= 0) {
-    styles[particularsIndex] = {
-      ...styles[particularsIndex],
-      cellWidth: Math.max(42, contentWidth - fixedTotal),
+  for (const index of growIndexes) {
+    styles[index] = {
+      ...styles[index],
+      cellWidth: growShare,
       halign: "left",
     };
   }
@@ -498,6 +514,8 @@ function applyAlignedPdfTable(
     fontSize: number;
     striped?: boolean;
     columnStyles?: Record<number, TablePdfColumnStyle>;
+    /** Tighter horizontal padding when a sheet has many columns. */
+    cellPadX?: number;
   },
 ) {
   const columnStyles = resolveTableColumnStyles(
@@ -505,16 +523,17 @@ function applyAlignedPdfTable(
     options.contentWidth,
     options.columnStyles,
   );
+  const padX = options.cellPadX ?? 3;
   autoTable(doc, {
     startY: options.startY,
-    margin: { left: options.margin, right: options.margin, top: 16, bottom: 16 },
+    margin: { left: options.margin, right: options.margin, top: 16, bottom: 18 },
     tableWidth: options.contentWidth,
     head: [options.headers.map((header) => pdfSafe(header))],
     body: options.body,
     theme: "grid",
     styles: {
       fontSize: options.fontSize,
-      cellPadding: { top: 2.2, right: 3, bottom: 2.2, left: 3 },
+      cellPadding: { top: 2.2, right: padX, bottom: 2.2, left: padX },
       overflow: "linebreak",
       valign: "middle",
       textColor: [15, 23, 42],
@@ -585,6 +604,50 @@ function drawPdfAppendTable(
   });
 }
 
+const PDF_CREDIT_SLATE: [number, number, number] = [100, 116, 139];
+const PDF_CREDIT_TEAL: [number, number, number] = [15, 118, 110];
+
+/**
+ * Centered footer credit: "Powered by Feezo · www.feezo.app".
+ * Draws nothing when this school has the credit turned off.
+ * `box` limits the line to one panel (A5 receipts sit side by side).
+ */
+export function drawPdfFeezoCredit(
+  doc: jsPDF,
+  y: number,
+  box?: { x: number; width: number },
+): void {
+  if (!sessionPdfCreditEnabled()) return;
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const originX = box?.x ?? 0;
+  const width = box?.width ?? pageWidth;
+  const lead = "Powered by ";
+  const brand = "Feezo";
+  const mid = "  ·  ";
+  const site = "www.feezo.app";
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7);
+  const leadW = doc.getTextWidth(lead);
+  doc.setFont("helvetica", "bold");
+  const brandW = doc.getTextWidth(brand);
+  doc.setFont("helvetica", "normal");
+  const midW = doc.getTextWidth(mid);
+  const siteW = doc.getTextWidth(site);
+  let x = originX + (width - (leadW + brandW + midW + siteW)) / 2;
+  doc.setTextColor(...PDF_CREDIT_SLATE);
+  doc.text(lead, x, y);
+  x += leadW;
+  doc.setFont("helvetica", "bold");
+  doc.text(brand, x, y);
+  x += brandW;
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(...PDF_CREDIT_SLATE);
+  doc.text(mid, x, y);
+  x += midW;
+  doc.setTextColor(...PDF_CREDIT_TEAL);
+  doc.text(site, x, y);
+}
+
 function stampTablePdfPages(
   doc: jsPDF,
   margin: number,
@@ -607,17 +670,19 @@ function stampTablePdfPages(
     }
     doc.setDrawColor(226, 232, 240);
     doc.setLineWidth(0.2);
-    doc.line(margin, pageHeight - 10, pageWidth - margin, pageHeight - 10);
+    doc.line(margin, pageHeight - 14, pageWidth - margin, pageHeight - 14);
     doc.setFont(pdfFontName(), "normal");
     doc.setFontSize(8);
     doc.setTextColor(148, 163, 184);
+    const pageLabel = `Page ${page} of ${pageCount}`;
+    const pageLabelWidth = doc.getTextWidth(pageLabel);
     if (footerLeft) {
-      const clipped = doc.splitTextToSize(pdfSafe(footerLeft), pageWidth / 2 - margin)[0];
-      doc.text(clipped, margin, pageHeight - 6);
+      const leftMax = Math.max(36, pageWidth - margin * 2 - pageLabelWidth - 6);
+      const clipped = doc.splitTextToSize(pdfSafe(footerLeft), leftMax)[0];
+      doc.text(clipped, margin, pageHeight - 10);
     }
-    doc.text(`Page ${page} of ${pageCount}`, pageWidth - margin, pageHeight - 6, {
-      align: "right",
-    });
+    doc.text(pageLabel, pageWidth - margin, pageHeight - 10, { align: "right" });
+    if (sessionPdfCreditEnabled()) drawPdfFeezoCredit(doc, pageHeight - 5.5);
   }
 }
 
@@ -640,6 +705,89 @@ type TablePdfOptions = {
   columnStyles?: Record<number, TablePdfColumnStyle>;
   footerPlacement?: "after-main" | "end";
 };
+
+/** Name, class, and division stay on every band of a wide sheet. */
+function leadingStickyCount(headers: string[]): number {
+  let count = 0;
+  for (const header of headers) {
+    const label = header.trim().toLowerCase();
+    const sticky =
+      label === "name" ||
+      label.startsWith("name ") ||
+      label === "class" ||
+      label.startsWith("class ") ||
+      label === "division" ||
+      label === "div";
+    if (!sticky) break;
+    count += 1;
+    if (count >= 3) break;
+  }
+  return count;
+}
+
+function stickyColumnWidth(label: string): number {
+  const text = label.trim().toLowerCase();
+  if (text.startsWith("name")) return 40;
+  if (text.startsWith("class")) return 22;
+  return 16;
+}
+
+/**
+ * A full fee schedule has more columns than a landscape page can show.
+ * Split value columns into bands that stay at least 20mm wide, and repeat
+ * the student columns on each band.
+ */
+function tableColumnBands(headers: string[], contentWidth: number): number[][] {
+  const all = headers.map((_, index) => index);
+  const stickyCount = leadingStickyCount(headers);
+  const valueCount = headers.length - stickyCount;
+  if (valueCount <= 0) return [all];
+  let stickyWidth = 0;
+  for (let index = 0; index < stickyCount; index += 1) {
+    stickyWidth += stickyColumnWidth(headers[index] ?? "");
+  }
+  const perBand = Math.max(1, Math.floor((contentWidth - stickyWidth) / 20));
+  if (valueCount <= perBand) return [all];
+  const sticky = Array.from({ length: stickyCount }, (_, index) => index);
+  const bands: number[][] = [];
+  for (let start = stickyCount; start < headers.length; start += perBand) {
+    const values: number[] = [];
+    const end = Math.min(headers.length, start + perBand);
+    for (let index = start; index < end; index += 1) values.push(index);
+    bands.push([...sticky, ...values]);
+  }
+  return bands;
+}
+
+function bandColumnStyles(
+  headers: string[],
+  contentWidth: number,
+): Record<number, TablePdfColumnStyle> {
+  const styles: Record<number, TablePdfColumnStyle> = {};
+  const stickyWidths = headers.map((header) => {
+    const label = header.trim().toLowerCase();
+    if (
+      label.startsWith("name") ||
+      label.startsWith("class") ||
+      label.startsWith("division") ||
+      label === "div"
+    ) {
+      return stickyColumnWidth(header);
+    }
+    return 0;
+  });
+  const stickyTotal = stickyWidths.reduce((sum, width) => sum + width, 0);
+  const valueCount = stickyWidths.filter((width) => width === 0).length;
+  const valueWidth = valueCount > 0 ? (contentWidth - stickyTotal) / valueCount : contentWidth;
+  headers.forEach((_, index) => {
+    if ((stickyWidths[index] ?? 0) > 0) {
+      styles[index] = { cellWidth: stickyWidths[index], halign: "left" };
+    } else {
+      styles[index] = { cellWidth: valueWidth, halign: "right" };
+    }
+  });
+  return styles;
+}
 
 export function downloadTablePdf({
   filename,
@@ -721,18 +869,46 @@ export function downloadTablePdf({
     cursorY = drawPdfSectionTitle(doc, tableTitle, cursorY, margin);
   }
 
-  cursorY =
-    applyAlignedPdfTable(doc, {
-      startY: cursorY,
-      margin,
-      contentWidth,
-      headers,
-      body: tablePdfBody(headers, rows, emptyMessage),
-      brand,
-      fontSize,
-      striped,
-      columnStyles,
-    }) + 6;
+  const bands = tableColumnBands(headers, contentWidth);
+  const drawBand = (indexes: number[], startY: number) => {
+    const bandHeaders = indexes.map((index) => headers[index] ?? "");
+    const bandRows = rows.map((row) => indexes.map((index) => row[index] ?? ""));
+    let y = startY;
+    if (bands.length > 1) {
+      const stickyCount = leadingStickyCount(headers);
+      const labels = indexes.slice(stickyCount).map((index) => headers[index] ?? "");
+      const caption =
+        labels.length <= 1 ? (labels[0] ?? "") : `${labels[0]} – ${labels[labels.length - 1]}`;
+      y = ensurePdfTableSpace(doc, y, 10, margin);
+      doc.setFont(pdfFontName(), "bold");
+      doc.setFontSize(8);
+      doc.setTextColor(71, 85, 105);
+      doc.text(pdfSafe(caption), margin, y);
+      y += 3.5;
+    }
+    return (
+      applyAlignedPdfTable(doc, {
+        startY: y,
+        margin,
+        contentWidth,
+        headers: bandHeaders,
+        body: tablePdfBody(bandHeaders, bandRows, emptyMessage),
+        brand,
+        fontSize: bandHeaders.length > 8 ? 7.5 : fontSize,
+        striped,
+        columnStyles: bands.length > 1 ? bandColumnStyles(bandHeaders, contentWidth) : columnStyles,
+        cellPadX: bands.length > 1 ? 1.5 : undefined,
+      }) + 6
+    );
+  };
+
+  bands.forEach((indexes, bandIndex) => {
+    if (bandIndex > 0) {
+      doc.addPage();
+      cursorY = 16;
+    }
+    cursorY = drawBand(indexes, cursorY);
+  });
 
   if (summaryItems?.length && summaryPlacement !== "before") {
     cursorY = drawPdfSummaryStrip(doc, cursorY, margin, contentWidth, summaryItems, brand) + 6;
@@ -1467,10 +1643,11 @@ function drawA5ReceiptPanel(
   }
 
   const stripH = 2;
+  const creditGap = sessionPdfCreditEnabled() ? 3.2 : 0;
   const sealSize = 22;
   const signW = 36;
   const signH = 12;
-  const lowestSealY = pageHeight - stripH - 4 - 4.2 - 3.2 - sealSize;
+  const lowestSealY = pageHeight - stripH - 4 - 4.2 - 3.2 - sealSize - creditGap;
   const sealY = Math.min(lowestSealY, contentBottom + 10);
   const labelY = sealY + sealSize + 3.2;
   const genY = labelY + 4.2;
@@ -1510,6 +1687,9 @@ function drawA5ReceiptPanel(
   doc.setFontSize(5.6);
   doc.text(`Generated ${ctx.generatedAt}`, left, genY);
   doc.text("Computer-generated receipt", right, genY, { align: "right" });
+  if (creditGap > 0) {
+    drawPdfFeezoCredit(doc, pageHeight - stripH - 2.2, { x: frameX, width: frameW });
+  }
 
   doc.setFillColor(...ink.teal);
   doc.rect(frameX, pageHeight - stripH, frameW, stripH, "F");
@@ -2233,6 +2413,7 @@ async function drawSealFooter(
   }
   doc.setFillColor(...receiptInk().teal);
   doc.rect(0, pageHeight - 3.2, pageWidth, 3.2, "F");
+  drawPdfFeezoCredit(doc, pageHeight - 8);
 }
 
 export type DisbursalDoc = {
@@ -3116,6 +3297,7 @@ function stampFeeStatementPages(
         align: "right",
       });
     }
+    drawPdfFeezoCredit(doc, pageHeight - 8);
     doc.setFillColor(...receiptInk().teal);
     doc.rect(0, pageHeight - 3.2, pageWidth, 3.2, "F");
   }

@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { formatEventDateTime } from "@/lib/dates";
+import type { StaffStatusEvent } from "@/lib/tenant-store";
 import { cn } from "@/lib/utils";
 
 const META_LABEL =
@@ -85,6 +87,7 @@ export function ProfileAccountActions({
   /** Require a written reason when deactivating (students). */
   requireDeactivateReason = false,
   lastDeactivationReason,
+  statusHistory = [],
 }: {
   name: string;
   recordId: string;
@@ -96,6 +99,7 @@ export function ProfileAccountActions({
   deleteBlockedReason?: string;
   requireDeactivateReason?: boolean;
   lastDeactivationReason?: string;
+  statusHistory?: StaffStatusEvent[];
 }) {
   const [confirmDeactivate, setConfirmDeactivate] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -196,6 +200,42 @@ export function ProfileAccountActions({
             </tbody>
           </table>
         </div>
+
+        {statusHistory.length > 0 ? (
+          <div className="mt-5 border-t border-slate-100 pt-4 dark:border-white/10">
+            <h3 className="text-[13px] font-semibold text-black dark:text-zinc-50">Status history</h3>
+            <p className="mt-1 text-[12px] text-black/50 dark:text-zinc-400">
+              Earlier deactivations stay on the profile after reactivation.
+            </p>
+            <ol className="mt-3 space-y-2">
+              {statusHistory.map((event) => (
+                <li
+                  key={event.id}
+                  className="rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-2.5 dark:border-white/10 dark:bg-zinc-900/70"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={cn(
+                        "inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                        event.type === "deactivated"
+                          ? "bg-[#FEE2E2] text-[#B91C1C] dark:bg-rose-950/50 dark:text-rose-300"
+                          : "bg-[#D1F2E1] text-[#047857] dark:bg-emerald-950/45 dark:text-emerald-300",
+                      )}
+                    >
+                      {event.type === "deactivated" ? "Deactivated" : "Reactivated"}
+                    </span>
+                    <span className="font-mono text-[12px] text-black/70 dark:text-zinc-300">
+                      {formatEventDateTime(event.at)}
+                    </span>
+                  </div>
+                  {event.note ? (
+                    <p className="mt-1 text-[12.5px] text-black/70 dark:text-zinc-300">{event.note}</p>
+                  ) : null}
+                </li>
+              ))}
+            </ol>
+          </div>
+        ) : null}
       </section>
 
       <Dialog open={confirmDeactivate} onOpenChange={resetDeactivateDialog}>

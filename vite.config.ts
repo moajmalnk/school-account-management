@@ -136,6 +136,7 @@ export default defineConfig(({ mode }) => {
           navigateFallbackDenylist: [
             /^\/api\//,
             /^\/manifest\.webmanifest$/,
+            /^\/family\.webmanifest$/,
             /^\/version\.json$/,
             /^\/sw\.js$/,
             /^\/workbox-.*\.js$/,

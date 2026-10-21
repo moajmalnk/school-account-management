@@ -3,6 +3,7 @@ import autoTable from "jspdf-autotable";
 
 import type { FeezoLocale, FeezoUiBlock } from "@/lib/api/ai";
 import { formatDownloadFilename, todayStamp } from "@/lib/download-names";
+import { drawPdfFeezoCredit } from "@/lib/finance-export";
 import { asciiCurrencyText } from "@/lib/money";
 import { saveFile } from "@/lib/native-download";
 
@@ -297,7 +298,8 @@ function drawFooter(doc: jsPDF, school: string) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
     doc.setTextColor(...MUTED);
-    doc.text(`Confidential · Generated with Feezo AI · ${pdfSafeText(school)}`, MARGIN, pageH - 22);
+    doc.text(`Confidential · ${pdfSafeText(school)}`, MARGIN, pageH - 22);
+    drawPdfFeezoCredit(doc, pageH - 12);
     doc.text(`Page ${i} of ${pageCount}`, pageW - MARGIN, pageH - 22, { align: "right" });
   }
 }

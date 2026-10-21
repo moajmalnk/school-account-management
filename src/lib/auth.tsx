@@ -72,6 +72,8 @@ export type Session = {
   planName?: string;
   /** Live feature matrix from the tenant's subscription plan. */
   planFlags?: PlanFlags;
+  /** When false, school PDFs omit the Feezo footer credit. Omitted means on. */
+  pdfCreditEnabled?: boolean;
   /** True when an admin is previewing this workspace via impersonation (per-tab). */
   impersonated?: boolean;
   /** Who started impersonation — controls Exit destination. */
@@ -89,7 +91,8 @@ type AuthState = {
   login: (email: string, password: string) => Promise<LoginResult>;
   /** Apply tokens already persisted by apiRegisterTrial / similar. */
   acceptLoginResponse: (data: ApiLoginResponse) => LoginResult;
-  logout: () => void;
+  /** `local` clears this browser only, after the server call already finished. */
+  logout: (scope?: "device" | "everywhere" | "local") => void;
   updateSession: (
     patch: Partial<
       Pick<
@@ -186,6 +189,10 @@ function sessionFromApiLogin(
     tier: data.session.tier,
     planName: data.session.planName,
     planFlags: data.session.planFlags ? normalizePlanFlags(data.session.planFlags) : undefined,
+    pdfCreditEnabled:
+      typeof data.session.pdfCreditEnabled === "boolean"
+        ? data.session.pdfCreditEnabled
+        : undefined,
   };
   writeSession(next);
   setSession(next);
@@ -223,6 +230,9 @@ function parseSessionRaw(raw: string, impersonated: boolean): Session | null {
     tier: typeof parsed.tier === "string" ? parsed.tier : undefined,
     planName: typeof parsed.planName === "string" ? parsed.planName : undefined,
     planFlags: parsed.planFlags ? normalizePlanFlags(parsed.planFlags) : undefined,
+    ...(typeof parsed.pdfCreditEnabled === "boolean"
+      ? { pdfCreditEnabled: parsed.pdfCreditEnabled }
+      : {}),
     ...(impersonated || parsed.impersonated ? { impersonated: true as const } : {}),
     ...(parsed.impersonationSource === "super_admin" ||
     parsed.impersonationSource === "school_admin"
@@ -232,6 +242,16 @@ function parseSessionRaw(raw: string, impersonated: boolean): Session | null {
       ? { impersonationTicket: parsed.impersonationTicket }
       : {}),
   };
+}
+
+/**
+ * School PDFs show the Feezo credit unless this session explicitly turned it off.
+ * A missing flag (older saved sessions) stays on.
+ */
+export function sessionPdfCreditEnabled(): boolean {
+  const session = readSession();
+  if (!session || typeof session.pdfCreditEnabled !== "boolean") return true;
+  return session.pdfCreditEnabled;
 }
 
 /** Reads the per-tab impersonation session first, then the shared login session. */
@@ -456,7 +476,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         try {
           if (!impersonated) {
-            await apiMe();
+            const me = await apiMe();
+            if (existing) {
+              const patch: Partial<Session> = {};
+              if (typeof me.pdfCreditEnabled === "boolean") patch.pdfCreditEnabled = me.pdfCreditEnabled;
+              if (me.planFlags) patch.planFlags = normalizePlanFlags(me.planFlags);
+              if (Object.keys(patch).length > 0) writeSession({ ...existing, ...patch });
+            }
           }
           touchLastActive(true);
           if (!cancelled) setSession(readSession() ?? existing);
@@ -601,7 +627,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const logout = useCallback(() => {
+  const logout = useCallback((scope: "device" | "everywhere" | "local" = "device") => {
     // Exiting an impersonated tab restores the underlying admin login.
     if (typeof window !== "undefined") {
       try {
@@ -616,7 +642,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // ignore
       }
     }
-    void apiLogoutCurrentDevice();
+    if (scope !== "local") void apiLogoutCurrentDevice(scope);
     clearAllAuthState();
     setSession(null);
   }, []);

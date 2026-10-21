@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Status, Tenant } from "./data";
-import { setSuperAdminTenantAccess } from "@/lib/api/super-admin";
+import { setSuperAdminTenantAccess, updateSuperAdminTenant } from "@/lib/api/super-admin";
 import { ApiError } from "@/lib/api/client";
 import { formatEventDateTime } from "@/lib/dates";
 import {
@@ -35,6 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { Switch } from "@/components/ui/switch";
 
 type RestoreStatus = Exclude<Status, "Suspended">;
 
@@ -53,6 +54,69 @@ const REASON_PRESETS = [
 
 const errorMessage = (err: unknown, fallback: string) =>
   err instanceof ApiError || err instanceof Error ? err.message : fallback;
+
+/** Super Admin only. Schools cannot change this from their own settings. */
+export function TenantPdfCreditControl({
+  tenant,
+  onUpdated,
+}: {
+  tenant: Tenant;
+  onUpdated: (tenant: Tenant) => void;
+}) {
+  const enabled = tenant.pdfCreditEnabled !== false;
+  const [busy, setBusy] = useState(false);
+
+  const toggle = async (next: boolean) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const updated = await updateSuperAdminTenant({
+        id: tenant.id,
+        name: tenant.name,
+        subdomain: tenant.subdomain,
+        tier: tenant.tier,
+        status: tenant.status,
+        capacity: tenant.capacity,
+        pdfCreditEnabled: next,
+      });
+      onUpdated(updated);
+      toast.success(
+        next ? "Feezo credit will show on documents" : "Feezo credit hidden on documents",
+      );
+    } catch (err) {
+      toast.error("Could not update document credit", {
+        description: errorMessage(err, "Try again in a moment."),
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border border-[#E5E5E5] bg-white p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-black/55">
+            Feezo credit on documents
+          </div>
+          <p className="mt-1 text-[12px] leading-relaxed text-black/60">
+            Receipts, salary slips, vouchers, and reports print “Powered by Feezo · www.feezo.app”
+            in the footer. Turn this off for a school that should not show Feezo on parent-facing
+            documents.
+          </p>
+        </div>
+        <Switch
+          checked={enabled}
+          disabled={busy}
+          aria-label="Feezo credit on documents"
+          onCheckedChange={(next) => {
+            void toggle(next);
+          }}
+        />
+      </div>
+    </div>
+  );
+}
 
 export function TenantAccessControl({
   tenant,

@@ -236,7 +236,7 @@ export function MarketingFooter() {
         >
           <div className="flex flex-col items-center gap-3 sm:flex-row sm:gap-4">
             <p className="text-center text-[12px] font-medium text-[var(--mkt-muted)] sm:text-left">
-              © {new Date().getFullYear()} {BRAND.name}. All rights reserved.
+              © {new Date().getFullYear()} {BRAND.legal.operator}. All rights reserved.
             </p>
             <LocaleSelectBar placement="top" density="compact" />
           </div>

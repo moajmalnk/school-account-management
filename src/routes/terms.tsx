@@ -30,6 +30,7 @@ function TermsOfUsePage() {
         (together, the “Service”), you agree to these Terms of Use (“Terms”). If you do not agree,
         do not use the Service.
       </p>
+      <p>{BRAND.legal.operatorNotice}</p>
 
       <LegalSection title="1. The Service">
         <p>
@@ -103,7 +104,8 @@ function TermsOfUsePage() {
         <p>
           {BRAND.name} may offer a free evaluation period (for example, a 14-day trial) and paid
           subscription plans. Pricing, plan features, seat limits, and billing cycles are shown at
-          signup or in your workspace billing settings.
+          signup or in your workspace billing settings. Payment processing, merchant billing, and
+          settlements for the Service are managed under {BRAND.legal.operator}.
         </p>
         <ul className="list-disc space-y-1.5 pl-5">
           <li>
@@ -136,7 +138,8 @@ function TermsOfUsePage() {
 
       <LegalSection title="7. Intellectual property">
         <p>
-          {BRAND.name}, its logos, software, design, and documentation are owned by us or our
+          {BRAND.name} is proprietary software owned and operated by {BRAND.legal.operator}. Its
+          logos, software, design, and documentation are owned by {BRAND.legal.operator} or its
           licensors. We grant you a limited, non-exclusive, non-transferable right to use the
           Service during your subscription or trial for your School’s internal operations.
         </p>

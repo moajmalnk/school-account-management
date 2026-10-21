@@ -36,9 +36,11 @@ import {
   type WhatsAppMessageTemplates,
 } from "@/lib/whatsapp-messages";
 import {
+  openWhatsAppShare,
   renderWhatsAppTemplate,
   sendPersonalizedWhatsApp,
   toNotifyWhatsAppNumber,
+  whatsAppGatewayNeedsConnect,
 } from "@/lib/whatsapp-notify";
 import { cn } from "@/lib/utils";
 
@@ -73,6 +75,10 @@ export function MarkStudentAttendanceModal({
   const [confirmPresentOpen, setConfirmPresentOpen] = useState(false);
   const [confirmWhatsAppOpen, setConfirmWhatsAppOpen] = useState(false);
   const [pendingNotify, setPendingNotify] = useState<AttendanceRosterStudent[]>([]);
+  const [waFallback, setWaFallback] = useState<
+    { name: string; number: string; message: string }[]
+  >([]);
+  const [waFallbackReason, setWaFallbackReason] = useState("");
   const [sendingWa, setSendingWa] = useState(false);
 
   const gradeOptions = useMemo(() => {
@@ -114,11 +120,17 @@ export function MarkStudentAttendanceModal({
         if (cancelled) return;
         setRoster(res.students);
         const next: DraftMap = {};
+        const saved: DraftMap = {};
         for (const s of res.students) {
-          if (s.status) next[s.studentId] = s.status;
+          if (s.status) {
+            next[s.studentId] = s.status;
+            saved[s.studentId] = s.status;
+          } else {
+            next[s.studentId] = "present";
+          }
         }
         setDraft(next);
-        setBaseline({ ...next });
+        setBaseline(saved);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -205,6 +217,8 @@ export function MarkStudentAttendanceModal({
         );
 
       if (nonPresent.length > 0) {
+        setWaFallback([]);
+        setWaFallbackReason("");
         setPendingNotify(nonPresent);
         setConfirmWhatsAppOpen(true);
       } else {
@@ -250,8 +264,43 @@ export function MarkStudentAttendanceModal({
       }
 
       const result = await sendPersonalizedWhatsApp({ recipients });
-      toast.success("WhatsApp sent", {
-        description: `${result.sent} sent${result.failed ? `, ${result.failed} failed` : ""}.`,
+      if (result.sent > 0 && result.failed === 0) {
+        toast.success("WhatsApp sent", {
+          description: `${result.sent} parent${result.sent === 1 ? "" : "s"} notified.`,
+        });
+        setWaFallback([]);
+        setWaFallbackReason("");
+        setConfirmWhatsAppOpen(false);
+        onOpenChange(false);
+        return;
+      }
+
+      const reason = result.errors[0] ?? "The school WhatsApp line did not accept the message.";
+      if (result.sent === 0) {
+        setWaFallback(
+          pendingNotify.flatMap((student) => {
+            const match = recipients.find(
+              (row) => row.number === toNotifyWhatsAppNumber(student.phone ?? undefined),
+            );
+            return match ? [{ name: student.name, number: match.number, message: match.message }] : [];
+          }),
+        );
+        setWaFallbackReason(reason);
+        toast.error(
+          whatsAppGatewayNeedsConnect(reason)
+            ? "School WhatsApp is not connected"
+            : "Parents were not notified",
+          {
+            description: whatsAppGatewayNeedsConnect(reason)
+              ? "Open the alert in WhatsApp on this device instead."
+              : reason,
+          },
+        );
+        return;
+      }
+
+      toast.warning("Some parents were not notified", {
+        description: `${result.sent} sent, ${result.failed} failed. ${reason}`,
       });
       setConfirmWhatsAppOpen(false);
       onOpenChange(false);
@@ -273,7 +322,7 @@ export function MarkStudentAttendanceModal({
               Mark student attendance
             </DialogTitle>
             <DialogDescription className="text-[13px] text-slate-500 dark:text-zinc-400">
-              {date} · choose status for each person, then save.
+              {date} · everyone starts as Present. Change exceptions, then save.
             </DialogDescription>
           </DialogHeader>
 
@@ -499,39 +548,75 @@ export function MarkStudentAttendanceModal({
         open={confirmWhatsAppOpen}
         onOpenChange={(next) => {
           setConfirmWhatsAppOpen(next);
-          if (!next) onOpenChange(false);
+          if (!next) {
+            setWaFallback([]);
+            setWaFallbackReason("");
+            onOpenChange(false);
+          }
         }}
       >
         <DialogContent className="max-w-sm rounded-xl">
           <DialogHeader>
-            <DialogTitle>Notify parents on WhatsApp?</DialogTitle>
+            <DialogTitle>
+              {waFallback.length > 0 ? "Send from this device" : "Notify parents on WhatsApp?"}
+            </DialogTitle>
             <DialogDescription>
-              Send attendance alerts to {pendingNotify.length} parent
-              {pendingNotify.length === 1 ? "" : "s"} for students marked Absent, Halfday, Late, or
-              Leave.
+              {waFallback.length > 0
+                ? whatsAppGatewayNeedsConnect(waFallbackReason)
+                  ? "The school WhatsApp line is not connected. Open each alert in WhatsApp on this device and send it yourself."
+                  : waFallbackReason
+                : `Send attendance alerts to ${pendingNotify.length} parent${
+                    pendingNotify.length === 1 ? "" : "s"
+                  } for students marked Absent, Halfday, Late, or Leave.`}
             </DialogDescription>
           </DialogHeader>
+          {waFallback.length > 0 ? (
+            <div className="flex max-h-48 flex-col gap-2 overflow-y-auto">
+              {waFallback.map((row) => (
+                <Button
+                  key={row.number}
+                  type="button"
+                  variant="outline"
+                  className="h-10 justify-start rounded-xl"
+                  onClick={() => {
+                    const opened = openWhatsAppShare(row.message, row.number);
+                    if (!opened) {
+                      toast.error("WhatsApp did not open", {
+                        description: "Allow pop-ups, then try again.",
+                      });
+                    }
+                  }}
+                >
+                  Open WhatsApp · {row.name}
+                </Button>
+              ))}
+            </div>
+          ) : null}
           <DialogFooter className="gap-2">
             <Button
               type="button"
               variant="outline"
               disabled={sendingWa}
               onClick={() => {
+                setWaFallback([]);
+                setWaFallbackReason("");
                 setConfirmWhatsAppOpen(false);
                 onOpenChange(false);
               }}
             >
-              Skip
+              {waFallback.length > 0 ? "Done" : "Skip"}
             </Button>
-            <Button
-              type="button"
-              className="bg-[#0F766E] text-white hover:bg-[#0D9488]"
-              disabled={sendingWa}
-              onClick={() => void sendAbsenceWhatsApp()}
-            >
-              {sendingWa ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-              Send WhatsApp
-            </Button>
+            {waFallback.length > 0 ? null : (
+              <Button
+                type="button"
+                className="bg-[#0F766E] text-white hover:bg-[#0D9488]"
+                disabled={sendingWa}
+                onClick={() => void sendAbsenceWhatsApp()}
+              >
+                {sendingWa ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+                Send WhatsApp
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -4,12 +4,16 @@ import {
   FileText,
   Loader2,
   MessageCircle,
+  Upload,
   UserCheck,
   UserX,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { ParentLeaveInbox } from "@/components/school/ParentLeaveInbox";
+import { AttendanceActions, AttendanceToolbarProvider } from "@/components/school/attendance/attendance-toolbar";
+import { AttendanceUploadDialog } from "@/components/school/attendance/AttendanceUploadDialog";
 import { MarkStudentAttendanceModal } from "@/components/school/attendance/MarkStudentAttendanceModal";
 import { StaffAttendancePanel } from "@/components/school/attendance/StaffAttendancePanel";
 import { Button } from "@/components/ui/button";
@@ -34,6 +38,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   apiAttendanceDay,
+  apiAttendanceMark,
   apiAttendanceReport,
   apiAttendanceSummary,
 } from "@/lib/api/attendance";
@@ -55,6 +60,13 @@ import {
   type AttendanceSummaryResponse,
   type StudentAttendanceStatus,
 } from "@/lib/student-attendance";
+import {
+  parseStudentAttendanceTable,
+  STUDENT_ATTENDANCE_HEADERS,
+} from "@/lib/attendance-import";
+import { formatDownloadFilename } from "@/lib/download-names";
+import { downloadBlobFile } from "@/lib/finance-export";
+import { buildXlsxBlob } from "@/lib/xlsx-workbook";
 import { useTenantStore } from "@/lib/tenant-store";
 import { cn, glassCardClass } from "@/lib/utils";
 import { loadWhatsAppTemplates } from "@/lib/whatsapp-messages";
@@ -175,13 +187,14 @@ function Donut({ percent }: { percent: number }) {
 }
 
 function StudentAttendanceBoard() {
-  const { schoolDetails, classes: classConfigs } = useTenantStore();
+  const { schoolDetails, classes: classConfigs, students } = useTenantStore();
   const schoolName = schoolDetails.name || "School";
 
   const [date, setDate] = useState(todayYmd);
   const [summary, setSummary] = useState<AttendanceSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [markOpen, setMarkOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [markClass, setMarkClass] = useState("all");
   const [markDivision, setMarkDivision] = useState("all");
 
@@ -382,30 +395,35 @@ function StudentAttendanceBoard() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <p className="max-w-xl text-[13px] text-slate-500 dark:text-zinc-400">
-          Mark by class and division, then export the register or send it on WhatsApp.
-        </p>
-        <div className="flex items-center gap-2">
-          <DatePicker
-            value={date}
-            onChange={setDate}
-            valueFormat="iso"
-            placeholder="Pick date"
-            align="end"
-            quickPicks={[{ label: "Today", getDate: (t) => t }]}
-            className="h-10 w-[11.5rem] rounded-xl border-slate-200 dark:border-white/10"
-          />
-          <Button
-            type="button"
-            className="h-10 rounded-full bg-[#0F766E] px-4 text-white hover:bg-[#0D9488]"
-            onClick={() => openMark()}
-          >
-            <UserCheck className="mr-1.5 h-4 w-4" />
-            Mark students
-          </Button>
-        </div>
-      </div>
+      <ParentLeaveInbox />
+      <AttendanceActions>
+        <DatePicker
+          value={date}
+          onChange={setDate}
+          valueFormat="iso"
+          placeholder="Pick date"
+          align="end"
+          quickPicks={[{ label: "Today", getDate: (t) => t }]}
+          className="h-10 w-full min-w-0 rounded-xl border-slate-200 dark:border-white/10"
+        />
+        <Button
+          type="button"
+          className="h-10 w-full rounded-full bg-[#0F766E] px-4 text-white hover:bg-[#0D9488]"
+          onClick={() => openMark()}
+        >
+          <UserCheck className="mr-1.5 h-4 w-4 shrink-0" />
+          <span className="truncate">Mark students</span>
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-10 w-full rounded-full px-4"
+          onClick={() => setUploadOpen(true)}
+        >
+          <Upload className="mr-1.5 h-4 w-4 shrink-0" />
+          Upload
+        </Button>
+      </AttendanceActions>
 
       <div className="grid grid-cols-12 gap-4">
         <section className={cn(glassCardClass, "col-span-12 p-4 sm:p-5 lg:col-span-5")}>
@@ -480,6 +498,15 @@ function StudentAttendanceBoard() {
             onClick={() => openMark()}
           >
             Mark students
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 w-full rounded-xl"
+            onClick={() => setUploadOpen(true)}
+          >
+            <Upload className="mr-1.5 h-4 w-4" />
+            Upload Excel
           </Button>
           <div className="grid grid-cols-2 gap-2">
             <Button type="button" variant="outline" className="rounded-xl" onClick={() => openMark()}>
@@ -588,6 +615,68 @@ function StudentAttendanceBoard() {
         </section>
       </div>
 
+      <AttendanceUploadDialog
+        open={uploadOpen}
+        onOpenChange={setUploadOpen}
+        title="Upload student attendance"
+        description="Download the mock Excel, set each status, then upload the same sheet."
+        hint="Status is Present, Absent, Halfday, Late, or Leave. A blank status is saved as Present. Student ID must match the register."
+        onDownloadMock={() => {
+          const live = students.filter((student) => !student.deletedAt && student.active !== false);
+          const sample = live.length
+            ? live.map((student) => [date, student.id, student.name, student.cls || "", "Present"])
+            : [
+                [date, "STU-001", "Aarav Menon", "Grade 8 - B", "Present"],
+                [date, "STU-009", "Aditya Joshi", "Grade 9 - A", "Absent"],
+                [date, "STU-016", "Aisha Rahman", "Grade 9 - A", "Leave"],
+              ];
+          downloadBlobFile(
+            buildXlsxBlob("Students", [[...STUDENT_ATTENDANCE_HEADERS], ...sample]),
+            formatDownloadFilename("bulkDemo", "xlsx", {
+              report: "student-attendance",
+              date,
+              school: schoolName,
+            }),
+          );
+          toast.success("Mock Excel downloaded", {
+            description: live.length
+              ? `${live.length} students listed as Present for ${date}. Change only the exceptions.`
+              : "Sample rows use STU-001 style IDs. Replace them with real student IDs before upload.",
+          });
+        }}
+        parseTable={(table) =>
+          parseStudentAttendanceTable(table, {
+            fallbackDate: date,
+            knownIds: new Set(
+              students
+                .filter((student) => !student.deletedAt && student.active !== false)
+                .map((student) => student.id.toLowerCase()),
+            ),
+          })
+        }
+        onSave={async (rows) => {
+          const canonical = new Map(
+            students.map((student) => [student.id.toLowerCase(), student.id]),
+          );
+          const byDate = new Map<string, Array<{ studentId: string; status: StudentAttendanceStatus }>>();
+          for (const row of rows) {
+            const studentId = canonical.get(row.studentId.toLowerCase()) ?? row.studentId;
+            const list = byDate.get(row.date) ?? [];
+            list.push({ studentId, status: row.status });
+            byDate.set(row.date, list);
+          }
+          let saved = 0;
+          for (const [markDate, marks] of byDate) {
+            const result = await apiAttendanceMark({ date: markDate, marks });
+            saved += result.saved;
+          }
+          toast.success("Student attendance uploaded", {
+            description: `${saved} mark${saved === 1 ? "" : "s"} saved.`,
+          });
+          await refresh();
+        }}
+      />
+
       <MarkStudentAttendanceModal
         open={markOpen}
         onOpenChange={setMarkOpen}
@@ -688,30 +777,33 @@ function StudentAttendanceBoard() {
 
 export function AttendanceWorkspace() {
   const [tab, setTab] = useState<"students" | "staff">("students");
+  const [actionsHost, setActionsHost] = useState<HTMLDivElement | null>(null);
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-4 px-3 pb-24 pt-3 sm:px-4 md:px-6 md:pb-8">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-[22px] font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
-            Attendance
-          </h1>
-          <p className="mt-0.5 text-[13px] text-slate-500 dark:text-zinc-400">
-            Daily class register for students. Monthly payable days for staff.
-          </p>
-        </div>
-        <Tabs value={tab} onValueChange={(value) => setTab(value === "staff" ? "staff" : "students")}>
-          <TabsList className="h-10 rounded-full bg-slate-100 p-1 dark:bg-white/10">
-            <TabsTrigger value="students" className="rounded-full px-4 data-[state=active]:text-[#0F766E]">
-              Students attendance
+      <h1 className="text-[22px] font-semibold tracking-tight text-slate-900 dark:text-zinc-50">
+        Attendance
+      </h1>
+      <div className="grid w-full grid-cols-1 gap-2 lg:grid-cols-5">
+        <Tabs
+          value={tab}
+          onValueChange={(value) => setTab(value === "staff" ? "staff" : "students")}
+          className="min-w-0 lg:col-span-2"
+        >
+          <TabsList className="grid h-10 w-full grid-cols-2 rounded-full bg-slate-100 p-1 dark:bg-white/10">
+            <TabsTrigger value="students" className="h-8 w-full rounded-full px-2 data-[state=active]:text-[#0F766E]">
+              <span className="truncate">Students attendance</span>
             </TabsTrigger>
-            <TabsTrigger value="staff" className="rounded-full px-4 data-[state=active]:text-[#0F766E]">
-              Staff attendance
+            <TabsTrigger value="staff" className="h-8 w-full rounded-full px-2 data-[state=active]:text-[#0F766E]">
+              <span className="truncate">Staff attendance</span>
             </TabsTrigger>
           </TabsList>
         </Tabs>
+        <div ref={setActionsHost} className="grid min-w-0 grid-cols-3 gap-2 lg:col-span-3" />
       </div>
-      {tab === "students" ? <StudentAttendanceBoard /> : <StaffAttendancePanel />}
+      <AttendanceToolbarProvider host={actionsHost}>
+        {tab === "students" ? <StudentAttendanceBoard /> : <StaffAttendancePanel />}
+      </AttendanceToolbarProvider>
     </div>
   );
 }

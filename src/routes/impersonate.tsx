@@ -234,6 +234,9 @@ function ImpersonatePage() {
             planFlags: data.session.planFlags
               ? normalizePlanFlags(data.session.planFlags)
               : undefined,
+            ...(typeof data.session.pdfCreditEnabled === "boolean"
+              ? { pdfCreditEnabled: data.session.pdfCreditEnabled }
+              : {}),
             impersonationSource: "super_admin",
             impersonationTicket: data.ticket,
           });
@@ -270,6 +273,9 @@ function ImpersonatePage() {
           staffId: user.staffId,
           permissions: user.permissions,
           branchIds,
+          ...(typeof adminSession.pdfCreditEnabled === "boolean"
+            ? { pdfCreditEnabled: adminSession.pdfCreditEnabled }
+            : {}),
           impersonationSource: "school_admin",
         });
         window.location.replace(firstAllowedTenantPath(user.permissions));
@@ -291,6 +297,9 @@ function ImpersonatePage() {
           issuedAt: Date.now(),
           permissions,
           branchIds: branchesFromQuery,
+          ...(typeof adminSession.pdfCreditEnabled === "boolean"
+            ? { pdfCreditEnabled: adminSession.pdfCreditEnabled }
+            : {}),
           impersonationSource: "school_admin",
         });
         window.location.replace(firstAllowedTenantPath(permissions));

@@ -34,6 +34,7 @@ function Bone({ className }: { className?: string }) {
 function openingVariantForPath(pathname: string): "dashboard" | "directory" {
   if (
     pathname.includes("/students") ||
+    pathname.includes("/parents") ||
     pathname.includes("/staff") ||
     pathname.includes("/finance")
   ) {

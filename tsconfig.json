@@ -6,6 +6,7 @@
     "vite.config.ts",
     "eslint.config.js"
   ],
+  "exclude": ["src/logo-preview.tsx", "src/chart-preview.tsx"],
   "compilerOptions": {
     "target": "ES2022",
     "jsx": "react-jsx",

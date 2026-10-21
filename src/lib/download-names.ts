@@ -264,7 +264,7 @@ function withExtension(base: string, ext: string): string {
 
 export function formatDownloadFilename(
   kind: DownloadKind,
-  ext: "pdf" | "csv",
+  ext: "pdf" | "csv" | "xlsx",
   vars: DownloadNameVars = {},
   patterns?: Partial<Record<DownloadKind, string>>,
 ): string {

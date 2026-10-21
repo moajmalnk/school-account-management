@@ -734,6 +734,123 @@ export async function apiGlReportBalanceSheet(params?: {
   };
 }
 
+export type GlCashFlowLine = {
+  account: string;
+  groupName: string;
+  inflow: number;
+  outflow: number;
+};
+
+export type GlCashFlowSection = {
+  inflow: number;
+  outflow: number;
+  net: number;
+  lines: GlCashFlowLine[];
+};
+
+export type GlCashFlowTransfer = {
+  date: string;
+  voucherNo: string;
+  narration: string;
+  fromAccount: string;
+  toAccount: string;
+  amount: number;
+};
+
+export type GlCashFlowReport = {
+  opening: number;
+  closing: number;
+  netChange: number;
+  operating: GlCashFlowSection;
+  investing: GlCashFlowSection;
+  financing: GlCashFlowSection;
+  transfers: {
+    amount: number;
+    lines: GlCashFlowTransfer[];
+  };
+  academicYear: string | null;
+  from: string | null;
+  to: string | null;
+};
+
+function emptyCashFlowSection(): GlCashFlowSection {
+  return { inflow: 0, outflow: 0, net: 0, lines: [] };
+}
+
+function readCashFlowSection(value: unknown): GlCashFlowSection {
+  if (!isRecord(value)) return emptyCashFlowSection();
+  const lines = Array.isArray(value.lines)
+    ? value.lines.filter(isRecord).map((line) => ({
+        account: String(line.account ?? ""),
+        groupName: String(line.groupName ?? ""),
+        inflow: Number(line.inflow) || 0,
+        outflow: Number(line.outflow) || 0,
+      }))
+    : [];
+  return {
+    inflow: Number(value.inflow) || 0,
+    outflow: Number(value.outflow) || 0,
+    net: Number(value.net) || 0,
+    lines,
+  };
+}
+
+/** Direct cash-flow statement from posted cash and bank journals. */
+export async function apiGlReportCashFlow(params?: {
+  from?: string;
+  to?: string;
+  academicYear?: string;
+}): Promise<GlCashFlowReport> {
+  const empty: GlCashFlowReport = {
+    opening: 0,
+    closing: 0,
+    netChange: 0,
+    operating: emptyCashFlowSection(),
+    investing: emptyCashFlowSection(),
+    financing: emptyCashFlowSection(),
+    transfers: { amount: 0, lines: [] },
+    academicYear: params?.academicYear ?? null,
+    from: params?.from ?? null,
+    to: params?.to ?? null,
+  };
+  if (!hasToken()) return empty;
+  const data = await apiRequest<unknown>(
+    glReportsQuery({
+      report: "cashFlow",
+      from: params?.from,
+      to: params?.to,
+      academicYear: params?.academicYear,
+    }),
+  );
+  if (!isRecord(data) || typeof data.opening !== "number") return empty;
+  const transfers = isRecord(data.transfers) ? data.transfers : {};
+  const transferLines = Array.isArray(transfers.lines)
+    ? transfers.lines.filter(isRecord).map((line) => ({
+        date: String(line.date ?? ""),
+        voucherNo: String(line.voucherNo ?? ""),
+        narration: String(line.narration ?? ""),
+        fromAccount: String(line.fromAccount ?? ""),
+        toAccount: String(line.toAccount ?? ""),
+        amount: Number(line.amount) || 0,
+      }))
+    : [];
+  return {
+    opening: Number(data.opening) || 0,
+    closing: Number(data.closing) || 0,
+    netChange: Number(data.netChange) || 0,
+    operating: readCashFlowSection(data.operating),
+    investing: readCashFlowSection(data.investing),
+    financing: readCashFlowSection(data.financing),
+    transfers: {
+      amount: Number(transfers.amount) || 0,
+      lines: transferLines,
+    },
+    academicYear: typeof data.academicYear === "string" ? data.academicYear : empty.academicYear,
+    from: typeof data.from === "string" ? data.from : null,
+    to: typeof data.to === "string" ? data.to : null,
+  };
+}
+
 export async function apiGlGetPeriod(year: string): Promise<GlPeriod> {
   const fallback: GlPeriod = { yearLabel: year, status: "open" };
   const data = await glGet<unknown>("periods", { academicYear: year }, fallback);

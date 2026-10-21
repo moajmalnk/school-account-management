@@ -13,7 +13,6 @@ import {
   Search,
   Send,
   Sparkles,
-  UserRound,
   Users,
   Wallet,
   X,
@@ -22,6 +21,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { FeezoConfirmCard } from "@/components/ai/FeezoConfirmCard";
+import { SchoolLogo } from "@/components/ui/school-logo";
 import { FeezoMessageActions } from "@/components/ai/FeezoMessageActions";
 import { FeezoMessageRenderer } from "@/components/ai/FeezoMessageRenderer";
 import { FeezoRichText } from "@/components/ai/FeezoRichText";
@@ -153,18 +153,14 @@ function SchoolMark({
   return (
     <div
       className={cn(
-        "grid shrink-0 place-items-center overflow-hidden rounded-[0.7rem] text-[11px] font-bold text-white shadow-sm shadow-teal-950/15 ring-1 ring-slate-200/80 dark:ring-white/15",
+        "relative grid shrink-0 place-items-center overflow-hidden rounded-[0.7rem] text-[11px] font-bold text-white shadow-sm shadow-teal-950/15 ring-1 ring-slate-200/80 dark:ring-white/15",
         !src && "bg-gradient-to-br from-[#0F766E] to-[#0D5C56]",
         className,
       )}
       title={name}
       aria-hidden
     >
-      {src ? (
-        <img src={src} alt="" className="h-full w-full bg-white object-contain p-0.5" />
-      ) : (
-        initials
-      )}
+      {src ? <SchoolLogo src={src} className="absolute inset-0" /> : initials}
     </div>
   );
 }
@@ -224,18 +220,16 @@ export function FeezoChatPanel({ assistant }: Props) {
   const titleId = useId();
   const descId = useId();
 
+  const draftRef = useRef("");
+  draftRef.current = draft;
+
   const voice = useFeezoVoice({
     locale,
     enabled: open,
+    getDraft: () => draftRef.current,
+    onDraft: (text) => setDraft(text),
+    onInterim: (text) => setInterim(text),
     onWake: () => setOpen(true),
-    onTranscript: (text, isFinal) => {
-      if (isFinal) {
-        setInterim("");
-        setDraft((prev) => (prev ? `${prev} ${text}` : text));
-      } else {
-        setInterim(text);
-      }
-    },
   });
 
   useEffect(() => {
@@ -369,7 +363,7 @@ export function FeezoChatPanel({ assistant }: Props) {
               </h2>
               <span
                 className={cn(
-                  "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider",
+                  "inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider",
                   voice.listening
                     ? "bg-rose-50 text-rose-600 ring-1 ring-rose-200/80 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/30"
                     : busy
@@ -399,6 +393,7 @@ export function FeezoChatPanel({ assistant }: Props) {
             <button
               type="button"
               onClick={() => {
+                voice.stop(false);
                 newChat();
                 setDraft("");
                 setInterim("");
@@ -440,6 +435,12 @@ export function FeezoChatPanel({ assistant }: Props) {
                   key={code}
                   type="button"
                   onClick={() => setLocale(code)}
+                  aria-pressed={locale === code}
+                  title={
+                    code === "ml"
+                      ? "Dictate in Malayalam"
+                      : "Dictate in English"
+                  }
                   className={cn(
                     "rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition",
                     locale === code
@@ -604,9 +605,11 @@ export function FeezoChatPanel({ assistant }: Props) {
                     )}
                   >
                     {isUser ? (
-                      <div className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-[0.65rem] bg-slate-200/90 text-slate-600 dark:bg-zinc-800 dark:text-zinc-300">
-                        <UserRound className="h-3.5 w-3.5" strokeWidth={2.25} />
-                      </div>
+                      <SchoolMark
+                        name={schoolName}
+                        logoUrl={schoolDetails.logoUrl}
+                        className="mt-0.5 h-7 w-7 text-[9px]"
+                      />
                     ) : (
                       <FeezoMark className="mt-0.5 h-7 w-7 shrink-0" />
                     )}
@@ -730,13 +733,19 @@ export function FeezoChatPanel({ assistant }: Props) {
           )}
         >
           <div className={cn(contentMax)}>
-            {interim ? (
+            {voice.listening || interim ? (
               <div className="mb-2 flex items-center gap-2 rounded-lg border border-teal-200/60 bg-teal-50/80 px-2.5 py-1.5 text-[11px] text-teal-800 dark:border-teal-500/25 dark:bg-teal-950/40 dark:text-teal-200">
-                <span className="relative flex h-2 w-2">
+                <span className="relative flex h-2 w-2 shrink-0">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-teal-400 opacity-60" />
                   <span className="relative inline-flex h-2 w-2 rounded-full bg-teal-500" />
                 </span>
-                <span className="italic">{interim}</span>
+                <span className="min-w-0 truncate">
+                  {interim
+                    ? interim
+                    : locale === "ml"
+                      ? "മലയാളം കേൾക്കുന്നു"
+                      : "Listening in English"}
+                </span>
               </div>
             ) : null}
             {voice.error ? (
@@ -753,13 +762,25 @@ export function FeezoChatPanel({ assistant }: Props) {
               <button
                 type="button"
                 disabled={!voice.supported}
+                aria-pressed={voice.listening}
+                aria-label={
+                  voice.listening
+                    ? locale === "ml"
+                      ? "മൈക്ക് നിർത്തുക"
+                      : "Stop microphone"
+                    : locale === "ml"
+                      ? "മലയാളത്തിൽ പറയുക"
+                      : "Speak in English"
+                }
                 onClick={() => (voice.listening ? voice.stop() : voice.start())}
                 title={
                   voice.supported
                     ? locale === "ml"
-                      ? "മൈക്ക് (ഹേ ഫീസോ)"
-                      : "Voice input (say hey Feezo)"
-                    : "Voice not supported"
+                      ? "മലയാളം മൈക്ക്. നിർത്താൻ വീണ്ടും അമർത്തുക."
+                      : "English mic. Press again to stop."
+                    : locale === "ml"
+                      ? "ഈ ബ്രൗസറിൽ വോയ്സ് ലഭ്യമല്ല"
+                      : "Voice not supported in this browser"
                 }
                 className={cn(
                   "grid h-10 w-10 shrink-0 place-items-center rounded-xl transition",
@@ -776,12 +797,17 @@ export function FeezoChatPanel({ assistant }: Props) {
                 ref={inputRef}
                 rows={1}
                 value={draft}
-                onChange={(e) => setDraft(e.target.value)}
+                onChange={(e) => {
+                  setDraft(e.target.value);
+                  if (voice.listening) voice.stop(false);
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
-                    const text = draft.trim();
+                    const text = [draft, interim].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
                     if (!text || busy) return;
+                    if (voice.listening) voice.stop(false);
+                    setInterim("");
                     setDraft("");
                     void send(text);
                   }
@@ -800,10 +826,12 @@ export function FeezoChatPanel({ assistant }: Props) {
 
               <button
                 type="button"
-                disabled={busy || !draft.trim()}
+                disabled={busy || ![draft, interim].some((part) => part.trim())}
                 onClick={() => {
-                  const text = draft.trim();
-                  if (!text) return;
+                  const text = [draft, interim].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+                  if (!text || busy) return;
+                  if (voice.listening) voice.stop(false);
+                  setInterim("");
                   setDraft("");
                   void send(text);
                 }}

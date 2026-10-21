@@ -184,6 +184,12 @@ function LoginPage() {
           <UserPlus className="h-4 w-4" aria-hidden />
           Create account
         </Link>
+        <a
+          href="/family/login"
+          className="mt-4 block text-center text-[13px] font-medium text-[#0F766E]"
+        >
+          Parent sign in
+        </a>
       </form>
     </AuthShell>
   );

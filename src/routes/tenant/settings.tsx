@@ -7,6 +7,7 @@ export const SETTINGS_TABS = [
   "school",
   "branches",
   "classes",
+  "academics",
   "departments",
   "roles",
   "leave",
@@ -16,6 +17,7 @@ export const SETTINGS_TABS = [
   "transport",
   "system",
   "support",
+  "subscription",
 ] as const;
 
 export type SettingsTab = (typeof SETTINGS_TABS)[number];

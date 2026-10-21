@@ -99,6 +99,7 @@ import {
   studentNeedsTransport,
   upsertStudentInSnapshot,
   useTenantStore,
+  withStudentStatusChange,
   type StaffDocument,
   type StaffDocumentAttachment,
   type Student,
@@ -124,6 +125,8 @@ import {
   type StudentProfileTabId,
 } from "@/components/school/ProfileDetailTabs";
 import { StudentAttendanceTab } from "@/components/school/attendance/StudentAttendanceTab";
+import { StudentYearPlacement } from "@/components/school/StudentYearPlacement";
+import { StudentParentsAppPanel } from "@/components/school/StudentParentsAppPanel";
 import { planAllowsStudentAttendance } from "@/lib/permissions";
 import { cn, glassCardClass } from "@/lib/utils";
 import { formatDobDisplay } from "@/lib/dates";
@@ -832,13 +835,7 @@ export function StudentProfileDetail({
     : undefined;
 
   const toggleActive = (nextActive: boolean, reason?: string) => {
-    const updated: Student = {
-      ...student,
-      active: nextActive,
-      deactivationReason: nextActive
-        ? undefined
-        : (reason?.trim() || student.deactivationReason || undefined),
-    };
+    const updated = withStudentStatusChange(student, nextActive, reason);
     syncStudent(updated);
     toast.success(nextActive ? `${student.name} reactivated` : `${student.name} deactivated`, {
       description: nextActive
@@ -1016,7 +1013,7 @@ export function StudentProfileDetail({
           </div>
         </ProfileTabPanel>
 
-        <ProfileTabPanel value="academic">
+        <ProfileTabPanel value="academic" forceMount>
           <div className="grid grid-cols-1 gap-4 sm:gap-5">
             <ProfileDataTable
               title="Academic Placement"
@@ -1038,6 +1035,8 @@ export function StudentProfileDetail({
                 { label: "Student Category", value: student.studentCategory || EMPTY },
               ]}
             />
+
+            <StudentYearPlacement student={student} />
 
             <section className={CARD_FRAME}>
               <h2 className="text-base font-semibold text-black dark:text-zinc-50">Transport</h2>
@@ -1120,7 +1119,11 @@ export function StudentProfileDetail({
                         list (e.g. University).
                       </p>
                     ) : null}
-                    {studentTransportFee.amount && studentTransportFee.amount > 0 ? (
+                    {student.hasConcession && student.concessionFees?.vehicle?.fullConcession ? (
+                      <div className="rounded-xl border border-[#CCFBF1] bg-[#F0FDFA]/70 px-3.5 py-3 text-[12px] leading-relaxed text-[#115E59] dark:border-teal-500/30 dark:bg-teal-950/40 dark:text-teal-100">
+                        Bus fee is fully waived. Nothing is collected for transport.
+                      </div>
+                    ) : studentTransportFee.amount && studentTransportFee.amount > 0 ? (
                       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#CCFBF1] bg-[#F0FDFA]/70 px-3.5 py-3 dark:border-teal-500/30 dark:bg-teal-950/40">
                         <div>
                           <div className="text-[11px] font-semibold uppercase tracking-wider text-black/45 dark:text-teal-200/80">
@@ -1384,6 +1387,10 @@ export function StudentProfileDetail({
             />
           </section>
         </ProfileTabPanel>
+
+        <ProfileTabPanel value="parents-app">
+          <StudentParentsAppPanel student={student} />
+        </ProfileTabPanel>
       </ProfileDetailTabs>
 
       <FeeBreaksManageDialog
@@ -1412,6 +1419,7 @@ export function StudentProfileDetail({
         deleteBlockedReason={deleteBlockedReason}
         requireDeactivateReason
         lastDeactivationReason={student.deactivationReason}
+        statusHistory={student.statusHistory}
       />
     </div>
   );

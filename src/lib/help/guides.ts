@@ -106,7 +106,7 @@ export const HELP_GUIDES: HelpGuide[] = [
       },
       {
         title: "Use the menu to move between modules",
-        body: "Dashboard, Students, Staff, Finance, Support, Subscription and Settings. On a phone the same menu sits at the bottom of the screen.",
+        body: "Dashboard, Students, Attendance, Staff, Finance, Support, and Settings. Subscription is a tab inside Settings.",
       },
       {
         title: "Quick actions on the Dashboard",
@@ -316,6 +316,10 @@ export const HELP_GUIDES: HelpGuide[] = [
       "reminder",
       "bulk",
       "promote",
+      "promotion",
+      "demote",
+      "repeat",
+      "next year",
       "change class",
       "follow up",
       "message",
@@ -333,8 +337,12 @@ export const HELP_GUIDES: HelpGuide[] = [
       },
       {
         title: "Choose an action",
-        body: "Bulk WhatsApp sends one message to every selected guardian. Change Class moves them to another class (for example at promotion time). Change Status sets them Active or Inactive.",
+        body: "Bulk WhatsApp sends one message to every selected guardian. Change Class moves them inside the open year only. Change Status sets them Active or Inactive.",
         tip: "Use Select overdue + Bulk WhatsApp for a one-click fee reminder.",
+      },
+      {
+        title: "Promote to the next year",
+        body: "Promote on the Students directory places the current class, or the students you selected, into the next academic year. Grade 8 becomes Grade 9 when that class exists. Repeat keeps the grade, Demote moves down, and the final grade graduates. This year’s fees stay put. One student can be placed from their Academic tab.",
       },
       {
         title: "Deleted by mistake?",
@@ -1610,11 +1618,11 @@ export const HELP_GUIDES: HelpGuide[] = [
       "trial",
       "premium",
     ],
-    openTo: { href: "/tenant/billing", label: "Open Subscription" },
+    openTo: { href: "/tenant/settings?tab=subscription", label: "Open Subscription" },
     steps: [
       {
         title: "Open Subscription",
-        body: "The Subscription menu shows your plan, Renewal date, Auto-renewal and Renewal price.",
+        body: "Settings → Subscription shows your plan, Renewal date, Auto-renewal and Renewal price.",
         image: IMG.subscriptions,
       },
       {

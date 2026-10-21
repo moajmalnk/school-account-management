@@ -68,9 +68,14 @@ function tierToDraft(tier?: StudentConcessionFeeTier): FeeScheduleDraft {
   });
 }
 
-function draftToTier(draft: FeeScheduleDraft, enabled: boolean): StudentConcessionFeeTier {
+function draftToTier(
+  draft: FeeScheduleDraft,
+  enabled: boolean,
+  fullConcession = false,
+): StudentConcessionFeeTier {
   return {
-    enabled,
+    enabled: enabled || fullConcession,
+    ...(fullConcession ? { fullConcession: true } : {}),
     billingCycle: draft.billingCycle,
     feeAmountMode: draft.feeAmountMode,
     feeSchedule: feeScheduleFromDraft(draft),
@@ -140,7 +145,9 @@ function TierBlock({
   title,
   defaultSummary,
   enabled,
+  fullConcession,
   onEnabledChange,
+  onFullConcessionChange,
   draft,
   onDraftChange,
   onSeedFromDefault,
@@ -148,38 +155,59 @@ function TierBlock({
   title: string;
   defaultSummary?: string;
   enabled: boolean;
+  fullConcession: boolean;
   onEnabledChange: (checked: boolean) => void;
+  onFullConcessionChange: (next: boolean) => void;
   draft: FeeScheduleDraft;
   onDraftChange: (draft: FeeScheduleDraft) => void;
   onSeedFromDefault?: () => void;
 }) {
   return (
     <div className="rounded-xl border border-slate-200/80 bg-white/60 p-4 dark:border-zinc-700/60 dark:bg-zinc-900/40">
-      <label className="flex cursor-pointer items-start gap-3">
-        <Checkbox
-          checked={enabled}
-          onCheckedChange={(checked) => onEnabledChange(checked === true)}
-          className="mt-0.5"
-        />
-        <span className="min-w-0 flex-1">
-          <span className="block text-[13px] font-semibold text-slate-900 dark:text-zinc-100">
-            {title}
-          </span>
-          {defaultSummary ? (
-            <span className="mt-0.5 block text-[12px] text-slate-500 dark:text-zinc-400">
-              Class / route default: {defaultSummary}
+      <div className="flex items-start justify-between gap-3">
+        <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
+          <Checkbox
+            checked={enabled || fullConcession}
+            onCheckedChange={(checked) => onEnabledChange(checked === true)}
+            className="mt-0.5"
+          />
+          <span className="min-w-0 flex-1">
+            <span className="block text-[13px] font-semibold text-slate-900 dark:text-zinc-100">
+              {title}
             </span>
-          ) : null}
-        </span>
-      </label>
-      {enabled ? (
+            {defaultSummary ? (
+              <span className="mt-0.5 block text-[12px] text-slate-500 dark:text-zinc-400">
+                Class / route default: {defaultSummary}
+              </span>
+            ) : null}
+          </span>
+        </label>
+        <button
+          type="button"
+          aria-pressed={fullConcession}
+          onClick={() => onFullConcessionChange(!fullConcession)}
+          className={cn(
+            "mt-0.5 shrink-0 rounded-xl px-3 py-1 text-[12px] font-semibold transition-colors",
+            fullConcession
+              ? "bg-[#0F766E] text-white"
+              : "border border-slate-200 bg-white text-slate-600 hover:border-[#0F766E] hover:text-[#0F766E] dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-teal-400 dark:hover:text-teal-200",
+          )}
+        >
+          Full concession
+        </button>
+      </div>
+      {fullConcession ? (
+        <p className="mt-3 rounded-xl border border-[#CCFBF1] bg-[#F0FDFA] px-3 py-2 text-[12px] leading-relaxed text-[#115E59] dark:border-teal-500/30 dark:bg-teal-950/40 dark:text-teal-100">
+          Full concession — nothing is collected for this fee.
+        </p>
+      ) : enabled ? (
         <div className="mt-3 space-y-3 border-t border-slate-100 pt-3 dark:border-zinc-800">
           {onSeedFromDefault ? (
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="h-8 rounded-full text-[12px]"
+              className="h-8 rounded-xl text-[12px]"
               onClick={onSeedFromDefault}
             >
               Reset from default schedule
@@ -371,6 +399,7 @@ export function StudentConcessionSection({
             title="Tuition Fee"
             defaultSummary={classSummary}
             enabled={tuitionEnabled}
+            fullConcession={value.concessionFees.tuition?.fullConcession === true}
             onEnabledChange={(checked) => {
               if (checked && !value.concessionFees.tuition) {
                 const seeded = defaultConcessionTierFromClass(matchedClass, feeTerms, "tuition");
@@ -382,7 +411,13 @@ export function StudentConcessionSection({
               }
               patchFees({
                 ...value.concessionFees,
-                tuition: draftToTier(tuitionDraft, checked),
+                tuition: draftToTier(tuitionDraft, checked, false),
+              });
+            }}
+            onFullConcessionChange={(next) => {
+              patchFees({
+                ...value.concessionFees,
+                tuition: draftToTier(tuitionDraft, next || tuitionEnabled, next),
               });
             }}
             draft={tuitionDraft}
@@ -390,7 +425,11 @@ export function StudentConcessionSection({
               setTuitionDraft(draft);
               patchFees({
                 ...value.concessionFees,
-                tuition: draftToTier(draft, tuitionEnabled),
+                tuition: draftToTier(
+                  draft,
+                  tuitionEnabled,
+                  value.concessionFees.tuition?.fullConcession === true,
+                ),
               });
             }}
             onSeedFromDefault={seedTuition}
@@ -401,6 +440,7 @@ export function StudentConcessionSection({
               title="Bus / Vehicle Fee"
               defaultSummary={vehicleDefaultSummary}
               enabled={vehicleEnabled}
+              fullConcession={value.concessionFees.vehicle?.fullConcession === true}
               onEnabledChange={(checked) => {
                 if (checked && !value.concessionFees.vehicle) {
                   const seeded = resolveVehicleConcessionSeed(
@@ -419,7 +459,32 @@ export function StudentConcessionSection({
                 }
                 patchFees({
                   ...value.concessionFees,
-                  vehicle: draftToTier(vehicleDraft, checked),
+                  vehicle: draftToTier(vehicleDraft, checked, false),
+                });
+              }}
+              onFullConcessionChange={(next) => {
+                const base = value.concessionFees.vehicle
+                  ? vehicleDraft
+                  : tierToDraft(
+                      resolveVehicleConcessionSeed(
+                        matchedClass,
+                        feeTerms,
+                        transportRoutes,
+                        busPoint1,
+                        busPoint2,
+                        matchedClass?.className,
+                      ),
+                    );
+                if (next && !value.concessionFees.vehicle) {
+                  setVehicleDraft(base);
+                }
+                patchFees({
+                  ...value.concessionFees,
+                  vehicle: draftToTier(
+                    next && !value.concessionFees.vehicle ? base : vehicleDraft,
+                    next || vehicleEnabled,
+                    next,
+                  ),
                 });
               }}
               draft={vehicleDraft}
@@ -427,7 +492,11 @@ export function StudentConcessionSection({
                 setVehicleDraft(draft);
                 patchFees({
                   ...value.concessionFees,
-                  vehicle: draftToTier(draft, vehicleEnabled),
+                  vehicle: draftToTier(
+                    draft,
+                    vehicleEnabled,
+                    value.concessionFees.vehicle?.fullConcession === true,
+                  ),
                 });
               }}
               onSeedFromDefault={seedVehicle}
@@ -455,13 +524,30 @@ export function StudentConcessionSection({
                 key={fee.id}
                 className="rounded-xl border border-slate-200/80 bg-white/60 p-4 dark:border-zinc-700/60 dark:bg-zinc-900/40"
               >
-                <div className="mb-3 flex items-center gap-2">
+                <div className="mb-3 flex flex-wrap items-center gap-2">
                   <Input
                     value={fee.label}
                     onChange={(e) => updateOtherFee(fee.id, { label: e.target.value })}
                     placeholder="Fee name · e.g. Lab Fee"
-                    className="h-9 flex-1"
+                    className="h-9 min-w-[12rem] flex-1"
                   />
+                  <button
+                    type="button"
+                    aria-pressed={fee.fullConcession === true}
+                    onClick={() =>
+                      updateOtherFee(fee.id, {
+                        fullConcession: fee.fullConcession === true ? undefined : true,
+                      })
+                    }
+                    className={cn(
+                      "shrink-0 rounded-xl px-3 py-1 text-[12px] font-semibold transition-colors",
+                      fee.fullConcession
+                        ? "bg-[#0F766E] text-white"
+                        : "border border-slate-200 bg-white text-slate-600 hover:border-[#0F766E] hover:text-[#0F766E] dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-teal-400 dark:hover:text-teal-200",
+                    )}
+                  >
+                    Full concession
+                  </button>
                   <Button
                     type="button"
                     variant="ghost"
@@ -473,13 +559,19 @@ export function StudentConcessionSection({
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
-                <FeeScheduleEditor
-                  value={otherDrafts[fee.id] ?? otherFeeToDraft(fee)}
-                  onChange={(draft) => {
-                    setOtherDrafts((prev) => ({ ...prev, [fee.id]: draft }));
-                    updateOtherFee(fee.id, draftToOtherFee(draft, fee));
-                  }}
-                />
+                {fee.fullConcession ? (
+                  <p className="rounded-xl border border-[#CCFBF1] bg-[#F0FDFA] px-3 py-2 text-[12px] leading-relaxed text-[#115E59] dark:border-teal-500/30 dark:bg-teal-950/40 dark:text-teal-100">
+                    Full concession — nothing is collected for this fee.
+                  </p>
+                ) : (
+                  <FeeScheduleEditor
+                    value={otherDrafts[fee.id] ?? otherFeeToDraft(fee)}
+                    onChange={(draft) => {
+                      setOtherDrafts((prev) => ({ ...prev, [fee.id]: draft }));
+                      updateOtherFee(fee.id, draftToOtherFee(draft, fee));
+                    }}
+                  />
+                )}
               </div>
             ))}
           </div>

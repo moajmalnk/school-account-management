@@ -43,7 +43,7 @@ import { mobileFabClass } from "@/components/layout/MobileTabBar";
 import { PlatformInvoicesPanel } from "@/components/admin/PlatformInvoicesPanel";
 import { TenantSubscriptionsPanel } from "@/components/admin/TenantSubscriptionsPanel";
 import { TenantActivityPanel } from "@/components/admin/TenantActivityPanel";
-import { TenantAccessControl } from "@/components/admin/TenantAccessControl";
+import { TenantAccessControl, TenantPdfCreditControl } from "@/components/admin/TenantAccessControl";
 import { OrganicCard } from "@/components/ui/organic-card";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
@@ -1961,6 +1961,9 @@ function TenantDetailDrawer({
               <div className="grid grid-cols-12 gap-3">
                 <div className="col-span-12">
                   <TenantAccessControl tenant={tenant} onUpdated={onTenantUpdated} />
+                </div>
+                <div className="col-span-12">
+                  <TenantPdfCreditControl tenant={tenant} onUpdated={onTenantUpdated} />
                 </div>
 
                 <div className="col-span-12 rounded-2xl border border-[#E5E5E5] bg-[#F4F4F5] p-4">

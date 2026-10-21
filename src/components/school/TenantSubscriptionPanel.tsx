@@ -382,15 +382,6 @@ export function TenantSubscriptionPanel({
         </SheetContent>
       </Sheet>
 
-      <div>
-        <h1 className="text-[22px] font-semibold tracking-tight text-black dark:text-zinc-50 sm:text-[26px]">
-          Subscriptions
-        </h1>
-        <p className="mt-1 text-[13px] text-black/50 dark:text-zinc-400">
-          Platform plan for {schoolLabel} — organization-wide, not scoped per campus.
-        </p>
-      </div>
-
       {showAlert && !loading ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#FFF4E5] px-4 py-3 dark:bg-[#C2410C]/20">
           <div className="flex min-w-0 items-start gap-2.5">

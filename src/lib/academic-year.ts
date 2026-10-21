@@ -358,8 +358,10 @@ export function cloneTaggedForYear<T extends { id: string; academicYear?: string
 ): T[] {
   if (!toYear || fromYear === toYear) return [];
   return filterByAcademicYear(items, fromYear).map((source) => {
+    // Deep copy so fee schedules and other nested arrays are not shared with the
+    // source year. A later edit or installment rebuild must not rewrite this year's bill.
     const clone = {
-      ...source,
+      ...structuredClone(source),
       id: yearScopedId(source.id, toYear),
       academicYear: toYear,
     };

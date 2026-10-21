@@ -26,7 +26,8 @@ function RefundPolicyPage() {
     >
       <p>
         This Refund Policy explains how billing, cancellations, and refunds apply when your School
-        uses <strong>{BRAND.name}</strong>. It should be read together with our{" "}
+        uses <strong>{BRAND.name}</strong>. {BRAND.legal.operatorNotice} It should be read together
+        with our{" "}
         <LegalLink href={BRAND.legal.termsPath}>Terms of Use</LegalLink> and{" "}
         <LegalLink href={BRAND.legal.privacyPath}>Privacy Policy</LegalLink>.
       </p>

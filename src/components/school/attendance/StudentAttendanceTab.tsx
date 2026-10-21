@@ -69,9 +69,6 @@ export function StudentAttendanceTab({ student }: { student: Student }) {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="space-y-1">
-            <Label htmlFor="stu-att-month" className="text-[11px] text-slate-500">
-              Month
-            </Label>
             <Input
               id="stu-att-month"
               type="month"

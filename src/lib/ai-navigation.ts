@@ -8,6 +8,7 @@ export const FEEZO_NAV_PATHS = [
   "/tenant/students/admit",
   "/tenant/students/edit",
   "/tenant/attendance",
+  "/tenant/parents",
   "/tenant/staff",
   "/tenant/staff/edit",
   "/tenant/finance",
@@ -23,6 +24,7 @@ const SETTINGS_TABS = [
   "school",
   "branches",
   "classes",
+  "academics",
   "departments",
   "roles",
   "leave",
@@ -32,9 +34,10 @@ const SETTINGS_TABS = [
   "transport",
   "system",
   "support",
+  "subscription",
 ] as const;
 
-const STUDENT_TABS = ["profile", "academic", "attendance", "documents", "payments"] as const;
+const STUDENT_TABS = ["profile", "academic", "attendance", "documents", "payments", "parents-app"] as const;
 const STAFF_TABS = ["profile", "professional", "attendance", "documents", "payments"] as const;
 
 export type FeezoNormalizedNav = {
@@ -58,12 +61,24 @@ const ALIASES: Record<string, { to: FeezoNavPath; search?: Record<string, string
     admit: { to: "/tenant/students/admit", label: "Admit student" },
     attendance: { to: "/tenant/attendance", label: "Attendance" },
     "mark.attendance": { to: "/tenant/attendance", label: "Mark attendance" },
+    parents: { to: "/tenant/students", label: "Students" },
+    academics: { to: "/tenant/settings", search: { tab: "academics" }, label: "Academics" },
+    exams: { to: "/tenant/settings", search: { tab: "academics" }, label: "Academics" },
     staff: { to: "/tenant/staff", label: "Staff" },
     "staff.list": { to: "/tenant/staff", label: "Staff" },
     "staff.edit": { to: "/tenant/staff/edit", label: "Edit staff" },
     finance: { to: "/tenant/finance", label: "Finance" },
     settings: { to: "/tenant/settings", label: "Settings" },
-    billing: { to: "/tenant/billing", label: "Billing" },
+    billing: {
+      to: "/tenant/settings",
+      search: { tab: "subscription" },
+      label: "Subscription",
+    },
+    subscription: {
+      to: "/tenant/settings",
+      search: { tab: "subscription" },
+      label: "Subscription",
+    },
     support: { to: "/tenant/support", label: "Help & support" },
     help: { to: "/tenant/support", label: "Help & support" },
     guide: { to: "/tenant/support", label: "Help & support" },
@@ -98,6 +113,14 @@ const ALIASES: Record<string, { to: FeezoNavPath; search?: Record<string, string
       search: { tab: "reconciliation" },
       label: "Bank reconciliation",
     },
+    cashflow: { to: "/tenant/finance", search: { tab: "cashflow" }, label: "Cash flow" },
+    "cash-flow": { to: "/tenant/finance", search: { tab: "cashflow" }, label: "Cash flow" },
+    vehicle: { to: "/tenant/finance", search: { tab: "vehicle" }, label: "Vehicle fees" },
+    "vehicle-fees": { to: "/tenant/finance", search: { tab: "vehicle" }, label: "Vehicle fees" },
+    aging: { to: "/tenant/finance", search: { tab: "aging" }, label: "Fee aging" },
+    "fee-aging": { to: "/tenant/finance", search: { tab: "aging" }, label: "Fee aging" },
+    heads: { to: "/tenant/finance", search: { tab: "heads" }, label: "Fee heads" },
+    "fee-heads": { to: "/tenant/finance", search: { tab: "heads" }, label: "Fee heads" },
   };
 
 const FINANCE_TAB_ALIASES: Record<string, FinanceTab> = {
@@ -134,6 +157,14 @@ const FINANCE_TAB_ALIASES: Record<string, FinanceTab> = {
   reconciliation: "reconciliation",
   recon: "reconciliation",
   "bank-reconciliation": "reconciliation",
+  cashflow: "cashflow",
+  "cash-flow": "cashflow",
+  vehicle: "vehicle",
+  "vehicle-fees": "vehicle",
+  aging: "aging",
+  "fee-aging": "aging",
+  heads: "heads",
+  "fee-heads": "heads",
 };
 
 function cleanString(value: unknown): string | undefined {
@@ -250,12 +281,15 @@ function defaultLabel(path: FeezoNavPath, search: Record<string, string>): strin
     };
     return labels[search.tab] ?? "Finance";
   }
+  if (path === "/tenant/settings" && search.tab === "academics") return "Academics";
+  if (path === "/tenant/settings" && search.tab === "support") return "Chat with support";
   if (path === "/tenant/students" && search.id) return "Student profile";
   if (path === "/tenant/staff" && search.id) return "Staff profile";
   const map: Partial<Record<FeezoNavPath, string>> = {
     "/tenant/dashboard": "Dashboard",
     "/tenant/ai": "Feezo AI",
     "/tenant/students": "Students",
+    "/tenant/parents": "Parents",
     "/tenant/students/admit": "Admit student",
     "/tenant/students/edit": "Edit student",
     "/tenant/staff": "Staff",
@@ -312,6 +346,11 @@ export function normalizeFeezoNavigation(input: {
     query = { ...parsed.query, ...stringifySearch(input.search as Record<string, unknown>) };
   }
 
+  if (path === "/tenant/billing") {
+    path = "/tenant/settings";
+    query = { ...query, tab: "subscription" };
+  }
+
   if (!isAllowedPath(path)) {
     // Map bare finance tab as path mistake: to="fees"
     const tab = normalizeFinanceTab(path.replace(/^\//, ""));
@@ -344,16 +383,17 @@ export function feezoNavigationCatalogText(): string {
     "Navigation URLs (use navigate tool):",
     "- /tenant/dashboard",
     "- /tenant/ai (assistant panel; refresh-safe)",
-    "- /tenant/students?id=STU-…&tab=profile|academic|attendance|documents|payments",
+    "- /tenant/students?id=STU-…&tab=profile|academic|attendance|documents|payments|parents-app",
     "- /tenant/attendance",
+    "- /tenant/settings?tab=academics",
     "- /tenant/students/admit",
     "- /tenant/students/edit?id=STU-…",
     "- /tenant/staff?id=STF-…&tab=profile|professional|attendance|documents|payments",
     "- /tenant/staff/edit?id=STF-…",
     `- /tenant/finance?tab=<${financeTabs}>`,
     "  Optional finance search: studentId, staffId, paymentId, amount, month (YYYY-MM), feeKind (tuition|vehicle), periods",
-    "- /tenant/settings?tab=school|branches|classes|departments|roles|leave|fees|users|vehicles|transport|system|support",
-    "- /tenant/billing | /tenant/notifications",
+    "- /tenant/settings?tab=school|branches|classes|departments|roles|leave|fees|users|vehicles|transport|system|support|subscription",
+    "- /tenant/notifications",
     "- /tenant/support?guide=<guide-id>&q=<search> (step-by-step help guides; use for 'how do I…' questions)",
     "Shortcuts also accepted: fees, overdue, receive, make, transfer, transfers, ledger, journals, trial, pl, balance, concession, salary, daybook, recon",
   ].join("\n");

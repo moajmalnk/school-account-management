@@ -25,8 +25,17 @@ export function studentHasConcession(student: Pick<Student, "hasConcession">): b
   return student.hasConcession === true;
 }
 
+/** True when this tier is marked as a complete waiver, regardless of stored schedule amounts. */
+export function isFullConcessionTier(
+  tier?: Pick<StudentConcessionFeeTier, "enabled" | "fullConcession">,
+): boolean {
+  return tier?.fullConcession === true && tier.enabled !== false;
+}
+
 export function isConcessionTierEnabled(tier?: StudentConcessionFeeTier): boolean {
-  return Boolean(tier?.enabled && tier.feeSchedule.some((line) => line.amount > 0));
+  if (!tier || tier.enabled === false) return false;
+  if (tier.fullConcession === true) return true;
+  return tier.feeSchedule.some((line) => line.amount > 0);
 }
 
 function concessionTierToClassConfig(
@@ -58,6 +67,21 @@ export function resolveConcessionTuitionClassConfig(
   if (!studentHasConcession(student)) return undefined;
   const tier = student.concessionFees?.tuition;
   if (!isConcessionTierEnabled(tier)) return undefined;
+  if (isFullConcessionTier(tier)) {
+    return {
+      id: classConfig?.id ?? "__concession__",
+      className: classConfig?.className ?? "",
+      grade: classConfig?.grade ?? "",
+      section: classConfig?.section ?? "",
+      tuitionFeeAmount: 0,
+      vehicleFeeAmount: 0,
+      billingCycle: tier!.billingCycle,
+      feeAmountMode: "fixed",
+      feeSchedule: [],
+      feeCollectionStartMonth: tier!.feeCollectionStartMonth ?? classConfig?.feeCollectionStartMonth,
+      classTeacherId: classConfig?.classTeacherId,
+    };
+  }
   const synthetic = concessionTierToClassConfig(tier!, classConfig);
   return withClassFeeSchedule(synthetic, feeTerms);
 }
@@ -66,7 +90,7 @@ export function resolveConcessionTuitionClassConfig(
 export function resolveConcessionVehicleSchedule(student: Student): ClassFeeLine[] {
   if (!studentHasConcession(student)) return [];
   const tier = student.concessionFees?.vehicle;
-  if (!isConcessionTierEnabled(tier)) return [];
+  if (!isConcessionTierEnabled(tier) || isFullConcessionTier(tier)) return [];
   return tier!.feeSchedule.filter((line) => line.amount > 0);
 }
 
@@ -78,7 +102,9 @@ export function concessionVehiclePrefillAmount(
     collectionStartMonth?: string;
   },
 ): number | undefined {
+  if (!studentHasConcession(student)) return undefined;
   const tier = student.concessionFees?.vehicle;
+  if (isFullConcessionTier(tier)) return 0;
   if (!isConcessionTierEnabled(tier)) return undefined;
   const synthetic = concessionTierToClassConfig(tier!);
   return classFeePrefillAmount(synthetic, {
@@ -89,10 +115,28 @@ export function concessionVehiclePrefillAmount(
   });
 }
 
-export function resolveConcessionOtherFees(student: Student): StudentConcessionOtherFee[] {
+/** Other fees that are either billed at a custom rate or fully waived. */
+export function activeConcessionOtherFees(student: Student): StudentConcessionOtherFee[] {
   if (!studentHasConcession(student)) return [];
   return (student.concessionFees?.otherFees ?? []).filter(
-    (fee) => fee.label.trim() && fee.feeSchedule.some((line) => line.amount > 0),
+    (fee) =>
+      fee.label.trim() &&
+      (fee.fullConcession === true || fee.feeSchedule.some((line) => line.amount > 0)),
+  );
+}
+
+/** Custom other fees that still produce a charge. Full waivers are omitted. */
+export function resolveConcessionOtherFees(student: Student): StudentConcessionOtherFee[] {
+  return activeConcessionOtherFees(student).filter((fee) => fee.fullConcession !== true);
+}
+
+/** Lowercase labels of other fees marked as a full concession. */
+export function fullConcessionOtherLabels(student: Student): Set<string> {
+  if (!studentHasConcession(student)) return new Set();
+  return new Set(
+    (student.concessionFees?.otherFees ?? [])
+      .filter((fee) => fee.fullConcession === true && fee.label.trim())
+      .map((fee) => fee.label.trim().toLowerCase()),
   );
 }
 
@@ -105,8 +149,14 @@ export function concessionOtherFeePrefillAmount(
     collectionStartMonth?: string;
   },
 ): number | undefined {
+  if (!studentHasConcession(student)) return undefined;
+  const needle = label.trim().toLowerCase();
+  const waived = (student.concessionFees?.otherFees ?? []).find(
+    (row) => row.fullConcession === true && row.label.trim().toLowerCase() === needle,
+  );
+  if (waived) return 0;
   const fee = resolveConcessionOtherFees(student).find(
-    (row) => row.label.trim().toLowerCase() === label.trim().toLowerCase(),
+    (row) => row.label.trim().toLowerCase() === needle,
   );
   if (!fee) return undefined;
   const synthetic: ClassConfig = {
@@ -139,6 +189,9 @@ export function resolveConcessionTransportFee(
 ): { amount: number | undefined; shift: TransportFeeShift; route?: TransportRoute } | undefined {
   if (!studentHasConcession(student)) return undefined;
   const tier = student.concessionFees?.vehicle;
+  if (isFullConcessionTier(tier)) {
+    return { amount: 0, shift: "both" };
+  }
   if (!isConcessionTierEnabled(tier)) return undefined;
   const amount = concessionVehiclePrefillAmount(student, {
     periodLabel: period?.label,
@@ -155,15 +208,23 @@ export function concessionSummaryLines(student: Student): string[] {
   if (!studentHasConcession(student)) return [];
   const lines: string[] = [];
   const fees = student.concessionFees;
-  if (isConcessionTierEnabled(fees?.tuition)) {
+  if (isFullConcessionTier(fees?.tuition)) {
+    lines.push("Tuition fully waived");
+  } else if (isConcessionTierEnabled(fees?.tuition)) {
     const total = sumFeeSchedule(fees!.tuition!.feeSchedule);
     lines.push(`Custom tuition: ${formatMoney(total)}`);
   }
-  if (isConcessionTierEnabled(fees?.vehicle)) {
+  if (isFullConcessionTier(fees?.vehicle)) {
+    lines.push("Bus fee fully waived");
+  } else if (isConcessionTierEnabled(fees?.vehicle)) {
     const total = sumFeeSchedule(fees!.vehicle!.feeSchedule);
     lines.push(`Custom bus fee: ${formatMoney(total)}`);
   }
-  for (const other of resolveConcessionOtherFees(student)) {
+  for (const other of activeConcessionOtherFees(student)) {
+    if (other.fullConcession) {
+      lines.push(`${other.label} fully waived`);
+      continue;
+    }
     const total = sumFeeSchedule(other.feeSchedule);
     lines.push(`${other.label}: ${formatMoney(total)}`);
   }
@@ -294,13 +355,23 @@ export function validateConcessionFees(
   fees?: StudentConcessionFees,
 ): string | null {
   if (!hasConcession) return null;
+  const others = fees?.otherFees ?? [];
+  for (const fee of others) {
+    const active =
+      fee.fullConcession === true || fee.feeSchedule.some((line) => line.amount > 0);
+    if (active && !fee.label.trim()) {
+      return "Enter a name for each other fee";
+    }
+  }
   const tuitionOk = isConcessionTierEnabled(fees?.tuition);
   const vehicleOk = isConcessionTierEnabled(fees?.vehicle);
-  const otherOk = (fees?.otherFees ?? []).some(
-    (fee) => fee.label.trim() && fee.feeSchedule.some((line) => line.amount > 0),
+  const otherOk = others.some(
+    (fee) =>
+      fee.label.trim() &&
+      (fee.fullConcession === true || fee.feeSchedule.some((line) => line.amount > 0)),
   );
   if (!tuitionOk && !vehicleOk && !otherOk) {
-    return "Enable at least one fee tier with amounts greater than zero";
+    return "Enable at least one fee with an amount, or mark it as a full concession";
   }
   return null;
 }
@@ -376,25 +447,37 @@ export function buildConcessionReportRows(input: {
   for (const student of input.students) {
     if (!studentHasConcession(student)) continue;
     const classConfig = input.classes.find((c) => c.className === student.cls);
-    const coversTuition = isConcessionTierEnabled(student.concessionFees?.tuition);
-    const coversVehicle = isConcessionTierEnabled(student.concessionFees?.vehicle);
-    const otherList = resolveConcessionOtherFees(student);
+    const tuitionTier = student.concessionFees?.tuition;
+    const vehicleTier = student.concessionFees?.vehicle;
+    const coversTuition = isConcessionTierEnabled(tuitionTier);
+    const coversVehicle = isConcessionTierEnabled(vehicleTier);
+    const otherList = activeConcessionOtherFees(student);
     const coversOther = otherList.length > 0;
     if (!coversTuition && !coversVehicle && !coversOther) continue;
 
+    const waivedLabels = fullConcessionOtherLabels(student);
     const standardTuition = coversTuition
       ? standardTuitionScheduleTotal(classConfig, input.feeTerms)
       : 0;
-    const concessionTuition = coversTuition
-      ? sumFeeSchedule(student.concessionFees!.tuition!.feeSchedule)
-      : 0;
+    const concessionTuition =
+      coversTuition && !isFullConcessionTier(tuitionTier)
+        ? sumFeeSchedule(
+            tuitionTier!.feeSchedule.filter(
+              (line) => !waivedLabels.has(line.label.trim().toLowerCase()),
+            ),
+          )
+        : 0;
     const standardVehicle = coversVehicle
       ? standardVehicleScheduleTotal(student, classConfig, transportRoutes, input.feeTerms)
       : 0;
-    const concessionVehicle = coversVehicle
-      ? sumFeeSchedule(student.concessionFees!.vehicle!.feeSchedule)
-      : 0;
-    const otherFees = otherList.reduce((sum, fee) => sum + sumFeeSchedule(fee.feeSchedule), 0);
+    const concessionVehicle =
+      coversVehicle && !isFullConcessionTier(vehicleTier)
+        ? sumFeeSchedule(vehicleTier!.feeSchedule)
+        : 0;
+    const otherFees = otherList.reduce(
+      (sum, fee) => (fee.fullConcession ? sum : sum + sumFeeSchedule(fee.feeSchedule)),
+      0,
+    );
 
     const standardTotal = standardTuition + standardVehicle;
     const concessionTotal = concessionTuition + concessionVehicle + otherFees;
@@ -403,9 +486,13 @@ export function buildConcessionReportRows(input: {
       Math.max(0, standardVehicle - concessionVehicle);
 
     const covers = [
-      coversTuition ? "Tuition" : null,
-      coversVehicle ? "Vehicle" : null,
-      coversOther ? "Other" : null,
+      coversTuition ? (isFullConcessionTier(tuitionTier) ? "Tuition (full)" : "Tuition") : null,
+      coversVehicle ? (isFullConcessionTier(vehicleTier) ? "Vehicle (full)" : "Vehicle") : null,
+      coversOther
+        ? otherList.every((fee) => fee.fullConcession)
+          ? "Other (full)"
+          : "Other"
+        : null,
     ]
       .filter(Boolean)
       .join(" · ");

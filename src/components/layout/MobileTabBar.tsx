@@ -47,18 +47,18 @@ export function MobileTabBar({ items, pathname, className }: MobileTabBarProps) 
     <div
       data-mobile-tab-dock
       className={cn(
-        "pointer-events-none fixed inset-x-0 bottom-0 z-50 px-5 lg:hidden",
+        "pointer-events-none fixed inset-x-0 bottom-0 z-50 px-2 lg:hidden",
         "pb-[calc(0.75rem+env(safe-area-inset-bottom))]",
         className,
       )}
     >
       <nav
-        className="mobile-tab-dock pointer-events-auto relative mx-auto w-full max-w-md overflow-hidden rounded-[28px]"
+        className="mobile-tab-dock pointer-events-auto relative mx-auto w-full max-w-lg overflow-hidden rounded-[28px]"
         aria-label="Mobile navigation"
       >
         <LayoutGroup id="mobile-tab-bar">
           <div
-            className="relative flex w-full items-stretch justify-around px-2"
+            className="relative flex w-full items-stretch justify-around px-0.5"
             style={{ height: TAB_BAR_HEIGHT }}
             role="tablist"
           >
@@ -83,7 +83,7 @@ export function MobileTabBar({ items, pathname, className }: MobileTabBarProps) 
                   {active ? (
                     <motion.span
                       layoutId="mobile-tab-indicator"
-                      className="mobile-tab-indicator absolute inset-x-0.5 inset-y-1.5 rounded-[20px]"
+                      className="mobile-tab-indicator absolute inset-x-1 inset-y-1.5 rounded-[20px]"
                       transition={indicatorTransition}
                     />
                   ) : null}
@@ -95,7 +95,7 @@ export function MobileTabBar({ items, pathname, className }: MobileTabBarProps) 
                   >
                     <Icon
                       className={cn(
-                        "h-[21px] w-[21px] shrink-0 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
+                        "h-[18px] w-[18px] shrink-0 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
                         active
                           ? "text-[#0F766E] dark:text-[#5EEAD4]"
                           : "text-[#64748B] dark:text-[#A1A1AA]",
@@ -106,7 +106,7 @@ export function MobileTabBar({ items, pathname, className }: MobileTabBarProps) 
                     />
                     <span
                       className={cn(
-                        "max-w-[4.75rem] truncate text-[10px] leading-none tracking-[0.005em] transition-colors duration-300",
+                        "max-w-full truncate text-[9px] leading-none tracking-tight transition-colors duration-300",
                         active
                           ? "font-semibold text-[#0F172A] dark:text-white"
                           : "font-medium text-[#64748B] dark:text-[#A1A1AA]",
@@ -132,9 +132,22 @@ export const MOBILE_TAB_DOCK_SPACE =
 export const mobileMainPadding =
   "pb-[calc(60px+0.75rem+env(safe-area-inset-bottom))] lg:pb-12";
 
+/** Shared mobile FAB anchor. Bottom offset is chosen per screen. */
+export const mobileFabAnchorClass = "fixed right-4 z-40 md:hidden";
+
+/** Default FAB — sits just above the mobile tab dock. */
+export const mobileFabBottomClass =
+  "bottom-[calc(60px+1.25rem+env(safe-area-inset-bottom))]";
+
+/**
+ * Finance reports also pins Receive / Make / Transfer above the tab dock.
+ * This offset clears that bar. Apply it only while that bar is on screen.
+ */
+export const mobileFabAboveFinanceDockClass =
+  "bottom-[calc(10.125rem+env(safe-area-inset-bottom))]";
+
 /** Fixed position for FABs — sits above the mobile tab dock. */
-export const mobileFabClass =
-  "fixed right-4 z-40 md:hidden bottom-[calc(60px+1.25rem+env(safe-area-inset-bottom))]";
+export const mobileFabClass = cn(mobileFabAnchorClass, mobileFabBottomClass);
 
 /**
  * Mobile chat / thread shell height: fills the viewport between the sticky top nav
