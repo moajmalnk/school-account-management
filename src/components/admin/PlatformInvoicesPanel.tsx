@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { Download, FileText, Loader2, Plus, Receipt } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Download, FileText, Loader2, Plus, Receipt, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -11,6 +11,7 @@ import { ApiError } from "@/lib/api/client";
 import {
   fetchSuperAdminTenantInvoices,
   fetchTenantPlatformInvoices,
+  deleteSuperAdminTenantInvoice,
   issueSuperAdminTenantInvoice,
   markSuperAdminTenantInvoicePaid,
   type PlatformInvoice,
@@ -53,6 +54,9 @@ export function PlatformInvoicesPanel({
   const [rows, setRows] = useState<PlatformInvoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<PlatformInvoice | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const confirmRef = useRef<HTMLDivElement>(null);
   const [preview, setPreview] = useState<{
     kind: PlatformDocKind;
     invoice: PlatformInvoice;
@@ -77,17 +81,27 @@ export function PlatformInvoicesPanel({
 
   useEffect(() => {
     void load();
+    return () => {
+      setPendingDelete(null);
+      setDeleting(false);
+    };
   }, [load]);
 
-  const issueInvoice = async (markPaid: boolean) => {
+  useEffect(() => {
+    if (!pendingDelete) return;
+    confirmRef.current?.scrollIntoView({ block: "nearest" });
+  }, [pendingDelete]);
+
+  const issueInvoice = async (markPaid: boolean, paymentMethod?: string) => {
     if (mode !== "super_admin" || !tenantId || !issueDraft) return;
     setBusyId("issue");
     try {
       const created = await issueSuperAdminTenantInvoice({
         tenantId,
         ...issueDraft,
+        paymentMethod: paymentMethod || issueDraft.paymentMethod,
         markPaid,
-        notes: markPaid ? "Issued and marked paid from Control Plane" : "Issued from Control Plane",
+        notes: markPaid ? "Payment recorded from Control Plane" : "Issued from Control Plane",
       });
       setRows((prev) => [created, ...prev]);
       toast.success(markPaid ? "Invoice issued & receipt ready" : "Invoice issued", {
@@ -108,7 +122,10 @@ export function PlatformInvoicesPanel({
       const updated = await markSuperAdminTenantInvoicePaid({
         tenantId,
         invoiceId: invoice.id,
-        paymentMethod: invoice.paymentMethod || issueDraft?.paymentMethod,
+        paymentMethod:
+          invoice.paymentMethod === "Cashfree"
+            ? "Recorded by Feezo"
+            : invoice.paymentMethod || issueDraft?.paymentMethod,
       });
       setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
       toast.success("Marked paid · receipt available", {
@@ -119,6 +136,23 @@ export function PlatformInvoicesPanel({
       toast.error("Update failed", { description: msg });
     } finally {
       setBusyId(null);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (mode !== "super_admin" || !tenantId || !pendingDelete || deleting) return;
+    const target = pendingDelete;
+    setDeleting(true);
+    try {
+      await deleteSuperAdminTenantInvoice({ tenantId, invoiceId: target.id });
+      setRows((prev) => prev.filter((row) => row.id !== target.id));
+      setPendingDelete(null);
+      toast.success("Invoice deleted", { description: target.invoiceNumber });
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Could not delete invoice";
+      toast.error("Delete failed", { description: msg });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -168,8 +202,7 @@ export function PlatformInvoicesPanel({
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
-              variant="outline"
-              className="rounded-full"
+              className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
               disabled={busyId === "issue"}
               onClick={() => void issueInvoice(false)}
             >
@@ -182,16 +215,57 @@ export function PlatformInvoicesPanel({
             </Button>
             <Button
               type="button"
-              className="rounded-full bg-[#0F766E] text-white hover:bg-[#0D9488]"
+              variant="outline"
+              className="rounded-full"
               disabled={busyId === "issue"}
-              onClick={() => void issueInvoice(true)}
+              onClick={() =>
+                void issueInvoice(
+                  true,
+                  issueDraft.paymentMethod === "Cashfree" ? "Recorded by Feezo" : issueDraft.paymentMethod,
+                )
+              }
             >
               <Receipt className="h-3.5 w-3.5" />
-              Issue & mark paid
+              {issueDraft.paymentMethod === "Cashfree" ? "Record offline receipt" : "Issue and record payment"}
             </Button>
           </div>
         ) : null}
       </div>
+
+      {mode === "super_admin" && pendingDelete ? (
+        <div
+          ref={confirmRef}
+          className="mx-auto w-full max-w-[400px] rounded-2xl border border-[#FECACA] bg-[#FEF2F2] p-4"
+        >
+          <div className="text-[14px] font-semibold text-black">
+            Delete {pendingDelete.invoiceNumber}?
+          </div>
+          <p className="mt-1 text-[12px] leading-relaxed text-black/60">
+            {formatMoney(Math.round(pendingDelete.total), pendingDelete.currency)} will be removed
+            from this school. The school will no longer see this invoice.
+          </p>
+          <div className="mt-3 flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full"
+              disabled={deleting}
+              onClick={() => setPendingDelete(null)}
+            >
+              Keep
+            </Button>
+            <Button
+              type="button"
+              className="rounded-full bg-[#EF4444] text-white hover:bg-[#DC2626]"
+              disabled={deleting}
+              onClick={() => void confirmDelete()}
+            >
+              {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              Delete invoice
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       <div className="overflow-hidden rounded-2xl border border-[#E5E5E5] bg-white">
         {loading ? (
@@ -260,6 +334,19 @@ export function PlatformInvoicesPanel({
                       <Download className="h-3.5 w-3.5" />
                       Receipt
                     </Button>
+                    {mode === "super_admin" ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-full px-2.5 text-[11px] text-[#EF4444] hover:text-[#EF4444]"
+                        disabled={deleting}
+                        onClick={() => setPendingDelete(inv)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Delete
+                      </Button>
+                    ) : null}
                     {mode === "super_admin" && !paid && inv.status !== "Void" ? (
                       <Button
                         type="button"
@@ -271,7 +358,7 @@ export function PlatformInvoicesPanel({
                         {busyId === inv.id ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         ) : (
-                          "Mark paid"
+                          inv.paymentMethod === "Cashfree" ? "Record receipt" : "Mark paid"
                         )}
                       </Button>
                     ) : null}

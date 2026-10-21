@@ -45,11 +45,10 @@ export function apiBaseUrl(): string {
 
 /**
  * Browser fetch origin for JSON API calls.
- * In Vite, same-origin `/api` avoids CORS preflight and uses the configured proxy —
- * far more reliable on flaky routes to api.feezo.app.
+ * Local Vite and production builds both call https://api.feezo.app. The dev server
+ * proxy is not used for these requests.
  */
 export function apiRequestOrigin(): string {
-  if (import.meta.env.DEV) return "";
   return apiBaseUrl();
 }
 

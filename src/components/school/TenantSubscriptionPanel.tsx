@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Check,
@@ -28,7 +28,14 @@ import {
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { ApiError } from "@/lib/api/client";
-import { fetchTenantSubscription, type TenantSubscription } from "@/lib/api/subscription";
+import {
+  confirmSubscriptionCheckout,
+  fetchTenantSubscription,
+  releaseSubscriptionCheckout,
+  startSubscriptionCheckout,
+  type TenantSubscription,
+} from "@/lib/api/subscription";
+import { openCashfreeCheckout } from "@/lib/cashfree-checkout";
 import type { PlatformInvoice } from "@/lib/api/super-admin";
 import { PLAN_FEATURE_ITEMS } from "@/lib/permissions";
 import { formatMoney } from "@/lib/money";
@@ -207,6 +214,8 @@ export function TenantSubscriptionPanel({
   const [loading, setLoading] = useState(true);
   const [autoRenew, setAutoRenew] = useState(() => readAutoRenew(tenantId));
   const [renewOpen, setRenewOpen] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const payingRef = useRef(false);
   const [docsOpen, setDocsOpen] = useState(false);
   const [preview, setPreview] = useState<{
     kind: PlatformDocKind;
@@ -310,17 +319,41 @@ export function TenantSubscriptionPanel({
     });
   };
 
-  const completePayment = () => {
-    setRenewOpen(false);
-    if (outstanding) {
-      openInvoice(outstanding);
-      return;
-    }
-    toast.success("Your plan is current", {
-      description: renewalDate
-        ? `Feezo will issue the next invoice before ${renewalDate}.`
-        : "Feezo will issue the next invoice when this period is due.",
-    });
+  const completePayment = (selectedCycle: SubscriptionCycle) => {
+    if (payingRef.current) return;
+    payingRef.current = true;
+    setPaying(true);
+    void (async () => {
+      let orderId = "";
+      let reportedPaid = false;
+      try {
+        const order = await startSubscriptionCheckout(selectedCycle);
+        orderId = order.orderId;
+        const outcome = await openCashfreeCheckout(order.paymentSessionId);
+        if (outcome === "closed") {
+          await releaseSubscriptionCheckout(order.orderId);
+          toast.error("Payment was not completed");
+          return;
+        }
+        reportedPaid = true;
+        const paid = await confirmSubscriptionCheckout(order.orderId);
+        toast.success("Plan renewed", {
+          description: paid.receiptNumber
+            ? `Receipt ${paid.receiptNumber}. Next due ${paid.nextDueDate}.`
+            : "Cashfree confirmed this invoice.",
+        });
+        setRenewOpen(false);
+        await load();
+      } catch (err) {
+        if (orderId && !reportedPaid) {
+          await releaseSubscriptionCheckout(orderId).catch(() => undefined);
+        }
+        toast.error(err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Could not start payment");
+      } finally {
+        payingRef.current = false;
+        setPaying(false);
+      }
+    })();
   };
 
   return (
@@ -347,6 +380,12 @@ export function TenantSubscriptionPanel({
         autoRenew={autoRenew}
         onAutoRenewChange={handleAutoRenew}
         onComplete={completePayment}
+        paying={paying}
+        chargeNote={
+          outstanding
+            ? `Pays invoice ${outstanding.invoiceNumber} (${formatMoney(Number(outstanding.total) || 0, currency)}) via Cashfree.`
+            : null
+        }
       />
 
       <Sheet open={docsOpen} onOpenChange={setDocsOpen}>

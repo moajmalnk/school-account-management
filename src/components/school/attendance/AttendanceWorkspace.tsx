@@ -316,7 +316,7 @@ function StudentAttendanceBoard() {
     try {
       const templates = loadWhatsAppTemplates();
       if (reportMode === "daily") {
-        const { blob, filename } = buildAttendanceDailyPdfBlob({
+        const { blob, filename } = await buildAttendanceDailyPdfBlob({
           date,
           students: dayRoster,
           schoolName,

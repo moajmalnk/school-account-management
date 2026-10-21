@@ -3,6 +3,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
+import { refreshSessionPdfCredit } from "@/lib/auth";
 import { downloadTablePdf, drawPdfFeezoCredit, type PdfEmitAction } from "@/lib/finance-export";
 import { formatDownloadFilename } from "@/lib/download-names";
 import {
@@ -149,12 +150,13 @@ export function downloadAttendanceDetailedPdf(params: {
 }
 
 /** In-memory PDF blob for WhatsApp file share. */
-export function buildAttendanceDailyPdfBlob(params: {
+export async function buildAttendanceDailyPdfBlob(params: {
   date: string;
   students: AttendanceRosterStudent[];
   schoolName?: string;
   classLabel?: string;
-}): { blob: Blob; filename: string } {
+}): Promise<{ blob: Blob; filename: string }> {
+  await refreshSessionPdfCredit();
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const filename = formatDownloadFilename("studentAttendance", "pdf", {
     date: params.date,

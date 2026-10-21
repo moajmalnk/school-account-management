@@ -150,7 +150,7 @@ function matchesTrialWindow(info: TrialInfo | null, window: TrialWindow): boolea
 
 type BillingCycle = "Monthly" | "Quarterly" | "Annual";
 type Currency = "INR" | "USD" | "AED" | "EUR";
-type PaymentMethod = "Razorpay" | "Stripe" | "Bank Transfer" | "Manual Invoice";
+type PaymentMethod = "Cashfree" | "Bank Transfer" | "Recorded by Feezo";
 /** Per student = seats × rate. Flat cycle = fixed fee for the billing period. */
 type PricingModel = "per_student" | "flat_cycle";
 
@@ -200,6 +200,32 @@ function billingGross(rule: BillingRule, students: number): number {
   return rule.ratePerStudent * Math.max(students, 1);
 }
 
+function normalizePaymentMethod(value: string | undefined): PaymentMethod {
+  if (value === "Bank Transfer") return "Bank Transfer";
+  if (value === "Manual Invoice" || value === "Recorded by Feezo") return "Recorded by Feezo";
+  return "Cashfree";
+}
+
+function paymentMethodHint(method: PaymentMethod, currency: Currency): string {
+  if (method === "Cashfree" && currency !== "INR") {
+    return "Cashfree collects in INR. Use bank transfer for another currency.";
+  }
+  if (method === "Cashfree") {
+    return "Issue the invoice, then the school pays it in Settings → Subscription. The receipt is written after Cashfree confirms the amount.";
+  }
+  if (method === "Bank Transfer") {
+    return "Issue the invoice, then record the transfer when it arrives. There is no online checkout.";
+  }
+  return "Use this when the fee was already collected outside Cashfree. The receipt is written when you record the payment.";
+}
+
+function collectionSummary(rule: BillingRule): string {
+  if (rule.paymentMethod === "Cashfree" && rule.currency === "INR") return "school pays via Cashfree";
+  if (rule.paymentMethod === "Cashfree") return "Cashfree collects in INR";
+  if (rule.paymentMethod === "Bank Transfer") return "bank transfer";
+  return "recorded by Feezo";
+}
+
 function billingRateDescription(rule: BillingRule, sym: string): string {
   if (rule.pricingModel === "flat_cycle") {
     return `${sym}${rule.ratePerStudent}/${cycleUnitLabel(rule.cycle)} flat`;
@@ -221,7 +247,7 @@ function defaultBilling(t: Tenant): BillingRule {
     taxPercent: 18,
     discountPercent: t.tier === "Enterprise" ? 12 : 0,
     nextInvoice: next.toISOString().slice(0, 10),
-    paymentMethod: t.tier === "Basic" ? "Razorpay" : "Stripe",
+    paymentMethod: "Cashfree",
     graceDays: 7,
   };
 }
@@ -319,6 +345,7 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (tenant: Tenant
     return {
       ...base,
       pricingModel: base.pricingModel ?? "per_student",
+      paymentMethod: normalizePaymentMethod(base.paymentMethod),
     };
   };
 
@@ -1709,7 +1736,7 @@ function TenantDetailDrawer({
             <TabsContent value="billing" className="mt-0">
               <div className="grid grid-cols-12 gap-3">
                 <div className="col-span-12">
-                  <Field label="Payment system">
+                  <Field label="Pricing">
                     <div className="grid grid-cols-12 gap-2">
                       {(
                         [
@@ -1794,7 +1821,13 @@ function TenantDetailDrawer({
                   <Field label="Currency">
                     <Select
                       value={draft.currency}
-                      onValueChange={(v) => set("currency", v as Currency)}
+                      onValueChange={(v) => {
+                        const currency = v as Currency;
+                        set("currency", currency);
+                        if (currency !== "INR" && draft.paymentMethod === "Cashfree") {
+                          set("paymentMethod", "Bank Transfer");
+                        }
+                      }}
                     >
                       <SelectTrigger className="h-10 rounded-lg border-[#E5E5E5] bg-white text-[13px]">
                         <SelectValue />
@@ -1858,7 +1891,7 @@ function TenantDetailDrawer({
                   </Field>
                 </div>
                 <div className="col-span-12 sm:col-span-6">
-                  <Field label="Payment Method">
+                  <Field label="How this school pays">
                     <Select
                       value={draft.paymentMethod}
                       onValueChange={(v) => set("paymentMethod", v as PaymentMethod)}
@@ -1867,12 +1900,14 @@ function TenantDetailDrawer({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Razorpay">Razorpay</SelectItem>
-                        <SelectItem value="Stripe">Stripe</SelectItem>
-                        <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
-                        <SelectItem value="Manual Invoice">Manual Invoice</SelectItem>
+                        <SelectItem value="Cashfree">Cashfree · school pays online</SelectItem>
+                        <SelectItem value="Bank Transfer">Bank transfer · record when it arrives</SelectItem>
+                        <SelectItem value="Recorded by Feezo">Recorded by Feezo · no gateway</SelectItem>
                       </SelectContent>
                     </Select>
+                    <p className="mt-1.5 text-[11px] leading-snug text-black/50">
+                      {paymentMethodHint(draft.paymentMethod, draft.currency)}
+                    </p>
                   </Field>
                 </div>
 
@@ -1888,8 +1923,7 @@ function TenantDetailDrawer({
                     {draft.pricingModel === "per_student"
                       ? `${seats.toLocaleString("en-IN")} × ${sym}${draft.ratePerStudent}`
                       : `${sym}${draft.ratePerStudent}/${cycleUnitLabel(draft.cycle)}`}{" "}
-                    · {draft.cycle} · {draft.paymentMethod}
-                    {draft.autoCharge ? " · auto-charge on" : " · manual"}
+                    · {draft.cycle} · {collectionSummary(draft)}
                   </div>
                 </div>
 
@@ -2356,7 +2390,7 @@ function BillingRulesDrawer({
         </SheetHeader>
 
         <div className="space-y-5 px-6 py-5">
-          <Field label="Payment system">
+          <Field label="Pricing">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {(
                 [
@@ -2425,7 +2459,16 @@ function BillingRulesDrawer({
               />
             </Field>
             <Field label="Currency">
-              <Select value={draft.currency} onValueChange={(v) => set("currency", v as Currency)}>
+              <Select
+                value={draft.currency}
+                onValueChange={(v) => {
+                  const currency = v as Currency;
+                  set("currency", currency);
+                  if (currency !== "INR" && draft.paymentMethod === "Cashfree") {
+                    set("paymentMethod", "Bank Transfer");
+                  }
+                }}
+              >
                 <SelectTrigger className="h-10 rounded-lg border-[#E5E5E5] bg-white text-[13px]">
                   <SelectValue />
                 </SelectTrigger>
@@ -2484,7 +2527,7 @@ function BillingRulesDrawer({
             </Field>
           </div>
 
-          <Field label="Payment Method">
+          <Field label="How this school pays">
             <Select
               value={draft.paymentMethod}
               onValueChange={(v) => set("paymentMethod", v as PaymentMethod)}
@@ -2493,23 +2536,15 @@ function BillingRulesDrawer({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Razorpay">Razorpay</SelectItem>
-                <SelectItem value="Stripe">Stripe</SelectItem>
-                <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
-                <SelectItem value="Manual Invoice">Manual Invoice</SelectItem>
+                <SelectItem value="Cashfree">Cashfree · school pays online</SelectItem>
+                <SelectItem value="Bank Transfer">Bank transfer · record when it arrives</SelectItem>
+                <SelectItem value="Recorded by Feezo">Recorded by Feezo · no gateway</SelectItem>
               </SelectContent>
             </Select>
+            <p className="mt-1.5 text-[11px] leading-snug text-black/50">
+              {paymentMethodHint(draft.paymentMethod, draft.currency)}
+            </p>
           </Field>
-
-          <div className="flex items-center justify-between rounded-2xl border border-[#E5E5E5] bg-white px-3 py-2.5">
-            <div>
-              <div className="text-[13px] font-semibold text-black">Auto-charge on cycle</div>
-              <div className="text-[11px] text-black/55">
-                Attempt the configured method on invoice date
-              </div>
-            </div>
-            <Switch checked={draft.autoCharge} onCheckedChange={(v) => set("autoCharge", v)} />
-          </div>
 
           <div className="rounded-2xl border border-[#E5E5E5] bg-[#F4F4F5] p-4">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-black/55">

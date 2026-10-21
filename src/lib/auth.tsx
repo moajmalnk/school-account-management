@@ -254,6 +254,28 @@ export function sessionPdfCreditEnabled(): boolean {
   return session.pdfCreditEnabled;
 }
 
+/**
+ * Pull the tenant's current document-credit flag. Super Admin can change it
+ * while a school tab is already open, so PDF export must not trust login time.
+ */
+export async function refreshSessionPdfCredit(): Promise<void> {
+  const current = readSession();
+  if (!current || current.role === "super_admin") return;
+  try {
+    const me = await apiMe();
+    const latest = readSession();
+    if (!latest) return;
+    if (typeof me.pdfCreditEnabled !== "boolean" && !me.planFlags) return;
+    writeSession({
+      ...latest,
+      ...(typeof me.pdfCreditEnabled === "boolean" ? { pdfCreditEnabled: me.pdfCreditEnabled } : {}),
+      ...(me.planFlags ? { planFlags: normalizePlanFlags(me.planFlags) } : {}),
+    });
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401) throw err;
+  }
+}
+
 /** Reads the per-tab impersonation session first, then the shared login session. */
 export function readSession(): Session | null {
   if (typeof window === "undefined") return null;
@@ -475,15 +497,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         try {
-          if (!impersonated) {
-            const me = await apiMe();
-            if (existing) {
-              const patch: Partial<Session> = {};
-              if (typeof me.pdfCreditEnabled === "boolean") patch.pdfCreditEnabled = me.pdfCreditEnabled;
-              if (me.planFlags) patch.planFlags = normalizePlanFlags(me.planFlags);
-              if (Object.keys(patch).length > 0) writeSession({ ...existing, ...patch });
-            }
-          }
+          await refreshSessionPdfCredit();
           touchLastActive(true);
           if (!cancelled) setSession(readSession() ?? existing);
         } catch (err) {
@@ -521,6 +535,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      void refreshSessionPdfCredit()
+        .then(() => setSession(readSession()))
+        .catch((err: unknown) => {
+          if (err instanceof ApiError && err.status === 401) {
+            clearAllAuthState();
+            setSession(null);
+          }
+        });
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [hydrated]);
 
   useEffect(() => {
     return onUnauthorized((reason) => {

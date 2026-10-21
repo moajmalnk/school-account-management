@@ -449,6 +449,19 @@ export async function issueSuperAdminTenantInvoice(input: {
   });
 }
 
+export async function deleteSuperAdminTenantInvoice(input: {
+  tenantId: string;
+  invoiceId: string;
+}): Promise<{ deleted: boolean; id: string; invoiceNumber: string }> {
+  return apiRequest<{ deleted: boolean; id: string; invoiceNumber: string }>(
+    "/api/super-admin/tenants/invoices.php",
+    {
+      method: "POST",
+      body: { action: "delete", ...input },
+    },
+  );
+}
+
 export async function voidSuperAdminTenantInvoice(input: {
   tenantId: string;
   invoiceId: string;

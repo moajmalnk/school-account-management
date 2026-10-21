@@ -3,6 +3,7 @@ import autoTable from "jspdf-autotable";
 
 import type { FeezoLocale, FeezoUiBlock } from "@/lib/api/ai";
 import { formatDownloadFilename, todayStamp } from "@/lib/download-names";
+import { refreshSessionPdfCredit } from "@/lib/auth";
 import { drawPdfFeezoCredit } from "@/lib/finance-export";
 import { asciiCurrencyText } from "@/lib/money";
 import { saveFile } from "@/lib/native-download";
@@ -616,7 +617,8 @@ function drawExtraText(doc: jsPDF, blocks: FeezoUiBlock[] | undefined, startY: n
  * Professional Feezo AI PDF — branded header, executive summary, KPI grid,
  * structured guidance (markdown parsed), tables.
  */
-export function downloadFeezoAiPdf(input: FeezoAiPdfInput): void {
+export async function downloadFeezoAiPdf(input: FeezoAiPdfInput): Promise<void> {
+  await refreshSessionPdfCredit();
   const doc = new jsPDF({ unit: "pt", format: "a4", compress: true });
   const school = input.schoolName?.trim() || "School";
   const when = formatWhen();

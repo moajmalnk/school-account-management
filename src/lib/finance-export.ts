@@ -14,7 +14,7 @@ import {
   type Staff,
   type Student,
 } from "@/lib/tenant-store";
-import { sessionPdfCreditEnabled } from "@/lib/auth";
+import { refreshSessionPdfCredit, sessionPdfCreditEnabled } from "@/lib/auth";
 import { getActiveBrandPalette, pdfFontName } from "@/lib/brand-theme";
 import { defaultSealToPng, defaultSignatureSvg, svgMarkupToPng } from "@/lib/school-marks";
 import { amountInWords } from "@/lib/amount-words";
@@ -789,7 +789,7 @@ function bandColumnStyles(
   return styles;
 }
 
-export function downloadTablePdf({
+export async function downloadTablePdf({
   filename,
   title,
   subtitle,
@@ -808,6 +808,7 @@ export function downloadTablePdf({
   columnStyles,
   footerPlacement = "end",
 }: TablePdfOptions) {
+  await refreshSessionPdfCredit();
   const brand = getActiveBrandPalette();
   const colCount = headers.length;
   const useLandscape = landscape ?? colCount > 5;
@@ -927,7 +928,7 @@ export function downloadTablePdf({
 }
 
 export function printTablePdf(options: Omit<TablePdfOptions, "action">) {
-  downloadTablePdf({ ...options, action: "print" });
+  return downloadTablePdf({ ...options, action: "print" });
 }
 
 function formatReceiptIssuedAt(raw: string | undefined, fallback: string): string {
@@ -1782,6 +1783,7 @@ export async function buildReceiptPdfBlob(
   academicYear: string,
   branding?: ReceiptBranding,
 ): Promise<{ blob: Blob; filename: string }> {
+  await refreshSessionPdfCredit();
   const { doc, filename } = await createReceiptPdf(payment, schoolName, academicYear, branding);
   return { blob: doc.output("blob"), filename };
 }
@@ -1795,6 +1797,7 @@ export async function downloadReceiptPdf(
   action: PdfEmitAction = "download",
   layout: ReceiptPrintLayout = getReceiptPrintLayout(),
 ) {
+  await refreshSessionPdfCredit();
   const { doc, filename } = await createReceiptPdfForLayout(
     payment,
     schoolName,
@@ -2474,6 +2477,7 @@ export async function downloadSalarySlipPdf(
   academicYear?: string,
   action: PdfEmitAction = "download",
 ) {
+  await refreshSessionPdfCredit();
   const [logo, letterhead] = await Promise.all([
     loadLogoForPdf(branding?.logoUrl),
     loadLetterheadForPdf(branding?.letterheadUrl),
@@ -2710,6 +2714,7 @@ export async function downloadPaymentVoucherPdf(
   academicYear?: string,
   action: PdfEmitAction = "download",
 ) {
+  await refreshSessionPdfCredit();
   const [logo, letterhead] = await Promise.all([
     loadLogoForPdf(branding?.logoUrl),
     loadLetterheadForPdf(branding?.letterheadUrl),
@@ -3307,6 +3312,7 @@ export async function downloadStudentFeeReportPdf(
   input: StudentFeeReportInput,
   action: PdfEmitAction = "download",
 ) {
+  await refreshSessionPdfCredit();
   const { student, schoolName, academicYear, branding } = input;
   const [logo, letterhead] = await Promise.all([
     loadLogoForPdf(branding?.logoUrl),
@@ -3402,6 +3408,7 @@ export async function downloadStaffPayrollReportPdf(
   input: StaffPayrollReportInput,
   action: PdfEmitAction = "download",
 ) {
+  await refreshSessionPdfCredit();
   const { staff, schoolName, payrollMonthLabel, statement, branding } = input;
   const [logo, letterhead] = await Promise.all([
     loadLogoForPdf(branding?.logoUrl),

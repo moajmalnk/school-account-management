@@ -1455,14 +1455,6 @@ export function TenantDesktopTopBar() {
             )}
             {session?.impersonated ? "End preview" : "Sign out"}
           </Button>
-          <button
-            type="button"
-            disabled={signingOut}
-            onClick={closeLogout}
-            className="mt-2 w-full py-1.5 text-[13px] font-medium text-slate-500 transition-colors hover:text-slate-800 disabled:opacity-60 dark:text-zinc-400 dark:hover:text-zinc-100"
-          >
-            Cancel
-          </button>
           {session?.impersonated ? null : (
             <p className="mt-2 text-center text-[11.5px] text-slate-400 dark:text-zinc-500">
               Need to remove your login?{" "}

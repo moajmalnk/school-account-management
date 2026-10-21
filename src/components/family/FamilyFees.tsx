@@ -1,5 +1,5 @@
 import { CalendarDays, Check, FileText, Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { FamilyCard, FamilyHeader, FamilySkeleton } from "@/components/family/FamilyChrome";
@@ -9,33 +9,12 @@ import {
   familyFeeRelease,
   familyFeeVerify,
   familyFees,
-  type FeeCheckout,
   type FeeLine,
 } from "@/lib/api/family";
 import { ApiError } from "@/lib/api/client";
+import { openCashfreeCheckout } from "@/lib/cashfree-checkout";
 import { useFamily } from "@/lib/family-session";
 import { cn } from "@/lib/utils";
-
-type RazorpayHandler = {
-  razorpay_order_id: string;
-  razorpay_payment_id: string;
-  razorpay_signature: string;
-};
-
-type EasebuzzCheckoutClient = {
-  initiatePayment: (options: {
-    access_key: string;
-    onResponse: (response: { status?: string }) => void;
-    theme?: string;
-  }) => void;
-};
-
-declare global {
-  interface Window {
-    Razorpay?: new (options: Record<string, unknown>) => { open: () => void };
-    EasebuzzCheckout?: new (key: string, env: string) => EasebuzzCheckoutClient;
-  }
-}
 
 function money(amount: number, currency: string) {
   return new Intl.NumberFormat("en-IN", {
@@ -56,23 +35,13 @@ function dueLabel(iso: string) {
   });
 }
 
-function loadScript(src: string, ready: () => boolean) {
-  if (ready()) return Promise.resolve();
-  return new Promise<void>((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = src;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Could not load the payment window"));
-    document.body.appendChild(script);
-  });
-}
-
 export function FamilyFees() {
-  const { student, profile } = useFamily();
+  const { student } = useFamily();
   const [tab, setTab] = useState<"due" | "paid" | "receipts">("due");
   const [data, setData] = useState<Awaited<ReturnType<typeof familyFees>> | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   const [error, setError] = useState("");
 
   function load(id: string) {
@@ -122,66 +91,31 @@ export function FamilyFees() {
     if (student) load(student.id);
   }
 
-  async function payEasebuzz(order: FeeCheckout) {
-    await loadScript(
-      "https://ebz-static.s3.ap-south-1.amazonaws.com/easecheckout/v2.0.1/easebuzz-checkout-v2.js",
-      () => Boolean(window.EasebuzzCheckout),
-    );
-    if (!window.EasebuzzCheckout || !order.accessKey || !order.txnid) {
-      throw new Error("Payment window is unavailable");
-    }
-    const checkout = new window.EasebuzzCheckout(order.keyId, order.env === "prod" ? "prod" : "test");
-    checkout.initiatePayment({
-      access_key: order.accessKey,
-      theme: "#0F766E",
-      onResponse: (response) => {
-        const txnid = order.txnid ?? "";
-        if (response.status !== "success") {
-          void familyFeeRelease(txnid).finally(() => finishFailed("Payment was not completed"));
-          return;
-        }
-        void familyFeeVerify({ provider: "easebuzz", txnid })
-          .then((receipt) => finishPaid(receipt.receiptId))
-          .catch((err) => finishFailed(err instanceof ApiError ? err.message : "Payment was not confirmed"));
-      },
-    });
-  }
-
-  async function payRazorpay(order: FeeCheckout) {
-    await loadScript("https://checkout.razorpay.com/v1/checkout.js", () => Boolean(window.Razorpay));
-    if (!window.Razorpay || !order.razorpayOrderId) throw new Error("Payment window is unavailable");
-    const checkout = new window.Razorpay({
-      key: order.keyId,
-      amount: order.amount * 100,
-      currency: order.currency,
-      name: order.name,
-      description: order.description,
-      order_id: order.razorpayOrderId,
-      prefill: { contact: profile?.parent.phone, name: profile?.parent.name },
-      handler: (response: RazorpayHandler) => {
-        void familyFeeVerify({
-          provider: "razorpay",
-          razorpayOrderId: response.razorpay_order_id,
-          razorpayPaymentId: response.razorpay_payment_id,
-          razorpaySignature: response.razorpay_signature,
-        })
-          .then((receipt) => finishPaid(receipt.receiptId))
-          .catch((err) => finishFailed(err instanceof ApiError ? err.message : "Payment was not confirmed"));
-      },
-      modal: { ondismiss: () => setBusy(false) },
-    });
-    checkout.open();
-  }
-
   async function pay() {
-    if (!student || !data?.payEnabled || selected.length === 0 || busy) return;
+    if (!student || !data?.payEnabled || selected.length === 0 || busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
+    let orderId = "";
+    let reportedPaid = false;
     try {
       const order = await familyFeeOrder(student.id, selected);
-      if (order.provider === "easebuzz") await payEasebuzz(order);
-      else await payRazorpay(order);
+      orderId = order.orderId;
+      const outcome = await openCashfreeCheckout(order.paymentSessionId);
+      if (outcome === "closed") {
+        await familyFeeRelease(order.orderId);
+        finishFailed("Payment was not completed");
+        return;
+      }
+      reportedPaid = true;
+      const receipt = await familyFeeVerify({ provider: "cashfree", orderId: order.orderId });
+      finishPaid(receipt.receiptId);
     } catch (err) {
+      if (orderId && !reportedPaid) {
+        await familyFeeRelease(orderId).catch(() => undefined);
+      }
       finishFailed(err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Could not start payment");
+    } finally {
+      busyRef.current = false;
     }
   }
 
@@ -211,9 +145,7 @@ export function FamilyFees() {
         <div>
           <h1 className="text-lg font-semibold">Fee installments</h1>
           <p className="mt-0.5 text-xs text-slate-500">
-            {data.payProvider === "easebuzz" || !data.payEnabled
-              ? "Pay online securely via Easebuzz"
-              : "Pay online securely"}
+            Pay online securely via Cashfree
           </p>
         </div>
         {tab === "due" && visible.length > 0 ? (

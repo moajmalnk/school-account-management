@@ -17,6 +17,36 @@ export type TenantSubscription = {
   invoices: PlatformInvoice[];
 };
 
+export type SubscriptionCheckout = {
+  provider: "cashfree";
+  orderId: string;
+  paymentSessionId: string;
+  amount: number;
+  invoiceNumber: string;
+};
+
+export function startSubscriptionCheckout(cycle: "Monthly" | "Annual") {
+  return apiRequest<SubscriptionCheckout>("/api/tenant/subscription-checkout.php", {
+    method: "POST",
+    body: { action: "order", cycle },
+    timeoutMs: 20_000,
+  });
+}
+
+export function confirmSubscriptionCheckout(orderId: string) {
+  return apiRequest<{ receiptNumber: string; nextDueDate: string; amount: number }>(
+    "/api/tenant/subscription-checkout.php",
+    { method: "POST", body: { action: "confirm", orderId }, timeoutMs: 20_000 },
+  );
+}
+
+export function releaseSubscriptionCheckout(orderId: string) {
+  return apiRequest<{ released: boolean }>("/api/tenant/subscription-checkout.php", {
+    method: "POST",
+    body: { action: "release", orderId },
+  });
+}
+
 export async function fetchTenantSubscription(): Promise<TenantSubscription> {
   const data = await apiRequest<TenantSubscription>("/api/tenant/subscription.php");
   return {

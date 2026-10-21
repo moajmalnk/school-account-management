@@ -99,25 +99,11 @@ export function schoolAcademicsAction(body: Record<string, unknown>) {
 export function schoolParentPay() {
   return apiRequest<{
     enabled: boolean;
-    provider: "razorpay" | "easebuzz";
-    env: "test" | "prod";
-    keyId: string;
-    hasSecret: boolean;
-    hasWebhookSecret: boolean;
-    razorpayKeyId?: string;
-    easebuzzKey?: string;
-    hasRazorpaySecret?: boolean;
-    hasEasebuzzSalt?: boolean;
+    provider: "cashfree";
+    configured: boolean;
   }>("/api/school/parent-pay.php");
 }
 
-export function schoolSaveParentPay(body: {
-  enabled: boolean;
-  provider: "razorpay" | "easebuzz";
-  env: "test" | "prod";
-  keyId: string;
-  keySecret?: string;
-  webhookSecret?: string;
-}) {
+export function schoolSaveParentPay(body: { enabled: boolean }) {
   return apiRequest("/api/school/parent-pay.php", { method: "POST", body });
 }

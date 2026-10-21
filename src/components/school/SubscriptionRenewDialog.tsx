@@ -1,3 +1,4 @@
+import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,8 @@ type SubscriptionRenewDialogProps = {
   autoRenew: boolean;
   onAutoRenewChange: (next: boolean) => void;
   onComplete: (cycle: SubscriptionCycle) => void;
+  paying?: boolean;
+  chargeNote?: string | null;
 };
 
 function startOfDay(date: Date): Date {
@@ -69,6 +72,8 @@ export function SubscriptionRenewDialog({
   autoRenew,
   onAutoRenewChange,
   onComplete,
+  paying = false,
+  chargeNote = null,
 }: SubscriptionRenewDialogProps) {
   const [cycle, setCycle] = useState<SubscriptionCycle>(currentCycle);
 
@@ -110,7 +115,7 @@ export function SubscriptionRenewDialog({
             Renew your {planName} plan
           </DialogTitle>
           <DialogDescription className="text-[13px] text-black/55 dark:text-zinc-400">
-            Choose a billing period. Online auto-charge is not enabled yet.
+            Choose a billing period. An open invoice is collected through Cashfree.
           </DialogDescription>
         </DialogHeader>
 
@@ -199,13 +204,20 @@ export function SubscriptionRenewDialog({
           >
             Cancel
           </Button>
-          <Button
-            type="button"
-            className="rounded-lg bg-[#0F766E] px-5 text-white hover:bg-[#0D9488]"
-            onClick={() => onComplete(cycle)}
-          >
-            Complete payment
-          </Button>
+          <div className="flex flex-col items-end gap-1">
+            {chargeNote ? (
+              <p className="max-w-[16rem] text-right text-[11px] text-black/45 dark:text-zinc-500">{chargeNote}</p>
+            ) : null}
+            <Button
+              type="button"
+              disabled={paying}
+              className="rounded-lg bg-[#0F766E] px-5 text-white hover:bg-[#0D9488]"
+              onClick={() => onComplete(cycle)}
+            >
+              {paying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Pay with Cashfree
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

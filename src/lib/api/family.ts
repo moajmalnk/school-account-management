@@ -331,17 +331,13 @@ export type FeeLine = {
 };
 
 export type FeeCheckout = {
-  provider: "razorpay" | "easebuzz";
+  provider: "cashfree";
   orderId: string;
-  keyId: string;
+  paymentSessionId: string;
   amount: number;
   currency: string;
   name: string;
   description: string;
-  razorpayOrderId?: string;
-  txnid?: string;
-  accessKey?: string;
-  env?: "test" | "prod";
 };
 
 export function familyFees(studentId: string) {
@@ -352,7 +348,7 @@ export function familyFees(studentId: string) {
     lines: FeeLine[];
     receipts: { id: string; date: string; amount: number; mode: string; category: string; period: string }[];
     payEnabled: boolean;
-    payProvider: "razorpay" | "easebuzz";
+    payProvider: "cashfree";
     keyId: string;
   }>(`/api/family/fees.php?studentId=${encodeURIComponent(studentId)}`);
 }
@@ -364,23 +360,17 @@ export function familyFeeOrder(studentId: string, lineKeys: string[]) {
   });
 }
 
-export function familyFeeVerify(body: {
-  provider?: "razorpay" | "easebuzz";
-  txnid?: string;
-  razorpayOrderId?: string;
-  razorpayPaymentId?: string;
-  razorpaySignature?: string;
-}) {
+export function familyFeeVerify(body: { provider: "cashfree"; orderId: string }) {
   return familyRequest<{ receiptId: string; amount: number }>("/api/family/fees.php", {
     method: "POST",
     body: { action: "verify", ...body },
   });
 }
 
-export function familyFeeRelease(txnid: string) {
+export function familyFeeRelease(orderId: string) {
   return familyRequest<{ released: boolean }>("/api/family/fees.php", {
     method: "POST",
-    body: { action: "release", txnid },
+    body: { action: "release", orderId },
   });
 }
 
