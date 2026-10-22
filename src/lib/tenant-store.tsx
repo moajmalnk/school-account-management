@@ -145,6 +145,8 @@ export type StudentConcessionFees = {
   otherFees?: StudentConcessionOtherFee[];
 };
 
+export type TransportFeeShift = "morning" | "evening" | "both";
+
 export type Student = {
   id: string;
   name: string;
@@ -172,6 +174,10 @@ export type Student = {
   needsBus?: boolean;
   busPoint1?: string;
   busPoint2?: string;
+  /** Assigned fleet vehicle public id (Settings → Bus Point). */
+  vehicleId?: string;
+  /** Explicit morning / evening / both; when missing, inferred from bus points. */
+  transportShift?: TransportFeeShift;
   active?: boolean;
   /** Why the student is currently inactive. Cleared on reactivation; past reasons stay in statusHistory. */
   deactivationReason?: string;
@@ -913,6 +919,13 @@ export function normalizeStudent(
     needsBus: typeof raw.needsBus === "boolean" ? raw.needsBus : undefined,
     busPoint1: optionalTrimmedString(raw.busPoint1),
     busPoint2: optionalTrimmedString(raw.busPoint2),
+    vehicleId: optionalTrimmedString(raw.vehicleId),
+    transportShift:
+      raw.transportShift === "morning" ||
+      raw.transportShift === "evening" ||
+      raw.transportShift === "both"
+        ? raw.transportShift
+        : undefined,
     active: typeof raw.active === "boolean" ? raw.active : true,
     deactivationReason: optionalTrimmedString(raw.deactivationReason),
     statusHistory: normalizeStudentStatusHistory(raw.statusHistory),
@@ -2943,6 +2956,11 @@ function profileCollectDigest(rows: unknown[], kind: "student" | "staff"): strin
             r.bloodGroup,
             r.religion,
             r.placeOfBirth,
+            r.vehicleId,
+            r.transportShift,
+            r.busPoint1,
+            r.busPoint2,
+            r.needsBus,
           ]
         : [
             r.id,
@@ -5185,18 +5203,25 @@ function busPointsMatch(a: string | undefined, b: string | undefined): boolean {
 }
 
 export function studentNeedsTransport(
-  student: Pick<Student, "needsBus" | "busPoint1" | "busPoint2">,
+  student: Pick<Student, "needsBus" | "busPoint1" | "busPoint2" | "vehicleId">,
 ): boolean {
   return (
-    student.needsBus === true || Boolean(student.busPoint1?.trim() || student.busPoint2?.trim())
+    student.needsBus === true ||
+    Boolean(student.vehicleId?.trim()) ||
+    Boolean(student.busPoint1?.trim() || student.busPoint2?.trim())
   );
 }
 
-export type TransportFeeShift = "morning" | "evening" | "both";
-
 export function resolveTransportFeeShift(
-  student: Pick<Student, "busPoint1" | "busPoint2">,
+  student: Pick<Student, "busPoint1" | "busPoint2" | "transportShift">,
 ): TransportFeeShift {
+  if (
+    student.transportShift === "morning" ||
+    student.transportShift === "evening" ||
+    student.transportShift === "both"
+  ) {
+    return student.transportShift;
+  }
   const hasPickup = Boolean(student.busPoint1?.trim());
   const hasDrop = Boolean(student.busPoint2?.trim());
   if (hasPickup && hasDrop) return "both";
@@ -5206,34 +5231,50 @@ export function resolveTransportFeeShift(
 }
 
 export function findTransportRouteForStudent(
-  student: Pick<Student, "needsBus" | "busPoint1" | "busPoint2">,
+  student: Pick<Student, "needsBus" | "busPoint1" | "busPoint2" | "vehicleId">,
   routes: TransportRoute[],
+  vehicles: TransportVehicle[] = [],
 ): TransportRoute | undefined {
   if (!studentNeedsTransport(student)) return undefined;
   const pickup = student.busPoint1?.trim();
   const drop = student.busPoint2?.trim();
+  const vehicle = student.vehicleId
+    ? vehicles.find((v) => v.id === student.vehicleId)
+    : undefined;
+  const scoped =
+    vehicle && vehicle.routeIds.length > 0
+      ? routes.filter((route) => vehicle.routeIds.includes(route.id))
+      : routes;
+  const pool = scoped.length > 0 ? scoped : routes;
 
   if (pickup && drop) {
-    const matched = routes.find(
+    const matched = pool.find(
       (route) => busPointsMatch(route.mapFrom, pickup) && busPointsMatch(route.mapTo, drop),
     );
     if (matched) return matched;
   }
   if (pickup) {
-    const matched = routes.find((route) => busPointsMatch(route.mapFrom, pickup));
+    const matched = pool.find((route) => busPointsMatch(route.mapFrom, pickup));
     if (matched) return matched;
   }
   if (drop) {
-    const matched = routes.find((route) => busPointsMatch(route.mapTo, drop));
+    const matched = pool.find((route) => busPointsMatch(route.mapTo, drop));
     if (matched) return matched;
   }
-  return undefined;
+  return pool[0];
 }
 
 export function resolveTransportFeeForStudent(
   student: Pick<
     Student,
-    "needsBus" | "busPoint1" | "busPoint2" | "cls" | "hasConcession" | "concessionFees"
+    | "needsBus"
+    | "busPoint1"
+    | "busPoint2"
+    | "vehicleId"
+    | "transportShift"
+    | "cls"
+    | "hasConcession"
+    | "concessionFees"
   >,
   routes: TransportRoute[],
   classConfig?: Pick<ClassConfig, "vehicleFeeAmount">,
@@ -5243,8 +5284,9 @@ export function resolveTransportFeeForStudent(
     collectionStartMonth?: string;
   },
   feeTerms: FeeTerm[] = [],
+  vehicles: TransportVehicle[] = [],
 ): { amount: number | undefined; shift: TransportFeeShift; route?: TransportRoute } {
-  if (!studentNeedsTransport(student)) {
+  if (!studentNeedsTransport(student) && !student.vehicleId) {
     return { amount: undefined, shift: "both" };
   }
 
@@ -5256,7 +5298,7 @@ export function resolveTransportFeeForStudent(
     return {
       amount: 0,
       shift: resolveTransportFeeShift(student),
-      route: findTransportRouteForStudent(student, routes),
+      route: findTransportRouteForStudent(student, routes, vehicles),
     };
   }
 
@@ -5289,7 +5331,7 @@ export function resolveTransportFeeForStudent(
   }
 
   const shift = resolveTransportFeeShift(student);
-  const route = findTransportRouteForStudent(student, routes);
+  const route = findTransportRouteForStudent(student, routes, vehicles);
 
   if (route) {
     const normalized = withRouteFeeSchedule(route, feeTerms);

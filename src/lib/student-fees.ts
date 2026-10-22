@@ -333,6 +333,7 @@ function expectedVehicleChargeLines(
   transportRoutes: TransportRoute[],
   feeTerms: FeeTerm[],
   academicYear: string,
+  vehicles: import("@/lib/tenant-store").TransportVehicle[] = [],
 ): ChargeDraft[] {
   if (!studentNeedsTransport(student)) return [];
 
@@ -362,6 +363,7 @@ function expectedVehicleChargeLines(
     classConfig,
     undefined,
     feeTerms,
+    vehicles,
   );
   const shift = transport.shift;
   const route = transport.route;
@@ -835,11 +837,13 @@ export function buildStudentFeeStatement(input: {
   classes: ClassConfig[];
   feeTerms: FeeTerm[];
   transportRoutes?: TransportRoute[];
+  transportVehicles?: import("@/lib/tenant-store").TransportVehicle[];
   academicYear: string;
   feeBreaks?: StudentFeeBreak[];
 }): StudentFeeStatement {
   const { student, academicYear } = input;
   const transportRoutes = input.transportRoutes ?? [];
+  const transportVehicles = input.transportVehicles ?? [];
   const feeBreaks = input.feeBreaks ?? [];
   const yearPayments = filterByAcademicYear(input.payments, academicYear);
   const yearTerms = filterByAcademicYear(input.feeTerms, academicYear);
@@ -857,7 +861,14 @@ export function buildStudentFeeStatement(input: {
     "tuition",
   );
   const vehicleExpected = markBreaksOnCharges(
-    expectedVehicleChargeLines(student, classConfig, transportRoutes, yearTerms, academicYear),
+    expectedVehicleChargeLines(
+      student,
+      classConfig,
+      transportRoutes,
+      yearTerms,
+      academicYear,
+      transportVehicles,
+    ),
     feeBreaks,
     student.id,
     academicYear,
@@ -881,6 +892,7 @@ export function buildStudentFeeStatement(input: {
     classConfig,
     undefined,
     yearTerms,
+    transportVehicles,
   );
   const route = transport.route;
 

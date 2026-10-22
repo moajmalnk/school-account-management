@@ -457,6 +457,7 @@ export function StudentProfileDetail({
     activePayments,
     activeFeeTerms,
     transportRoutes,
+    transportVehicles,
     studentFeeBreaks,
     setStudentFeeBreaks,
   } = useTenantStore();
@@ -490,8 +491,26 @@ export function StudentProfileDetail({
   };
   const [feeBreaksOpen, setFeeBreaksOpen] = useState(false);
 
+  const activeVehicles = useMemo(
+    () => transportVehicles.filter((v) => v.active !== false),
+    [transportVehicles],
+  );
+
+  const assignedVehicle = useMemo(
+    () =>
+      student.vehicleId
+        ? (transportVehicles.find((v) => v.id === student.vehicleId) ?? null)
+        : null,
+    [student.vehicleId, transportVehicles],
+  );
+
   const busPointOptions = useMemo(() => {
-    const { pickups, drops } = transportBusPointOptions(transportRoutes);
+    const scopedRoutes =
+      assignedVehicle && assignedVehicle.routeIds.length > 0
+        ? transportRoutes.filter((r) => assignedVehicle.routeIds.includes(r.id))
+        : transportRoutes;
+    const pool = scopedRoutes.length > 0 ? scopedRoutes : transportRoutes;
+    const { pickups, drops } = transportBusPointOptions(pool);
     const dropPool = drops.length > 0 ? drops : pickups;
     const point1 = withCurrentBusPointOption(student.busPoint1, pickups);
     const point2 = withCurrentBusPointOption(student.busPoint2, dropPool);
@@ -501,7 +520,7 @@ export function StudentProfileDetail({
       orphanPickup: point1.orphan,
       orphanDrop: point2.orphan,
     };
-  }, [student.busPoint1, student.busPoint2, transportRoutes]);
+  }, [student.busPoint1, student.busPoint2, transportRoutes, assignedVehicle]);
 
   const matchedClass = useMemo(
     () => classConfigs.find((c) => c.className === student.cls),
@@ -509,8 +528,16 @@ export function StudentProfileDetail({
   );
 
   const studentTransportFee = useMemo(
-    () => resolveTransportFeeForStudent(student, transportRoutes, matchedClass),
-    [student, transportRoutes, matchedClass],
+    () =>
+      resolveTransportFeeForStudent(
+        student,
+        transportRoutes,
+        matchedClass,
+        undefined,
+        activeFeeTerms,
+        transportVehicles,
+      ),
+    [student, transportRoutes, matchedClass, activeFeeTerms, transportVehicles],
   );
 
   const openCollectVehicleFee = (target: Student) => {
@@ -521,7 +548,9 @@ export function StudentProfileDetail({
   };
 
   const studentNeedsBus =
-    student.needsBus === true || Boolean(student.busPoint1 || student.busPoint2);
+    student.needsBus === true ||
+    Boolean(student.vehicleId) ||
+    Boolean(student.busPoint1 || student.busPoint2);
 
   useEffect(() => {
     setShareToken(student.shareToken ?? "");
@@ -562,6 +591,7 @@ export function StudentProfileDetail({
         classes: classConfigs,
         feeTerms: activeFeeTerms,
         transportRoutes,
+        transportVehicles,
         academicYear,
         feeBreaks: studentFeeBreaks,
       }),
@@ -571,6 +601,7 @@ export function StudentProfileDetail({
       classConfigs,
       activeFeeTerms,
       transportRoutes,
+      transportVehicles,
       academicYear,
       studentFeeBreaks,
     ],
@@ -642,24 +673,40 @@ export function StudentProfileDetail({
 
   const updateTransport = (patch: {
     needsBus: boolean;
+    vehicleId?: string;
     busPoint1?: string;
     busPoint2?: string;
+    transportShift?: "morning" | "evening" | "both";
   }) => {
     const updated: Student = {
       ...student,
       needsBus: patch.needsBus,
+      vehicleId: patch.needsBus ? emptyToUndefined(patch.vehicleId ?? "") : undefined,
       busPoint1: patch.needsBus ? emptyToUndefined(patch.busPoint1 ?? "") : undefined,
       busPoint2: patch.needsBus ? emptyToUndefined(patch.busPoint2 ?? "") : undefined,
+      transportShift: patch.needsBus ? patch.transportShift : undefined,
     };
-    const fee = resolveTransportFeeForStudent(updated, transportRoutes, matchedClass);
-    syncStudent(updated);
+    if (updated.vehicleId) updated.needsBus = true;
+    const fee = resolveTransportFeeForStudent(
+      updated,
+      transportRoutes,
+      matchedClass,
+      undefined,
+      activeFeeTerms,
+      transportVehicles,
+    );
+    void syncStudent(updated);
+    const vehicleName = updated.vehicleId
+      ? transportVehicles.find((v) => v.id === updated.vehicleId)?.name
+      : undefined;
     const points = [updated.busPoint1, updated.busPoint2].filter(Boolean).join(" · ");
     const canCollect = studentNeedsTransport(updated) && Boolean(fee.amount && fee.amount > 0);
-    toast.success("Transport route updated", {
+    toast.success("Transport updated", {
       description: canCollect
-        ? `Vehicle fee ${formatMoney(fee.amount!)}${points ? ` · ${points}` : ""}`
+        ? `Vehicle fee ${formatMoney(fee.amount!)}${vehicleName ? ` · ${vehicleName}` : ""}${points ? ` · ${points}` : ""}`
         : patch.needsBus
-          ? points || "School bus required · pick points below"
+          ? [vehicleName, points].filter(Boolean).join(" · ") ||
+            "School bus required · pick vehicle and stops"
           : "School bus not required",
       ...(canCollect
         ? {
@@ -1078,7 +1125,7 @@ export function StudentProfileDetail({
             <section className={CARD_FRAME}>
               <h2 className="text-base font-semibold text-black dark:text-zinc-50">Transport</h2>
               <p className="mt-1 text-[12.5px] text-black/50 dark:text-zinc-400">
-                School bus requirement and pickup points. Changes save immediately.
+                Assign a bus, boarding and dropping stops, and shift. Changes save immediately.
               </p>
 
               <div className="mt-4 space-y-3">
@@ -1089,8 +1136,12 @@ export function StudentProfileDetail({
                       const needsBus = checked === true;
                       updateTransport({
                         needsBus,
+                        vehicleId: needsBus ? (student.vehicleId ?? "") : "",
                         busPoint1: needsBus ? (student.busPoint1 ?? "") : "",
                         busPoint2: needsBus ? (student.busPoint2 ?? "") : "",
+                        transportShift: needsBus
+                          ? student.transportShift || studentTransportFee.shift
+                          : undefined,
                       });
                     }}
                   />
@@ -1099,16 +1150,45 @@ export function StudentProfileDetail({
 
                 {studentNeedsBus ? (
                   <div className="space-y-3">
+                    <MetaSelect
+                      label="Vehicle"
+                      value={student.vehicleId ?? ""}
+                      editing
+                      onChange={(v) =>
+                        updateTransport({
+                          needsBus: true,
+                          vehicleId: v === "__none__" ? "" : v,
+                          busPoint1: student.busPoint1 ?? "",
+                          busPoint2: student.busPoint2 ?? "",
+                          transportShift:
+                            student.transportShift || studentTransportFee.shift || "both",
+                        })
+                      }
+                      options={activeVehicles.map((v) => v.name)}
+                      optionValues={activeVehicles.map((v) => v.id)}
+                      orphanValues={
+                        student.vehicleId &&
+                        !activeVehicles.some((v) => v.id === student.vehicleId)
+                          ? new Set([student.vehicleId])
+                          : undefined
+                      }
+                      placeholder="Select bus"
+                      allowNone
+                      noneLabel="No vehicle assigned"
+                    />
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <MetaSelect
-                        label="Bus Point 1"
+                        label="Boarding stop"
                         value={student.busPoint1 ?? ""}
                         editing
                         onChange={(v) =>
                           updateTransport({
                             needsBus: true,
+                            vehicleId: student.vehicleId ?? "",
                             busPoint1: v === "__none__" ? "" : v,
                             busPoint2: student.busPoint2 ?? "",
+                            transportShift:
+                              student.transportShift || studentTransportFee.shift || "both",
                           })
                         }
                         options={busPointOptions.point1}
@@ -1117,19 +1197,22 @@ export function StudentProfileDetail({
                             ? new Set([busPointOptions.orphanPickup])
                             : undefined
                         }
-                        placeholder="Select pickup point"
+                        placeholder="Select boarding stop"
                         allowNone
-                        noneLabel="No pickup point"
+                        noneLabel="No boarding stop"
                       />
                       <MetaSelect
-                        label="Bus Point 2"
+                        label="Dropping stop"
                         value={student.busPoint2 ?? ""}
                         editing
                         onChange={(v) =>
                           updateTransport({
                             needsBus: true,
+                            vehicleId: student.vehicleId ?? "",
                             busPoint1: student.busPoint1 ?? "",
                             busPoint2: v === "__none__" ? "" : v,
+                            transportShift:
+                              student.transportShift || studentTransportFee.shift || "both",
                           })
                         }
                         options={busPointOptions.point2}
@@ -1138,10 +1221,50 @@ export function StudentProfileDetail({
                             ? new Set([busPointOptions.orphanDrop])
                             : undefined
                         }
-                        placeholder="Select drop point"
+                        placeholder="Select dropping stop"
                         allowNone
-                        noneLabel="No drop point"
+                        noneLabel="No dropping stop"
                       />
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-black/45">
+                        Shift
+                      </div>
+                      <div className="inline-flex w-full items-center rounded-full border border-black/10 bg-white p-1">
+                        {(
+                          [
+                            { key: "morning" as const, label: "Morning" },
+                            { key: "evening" as const, label: "Evening" },
+                            { key: "both" as const, label: "Both" },
+                          ] as const
+                        ).map((opt) => {
+                          const selected =
+                            (student.transportShift || studentTransportFee.shift) === opt.key;
+                          return (
+                            <button
+                              key={opt.key}
+                              type="button"
+                              onClick={() =>
+                                updateTransport({
+                                  needsBus: true,
+                                  vehicleId: student.vehicleId ?? "",
+                                  busPoint1: student.busPoint1 ?? "",
+                                  busPoint2: student.busPoint2 ?? "",
+                                  transportShift: opt.key,
+                                })
+                              }
+                              className={cn(
+                                "min-h-9 flex-1 rounded-full text-[12px] font-semibold transition-colors",
+                                selected
+                                  ? "bg-[#0F766E] text-white"
+                                  : "text-black/55 hover:bg-black/5",
+                              )}
+                            >
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                     {busPointOptions.orphanPickup || busPointOptions.orphanDrop ? (
                       <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] leading-snug text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
@@ -1151,9 +1274,9 @@ export function StudentProfileDetail({
                           .join(" and ")}{" "}
                         {busPointOptions.orphanPickup && busPointOptions.orphanDrop ? "are" : "is"}{" "}
                         saved on this student but{" "}
-                        <span className="font-semibold">not in Transport Routes</span>. Add a route
-                        in Settings with matching Map From / Map To, or pick a route point from the
-                        list (e.g. University).
+                        <span className="font-semibold">not on this vehicle&apos;s routes</span>.
+                        Pick a stop from the list or attach routes on the vehicle in Settings → Bus
+                        Point.
                       </p>
                     ) : null}
                     {student.hasConcession && student.concessionFees?.vehicle?.fullConcession ? (
@@ -1170,7 +1293,9 @@ export function StudentProfileDetail({
                             {formatMoney(studentTransportFee.amount)}
                           </div>
                           <div className="mt-0.5 text-[12px] text-black/50 dark:text-zinc-400">
-                            Based on assigned pickup / drop route
+                            {assignedVehicle
+                              ? `${assignedVehicle.name} · ${studentTransportFee.shift}`
+                              : "Based on assigned pickup / drop route"}
                           </div>
                         </div>
                         <Button
@@ -1186,7 +1311,7 @@ export function StudentProfileDetail({
                   </div>
                 ) : (
                   <p className="text-[12.5px] text-black/50 dark:text-zinc-400">
-                    No transport route assigned for this student.
+                    No transport assigned for this student.
                   </p>
                 )}
               </div>
@@ -1879,6 +2004,7 @@ function MetaSelect({
   editing,
   onChange,
   options,
+  optionValues,
   orphanValues,
   placeholder,
   allowNone = false,
@@ -1889,14 +2015,23 @@ function MetaSelect({
   editing: boolean;
   onChange: (value: string) => void;
   options: string[];
+  /** When set, paired 1:1 with options as SelectItem values (e.g. vehicle ids). */
+  optionValues?: string[];
   /** Values kept only because they are saved on the student — not route endpoints. */
   orphanValues?: Set<string>;
   placeholder?: string;
   allowNone?: boolean;
   noneLabel?: string;
 }) {
+  const values = optionValues ?? options;
+  const labelFor = (id: string) => {
+    if (!optionValues) return id;
+    const idx = optionValues.indexOf(id);
+    return idx >= 0 ? options[idx] ?? id : id;
+  };
+  const known = values.includes(value) || Boolean(value && orphanValues?.has(value));
   const resolved =
-    value && options.includes(value)
+    value && known
       ? value
       : allowNone && !value
         ? "__none__"
@@ -1920,24 +2055,35 @@ function MetaSelect({
                   {noneLabel}
                 </SelectItem>
               )}
-              {options.map((option) => (
-                <SelectItem key={option} value={option}>
-                  {orphanValues?.has(option) ? (
-                    <span>
-                      {option}
-                      <span className="ml-1 text-[11px] font-medium text-amber-700">
-                        · not in routes
+              {values.map((itemValue, index) => {
+                const optionLabel = options[index] ?? itemValue;
+                return (
+                  <SelectItem key={itemValue} value={itemValue}>
+                    {orphanValues?.has(itemValue) ? (
+                      <span>
+                        {optionLabel}
+                        <span className="ml-1 text-[11px] font-medium text-amber-700">
+                          · not in fleet
+                        </span>
                       </span>
-                    </span>
-                  ) : (
-                    option
-                  )}
+                    ) : (
+                      optionLabel
+                    )}
+                  </SelectItem>
+                );
+              })}
+              {value && !values.includes(value) && orphanValues?.has(value) ? (
+                <SelectItem value={value}>
+                  {labelFor(value)}
+                  <span className="ml-1 text-[11px] font-medium text-amber-700">· not in fleet</span>
                 </SelectItem>
-              ))}
+              ) : null}
             </SelectContent>
           </Select>
         ) : (
-          <div className="text-[14px] font-medium text-black">{value?.trim() ? value : "—"}</div>
+          <div className="text-[14px] font-medium text-black">
+            {value?.trim() ? labelFor(value) : "—"}
+          </div>
         )}
       </div>
     </div>

@@ -267,6 +267,10 @@ import {
 } from "@/lib/tenant-store";
 import { classSelectOptions } from "@/lib/class-options";
 import { StudentProfileDetail } from "@/components/school/StudentProfileDetail";
+import {
+  VehicleStudentAssignments,
+  vehicleSeatSummary,
+} from "@/components/school/VehicleStudentAssignments";
 import { AcademicPromotionDialog } from "@/components/school/AcademicPromotionDialog";
 import {
   StudentConcessionSection,
@@ -10462,6 +10466,7 @@ function ReceivePayment() {
     setPayments,
     classes: classConfigs,
     transportRoutes,
+    transportVehicles,
     paymentCategories,
     setPaymentCategories,
     activeFeeTerms: feeTerms,
@@ -10648,8 +10653,9 @@ function ReceivePayment() {
       matchedClass,
       undefined,
       feeTerms,
+      transportVehicles,
     );
-  }, [selected, transportRoutes, matchedClass, feeTerms]);
+  }, [selected, transportRoutes, matchedClass, feeTerms, transportVehicles]);
 
   const matchedRoute = transportFeeResolved?.route;
   const transportShift = transportFeeResolved?.shift ?? "both";
@@ -19073,11 +19079,13 @@ function VehicleCard({
 }) {
   const MAX_VEHICLE_DOC_BYTES = 1_500_000;
   const emptyDocs = (): VehicleDocument[] => createDefaultVehicleDocuments();
+  const { students: rosterStudents } = useTenantStore();
 
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<TransportVehicle | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [manageStudentsId, setManageStudentsId] = useState<string | null>(null);
   const [routeQuery, setRouteQuery] = useState("");
   const [form, setForm] = useState({
     name: "",
@@ -19325,6 +19333,27 @@ function VehicleCard({
     return { v, alert, docs, assignedRoutes };
   }, [detailVehicle, transportRoutes]);
 
+  const manageVehicle = useMemo(
+    () =>
+      manageStudentsId
+        ? (transportVehicles.find((v) => v.id === manageStudentsId) ?? null)
+        : null,
+    [manageStudentsId, transportVehicles],
+  );
+
+  if (manageVehicle) {
+    return (
+      <VehicleStudentAssignments
+        vehicle={manageVehicle}
+        routes={transportRoutes}
+        onBack={() => {
+          setManageStudentsId(null);
+          setDetailId(manageVehicle.id);
+        }}
+      />
+    );
+  }
+
   return (
     <>
       {detailMeta ? (
@@ -19388,6 +19417,14 @@ function VehicleCard({
               </span>
               <button
                 type="button"
+                onClick={() => setManageStudentsId(detailMeta.v.id)}
+                className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#0F766E] px-3 text-[12px] font-semibold text-white shadow-sm transition-colors hover:bg-[#0D9488]"
+              >
+                <Users className="h-3.5 w-3.5" />
+                Manage students
+              </button>
+              <button
+                type="button"
                 onClick={() => startEdit(detailMeta.v)}
                 className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 text-[12px] font-semibold text-black/70 transition-colors hover:bg-[#F4F4F5] hover:text-black"
               >
@@ -19421,10 +19458,14 @@ function VehicleCard({
             </div>
             <div className="col-span-6 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4 lg:col-span-4">
               <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
-                Seat Capacity
+                Seats assigned
               </div>
               <div className="mt-1.5 font-mono text-[18px] font-bold text-black">
-                {detailMeta.v.capacity}
+                {vehicleSeatSummary(
+                  rosterStudents,
+                  detailMeta.v.id,
+                  detailMeta.v.capacity,
+                )}
               </div>
             </div>
             <div className="col-span-6 rounded-lg border border-[#EFEFEF] bg-[#FAFAFA] p-4 lg:col-span-4">

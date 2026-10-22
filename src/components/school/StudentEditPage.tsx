@@ -89,6 +89,8 @@ type StudentDraft = {
   studentCategory: string;
   bloodGroup: string;
   needsBus: boolean;
+  vehicleId: string;
+  transportShift: "" | "morning" | "evening" | "both";
   busPoint1: string;
   busPoint2: string;
 };
@@ -114,7 +116,12 @@ function draftFromStudent(student: Student): StudentDraft {
     religion: student.religion ?? "",
     studentCategory: student.studentCategory ?? "",
     bloodGroup: student.bloodGroup ?? "",
-    needsBus: student.needsBus === true || Boolean(student.busPoint1 || student.busPoint2),
+    needsBus:
+      student.needsBus === true ||
+      Boolean(student.vehicleId) ||
+      Boolean(student.busPoint1 || student.busPoint2),
+    vehicleId: student.vehicleId ?? "",
+    transportShift: student.transportShift ?? "",
     busPoint1: student.busPoint1 ?? "",
     busPoint2: student.busPoint2 ?? "",
   };
@@ -182,7 +189,15 @@ function applyDraftToStudent(
     religion: emptyToUndefined(draft.religion),
     studentCategory: emptyToUndefined(draft.studentCategory),
     bloodGroup: emptyToUndefined(draft.bloodGroup),
-    needsBus: draft.needsBus,
+    needsBus: draft.needsBus || Boolean(draft.vehicleId.trim()),
+    vehicleId: draft.needsBus ? emptyToUndefined(draft.vehicleId) : undefined,
+    transportShift:
+      draft.needsBus &&
+      (draft.transportShift === "morning" ||
+        draft.transportShift === "evening" ||
+        draft.transportShift === "both")
+        ? draft.transportShift
+        : undefined,
     busPoint1: draft.needsBus ? emptyToUndefined(draft.busPoint1) : undefined,
     busPoint2: draft.needsBus ? emptyToUndefined(draft.busPoint2) : undefined,
     documents: nextDocs,
@@ -203,12 +218,18 @@ export function StudentEditPage() {
     activeClasses: classes,
     setClasses,
     activeTransportRoutes: transportRoutes,
+    transportVehicles,
     academicYear,
     activeFeeTerms,
     activePayments,
     studentFeeBreaks,
     setStudentFeeBreaks,
   } = useTenantStore();
+
+  const activeVehicles = useMemo(
+    () => transportVehicles.filter((v) => v.active !== false),
+    [transportVehicles],
+  );
 
   const student = useMemo(
     () => (search.id ? (students.find((s) => s.id === search.id) ?? null) : null),
@@ -245,7 +266,15 @@ export function StudentEditPage() {
   );
 
   const busPointOptions = useMemo(() => {
-    const { pickups, drops } = transportBusPointOptions(transportRoutes);
+    const vehicle = draft.vehicleId
+      ? transportVehicles.find((v) => v.id === draft.vehicleId)
+      : undefined;
+    const scoped =
+      vehicle && vehicle.routeIds.length > 0
+        ? transportRoutes.filter((r) => vehicle.routeIds.includes(r.id))
+        : transportRoutes;
+    const pool = scoped.length > 0 ? scoped : transportRoutes;
+    const { pickups, drops } = transportBusPointOptions(pool);
     const dropPool = drops.length > 0 ? drops : pickups;
     const point1 = withCurrentBusPointOption(draft.busPoint1, pickups);
     const point2 = withCurrentBusPointOption(draft.busPoint2, dropPool);
@@ -255,13 +284,20 @@ export function StudentEditPage() {
       orphanPickup: point1.orphan,
       orphanDrop: point2.orphan,
     };
-  }, [draft.busPoint1, draft.busPoint2, transportRoutes]);
+  }, [draft.busPoint1, draft.busPoint2, draft.vehicleId, transportRoutes, transportVehicles]);
 
   const draftTransportFee = useMemo(
     () =>
       resolveTransportFeeForStudent(
         {
           needsBus: draft.needsBus,
+          vehicleId: draft.vehicleId || undefined,
+          transportShift:
+            draft.transportShift === "morning" ||
+            draft.transportShift === "evening" ||
+            draft.transportShift === "both"
+              ? draft.transportShift
+              : undefined,
           busPoint1: draft.busPoint1,
           busPoint2: draft.busPoint2,
           cls: draft.cls,
@@ -272,8 +308,17 @@ export function StudentEditPage() {
         matchedClass,
         undefined,
         activeFeeTerms,
+        transportVehicles,
       ),
-    [draft, concession.hasConcession, concession.concessionFees, transportRoutes, matchedClass, activeFeeTerms],
+    [
+      draft,
+      concession.hasConcession,
+      concession.concessionFees,
+      transportRoutes,
+      matchedClass,
+      activeFeeTerms,
+      transportVehicles,
+    ],
   );
 
   const draftAsStudent = useMemo((): Student | null => {
@@ -545,6 +590,7 @@ export function StudentEditPage() {
         matchedClass,
         undefined,
         activeFeeTerms,
+        transportVehicles,
       );
       const canCollect = studentNeedsTransport(updated) && Boolean(fee.amount && fee.amount > 0);
       toast.success("Profile updated", {
@@ -895,7 +941,9 @@ export function StudentEditPage() {
                 setDraft((prev) => ({
                   ...prev,
                   needsBus: checked === true,
-                  ...(checked === true ? {} : { busPoint1: "", busPoint2: "" }),
+                  ...(checked === true
+                    ? {}
+                    : { vehicleId: "", transportShift: "", busPoint1: "", busPoint2: "" }),
                 }))
               }
               className="mt-0.5 h-5 w-5 rounded-md border-slate-300"
@@ -905,15 +953,38 @@ export function StudentEditPage() {
                 Requires school bus
               </span>
               <span className="mt-0.5 block text-[12px] text-slate-500">
-                Check if your child needs transport · then pick pickup points
+                Assign a bus, boarding and dropping stops, and shift
               </span>
             </span>
           </label>
 
           {draft.needsBus && (
             <div className="space-y-3">
+              <FormField label="Vehicle">
+                <Select
+                  value={draft.vehicleId || "__none__"}
+                  onValueChange={(vehicleId) =>
+                    patchDraft("vehicleId", vehicleId === "__none__" ? "" : vehicleId)
+                  }
+                >
+                  <SelectTrigger className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white text-[13px]">
+                    <SelectValue placeholder="Select bus" />
+                  </SelectTrigger>
+                  <SelectContent position="popper" className="z-[250]">
+                    <SelectItem value="__none__" className="text-slate-500">
+                      No vehicle assigned
+                    </SelectItem>
+                    {activeVehicles.map((vehicle) => (
+                      <SelectItem key={vehicle.id} value={vehicle.id}>
+                        {vehicle.name}
+                        {vehicle.registrationNo ? ` · ${vehicle.registrationNo}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormField>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <FormField label="Bus Point 1">
+                <FormField label="Boarding stop">
                   <Select
                     value={draft.busPoint1 || "__none__"}
                     onValueChange={(busPoint1) =>
@@ -921,11 +992,11 @@ export function StudentEditPage() {
                     }
                   >
                     <SelectTrigger className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white text-[13px]">
-                      <SelectValue placeholder="Select pickup point" />
+                      <SelectValue placeholder="Select boarding stop" />
                     </SelectTrigger>
                     <SelectContent position="popper" className="z-[250]">
                       <SelectItem value="__none__" className="text-slate-500">
-                        No pickup point
+                        No boarding stop
                       </SelectItem>
                       {busPointOptions.point1.map((point) => (
                         <SelectItem key={point} value={point}>
@@ -933,7 +1004,7 @@ export function StudentEditPage() {
                             <span>
                               {point}
                               <span className="ml-1 text-[11px] font-medium text-amber-700">
-                                · not in routes
+                                · not on vehicle routes
                               </span>
                             </span>
                           ) : (
@@ -944,7 +1015,7 @@ export function StudentEditPage() {
                     </SelectContent>
                   </Select>
                 </FormField>
-                <FormField label="Bus Point 2">
+                <FormField label="Dropping stop">
                   <Select
                     value={draft.busPoint2 || "__none__"}
                     onValueChange={(busPoint2) =>
@@ -952,11 +1023,11 @@ export function StudentEditPage() {
                     }
                   >
                     <SelectTrigger className="h-9 w-full rounded-lg border-[#E5E5E5] bg-white text-[13px]">
-                      <SelectValue placeholder="Select drop point" />
+                      <SelectValue placeholder="Select dropping stop" />
                     </SelectTrigger>
                     <SelectContent position="popper" className="z-[250]">
                       <SelectItem value="__none__" className="text-slate-500">
-                        No drop point
+                        No dropping stop
                       </SelectItem>
                       {busPointOptions.point2.map((point) => (
                         <SelectItem key={point} value={point}>
@@ -964,7 +1035,7 @@ export function StudentEditPage() {
                             <span>
                               {point}
                               <span className="ml-1 text-[11px] font-medium text-amber-700">
-                                · not in routes
+                                · not on vehicle routes
                               </span>
                             </span>
                           ) : (
@@ -976,6 +1047,35 @@ export function StudentEditPage() {
                   </Select>
                 </FormField>
               </div>
+              <FormField label="Shift">
+                <div className="inline-flex w-full items-center rounded-full border border-black/10 bg-white p-1">
+                  {(
+                    [
+                      { key: "morning" as const, label: "Morning" },
+                      { key: "evening" as const, label: "Evening" },
+                      { key: "both" as const, label: "Both" },
+                    ] as const
+                  ).map((opt) => {
+                    const selected =
+                      (draft.transportShift || draftTransportFee.shift) === opt.key;
+                    return (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() => patchDraft("transportShift", opt.key)}
+                        className={cn(
+                          "min-h-9 flex-1 rounded-full text-[12px] font-semibold transition-colors",
+                          selected
+                            ? "bg-[#0F766E] text-white"
+                            : "text-black/55 hover:bg-black/5",
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </FormField>
               {busPointOptions.orphanPickup || busPointOptions.orphanDrop ? (
                 <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] leading-snug text-amber-900">
                   {[busPointOptions.orphanPickup, busPointOptions.orphanDrop]
@@ -983,8 +1083,8 @@ export function StudentEditPage() {
                     .map((p) => `“${p}”`)
                     .join(" and ")}{" "}
                   {busPointOptions.orphanPickup && busPointOptions.orphanDrop ? "are" : "is"} saved
-                  on this student but not in Transport Routes. Add a matching route in Settings, or
-                  pick University / another route point.
+                  on this student but not on this vehicle&apos;s routes. Attach routes on the
+                  vehicle in Settings → Bus Point, or pick another stop.
                 </p>
               ) : null}
             </div>
