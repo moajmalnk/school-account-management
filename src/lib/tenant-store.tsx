@@ -2917,6 +2917,57 @@ function studentStatusDigest(students: unknown[]): string {
   return `${inactive}:${events}`;
 }
 
+/**
+ * Profile fields parents/staff fill via Collect. Counts alone are not enough — otherwise a
+ * school browser keeps empty local rows after the API already has the submitted details.
+ */
+function profileCollectDigest(rows: unknown[], kind: "student" | "staff"): string {
+  let hash = 0;
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    const parts =
+      kind === "student"
+        ? [
+            r.id,
+            r.guardian,
+            r.phone,
+            r.dob,
+            r.email,
+            r.address,
+            r.nationality,
+            r.motherName,
+            r.photoUrl,
+            r.shareToken,
+            r.gender,
+            r.bloodGroup,
+            r.religion,
+            r.placeOfBirth,
+          ]
+        : [
+            r.id,
+            r.phone,
+            r.altPhone,
+            r.guardianPhone,
+            r.dob,
+            r.email,
+            r.address,
+            r.photoUrl,
+            r.shareToken,
+            r.gender,
+            r.bloodGroup,
+            r.emergencyName,
+            r.emergencyRelation,
+          ];
+    const key = parts.map((v) => (v == null ? "" : String(v))).join("\u001f");
+    for (let i = 0; i < key.length; i += 1) {
+      hash = (hash * 31 + key.charCodeAt(i)) | 0;
+    }
+    hash = (hash * 31 + key.length) | 0;
+  }
+  return `${rows.length}:${hash}`;
+}
+
 function snapshotDigest(snap: {
   students: unknown[];
   staff: unknown[];
@@ -2924,7 +2975,16 @@ function snapshotDigest(snap: {
   academicYear: string;
   activeBranchId: string;
 }): string {
-  return `${snap.students.length}|${studentStatusDigest(snap.students)}|${snap.staff.length}|${snap.payments.length}|${snap.academicYear}|${snap.activeBranchId}`;
+  return [
+    snap.students.length,
+    studentStatusDigest(snap.students),
+    profileCollectDigest(snap.students, "student"),
+    snap.staff.length,
+    profileCollectDigest(snap.staff, "staff"),
+    snap.payments.length,
+    snap.academicYear,
+    snap.activeBranchId,
+  ].join("|");
 }
 
 const NOTIFICATION_CATEGORIES = ["fees", "admissions", "staff", "system", "transport"] as const;

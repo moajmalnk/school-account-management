@@ -289,28 +289,19 @@ function StaffCollectPage() {
 
     setSaving(true);
     try {
-      try {
-        await apiSubmitStaffCollect(token, {
-          phone: fields.phone ?? "",
-          altPhone: fields.altPhone,
-          guardianPhone: fields.guardianPhone,
-          photoUrl: fields.photoUrl,
-          gender: fields.gender,
-          dob: fields.dob,
-          email: fields.email,
-          address: fields.address,
-          bloodGroup: fields.bloodGroup,
-          emergencyName: fields.emergencyName,
-          emergencyRelation: fields.emergencyRelation,
-        });
-      } catch (err) {
-        const offline = !(err instanceof ApiError) || err.status === 0;
-        if (!offline) throw err;
-        if (!applyStaffCollectUpdate(token, fields)) {
-          toast.error("Could not save. This link may be invalid or expired.");
-          return;
-        }
-      }
+      await apiSubmitStaffCollect(token, {
+        phone: fields.phone ?? "",
+        altPhone: fields.altPhone,
+        guardianPhone: fields.guardianPhone,
+        photoUrl: fields.photoUrl,
+        gender: fields.gender,
+        dob: fields.dob,
+        email: fields.email,
+        address: fields.address,
+        bloodGroup: fields.bloodGroup,
+        emergencyName: fields.emergencyName,
+        emergencyRelation: fields.emergencyRelation,
+      });
       applyStaffCollectUpdate(token, fields);
       dirtyRef.current = false;
       setForm(emptyFields());
@@ -324,7 +315,9 @@ function StaffCollectPage() {
         });
         return;
       }
-      toast.error(err instanceof Error ? err.message : "Could not save");
+      toast.error(err instanceof Error ? err.message : "Could not save", {
+        description: "Check your connection and try again. The school only sees a successful save.",
+      });
     } finally {
       setSaving(false);
     }

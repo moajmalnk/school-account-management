@@ -86,6 +86,8 @@ import {
   apiCreateFeeBreak,
   apiDeleteFeeBreak,
   apiDeleteStudent,
+  apiGetStudent,
+  apiSetStudentShareToken,
   apiUpsertStudent,
 } from "@/lib/api/records";
 import { getApiToken } from "@/lib/api/client";
@@ -93,6 +95,7 @@ import { useAuth } from "@/lib/auth";
 import {
   createStudentShareToken,
   DEFAULT_STUDENT_DOCUMENTS,
+  normalizeStudent,
   transportBusPointOptions,
   withCurrentBusPointOption,
   resolveTransportFeeForStudent,
@@ -524,6 +527,33 @@ export function StudentProfileDetail({
     setShareToken(student.shareToken ?? "");
   }, [student]);
 
+  // Always pull the latest row from the API so parent Collect updates show even when
+  // the school browser still has an older local cache.
+  useEffect(() => {
+    if (!getApiToken()) return;
+    let cancelled = false;
+    void apiGetStudent(student.id)
+      .then((remote) => {
+        if (cancelled) return;
+        const merged = normalizeStudent({
+          ...student,
+          ...remote,
+          id: student.id,
+        });
+        setStudents((prev) => prev.map((s) => (s.id === student.id ? merged : s)));
+        upsertStudentInSnapshot(merged);
+        setShareToken(merged.shareToken ?? "");
+      })
+      .catch(() => {
+        /* keep cached profile */
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Re-fetch when opening a different student profile.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only refetch on id change
+  }, [student.id, setStudents]);
+
   const feeStatement = useMemo(
     () =>
       buildStudentFeeStatement({
@@ -798,9 +828,16 @@ export function StudentProfileDetail({
       let token = (student.shareToken ?? shareToken).trim();
       if (!token) token = createStudentShareToken();
       try {
-        const saved = await syncStudent({ ...student, shareToken: token });
+        // Token-only write — a full upsert from a stale cache would wipe parent Collect fields.
+        const saved = await apiSetStudentShareToken(student.id, token);
         token = (saved.shareToken ?? token).trim();
-      } catch {
+        const merged = normalizeStudent({ ...student, ...saved, id: student.id, shareToken: token });
+        setStudents((prev) => prev.map((s) => (s.id === student.id ? merged : s)));
+        upsertStudentInSnapshot(merged);
+      } catch (err) {
+        toast.error("Could not save the parent link", {
+          description: err instanceof Error ? err.message : "Save failed",
+        });
         return;
       }
       if (!token) {

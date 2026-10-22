@@ -205,27 +205,22 @@ function ParentStudentPage() {
     };
     setSaving(true);
     try {
-      let updated: Student | null = null;
+      let updated: Student;
       try {
         updated = await apiSubmitParentStudent(token, patch);
         applyParentStudentUpdate(token, patch);
       } catch (err) {
-        const offline = !(err instanceof ApiError) || err.status === 0;
-        if (!offline) {
-          if (err instanceof ApiError && err.status === 404) {
-            setStudent(null);
-            setLookup("missing");
-            toast.error("This link has expired. Ask the school for a new link.");
-            return;
-          }
-          toast.error(err instanceof Error ? err.message : "Could not save");
+        if (err instanceof ApiError && err.status === 404) {
+          setStudent(null);
+          setLookup("missing");
+          toast.error("This link has expired. Ask the school for a new link.");
           return;
         }
-        updated = applyParentStudentUpdate(token, patch);
-        if (!updated) {
-          toast.error("Could not save. This link may be invalid or expired.");
-          return;
-        }
+        // Do not pretend the school got the update — local-only saves leave profiles empty.
+        toast.error(err instanceof Error ? err.message : "Could not save", {
+          description: "Check your connection and try again. The school only sees a successful save.",
+        });
+        return;
       }
       setStudent({ ...updated, shareToken: undefined });
       setSubmitted(true);

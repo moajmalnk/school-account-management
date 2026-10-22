@@ -33,7 +33,8 @@ import { Label } from "@/components/ui/label";
 import { ProfileAvatar } from "@/components/ui/profile-avatar";
 import { ImageCropDialog } from "@/components/ui/image-crop-dialog";
 import type { Staff, StaffDocument, StaffDocumentAttachment, TenantUser } from "@/lib/tenant-store";
-import { apiDeleteStaff, apiUpsertStaff } from "@/lib/api/records";
+import { apiDeleteStaff, apiGetStaff, apiSetStaffShareToken, apiUpsertStaff } from "@/lib/api/records";
+import { getApiToken } from "@/lib/api/client";
 import {
   DEFAULT_STAFF_DOCUMENTS,
   normalizeTenantUser,
@@ -322,6 +323,26 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
   useEffect(() => {
     setShareToken(staff.shareToken ?? "");
   }, [staff.id, staff.shareToken]);
+
+  // Pull the latest staff row so Collect submissions replace an older local cache.
+  useEffect(() => {
+    if (!getApiToken()) return;
+    let cancelled = false;
+    void apiGetStaff(staff.id)
+      .then((remote) => {
+        if (cancelled) return;
+        const merged = normalizeStaff({ ...staff, ...remote, id: staff.id });
+        setStaff((prev) => prev.map((s) => (s.id === staff.id ? merged : s)));
+        setShareToken(merged.shareToken ?? "");
+      })
+      .catch(() => {
+        /* keep cached profile */
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only refetch on id change
+  }, [staff.id, setStaff]);
 
   const syncStaff = async (updated: Staff) => {
     setStaff((prev) => prev.map((s) => (s.id === staff.id ? updated : s)));
@@ -827,9 +848,18 @@ export function StaffProfileDetail({ staff, onBack }: { staff: Staff; onBack: ()
     void (async () => {
       let token = (staff.shareToken ?? shareToken).trim();
       if (!token) token = createStaffShareToken();
-      const saved = await syncStaff({ ...staff, shareToken: token });
-      if (!saved) return;
-      token = (saved.shareToken ?? token).trim();
+      try {
+        // Token-only write — a full upsert from a stale cache would wipe Collect fields.
+        const saved = await apiSetStaffShareToken(staff.id, token);
+        token = (saved.shareToken ?? token).trim();
+        const merged = normalizeStaff({ ...staff, ...saved, id: staff.id, shareToken: token });
+        setStaff((prev) => prev.map((s) => (s.id === staff.id ? merged : s)));
+      } catch (err) {
+        toast.error("Could not create the collection link", {
+          description: err instanceof Error ? err.message : "Save failed",
+        });
+        return;
+      }
       if (!token) {
         toast.error("Could not create the collection link");
         return;

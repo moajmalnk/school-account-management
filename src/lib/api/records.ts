@@ -92,6 +92,21 @@ export async function apiGetStudent(id: string): Promise<Student> {
   return apiRequest<Student>(`/api/students/get.php?id=${encodeURIComponent(id)}`);
 }
 
+/** Authenticated staff row, including personal fields filled via Collect. */
+export async function apiGetStaff(id: string): Promise<Staff> {
+  return apiRequest<Staff>(`/api/staff/get.php?id=${encodeURIComponent(id)}`);
+}
+
+/** Only rotate the parent collect token — never overwrite profile fields from a stale client cache. */
+export async function apiSetStudentShareToken(id: string, shareToken: string): Promise<Student> {
+  return mutate<Student>("/api/students/update.php", { id, shareToken });
+}
+
+/** Only rotate the staff collect token — leave personal fields on the server untouched. */
+export async function apiSetStaffShareToken(id: string, shareToken: string): Promise<Staff> {
+  return mutate<Staff>("/api/staff/update.php", { id, shareToken });
+}
+
 /** Public parent profile. No login — the share token is the credential. */
 export async function apiGetParentStudent(token: string): Promise<Student> {
   const data = await apiRequest<{ student: Student }>(
