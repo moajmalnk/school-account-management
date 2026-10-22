@@ -58,6 +58,60 @@ function classDivision(cls: string): string {
   return splitClassName(cls).section || "—";
 }
 
+/** Compact label for long map addresses in tight columns. */
+function shortStopLabel(stop: string, max = 42): string {
+  const raw = stop.trim();
+  if (!raw) return "No stop";
+  const first = raw.split(",")[0]?.trim() || raw;
+  if (first.length <= max) return first;
+  return `${first.slice(0, max - 1)}…`;
+}
+
+function StopSelect({
+  value,
+  disabled,
+  options,
+  orphan,
+  onChange,
+}: {
+  value: string;
+  disabled?: boolean;
+  options: string[];
+  orphan?: string;
+  onChange: (next: string) => void;
+}) {
+  const resolved = value || "__none__";
+  return (
+    <Select
+      disabled={disabled}
+      value={resolved}
+      onValueChange={(v) => onChange(v === "__none__" ? "" : v)}
+    >
+      <SelectTrigger
+        className="h-9 w-full max-w-full rounded-lg text-left text-[12px] [&>span]:line-clamp-1 [&>span]:min-w-0 [&>span]:break-all"
+        title={value || undefined}
+      >
+        <SelectValue placeholder="Stop" />
+      </SelectTrigger>
+      <SelectContent className="w-[var(--radix-select-trigger-width)] max-w-[min(92vw,22rem)]">
+        <SelectItem value="__none__">No stop</SelectItem>
+        {options.map((stop) => (
+          <SelectItem key={stop} value={stop} title={stop} textValue={shortStopLabel(stop, 80)}>
+            <span className="line-clamp-2 whitespace-normal leading-snug">{shortStopLabel(stop, 56)}</span>
+          </SelectItem>
+        ))}
+        {orphan && !options.includes(orphan) ? (
+          <SelectItem value={orphan} title={orphan} textValue={shortStopLabel(orphan, 80)}>
+            <span className="line-clamp-2 whitespace-normal leading-snug">
+              {shortStopLabel(orphan, 56)}
+            </span>
+          </SelectItem>
+        ) : null}
+      </SelectContent>
+    </Select>
+  );
+}
+
 export function VehicleStudentAssignments({
   vehicle,
   routes,
@@ -67,7 +121,7 @@ export function VehicleStudentAssignments({
   const [query, setQuery] = useState("");
   const [gradeFilter, setGradeFilter] = useState("all");
   const [divisionFilter, setDivisionFilter] = useState("all");
-  const [assignedOnly, setAssignedOnly] = useState(true);
+  const [assignedOnly, setAssignedOnly] = useState(false);
   const [saving, setSaving] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, TransportAssignmentDraft>>({});
 
@@ -251,9 +305,10 @@ export function VehicleStudentAssignments({
             type="button"
             onClick={onBack}
             aria-label="Back to vehicle"
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#E5E5E5] bg-white text-slate-700 transition-colors hover:text-[#0F766E]"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#E5E5E5] bg-white text-slate-700 transition-colors hover:text-[#0F766E] sm:h-10 sm:w-auto sm:gap-1.5 sm:px-3"
           >
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="h-4 w-4 shrink-0" />
+            <span className="hidden text-[13px] font-semibold sm:inline">Back</span>
           </button>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -289,7 +344,7 @@ export function VehicleStudentAssignments({
           type="button"
           disabled={!dirty || saving}
           onClick={() => void save()}
-          className="h-10 rounded-full bg-[#0F766E] px-4 text-white hover:bg-[#0D9488]"
+          className="h-10 w-full shrink-0 rounded-full bg-[#0F766E] px-4 text-white hover:bg-[#0D9488] sm:w-auto"
         >
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           Save assignments
@@ -313,8 +368,8 @@ export function VehicleStudentAssignments({
         </div>
       ) : null}
 
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-        <div className="relative min-w-0 flex-1">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_140px_140px_auto]">
+        <div className="relative min-w-0 sm:col-span-2 lg:col-span-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-black/35" />
           <Input
             value={query}
@@ -324,7 +379,7 @@ export function VehicleStudentAssignments({
           />
         </div>
         <Select value={gradeFilter} onValueChange={setGradeFilter}>
-          <SelectTrigger className="h-10 w-full rounded-xl lg:w-[140px]">
+          <SelectTrigger className="h-10 w-full rounded-xl">
             <SelectValue placeholder="All classes" />
           </SelectTrigger>
           <SelectContent>
@@ -337,7 +392,7 @@ export function VehicleStudentAssignments({
           </SelectContent>
         </Select>
         <Select value={divisionFilter} onValueChange={setDivisionFilter}>
-          <SelectTrigger className="h-10 w-full rounded-xl lg:w-[140px]">
+          <SelectTrigger className="h-10 w-full rounded-xl">
             <SelectValue placeholder="All divisions" />
           </SelectTrigger>
           <SelectContent>
@@ -349,9 +404,9 @@ export function VehicleStudentAssignments({
             ))}
           </SelectContent>
         </Select>
-        <label className="flex h-10 items-center gap-2 rounded-xl border border-[#E5E5E5] bg-white px-3 text-[12.5px] font-medium text-black/70">
+        <label className="flex h-10 items-center justify-between gap-2 rounded-xl border border-[#E5E5E5] bg-white px-3 text-[12.5px] font-medium text-black/70 sm:col-span-2 lg:col-span-1">
+          <span>Assigned only</span>
           <Switch checked={assignedOnly} onCheckedChange={setAssignedOnly} />
-          Assigned only
         </label>
       </div>
 
@@ -360,159 +415,263 @@ export function VehicleStudentAssignments({
         {assignedOnly ? " · turn off Assigned only to add more students" : ""}
       </p>
 
-      <div className="overflow-x-auto rounded-xl border border-[#E5E5E5]">
-        <table className="min-w-[880px] w-full border-collapse text-left text-[12.5px]">
-          <thead>
-            <tr className="bg-[#0F766E] text-[10px] font-semibold uppercase tracking-wider text-white">
-              <th className="px-3 py-2.5 w-12">On</th>
-              <th className="px-3 py-2.5 w-12">Sl</th>
-              <th className="px-3 py-2.5">Student</th>
-              <th className="px-3 py-2.5 min-w-[160px]">Boarding</th>
-              <th className="px-3 py-2.5 min-w-[160px]">Dropping</th>
-              <th className="px-3 py-2.5 min-w-[120px]">Shift</th>
-              <th className="px-3 py-2.5 min-w-[100px]">Fare</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-black/45">
-                  No students match these filters.
-                </td>
-              </tr>
-            ) : (
-              rows.map((student, index) => {
-                const draft = drafts[student.id] ?? draftFromStudent(student, vehicle.id);
-                const previewStudent: Student = applyVehicleAssignment(student, vehicle.id, draft);
-                const fare = draft.assigned
-                  ? assignmentFareForStudent(
-                      previewStudent,
-                      routes,
-                      transportVehicles,
-                      undefined,
-                      activeFeeTerms,
-                    )
-                  : undefined;
-                return (
-                  <tr
-                    key={student.id}
-                    className={cn(
-                      "border-t border-[#EFEFEF]",
-                      draft.assigned ? "bg-[#F0FDFA]/40" : "bg-white",
-                    )}
-                  >
-                    <td className="px-3 py-2.5 align-middle">
-                      <Checkbox
-                        checked={draft.assigned}
-                        onCheckedChange={(checked) => {
-                          const on = checked === true;
-                          patchDraft(student.id, {
-                            assigned: on,
-                            busPoint1: on
-                              ? draft.busPoint1 || stops.pickups[0] || student.busPoint1 || ""
-                              : "",
-                            busPoint2: on
-                              ? draft.busPoint2 || stops.drops[0] || student.busPoint2 || ""
-                              : "",
-                            transportShift: on ? draft.transportShift || "both" : "both",
-                          });
-                        }}
-                      />
-                    </td>
-                    <td className="px-3 py-2.5 align-middle font-mono text-black/50">
-                      {index + 1}
-                    </td>
-                    <td className="px-3 py-2.5 align-middle">
-                      <div className="font-semibold text-black">{student.name}</div>
-                      <div className="mt-0.5 font-mono text-[11px] text-black/45">
-                        {student.admissionNumber || student.id} · {student.cls}
+      {rows.length === 0 ? (
+        <div className="rounded-xl border border-[#E5E5E5] bg-white px-4 py-10 text-center text-[13px] text-black/45">
+          No students match these filters.
+        </div>
+      ) : (
+        <>
+          {/* Mobile / tablet: stacked cards */}
+          <div className="space-y-2 xl:hidden">
+            {rows.map((student, index) => {
+              const draft = drafts[student.id] ?? draftFromStudent(student, vehicle.id);
+              const previewStudent = applyVehicleAssignment(student, vehicle.id, draft);
+              const fare = draft.assigned
+                ? assignmentFareForStudent(
+                    previewStudent,
+                    routes,
+                    transportVehicles,
+                    undefined,
+                    activeFeeTerms,
+                  )
+                : undefined;
+              return (
+                <div
+                  key={student.id}
+                  className={cn(
+                    "rounded-xl border border-[#E5E5E5] p-3",
+                    draft.assigned ? "bg-[#F0FDFA]/50" : "bg-white",
+                  )}
+                >
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      className="mt-1"
+                      checked={draft.assigned}
+                      onCheckedChange={(checked) => {
+                        const on = checked === true;
+                        patchDraft(student.id, {
+                          assigned: on,
+                          busPoint1: on
+                            ? draft.busPoint1 || stops.pickups[0] || student.busPoint1 || ""
+                            : "",
+                          busPoint2: on
+                            ? draft.busPoint2 || stops.drops[0] || student.busPoint2 || ""
+                            : "",
+                          transportShift: on ? draft.transportShift || "both" : "both",
+                        });
+                      }}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="truncate text-[13px] font-semibold text-black">
+                            <span className="mr-1.5 font-mono text-[11px] text-black/40">
+                              {index + 1}.
+                            </span>
+                            {student.name}
+                          </div>
+                          <div className="mt-0.5 truncate font-mono text-[11px] text-black/45">
+                            {student.admissionNumber || student.id} · {student.cls}
+                          </div>
+                        </div>
+                        <div className="shrink-0 font-mono text-[13px] font-semibold text-black">
+                          {draft.assigned && fare != null && fare > 0 ? formatMoney(fare) : "—"}
+                        </div>
                       </div>
-                    </td>
-                    <td className="px-3 py-2.5 align-middle">
-                      <Select
-                        disabled={!draft.assigned}
-                        value={draft.busPoint1 || "__none__"}
-                        onValueChange={(v) =>
-                          patchDraft(student.id, {
-                            busPoint1: v === "__none__" ? "" : v,
-                          })
-                        }
-                      >
-                        <SelectTrigger className="h-9 rounded-lg">
-                          <SelectValue placeholder="Stop" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">No stop</SelectItem>
-                          {stops.pickups.map((stop) => (
-                            <SelectItem key={stop} value={stop}>
-                              {stop}
-                            </SelectItem>
-                          ))}
-                          {draft.busPoint1 &&
-                          !stops.pickups.includes(draft.busPoint1) ? (
-                            <SelectItem value={draft.busPoint1}>{draft.busPoint1}</SelectItem>
-                          ) : null}
-                        </SelectContent>
-                      </Select>
-                    </td>
-                    <td className="px-3 py-2.5 align-middle">
-                      <Select
-                        disabled={!draft.assigned}
-                        value={draft.busPoint2 || "__none__"}
-                        onValueChange={(v) =>
-                          patchDraft(student.id, {
-                            busPoint2: v === "__none__" ? "" : v,
-                          })
-                        }
-                      >
-                        <SelectTrigger className="h-9 rounded-lg">
-                          <SelectValue placeholder="Stop" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">No stop</SelectItem>
-                          {stops.drops.map((stop) => (
-                            <SelectItem key={stop} value={stop}>
-                              {stop}
-                            </SelectItem>
-                          ))}
-                          {draft.busPoint2 && !stops.drops.includes(draft.busPoint2) ? (
-                            <SelectItem value={draft.busPoint2}>{draft.busPoint2}</SelectItem>
-                          ) : null}
-                        </SelectContent>
-                      </Select>
-                    </td>
-                    <td className="px-3 py-2.5 align-middle">
-                      <Select
-                        disabled={!draft.assigned}
-                        value={draft.transportShift}
-                        onValueChange={(v) =>
-                          patchDraft(student.id, {
-                            transportShift: v as TransportFeeShift,
-                          })
-                        }
-                      >
-                        <SelectTrigger className="h-9 rounded-lg">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(["morning", "evening", "both"] as TransportFeeShift[]).map((shift) => (
-                            <SelectItem key={shift} value={shift}>
-                              {transportShiftLabel(shift)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </td>
-                    <td className="px-3 py-2.5 align-middle font-mono font-semibold text-black">
-                      {draft.assigned && fare != null && fare > 0 ? formatMoney(fare) : "—"}
-                    </td>
+                      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <div className="min-w-0 space-y-1">
+                          <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                            Boarding
+                          </div>
+                          <StopSelect
+                            value={draft.busPoint1}
+                            disabled={!draft.assigned}
+                            options={stops.pickups}
+                            orphan={draft.busPoint1}
+                            onChange={(busPoint1) => patchDraft(student.id, { busPoint1 })}
+                          />
+                        </div>
+                        <div className="min-w-0 space-y-1">
+                          <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                            Dropping
+                          </div>
+                          <StopSelect
+                            value={draft.busPoint2}
+                            disabled={!draft.assigned}
+                            options={stops.drops}
+                            orphan={draft.busPoint2}
+                            onChange={(busPoint2) => patchDraft(student.id, { busPoint2 })}
+                          />
+                        </div>
+                        <div className="min-w-0 space-y-1 sm:col-span-2 sm:max-w-[220px]">
+                          <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
+                            Shift
+                          </div>
+                          <Select
+                            disabled={!draft.assigned}
+                            value={draft.transportShift}
+                            onValueChange={(v) =>
+                              patchDraft(student.id, {
+                                transportShift: v as TransportFeeShift,
+                              })
+                            }
+                          >
+                            <SelectTrigger className="h-9 rounded-lg text-[12px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(["morning", "evening", "both"] as TransportFeeShift[]).map(
+                                (shift) => (
+                                  <SelectItem key={shift} value={shift}>
+                                    {transportShiftLabel(shift)}
+                                  </SelectItem>
+                                ),
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop: constrained table */}
+          <div className="hidden overflow-hidden rounded-xl border border-[#E5E5E5] xl:block">
+            <div className="overflow-x-auto">
+              <table className="w-full table-fixed border-collapse text-left text-[12.5px]">
+                <colgroup>
+                  <col className="w-12" />
+                  <col className="w-12" />
+                  <col className="w-[22%]" />
+                  <col className="w-[22%]" />
+                  <col className="w-[22%]" />
+                  <col className="w-[14%]" />
+                  <col className="w-[10%]" />
+                </colgroup>
+                <thead>
+                  <tr className="bg-[#0F766E] text-[10px] font-semibold uppercase tracking-wider text-white">
+                    <th className="px-2 py-2.5">On</th>
+                    <th className="px-2 py-2.5">Sl</th>
+                    <th className="px-2 py-2.5">Student</th>
+                    <th className="px-2 py-2.5">Boarding</th>
+                    <th className="px-2 py-2.5">Dropping</th>
+                    <th className="px-2 py-2.5">Shift</th>
+                    <th className="px-2 py-2.5">Fare</th>
                   </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+                </thead>
+                <tbody>
+                  {rows.map((student, index) => {
+                    const draft = drafts[student.id] ?? draftFromStudent(student, vehicle.id);
+                    const previewStudent = applyVehicleAssignment(student, vehicle.id, draft);
+                    const fare = draft.assigned
+                      ? assignmentFareForStudent(
+                          previewStudent,
+                          routes,
+                          transportVehicles,
+                          undefined,
+                          activeFeeTerms,
+                        )
+                      : undefined;
+                    return (
+                      <tr
+                        key={student.id}
+                        className={cn(
+                          "border-t border-[#EFEFEF]",
+                          draft.assigned ? "bg-[#F0FDFA]/40" : "bg-white",
+                        )}
+                      >
+                        <td className="px-2 py-2 align-middle">
+                          <Checkbox
+                            checked={draft.assigned}
+                            onCheckedChange={(checked) => {
+                              const on = checked === true;
+                              patchDraft(student.id, {
+                                assigned: on,
+                                busPoint1: on
+                                  ? draft.busPoint1 ||
+                                    stops.pickups[0] ||
+                                    student.busPoint1 ||
+                                    ""
+                                  : "",
+                                busPoint2: on
+                                  ? draft.busPoint2 || stops.drops[0] || student.busPoint2 || ""
+                                  : "",
+                                transportShift: on ? draft.transportShift || "both" : "both",
+                              });
+                            }}
+                          />
+                        </td>
+                        <td className="px-2 py-2 align-middle font-mono text-black/50">
+                          {index + 1}
+                        </td>
+                        <td className="px-2 py-2 align-middle">
+                          <div className="truncate font-semibold text-black" title={student.name}>
+                            {student.name}
+                          </div>
+                          <div
+                            className="mt-0.5 truncate font-mono text-[11px] text-black/45"
+                            title={`${student.admissionNumber || student.id} · ${student.cls}`}
+                          >
+                            {student.admissionNumber || student.id} · {student.cls}
+                          </div>
+                        </td>
+                        <td className="px-2 py-2 align-middle">
+                          <StopSelect
+                            value={draft.busPoint1}
+                            disabled={!draft.assigned}
+                            options={stops.pickups}
+                            orphan={draft.busPoint1}
+                            onChange={(busPoint1) => patchDraft(student.id, { busPoint1 })}
+                          />
+                        </td>
+                        <td className="px-2 py-2 align-middle">
+                          <StopSelect
+                            value={draft.busPoint2}
+                            disabled={!draft.assigned}
+                            options={stops.drops}
+                            orphan={draft.busPoint2}
+                            onChange={(busPoint2) => patchDraft(student.id, { busPoint2 })}
+                          />
+                        </td>
+                        <td className="px-2 py-2 align-middle">
+                          <Select
+                            disabled={!draft.assigned}
+                            value={draft.transportShift}
+                            onValueChange={(v) =>
+                              patchDraft(student.id, {
+                                transportShift: v as TransportFeeShift,
+                              })
+                            }
+                          >
+                            <SelectTrigger className="h-9 w-full rounded-lg text-[12px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(["morning", "evening", "both"] as TransportFeeShift[]).map(
+                                (shift) => (
+                                  <SelectItem key={shift} value={shift}>
+                                    {transportShiftLabel(shift)}
+                                  </SelectItem>
+                                ),
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="px-2 py-2 align-middle font-mono text-[12px] font-semibold text-black">
+                          {draft.assigned && fare != null && fare > 0 ? formatMoney(fare) : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

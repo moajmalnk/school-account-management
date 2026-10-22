@@ -16632,22 +16632,14 @@ export function SchoolSettings() {
 
       {activeTab === "transport" &&
         renderSettingsPanel(
-          <div className="space-y-3">
-            <TransportCard
-              listLayout={listLayout}
-              transportRoutes={transportRoutes}
-              setTransportRoutes={setTransportRoutes}
-              transportVehicles={transportVehicles}
-              setTransportVehicles={setTransportVehicles}
-              feeTerms={feeTerms}
-            />
-            <VehicleCard
-              listLayout={listLayout}
-              transportVehicles={transportVehicles}
-              setTransportVehicles={setTransportVehicles}
-              transportRoutes={transportRoutes}
-            />
-          </div>,
+          <TransportBusPointPanel
+            listLayout={listLayout}
+            transportRoutes={transportRoutes}
+            setTransportRoutes={setTransportRoutes}
+            transportVehicles={transportVehicles}
+            setTransportVehicles={setTransportVehicles}
+            feeTerms={feeTerms}
+          />,
           "Loading bus points",
           listLayout,
         )}
@@ -19066,6 +19058,46 @@ function ClassesCard({
   );
 }
 
+function TransportBusPointPanel({
+  transportRoutes,
+  setTransportRoutes,
+  transportVehicles,
+  setTransportVehicles,
+  feeTerms,
+  listLayout = "table",
+}: {
+  transportRoutes: TransportRoute[];
+  setTransportRoutes: React.Dispatch<React.SetStateAction<TransportRoute[]>>;
+  transportVehicles: TransportVehicle[];
+  setTransportVehicles: React.Dispatch<React.SetStateAction<TransportVehicle[]>>;
+  feeTerms: FeeTerm[];
+  listLayout?: "cards" | "table";
+}) {
+  const search = useSearch({ from: "/tenant/settings" });
+  const inVehicleFlow = Boolean(search.vehicle);
+
+  return (
+    <div className="space-y-3">
+      {!inVehicleFlow ? (
+        <TransportCard
+          listLayout={listLayout}
+          transportRoutes={transportRoutes}
+          setTransportRoutes={setTransportRoutes}
+          transportVehicles={transportVehicles}
+          setTransportVehicles={setTransportVehicles}
+          feeTerms={feeTerms}
+        />
+      ) : null}
+      <VehicleCard
+        listLayout={listLayout}
+        transportVehicles={transportVehicles}
+        setTransportVehicles={setTransportVehicles}
+        transportRoutes={transportRoutes}
+      />
+    </div>
+  );
+}
+
 function VehicleCard({
   transportVehicles,
   setTransportVehicles,
@@ -19080,13 +19112,60 @@ function VehicleCard({
   const MAX_VEHICLE_DOC_BYTES = 1_500_000;
   const emptyDocs = (): VehicleDocument[] => createDefaultVehicleDocuments();
   const { students: rosterStudents } = useTenantStore();
+  const navigate = useNavigate();
+  const search = useSearch({ from: "/tenant/settings" });
 
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<TransportVehicle | null>(null);
-  const [detailId, setDetailId] = useState<string | null>(null);
-  const [manageStudentsId, setManageStudentsId] = useState<string | null>(null);
   const [routeQuery, setRouteQuery] = useState("");
+
+  const vehicleParam = typeof search.vehicle === "string" ? search.vehicle : null;
+  const manageStudentsOpen = Boolean(vehicleParam && search.students);
+  const detailId = vehicleParam && !manageStudentsOpen ? vehicleParam : null;
+  const manageStudentsId = vehicleParam && manageStudentsOpen ? vehicleParam : null;
+
+  const goFleetList = useCallback(() => {
+    navigate({
+      to: "/tenant/settings",
+      search: (prev) => ({
+        ...prev,
+        tab: "transport",
+        vehicle: undefined,
+        students: undefined,
+      }),
+    });
+  }, [navigate]);
+
+  const goVehicleDetail = useCallback(
+    (id: string) => {
+      navigate({
+        to: "/tenant/settings",
+        search: (prev) => ({
+          ...prev,
+          tab: "transport",
+          vehicle: id,
+          students: undefined,
+        }),
+      });
+    },
+    [navigate],
+  );
+
+  const goManageStudents = useCallback(
+    (id: string) => {
+      navigate({
+        to: "/tenant/settings",
+        search: (prev) => ({
+          ...prev,
+          tab: "transport",
+          vehicle: id,
+          students: true,
+        }),
+      });
+    },
+    [navigate],
+  );
   const [form, setForm] = useState({
     name: "",
     registrationNo: "",
@@ -19105,10 +19184,16 @@ function VehicleCard({
   );
 
   useEffect(() => {
-    if (detailId && !transportVehicles.some((v) => v.id === detailId)) {
-      setDetailId(null);
+    if (!vehicleParam) return;
+    if (!transportVehicles.some((v) => v.id === vehicleParam)) {
+      goFleetList();
     }
-  }, [detailId, transportVehicles]);
+  }, [vehicleParam, transportVehicles, goFleetList]);
+
+  useEffect(() => {
+    if (!vehicleParam) return;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [vehicleParam, manageStudentsOpen]);
 
   const routeLabel = (routeId: string) => {
     const route = transportRoutes.find((r) => r.id === routeId);
@@ -19275,7 +19360,7 @@ function VehicleCard({
     const deletedId = pendingDelete.id;
     remove(pendingDelete);
     setPendingDelete(null);
-    if (detailId === deletedId) setDetailId(null);
+    if (vehicleParam === deletedId) goFleetList();
   };
 
   const activeCount = transportVehicles.filter((v) => v.active).length;
@@ -19341,17 +19426,19 @@ function VehicleCard({
     [manageStudentsId, transportVehicles],
   );
 
-  if (manageVehicle) {
+  if (manageStudentsOpen) {
+    if (!manageVehicle) return null;
     return (
       <VehicleStudentAssignments
         vehicle={manageVehicle}
         routes={transportRoutes}
-        onBack={() => {
-          setManageStudentsId(null);
-          setDetailId(manageVehicle.id);
-        }}
+        onBack={() => goVehicleDetail(manageVehicle.id)}
       />
     );
+  }
+
+  if (vehicleParam && !detailMeta) {
+    return null;
   }
 
   return (
@@ -19367,7 +19454,7 @@ function VehicleCard({
             <div className="flex min-w-0 items-start gap-2.5 sm:gap-3">
               <button
                 type="button"
-                onClick={() => setDetailId(null)}
+                onClick={goFleetList}
                 aria-label="Back to vehicle list"
                 className={cn(
                   glassInsetClass,
@@ -19417,7 +19504,7 @@ function VehicleCard({
               </span>
               <button
                 type="button"
-                onClick={() => setManageStudentsId(detailMeta.v.id)}
+                onClick={() => goManageStudents(detailMeta.v.id)}
                 className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#0F766E] px-3 text-[12px] font-semibold text-white shadow-sm transition-colors hover:bg-[#0D9488]"
               >
                 <Users className="h-3.5 w-3.5" />
@@ -19624,11 +19711,11 @@ function VehicleCard({
                     key={v.id}
                     role="button"
                     tabIndex={0}
-                    onClick={() => setDetailId(v.id)}
+                    onClick={() => goVehicleDetail(v.id)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        setDetailId(v.id);
+                        goVehicleDetail(v.id);
                       }
                     }}
                     aria-label={`Open details for ${v.name}`}
@@ -19753,11 +19840,11 @@ function VehicleCard({
                           key={v.id}
                           role="button"
                           tabIndex={0}
-                          onClick={() => setDetailId(v.id)}
+                          onClick={() => goVehicleDetail(v.id)}
                           onKeyDown={(e) => {
                             if (e.key === "Enter" || e.key === " ") {
                               e.preventDefault();
-                              setDetailId(v.id);
+                              goVehicleDetail(v.id);
                             }
                           }}
                           aria-label={`Open details for ${v.name}`}
