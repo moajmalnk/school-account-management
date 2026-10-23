@@ -101,6 +101,10 @@ function buildMonthGrid(viewMonth: Date) {
   return cells;
 }
 
+/** Birth dates need ~100 years of history; general pickers stay near “today”. */
+const BIRTH_YEAR_SPAN = 100;
+const NEAR_YEAR_SPAN = 10;
+
 export type DatePickerProps = {
   value?: string;
   onChange: (value: string) => void;
@@ -112,6 +116,12 @@ export type DatePickerProps = {
   disabled?: boolean;
   valueFormat?: "iso" | "display";
   variant?: "default" | "pill";
+  /**
+   * `birth` — date of birth / age fields: years span ~100y back through today,
+   * no future dates, no +30d / +1y shortcuts.
+   * `general` — fee / event dates near today (±10y unless min/max set).
+   */
+  purpose?: "general" | "birth";
   /** Show "Today" / "Yesterday" instead of numeric dates when applicable. */
   relativeDisplay?: boolean;
   quickPicks?: { label: string; getDate: (today: Date) => Date }[];
@@ -137,16 +147,32 @@ export function DatePicker({
   disabled,
   valueFormat = "iso",
   variant = "default",
+  purpose = "general",
   relativeDisplay = false,
-  quickPicks = DEFAULT_QUICK_PICKS,
+  quickPicks,
 }: DatePickerProps) {
+  const isBirth = purpose === "birth";
+  const resolvedQuickPicks = quickPicks ?? (isBirth ? [] : DEFAULT_QUICK_PICKS);
+
   const selected = useMemo(() => parseFlexibleDate(value), [value]);
-  const minDate = useMemo(() => parseFlexibleDate(min) ?? parseISO(min), [min]);
-  const maxDate = useMemo(() => parseFlexibleDate(max) ?? parseISO(max), [max]);
   const today = useMemo(() => {
     const t = new Date();
     return new Date(t.getFullYear(), t.getMonth(), t.getDate());
   }, []);
+
+  const minDate = useMemo(() => {
+    const explicit = parseFlexibleDate(min) ?? parseISO(min);
+    if (explicit) return explicit;
+    if (isBirth) return new Date(today.getFullYear() - BIRTH_YEAR_SPAN, 0, 1);
+    return null;
+  }, [min, isBirth, today]);
+
+  const maxDate = useMemo(() => {
+    const explicit = parseFlexibleDate(max) ?? parseISO(max);
+    if (explicit) return explicit;
+    if (isBirth) return today;
+    return null;
+  }, [max, isBirth, today]);
 
   const [open, setOpen] = useState(false);
   const [viewMonth, setViewMonth] = useState<Date>(() => startOfMonth(selected ?? today));
@@ -154,19 +180,41 @@ export function DatePicker({
 
   useEffect(() => {
     if (open && !initialised.current) {
-      setViewMonth(startOfMonth(selected ?? today));
+      setViewMonth(startOfMonth(selected ?? (isBirth ? new Date(today.getFullYear() - 10, today.getMonth(), 1) : today)));
       initialised.current = true;
     }
     if (!open) initialised.current = false;
-  }, [open, selected, today]);
+  }, [open, selected, today, isBirth]);
 
   const yearOptions = useMemo(() => {
-    const start = (minDate ?? new Date(today.getFullYear() - 10, 0, 1)).getFullYear();
-    const end = (maxDate ?? new Date(today.getFullYear() + 10, 0, 1)).getFullYear();
+    // When only max is set (common for DOB), do not clamp the floor to today−10 —
+    // that made staff/student birth years start at e.g. 2016.
+    let start: number;
+    let end: number;
+    if (minDate) {
+      start = minDate.getFullYear();
+    } else if (maxDate) {
+      start = maxDate.getFullYear() - (isBirth ? BIRTH_YEAR_SPAN : NEAR_YEAR_SPAN);
+    } else {
+      start = today.getFullYear() - NEAR_YEAR_SPAN;
+    }
+    if (maxDate) {
+      end = maxDate.getFullYear();
+    } else if (minDate) {
+      end = minDate.getFullYear() + (isBirth ? BIRTH_YEAR_SPAN : NEAR_YEAR_SPAN);
+    } else {
+      end = today.getFullYear() + NEAR_YEAR_SPAN;
+    }
+    if (selected) {
+      start = Math.min(start, selected.getFullYear());
+      end = Math.max(end, selected.getFullYear());
+    }
+    if (end < start) end = start;
     const years: number[] = [];
-    for (let y = start; y <= end; y++) years.push(y);
+    // Newest first so recent student DOBs are reachable without long scroll.
+    for (let y = end; y >= start; y -= 1) years.push(y);
     return years;
-  }, [minDate, maxDate, today]);
+  }, [minDate, maxDate, today, selected, isBirth]);
 
   const days = useMemo(() => buildMonthGrid(viewMonth), [viewMonth]);
   const isDisabled = (d: Date) => {
@@ -326,32 +374,30 @@ export function DatePicker({
           </div>
         </div>
 
-        {quickPicks.length > 0 && (
-          <div className="flex items-center gap-1 border-t border-[#EEEEEE] px-2.5 py-2 dark:border-white/10">
-            <div className="flex flex-1 items-center gap-1 overflow-hidden">
-              {quickPicks.map((q) => (
-                <button
-                  key={q.label}
-                  type="button"
-                  onClick={() => commit(stripTime(q.getDate(today)))}
-                  className="inline-flex shrink-0 items-center rounded-full border border-[#E5E5E5] bg-white px-2 py-1 text-[10.5px] font-semibold text-black/70 transition hover:border-black hover:bg-black hover:text-white dark:border-white/15 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:border-white/40 dark:hover:bg-zinc-700"
-                >
-                  {q.label}
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                onChange("");
-                setOpen(false);
-              }}
-              className="shrink-0 rounded-full px-2 py-1 text-[10.5px] font-semibold text-black/55 transition hover:bg-[#F4F4F5] hover:text-black dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-zinc-50"
-            >
-              Clear
-            </button>
+        <div className="flex items-center gap-1 border-t border-[#EEEEEE] px-2.5 py-2 dark:border-white/10">
+          <div className="flex flex-1 items-center gap-1 overflow-hidden">
+            {resolvedQuickPicks.map((q) => (
+              <button
+                key={q.label}
+                type="button"
+                onClick={() => commit(stripTime(q.getDate(today)))}
+                className="inline-flex shrink-0 items-center rounded-full border border-[#E5E5E5] bg-white px-2 py-1 text-[10.5px] font-semibold text-black/70 transition hover:border-black hover:bg-black hover:text-white dark:border-white/15 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:border-white/40 dark:hover:bg-zinc-700"
+              >
+                {q.label}
+              </button>
+            ))}
           </div>
-        )}
+          <button
+            type="button"
+            onClick={() => {
+              onChange("");
+              setOpen(false);
+            }}
+            className="shrink-0 rounded-full px-2 py-1 text-[10.5px] font-semibold text-black/55 transition hover:bg-[#F4F4F5] hover:text-black dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-zinc-50"
+          >
+            Clear
+          </button>
+        </div>
       </PopoverContent>
     </Popover>
   );

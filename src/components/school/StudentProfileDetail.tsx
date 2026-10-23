@@ -2121,8 +2121,7 @@ function MetaField({
               placeholder={placeholder ?? "Pick a date"}
               valueFormat="iso"
               variant="pill"
-              quickPicks={[]}
-              min="1990-01-01"
+              purpose="birth"
               max={todayISO()}
               className="h-9 bg-white"
             />

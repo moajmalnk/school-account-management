@@ -494,8 +494,10 @@ function StaffCollectPage() {
                 <Field className="col-span-12 sm:col-span-6" label="Date of birth" error={errors.dob}>
                   <DatePicker
                     value={form.dob}
+                    purpose="birth"
                     max={todayISO()}
                     onChange={(dob) => patch({ dob: dob ?? "" })}
+                    placeholder="Select date of birth"
                   />
                 </Field>
                 <Field className="col-span-12 sm:col-span-6" label="Email" error={errors.email}>

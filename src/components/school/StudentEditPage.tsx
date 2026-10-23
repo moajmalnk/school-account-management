@@ -836,8 +836,7 @@ export function StudentEditPage() {
                 placeholder="14 Mar 2012"
                 valueFormat="iso"
                 variant="pill"
-                quickPicks={[]}
-                min="1990-01-01"
+                purpose="birth"
                 max={todayISO()}
                 className="h-9 w-full"
               />

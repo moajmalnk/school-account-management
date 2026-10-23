@@ -381,8 +381,7 @@ export function StaffEditPage() {
                 placeholder="Select date"
                 valueFormat="iso"
                 variant="pill"
-                quickPicks={[]}
-                min="1940-01-01"
+                purpose="birth"
                 max={todayISO()}
                 className="h-9 w-full"
               />
