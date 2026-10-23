@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { motion, useInView, useReducedMotion } from "motion/react";
 
 import { easeOutExpo } from "@/components/marketing/motion";
 import { MARKETING } from "@/lib/marketing-content";
+import { cn } from "@/lib/utils";
 
 const { problems, showcase } = MARKETING;
 
@@ -63,62 +65,197 @@ function StatPill({
   );
 }
 
-function ShowcaseCard({
-  item,
-  index,
-  featured = false,
-}: {
-  item: (typeof showcase.items)[number];
-  index: number;
-  featured?: boolean;
-}) {
+/** App Store–style single-row screenshot strip */
+function ShowcaseStrip() {
+  const scrollerRef = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
+  const [canPrev, setCanPrev] = useState(false);
+  const [canNext, setCanNext] = useState(true);
+  const [active, setActive] = useState(0);
+  const total = showcase.items.length;
+
+  const sync = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+
+    const maxScroll = Math.max(0, el.scrollWidth - el.clientWidth);
+    setCanPrev(el.scrollLeft > 6);
+    setCanNext(el.scrollLeft < maxScroll - 6);
+
+    const cards = Array.from(el.querySelectorAll<HTMLElement>("[data-shot]"));
+    if (!cards.length) return;
+
+    const scrollerBox = el.getBoundingClientRect();
+    // Prefer the card closest to the left padding edge (App Store primary shot)
+    const targetX = scrollerBox.left + 20;
+    let best = 0;
+    let bestDist = Infinity;
+
+    cards.forEach((card, i) => {
+      const box = card.getBoundingClientRect();
+      const dist = Math.abs(box.left - targetX);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = i;
+      }
+    });
+
+    // At end of strip, lock to last shot
+    if (maxScroll > 0 && el.scrollLeft >= maxScroll - 12) {
+      best = cards.length - 1;
+    }
+
+    setActive(best);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    sync();
+    el.addEventListener("scroll", sync, { passive: true });
+    window.addEventListener("resize", sync);
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(sync) : null;
+    ro?.observe(el);
+    return () => {
+      el.removeEventListener("scroll", sync);
+      window.removeEventListener("resize", sync);
+      ro?.disconnect();
+    };
+  }, [sync]);
+
+  const scrollToIndex = useCallback(
+    (index: number) => {
+      const el = scrollerRef.current;
+      if (!el) return;
+      const cards = el.querySelectorAll<HTMLElement>("[data-shot]");
+      const card = cards[Math.max(0, Math.min(index, cards.length - 1))];
+      if (!card) return;
+
+      const pad = Number.parseFloat(getComputedStyle(el).paddingLeft) || 0;
+      const delta =
+        card.getBoundingClientRect().left - el.getBoundingClientRect().left - pad;
+      el.scrollTo({
+        left: Math.max(0, el.scrollLeft + delta),
+        behavior: reduce ? "auto" : "smooth",
+      });
+      setActive(index);
+    },
+    [reduce],
+  );
+
+  const scrollByCard = (dir: -1 | 1) => {
+    scrollToIndex(active + dir);
+  };
 
   return (
-    <motion.figure
-      className={featured ? "mx-auto w-full max-w-[22rem] sm:max-w-[26rem] lg:max-w-[28rem]" : "w-full"}
-      initial={reduce ? false : { opacity: 0, y: 28 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-50px" }}
-      transition={{ duration: 0.7, ease: easeOutExpo, delay: Math.min(index, 3) * 0.07 }}
-    >
-      <motion.div
-        className="relative"
-        whileHover={reduce ? undefined : { y: -4 }}
-        transition={{ type: "spring", stiffness: 320, damping: 28 }}
-      >
-        {/* Soft ambient glow — elegant depth without a heavy card chrome */}
-        <div
-          className="pointer-events-none absolute -inset-5 rounded-[2.5rem] opacity-70 sm:-inset-7"
-          style={{
-            background:
-              "radial-gradient(ellipse 70% 60% at 50% 55%, rgba(143,202,74,0.18) 0%, transparent 72%)",
-          }}
-          aria-hidden
-        />
-        <div className="relative overflow-hidden rounded-[1.35rem] bg-white/40 shadow-[0_30px_80px_-48px_rgba(26,28,44,0.55)] ring-1 ring-black/[0.04] sm:rounded-[1.6rem]">
-          <img
-            src={item.image}
-            alt={item.alt}
-            width={768}
-            height={1024}
-            className="h-auto w-full object-cover object-top"
-            loading={index < 2 ? "eager" : "lazy"}
-            decoding="async"
-            fetchPriority={index === 0 ? "high" : "auto"}
-          />
-        </div>
-      </motion.div>
+    <div className="relative mt-10 sm:mt-12 lg:mt-14">
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-[#fafdf7] to-transparent transition-opacity sm:w-14",
+          canPrev ? "opacity-100" : "opacity-0",
+        )}
+        aria-hidden
+      />
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-[#fafdf7] to-transparent transition-opacity sm:w-14",
+          canNext ? "opacity-100" : "opacity-0",
+        )}
+        aria-hidden
+      />
 
-      <figcaption className="mt-5 text-center sm:mt-6">
-        <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-[var(--mkt-green-deep)]/90">
-          {item.eyebrow}
-        </p>
-        <p className="mx-auto mt-1.5 max-w-[18rem] text-[14px] font-medium leading-snug text-[var(--mkt-ink)]/80 sm:text-[15px]">
-          {item.headline}
-        </p>
-      </figcaption>
-    </motion.figure>
+      <button
+        type="button"
+        onClick={() => scrollByCard(-1)}
+        disabled={!canPrev}
+        aria-label="Previous screenshot"
+        className={cn(
+          "absolute left-2 top-[42%] z-20 hidden h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-[var(--mkt-line)] bg-white/95 text-[var(--mkt-ink)] shadow-md backdrop-blur-sm transition enabled:hover:scale-105 enabled:hover:bg-white md:grid",
+          !canPrev && "pointer-events-none opacity-0",
+        )}
+      >
+        <ChevronLeft className="h-5 w-5" strokeWidth={1.75} />
+      </button>
+      <button
+        type="button"
+        onClick={() => scrollByCard(1)}
+        disabled={!canNext}
+        aria-label="Next screenshot"
+        className={cn(
+          "absolute right-2 top-[42%] z-20 hidden h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-[var(--mkt-line)] bg-white/95 text-[var(--mkt-ink)] shadow-md backdrop-blur-sm transition enabled:hover:scale-105 enabled:hover:bg-white md:grid",
+          !canNext && "pointer-events-none opacity-0",
+        )}
+      >
+        <ChevronRight className="h-5 w-5" strokeWidth={1.75} />
+      </button>
+
+      <div
+        ref={scrollerRef}
+        className="mkt-showcase-strip flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain px-[max(1.25rem,calc((100vw-72rem)/2+1.25rem))] pb-2 pt-1 sm:gap-4 sm:px-[max(2rem,calc((100vw-72rem)/2+2rem))]"
+        role="list"
+        aria-label="App screenshots"
+      >
+        {showcase.items.map((item, index) => (
+          <motion.figure
+            key={item.id}
+            data-shot
+            data-index={index}
+            role="listitem"
+            className="mkt-showcase-shot relative shrink-0 snap-start"
+            initial={reduce ? false : { opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-40px" }}
+            transition={{ duration: 0.55, ease: easeOutExpo, delay: Math.min(index, 4) * 0.05 }}
+          >
+            <div className="h-full overflow-hidden rounded-[1.15rem] bg-white shadow-[0_18px_48px_-28px_rgba(26,28,44,0.45)] ring-1 ring-black/[0.05] sm:rounded-[1.35rem]">
+              <img
+                src={item.image}
+                alt={item.alt}
+                width={1080}
+                height={1920}
+                className="h-full w-full object-cover object-top"
+                loading={index < 2 ? "eager" : "lazy"}
+                decoding="async"
+                draggable={false}
+                fetchPriority={index === 0 ? "high" : "auto"}
+              />
+            </div>
+            <figcaption className="sr-only">
+              {item.eyebrow}: {item.headline}
+            </figcaption>
+          </motion.figure>
+        ))}
+        {/* End spacer — lets last card snap fully into view */}
+        <div className="w-[12vw] shrink-0 sm:w-[18vw]" aria-hidden />
+      </div>
+
+      {/* Page dots — one per screenshot, synced to scroll */}
+      <div
+        className="mt-7 flex items-center justify-center gap-2"
+        role="tablist"
+        aria-label="Screenshot pages"
+      >
+        {showcase.items.map((item, i) => {
+          const isActive = i === active;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              aria-label={`${i + 1} of ${total}: ${item.eyebrow}`}
+              onClick={() => scrollToIndex(i)}
+              className={cn(
+                "rounded-full transition-all duration-300 ease-out",
+                isActive
+                  ? "h-2 w-6 bg-[var(--mkt-green-deep)] shadow-[0_0_0_3px_rgba(107,168,50,0.18)]"
+                  : "h-2 w-2 bg-[var(--mkt-ink)]/20 hover:bg-[var(--mkt-ink)]/40",
+              )}
+            />
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -185,7 +322,7 @@ export function HowItWorks() {
         </div>
       </div>
 
-      {/* Showcase — full-bleed elegance */}
+      {/* Showcase — App Store listing strip */}
       <div className="relative mt-20 sm:mt-24 lg:mt-28">
         <motion.div
           className="mx-auto max-w-2xl px-5 text-center sm:px-8"
@@ -202,15 +339,7 @@ export function HowItWorks() {
           </h3>
         </motion.div>
 
-        <div className="mt-12 sm:mt-14 lg:mt-16">
-          <ShowcaseCard item={showcase.items[0]} index={0} featured />
-        </div>
-
-        <div className="mx-auto mt-12 grid max-w-5xl grid-cols-1 gap-12 px-5 sm:mt-16 sm:grid-cols-2 sm:gap-x-10 sm:gap-y-14 sm:px-8 lg:mt-20 lg:gap-x-14 lg:gap-y-16 lg:px-10">
-          {showcase.items.slice(1).map((item, index) => (
-            <ShowcaseCard key={item.id} item={item} index={index + 1} />
-          ))}
-        </div>
+        <ShowcaseStrip />
       </div>
     </section>
   );

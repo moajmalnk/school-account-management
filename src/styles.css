@@ -260,21 +260,82 @@
   will-change: auto;
 }
 
-@keyframes mkt-testimonial-marquee {
-  0% {
-    transform: translate3d(-50%, 0, 0);
+/* App Store–style showcase strip: one row, snap scroll, peek next shot */
+.mkt-showcase-strip {
+  -webkit-overflow-scrolling: touch;
+  scroll-padding-inline: max(1.25rem, calc((100vw - 72rem) / 2 + 1.25rem));
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.mkt-showcase-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.mkt-showcase-shot {
+  /* Larger shots so ~2–3 peek — forces scroll like App Store */
+  height: min(64vh, 480px);
+  width: calc(min(64vh, 480px) * 9 / 16);
+}
+
+@media (min-width: 640px) {
+  .mkt-showcase-strip {
+    scroll-padding-inline: max(2rem, calc((100vw - 72rem) / 2 + 2rem));
   }
-  100% {
+  .mkt-showcase-shot {
+    height: min(68vh, 560px);
+    width: calc(min(68vh, 560px) * 9 / 16);
+  }
+}
+
+@media (min-width: 1024px) {
+  .mkt-showcase-shot {
+    height: min(70vh, 620px);
+    width: calc(min(70vh, 620px) * 9 / 16);
+  }
+}
+
+@media (max-width: 380px) {
+  .mkt-showcase-shot {
+    height: min(58vh, 400px);
+    width: calc(min(58vh, 400px) * 9 / 16);
+  }
+}
+
+/* Seamless full-bleed testimonial marquee — track is 2 identical halves */
+@keyframes mkt-testimonial-marquee {
+  from {
     transform: translate3d(0, 0, 0);
   }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.mkt-testimonial-viewport {
+  width: 100%;
+  overflow: hidden;
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    #000 4%,
+    #000 96%,
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    #000 4%,
+    #000 96%,
+    transparent 100%
+  );
 }
 
 .mkt-testimonial-track {
   display: flex;
   width: max-content;
-  gap: 1.25rem;
-  padding-inline: 1.25rem;
-  animation: mkt-testimonial-marquee 52s linear infinite;
+  gap: 0;
+  padding-block: 0.25rem;
+  animation: mkt-testimonial-marquee 45s linear infinite;
   will-change: transform;
 }
 
@@ -282,13 +343,37 @@
   animation-play-state: paused;
 }
 
+.mkt-testimonial-half {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 1.25rem;
+  /* Trailing gap baked into each half so -50% loop stays seamless */
+  padding-right: 1.25rem;
+}
+
+.mkt-testimonial-slide {
+  flex: 0 0 auto;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .mkt-testimonial-viewport {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    mask-image: none;
+    -webkit-mask-image: none;
+  }
+
+  .mkt-testimonial-viewport::-webkit-scrollbar {
+    display: none;
+  }
+
   .mkt-testimonial-track {
     animation: none;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
+    gap: 1.25rem;
     padding-inline: 1.25rem;
-    -webkit-overflow-scrolling: touch;
   }
 
   .mkt-testimonial-slide {
