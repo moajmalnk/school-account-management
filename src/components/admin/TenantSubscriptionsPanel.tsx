@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/select";
 import { ApiError } from "@/lib/api/client";
 import {
+  deleteSuperAdminTenantInvoice,
   fetchSuperAdminTenantInvoices,
   issueSuperAdminTenantInvoice,
   voidSuperAdminTenantInvoice,
@@ -116,7 +117,9 @@ export function TenantSubscriptionsPanel({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [voiding, setVoiding] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [pendingVoid, setPendingVoid] = useState<PlatformInvoice | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<PlatformInvoice | null>(null);
   const [preview, setPreview] = useState<{ kind: PlatformDocKind; invoice: PlatformInvoice } | null>(
     null,
   );
@@ -238,6 +241,27 @@ export function TenantSubscriptionsPanel({
       toast.error("Void failed", { description: msg });
     } finally {
       setVoiding(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      const result = await deleteSuperAdminTenantInvoice({
+        tenantId,
+        invoiceId: pendingDelete.id,
+      });
+      toast.success("Collection deleted", {
+        description: result.invoiceNumber || pendingDelete.invoiceNumber,
+      });
+      setPendingDelete(null);
+      await load();
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Could not delete this collection";
+      toast.error("Delete failed", { description: msg });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -392,7 +416,8 @@ export function TenantSubscriptionsPanel({
         <div className="border-b border-[#F0F0F0] px-4 py-3">
           <div className="text-[13px] font-semibold text-black">Collections</div>
           <p className="mt-0.5 text-[12px] text-black/50">
-            Latest payment sets the renewal date on the school Subscriptions page.
+            Latest paid collection sets renewal. Void cancels it but keeps the record; Delete
+            removes it forever.
           </p>
         </div>
         {loading ? (
@@ -408,8 +433,13 @@ export function TenantSubscriptionsPanel({
             {rows.map((row) => {
               const voided = row.status === "Void";
               return (
-                <li key={row.id} className={cn("px-4 py-3", voided && "opacity-60")}>
-                  <div className="flex flex-wrap items-start justify-between gap-2">
+                <li key={row.id} className="px-4 py-3">
+                  <div
+                    className={cn(
+                      "flex flex-wrap items-start justify-between gap-2",
+                      voided && "opacity-55",
+                    )}
+                  >
                     <div className="min-w-0">
                       <div className="truncate text-[13px] font-semibold text-black">
                         {row.periodLabel || row.invoiceNumber}
@@ -419,6 +449,7 @@ export function TenantSubscriptionsPanel({
                         {row.nextDueDate ? ` · next ${pretty(row.nextDueDate)}` : ""}
                         {row.paymentMethod ? ` · ${row.paymentMethod}` : ""}
                         {row.paymentRef ? ` · ${row.paymentRef}` : ""}
+                        {voided ? " · cancelled (kept for history)" : ""}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -468,6 +499,15 @@ export function TenantSubscriptionsPanel({
                         Void
                       </Button>
                     )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 rounded-full border-[#FECACA] bg-white px-2.5 text-[11px] font-semibold text-[#B91C1C] hover:bg-[#FEF2F2] hover:text-[#991B1B]"
+                      onClick={() => setPendingDelete(row)}
+                    >
+                      Delete
+                    </Button>
                   </div>
                 </li>
               );
@@ -498,6 +538,41 @@ export function TenantSubscriptionsPanel({
             >
               {voiding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
               Void collection
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(pendingDelete)}
+        onOpenChange={(open) => !open && !deleting && setPendingDelete(null)}
+      >
+        <DialogContent className="max-w-sm rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Delete this collection?</DialogTitle>
+            <DialogDescription>
+              {pendingDelete
+                ? `${pendingDelete.invoiceNumber} for ${formatMoney(pendingDelete.total, pendingDelete.currency || currency)} will be permanently removed. This cannot be undone.`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={deleting}
+              onClick={() => setPendingDelete(null)}
+            >
+              Keep
+            </Button>
+            <Button
+              type="button"
+              className="bg-[#B91C1C] text-white hover:bg-[#991B1B]"
+              disabled={deleting}
+              onClick={() => void confirmDelete()}
+            >
+              {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              Delete permanently
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -10,6 +10,16 @@ export type Tenant = {
   status: Status;
   students: number;
   capacity: number;
+  /** Active staff count (from registry list). */
+  staffCount?: number;
+  /** Branch count (from registry list). */
+  branchCount?: number;
+  /** Plan list price INR / month. */
+  monthlyPriceInr?: number;
+  /** MRR counted when Active or Trial. */
+  mrrContribution?: number;
+  /** Seat fill % (students / capacity). */
+  seatUtilizationPct?: number;
   createdAt: string;
   /** Primary school admin login email (username). */
   adminEmail?: string;

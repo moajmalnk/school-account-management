@@ -1741,3 +1741,64 @@ html.dark.school-brand [data-feezo-global-search] [cmdk-item][data-selected="tru
   background-color: rgba(24, 24, 27, 0.9) !important;
   color: #5eead4 !important;
 }
+
+/* ── Feezo Family (parents app) ─────────────────────────────────────────── */
+.family-app {
+  --family-ink: #1a1a4b;
+  --family-ink-muted: #6b6b8d;
+  --family-page: #f8f9ff;
+  --family-surface: #ffffff;
+  --family-mint: #e0f5ed;
+  --family-mint-deep: #2f9e7a;
+  --family-lavender: #ebe8ff;
+  --family-lavender-deep: #6b5ce7;
+  --family-cream: #fff4d6;
+  --family-cream-deep: #d4920a;
+  --family-sky: #e3f0ff;
+  --family-sky-deep: #3b82c4;
+  --family-pink: #ffe8ec;
+  --family-pink-deep: #e05a6c;
+  --family-yellow: #ffc542;
+  --family-yellow-press: #f0b429;
+  --family-whatsapp: #25d366;
+  --family-call: #3b82f6;
+  --family-radius-card: 24px;
+  --family-radius-tile: 22px;
+  --family-radius-pill: 9999px;
+  --family-shadow: 0 10px 30px -12px rgba(26, 26, 75, 0.12);
+  --family-shadow-nav: 0 -4px 24px rgba(26, 26, 75, 0.08), 0 8px 24px rgba(26, 26, 75, 0.06);
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  color: var(--family-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+.family-app.dark,
+.family-app .dark {
+  --family-ink: #f0f0ff;
+  --family-ink-muted: #a0a0c0;
+  --family-page: #12122a;
+  --family-surface: #1c1c38;
+  --family-mint: #1a3d34;
+  --family-lavender: #2a2850;
+  --family-cream: #3d3420;
+  --family-sky: #1a2e44;
+  --family-pink: #3d2228;
+}
+
+.family-app-shell {
+  background-color: var(--family-page);
+  background-image:
+    radial-gradient(ellipse 70% 55% at 8% 5%, rgba(125, 211, 252, 0.45), transparent 58%),
+    radial-gradient(ellipse 55% 45% at 92% 8%, rgba(196, 181, 253, 0.4), transparent 52%),
+    radial-gradient(ellipse 50% 50% at 78% 72%, rgba(253, 186, 116, 0.22), transparent 55%),
+    radial-gradient(ellipse 45% 40% at 18% 85%, rgba(110, 231, 183, 0.28), transparent 50%);
+}
+
+.family-app.dark .family-app-shell,
+.dark .family-app-shell {
+  background-image:
+    radial-gradient(ellipse 70% 55% at 8% 5%, rgba(15, 118, 110, 0.18), transparent 58%),
+    radial-gradient(ellipse 55% 45% at 92% 8%, rgba(99, 102, 241, 0.16), transparent 52%),
+    radial-gradient(ellipse 50% 50% at 78% 72%, rgba(30, 41, 59, 0.4), transparent 55%),
+    radial-gradient(ellipse 45% 40% at 18% 85%, rgba(15, 118, 110, 0.12), transparent 50%);
+}

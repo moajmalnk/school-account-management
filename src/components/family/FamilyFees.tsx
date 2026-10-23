@@ -2,8 +2,12 @@ import { CalendarDays, Check, FileText, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { FamilyCard, FamilyHeader, FamilySkeleton } from "@/components/family/FamilyChrome";
-import { Button } from "@/components/ui/button";
+import {
+  FamilyCard,
+  FamilyHeader,
+  FamilyPillButton,
+  FamilySkeleton,
+} from "@/components/family/FamilyChrome";
 import {
   familyFeeOrder,
   familyFeeResume,
@@ -186,7 +190,7 @@ export function FamilyFees() {
   }
 
   if (!student) return <p className="px-4 pt-6 text-sm">No student is linked yet.</p>;
-  if (error) return <p className="px-4 pt-4 text-sm text-rose-600">{error}</p>;
+  if (error) return <p className="px-4 pt-4 text-sm text-[var(--family-pink-deep)]">{error}</p>;
   if (!data) {
     return (
       <>
@@ -208,32 +212,26 @@ export function FamilyFees() {
     <div className="flex min-h-0 flex-1 flex-col">
       <FamilyHeader showBell={false} />
       <div className="shrink-0 space-y-3 px-4 pb-3">
-        <div>
-          <h1 className="text-lg font-semibold">Fee installments</h1>
-          <p className="mt-0.5 text-xs text-slate-500">
-            Pay online securely via Cashfree
-          </p>
-        </div>
         {tab === "due" && visible.length > 0 ? (
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-[#FFF1E6] px-3 py-1.5 text-xs font-semibold text-[#E07A2F] dark:bg-orange-950 dark:text-orange-200">
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-[var(--family-cream)] px-3 py-1.5 text-xs font-bold text-[var(--family-cream-deep)]">
             <CalendarDays className="h-3.5 w-3.5" />
             Next due: {nextDue ? dueLabel(nextDue) : "Due now"}
           </div>
         ) : null}
-        <div className="flex gap-2">
+        <div className="flex gap-2 rounded-2xl bg-[var(--family-lavender)]/50 p-1 dark:bg-[var(--family-lavender)]">
           {(["due", "paid", "receipts"] as const).map((item) => (
             <button
               key={item}
               type="button"
               onClick={() => setTab(item)}
               className={cn(
-                "rounded-full px-4 py-2 text-xs font-semibold",
+                "flex-1 rounded-xl px-3 py-2.5 text-xs font-bold transition",
                 tab === item
-                  ? "bg-[#0F766E] text-white"
-                  : "bg-white text-slate-600 dark:bg-zinc-900 dark:text-zinc-300",
+                  ? "bg-[var(--family-yellow)] text-[var(--family-ink)] shadow-sm"
+                  : "text-[var(--family-ink-muted)]",
               )}
             >
-              {item === "due" ? "Due Fees" : item === "paid" ? "Paid Fees" : "Receipts Fees"}
+              {item === "due" ? "Due" : item === "paid" ? "Paid" : "Receipts"}
             </button>
           ))}
         </div>
@@ -242,29 +240,31 @@ export function FamilyFees() {
         {tab === "receipts" ? (
           data.receipts.length === 0 ? (
             <FamilyCard>
-              <p className="text-sm text-slate-500">No receipts yet.</p>
+              <p className="text-sm text-[var(--family-ink-muted)]">No receipts yet.</p>
             </FamilyCard>
           ) : (
             data.receipts.map((receipt) => (
-              <FamilyCard key={receipt.id} className="flex items-center justify-between py-3">
+              <FamilyCard key={receipt.id} className="flex items-center justify-between !py-3">
                 <div>
-                  <p className="text-sm font-medium">{receipt.id}</p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-sm font-bold">{receipt.id}</p>
+                  <p className="text-xs text-[var(--family-ink-muted)]">
                     {receipt.date} · {receipt.category || receipt.mode}
                   </p>
                 </div>
-                <p className="text-sm font-semibold">{money(receipt.amount, data.currency)}</p>
+                <p className="text-sm font-extrabold">{money(receipt.amount, data.currency)}</p>
               </FamilyCard>
             ))
           )
         ) : visible.length === 0 ? (
           <FamilyCard>
-            <p className="text-sm text-slate-500">{tab === "due" ? "Nothing is due." : "No paid fees in this view."}</p>
+            <p className="text-sm text-[var(--family-ink-muted)]">
+              {tab === "due" ? "Nothing is due." : "No paid fees in this view."}
+            </p>
           </FamilyCard>
         ) : (
           groups.map((group) => (
             <section key={group.label} className="space-y-3">
-              <h2 className="text-sm font-semibold">{group.label}</h2>
+              <h2 className="text-sm font-bold text-[var(--family-ink)]">{group.label}</h2>
               {group.lines.map((line) => {
                 const on = selected.includes(line.key);
                 const orderId = line.checkoutOrderId ?? "";
@@ -272,12 +272,12 @@ export function FamilyFees() {
                 const body = (
                   <>
                     <span className="flex items-start gap-3">
-                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-slate-500 dark:bg-zinc-900 dark:text-zinc-300">
+                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-[var(--family-cream-deep)] shadow-sm dark:bg-[var(--family-surface)]">
                         <FileText className="h-4 w-4" />
                       </span>
                       <span className="min-w-0 flex-1 pt-0.5">
-                        <span className="block text-sm font-semibold">{line.label}</span>
-                        <span className="mt-0.5 block text-xs text-slate-500 dark:text-zinc-400">
+                        <span className="block text-sm font-bold">{line.label}</span>
+                        <span className="mt-0.5 block text-xs text-[var(--family-ink-muted)]">
                           {[student.cls, data.academicYear].filter(Boolean).join(" · ")}
                           {line.locked ? " · Payment in progress" : ""}
                         </span>
@@ -286,7 +286,9 @@ export function FamilyFees() {
                         <span
                           className={cn(
                             "mt-1 grid h-6 w-6 shrink-0 place-items-center rounded-full border-2",
-                            on ? "border-[#0F766E] bg-[#0F766E] text-white" : "border-slate-300 bg-white/70 dark:border-zinc-500 dark:bg-transparent",
+                            on
+                              ? "border-[var(--family-lavender-deep)] bg-[var(--family-lavender-deep)] text-white"
+                              : "border-[#C8CAD8] bg-white/70 dark:border-zinc-500 dark:bg-transparent",
                           )}
                         >
                           {on ? <Check className="h-3.5 w-3.5" /> : null}
@@ -295,36 +297,42 @@ export function FamilyFees() {
                     </span>
                     <span className="mt-4 flex items-end justify-between gap-3 pl-[3.25rem]">
                       <span>
-                        <span className="block text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                        <span className="block text-[10px] font-bold uppercase tracking-wide text-[var(--family-ink-muted)]">
                           {tab === "due" ? "Due date" : "Status"}
                         </span>
-                        <span className={cn("mt-0.5 block text-sm font-semibold", tab === "due" && "text-[#E11D48]")}>
+                        <span
+                          className={cn(
+                            "mt-0.5 block text-sm font-bold",
+                            tab === "due" && "text-[var(--family-pink-deep)]",
+                          )}
+                        >
                           {tab === "due" ? dueLabel(line.dueDate) : line.status}
                         </span>
                       </span>
                       <span className="text-right">
-                        <span className="block text-[10px] font-medium uppercase tracking-wide text-slate-400">Amount</span>
-                        <span className="mt-0.5 block text-sm font-semibold">
+                        <span className="block text-[10px] font-bold uppercase tracking-wide text-[var(--family-ink-muted)]">
+                          Amount
+                        </span>
+                        <span className="mt-0.5 block text-sm font-extrabold">
                           {money(tab === "due" ? line.balance : line.paid, data.currency)}
                         </span>
                       </span>
                     </span>
                     {showResume ? (
-                      <button
-                        type="button"
+                      <FamilyPillButton
+                        className="mt-3 h-10 w-full text-[13px]"
                         disabled={busy}
                         onClick={() => void resume(orderId)}
-                        className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-2xl bg-[#0F766E] text-[13px] font-semibold text-white disabled:opacity-60"
                       >
                         {resumingId === orderId ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                         Continue payment
-                      </button>
+                      </FamilyPillButton>
                     ) : null}
                   </>
                 );
                 const cardClass = cn(
-                  "w-full rounded-[22px] p-4 text-left",
-                  on ? "bg-[#F0FDFA] dark:bg-teal-950" : "bg-[#F8E6D4] dark:bg-orange-950/50",
+                  "w-full rounded-[22px] p-4 text-left shadow-[var(--family-shadow)] transition",
+                  on ? "bg-[var(--family-lavender)]" : "bg-[var(--family-cream)]",
                   tab === "due" && !line.selectable && !line.locked && "opacity-70",
                 );
                 if (line.locked) {
@@ -351,26 +359,25 @@ export function FamilyFees() {
         )}
       </div>
       {tab === "due" && selected.length > 0 ? (
-        <div className="mx-4 mb-3 shrink-0 rounded-[22px] bg-white px-4 py-3 shadow-xl dark:bg-zinc-900">
+        <div className="mx-4 mb-3 shrink-0 rounded-[22px] bg-white px-4 py-3 shadow-[var(--family-shadow-nav)] dark:bg-[var(--family-surface)]">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--family-ink-muted)]">
                 {selected.length} selected
               </p>
-              <p className="text-lg font-semibold">{money(total, data.currency)}</p>
+              <p className="text-lg font-extrabold">{money(total, data.currency)}</p>
             </div>
-            <Button
-              type="button"
+            <FamilyPillButton
               disabled={busy || !data.payEnabled}
               onClick={() => void pay()}
-              className="rounded-full bg-[#0F766E] px-5 text-white hover:bg-[#115E59]"
+              className="px-5"
             >
-              {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               Pay now
-            </Button>
+            </FamilyPillButton>
           </div>
           {!data.payEnabled ? (
-            <p className="mt-2 text-xs text-slate-500">Online payment is turned off for this school.</p>
+            <p className="mt-2 text-xs text-[var(--family-ink-muted)]">Online payment is turned off for this school.</p>
           ) : null}
         </div>
       ) : null}

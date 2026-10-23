@@ -30,9 +30,10 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { ApiError } from "@/lib/api/client";
 import {
+  SUBSCRIPTION_CHECKOUT_PATH,
   confirmSubscriptionCheckout,
   fetchTenantSubscription,
-  releaseSubscriptionCheckout,
+  resumeSubscriptionCheckout,
   startSubscriptionCheckout,
   type TenantSubscription,
 } from "@/lib/api/subscription";
@@ -351,41 +352,77 @@ export function TenantSubscriptionPanel({
     });
   };
 
+  async function finishPaid(orderId: string) {
+    const paid = await confirmSubscriptionCheckout(orderId);
+    toast.success("Plan renewed", {
+      description: paid.receiptNumber
+        ? `Receipt ${paid.receiptNumber}. Next due ${paid.nextDueDate}.`
+        : "Cashfree confirmed this invoice.",
+    });
+    setRenewOpen(false);
+    await load();
+  }
+
+  async function runCheckout(paymentSessionId: string, orderId: string) {
+    const outcome = await openCashfreeCheckout(
+      paymentSessionId,
+      checkoutReturnUrl(SUBSCRIPTION_CHECKOUT_PATH, orderId),
+    );
+    if (outcome === "redirect") return;
+    if (outcome === "closed") {
+      toast.message("Payment in progress", {
+        description: "Tap Continue payment on this page to finish checkout.",
+      });
+      await load();
+      return;
+    }
+    await finishPaid(orderId);
+  }
+
   const completePayment = (selectedCycle: SubscriptionCycle) => {
     if (payingRef.current) return;
     payingRef.current = true;
     setPaying(true);
     void (async () => {
-      let orderId = "";
-      let reportedPaid = false;
       try {
         const order = await startSubscriptionCheckout(selectedCycle);
-        orderId = order.orderId;
         setRenewOpen(false);
-        const outcome = await openCashfreeCheckout(
-          order.paymentSessionId,
-          checkoutReturnUrl("/tenant/settings?tab=subscription", order.orderId),
-        );
-        if (outcome === "redirect") return;
-        if (outcome === "closed") {
-          await releaseSubscriptionCheckout(order.orderId);
-          toast.error("Payment was not completed");
+        if (order.paid || !order.paymentSessionId) {
+          await finishPaid(order.orderId);
           return;
         }
-        reportedPaid = true;
-        const paid = await confirmSubscriptionCheckout(order.orderId);
-        toast.success("Plan renewed", {
-          description: paid.receiptNumber
-            ? `Receipt ${paid.receiptNumber}. Next due ${paid.nextDueDate}.`
-            : "Cashfree confirmed this invoice.",
-        });
-        setRenewOpen(false);
-        await load();
+        await runCheckout(order.paymentSessionId, order.orderId);
       } catch (err) {
-        if (orderId && !reportedPaid) {
-          await releaseSubscriptionCheckout(orderId).catch(() => undefined);
+        toast.error(
+          err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Could not start payment",
+        );
+        await load();
+      } finally {
+        payingRef.current = false;
+        setPaying(false);
+      }
+    })();
+  };
+
+  const continuePayment = () => {
+    const pending = data?.pendingCheckout;
+    if (!pending?.orderId || payingRef.current) return;
+    payingRef.current = true;
+    setPaying(true);
+    void (async () => {
+      try {
+        const order = await resumeSubscriptionCheckout(pending.orderId);
+        if (order.paid || !order.paymentSessionId) {
+          await finishPaid(order.orderId);
+          return;
         }
-        toast.error(err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Could not start payment");
+        await runCheckout(order.paymentSessionId, order.orderId);
+      } catch (err) {
+        const expired = err instanceof ApiError && (err.status === 409 || err.status === 404);
+        toast.error(expired ? "This payment expired" : "Could not reopen the payment", {
+          description: err instanceof ApiError ? err.message : "Tap Renew and pay again.",
+        });
+        await load();
       } finally {
         payingRef.current = false;
         setPaying(false);
@@ -458,7 +495,57 @@ export function TenantSubscriptionPanel({
         </SheetContent>
       </Sheet>
 
-      {showAlert && !loading ? (
+      {!loading && data?.pendingCheckout ? (
+        <div className="space-y-2">
+          <h3 className="text-[14px] font-semibold text-black dark:text-zinc-50">
+            {data.pendingCheckout.invoiceNumber
+              ? `Invoice ${data.pendingCheckout.invoiceNumber}`
+              : `${planName} renewal`}
+          </h3>
+          <div className="rounded-[22px] bg-[#FFF4D6] p-4 shadow-[0_10px_30px_-12px_rgba(26,26,75,0.12)] dark:bg-[#3d3420]/80">
+            <div className="flex items-start gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-[#D4920A] shadow-sm dark:bg-zinc-900">
+                <FileText className="h-4 w-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-black dark:text-zinc-50">
+                  {planName} plan · {data.pendingCheckout.billingCycle}
+                </p>
+                <p className="mt-0.5 text-xs text-black/50 dark:text-zinc-400">
+                  {schoolLabel} · Payment in progress
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 flex items-end justify-between gap-3 pl-[3.25rem]">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wide text-black/40 dark:text-zinc-500">
+                  Status
+                </p>
+                <p className="mt-0.5 text-sm font-semibold text-[#E11D48]">Due now</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-black/40 dark:text-zinc-500">
+                  Amount
+                </p>
+                <p className="mt-0.5 text-sm font-extrabold text-black dark:text-zinc-50">
+                  {formatMoney(data.pendingCheckout.amount, currency)}
+                </p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              disabled={paying}
+              onClick={() => continuePayment()}
+              className="mt-3 h-11 w-full rounded-2xl bg-[#FFC542] text-[13px] font-bold text-[#1A1A4B] hover:bg-[#F0B429]"
+            >
+              {paying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Continue payment
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {showAlert && !loading && !data?.pendingCheckout ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#FFF4E5] px-4 py-3 dark:bg-[#C2410C]/20">
           <div className="flex min-w-0 items-start gap-2.5">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#C2410C]" />
@@ -548,14 +635,27 @@ export function TenantSubscriptionPanel({
                   {displayStatus}
                 </span>
                 <div className="flex items-center gap-1">
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-8 rounded-lg bg-[#0F766E] px-3 text-[12px] font-semibold text-white hover:bg-[#0D9488]"
-                    onClick={() => setRenewOpen(true)}
-                  >
-                    Renew
-                  </Button>
+                  {data?.pendingCheckout ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={paying}
+                      className="h-8 rounded-lg bg-[#FFC542] px-3 text-[12px] font-semibold text-[#1A1A4B] hover:bg-[#F0B429]"
+                      onClick={() => continuePayment()}
+                    >
+                      {paying ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+                      Continue
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-8 rounded-lg bg-[#0F766E] px-3 text-[12px] font-semibold text-white hover:bg-[#0D9488]"
+                      onClick={() => setRenewOpen(true)}
+                    >
+                      Renew
+                    </Button>
+                  )}
                   <button
                     type="button"
                     className="grid h-8 w-8 place-items-center rounded-lg text-black/40 hover:bg-black/5 hover:text-black dark:text-zinc-500 dark:hover:bg-white/10 dark:hover:text-zinc-200"

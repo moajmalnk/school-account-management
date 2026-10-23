@@ -58,7 +58,7 @@ function FamilyGate() {
     <FamilyFrame>
       <div className="flex h-dvh flex-col overflow-hidden">
         {previewName ? (
-          <div className="flex items-center justify-between gap-3 bg-[#0F766E] px-4 py-2 text-sm text-white">
+          <div className="flex items-center justify-between gap-3 bg-[var(--family-lavender-deep)] px-4 py-2 text-sm text-white">
             <p className="min-w-0 truncate">Viewing the family app as {previewName}</p>
             <button
               type="button"

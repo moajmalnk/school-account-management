@@ -322,6 +322,35 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (tenant: Tenant
     return counts;
   }, [trialById]);
 
+  const registryStats = useMemo(() => {
+    let active = 0;
+    let trial = 0;
+    let overdue = 0;
+    let suspended = 0;
+    let students = 0;
+    let seats = 0;
+    let staff = 0;
+    let mrr = 0;
+    let basic = 0;
+    let premium = 0;
+    let enterprise = 0;
+    for (const t of tenants) {
+      if (t.status === "Active") active += 1;
+      else if (t.status === "Trial") trial += 1;
+      else if (t.status === "Overdue") overdue += 1;
+      else if (t.status === "Suspended") suspended += 1;
+      students += t.students || 0;
+      seats += t.capacity || 0;
+      staff += t.staffCount || 0;
+      mrr += t.mrrContribution || 0;
+      if (t.tier === "Basic") basic += 1;
+      else if (t.tier === "Premium") premium += 1;
+      else if (t.tier === "Enterprise") enterprise += 1;
+    }
+    const seatPct = seats > 0 ? Math.round((students / seats) * 100) : 0;
+    return { active, trial, overdue, suspended, students, seats, staff, mrr, seatPct, basic, premium, enterprise };
+  }, [tenants]);
+
   const filtered = useMemo(() => {
     const list = tenants.filter((t) => {
       if (tier !== "all" && t.tier !== tier) return false;
@@ -393,9 +422,6 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (tenant: Tenant
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
         <div>
           <h1 className="text-title sm:text-heading">School Tenants Registry</h1>
-          <p className="mt-1.5 text-[12.5px] leading-relaxed text-black/55 sm:mt-2 sm:text-[14px]">
-            {`${filtered.length} of ${tenants.length} tenants · isolated routing keys, provisioning & billing`}
-          </p>
         </div>
         <button
           type="button"
@@ -419,6 +445,101 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (tenant: Tenant
       >
         <Plus className="h-6 w-6" strokeWidth={2.25} />
       </button>
+
+      {/* Registry summary — denser platform pulse */}
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
+        <OrganicCard tone="white" cornerSide="tr" padded className="!p-3.5 sm:!p-4">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-black/40">
+            Portfolio
+          </div>
+          <div className="mt-1 font-mono text-[22px] font-semibold tracking-tight text-black">
+            {tenants.length}
+          </div>
+          <div className="mt-2 flex h-1.5 overflow-hidden rounded-full bg-[#F4F4F5]">
+            {[
+              { n: registryStats.active, c: "#10B981" },
+              { n: registryStats.trial, c: "#6366F1" },
+              { n: registryStats.overdue, c: "#F59E0B" },
+              { n: registryStats.suspended, c: "#EF4444" },
+            ].map((s, i) => (
+              <div
+                key={i}
+                className="h-full"
+                style={{
+                  width: `${tenants.length ? (s.n / tenants.length) * 100 : 0}%`,
+                  backgroundColor: s.c,
+                }}
+              />
+            ))}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-2 gap-y-0.5 text-[10.5px] text-black/50">
+            <span className="text-emerald-700">{registryStats.active} active</span>
+            <span className="text-indigo-600">{registryStats.trial} trial</span>
+            {registryStats.overdue > 0 ? (
+              <span className="text-amber-700">{registryStats.overdue} overdue</span>
+            ) : null}
+          </div>
+        </OrganicCard>
+
+        <OrganicCard tone="lime" cornerSide="bl" padded className="!p-3.5 sm:!p-4">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-white/70">
+            Est. MRR
+          </div>
+          <div className="mt-1 font-mono text-[20px] font-semibold tracking-tight text-white sm:text-[22px]">
+            {formatMoney(registryStats.mrr, "INR")}
+          </div>
+          <div className="mt-2 flex h-1.5 overflow-hidden rounded-full bg-white/20">
+            {[
+              { n: registryStats.basic, c: "rgba(255,255,255,0.35)" },
+              { n: registryStats.premium, c: "rgba(255,255,255,0.7)" },
+              { n: registryStats.enterprise, c: "#fff" },
+            ].map((s, i) => (
+              <div
+                key={i}
+                className="h-full"
+                style={{
+                  width: `${tenants.length ? (s.n / tenants.length) * 100 : 0}%`,
+                  backgroundColor: s.c,
+                }}
+              />
+            ))}
+          </div>
+          <div className="mt-2 text-[10.5px] text-white/75">
+            {registryStats.basic}B · {registryStats.premium}P · {registryStats.enterprise}E
+          </div>
+        </OrganicCard>
+
+        <OrganicCard tone="white" cornerSide="tr" padded className="!p-3.5 sm:!p-4">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-black/40">
+            Students / seats
+          </div>
+          <div className="mt-1 font-mono text-[22px] font-semibold tracking-tight text-black">
+            {registryStats.seatPct}%
+          </div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#F4F4F5]">
+            <div
+              className="h-full rounded-full bg-[#0F766E]"
+              style={{ width: `${Math.min(100, registryStats.seatPct)}%` }}
+            />
+          </div>
+          <div className="mt-2 text-[10.5px] text-black/50">
+            {registryStats.students.toLocaleString("en-IN")} /{" "}
+            {registryStats.seats.toLocaleString("en-IN")} seats
+          </div>
+        </OrganicCard>
+
+        <OrganicCard tone="black" cornerSide="bl" padded className="!p-3.5 sm:!p-4">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60">
+            Staff on platform
+          </div>
+          <div className="mt-1 font-mono text-[22px] font-semibold tracking-tight text-white">
+            {registryStats.staff.toLocaleString("en-IN")}
+          </div>
+          <div className="mt-2 text-[10.5px] text-white/65">
+            Across {tenants.length} school workspace{tenants.length === 1 ? "" : "s"}
+          </div>
+        </OrganicCard>
+      </div>
 
       {/* Filters */}
       <OrganicCard
@@ -508,12 +629,26 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (tenant: Tenant
       <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">
         {filtered.map((t, i) => {
           const capacity = Math.max(t.capacity, 0);
-          const pct = capacity > 0 ? Math.round((t.students / capacity) * 100) : 0;
+          const pct =
+            t.seatUtilizationPct ??
+            (capacity > 0 ? Math.round((t.students / capacity) * 100) : 0);
           const sStyle = STATUS_STYLE[t.status];
           const tStyle = TIER_STYLE[t.tier];
           const cornerSide: CornerSide = i % 2 === 0 ? "tr" : "bl";
           const initials = tenantInitials(t.name);
           const trial = trialById.get(t.id) ?? null;
+          const mrr = t.mrrContribution ?? 0;
+          const staff = t.staffCount ?? 0;
+          const branches = t.branchCount ?? 0;
+          const ageDays = t.createdAt
+            ? Math.max(
+                0,
+                Math.floor(
+                  (Date.now() - Date.parse(t.createdAt.includes("T") ? t.createdAt : `${t.createdAt}T00:00:00`)) /
+                    86_400_000,
+                ),
+              )
+            : null;
           return (
             <OrganicCard
               key={t.id}
@@ -534,7 +669,7 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (tenant: Tenant
                   setDetailTarget(t);
                 }
               }}
-              className="cursor-pointer space-y-4 transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-[0_1px_2px_rgba(0,0,0,0.05),0_28px_64px_-28px_rgba(15,23,42,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]/40 focus-visible:ring-offset-2"
+              className="cursor-pointer space-y-3.5 transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-[0_1px_2px_rgba(0,0,0,0.05),0_28px_64px_-28px_rgba(15,23,42,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F766E]/40 focus-visible:ring-offset-2"
             >
               <div className="flex items-start gap-3">
                 <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-[#0F766E] to-[#115E59] text-[13px] font-bold tracking-wide text-white">
@@ -547,7 +682,15 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (tenant: Tenant
                   <div className="mt-0.5 truncate font-mono text-[11px] text-[#0F766E]">
                     {t.subdomain}.feezo.app
                   </div>
-                  <div className="mt-0.5 font-mono text-[11px] text-black/40">{t.id}</div>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[11px] text-black/40">
+                    <span>{t.id}</span>
+                    {ageDays !== null ? (
+                      <span>· {ageDays === 0 ? "today" : `${ageDays}d old`}</span>
+                    ) : null}
+                  </div>
+                  {t.adminEmail ? (
+                    <div className="mt-0.5 truncate text-[11px] text-black/45">{t.adminEmail}</div>
+                  ) : null}
                 </div>
               </div>
 
@@ -569,6 +712,42 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (tenant: Tenant
                   />
                   {t.status}
                 </span>
+                {mrr > 0 ? (
+                  <span className="rounded-full bg-[#ECFDF5] px-2.5 py-1 font-mono text-[10px] font-semibold text-[#047857]">
+                    {formatMoney(mrr, "INR")}/mo
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-[#F4F4F5] px-2.5 py-1 text-[10px] font-semibold text-black/45">
+                    ₹0 MRR
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] px-2.5 py-2">
+                  <div className="text-[9px] font-semibold uppercase tracking-wider text-black/40">
+                    Students
+                  </div>
+                  <div className="mt-0.5 font-mono text-[15px] font-semibold tabular-nums text-black">
+                    {t.students.toLocaleString("en-IN")}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] px-2.5 py-2">
+                  <div className="text-[9px] font-semibold uppercase tracking-wider text-black/40">
+                    Staff
+                  </div>
+                  <div className="mt-0.5 font-mono text-[15px] font-semibold tabular-nums text-black">
+                    {staff.toLocaleString("en-IN")}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] px-2.5 py-2">
+                  <div className="text-[9px] font-semibold uppercase tracking-wider text-black/40">
+                    Branches
+                  </div>
+                  <div className="mt-0.5 font-mono text-[15px] font-semibold tabular-nums text-black">
+                    {branches.toLocaleString("en-IN")}
+                  </div>
+                </div>
               </div>
 
               <div className="rounded-2xl border border-[#EFEFEF] bg-[#FAFAFA] px-3 py-2.5">

@@ -439,19 +439,50 @@ export function familyAcademics(studentId: string) {
   }>(`/api/family/academics.php?studentId=${encodeURIComponent(studentId)}`);
 }
 
-export function familyReport(studentId: string, examId: string) {
-  return familyRequest<{
-    student: { name: string; cls: string };
-    school: { name: string };
-    result: {
-      exam: { name: string; academicYear: string };
-      subjects: { name: string; score: number; max: number }[];
-      score: number;
-      max: number;
-      percent: number;
+export type FamilyReportCard = {
+  student: {
+    id?: string;
+    name: string;
+    cls: string;
+    admissionNumber?: string;
+    section?: string;
+    rollNo?: string;
+  };
+  school: {
+    name: string;
+    branchName?: string;
+    tagline?: string;
+    address?: string;
+    phone?: string;
+    email?: string;
+    website?: string;
+    logoUrl?: string | null;
+    letterheadUrl?: string | null;
+    sealUrl?: string | null;
+    signatureUrl?: string | null;
+    themePrimary?: string;
+    registrationNo?: string;
+    affiliationNo?: string;
+    principalName?: string;
+  };
+  result: {
+    exam: {
+      name: string;
+      academicYear: string;
+      startsOn?: string | null;
+      endsOn?: string | null;
     };
-    attendancePercent: number | null;
-  }>(
+    subjects: { name: string; score: number; max: number }[];
+    score: number;
+    max: number;
+    percent: number;
+  };
+  attendancePercent: number | null;
+  generatedAt?: string;
+};
+
+export function familyReport(studentId: string, examId: string) {
+  return familyRequest<FamilyReportCard>(
     `/api/family/academics.php?studentId=${encodeURIComponent(studentId)}&examId=${encodeURIComponent(examId)}`,
   );
 }
