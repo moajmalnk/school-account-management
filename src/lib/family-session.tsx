@@ -12,6 +12,8 @@ import {
   clearFamilyAuth,
   familyLogout,
   familyPreviewName,
+  familyPreviewReturnPath,
+  familyPreviewSameWindow,
   familySavePrefs,
   familySession,
   familyToken,
@@ -116,12 +118,21 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const endPreview = useCallback(async () => {
+    const returnTo = familyPreviewReturnPath();
+    const sameWindow = familyPreviewSameWindow();
     setDirty(false);
     await familyLogout();
     setProfile(null);
     setPreviewName(null);
+    if (sameWindow) {
+      window.location.replace(returnTo);
+      return;
+    }
     setPreviewEnded(true);
     window.close();
+    window.setTimeout(() => {
+      if (!window.closed) window.location.replace(returnTo);
+    }, 100);
   }, []);
 
   const confirmLeave = useCallback(() => {

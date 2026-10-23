@@ -1,15 +1,21 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   AlertTriangle,
   Bus,
   ChevronLeft,
+  Download,
   Loader2,
   Save,
   Search,
   Users,
 } from "lucide-react";
 
+import {
+  CsvBulkImportDialog,
+  FinanceCsvImportMenu,
+  type CsvImportIssue,
+} from "@/components/school/CsvBulkImportDialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -23,12 +29,16 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { apiUpsertStudent } from "@/lib/api/records";
 import { getApiToken } from "@/lib/api/client";
+import { isExcelFilename } from "@/lib/csv-import";
+import { formatDownloadFilename, todayStamp } from "@/lib/download-names";
+import { downloadCsv } from "@/lib/finance-export";
 import { formatMoney } from "@/lib/money";
 import {
   applyVehicleAssignment,
   assignmentFareForStudent,
   draftFromStudent,
   stopsForVehicle,
+  studentsOnVehicle,
   transportShiftLabel,
   vehicleAssignedCount,
   type TransportAssignmentDraft,
@@ -43,6 +53,15 @@ import {
   type TransportVehicle,
 } from "@/lib/tenant-store";
 import { cn, glassCardClass } from "@/lib/utils";
+import {
+  parseVehicleAssignmentCsv,
+  resolveVehicleAssignmentImport,
+  VEHICLE_ASSIGNMENT_CSV_HEADERS,
+  vehicleAssignmentCsvDemoRows,
+  vehicleAssignmentCsvTemplateRows,
+  vehicleAssignmentToCsvRow,
+  type ResolvedVehicleAssignmentImport,
+} from "@/lib/vehicle-assignment-csv";
 
 type VehicleStudentAssignmentsProps = {
   vehicle: TransportVehicle;
@@ -117,13 +136,26 @@ export function VehicleStudentAssignments({
   routes,
   onBack,
 }: VehicleStudentAssignmentsProps) {
-  const { students, setStudents, classes, transportVehicles, activeFeeTerms } = useTenantStore();
+  const {
+    students,
+    setStudents,
+    classes,
+    transportVehicles,
+    activeFeeTerms,
+    schoolDetails,
+  } = useTenantStore();
   const [query, setQuery] = useState("");
   const [gradeFilter, setGradeFilter] = useState("all");
   const [divisionFilter, setDivisionFilter] = useState("all");
   const [assignedOnly, setAssignedOnly] = useState(false);
   const [saving, setSaving] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, TransportAssignmentDraft>>({});
+  const importRef = useRef<HTMLInputElement>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importReady, setImportReady] = useState<ResolvedVehicleAssignmentImport[]>([]);
+  const [importIssues, setImportIssues] = useState<CsvImportIssue[]>([]);
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
 
   const liveStudents = useMemo(
     () => students.filter((s) => !s.deletedAt && s.active !== false),
@@ -131,6 +163,7 @@ export function VehicleStudentAssignments({
   );
 
   const stops = useMemo(() => stopsForVehicle(vehicle, routes), [vehicle, routes]);
+  const schoolName = schoolDetails.name || "School";
 
   useEffect(() => {
     const next: Record<string, TransportAssignmentDraft> = {};
@@ -212,6 +245,20 @@ export function VehicleStudentAssignments({
         transportShift: "both" as TransportFeeShift,
       };
       return { ...prev, [studentId]: { ...base, ...patch, studentId } };
+    });
+  };
+
+  const toggleAssigned = (student: Student, draft: TransportAssignmentDraft) => {
+    const on = !draft.assigned;
+    patchDraft(student.id, {
+      assigned: on,
+      busPoint1: on
+        ? draft.busPoint1 || stops.pickups[0] || student.busPoint1 || ""
+        : "",
+      busPoint2: on
+        ? draft.busPoint2 || stops.drops[0] || student.busPoint2 || ""
+        : "",
+      transportShift: on ? draft.transportShift || "both" : "both",
     });
   };
 
@@ -297,8 +344,197 @@ export function VehicleStudentAssignments({
       ? "No routes"
       : `${vehicle.routeIds.length} route${vehicle.routeIds.length === 1 ? "" : "s"}`;
 
+  const downloadTemplate = () => {
+    downloadCsv(
+      formatDownloadFilename("bulkTemplate", "csv", {
+        report: "bus-roster",
+        school: schoolName,
+        date: todayStamp(),
+      }),
+      [...VEHICLE_ASSIGNMENT_CSV_HEADERS],
+      vehicleAssignmentCsvTemplateRows(stops),
+    );
+    toast.success("Bus roster template downloaded", {
+      description: `${vehicle.name} · fill AdmissionNo, Boarding, Dropping, Shift`,
+    });
+  };
+
+  const downloadDemoCsv = () => {
+    downloadCsv(
+      formatDownloadFilename("bulkDemo", "csv", {
+        report: "bus-roster",
+        school: schoolName,
+        date: todayStamp(),
+      }),
+      [...VEHICLE_ASSIGNMENT_CSV_HEADERS],
+      vehicleAssignmentCsvDemoRows(stops),
+    );
+    toast.success("Demo bus roster CSV downloaded", {
+      description: "Sample rows with Yes/No assign and Morning / Evening / Both shifts",
+    });
+  };
+
+  const exportAssignedCsv = () => {
+    const assigned = studentsOnVehicle(liveStudents, vehicle.id);
+    if (!assigned.length) {
+      toast.error("No students assigned to export", {
+        description: "Assign students first, or download the template to start a bulk list",
+      });
+      return;
+    }
+    downloadCsv(
+      formatDownloadFilename("busRoutes", "csv", {
+        school: `${schoolName}-${vehicle.name}`,
+        date: todayStamp(),
+      }),
+      [...VEHICLE_ASSIGNMENT_CSV_HEADERS],
+      assigned.map(vehicleAssignmentToCsvRow),
+    );
+    toast.success(
+      `${assigned.length} student${assigned.length === 1 ? "" : "s"} exported`,
+      { description: `${vehicle.name} · CSV ready in your downloads folder` },
+    );
+  };
+
+  const handleImportClick = () => importRef.current?.click();
+
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (isExcelFilename(file.name)) {
+      toast.error("Excel files are not supported yet", {
+        description: "Open the sheet in Excel/Sheets and Save as CSV, then upload",
+      });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const parsed = parseVehicleAssignmentCsv(String(reader.result ?? ""));
+      if (!parsed.ok) {
+        toast.error(parsed.error, { description: parsed.description });
+        return;
+      }
+      const resolved = resolveVehicleAssignmentImport(parsed.drafts, {
+        vehicle,
+        students: liveStudents,
+        routes,
+        vehicles: transportVehicles,
+        classes,
+        feeTerms: activeFeeTerms,
+      });
+      const issues: CsvImportIssue[] = [...parsed.issues, ...resolved.issues].map((issue) => ({
+        line: issue.line,
+        rowLabel: issue.rowLabel,
+        message: issue.message,
+      }));
+      setImportReady(resolved.ready);
+      setImportIssues(issues);
+      setImportProgress({ current: 0, total: resolved.ready.length });
+      setImportOpen(true);
+      if (!resolved.ready.length) {
+        toast.error("No students ready to import", {
+          description: issues[0]?.message || "Check AdmissionNo and shift columns",
+        });
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const confirmImport = () => {
+    if (!importReady.length || importing) return;
+    if (!getApiToken()) {
+      toast.error("Sign in again to import bus assignments");
+      return;
+    }
+    void (async () => {
+      setImporting(true);
+      setImportProgress({ current: 0, total: importReady.length });
+      const byId = new Map(liveStudents.map((s) => [s.id, s]));
+      const saved: Student[] = [];
+      let assignedN = 0;
+      let clearedN = 0;
+      let failed = 0;
+
+      try {
+        for (let i = 0; i < importReady.length; i += 1) {
+          const row = importReady[i];
+          const student = byId.get(row.studentId);
+          if (!student) {
+            failed += 1;
+            setImportProgress({ current: i + 1, total: importReady.length });
+            continue;
+          }
+          const next = applyVehicleAssignment(student, vehicle.id, row.draft);
+          try {
+            const remote = await apiUpsertStudent(next);
+            const merged = { ...next, ...remote, id: next.id };
+            saved.push(merged);
+            upsertStudentInSnapshot(merged);
+            byId.set(merged.id, merged);
+            if (row.draft.assigned) assignedN += 1;
+            else clearedN += 1;
+          } catch {
+            failed += 1;
+          }
+          setImportProgress({ current: i + 1, total: importReady.length });
+        }
+
+        if (saved.length) {
+          setStudents((prev) => {
+            const map = new Map(saved.map((s) => [s.id, s]));
+            return prev.map((s) => map.get(s.id) ?? s);
+          });
+          setDrafts((prev) => {
+            const next = { ...prev };
+            for (const row of importReady) {
+              if (!saved.some((s) => s.id === row.studentId)) continue;
+              next[row.studentId] = { ...row.draft, studentId: row.studentId };
+            }
+            return next;
+          });
+        }
+
+        setImportOpen(false);
+        setImportReady([]);
+        setImportIssues([]);
+        toast.success(
+          `${saved.length} student${saved.length === 1 ? "" : "s"} updated on ${vehicle.name}`,
+          {
+            description: [
+              assignedN ? `${assignedN} assigned` : "",
+              clearedN ? `${clearedN} cleared` : "",
+              failed ? `${failed} failed` : "",
+            ]
+              .filter(Boolean)
+              .join(" · "),
+          },
+        );
+      } finally {
+        setImporting(false);
+      }
+    })();
+  };
+
+  const importPreviewRows = importReady.map((row) => ({
+    line: row.line,
+    label: row.previewLabel,
+    amount: row.amount,
+    extra: row.previewExtra,
+    duplicate: row.alreadyOnThisBus,
+  }));
+  const importTotalAmount = importReady.reduce((sum, row) => sum + row.amount, 0);
+  const importUpdateCount = importReady.filter((row) => row.alreadyOnThisBus).length;
+
   return (
     <div className={cn(glassCardClass, "space-y-4 p-4 sm:p-5")}>
+      <input
+        ref={importRef}
+        type="file"
+        accept=".csv,text/csv"
+        className="hidden"
+        onChange={handleImportFile}
+      />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 items-start gap-2.5">
           <button
@@ -340,16 +576,58 @@ export function VehicleStudentAssignments({
             </div>
           </div>
         </div>
-        <Button
-          type="button"
-          disabled={!dirty || saving}
-          onClick={() => void save()}
-          className="h-10 w-full shrink-0 rounded-full bg-[#0F766E] px-4 text-white hover:bg-[#0D9488] sm:w-auto"
-        >
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          Save assignments
-        </Button>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+          <button
+            type="button"
+            onClick={exportAssignedCsv}
+            disabled={importing || saving}
+            className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3.5 text-[12px] font-semibold text-black transition-colors hover:border-black/20 hover:bg-[#F4F4F5] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Export
+          </button>
+          <FinanceCsvImportMenu
+            disabled={importing || saving}
+            onTemplate={downloadTemplate}
+            onDemo={downloadDemoCsv}
+            onUploadClick={handleImportClick}
+          />
+          <Button
+            type="button"
+            disabled={!dirty || saving || importing}
+            onClick={() => void save()}
+            className="h-10 w-full shrink-0 rounded-full bg-[#0F766E] px-4 text-white hover:bg-[#0D9488] sm:w-auto"
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save assignments
+          </Button>
+        </div>
       </div>
+
+      <CsvBulkImportDialog
+        open={importOpen}
+        onOpenChange={(open) => {
+          if (importing) return;
+          setImportOpen(open);
+          if (!open) {
+            setImportReady([]);
+            setImportIssues([]);
+          }
+        }}
+        title={`Import roster · ${vehicle.name}`}
+        description="Match students by admission number. Stops map to this bus’s routes. Assigned=No clears the student from this bus."
+        validCount={importReady.length}
+        invalidCount={importIssues.length}
+        duplicateCount={importUpdateCount}
+        totalAmount={importTotalAmount}
+        issues={importIssues}
+        previewRows={importPreviewRows}
+        importing={importing}
+        progress={importProgress}
+        onConfirm={confirmImport}
+        skipDuplicates={false}
+        duplicateStatLabel="Updates"
+      />
 
       {overCapacity ? (
         <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12.5px] text-amber-950">
@@ -438,29 +716,35 @@ export function VehicleStudentAssignments({
               return (
                 <div
                   key={student.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={draft.assigned}
+                  aria-label={`${draft.assigned ? "Unassign" : "Assign"} ${student.name}`}
+                  onClick={() => toggleAssigned(student, draft)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      toggleAssigned(student, draft);
+                    }
+                  }}
                   className={cn(
-                    "rounded-xl border border-[#E5E5E5] p-3",
-                    draft.assigned ? "bg-[#F0FDFA]/50" : "bg-white",
+                    "cursor-pointer rounded-xl border border-[#E5E5E5] p-3 transition-colors",
+                    draft.assigned
+                      ? "bg-[#F0FDFA]/50 ring-1 ring-[#0F766E]/15"
+                      : "bg-white hover:bg-[#FAFAFA]",
                   )}
                 >
                   <div className="flex items-start gap-3">
-                    <Checkbox
+                    <div
                       className="mt-1"
-                      checked={draft.assigned}
-                      onCheckedChange={(checked) => {
-                        const on = checked === true;
-                        patchDraft(student.id, {
-                          assigned: on,
-                          busPoint1: on
-                            ? draft.busPoint1 || stops.pickups[0] || student.busPoint1 || ""
-                            : "",
-                          busPoint2: on
-                            ? draft.busPoint2 || stops.drops[0] || student.busPoint2 || ""
-                            : "",
-                          transportShift: on ? draft.transportShift || "both" : "both",
-                        });
-                      }}
-                    />
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                    >
+                      <Checkbox
+                        checked={draft.assigned}
+                        onCheckedChange={() => toggleAssigned(student, draft)}
+                      />
+                    </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-baseline justify-between gap-2">
                         <div className="min-w-0">
@@ -478,7 +762,12 @@ export function VehicleStudentAssignments({
                           {draft.assigned && fare != null && fare > 0 ? formatMoney(fare) : "—"}
                         </div>
                       </div>
-                      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div
+                        className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2"
+                        onClick={(e) => {
+                          if (draft.assigned) e.stopPropagation();
+                        }}
+                      >
                         <div className="min-w-0 space-y-1">
                           <div className="text-[10px] font-semibold uppercase tracking-wider text-black/45">
                             Boarding
@@ -578,37 +867,41 @@ export function VehicleStudentAssignments({
                     return (
                       <tr
                         key={student.id}
+                        role="button"
+                        tabIndex={0}
+                        aria-pressed={draft.assigned}
+                        aria-label={`${draft.assigned ? "Unassign" : "Assign"} ${student.name}`}
+                        onClick={() => toggleAssigned(student, draft)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            toggleAssigned(student, draft);
+                          }
+                        }}
                         className={cn(
-                          "border-t border-[#EFEFEF]",
-                          draft.assigned ? "bg-[#F0FDFA]/40" : "bg-white",
+                          "cursor-pointer border-t border-[#EFEFEF] transition-colors",
+                          draft.assigned
+                            ? "bg-[#F0FDFA]/40"
+                            : "bg-white hover:bg-[#F8F8F9]",
                         )}
                       >
-                        <td className="px-2 py-2 align-middle">
+                        <td
+                          className="px-2 py-2 align-middle"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <Checkbox
                             checked={draft.assigned}
-                            onCheckedChange={(checked) => {
-                              const on = checked === true;
-                              patchDraft(student.id, {
-                                assigned: on,
-                                busPoint1: on
-                                  ? draft.busPoint1 ||
-                                    stops.pickups[0] ||
-                                    student.busPoint1 ||
-                                    ""
-                                  : "",
-                                busPoint2: on
-                                  ? draft.busPoint2 || stops.drops[0] || student.busPoint2 || ""
-                                  : "",
-                                transportShift: on ? draft.transportShift || "both" : "both",
-                              });
-                            }}
+                            onCheckedChange={() => toggleAssigned(student, draft)}
                           />
                         </td>
                         <td className="px-2 py-2 align-middle font-mono text-black/50">
                           {index + 1}
                         </td>
                         <td className="px-2 py-2 align-middle">
-                          <div className="truncate font-semibold text-black" title={student.name}>
+                          <div
+                            className="truncate font-semibold text-black"
+                            title={student.name}
+                          >
                             {student.name}
                           </div>
                           <div
@@ -618,7 +911,12 @@ export function VehicleStudentAssignments({
                             {student.admissionNumber || student.id} · {student.cls}
                           </div>
                         </td>
-                        <td className="px-2 py-2 align-middle">
+                        <td
+                          className="px-2 py-2 align-middle"
+                          onClick={(e) => {
+                            if (draft.assigned) e.stopPropagation();
+                          }}
+                        >
                           <StopSelect
                             value={draft.busPoint1}
                             disabled={!draft.assigned}
@@ -627,7 +925,12 @@ export function VehicleStudentAssignments({
                             onChange={(busPoint1) => patchDraft(student.id, { busPoint1 })}
                           />
                         </td>
-                        <td className="px-2 py-2 align-middle">
+                        <td
+                          className="px-2 py-2 align-middle"
+                          onClick={(e) => {
+                            if (draft.assigned) e.stopPropagation();
+                          }}
+                        >
                           <StopSelect
                             value={draft.busPoint2}
                             disabled={!draft.assigned}
@@ -636,7 +939,12 @@ export function VehicleStudentAssignments({
                             onChange={(busPoint2) => patchDraft(student.id, { busPoint2 })}
                           />
                         </td>
-                        <td className="px-2 py-2 align-middle">
+                        <td
+                          className="px-2 py-2 align-middle"
+                          onClick={(e) => {
+                            if (draft.assigned) e.stopPropagation();
+                          }}
+                        >
                           <Select
                             disabled={!draft.assigned}
                             value={draft.transportShift}

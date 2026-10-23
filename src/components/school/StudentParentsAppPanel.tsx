@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { schoolAnnouncements, schoolHolidays, schoolParentAction, schoolParents, schoolSaveAnnouncement, schoolSaveHoliday, type SchoolParent } from "@/lib/api/school-family";
 import { stageFamilyPreview, clearFamilyPreviewHandoff } from "@/lib/api/family";
 import { ApiError } from "@/lib/api/client";
+import { isEmbeddedWebView } from "@/lib/native-download";
 import { formatPhoneDisplay, phoneDigits, toWhatsAppDigits } from "@/lib/phone";
 import type { Student } from "@/lib/tenant-store";
 import { cn } from "@/lib/utils";
@@ -60,32 +61,44 @@ export function StudentParentsAppPanel({ student }: { student: Student }) {
 
   async function preview(parent: SchoolParent) {
     if (!parent.active) return;
-    const tab = window.open("", "_blank");
-    if (!tab) {
-      toast.error("Allow pop-ups to open the parent app");
-      return;
+    // iOS WKWebView blocks window.open. Open the family app in this window instead.
+    const sameWindow = isEmbeddedWebView();
+    const tab = sameWindow ? null : window.open("", "_blank");
+    if (!sameWindow && !tab) {
+      toast.message("Opening in this screen", {
+        description: "Pop-ups are blocked on this device.",
+      });
     }
     setBusyId(`view:${parent.id}`);
+    const returnPath = `${window.location.pathname}${window.location.search}`;
     try {
       const result = await schoolParentAction({ action: "impersonate", id: parent.id });
       if (!result.token) throw new Error("Could not open the parent app");
+      const useSameWindow = sameWindow || !tab;
       stageFamilyPreview({
         token: result.token,
         refreshToken: result.refreshToken,
         name: parent.name || "Parent",
+        returnPath: returnPath.startsWith("/tenant") ? returnPath : "/tenant/students",
+        sameWindow: useSameWindow,
       });
+      if (useSameWindow) {
+        toast.success(`Opening ${parent.name || "the parent"}'s family app`);
+        window.location.assign("/family");
+        return;
+      }
       tab.location.replace("/family");
       try {
         tab.opener = null;
       } catch {
-        // The preview tab can still be closed from Exit preview.
+        // Exit preview still returns to the school workspace.
       }
       toast.success(`Opening ${parent.name || "the parent"}'s family app`, {
         description: "New tab. Your school login stays here.",
       });
     } catch (err) {
       clearFamilyPreviewHandoff();
-      tab.close();
+      tab?.close();
       toast.error(err instanceof ApiError ? err.message : "Could not open the parent app");
     } finally {
       setBusyId("");

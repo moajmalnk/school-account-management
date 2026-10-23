@@ -7,37 +7,66 @@ const PREVIEW_FLAG = "feezo-family/preview";
 const PREVIEW_TOKEN = "feezo-family/preview-token";
 const PREVIEW_REFRESH = "feezo-family/preview-refresh";
 const PREVIEW_NAME = "feezo-family/preview-name";
+const PREVIEW_RETURN = "feezo-family/preview-return";
+const PREVIEW_SAME_WINDOW = "feezo-family/preview-same-window";
 const PREVIEW_HANDOFF = "feezo-family/preview-handoff";
 
 function previewActive() {
   return sessionStorage.getItem(PREVIEW_FLAG) === "1";
 }
 
-/** Pick up a staff preview started in another tab. The handoff is single-use. */
+/** Pick up a staff preview started in another tab or this WebView. The handoff is single-use. */
 function consumeFamilyPreviewHandoff() {
   const raw = localStorage.getItem(PREVIEW_HANDOFF);
   if (!raw) return;
   localStorage.removeItem(PREVIEW_HANDOFF);
   try {
-    const data = JSON.parse(raw) as { token?: string; refreshToken?: string; name?: string; at?: number };
+    const data = JSON.parse(raw) as {
+      token?: string;
+      refreshToken?: string;
+      name?: string;
+      at?: number;
+      returnPath?: string;
+      sameWindow?: boolean;
+    };
     if (!data.token || !data.at || Date.now() - data.at > 60_000) return;
     sessionStorage.setItem(PREVIEW_FLAG, "1");
     sessionStorage.setItem(PREVIEW_TOKEN, data.token);
     if (data.refreshToken) sessionStorage.setItem(PREVIEW_REFRESH, data.refreshToken);
     sessionStorage.setItem(PREVIEW_NAME, data.name?.trim() || "Parent");
+    const returnPath =
+      typeof data.returnPath === "string" && data.returnPath.startsWith("/tenant")
+        ? data.returnPath
+        : "/tenant/students";
+    sessionStorage.setItem(PREVIEW_RETURN, returnPath);
+    if (data.sameWindow) sessionStorage.setItem(PREVIEW_SAME_WINDOW, "1");
+    else sessionStorage.removeItem(PREVIEW_SAME_WINDOW);
   } catch {
     // A bad handoff must not become a session.
   }
 }
 
 /**
- * Leave a one-time preview for the next family-app tab.
+ * Leave a one-time preview for the family app.
  * Does not replace a real parent login stored in this browser.
  */
-export function stageFamilyPreview(input: { token: string; refreshToken?: string; name: string }) {
+export function stageFamilyPreview(input: {
+  token: string;
+  refreshToken?: string;
+  name: string;
+  returnPath?: string;
+  sameWindow?: boolean;
+}) {
   localStorage.setItem(
     PREVIEW_HANDOFF,
-    JSON.stringify({ token: input.token, refreshToken: input.refreshToken, name: input.name, at: Date.now() }),
+    JSON.stringify({
+      token: input.token,
+      refreshToken: input.refreshToken,
+      name: input.name,
+      at: Date.now(),
+      returnPath: input.returnPath,
+      sameWindow: Boolean(input.sameWindow),
+    }),
   );
 }
 
@@ -48,6 +77,17 @@ export function clearFamilyPreviewHandoff() {
 export function familyPreviewName() {
   if (!previewActive()) return null;
   return sessionStorage.getItem(PREVIEW_NAME);
+}
+
+/** Where Exit preview should send the staff member after a same-window Login as. */
+export function familyPreviewReturnPath() {
+  if (!previewActive()) return "/tenant/students";
+  const path = sessionStorage.getItem(PREVIEW_RETURN);
+  return path && path.startsWith("/tenant") ? path : "/tenant/students";
+}
+
+export function familyPreviewSameWindow() {
+  return previewActive() && sessionStorage.getItem(PREVIEW_SAME_WINDOW) === "1";
 }
 
 export type FamilyStudent = {
@@ -114,6 +154,8 @@ export function clearFamilyAuth() {
     sessionStorage.removeItem(PREVIEW_TOKEN);
     sessionStorage.removeItem(PREVIEW_REFRESH);
     sessionStorage.removeItem(PREVIEW_NAME);
+    sessionStorage.removeItem(PREVIEW_RETURN);
+    sessionStorage.removeItem(PREVIEW_SAME_WINDOW);
     return;
   }
   localStorage.removeItem(TOKEN_KEY);
