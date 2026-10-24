@@ -424,20 +424,22 @@ export function TenantsView({
     const target = pendingDelete;
     setOtpSending(true);
     setOtpError(null);
+    // Advance immediately — API returns before SMTP finishes.
+    setDeleteStep("otp");
+    setDeleteOtp("");
     try {
       if (!getApiToken()) {
         throw new ApiError("Not authenticated to API — log in again", 401);
       }
       const result = await requestSuperAdminTenantDeleteOtp(target.id);
       setOtpEmailMasked(result.emailMasked);
-      setDeleteStep("otp");
-      setDeleteOtp("");
       toast.success("Verification code sent", {
-        description: `Check ${result.emailMasked}`,
+        description: `Check ${result.emailMasked} — it may take a few seconds`,
       });
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Could not send code";
       setOtpError(msg);
+      setDeleteStep("confirm");
       toast.error("Could not send verification code", { description: msg });
     } finally {
       setOtpSending(false);
@@ -971,59 +973,85 @@ export function TenantsView({
           if (!next && !deleting && !otpSending) resetDeleteDialog();
         }}
       >
-        <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6">
-          <DialogHeader>
-            <DialogTitle className="text-[22px] font-semibold text-black">
-              Delete Tenant
-            </DialogTitle>
-            <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
-              {deleteStep === "confirm"
-                ? pendingDelete
-                  ? `Permanently delete ${pendingDelete.name} (${pendingDelete.id})? Students, staff, finance, and settings for this school will be removed. This cannot be undone.`
-                  : "Permanently delete this tenant?"
-                : `Enter the 6-digit code sent to ${otpEmailMasked || "your super admin email"}. Deletion is blocked until this code is verified.`}
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent
+          className={cn(
+            "max-w-[400px] gap-0 overflow-hidden rounded-[20px] border border-[#E8EAED] bg-white p-0",
+            "shadow-[0_1px_2px_rgba(0,0,0,0.04),0_24px_60px_-32px_rgba(15,23,42,0.35)]",
+          )}
+        >
+          <div className="px-7 pb-2 pt-7 sm:px-8 sm:pt-8">
+            <DialogHeader className="space-y-0 text-left">
+              <DialogTitle className="pr-8 text-[22px] font-semibold tracking-tight text-[#0B1220] sm:text-[24px]">
+                {deleteStep === "otp" ? "Verify deletion" : "Delete tenant"}
+              </DialogTitle>
+              <DialogDescription className="mt-1.5 text-[13.5px] leading-relaxed text-black/50">
+                {deleteStep === "confirm"
+                  ? pendingDelete
+                    ? `Permanently remove ${pendingDelete.name} (${pendingDelete.id})? Students, staff, finance, and settings for this school will be deleted. This cannot be undone.`
+                    : "Permanently delete this tenant?"
+                  : `Enter the 6-digit code sent to ${otpEmailMasked || "your super admin email"}. Deletion stays blocked until this code is verified.`}
+              </DialogDescription>
+            </DialogHeader>
 
-          {deleteStep === "otp" ? (
-            <div className="mt-4 space-y-2">
-              <Label htmlFor="tenant-delete-otp" className="text-[13px] font-medium text-black/65">
-                Verification code
-              </Label>
-              <Input
-                id="tenant-delete-otp"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                value={deleteOtp}
-                disabled={deleting}
-                placeholder="••••••"
-                onChange={(e) => {
-                  setDeleteOtp(e.target.value.replace(/\D/g, "").slice(0, 6));
-                  if (otpError) setOtpError(null);
-                }}
-                className="h-11 tracking-[0.35em] font-mono text-center text-[16px]"
-              />
-              {otpError ? <p className="text-[12px] text-[#DC2626]">{otpError}</p> : null}
-              <button
-                type="button"
-                disabled={otpSending || deleting}
-                onClick={() => void sendDeleteOtp()}
-                className="text-[12.5px] font-medium text-[#0F766E] hover:text-[#0D9488] disabled:opacity-50"
-              >
-                {otpSending ? "Sending…" : "Resend code"}
-              </button>
-            </div>
-          ) : otpError ? (
-            <p className="mt-3 text-[12px] text-[#DC2626]">{otpError}</p>
-          ) : null}
+            {deleteStep === "confirm" && pendingDelete ? (
+              <div className="mt-5 rounded-xl border border-[#ECEEF1] bg-[#F8FAFB] px-3.5 py-3">
+                <div className="truncate text-[13.5px] font-semibold text-[#0B1220]">
+                  {pendingDelete.name}
+                </div>
+                <div className="mt-0.5 truncate font-mono text-[11.5px] text-black/45">
+                  {pendingDelete.subdomain}.feezo.app · {pendingDelete.id}
+                </div>
+              </div>
+            ) : null}
 
-          <DialogFooter className="mt-5 flex-row justify-end gap-2">
+            {deleteStep === "otp" ? (
+              <div className="mt-5 space-y-1.5">
+                <Label
+                  htmlFor="tenant-delete-otp"
+                  className="text-[12.5px] font-medium text-black/55"
+                >
+                  Verification code
+                </Label>
+                <Input
+                  id="tenant-delete-otp"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  value={deleteOtp}
+                  disabled={deleting}
+                  placeholder="••••••"
+                  onChange={(e) => {
+                    setDeleteOtp(e.target.value.replace(/\D/g, "").slice(0, 6));
+                    if (otpError) setOtpError(null);
+                  }}
+                  className={cn(
+                    "h-11 rounded-xl border-[#E5E7EB] bg-white text-center font-mono text-[16px] tracking-[0.35em]",
+                    "placeholder:tracking-[0.35em] focus-visible:border-[#0F766E]/45 focus-visible:ring-[#0F766E]/20",
+                    otpError ? "border-[#EF4444]/45" : "",
+                  )}
+                />
+                {otpError ? <p className="text-[12px] text-[#DC2626]">{otpError}</p> : null}
+                <button
+                  type="button"
+                  disabled={otpSending || deleting}
+                  onClick={() => void sendDeleteOtp()}
+                  className="pt-1 text-[13px] font-medium text-[#0F766E] hover:text-[#0D9488] disabled:opacity-50"
+                >
+                  {otpSending ? "Sending…" : "Resend code"}
+                </button>
+              </div>
+            ) : otpError ? (
+              <p className="mt-4 text-[12px] text-[#DC2626]">{otpError}</p>
+            ) : null}
+          </div>
+
+          <DialogFooter className="mt-6 flex-col-reverse gap-2 border-t border-[#F0F1F3] px-7 py-5 sm:flex-row sm:justify-end sm:space-x-0 sm:px-8">
             <Button
               type="button"
               variant="outline"
               disabled={deleting || otpSending}
               onClick={resetDeleteDialog}
+              className="h-11 w-full rounded-xl border-[#E5E7EB] bg-white text-[13.5px] font-semibold text-[#0B1220] hover:bg-[#F8FAFB] sm:w-auto sm:px-5"
             >
               Cancel
             </Button>
@@ -1032,7 +1060,7 @@ export function TenantsView({
                 type="button"
                 disabled={otpSending || !pendingDelete}
                 onClick={() => void sendDeleteOtp()}
-                className="rounded-full bg-[#EF4444] text-white hover:bg-[#DC2626]"
+                className="h-11 w-full rounded-xl bg-[#EF4444] text-[13.5px] font-semibold text-white hover:bg-[#DC2626] disabled:opacity-55 sm:w-auto sm:min-w-[11rem] sm:px-5"
               >
                 {otpSending ? (
                   <>
@@ -1048,7 +1076,7 @@ export function TenantsView({
                 type="button"
                 disabled={deleting || deleteOtp.replace(/\D/g, "").length !== 6}
                 onClick={() => void confirmDeleteTenant()}
-                className="rounded-full bg-[#EF4444] text-white hover:bg-[#DC2626]"
+                className="h-11 w-full rounded-xl bg-[#EF4444] text-[13.5px] font-semibold text-white hover:bg-[#DC2626] disabled:opacity-55 sm:w-auto sm:min-w-[11rem] sm:px-5"
               >
                 {deleting ? (
                   <>
