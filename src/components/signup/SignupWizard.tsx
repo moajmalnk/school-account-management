@@ -23,6 +23,7 @@ import {
   signupSelectItemClass,
   signupSelectTriggerClass,
 } from "@/components/signup/SignupShell";
+import { markPostSignupSupportPending } from "@/lib/post-signup-support";
 import {
   Select,
   SelectContent,
@@ -216,6 +217,8 @@ export function SignupWizard({ stepSlug }: { stepSlug: string }) {
         toast.error(result.error);
         return;
       }
+      // Arm Support welcome only for this brand-new tenant (not later logins).
+      markPostSignupSupportPending(data.session.tenantId ?? data.tenant?.publicId);
       clearSignupDraft();
       setSuccess({
         tenantName: data.tenant?.name ?? form.schoolName,
@@ -858,7 +861,7 @@ function SuccessScreen({
           <button
             type="button"
             autoFocus
-            onClick={() => navigate({ to: data.redirect as "/tenant/dashboard" })}
+            onClick={() => void navigate({ to: data.redirect as "/tenant/dashboard" })}
             className="mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#0F766E] text-[13.5px] font-semibold text-white transition-colors hover:bg-[#0D9488]"
           >
             Continue to dashboard

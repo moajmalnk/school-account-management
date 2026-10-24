@@ -31,6 +31,7 @@ import {
   setApiToken,
   touchLastActive,
 } from "@/lib/api/client";
+import { clearBranchContext, setBranchContext } from "@/lib/branch-context";
 import {
   ALL_PERMISSIONS,
   firstAllowedTenantPath,
@@ -197,6 +198,16 @@ function sessionFromApiLogin(
         ? data.session.pdfCreditEnabled
         : undefined,
   };
+  // Never keep another school's campus header across login / signup.
+  const branchFromApi =
+    typeof data.activeBranchId === "string" && data.activeBranchId.trim()
+      ? data.activeBranchId.trim()
+      : null;
+  if (next.tenantId && branchFromApi) {
+    setBranchContext(next.tenantId, branchFromApi);
+  } else {
+    clearBranchContext();
+  }
   writeSession(next);
   setSession(next);
   return { ok: true, redirect: homePathForSession(next), session: next };
@@ -453,6 +464,7 @@ export function clearAllAuthState() {
   clearImpersonationSession();
   clearApiTokenBackup();
   clearPersistentAuthSecrets();
+  clearBranchContext();
   writeSession(null);
 }
 

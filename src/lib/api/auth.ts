@@ -35,6 +35,8 @@ export type ApiLoginResponse = {
   deviceId?: string;
   idleDays?: number;
   expiresInSeconds?: number;
+  /** Active campus public id (e.g. BR-…) — set immediately so API calls do not reuse a prior school's header. */
+  activeBranchId?: string;
   session: ApiLoginSession;
 };
 

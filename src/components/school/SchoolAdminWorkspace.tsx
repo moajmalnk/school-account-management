@@ -327,6 +327,7 @@ import {
 } from "@/lib/payment-category-create";
 import { FeeCategoriesCard } from "@/components/school/FeeCategoriesCard";
 import { ParentPayCard } from "@/components/school/ParentPayCard";
+import { OnlineFeePaymentDialog } from "@/components/school/OnlineFeePaymentDialog";
 import { DocumentNumbersPanel } from "@/components/school/DocumentNumbersPanel";
 import { WhatsAppMessageComposer } from "@/components/school/WhatsAppMessageComposer";
 import { WhatsAppMessagesCard } from "@/components/school/WhatsAppMessagesCard";
@@ -9176,8 +9177,8 @@ type FeeLineItem = {
   feePeriod: string;
 };
 
-const RECEIVE_PAYMENT_MODES = ["Bank", "Cash", "Both"] as const;
-const MAKE_PAYMENT_MODES = RECEIVE_PAYMENT_MODES;
+const RECEIVE_PAYMENT_MODES = ["Bank", "Cash", "Both", "Online"] as const;
+const MAKE_PAYMENT_MODES = ["Bank", "Cash", "Both"] as const;
 
 function newFeeLineId() {
   return `fl-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
@@ -10392,6 +10393,7 @@ function PaymentModeControls({
   cashSplitAmount,
   onBankChange,
   onCashChange,
+  modes = RECEIVE_PAYMENT_MODES,
 }: {
   mode: string;
   onModeChange: (next: string) => void;
@@ -10399,12 +10401,13 @@ function PaymentModeControls({
   cashSplitAmount: string;
   onBankChange: (next: string) => void;
   onCashChange: (next: string) => void;
+  modes?: readonly string[];
 }) {
   return (
     <>
       <FieldLabel>Payment Mode</FieldLabel>
       <div className="flex h-11 gap-1 rounded-full border border-[#E5E5E5] bg-white p-1 dark:border-white/10 dark:bg-zinc-900 sm:h-10">
-        {RECEIVE_PAYMENT_MODES.map((m) => {
+        {modes.map((m) => {
           const active = mode === m;
           return (
             <button
@@ -10523,6 +10526,7 @@ function ReceivePayment() {
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
   const [pendingDeletePayment, setPendingDeletePayment] = useState<Payment | null>(null);
   const [savingReceipt, setSavingReceipt] = useState(false);
+  const [onlinePayOpen, setOnlinePayOpen] = useState(false);
   const feeImportRef = useRef<HTMLInputElement>(null);
   const [feeImportOpen, setFeeImportOpen] = useState(false);
   const [feeImporting, setFeeImporting] = useState(false);
@@ -12070,6 +12074,22 @@ function ReceivePayment() {
       toast.error("Bank and cash amounts must add up to the total");
       return;
     }
+    if (mode === "Online") {
+      if (isExternal) {
+        toast.error("Online payment is for students only");
+        return;
+      }
+      if (!selected) {
+        toast.error("Select a valid student");
+        return;
+      }
+      if (filledFeeItems.length === 0) {
+        toast.error("Add at least one fee item with an amount");
+        return;
+      }
+      setOnlinePayOpen(true);
+      return;
+    }
 
     const stamp = toSqlDateTime(receiptTime.trim());
     const extras: string[] = [];
@@ -12716,6 +12736,7 @@ function ReceivePayment() {
                       cashSplitAmount={cashSplitAmount}
                       onBankChange={setBankSplitAmount}
                       onCashChange={setCashSplitAmount}
+                      modes={MAKE_PAYMENT_MODES}
                     />
                     {mode === "Both" && !splitOk && recordTotal > 0 && (
                       <p className="mt-1.5 text-[10.5px] text-red-600">
@@ -13079,12 +13100,21 @@ function ReceivePayment() {
                       cashSplitAmount={cashSplitAmount}
                       onBankChange={setBankSplitAmount}
                       onCashChange={setCashSplitAmount}
+                      modes={
+                        editingPayment ? MAKE_PAYMENT_MODES : RECEIVE_PAYMENT_MODES
+                      }
                     />
                     {mode === "Both" && !splitOk && recordTotal > 0 && (
                       <p className="mt-1.5 text-[10.5px] text-red-600">
                         Bank + Cash must equal {formatMoney(recordTotal)}
                       </p>
                     )}
+                    {mode === "Online" && !editingPayment ? (
+                      <p className="mt-1.5 text-[10.5px] text-black/50">
+                        Opens WhatsApp payment link or Cashfree checkout — receipt saves after
+                        payment confirms.
+                      </p>
+                    ) : null}
                   </div>
                   <div>
                     <FieldLabel>Date / Time</FieldLabel>
@@ -13161,6 +13191,8 @@ function ReceivePayment() {
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : editingPayment ? (
                   "Save changes"
+                ) : mode === "Online" ? (
+                  "Online payment"
                 ) : isExternal ? (
                   "Record"
                 ) : (
@@ -13171,6 +13203,50 @@ function ReceivePayment() {
           </div>
         </OrganicCard>
       </div>
+
+      {selected && !isExternal ? (
+        <OnlineFeePaymentDialog
+          open={onlinePayOpen}
+          onOpenChange={setOnlinePayOpen}
+          studentId={selected.id}
+          studentName={selected.name}
+          className={selected.cls}
+          guardian={selected.guardian}
+          phone={selected.phone}
+          amount={recordTotal}
+          academicYear={academicYear}
+          schoolName={schoolName}
+          feeSummary={
+            filledFeeItems.length
+              ? filledFeeItems
+                  .map((item) =>
+                    [feeLineCategoryLabel(item), item.feePeriod].filter(Boolean).join(" · "),
+                  )
+                  .filter(Boolean)
+                  .slice(0, 3)
+                  .join(" · ")
+              : undefined
+          }
+          onPaid={(receiptId, amount) => {
+            resetRecordForm();
+            setOnlinePayOpen(false);
+            setPayments((prev) => [
+              {
+                id: receiptId,
+                name: selected.name,
+                cat: primaryCategory || "Fees",
+                mode: "Cashfree",
+                amount,
+                time: toSqlDateTime(formatReceiptDateTimeNow()),
+                academicYear,
+                payerType: "student",
+                className: selected.cls,
+              },
+              ...prev.filter((p) => p.id !== receiptId),
+            ]);
+          }}
+        />
+      ) : null}
 
       <OrganicCard tone="white" cornerSide="bl" padded className={workspacePanelClass}>
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -15545,6 +15621,7 @@ function MakePayment() {
                 cashSplitAmount={cashSplitAmount}
                 onBankChange={setBankSplitAmount}
                 onCashChange={setCashSplitAmount}
+                modes={MAKE_PAYMENT_MODES}
               />
               {mode === "Both" && !splitOk && paymentTotal > 0 && (
                 <p className="mt-1.5 text-[10.5px] text-red-600">
@@ -15990,6 +16067,7 @@ function MakePayment() {
                   cashSplitAmount={cashSplitAmount}
                   onBankChange={setBankSplitAmount}
                   onCashChange={setCashSplitAmount}
+                  modes={MAKE_PAYMENT_MODES}
                 />
                 {disbursalEditForm.mode === "Both" &&
                   !splitMatchesTotal(

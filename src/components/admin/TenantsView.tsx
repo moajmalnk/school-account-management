@@ -34,6 +34,7 @@ import {
   fetchSuperAdminTenants,
   fetchSuperAdminTenantSnapshot,
   provisionSuperAdminTenant,
+  requestSuperAdminTenantDeleteOtp,
   updateSuperAdminTenant,
   type TenantWorkspaceSnapshot,
 } from "@/lib/api/super-admin";
@@ -283,6 +284,11 @@ export function TenantsView({
   const [detailTab, setDetailTab] = useState(initialDetailTab || "overview");
   const [pendingDelete, setPendingDelete] = useState<Tenant | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [deleteStep, setDeleteStep] = useState<"confirm" | "otp">("confirm");
+  const [deleteOtp, setDeleteOtp] = useState("");
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpEmailMasked, setOtpEmailMasked] = useState("");
+  const [otpError, setOtpError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -403,15 +409,56 @@ export function TenantsView({
     };
   };
 
-  const confirmDeleteTenant = async () => {
-    if (!pendingDelete || deleting) return;
+  const resetDeleteDialog = () => {
+    setPendingDelete(null);
+    setDeleteStep("confirm");
+    setDeleteOtp("");
+    setOtpEmailMasked("");
+    setOtpError(null);
+    setOtpSending(false);
+    setDeleting(false);
+  };
+
+  const sendDeleteOtp = async () => {
+    if (!pendingDelete || otpSending || deleting) return;
     const target = pendingDelete;
-    setDeleting(true);
+    setOtpSending(true);
+    setOtpError(null);
     try {
       if (!getApiToken()) {
         throw new ApiError("Not authenticated to API — log in again", 401);
       }
-      await deleteSuperAdminTenant(target.id);
+      const result = await requestSuperAdminTenantDeleteOtp(target.id);
+      setOtpEmailMasked(result.emailMasked);
+      setDeleteStep("otp");
+      setDeleteOtp("");
+      toast.success("Verification code sent", {
+        description: `Check ${result.emailMasked}`,
+      });
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Could not send code";
+      setOtpError(msg);
+      toast.error("Could not send verification code", { description: msg });
+    } finally {
+      setOtpSending(false);
+    }
+  };
+
+  const confirmDeleteTenant = async () => {
+    if (!pendingDelete || deleting) return;
+    const code = deleteOtp.replace(/\s+/g, "");
+    if (!/^\d{6}$/.test(code)) {
+      setOtpError("Enter the 6-digit code from your email");
+      return;
+    }
+    const target = pendingDelete;
+    setDeleting(true);
+    setOtpError(null);
+    try {
+      if (!getApiToken()) {
+        throw new ApiError("Not authenticated to API — log in again", 401);
+      }
+      await deleteSuperAdminTenant(target.id, code);
       setTenants((prev) => prev.filter((t) => t.id !== target.id));
       setBillingMap((prev) => {
         const next = { ...prev };
@@ -419,11 +466,12 @@ export function TenantsView({
         return next;
       });
       toast.error(`${target.name} deleted`, {
-        description: `${target.id} · ${target.subdomain}.schoolaccounts.in · all school data removed`,
+        description: `${target.id} · ${target.subdomain}.feezo.app · all school data removed`,
       });
-      setPendingDelete(null);
+      resetDeleteDialog();
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Delete failed";
+      setOtpError(msg);
       toast.error("Could not delete tenant", { description: msg });
     } finally {
       setDeleting(false);
@@ -920,7 +968,7 @@ export function TenantsView({
       <Dialog
         open={Boolean(pendingDelete)}
         onOpenChange={(next) => {
-          if (!next && !deleting) setPendingDelete(null);
+          if (!next && !deleting && !otpSending) resetDeleteDialog();
         }}
       >
         <DialogContent className="max-w-sm rounded-xl border border-[#E5E5E5] bg-white p-6">
@@ -929,35 +977,89 @@ export function TenantsView({
               Delete Tenant
             </DialogTitle>
             <DialogDescription className="mt-1 text-[13px] leading-relaxed text-black/60">
-              {pendingDelete
-                ? `Permanently delete ${pendingDelete.name} (${pendingDelete.id})? Students, staff, finance, and settings for this school will be removed. This cannot be undone.`
-                : "Permanently delete this tenant?"}
+              {deleteStep === "confirm"
+                ? pendingDelete
+                  ? `Permanently delete ${pendingDelete.name} (${pendingDelete.id})? Students, staff, finance, and settings for this school will be removed. This cannot be undone.`
+                  : "Permanently delete this tenant?"
+                : `Enter the 6-digit code sent to ${otpEmailMasked || "your super admin email"}. Deletion is blocked until this code is verified.`}
             </DialogDescription>
           </DialogHeader>
+
+          {deleteStep === "otp" ? (
+            <div className="mt-4 space-y-2">
+              <Label htmlFor="tenant-delete-otp" className="text-[13px] font-medium text-black/65">
+                Verification code
+              </Label>
+              <Input
+                id="tenant-delete-otp"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                value={deleteOtp}
+                disabled={deleting}
+                placeholder="••••••"
+                onChange={(e) => {
+                  setDeleteOtp(e.target.value.replace(/\D/g, "").slice(0, 6));
+                  if (otpError) setOtpError(null);
+                }}
+                className="h-11 tracking-[0.35em] font-mono text-center text-[16px]"
+              />
+              {otpError ? <p className="text-[12px] text-[#DC2626]">{otpError}</p> : null}
+              <button
+                type="button"
+                disabled={otpSending || deleting}
+                onClick={() => void sendDeleteOtp()}
+                className="text-[12.5px] font-medium text-[#0F766E] hover:text-[#0D9488] disabled:opacity-50"
+              >
+                {otpSending ? "Sending…" : "Resend code"}
+              </button>
+            </div>
+          ) : otpError ? (
+            <p className="mt-3 text-[12px] text-[#DC2626]">{otpError}</p>
+          ) : null}
+
           <DialogFooter className="mt-5 flex-row justify-end gap-2">
             <Button
               type="button"
               variant="outline"
-              disabled={deleting}
-              onClick={() => setPendingDelete(null)}
+              disabled={deleting || otpSending}
+              onClick={resetDeleteDialog}
             >
               Cancel
             </Button>
-            <Button
-              type="button"
-              disabled={deleting}
-              onClick={() => void confirmDeleteTenant()}
-              className="rounded-full bg-[#EF4444] text-white hover:bg-[#DC2626]"
-            >
-              {deleting ? (
-                <>
-                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                  Deleting…
-                </>
-              ) : (
-                "Delete permanently"
-              )}
-            </Button>
+            {deleteStep === "confirm" ? (
+              <Button
+                type="button"
+                disabled={otpSending || !pendingDelete}
+                onClick={() => void sendDeleteOtp()}
+                className="rounded-full bg-[#EF4444] text-white hover:bg-[#DC2626]"
+              >
+                {otpSending ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    Sending code…
+                  </>
+                ) : (
+                  "Email verification code"
+                )}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                disabled={deleting || deleteOtp.replace(/\D/g, "").length !== 6}
+                onClick={() => void confirmDeleteTenant()}
+                className="rounded-full bg-[#EF4444] text-white hover:bg-[#DC2626]"
+              >
+                {deleting ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    Deleting…
+                  </>
+                ) : (
+                  "Verify & delete"
+                )}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

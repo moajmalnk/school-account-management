@@ -7,7 +7,7 @@
 import { isEmbeddedWebView } from "@/lib/native-download";
 
 const PAY_RETURN_MESSAGE = "feezo-pay-return";
-const PAY_RETURN_PATHS = new Set(["/family/fees", "/tenant/settings"]);
+const PAY_RETURN_PATHS = new Set(["/family/fees", "/tenant/settings", "/tenant/finance"]);
 
 let checkoutOpen = false;
 let returnListenerReady = false;

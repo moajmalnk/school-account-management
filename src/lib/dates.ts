@@ -313,6 +313,33 @@ export function formatEventDate(value?: string | Date | null, reference = new Da
   return labelForDate(parsed, reference, false);
 }
 
+/** Compact relative stamp · "just now" / "12m ago" / "5h ago" / "3d ago". */
+export function formatRelativeAppTime(raw?: string | null, reference = new Date()): string | null {
+  const date = parseAppInstant(raw);
+  if (!date) return raw?.trim() ? raw : null;
+  const diffMs = reference.getTime() - date.getTime();
+  if (diffMs < 0) return formatInAppZone(date, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const mins = Math.floor(diffMs / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 48) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+/** Absolute stamp in Asia/Kolkata · "24 Oct, 07:22 pm". */
+export function formatAbsoluteAppTime(raw?: string | null): string | null {
+  const date = parseAppInstant(raw);
+  if (!date) return raw?.trim() ? raw : null;
+  return formatInAppZone(date, {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 /** Receipt TIME label · "Today · 13:47" / "19 Aug 2026 · 13:47" / "—". */
 export function formatEventDateTime(value?: string | Date | null, reference = new Date()): string {
   if (value instanceof Date) {

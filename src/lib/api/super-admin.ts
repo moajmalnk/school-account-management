@@ -40,6 +40,8 @@ export type SuperAdminOverview = {
     lastLoginEmail?: string | null;
     lastLoginDevice?: string | null;
     lastLoginIp?: string | null;
+    /** password | google — how the latest session was started */
+    lastLoginMethod?: "password" | "google" | string | null;
     lastLogoutAt?: string | null;
     lastLogoutReason?: string | null;
     lastLogoutUser?: string | null;
@@ -400,12 +402,32 @@ export async function setSuperAdminTenantAccess(
   });
 }
 
+export type TenantDeleteOtpResult = {
+  id: string;
+  name: string;
+  emailMasked: string;
+  expiresInSeconds: number;
+  message: string;
+};
+
+/** Email a 6-digit OTP to the signed-in super admin before tenant deletion. */
+export async function requestSuperAdminTenantDeleteOtp(
+  tenantId: string,
+): Promise<TenantDeleteOtpResult> {
+  return apiRequest<TenantDeleteOtpResult>("/api/super-admin/tenants/delete-otp.php", {
+    method: "POST",
+    body: { id: tenantId },
+  });
+}
+
+/** Permanently delete a tenant — requires a valid email OTP from requestSuperAdminTenantDeleteOtp. */
 export async function deleteSuperAdminTenant(
   tenantId: string,
+  otp: string,
 ): Promise<{ id: string; name: string; subdomain: string; deleted: boolean }> {
   return apiRequest("/api/super-admin/tenants/delete.php", {
     method: "POST",
-    body: { id: tenantId },
+    body: { id: tenantId, otp },
   });
 }
 

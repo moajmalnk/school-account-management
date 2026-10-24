@@ -44,7 +44,9 @@ export function scoreHelpGuide(guide: HelpGuide, tokens: string[], loose = false
   const title = normalize(guide.title);
   const summary = normalize(guide.summary);
   const keywords = normalize(guide.keywords.join(" "));
-  const body = normalize(guide.steps.map((s) => `${s.title} ${s.body} ${s.tip ?? ""}`).join(" "));
+  const body = normalize(
+    guide.steps.map((s) => `${s.title} ${s.body} ${s.tip ?? ""} ${s.warning ?? ""}`).join(" "),
+  );
   const flowchart = normalize(
     guide.flowchart ? `${guide.flowchart.title} ${guide.flowchart.mermaid}` : "",
   );

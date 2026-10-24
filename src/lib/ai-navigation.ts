@@ -61,8 +61,66 @@ const ALIASES: Record<string, { to: FeezoNavPath; search?: Record<string, string
     admit: { to: "/tenant/students/admit", label: "Admit student" },
     attendance: { to: "/tenant/attendance", label: "Attendance" },
     "mark.attendance": { to: "/tenant/attendance", label: "Mark attendance" },
-    "attendance.devices": { to: "/tenant/attendance", search: { tab: "devices" }, label: "Biometric devices" },
-    "attendance.staff": { to: "/tenant/attendance", search: { tab: "staff" }, label: "Staff attendance" },
+    "attendance.devices": {
+      to: "/tenant/attendance",
+      search: { tab: "devices" },
+      label: "Biometric devices",
+    },
+    "attendance.staff": {
+      to: "/tenant/attendance",
+      search: { tab: "staff" },
+      label: "Staff attendance",
+    },
+    biometric: {
+      to: "/tenant/attendance",
+      search: { tab: "devices" },
+      label: "Biometric devices",
+    },
+    biometrics: {
+      to: "/tenant/attendance",
+      search: { tab: "devices" },
+      label: "Biometric devices",
+    },
+    devices: {
+      to: "/tenant/attendance",
+      search: { tab: "devices" },
+      label: "Biometric devices",
+    },
+    adms: {
+      to: "/tenant/attendance",
+      search: { tab: "devices" },
+      label: "Biometric devices",
+    },
+    essl: {
+      to: "/tenant/attendance",
+      search: { tab: "devices" },
+      label: "Biometric devices",
+    },
+    zkteco: {
+      to: "/tenant/attendance",
+      search: { tab: "devices" },
+      label: "Biometric devices",
+    },
+    "google.login": {
+      to: "/tenant/support",
+      search: { guide: "google-sign-in" },
+      label: "Sign in with Google",
+    },
+    "google.sign.in": {
+      to: "/tenant/support",
+      search: { guide: "google-sign-in" },
+      label: "Sign in with Google",
+    },
+    "parent.portal": {
+      to: "/tenant/support",
+      search: { guide: "parent-portal" },
+      label: "Parent portal",
+    },
+    "parent.login": {
+      to: "/tenant/support",
+      search: { guide: "parent-portal" },
+      label: "Parent portal",
+    },
     parents: { to: "/tenant/students", label: "Students" },
     academics: { to: "/tenant/settings", search: { tab: "academics" }, label: "Academics" },
     exams: { to: "/tenant/settings", search: { tab: "academics" }, label: "Academics" },
@@ -246,6 +304,12 @@ function sanitizeSearch(path: FeezoNavPath, search: Record<string, string>): Rec
     return out;
   }
 
+  if (path === "/tenant/attendance") {
+    const tab = search.tab?.toLowerCase();
+    if (tab === "students" || tab === "staff" || tab === "devices") out.tab = tab;
+    return out;
+  }
+
   if (path === "/tenant/settings") {
     const tab = search.tab?.toLowerCase();
     if (tab && (SETTINGS_TABS as readonly string[]).includes(tab)) out.tab = tab;
@@ -287,6 +351,14 @@ function defaultLabel(path: FeezoNavPath, search: Record<string, string>): strin
   if (path === "/tenant/settings" && search.tab === "support") return "Chat with support";
   if (path === "/tenant/students" && search.id) return "Student profile";
   if (path === "/tenant/staff" && search.id) return "Staff profile";
+  if (path === "/tenant/attendance") {
+    const labels: Record<string, string> = {
+      students: "Student attendance",
+      staff: "Staff attendance",
+      devices: "Biometric devices",
+    };
+    return labels[search.tab ?? ""] ?? "Attendance";
+  }
   const map: Partial<Record<FeezoNavPath, string>> = {
     "/tenant/dashboard": "Dashboard",
     "/tenant/ai": "Feezo AI",
@@ -294,6 +366,7 @@ function defaultLabel(path: FeezoNavPath, search: Record<string, string>): strin
     "/tenant/parents": "Parents",
     "/tenant/students/admit": "Admit student",
     "/tenant/students/edit": "Edit student",
+    "/tenant/attendance": "Attendance",
     "/tenant/staff": "Staff",
     "/tenant/staff/edit": "Edit staff",
     "/tenant/finance": "Finance",
@@ -386,7 +459,7 @@ export function feezoNavigationCatalogText(): string {
     "- /tenant/dashboard",
     "- /tenant/ai (assistant panel; refresh-safe)",
     "- /tenant/students?id=STU-…&tab=profile|academic|attendance|documents|payments|parents-app",
-    "- /tenant/attendance",
+    "- /tenant/attendance?tab=students|staff|devices (devices = biometric ADMS)",
     "- /tenant/settings?tab=academics",
     "- /tenant/students/admit",
     "- /tenant/students/edit?id=STU-…",
@@ -397,6 +470,6 @@ export function feezoNavigationCatalogText(): string {
     "- /tenant/settings?tab=school|branches|classes|departments|roles|leave|fees|users|vehicles|transport|system|support|subscription",
     "- /tenant/notifications",
     "- /tenant/support?guide=<guide-id>&q=<search> (step-by-step help guides; use for 'how do I…' questions)",
-    "Shortcuts also accepted: fees, overdue, receive, make, transfer, transfers, ledger, journals, trial, pl, balance, concession, salary, daybook, recon",
+    "Shortcuts: fees, overdue, receive, make, transfer, attendance, biometric, devices, ledger, journals, trial, pl, balance, concession, salary, daybook, recon, help",
   ].join("\n");
 }

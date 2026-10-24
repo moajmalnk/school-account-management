@@ -176,7 +176,18 @@ function eventDetail(e: TenantActivityEvent): string {
       .filter(Boolean)
       .join(" · ");
   }
-  if (e.event === "login_success" && meta.source === "session") return "From session history";
+  if (e.event === "login_success") {
+    const method = String(meta.method ?? "").toLowerCase();
+    const methodLabel =
+      method === "google" ? "Google" : method === "password" || method === "email" ? "Email & password" : "";
+    if (meta.source === "session") {
+      return methodLabel ? `From session history · ${methodLabel}` : "From session history";
+    }
+    if (meta.source === "signup") {
+      return methodLabel ? `Signed up · ${methodLabel}` : "Signed up";
+    }
+    return methodLabel;
+  }
   return "";
 }
 

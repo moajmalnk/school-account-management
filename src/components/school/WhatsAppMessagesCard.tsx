@@ -19,6 +19,7 @@ const ORDER: WhatsAppMessageKind[] = [
   "feeReceipt",
   "feeReminder",
   "feeReminderBulk",
+  "onlinePaymentLink",
   "paymentVoucher",
   "attendanceAbsent",
   "attendanceDailyReport",
@@ -66,6 +67,18 @@ export function WhatsAppMessagesCard() {
               academic_year: "AY 2025-26",
               detail_block: "*Detail*\nSAR 1,600 × 36 = *SAR 57,600*",
             }
+          : active === "onlinePaymentLink"
+            ? {
+                guardian: "Rajesh Sharma",
+                student_name: "Ararav Sharma",
+                class: "Grade 8 - B",
+                student_id: "STU-2887",
+                school,
+                amount: "SAR 5,000",
+                fee_summary: "Tuition · October",
+                payment_link: "https://www.feezo.app/pay-fee.html?t=FORD-demo",
+                academic_year: "AY 2025-26",
+              }
           : active === "attendanceAbsent"
             ? {
                 guardian: "Rajesh Sharma",

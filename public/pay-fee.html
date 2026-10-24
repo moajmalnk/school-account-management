@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pay school fees · Feezo</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: "Segoe UI", system-ui, sans-serif;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(160deg, #f0fdfa 0%, #f8fafc 45%, #ecfeff 100%);
+        color: #0f172a;
+      }
+      .card {
+        width: min(420px, calc(100vw - 2rem));
+        border-radius: 1.25rem;
+        border: 1px solid #e2e8f0;
+        background: #fff;
+        padding: 1.5rem;
+        box-shadow: 0 18px 40px -28px rgba(15, 23, 42, 0.45);
+      }
+      h1 {
+        margin: 0;
+        font-size: 1.15rem;
+        font-weight: 700;
+      }
+      p {
+        margin: 0.5rem 0 0;
+        font-size: 0.9rem;
+        line-height: 1.45;
+        color: #64748b;
+      }
+      .amt {
+        margin-top: 1rem;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #0f766e;
+      }
+      button {
+        margin-top: 1.25rem;
+        width: 100%;
+        height: 2.75rem;
+        border: 0;
+        border-radius: 999px;
+        background: #0f766e;
+        color: #fff;
+        font-size: 0.95rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+      .err {
+        margin-top: 0.75rem;
+        color: #be123c;
+        font-size: 0.85rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1 id="title">School fee payment</h1>
+      <p id="sub">Opening secure checkout…</p>
+      <div class="amt" id="amt" hidden></div>
+      <button type="button" id="pay" hidden>Pay now</button>
+      <p class="err" id="err" hidden></p>
+    </div>
+    <script>
+      (function () {
+        var params = new URLSearchParams(location.search);
+        var token = (params.get("t") || params.get("token") || "").trim();
+        var title = document.getElementById("title");
+        var sub = document.getElementById("sub");
+        var amt = document.getElementById("amt");
+        var pay = document.getElementById("pay");
+        var err = document.getElementById("err");
+        var sessionId = "";
+        var orderId = "";
+        var apiBase = "https://api.feezo.app";
+
+        function showError(msg) {
+          err.hidden = false;
+          err.textContent = msg;
+          sub.textContent = "Could not start payment";
+          pay.hidden = true;
+        }
+
+        function formatInr(n) {
+          try {
+            return new Intl.NumberFormat("en-IN", {
+              style: "currency",
+              currency: "INR",
+              maximumFractionDigits: 0,
+            }).format(n);
+          } catch (e) {
+            return "₹" + n;
+          }
+        }
+
+        function loadSdk() {
+          return new Promise(function (resolve, reject) {
+            if (window.Cashfree) return resolve();
+            var s = document.createElement("script");
+            s.src = "https://sdk.cashfree.com/js/v3/cashfree.js";
+            s.onload = function () {
+              resolve();
+            };
+            s.onerror = function () {
+              reject(new Error("Could not load payment window"));
+            };
+            document.body.appendChild(s);
+          });
+        }
+
+        function openCheckout() {
+          if (!sessionId) return;
+          pay.disabled = true;
+          loadSdk()
+            .then(function () {
+              var mode =
+                location.hostname === "localhost" || location.hostname === "127.0.0.1"
+                  ? "sandbox"
+                  : "production";
+              var cf = window.Cashfree({ mode: mode });
+              return cf.checkout({
+                paymentSessionId: sessionId,
+                redirectTarget: "_self",
+              });
+            })
+            .catch(function (e) {
+              pay.disabled = false;
+              showError((e && e.message) || "Checkout failed");
+            });
+        }
+
+        if (!token) {
+          showError("This payment link is incomplete.");
+          return;
+        }
+
+        fetch(apiBase + "/api/public/fee-pay-session.php?t=" + encodeURIComponent(token), {
+          credentials: "omit",
+        })
+          .then(function (r) {
+            return r.json().then(function (body) {
+              if (!r.ok || !body || body.success === false) {
+                throw new Error((body && body.error) || "Payment link unavailable");
+              }
+              return body.data || body;
+            });
+          })
+          .then(function (data) {
+            if (data.paid) {
+              title.textContent = "Payment received";
+              sub.textContent = data.receiptId
+                ? "Receipt " + data.receiptId + " is ready."
+                : "Thank you — the school has received this fee.";
+              amt.hidden = false;
+              amt.textContent = formatInr(Number(data.amount) || 0);
+              return;
+            }
+            sessionId = data.paymentSessionId || "";
+            orderId = data.orderId || "";
+            if (!sessionId) throw new Error("Checkout session missing");
+            title.textContent = (data.schoolName || "School") + " · Pay fees";
+            sub.textContent = "Pay securely with UPI, card, or net banking.";
+            amt.hidden = false;
+            amt.textContent = formatInr(Number(data.amount) || 0);
+            pay.hidden = false;
+            pay.onclick = openCheckout;
+            openCheckout();
+          })
+          .catch(function (e) {
+            showError((e && e.message) || "Payment link unavailable");
+          });
+      })();
+    </script>
+  </body>
+</html>

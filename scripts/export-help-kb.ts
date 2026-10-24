@@ -46,7 +46,7 @@ const kb = {
     warning: g.warning,
     openTo: g.openTo,
     related: g.related,
-    steps: g.steps.map((s) => ({ title: s.title, body: s.body, tip: s.tip })),
+    steps: g.steps.map((s) => ({ title: s.title, body: s.body, tip: s.tip, warning: s.warning })),
   })),
   faqs: HELP_FAQS.map((f) => ({
     id: f.id,

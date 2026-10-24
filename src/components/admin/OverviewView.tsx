@@ -9,10 +9,13 @@ import {
   Clock,
   Eye,
   IndianRupee,
+  KeyRound,
   LogIn,
   LogOut,
+  Mail,
   Minus,
   School,
+  UserPlus,
   Users,
 } from "lucide-react";
 import {
@@ -33,6 +36,7 @@ import { OrganicCard } from "@/components/ui/organic-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fetchSuperAdminOverview, type SuperAdminOverview } from "@/lib/api/super-admin";
 import { ApiError, getApiToken } from "@/lib/api/client";
+import { formatAbsoluteAppTime, formatRelativeAppTime } from "@/lib/dates";
 import { cn, type Tone, type CornerSide } from "@/lib/utils";
 import { formatMoney } from "@/lib/money";
 
@@ -100,41 +104,27 @@ function formatInr(n: number) {
   return formatMoney(Math.round(n), "INR");
 }
 
-function formatRelativeTime(raw?: string | null) {
-  if (!raw) return null;
-  const normalized = raw.includes("T") ? raw : raw.replace(" ", "T");
-  const t = Date.parse(normalized);
-  if (!Number.isFinite(t)) return raw;
-  const diffMs = Date.now() - t;
-  if (diffMs < 0) return raw;
-  const mins = Math.floor(diffMs / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 48) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
-
-function formatAbsoluteTime(raw?: string | null) {
-  if (!raw) return null;
-  const normalized = raw.includes("T") ? raw : raw.replace(" ", "T");
-  const d = new Date(normalized);
-  if (Number.isNaN(d.getTime())) return raw;
-  return d.toLocaleString("en-IN", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 function logoutReasonLabel(reason?: string | null) {
   if (!reason) return "ended";
   if (reason === "logout") return "signed out";
   if (reason === "expired") return "session expired";
   if (reason === "replaced") return "replaced device";
   return reason.replace(/_/g, " ");
+}
+
+function loginMethodMeta(method?: string | null): {
+  label: string;
+  cls: string;
+  Icon: typeof Mail | typeof KeyRound;
+} | null {
+  const m = (method ?? "").toLowerCase();
+  if (m === "google") {
+    return { label: "Google", cls: "bg-sky-50 text-sky-800", Icon: KeyRound };
+  }
+  if (m === "password" || m === "email") {
+    return { label: "Email & password", cls: "bg-violet-50 text-violet-800", Icon: Mail };
+  }
+  return null;
 }
 
 function GrowthBadge({ pct, label }: { pct: number; label?: string }) {
@@ -715,12 +705,16 @@ export function OverviewView() {
             </div>
           ) : (
             overview.recentRegistrations.map((r) => {
-              const loginRel = formatRelativeTime(r.lastLoginAt);
-              const logoutRel = formatRelativeTime(r.lastLogoutAt);
-              const seenRel = formatRelativeTime(r.lastSeenAt);
-              const loginAbs = formatAbsoluteTime(r.lastLoginAt);
-              const logoutAbs = formatAbsoluteTime(r.lastLogoutAt);
-              const seenAbs = formatAbsoluteTime(r.lastSeenAt);
+              const signupRel = formatRelativeAppTime(r.time);
+              const signupAbs = formatAbsoluteAppTime(r.time);
+              const loginRel = formatRelativeAppTime(r.lastLoginAt);
+              const logoutRel = formatRelativeAppTime(r.lastLogoutAt);
+              const seenRel = formatRelativeAppTime(r.lastSeenAt);
+              const loginAbs = formatAbsoluteAppTime(r.lastLoginAt);
+              const logoutAbs = formatAbsoluteAppTime(r.lastLogoutAt);
+              const seenAbs = formatAbsoluteAppTime(r.lastSeenAt);
+              const loginMethod = loginMethodMeta(r.lastLoginMethod);
+              const LoginMethodIcon = loginMethod?.Icon;
               return (
                 <div key={`${r.domain}-${r.time}`} className="space-y-2.5 py-3.5">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -765,7 +759,7 @@ export function OverviewView() {
                         </span>
                       ) : null}
                       <span className="font-mono text-[11px] text-black/45" title="Registered">
-                        Joined {formatRelativeTime(r.time)}
+                        Joined {signupRel}
                       </span>
                       <Link
                         to="/super-admin/tenants"
@@ -778,7 +772,28 @@ export function OverviewView() {
                     </div>
                   </div>
 
-                  <div className="grid gap-2 pl-[3.25rem] sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="grid gap-2 pl-[3.25rem] sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] px-3 py-2">
+                      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/40">
+                        <UserPlus className="h-3 w-3" /> Signed up
+                      </div>
+                      {r.time ? (
+                        <>
+                          <div className="mt-1 text-[12.5px] font-semibold text-black">
+                            {signupRel}
+                            <span className="ml-1.5 font-mono text-[11px] font-normal text-black/45">
+                              {signupAbs}
+                            </span>
+                          </div>
+                          <div className="mt-0.5 truncate text-[11px] text-black/55">
+                            Workspace created · {r.flag}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="mt-1 text-[12px] text-black/40">Signup time unknown</div>
+                      )}
+                    </div>
+
                     <div className="rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] px-3 py-2">
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/40">
@@ -835,11 +850,22 @@ export function OverviewView() {
                       </div>
                       {r.lastLoginAt ? (
                         <>
-                          <div className="mt-1 text-[12.5px] font-semibold text-black">
-                            {loginRel}
-                            <span className="ml-1.5 font-mono text-[11px] font-normal text-black/45">
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[12.5px] font-semibold text-black">
+                            <span>{loginRel}</span>
+                            <span className="font-mono text-[11px] font-normal text-black/45">
                               {loginAbs}
                             </span>
+                            {loginMethod && LoginMethodIcon ? (
+                              <span
+                                className={cn(
+                                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                                  loginMethod.cls,
+                                )}
+                              >
+                                <LoginMethodIcon className="h-3 w-3" aria-hidden />
+                                {loginMethod.label}
+                              </span>
+                            ) : null}
                           </div>
                           <div className="mt-0.5 truncate text-[11px] text-black/55">
                             {[r.lastLoginUser || r.lastLoginEmail, r.lastLoginDevice, r.lastLoginIp]
@@ -852,7 +878,7 @@ export function OverviewView() {
                       )}
                     </div>
 
-                    <div className="rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] px-3 py-2 sm:col-span-2 lg:col-span-1">
+                    <div className="rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] px-3 py-2">
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/40">
                           <LogOut className="h-3 w-3" /> Last logout

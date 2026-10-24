@@ -107,3 +107,38 @@ export function schoolParentPay() {
 export function schoolSaveParentPay(body: { enabled: boolean }) {
   return apiRequest("/api/school/parent-pay.php", { method: "POST", body });
 }
+
+export type SchoolFeePayLink = {
+  provider: "cashfree";
+  orderId: string;
+  paymentSessionId: string;
+  publicId: string;
+  amount: number;
+  currency: string;
+  shareUrl: string;
+  payEnabled: boolean;
+  description?: string;
+  schoolName?: string;
+};
+
+/** Create Cashfree checkout for desk collection or WhatsApp payment link. */
+export function schoolCreateFeePayLink(body: {
+  studentId: string;
+  amount: number;
+  academicYear?: string;
+  phone?: string;
+  name?: string;
+  email?: string;
+}) {
+  return apiRequest<SchoolFeePayLink>("/api/school/fee-pay-link.php", {
+    method: "POST",
+    body,
+  });
+}
+
+export function schoolConfirmFeePayLink(orderId: string) {
+  return apiRequest<{ receiptId: string; amount: number }>("/api/school/fee-pay-link.php", {
+    method: "POST",
+    body: { action: "confirm", orderId },
+  });
+}

@@ -16,6 +16,8 @@ import {
   Download,
   ExternalLink,
   FileText,
+  Link2,
+  Loader2,
   MessageCircle,
   Paperclip,
   Pencil,
@@ -82,6 +84,7 @@ import {
   buildFeeReceiptWhatsApp,
   buildFeeReminderWhatsApp,
 } from "@/lib/whatsapp-messages";
+import { shareFeePayLinkWhatsApp } from "@/lib/fee-pay-link-share";
 import {
   apiCreateFeeBreak,
   apiDeleteFeeBreak,
@@ -2198,7 +2201,15 @@ function buildOverdueWhatsAppHref({
   return buildWhatsAppShareUrl(message, digits);
 }
 
-function OverdueWhatsAppButton({ href, compact }: { href: string | null; compact?: boolean }) {
+function OverdueWhatsAppButton({
+  href,
+  compact,
+  label = "Remind",
+}: {
+  href: string | null;
+  compact?: boolean;
+  label?: string;
+}) {
   if (!href) {
     return (
       <button
@@ -2215,7 +2226,7 @@ function OverdueWhatsAppButton({ href, compact }: { href: string | null; compact
         )}
       >
         <MessageCircle className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />
-        WhatsApp
+        {label}
       </button>
     );
   }
@@ -2232,8 +2243,40 @@ function OverdueWhatsAppButton({ href, compact }: { href: string | null; compact
       )}
     >
       <MessageCircle className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />
-      WhatsApp
+      {label}
     </a>
+  );
+}
+
+function FeePayLinkButton({
+  busy,
+  compact,
+  onClick,
+}: {
+  busy?: boolean;
+  compact?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border border-[#99F6E4] bg-[#F0FDFA] font-semibold text-[#0F766E] transition-colors hover:bg-[#CCFBF1] disabled:cursor-not-allowed disabled:opacity-50",
+        compact ? "px-2 py-1 text-[10px]" : "px-2.5 py-1 text-[11px]",
+      )}
+    >
+      {busy ? (
+        <Loader2 className={cn("animate-spin", compact ? "h-3 w-3" : "h-3.5 w-3.5")} />
+      ) : (
+        <Link2 className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />
+      )}
+      Pay link
+    </button>
   );
 }
 
@@ -2266,6 +2309,7 @@ function FeesTable({
   const [selectedRow, setSelectedRow] = useState<LedgerRow | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
   const [openScope, setOpenScope] = useState<"overdue" | "due" | "all">("all");
+  const [payLinkBusyKey, setPayLinkBusyKey] = useState<string | null>(null);
   const paidPct =
     selectedRow && selectedRow.charge > 0
       ? Math.round((selectedRow.paid / selectedRow.charge) * 100)
@@ -2403,9 +2447,52 @@ function FeesTable({
       });
       return;
     }
-    toast.success("Opening WhatsApp", {
-      description: `${lines.length} ${label ?? "fee line"}${lines.length === 1 ? "" : "s"}`,
+    toast.success("Opening WhatsApp reminder", {
+      description: `${lines.length} ${label ?? "fee line"}${lines.length === 1 ? "" : "s"} · no payment link`,
     });
+  };
+
+  const sharePayLink = async (rows: LedgerRow[], busyKey: string, label?: string) => {
+    if (payLinkBusyKey) return;
+    const lines = rows
+      .filter((row) => row.balance > 0)
+      .map((row) => ({
+        label: (row.periodLabel || row.desc).trim() || "Fee",
+        balance: row.balance,
+      }));
+    if (lines.length === 0) {
+      toast.error("Nothing to share", {
+        description: label ? `No open balance in ${label}.` : "Select lines with a balance.",
+      });
+      return;
+    }
+    setPayLinkBusyKey(busyKey);
+    try {
+      const result = await shareFeePayLinkWhatsApp({
+        studentId: student.id,
+        studentName: student.name,
+        className: student.cls,
+        guardian,
+        phone,
+        schoolName,
+        academicYear,
+        lines,
+      });
+      if (!result.ok) {
+        toast.error(result.message);
+        return;
+      }
+      toast.success(
+        result.via === "whatsapp" ? "Opening WhatsApp payment link" : "Payment message copied",
+        {
+          description: `${formatMoney(result.amount)} · ${lines.length} line${
+            lines.length === 1 ? "" : "s"
+          } · Cashfree link`,
+        },
+      );
+    } finally {
+      setPayLinkBusyKey(null);
+    }
   };
 
   const selectedScopedRows = scopedRows
@@ -2414,7 +2501,10 @@ function FeesTable({
   const actionRows = selectedScopedRows.length > 0 ? selectedScopedRows : scopedRows.map(({ row }) => row);
   const actionLabel =
     openScope === "overdue" ? "overdue" : openScope === "due" ? "due" : "open";
+  const actionSuffix = selectedScopedRows.length > 0 ? "selected" : actionLabel;
+  const actionTotal = actionRows.reduce((sum, row) => sum + row.balance, 0);
   const scopeTotal = scopedRows.reduce((sum, { row }) => sum + row.balance, 0);
+  const bulkBusy = payLinkBusyKey === "bulk";
 
   return (
     <>
@@ -2485,21 +2575,37 @@ function FeesTable({
               <div className="flex flex-wrap items-center gap-1.5">
                 <button
                   type="button"
-                  disabled={actionRows.length === 0}
+                  disabled={actionRows.length === 0 || Boolean(payLinkBusyKey)}
                   onClick={() => sendBulkWhatsApp(actionRows, actionLabel)}
+                  title="WhatsApp fee reminder — no payment link"
                   className="inline-flex h-8 items-center gap-1 rounded-full border border-[#25D366]/35 bg-[#25D366]/10 px-2.5 text-[11px] font-semibold text-[#128C7E] transition-colors hover:bg-[#25D366]/18 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <MessageCircle className="h-3.5 w-3.5" />
-                  WhatsApp {selectedScopedRows.length > 0 ? "selected" : actionLabel}
+                  Remind {actionSuffix}
+                </button>
+                <button
+                  type="button"
+                  disabled={actionRows.length === 0 || Boolean(payLinkBusyKey)}
+                  onClick={() => void sharePayLink(actionRows, "bulk", actionLabel)}
+                  title={`Share Cashfree payment link for ${formatMoney(actionTotal)}`}
+                  className="inline-flex h-8 items-center gap-1 rounded-full border border-[#99F6E4] bg-[#F0FDFA] px-2.5 text-[11px] font-semibold text-[#0F766E] transition-colors hover:bg-[#CCFBF1] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {bulkBusy ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Link2 className="h-3.5 w-3.5" />
+                  )}
+                  Pay link {actionSuffix}
                 </button>
                 <Button
                   type="button"
-                  disabled={actionRows.length === 0}
+                  disabled={actionRows.length === 0 || Boolean(payLinkBusyKey)}
                   className="h-8 rounded-full bg-[#0F766E] px-2.5 text-[11px] font-semibold text-white hover:bg-[#0D9488] disabled:opacity-40"
                   onClick={() => openCollectRows(actionRows)}
+                  title="Record Bank / Cash / Online in Finance"
                 >
                   <Wallet className="mr-1 h-3.5 w-3.5" />
-                  Collect {selectedScopedRows.length > 0 ? "selected" : actionLabel}
+                  Collect {actionSuffix}
                 </Button>
               </div>
             </div>
@@ -2551,9 +2657,16 @@ function FeesTable({
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-1.5">
                       <StatusBadge status={r.status} />
-                      {canSelect && (
-                        <OverdueWhatsAppButton href={overdueHref(r)} compact />
-                      )}
+                      {canSelect ? (
+                        <div className="flex flex-wrap justify-end gap-1">
+                          <OverdueWhatsAppButton href={overdueHref(r)} compact />
+                          <FeePayLinkButton
+                            compact
+                            busy={payLinkBusyKey === key}
+                            onClick={() => void sharePayLink([r], key)}
+                          />
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2.5">
@@ -2682,9 +2795,16 @@ function FeesTable({
                       <td className="py-4 pl-4 pr-1">
                         <div className="flex flex-col items-start gap-1.5">
                           <StatusBadge status={r.status} />
-                          {canSelect && (
-                            <OverdueWhatsAppButton href={overdueHref(r)} compact />
-                          )}
+                          {canSelect ? (
+                            <div className="flex flex-wrap gap-1">
+                              <OverdueWhatsAppButton href={overdueHref(r)} compact />
+                              <FeePayLinkButton
+                                compact
+                                busy={payLinkBusyKey === key}
+                                onClick={() => void sharePayLink([r], key)}
+                              />
+                            </div>
+                          ) : null}
                         </div>
                       </td>
                     </tr>
@@ -2717,9 +2837,6 @@ function FeesTable({
                 <div className="mt-1 text-[18px] font-semibold text-black">{selectedRow.desc}</div>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <StatusBadge status={selectedRow.status} />
-                  {showFeeReminder(selectedRow) && (
-                    <OverdueWhatsAppButton href={overdueHref(selectedRow)} />
-                  )}
                 </div>
               </div>
 
@@ -2746,14 +2863,21 @@ function FeesTable({
               </div>
 
               {showFeeReminder(selectedRow) ? (
-                <DialogFooter className="sm:justify-center">
+                <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
+                  <div className="flex w-full flex-wrap justify-center gap-2">
+                    <OverdueWhatsAppButton href={overdueHref(selectedRow)} />
+                    <FeePayLinkButton
+                      busy={payLinkBusyKey === "detail"}
+                      onClick={() => void sharePayLink([selectedRow], "detail")}
+                    />
+                  </div>
                   <Button
                     type="button"
-                    className="h-10 rounded-full bg-[#0F766E] px-4 text-[13px] font-semibold text-white hover:bg-[#0D9488]"
+                    className="h-10 w-full rounded-full bg-[#0F766E] px-4 text-[13px] font-semibold text-white hover:bg-[#0D9488] sm:w-auto"
                     onClick={() => openCollectNow(selectedRow)}
                   >
                     <Wallet className="mr-1.5 h-4 w-4" />
-                    Collect now
+                    Collect in Finance
                   </Button>
                 </DialogFooter>
               ) : null}

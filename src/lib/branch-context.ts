@@ -25,6 +25,12 @@ export function setBranchContext(tenantId: string | null, branchPublicId: string
   persist();
 }
 
+/** Drop in-memory campus header so a previous school's `X-Branch-Id` cannot leak into a new login. */
+export function clearBranchContext() {
+  currentTenantId = null;
+  currentBranchPublicId = null;
+}
+
 export function readStoredBranchPublicId(tenantId?: string | null): string | null {
   if (typeof window === "undefined") return null;
   const id = typeof tenantId === "string" ? tenantId.trim() : "";

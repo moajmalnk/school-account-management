@@ -47,6 +47,8 @@ export type HelpStep = {
   body: string;
   image?: string;
   tip?: string;
+  /** Caution callout under the step (stronger than tip). */
+  warning?: string;
 };
 
 export type HelpFlowchartSpec = {
@@ -183,37 +185,38 @@ export const HELP_GUIDES: HelpGuide[] = [
       },
       {
         title: "Sign in",
-        body: "Use the same email and password you use on the web. Your data is the same everywhere.",
+        body: "Staff: same email and password as the web, or **Continue with Google** when that Google email already has a Feezo login. Parents: use the parent portal with the phone on file.",
       },
       {
         title: "Collect fees on the go",
         body: "Open Finance → Receive payment on the phone to issue a receipt and share it on WhatsApp straight away.",
       },
     ],
-    related: ["receive-payment"],
+    related: ["receive-payment", "google-sign-in", "parent-portal"],
   },
   {
     id: "ai-assistant",
     category: "start",
     title: "Ask the Feezo AI assistant",
-    summary: "Get answers and open screens by just asking.",
+    summary: "Get answers, open screens, and follow official how-to guides.",
     minutes: 1,
-    keywords: ["ai", "assistant", "chat", "ask", "feezo ai", "help", "question"],
+    keywords: ["ai", "assistant", "chat", "ask", "feezo ai", "help", "question", "biometric", "google"],
     steps: [
       {
         title: "Open the assistant",
-        body: "Tap the sparkle button. It asks “How can I help today?”.",
+        body: "Tap the sparkle button (or open **Feezo AI**). It asks how it can help today.",
       },
       {
         title: "Ask in plain words",
-        body: "Try “What is our current financial status?”, “Show overdue fee students” or “Open fees report”. It can also open the right screen for you.",
+        body: "Try “Show overdue fees”, “Open biometric devices”, or “How do I sign in with Google?”. Feezo can open the right screen or guide for you.",
       },
       {
-        title: "Ask how to do something",
-        body: "Ask “How do I collect a fee?” and it can open the matching guide on this Support page.",
+        title: "How-to answers",
+        body: "For setup questions it uses the same Support guides you see under **Support** — short steps with exact button names.",
+        tip: "Prefer English or Malayalam; Feezo matches the language you write in.",
       },
     ],
-    related: ["workspace-tour"],
+    related: ["workspace-tour", "biometric-devices", "google-sign-in", "live-support"],
   },
 
   /* --------------------------------- Students -------------------------------- */
@@ -391,7 +394,57 @@ export const HELP_GUIDES: HelpGuide[] = [
         body: "Use Daily, Monthly, or Detailed report to download a PDF or share it on WhatsApp. Each student profile also has an Attendance tab for month history.",
       },
     ],
-    related: ["student-profile", "bulk-actions"],
+    related: ["student-profile", "bulk-actions", "biometric-devices"],
+  },
+  {
+    id: "biometric-devices",
+    category: "students",
+    title: "Connect a biometric attendance device",
+    summary: "Register an eSSL / ZKTeco ADMS machine, map PINs, and sync punches into Feezo.",
+    minutes: 5,
+    access: { kind: "permission", key: "students" },
+    keywords: [
+      "biometric",
+      "fingerprint",
+      "device",
+      "devices",
+      "adms",
+      "essl",
+      "zkteco",
+      "punch",
+      "serial",
+      "pin",
+      "machine",
+      "online",
+      "attendance device",
+    ],
+    openTo: { href: "/tenant/attendance?tab=devices", label: "Open Devices" },
+    steps: [
+      {
+        title: "Open Devices",
+        body: "Go to **Attendance → Devices**. This is where Feezo lists biometric machines for the current campus.",
+      },
+      {
+        title: "Register the serial number",
+        body: "Tap **Add device** (or Register). Enter the machine’s **Serial Number** exactly as shown on the device. Save so Feezo can claim punches from that SN.",
+      },
+      {
+        title: "Point the machine at Feezo",
+        body: "On the device menu set Server Mode to **ADMS**, enable domain name, Server Address **api.feezo.app**, Port **80**. Prefer plain HTTP for `/iclock/*` (many firmwares do not follow HTTPS redirects).",
+        tip: "When the machine is talking to Feezo, the device row shows **Online** (last seen within a few minutes).",
+      },
+      {
+        title: "Map each PIN to a person",
+        body: "Under user mapping, bind each biometric **PIN** to a student or staff member. Unmapped punches are stored but do not mark attendance until mapped.",
+      },
+      {
+        title: "Confirm live punches",
+        body: "Watch the live feed after a test punch. Use ADMS logs on the same screen if a device stays Offline.",
+        warning:
+          "Unregistered serial numbers stay unassigned and will not write tenant attendance until you claim them here.",
+      },
+    ],
+    related: ["student-attendance", "add-staff"],
   },
 
   /* ---------------------------------- Staff ---------------------------------- */
@@ -528,15 +581,15 @@ export const HELP_GUIDES: HelpGuide[] = [
     ],
     openTo: { href: "/tenant/finance?tab=receive", label: "Open Receive Payment" },
     flowchart: {
-      title: "Receive payment flow",
+      title: "Receive payment",
       mermaid: `flowchart TD
-  openNode[Open_Receive_Payment] --> pick[Select_Class_and_Student]
-  pick --> fee[Choose_Fee_Category_and_Amount]
-  fee --> mode[Set_Mode_Cash_Bank_or_Both]
-  mode --> when[Confirm_Paid_Date_and_Time]
-  when --> save[Review_and_Save]
-  save --> receipt[Open_Print_or_Share_Receipt]
-  receipt --> verify[Verify_Fee_Status_Updated]`,
+  openNode[Open Receive Payment] --> pick[Select class and student]
+  pick --> fee[Fee category and amount]
+  fee --> mode[Mode: Cash / Bank / Both]
+  mode --> when[Confirm paid date]
+  when --> save[Review and save]
+  save --> receipt[Print or share receipt]
+  receipt --> verify[Fee status updated]`,
     },
     steps: [
       {
@@ -592,18 +645,18 @@ export const HELP_GUIDES: HelpGuide[] = [
     ],
     openTo: { href: "/tenant/finance?tab=make", label: "Open Make Payment" },
     flowchart: {
-      title: "Make payment branches",
+      title: "Make payment",
       mermaid: `flowchart TD
-  openNode[Open_Make_Payment] --> type[Choose_Payee_Type]
+  openNode[Open Make Payment] --> type[Choose payee type]
   type --> salary[Salary]
-  type --> expense[Other_Expense]
+  type --> expense[Other expense]
   type --> vendor[Vendor]
-  salary --> fill[Amount_Mode_Narration]
-  expense --> ledger[Pick_Expense_Ledger]
+  salary --> fill[Amount, mode, narration]
+  expense --> ledger[Pick expense ledger]
   vendor --> ledger
   ledger --> fill
-  fill --> save[Review_and_Save]
-  save --> history[Check_Payment_History]`,
+  fill --> save[Review and save]
+  save --> history[Check payment history]`,
     },
     steps: [
       {
@@ -732,15 +785,15 @@ export const HELP_GUIDES: HelpGuide[] = [
     ],
     openTo: { href: "/tenant/finance?tab=ledger", label: "Open Ledger" },
     flowchart: {
-      title: "Ledger creation control",
+      title: "Ledger creation",
       mermaid: `flowchart TD
-  openNode[Open_Ledger_Setup] --> name[Enter_Ledger_Name]
-  name --> group[Select_Account_Group]
-  group --> check{Income_Expense_Asset_or_Liability}
-  check -->|Correct| save[Save_and_Verify]
-  check -->|Wrong_group| fix[Change_Group_Before_Save]
-  fix --> save
-  save --> use[Use_in_Receive_or_Make_Payment]`,
+  openNode[Open Ledger setup] --> name[Enter ledger name]
+  name --> group[Select Account Group]
+  group --> check{Group type correct?}
+  check -->|Yes| save[Save and verify]
+  check -->|No| fix[Change group first]
+  fix --> group
+  save --> use[Ready for Receive / Make Payment]`,
     },
     steps: [
       {
@@ -1528,6 +1581,7 @@ export const HELP_GUIDES: HelpGuide[] = [
       "password",
       "reset",
       "forgot",
+      "google",
     ],
     openTo: { href: "/tenant/settings?tab=users", label: "Open Users" },
     steps: [
@@ -1540,8 +1594,13 @@ export const HELP_GUIDES: HelpGuide[] = [
         body: "Tick only what they need, for example Receive payment but not Settings. Under Campuses, limit which branches they can open.",
       },
       {
+        title: "Sign in with Google (optional)",
+        body: "Staff can open **feezo.app/login** and use **Continue with Google** when that Google email matches an existing Feezo user. Create the login here first — Google does not create new school accounts by itself.",
+        tip: "Parents still sign in on the parent portal with phone + password, not Google.",
+      },
+      {
         title: "Reset a password",
-        body: "On the user row, tap Send reset link — they get an email and choose a new password. Or open Settings → Support and ask about password reset. Locked-out users can also use Forgot password on the sign-in page. No Feezo or super admin needed.",
+        body: "On the user row, tap Send reset link — they get an email and choose a new password. Locked-out users can also use Forgot password on the staff sign-in page.",
       },
       {
         title: "Test before saving",
@@ -1553,7 +1612,73 @@ export const HELP_GUIDES: HelpGuide[] = [
         tip: "Use Login as to see the workspace as that user when they report a problem.",
       },
     ],
-    related: ["branches"],
+    related: ["branches", "google-sign-in", "parent-portal"],
+  },
+  {
+    id: "google-sign-in",
+    category: "settings",
+    title: "Sign in with Google",
+    summary: "Staff and admins can use Google on the school login page when their email already exists in Feezo.",
+    minutes: 2,
+    keywords: [
+      "google",
+      "sign in",
+      "login",
+      "oauth",
+      "continue with google",
+      "gmail",
+      "staff login",
+    ],
+    openTo: { href: "/login", label: "Open staff login" },
+    steps: [
+      {
+        title: "Use the staff login page",
+        body: "Go to **feezo.app/login** (school staff and super admin). Parent accounts use **/family/login** instead.",
+      },
+      {
+        title: "Continue with Google",
+        body: "Tap **Continue with Google**, choose the Google account, and return to Feezo in the same tab.",
+      },
+      {
+        title: "Email must already exist",
+        body: "Feezo matches the verified Google email to an existing school user or super admin. If there is no matching login, ask your school admin to create one under **Settings → Users** first.",
+        warning: "Google sign-in does not create a new school trial or parent account.",
+      },
+    ],
+    related: ["team-users", "parent-portal"],
+  },
+  {
+    id: "parent-portal",
+    category: "start",
+    title: "Parent portal sign-in",
+    summary: "Parents open fees and updates with the phone number the school has on file.",
+    minutes: 2,
+    keywords: [
+      "parent",
+      "family",
+      "guardian",
+      "parent login",
+      "parent portal",
+      "phone login",
+      "family app",
+    ],
+    openTo: { href: "/family/login", label: "Open parent login" },
+    steps: [
+      {
+        title: "Open the parent portal",
+        body: "Go to **feezo.app/family/login** (or Parent sign in from the staff login page).",
+      },
+      {
+        title: "Sign in with phone",
+        body: "Enter the mobile number saved on the student’s record and the parent password. If the phone is linked to more than one school, pick the school when asked.",
+      },
+      {
+        title: "School side",
+        body: "Admins keep guardian phones up to date on the student profile and can invite parents from the Parents app tools where available.",
+        tip: "Parents do not use Continue with Google — that is only for staff on /login.",
+      },
+    ],
+    related: ["student-profile", "google-sign-in", "mobile-app"],
   },
   {
     id: "transport",
@@ -1733,6 +1858,27 @@ export const HELP_FAQS: HelpFaq[] = [
     answer:
       "Yes. Every school's data is kept separate, connections are encrypted, and only the logins you create can open your workspace. You control exactly what each login can see in Settings → Users.",
   },
+  {
+    id: "google-login-how",
+    question: "How do I sign in with Google?",
+    answer:
+      "Open feezo.app/login and tap Continue with Google. Your Google email must already exist as a Feezo school user or super admin. Parents use /family/login with phone instead.",
+    guideId: "google-sign-in",
+  },
+  {
+    id: "biometric-offline",
+    question: "Our biometric machine shows Offline",
+    answer:
+      "Confirm the serial number is registered under Attendance → Devices, the device points at api.feezo.app on port 80 over HTTP for /iclock, and PIN maps exist. Check ADMS logs on the Devices screen after a test punch.",
+    guideId: "biometric-devices",
+  },
+  {
+    id: "parent-vs-staff-login",
+    question: "Which login should parents use?",
+    answer:
+      "Parents use feezo.app/family/login with the phone number on the student record. Staff and school admins use feezo.app/login (email/password or Google).",
+    guideId: "parent-portal",
+  },
 ];
 
 export type QuickTask = { label: string; guideId: string };
@@ -1740,8 +1886,8 @@ export type QuickTask = { label: string; guideId: string };
 export const HELP_QUICK_TASKS: QuickTask[] = [
   { label: "Collect a fee", guideId: "receive-payment" },
   { label: "Admit a student", guideId: "admit-student" },
+  { label: "Mark attendance", guideId: "student-attendance" },
+  { label: "Connect biometric", guideId: "biometric-devices" },
   { label: "Set fee structure", guideId: "classes-fees" },
-  { label: "Pay salary", guideId: "salary-setup" },
-  { label: "Close the month", guideId: "monthly-close" },
   { label: "Add a team login", guideId: "team-users" },
 ];

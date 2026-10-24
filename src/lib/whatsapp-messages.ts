@@ -51,6 +51,19 @@ Date: {{date}}
 
 Thank you.`;
 
+export const DEFAULT_ONLINE_PAYMENT_LINK_WHATSAPP = `Dear {{guardian}},
+
+{{school}} has shared an online fee payment link for {{student_name}} ({{class}}).
+
+Amount: {{amount}}
+{{fee_summary}}
+Year: {{academic_year}}
+
+Pay securely here:
+{{payment_link}}
+
+The link stays open for a limited time. Thank you.`;
+
 const DEFAULT_ATTENDANCE_ABSENT_WHATSAPP = `Dear {{guardian}},
 
 This is an attendance notice from {{school}} for {{student_name}} ({{class}}).
@@ -82,6 +95,7 @@ export type WhatsAppMessageKind =
   | "feeReceipt"
   | "feeReminder"
   | "feeReminderBulk"
+  | "onlinePaymentLink"
   | "paymentVoucher"
   | "attendanceAbsent"
   | "attendanceDailyReport"
@@ -150,6 +164,21 @@ export const WHATSAPP_MESSAGE_FIELDS: Record<
       { key: "detail_block", label: "Detail block" },
     ],
   },
+  onlinePaymentLink: {
+    title: "Online payment link",
+    hint: "Shared from Finance → Receive Payment when mode is Online (WhatsApp link or counter checkout).",
+    vars: [
+      { key: "guardian", label: "Guardian" },
+      { key: "student_name", label: "Student" },
+      { key: "class", label: "Class" },
+      { key: "student_id", label: "Student ID" },
+      { key: "school", label: "School" },
+      { key: "amount", label: "Amount" },
+      { key: "fee_summary", label: "Fee summary" },
+      { key: "payment_link", label: "Payment link" },
+      { key: "academic_year", label: "Year" },
+    ],
+  },
   paymentVoucher: {
     title: "Payment voucher",
     hint: "Sent with salary slips and expense vouchers.",
@@ -203,6 +232,7 @@ export function defaultWhatsAppTemplates(): WhatsAppMessageTemplates {
     feeReceipt: DEFAULT_FEE_RECEIPT_WHATSAPP,
     feeReminder: DEFAULT_FEE_REMINDER_WHATSAPP,
     feeReminderBulk: DEFAULT_FEE_REMINDER_BULK_WHATSAPP,
+    onlinePaymentLink: DEFAULT_ONLINE_PAYMENT_LINK_WHATSAPP,
     paymentVoucher: DEFAULT_PAYMENT_VOUCHER_WHATSAPP,
     attendanceAbsent: DEFAULT_ATTENDANCE_ABSENT_WHATSAPP,
     attendanceDailyReport: DEFAULT_ATTENDANCE_DAILY_REPORT_WHATSAPP,
@@ -246,6 +276,7 @@ export function loadWhatsAppTemplates(): WhatsAppMessageTemplates {
       feeReceipt: textOr(parsed.feeReceipt, defaults.feeReceipt),
       feeReminder: migrateFeeReminderTemplate(parsed.feeReminder, defaults.feeReminder),
       feeReminderBulk: textOr(parsed.feeReminderBulk, defaults.feeReminderBulk),
+      onlinePaymentLink: textOr(parsed.onlinePaymentLink, defaults.onlinePaymentLink),
       paymentVoucher: textOr(parsed.paymentVoucher, defaults.paymentVoucher),
       attendanceAbsent: textOr(parsed.attendanceAbsent, defaults.attendanceAbsent),
       attendanceDailyReport: textOr(parsed.attendanceDailyReport, defaults.attendanceDailyReport),
@@ -265,6 +296,7 @@ export function saveWhatsAppTemplates(next: WhatsAppMessageTemplates): void {
     feeReceipt: textOr(next.feeReceipt, defaults.feeReceipt),
     feeReminder: textOr(next.feeReminder, defaults.feeReminder),
     feeReminderBulk: textOr(next.feeReminderBulk, defaults.feeReminderBulk),
+    onlinePaymentLink: textOr(next.onlinePaymentLink, defaults.onlinePaymentLink),
     paymentVoucher: textOr(next.paymentVoucher, defaults.paymentVoucher),
     attendanceAbsent: textOr(next.attendanceAbsent, defaults.attendanceAbsent),
     attendanceDailyReport: textOr(next.attendanceDailyReport, defaults.attendanceDailyReport),
@@ -321,6 +353,33 @@ export function buildFeeReceiptWhatsApp(input: {
     academic_year: input.academicYear?.trim() || "",
     category: input.category?.trim() || "",
   }).trim();
+}
+
+export function buildOnlinePaymentLinkWhatsApp(input: {
+  school: string;
+  guardian?: string;
+  studentName: string;
+  className?: string;
+  studentId?: string;
+  amount: number;
+  paymentLink: string;
+  feeSummary?: string;
+  academicYear?: string;
+}): string {
+  const template = loadWhatsAppTemplates().onlinePaymentLink;
+  return stripEmptyLabeledLines(
+    renderWhatsAppTemplate(template, {
+      guardian: input.guardian?.trim() || "Parent",
+      student_name: input.studentName,
+      class: input.className?.trim() || "—",
+      student_id: input.studentId?.trim() || "",
+      school: input.school.trim() || "School",
+      amount: formatMoney(input.amount),
+      fee_summary: input.feeSummary?.trim() || "",
+      payment_link: input.paymentLink.trim(),
+      academic_year: input.academicYear?.trim() || "",
+    }),
+  ).trim();
 }
 
 export function feeReminderTemplateFor(hasOverdue: boolean): string {
