@@ -13,6 +13,8 @@ import {
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
+import { FeezoBrand } from "@/components/brand/FeezoBrand";
+import { SignupCelebration } from "@/components/signup/SignupCelebration";
 import {
   FieldLabel,
   SignupShell,
@@ -813,30 +815,53 @@ function SuccessScreen({
     redirect: "/tenant/dashboard",
   };
   return (
-    <div className="min-h-dvh bg-[#F4F6F9] px-3 py-[calc(1rem+env(safe-area-inset-top))] sm:px-6 sm:py-10">
-      <div className="mx-auto w-full max-w-lg">
-        <div className="rounded-[28px] border border-white/80 bg-white px-6 py-8 text-center shadow-[0_24px_60px_-40px_rgba(0,0,0,0.35)] sm:px-8">
-          <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-[#F4FBF0]">
-            <Check className="h-7 w-7 text-[#6BA832]" aria-hidden />
+    <div className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-[#F3F5F7] px-4 py-[calc(1.25rem+env(safe-area-inset-top))] sm:py-16">
+      <SignupCelebration />
+      <div className="relative z-10 w-full max-w-[400px]">
+        <div className="mb-7 flex justify-center sm:mb-9">
+          <Link
+            to="/"
+            className="rounded-lg outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-[#0F766E]/30"
+          >
+            <FeezoBrand subtitle="Unified Control" markClassName="h-10 w-10" className="text-left" />
+          </Link>
+        </div>
+
+        <div className="rounded-2xl border border-white bg-white/95 p-7 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_20px_48px_-28px_rgba(15,23,42,0.22)] backdrop-blur-sm sm:p-8">
+          <div className="flex items-center gap-3">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#ECFDF5]">
+              <Check className="h-4 w-4 text-[#0F766E]" aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <h1 className="truncate text-[22px] font-semibold tracking-tight text-[#0B1220] sm:text-[24px]">
+                Workspace ready
+              </h1>
+              <p className="mt-0.5 text-[13.5px] text-black/50">14-day trial · full access</p>
+            </div>
           </div>
-          <h1 className="mt-4 text-[1.5rem] font-semibold tracking-tight text-black">
-            {data.tenantName} is ready
-          </h1>
-          <p className="mt-1.5 text-[14px] text-black/55">
-            Your workspace is live with full access for 14 days.
-          </p>
-          <div className="mt-6 space-y-2 rounded-2xl bg-[#F4FBF0] px-4 py-4 text-left text-[13px]">
-            <Row label="Workspace" value={data.tenantName} />
-            <Row label="Your role" value="School administrator" />
-            <Row label="Trial" value={`${data.tier} · 14 days, full access`} accent />
-          </div>
+
+          <dl className="mt-6 divide-y divide-[#F0F1F3] border-y border-[#F0F1F3] text-[13.5px]">
+            <div className="flex items-baseline justify-between gap-4 py-3">
+              <dt className="shrink-0 text-black/45">School</dt>
+              <dd className="truncate text-right font-medium text-[#0B1220]">{data.tenantName}</dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-4 py-3">
+              <dt className="shrink-0 text-black/45">Role</dt>
+              <dd className="text-right font-medium text-[#0B1220]">School administrator</dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-4 py-3">
+              <dt className="shrink-0 text-black/45">Plan</dt>
+              <dd className="text-right font-medium text-[#0F766E]">{data.tier}</dd>
+            </div>
+          </dl>
+
           <button
             type="button"
             autoFocus
             onClick={() => navigate({ to: data.redirect as "/tenant/dashboard" })}
-            className="mt-7 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#6BA832] text-[14px] font-semibold text-white shadow-[0_12px_28px_-14px_rgba(107,168,50,0.7)] transition-colors hover:bg-[#5a9429]"
+            className="mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#0F766E] text-[13.5px] font-semibold text-white transition-colors hover:bg-[#0D9488]"
           >
-            Open my dashboard
+            Continue to dashboard
             <ArrowRight className="h-4 w-4" aria-hidden />
           </button>
         </div>
@@ -881,17 +906,6 @@ function Field({
           {error}
         </p>
       ) : null}
-    </div>
-  );
-}
-
-function Row({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
-  return (
-    <div className="flex justify-between gap-3">
-      <span className="text-black/50">{label}</span>
-      <span className={cn("text-right font-semibold", accent ? "text-[#6BA832]" : "text-black")}>
-        {value}
-      </span>
     </div>
   );
 }
