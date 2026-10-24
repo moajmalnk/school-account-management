@@ -44,7 +44,12 @@ export type SuperAdminOverview = {
     lastLogoutReason?: string | null;
     lastLogoutUser?: string | null;
     lastLogoutDevice?: string | null;
+    lastLogoutIp?: string | null;
     lastSeenAt?: string | null;
+    lastSeenUser?: string | null;
+    lastSeenEmail?: string | null;
+    lastSeenDevice?: string | null;
+    lastSeenIp?: string | null;
   }[];
 };
 

@@ -3,9 +3,11 @@ import { Link } from "@tanstack/react-router";
 import {
   Activity,
   ArrowDownRight,
+  ArrowRight,
   ArrowUpRight,
   CheckCircle2,
   Clock,
+  Eye,
   IndianRupee,
   LogIn,
   LogOut,
@@ -696,7 +698,7 @@ export function OverviewView() {
           <div>
             <div className="text-title">Recent activity</div>
             <div className="mt-1 text-[13px] text-black/55">
-              Teams ordered by last login · online first
+              Teams ordered by last seen · online first
             </div>
           </div>
           <Link
@@ -715,8 +717,10 @@ export function OverviewView() {
             overview.recentRegistrations.map((r) => {
               const loginRel = formatRelativeTime(r.lastLoginAt);
               const logoutRel = formatRelativeTime(r.lastLogoutAt);
+              const seenRel = formatRelativeTime(r.lastSeenAt);
               const loginAbs = formatAbsoluteTime(r.lastLoginAt);
               const logoutAbs = formatAbsoluteTime(r.lastLogoutAt);
+              const seenAbs = formatAbsoluteTime(r.lastSeenAt);
               return (
                 <div key={`${r.domain}-${r.time}`} className="space-y-2.5 py-3.5">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -763,13 +767,71 @@ export function OverviewView() {
                       <span className="font-mono text-[11px] text-black/45" title="Registered">
                         Joined {formatRelativeTime(r.time)}
                       </span>
+                      <Link
+                        to="/super-admin/tenants"
+                        search={{ tenant: r.id || undefined, tab: "activity" }}
+                        className="inline-flex items-center gap-1 rounded-full border border-[#E5E5E5] bg-white px-2.5 py-1 text-[11px] font-medium text-black/65 hover:border-black/20 hover:text-black"
+                      >
+                        More details
+                        <ArrowRight className="h-3 w-3" />
+                      </Link>
                     </div>
                   </div>
 
-                  <div className="grid gap-2 pl-[3.25rem] sm:grid-cols-2">
+                  <div className="grid gap-2 pl-[3.25rem] sm:grid-cols-2 lg:grid-cols-3">
                     <div className="rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] px-3 py-2">
-                      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/40">
-                        <LogIn className="h-3 w-3" /> Last login
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/40">
+                          <Eye className="h-3 w-3" /> Last seen
+                        </div>
+                        <Link
+                          to="/super-admin/tenants"
+                          search={{ tenant: r.id || undefined, tab: "activity" }}
+                          className="text-black/35 hover:text-black/70"
+                          aria-label={`Last seen details for ${r.name}`}
+                        >
+                          <ArrowRight className="h-3 w-3" />
+                        </Link>
+                      </div>
+                      {r.lastSeenAt ? (
+                        <>
+                          <div className="mt-1 text-[12.5px] font-semibold text-black">
+                            {r.onlineNow ? "Now" : seenRel}
+                            <span className="ml-1.5 font-mono text-[11px] font-normal text-black/45">
+                              {seenAbs}
+                            </span>
+                          </div>
+                          <div className="mt-0.5 truncate text-[11px] text-black/55">
+                            {[
+                              r.lastSeenUser || r.lastSeenEmail,
+                              r.lastSeenDevice,
+                              r.lastSeenIp,
+                              r.onlineNow && r.openSessions
+                                ? `${r.openSessions} open session${r.openSessions === 1 ? "" : "s"}`
+                                : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ") || "Session heartbeat"}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="mt-1 text-[12px] text-black/40">No activity recorded yet</div>
+                      )}
+                    </div>
+
+                    <div className="rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] px-3 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/40">
+                          <LogIn className="h-3 w-3" /> Last login
+                        </div>
+                        <Link
+                          to="/super-admin/tenants"
+                          search={{ tenant: r.id || undefined, tab: "activity" }}
+                          className="text-black/35 hover:text-black/70"
+                          aria-label={`Login details for ${r.name}`}
+                        >
+                          <ArrowRight className="h-3 w-3" />
+                        </Link>
                       </div>
                       {r.lastLoginAt ? (
                         <>
@@ -790,9 +852,19 @@ export function OverviewView() {
                       )}
                     </div>
 
-                    <div className="rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] px-3 py-2">
-                      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/40">
-                        <LogOut className="h-3 w-3" /> Last logout
+                    <div className="rounded-xl border border-[#EFEFEF] bg-[#FAFAFA] px-3 py-2 sm:col-span-2 lg:col-span-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/40">
+                          <LogOut className="h-3 w-3" /> Last logout
+                        </div>
+                        <Link
+                          to="/super-admin/tenants"
+                          search={{ tenant: r.id || undefined, tab: "activity" }}
+                          className="text-black/35 hover:text-black/70"
+                          aria-label={`Logout details for ${r.name}`}
+                        >
+                          <ArrowRight className="h-3 w-3" />
+                        </Link>
                       </div>
                       {r.lastLogoutAt ? (
                         <>
@@ -807,6 +879,7 @@ export function OverviewView() {
                               r.lastLogoutUser,
                               logoutReasonLabel(r.lastLogoutReason),
                               r.lastLogoutDevice,
+                              r.lastLogoutIp,
                             ]
                               .filter(Boolean)
                               .join(" · ")}

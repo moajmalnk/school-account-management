@@ -61,6 +61,8 @@ const ALIASES: Record<string, { to: FeezoNavPath; search?: Record<string, string
     admit: { to: "/tenant/students/admit", label: "Admit student" },
     attendance: { to: "/tenant/attendance", label: "Attendance" },
     "mark.attendance": { to: "/tenant/attendance", label: "Mark attendance" },
+    "attendance.devices": { to: "/tenant/attendance", search: { tab: "devices" }, label: "Biometric devices" },
+    "attendance.staff": { to: "/tenant/attendance", search: { tab: "staff" }, label: "Staff attendance" },
     parents: { to: "/tenant/students", label: "Students" },
     academics: { to: "/tenant/settings", search: { tab: "academics" }, label: "Academics" },
     exams: { to: "/tenant/settings", search: { tab: "academics" }, label: "Academics" },

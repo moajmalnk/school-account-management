@@ -4,11 +4,19 @@ import { toast } from "sonner";
 
 import { AttendanceWorkspace } from "@/components/school/attendance/AttendanceWorkspace";
 import { useRequirePermission } from "@/hooks/useRequirePermission";
+import { attendanceTabFromSearch, isAttendanceTab, type AttendanceTab } from "@/lib/attendance-tabs";
 import { useAuth } from "@/lib/auth";
 import { firstAllowedTenantPath, planAllowsStudentAttendance } from "@/lib/permissions";
 import "@/file-routes";
 
+type AttendanceSearch = {
+  tab?: AttendanceTab;
+};
+
 export const Route = createFileRoute("/tenant/attendance")({
+  validateSearch: (search: Record<string, unknown>): AttendanceSearch => ({
+    tab: isAttendanceTab(search.tab) ? search.tab : undefined,
+  }),
   component: AttendanceRoute,
 });
 
@@ -28,3 +36,5 @@ function AttendanceRoute() {
   if (!planAllowsStudentAttendance(session?.planFlags)) return null;
   return <AttendanceWorkspace />;
 }
+
+export { attendanceTabFromSearch };

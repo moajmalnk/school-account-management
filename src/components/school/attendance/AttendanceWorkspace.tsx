@@ -8,6 +8,7 @@ import {
   UserCheck,
   UserX,
 } from "lucide-react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -15,6 +16,7 @@ import { ParentLeaveInbox } from "@/components/school/ParentLeaveInbox";
 import { AttendanceActions, AttendanceToolbarProvider } from "@/components/school/attendance/attendance-toolbar";
 import { AttendanceUploadDialog } from "@/components/school/attendance/AttendanceUploadDialog";
 import { MarkStudentAttendanceModal } from "@/components/school/attendance/MarkStudentAttendanceModal";
+import { BiometricDevicesPanel } from "@/components/school/attendance/BiometricDevicesPanel";
 import { StaffAttendancePanel } from "@/components/school/attendance/StaffAttendancePanel";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,6 +51,7 @@ import {
   downloadAttendanceDetailedPdf,
   downloadAttendanceMonthlyPdf,
 } from "@/lib/attendance-export";
+import { attendanceTabFromSearch, type AttendanceTab } from "@/lib/attendance-tabs";
 import {
   ATTENDANCE_STATUS_COLORS,
   ATTENDANCE_STATUS_LABELS,
@@ -776,8 +779,18 @@ function StudentAttendanceBoard() {
 }
 
 export function AttendanceWorkspace() {
-  const [tab, setTab] = useState<"students" | "staff">("students");
+  const navigate = useNavigate();
+  const search = useSearch({ from: "/tenant/attendance" });
+  const tab = attendanceTabFromSearch(search.tab);
   const [actionsHost, setActionsHost] = useState<HTMLDivElement | null>(null);
+
+  function setTab(next: AttendanceTab) {
+    navigate({
+      to: "/tenant/attendance",
+      search: next === "students" ? {} : { tab: next },
+      replace: true,
+    });
+  }
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-4 px-3 pb-24 pt-3 sm:px-4 md:px-6 md:pb-8">
@@ -787,22 +800,35 @@ export function AttendanceWorkspace() {
       <div className="grid w-full grid-cols-1 gap-2 lg:grid-cols-5">
         <Tabs
           value={tab}
-          onValueChange={(value) => setTab(value === "staff" ? "staff" : "students")}
+          onValueChange={(value) => {
+            if (value === "staff") setTab("staff");
+            else if (value === "devices") setTab("devices");
+            else setTab("students");
+          }}
           className="min-w-0 lg:col-span-2"
         >
-          <TabsList className="grid h-10 w-full grid-cols-2 rounded-full bg-slate-100 p-1 dark:bg-white/10">
+          <TabsList className="grid h-10 w-full grid-cols-3 rounded-full bg-slate-100 p-1 dark:bg-white/10">
             <TabsTrigger value="students" className="h-8 w-full rounded-full px-2 data-[state=active]:text-[#0F766E]">
-              <span className="truncate">Students attendance</span>
+              <span className="truncate">Students</span>
             </TabsTrigger>
             <TabsTrigger value="staff" className="h-8 w-full rounded-full px-2 data-[state=active]:text-[#0F766E]">
-              <span className="truncate">Staff attendance</span>
+              <span className="truncate">Staff</span>
+            </TabsTrigger>
+            <TabsTrigger value="devices" className="h-8 w-full rounded-full px-2 data-[state=active]:text-[#0F766E]">
+              <span className="truncate">Devices</span>
             </TabsTrigger>
           </TabsList>
         </Tabs>
         <div ref={setActionsHost} className="grid min-w-0 grid-cols-3 gap-2 lg:col-span-3" />
       </div>
       <AttendanceToolbarProvider host={actionsHost}>
-        {tab === "students" ? <StudentAttendanceBoard /> : <StaffAttendancePanel />}
+        {tab === "students" ? (
+          <StudentAttendanceBoard />
+        ) : tab === "staff" ? (
+          <StaffAttendancePanel />
+        ) : (
+          <BiometricDevicesPanel />
+        )}
       </AttendanceToolbarProvider>
     </div>
   );

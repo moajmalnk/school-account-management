@@ -260,7 +260,15 @@ function defaultBilling(t: Tenant): BillingRule {
   };
 }
 
-export function TenantsView({ onImpersonate }: { onImpersonate?: (tenant: Tenant) => void } = {}) {
+export function TenantsView({
+  onImpersonate,
+  initialTenantId,
+  initialDetailTab,
+}: {
+  onImpersonate?: (tenant: Tenant) => void;
+  initialTenantId?: string;
+  initialDetailTab?: string;
+} = {}) {
   const [query, setQuery] = useState("");
   const [tier, setTier] = useState<string>("all");
   const [status, setStatus] = useState<string>("all");
@@ -272,7 +280,7 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (tenant: Tenant
   const [billingTarget, setBillingTarget] = useState<Tenant | null>(null);
   const [auditTarget, setAuditTarget] = useState<Tenant | null>(null);
   const [detailTarget, setDetailTarget] = useState<Tenant | null>(null);
-  const [detailTab, setDetailTab] = useState("overview");
+  const [detailTab, setDetailTab] = useState(initialDetailTab || "overview");
   const [pendingDelete, setPendingDelete] = useState<Tenant | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -285,7 +293,16 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (tenant: Tenant
           throw new ApiError("Not authenticated to API — log in again", 401);
         }
         const list = await fetchSuperAdminTenants();
-        if (!cancelled) setTenants(list);
+        if (!cancelled) {
+          setTenants(list);
+          if (initialTenantId) {
+            const match = list.find((t) => t.id === initialTenantId);
+            if (match) {
+              setDetailTarget(match);
+              if (initialDetailTab) setDetailTab(initialDetailTab);
+            }
+          }
+        }
       } catch (err) {
         if (!cancelled) {
           setTenants([]);
@@ -301,7 +318,7 @@ export function TenantsView({ onImpersonate }: { onImpersonate?: (tenant: Tenant
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [initialTenantId, initialDetailTab]);
 
   const trialById = useMemo(() => {
     const now = Date.now();

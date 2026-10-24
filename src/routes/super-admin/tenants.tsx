@@ -3,7 +3,34 @@ import { toast } from "sonner";
 
 import { TenantsView } from "@/components/admin/TenantsView";
 
+const DETAIL_TABS = [
+  "overview",
+  "subscriptions",
+  "invoices",
+  "activity",
+  "access",
+  "audit",
+] as const;
+
+type DetailTab = (typeof DETAIL_TABS)[number];
+
+type TenantsSearch = {
+  tenant?: string;
+  tab?: DetailTab;
+};
+
+function isDetailTab(value: unknown): value is DetailTab {
+  return typeof value === "string" && (DETAIL_TABS as readonly string[]).includes(value);
+}
+
 export const Route = createFileRoute("/super-admin/tenants")({
+  validateSearch: (search: Record<string, unknown>): TenantsSearch => {
+    const tenant = typeof search.tenant === "string" ? search.tenant.trim() : "";
+    return {
+      tenant: tenant && tenant.length <= 64 ? tenant : undefined,
+      tab: isDetailTab(search.tab) ? search.tab : undefined,
+    };
+  },
   component: TenantsPage,
 });
 
@@ -26,24 +53,27 @@ function openImpersonateTab(href: string): "tab" | "same" {
 }
 
 function TenantsPage() {
+  const { tenant, tab } = Route.useSearch();
   return (
     <TenantsView
-      onImpersonate={(tenant) => {
-        if (tenant.status === "Suspended") {
+      initialTenantId={tenant}
+      initialDetailTab={tab}
+      onImpersonate={(selected) => {
+        if (selected.status === "Suspended") {
           toast.error("Cannot open this school", {
-            description: `${tenant.name} is deactivated. Open Tenant Details → Access and click Activate workspace, then try Impersonate again.`,
+            description: `${selected.name} is deactivated. Open Tenant Details → Access and click Activate workspace, then try Impersonate again.`,
             duration: 7000,
           });
           return;
         }
-        const href = `/impersonate?tenant=${encodeURIComponent(tenant.id)}`;
+        const href = `/impersonate?tenant=${encodeURIComponent(selected.id)}`;
         const mode = openImpersonateTab(href);
         if (mode === "tab") {
-          toast.success(`Opening ${tenant.name}`, {
+          toast.success(`Opening ${selected.name}`, {
             description: "New tab · your control-plane session stays here",
           });
         } else {
-          toast.message(`Opening ${tenant.name}`, {
+          toast.message(`Opening ${selected.name}`, {
             description: "Pop-ups blocked · continuing in this tab",
           });
         }
