@@ -120,10 +120,6 @@ export function ParentPayCard() {
                 </span>
               ) : null}
             </div>
-            <p className="max-w-xl text-[12.5px] leading-relaxed text-black/55 dark:text-zinc-400">
-              Cashfree checkout for due fees. Receipts post only after payment is confirmed — never
-              on link create.
-            </p>
           </div>
         </div>
       </div>
