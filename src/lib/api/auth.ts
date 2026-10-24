@@ -59,6 +59,27 @@ export async function apiLogin(email: string, password: string): Promise<ApiLogi
   return data;
 }
 
+/** Exchange a Google Identity Services ID token for a Feezo session. */
+export async function apiGoogleLogin(credential: string): Promise<ApiLoginResponse> {
+  const data = await apiRequest<ApiLoginResponse>("/api/auth/google-login.php", {
+    method: "POST",
+    body: {
+      credential,
+      deviceId: getOrCreateDeviceId(),
+      deviceName: guessDeviceName(),
+    },
+    auth: false,
+  });
+  persistAuthSecrets({
+    token: data.token,
+    refreshToken: data.refreshToken ?? null,
+    sessionId: data.sessionId ?? null,
+    deviceId: data.deviceId ?? null,
+  });
+  resetUnauthorizedGate();
+  return data;
+}
+
 export async function apiMe(): Promise<ApiLoginSession> {
   return apiRequest<ApiLoginSession>("/api/auth/me.php");
 }

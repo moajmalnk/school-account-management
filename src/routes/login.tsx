@@ -1,14 +1,19 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Eye, EyeOff, AlertCircle, UserPlus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Eye, EyeOff, AlertCircle } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { AuthShell } from "@/components/auth/AuthShell";
+import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
 import { Label } from "@/components/ui/label";
 import { homePathForSession, API_UNREACHABLE_MESSAGE, useAuth } from "@/lib/auth";
+import { consumeGoogleRedirectCredential, isGoogleSignInConfigured } from "@/lib/google-gis";
 
 const SCHOOL_DEACTIVATED_MESSAGE =
-  "You were signed out because this school workspace has been deactivated. Please contact Feezo support to restore access.";
+  "This school workspace has been deactivated. Contact Feezo support to restore access.";
+
+const fieldClass =
+  "h-11 w-full rounded-xl border bg-white px-3.5 text-[14px] text-[#0B1220] outline-none transition-[border-color,box-shadow] placeholder:text-black/35 focus:border-[#0F766E]/55 focus:ring-2 focus:ring-[#0F766E]/10";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
@@ -16,26 +21,27 @@ export const Route = createFileRoute("/login")({
 
 function LoginPage() {
   const navigate = useNavigate();
-  const { session, hydrated, login } = useAuth();
+  const { session, hydrated, login, loginWithGoogle } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [bannerError, setBannerError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [submitting, setSubmitting] = useState(false);
+  const googleEnabled = isGoogleSignInConfigured();
 
   useEffect(() => {
-    if (hydrated && session) {
+    if (hydrated && session && !submitting) {
       navigate({ to: homePathForSession(session) });
     }
-  }, [hydrated, session, navigate]);
+  }, [hydrated, session, navigate, submitting]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const reason = new URLSearchParams(window.location.search).get("reason");
     if (reason === "inactive") {
       toast.message("Signed out after 14 days without use", {
-        description: "Sign in again to continue on this browser.",
+        description: "Sign in again to continue.",
       });
     } else if (reason === "session_expired") {
       toast.error("Please sign in again to continue");
@@ -49,6 +55,41 @@ function LoginPage() {
       window.history.replaceState({}, "", url.pathname + url.search);
     }
   }, []);
+
+  const finishGoogleCredential = useCallback(
+    async (credential: string) => {
+      setBannerError(null);
+      setSubmitting(true);
+      const result = await loginWithGoogle(credential);
+      setSubmitting(false);
+
+      if (!result.ok) {
+        const message = result.error || "Google sign-in failed.";
+        setBannerError(message);
+        toast.error(message);
+        return;
+      }
+
+      toast.success(`Welcome, ${result.session.displayName}`);
+      navigate({ to: result.redirect });
+    },
+    [loginWithGoogle, navigate],
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let credential: string | null = null;
+    try {
+      credential = consumeGoogleRedirectCredential();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Google sign-in failed.";
+      setBannerError(message);
+      toast.error(message);
+      return;
+    }
+    if (!credential) return;
+    void finishGoogleCredential(credential);
+  }, [finishGoogleCredential]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,7 +107,7 @@ function LoginPage() {
     setSubmitting(false);
 
     if (!result.ok) {
-      const message = result.error || "Sign in failed. Please try again.";
+      const message = result.error || "Sign in failed.";
       setBannerError(message);
       toast.error(message);
       return;
@@ -78,33 +119,31 @@ function LoginPage() {
   };
 
   return (
-    <AuthShell title="Sign in to continue" subtitle="Enter your account credentials.">
-      {bannerError && (
+    <AuthShell title="Sign in" subtitle="School staff and super admin access.">
+      {bannerError ? (
         <div
           role="alert"
           className={
             bannerError === API_UNREACHABLE_MESSAGE
-              ? "mt-4 flex items-start gap-2 rounded-2xl border border-[#F59E0B]/25 bg-[#FFFBEB] px-3 py-2.5 text-[12px] text-[#B45309]"
-              : "mt-4 flex items-start gap-2 rounded-2xl border border-[#EF4444]/20 bg-[#FEE2E2] px-3 py-2.5 text-[12px] text-[#EF4444]"
+              ? "mt-5 flex items-start gap-2 rounded-xl border border-[#F59E0B]/20 bg-[#FFFBEB] px-3 py-2.5 text-[12.5px] leading-snug text-[#B45309]"
+              : "mt-5 flex items-start gap-2 rounded-xl border border-[#EF4444]/15 bg-[#FEF2F2] px-3 py-2.5 text-[12.5px] leading-snug text-[#DC2626]"
           }
         >
           <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>{bannerError}</span>
         </div>
-      )}
+      ) : null}
 
-      <form onSubmit={handleSubmit} className="mt-6 space-y-4" noValidate>
+      <form onSubmit={handleSubmit} className="mt-6 space-y-3.5" noValidate>
         <div className="space-y-1.5">
-          <Label
-            htmlFor="login-email"
-            className="text-[11px] font-semibold uppercase tracking-wider text-black/55"
-          >
-            Email / Username
+          <Label htmlFor="login-email" className="text-[13px] font-medium text-black/65">
+            Email
           </Label>
           <input
             id="login-email"
             type="email"
             autoComplete="email"
+            autoFocus
             value={email}
             onChange={(e) => {
               setEmail(e.target.value);
@@ -113,28 +152,25 @@ function LoginPage() {
             }}
             placeholder="you@school.com"
             aria-invalid={!!fieldErrors.email}
-            className={`h-12 w-full rounded-2xl border bg-white px-4 text-[14px] outline-none transition-colors placeholder:text-black/35 focus:border-black focus:ring-2 focus:ring-black/5 ${
-              fieldErrors.email ? "border-[#EF4444]/40" : "border-[#E5E5E5]"
+            className={`${fieldClass} ${
+              fieldErrors.email ? "border-[#EF4444]/45" : "border-[#E5E7EB]"
             }`}
           />
-          {fieldErrors.email && (
-            <div className="text-[11px] text-[#EF4444]">{fieldErrors.email}</div>
-          )}
+          {fieldErrors.email ? (
+            <p className="text-[12px] text-[#DC2626]">{fieldErrors.email}</p>
+          ) : null}
         </div>
 
         <div className="space-y-1.5">
           <div className="flex items-center justify-between gap-3">
-            <Label
-              htmlFor="login-password"
-              className="text-[11px] font-semibold uppercase tracking-wider text-black/55"
-            >
+            <Label htmlFor="login-password" className="text-[13px] font-medium text-black/65">
               Password
             </Label>
             <Link
               to="/forgot-password"
-              className="text-[12px] font-medium text-[#0F766E] hover:underline"
+              className="text-[12.5px] font-medium text-[#0F766E] hover:text-[#0D9488]"
             >
-              Forgot password?
+              Forgot?
             </Link>
           </div>
           <div className="relative">
@@ -148,49 +184,66 @@ function LoginPage() {
                 if (fieldErrors.password) setFieldErrors((f) => ({ ...f, password: undefined }));
                 if (bannerError) setBannerError(null);
               }}
-              placeholder="••••••••"
+              placeholder="Enter password"
               aria-invalid={!!fieldErrors.password}
-              className={`h-12 w-full rounded-2xl border bg-white px-4 pr-11 text-[14px] outline-none transition-colors placeholder:text-black/35 focus:border-black focus:ring-2 focus:ring-black/5 ${
-                fieldErrors.password ? "border-[#EF4444]/40" : "border-[#E5E5E5]"
+              className={`${fieldClass} pr-10 ${
+                fieldErrors.password ? "border-[#EF4444]/45" : "border-[#E5E7EB]"
               }`}
             />
             <button
               type="button"
               onClick={() => setShowPw((v) => !v)}
               aria-label={showPw ? "Hide password" : "Show password"}
-              className="absolute right-2 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-xl text-black/45 hover:bg-[#F4F4F5] hover:text-black"
+              className="absolute right-1.5 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-lg text-black/40 hover:bg-black/[0.04] hover:text-black/70"
             >
               {showPw ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
             </button>
           </div>
-          {fieldErrors.password && (
-            <div className="text-[11px] text-[#EF4444]">{fieldErrors.password}</div>
-          )}
+          {fieldErrors.password ? (
+            <p className="text-[12px] text-[#DC2626]">{fieldErrors.password}</p>
+          ) : null}
         </div>
 
         <button
           type="submit"
           disabled={submitting}
-          className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#0F766E] text-[13.5px] font-semibold text-white shadow-[0_8px_24px_-12px_rgba(15,118,110,0.4)] transition-colors hover:bg-[#0D9488] disabled:opacity-60"
+          className="mt-1 flex h-11 w-full items-center justify-center rounded-xl bg-[#0F766E] text-[13.5px] font-semibold text-white transition-colors hover:bg-[#0D9488] disabled:opacity-55"
         >
           {submitting ? "Signing in…" : "Sign in"}
         </button>
+      </form>
 
+      {googleEnabled ? (
+        <div className="mt-5 space-y-3.5">
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-[#ECEEF1]" />
+            <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-black/35">
+              or
+            </span>
+            <div className="h-px flex-1 bg-[#ECEEF1]" />
+          </div>
+          <GoogleSignInButton disabled={submitting} />
+          {submitting ? (
+            <p className="text-center text-[12px] text-black/40">Signing in…</p>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="mt-6 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-t border-[#F0F1F3] pt-5 text-[13px] text-black/45">
         <Link
           to="/signup/$step"
           params={{ step: "school" }}
-          className="flex h-12 w-full items-center justify-center gap-2 rounded-full border border-[#E5E5E5] bg-white text-[13.5px] font-semibold text-[#0F766E] transition-colors hover:border-[#0F766E]/25 hover:bg-[#F0FDFA]"
+          className="font-medium text-[#0F766E] hover:text-[#0D9488]"
         >
-          <UserPlus className="h-4 w-4" aria-hidden />
           Create account
         </Link>
-        <a
-          href="/family/login"
-          className="mt-4 block text-center text-[13px] font-medium text-[#0F766E]"
-        >
+        <span aria-hidden className="text-black/20">
+          ·
+        </span>
+        <Link to="/family/login" className="font-medium text-black/55 hover:text-black/80">
           Parent sign in
-        </a>
-      </form>
+        </Link>
+      </div>
     </AuthShell>
   );
 }

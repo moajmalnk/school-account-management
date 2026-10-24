@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import {
+  apiGoogleLogin,
   apiLogin,
   apiLogoutCurrentDevice,
   apiMe,
@@ -89,6 +90,8 @@ type AuthState = {
   session: Session | null;
   hydrated: boolean;
   login: (email: string, password: string) => Promise<LoginResult>;
+  /** Sign in with a Google Identity Services ID token (credential JWT). */
+  loginWithGoogle: (credential: string) => Promise<LoginResult>;
   /** Apply tokens already persisted by apiRegisterTrial / similar. */
   acceptLoginResponse: (data: ApiLoginResponse) => LoginResult;
   /** `local` clears this browser only, after the server call already finished. */
@@ -653,6 +656,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const loginWithGoogle = useCallback<AuthState["loginWithGoogle"]>(async (credential) => {
+    try {
+      const data = await apiGoogleLogin(credential);
+      return sessionFromApiLogin(data, setSession);
+    } catch (err) {
+      return { ok: false, error: loginFailureMessage(err) };
+    }
+  }, []);
+
   const acceptLoginResponse = useCallback<AuthState["acceptLoginResponse"]>(
     (data) => sessionFromApiLogin(data, setSession),
     [],
@@ -688,8 +700,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthState>(
-    () => ({ session, hydrated, login, acceptLoginResponse, logout, updateSession }),
-    [session, hydrated, login, acceptLoginResponse, logout, updateSession],
+    () => ({
+      session,
+      hydrated,
+      login,
+      loginWithGoogle,
+      acceptLoginResponse,
+      logout,
+      updateSession,
+    }),
+    [session, hydrated, login, loginWithGoogle, acceptLoginResponse, logout, updateSession],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
