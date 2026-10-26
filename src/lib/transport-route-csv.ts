@@ -18,6 +18,7 @@ export const TRANSPORT_ROUTE_CSV_HEADERS = [
   "BothFee",
   "BillingCycle",
   "StartMonth",
+  "FeeAmountMode",
   "Vehicles",
   "RouteId",
 ] as const;
@@ -40,6 +41,7 @@ export type TransportRouteCsvDraft = {
   bothFee: number;
   billingCycle: "Monthly" | "Term";
   startMonth: string;
+  feeAmountMode: "fixed" | "custom";
   vehiclesRaw: string;
   hasVehicleColumn: boolean;
   clearVehicles: boolean;
@@ -98,6 +100,13 @@ const EVENING_ALIASES = ["evening fee", "eveningfee", "evening", "pm fee"];
 const BOTH_ALIASES = ["both fee", "bothfee", "both", "full fee", "fee", "amount"];
 const CYCLE_ALIASES = ["billing cycle", "billingcycle", "cycle", "billing"];
 const MONTH_ALIASES = ["start month", "startmonth", "collection start", "from month"];
+const FEE_MODE_ALIASES = [
+  "fee amount mode",
+  "feeamountmode",
+  "amount mode",
+  "fee mode",
+  "installment mode",
+];
 const VEHICLE_ALIASES = ["vehicles", "vehicle", "bus", "assigned vehicles", "fleet"];
 const ID_ALIASES = ["route id", "routeid", "id"];
 const FROM_LAT_ALIASES = ["from lat", "fromlat", "pickup lat"];
@@ -161,6 +170,13 @@ function parseStartMonth(raw: string): string | null {
     }
   }
   return null;
+}
+
+function parseFeeAmountMode(raw: string): "fixed" | "custom" {
+  const v = headerKey(raw);
+  if (!v) return "fixed";
+  if (/^custom/.test(v) || v === "c" || /^variable/.test(v)) return "custom";
+  return "fixed";
 }
 
 function parseVehicleIntent(raw: string): { clear: boolean; names: string[] } {
@@ -248,16 +264,38 @@ export function vehiclesLabelForRoute(routeId: string, vehicles: TransportVehicl
 
 export function transportRouteCsvTemplateRows(): (string | number)[][] {
   return [
-    ["Kondotty, Malappuram", "Mac Media School", 600, 600, 1200, "Monthly", "June", "", ""],
-    ["University CALII", "School", 500, 500, 1000, "Monthly", "June", "", ""],
+    [
+      "Kondotty, Malappuram",
+      "Mac Media School",
+      600,
+      600,
+      1200,
+      "Monthly",
+      "June",
+      "fixed",
+      "",
+      "",
+    ],
+    ["University CALII", "School", 500, 500, 1000, "Monthly", "June", "fixed", "", ""],
   ];
 }
 
 export function transportRouteCsvDemoRows(): (string | number)[][] {
   return [
-    ["Kondotty, Malappuram", "Mac Media School", 600, 600, 1200, "Monthly", "June", "", ""],
-    ["University CALII", "School", 500, 500, 1000, "Monthly", "June", "", ""],
-    ["Feroke Town", "Main Campus", 700, 700, 1300, "Monthly", "June", "", ""],
+    [
+      "Kondotty, Malappuram",
+      "Mac Media School",
+      600,
+      600,
+      1200,
+      "Monthly",
+      "June",
+      "fixed",
+      "",
+      "",
+    ],
+    ["University CALII", "School", 500, 500, 1000, "Monthly", "June", "fixed", "", ""],
+    ["Feroke Town", "Main Campus", 700, 700, 1300, "Monthly", "June", "fixed", "", ""],
   ];
 }
 
@@ -273,6 +311,7 @@ export function transportRouteToCsvRow(
     route.bothFee,
     route.billingCycle === "Term" ? "Term" : "Monthly",
     route.feeCollectionStartMonth || DEFAULT_FEE_COLLECTION_START_MONTH,
+    route.feeAmountMode === "custom" ? "custom" : "fixed",
     vehiclesLabelForRoute(route.id, vehicles),
     route.id,
     route.fromLat ?? "",
@@ -312,6 +351,7 @@ export function parseTransportRouteCsv(text: string): ParseTransportRouteCsvResu
   const bothIdx = columnIndex(headers, BOTH_ALIASES);
   const cycleIdx = columnIndex(headers, CYCLE_ALIASES);
   const monthIdx = columnIndex(headers, MONTH_ALIASES);
+  const feeModeIdx = columnIndex(headers, FEE_MODE_ALIASES);
   const vehicleIdx = columnIndex(headers, VEHICLE_ALIASES);
   const idIdx = columnIndex(headers, ID_ALIASES);
   const fromLatIdx = columnIndex(headers, FROM_LAT_ALIASES);
@@ -401,6 +441,7 @@ export function parseTransportRouteCsv(text: string): ParseTransportRouteCsvResu
       ...fees,
       billingCycle: cycle,
       startMonth,
+      feeAmountMode: parseFeeAmountMode(cell(cells, feeModeIdx)),
       vehiclesRaw: vehicleRaw,
       hasVehicleColumn: vehicleIdx >= 0,
       clearVehicles: vehicleIntent.clear,
@@ -457,7 +498,7 @@ export function resolveTransportRouteImport(
       eveningFee: draft.eveningFee,
       bothFee: draft.bothFee,
       billingCycle: draft.billingCycle,
-      feeAmountMode: "fixed",
+      feeAmountMode: draft.feeAmountMode,
       morningFeeSchedule: [],
       eveningFeeSchedule: [],
       bothFeeSchedule: [],

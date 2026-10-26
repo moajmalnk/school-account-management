@@ -3356,21 +3356,26 @@ export function AdmitStudentPage() {
       toast.message(`Using existing class ${existing.className}`);
       return;
     }
-    const created = buildClassFromLabel(
-      nextPrefixedId(
-        "CLS",
-        classes.map((c) => c.id),
-        3,
-      ),
-      className,
+    const clientId = nextPrefixedId(
+      "CLS",
+      classes.map((c) => c.id),
+      3,
     );
+    const created = buildClassFromLabel(clientId, className);
     setSavingClass(true);
     try {
       setClasses((prev) => [...prev, created]);
+      let saved = created;
       if (getApiToken()) {
-        await apiUpsertClass(created);
+        saved = { ...created, ...(await apiUpsertClass(created)) };
+        const finalId = saved.id || clientId;
+        setClasses((prev) =>
+          prev.map((c) =>
+            c.id === clientId || c.id === finalId ? { ...created, ...saved, id: finalId } : c,
+          ),
+        );
       }
-      setForm((prev) => ({ ...prev, cls: created.className }));
+      setForm((prev) => ({ ...prev, cls: saved.className || created.className }));
       setAddClassOpen(false);
       setNewClassGrade("");
       setNewClassSection("");
@@ -3380,6 +3385,7 @@ export function AdmitStudentPage() {
           : "Configure fees anytime in Settings → Class Tier",
       });
     } catch (err) {
+      setClasses((prev) => prev.filter((c) => c.id !== clientId));
       toast.error(err instanceof Error ? err.message : "Could not add class");
     } finally {
       setSavingClass(false);
@@ -3820,9 +3826,21 @@ export function StudentsLedger() {
       });
       if (getApiToken()) {
         for (const cls of missing) {
-          await apiUpsertClass(cls).catch(() => {
+          try {
+            const saved = await apiUpsertClass(cls);
+            const finalId = saved.id || cls.id;
+            setClasses((prev) =>
+              prev.map((c) =>
+                c.id === cls.id ||
+                c.id === finalId ||
+                normalizeClassLabelKey(c.className) === normalizeClassLabelKey(cls.className)
+                  ? { ...c, ...cls, ...saved, id: finalId }
+                  : c,
+              ),
+            );
+          } catch {
             /* keep local tier; settings sync can retry on next visit */
-          });
+          }
         }
       }
       toast.message(
@@ -4702,9 +4720,21 @@ export function StudentsLedger() {
           ];
 
           for (const cls of tiersToSync) {
-            await apiUpsertClass(cls).catch(() => {
+            try {
+              const saved = await apiUpsertClass(cls);
+              const finalId = saved.id || cls.id;
+              setClasses((prev) =>
+                prev.map((c) =>
+                  c.id === cls.id ||
+                  c.id === finalId ||
+                  normalizeClassLabelKey(c.className) === normalizeClassLabelKey(cls.className)
+                    ? { ...c, ...cls, ...saved, id: finalId }
+                    : c,
+                ),
+              );
+            } catch {
               /* local class kept; settings sync can retry */
-            });
+            }
           }
 
           let syncFailed = 0;
@@ -21517,7 +21547,8 @@ function TransportCard({
       transportRouteCsvTemplateRows(),
     );
     toast.success("Bus route template downloaded", {
-      description: "Fill From, To, and shift fees · Vehicles are optional fleet names",
+      description:
+        "Fill From, To, fees, StartMonth, FeeAmountMode · leave RouteId blank for new routes",
     });
   };
 
@@ -21532,7 +21563,7 @@ function TransportCard({
       transportRouteCsvDemoRows(),
     );
     toast.success("Demo bus route CSV downloaded", {
-      description: "Sample pickup → drop rows with morning, evening, and both-shift fees",
+      description: "Sample pickup → drop rows with fees, start month, and fee mode",
     });
   };
 
@@ -21606,47 +21637,57 @@ function TransportCard({
       setRouteImporting(true);
       setRouteImportProgress({ current: 0, total: routeImportReady.length });
       let usedIds = transportRoutes.map((route) => route.id);
-      const nextRoutes = [...transportRoutes];
-      const applied: TransportRoute[] = [];
+      let nextRoutes = [...transportRoutes];
       let created = 0;
       let updated = 0;
+      let failed = 0;
 
       try {
         for (let index = 0; index < routeImportReady.length; index += 1) {
           const row = routeImportReady[index];
-          const id = row.existingId || nextPrefixedId("TR", usedIds, 3);
-          if (!row.existingId) {
-            usedIds = [...usedIds, id];
-            created += 1;
-          } else {
-            updated += 1;
-          }
-          const saved: TransportRoute = { ...row.route, id };
-          const existingIndex = nextRoutes.findIndex((route) => route.id === id);
-          if (existingIndex >= 0) nextRoutes[existingIndex] = saved;
-          else nextRoutes.push(saved);
-          applied.push(saved);
-          if (row.applyVehicles) syncRouteVehicles(id, row.vehicleIds);
+          const clientId = row.existingId || nextPrefixedId("TR", usedIds, 3);
+          if (!row.existingId) usedIds = [...usedIds, clientId];
+          const payload: TransportRoute = { ...row.route, id: clientId };
           setRouteImportProgress({ current: index + 1, total: routeImportReady.length });
+          try {
+            const saved = await apiUpsertTransportRoute(payload);
+            const finalId = saved.id || clientId;
+            const merged: TransportRoute = { ...payload, ...saved, id: finalId };
+            if (!row.existingId) {
+              created += 1;
+              if (!usedIds.includes(finalId)) usedIds = [...usedIds, finalId];
+            } else {
+              updated += 1;
+            }
+            nextRoutes = nextRoutes.filter(
+              (route) => route.id !== clientId && route.id !== finalId,
+            );
+            nextRoutes.push(merged);
+            if (row.applyVehicles) syncRouteVehicles(finalId, row.vehicleIds);
+            setTransportRoutes(nextRoutes);
+          } catch {
+            failed += 1;
+          }
         }
-
-        setTransportRoutes(nextRoutes);
-        const synced = await importRowsSequentially(applied, async (route) => {
-          await apiUpsertTransportRoute(route);
-        });
 
         setRouteImportOpen(false);
         setRouteImportReady([]);
         setRouteImportIssues([]);
-        toast.success(`${applied.length} route${applied.length === 1 ? "" : "s"} imported`, {
-          description: [
-            created ? `${created} new` : "",
-            updated ? `${updated} updated` : "",
-            synced.failed ? `${synced.failed} failed to sync` : "",
-          ]
-            .filter(Boolean)
-            .join(" · "),
-        });
+        const ok = created + updated;
+        toast.success(
+          ok > 0
+            ? `${ok} route${ok === 1 ? "" : "s"} imported`
+            : "No routes imported",
+          {
+            description: [
+              created ? `${created} new` : "",
+              updated ? `${updated} updated` : "",
+              failed ? `${failed} failed to sync` : "",
+            ]
+              .filter(Boolean)
+              .join(" · "),
+          },
+        );
       } finally {
         setRouteImporting(false);
       }
